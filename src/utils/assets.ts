@@ -58,9 +58,11 @@ import multisigTotal from '@/assets/svg/multisig_stack.svg'
 import detailsSvg from '@/assets/svg/details.svg'
 import depositSvg from '@/assets/svg/deposit.svg'
 import cardanoBackground from '@/assets/cardanoBg.png'
+import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
 import geroLogo from '@/assets/svg/gero-logo.svg'
+import geroLogoApex from '@/assets/svg/gero-logo-apex.svg'
 import geroDashboardText from '@/assets/gero-dashboard.svg'
 import geroText from '@/assets/svg/gero-text.svg'
 import apexBackground from '@/assets/background2.png'
@@ -116,8 +118,6 @@ import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
 import questionMark from '@/assets/svg/question-mark.svg'
 import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
-import midnightImage from '@/assets/Midnight.png'
-import logoStackedLight from '@/assets/logo-stacked-light.svg'
 import apexBgDashboard from '@/assets/apexBg.png'
 import apexImage from '@/assets/apex.png'
 import apexSvg from '@/assets/svg/ap3x.svg'
@@ -130,6 +130,7 @@ import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
 import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/svg/card.svg'
 import bringWhite from '@/assets/svg/bring-white.svg'
+import apex from '@/assets/img/apex.jpg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -193,6 +194,7 @@ export default {
   cardanoShieldLogo,
   cardanoShieldBigLogo,
   geroLogo,
+  geroLogoApex,
   geroDashboardText,
   geroText,
   apexBackground,
@@ -354,8 +356,6 @@ export default {
   clarityLogo,
   questionMark,
   questionMarkDark,
-  midnightImage,
-  logoStackedLight,
   apexBgDashboard,
   apexImage,
   apexSvg,
@@ -365,7 +365,9 @@ export default {
   cashbackImage,
   debitCardImage,
   frontCardNoMcx2,
-  emptyState
+  emptyState,
+  cardanoBlueLogo,
+  apex
 }
 
 export {

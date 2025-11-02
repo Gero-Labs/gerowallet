@@ -12,23 +12,53 @@ import router from '../modules/navigation/router';
 import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
 import walletStore from '@/stores/geroStore';
+import Notifications from '@voerro/vue-notifications';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
-    chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
-      if (saved) Object.assign(walletStore, saved);
+    try {
+      chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Chrome storage error:', chrome.runtime.lastError.message);
+          resolve();
+          return;
+        }
+        if (saved) Object.assign(walletStore, saved);
+        resolve();
+      });
+    } catch (error) {
+      console.warn('Error loading persisted wallet:', error);
       resolve();
-    });
+    }
   });
 }
 
+async function initializeFeatureFlags(): Promise<void> {
+  //@ts-ignore
+  const ldClientId = import.meta.env.VITE_LD_CLIENT_SIDE_ID;
+  if (ldClientId) {
+    try {
+      await featureFlagsStore.initialize(ldClientId);
+    } catch (error) {
+      console.error('Failed to initialize feature flags:', error);
+    }
+  } else {
+    console.warn('LaunchDarkly client ID not found in environment');
+  }
+}
+
 loadPersistedWallet().then(() => {
+  // Initialize feature flags in background (non-blocking)
+  // This prevents delaying app startup if LaunchDarkly is slow/down
+  initializeFeatureFlags().catch((error) => {
+    console.error('Feature flags initialization failed:', error);
+  });
+
   Vue.config.productionTip = false;
   Vue.use(FlagIcon);
   Vue.use(VueShowdown, {
-    // set default flavor of showdown
     flavor: 'github',
-    // set default options of showdown (will override the flavor options)
     options: {
       emoji: false,
     },
@@ -36,11 +66,24 @@ loadPersistedWallet().then(() => {
 
   Vue.use(VueRouter);
   Vue.directive('click-outside', ClickOutside);
+  Vue.component('notifications', Notifications);
 
-  new Vue({
-    vuetify,
-    i18n,
-    router,
-    render: h => h(App)
-  }).$mount('#app');
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
+      if (saved?.loggedWallet?.id && saved?.config?.locale) {
+        console.log('🌐 Setting initial locale from storage:', saved.config.locale);
+        i18n.locale = saved.config.locale;
+      } else {
+        console.log('🌐 Using default locale: us');
+      }
+      resolve();
+    });
+  }).then(() => {
+    new Vue({
+      vuetify,
+      i18n,
+      router,
+      render: h => h(App)
+    }).$mount('#app');
+  });
 });

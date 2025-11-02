@@ -18,20 +18,41 @@ class InternalController {
 
   constructor() {
     if (chrome?.runtime) {
-      this.port = chrome.runtime.connect({
-        name: 'internal-background-popup-communication',
-      });
-      this.tabId = new Promise((resolve, reject) =>
-        chrome.tabs.getCurrent((tab) => {
-          console.log('tab', tab);
-          console.log('chrome.runtime.lastError', chrome.runtime.lastError);
-          if (chrome.runtime.lastError || !tab) {
-            reject(chrome.runtime.lastError);
-          } else {
-            resolve(tab.id!);
+      try {
+        this.port = chrome.runtime.connect({
+          name: 'internal-background-popup-communication',
+        });
+        
+        // Handle port disconnection
+        this.port.onDisconnect.addListener(() => {
+          if (chrome.runtime.lastError) {
+            console.warn('Port disconnected with error:', chrome.runtime.lastError.message);
           }
-        })
-      );
+        });
+      } catch (error) {
+        console.warn('Error creating runtime port:', error);
+      }
+      
+      this.tabId = new Promise((resolve, reject) => {
+        try {
+          chrome.tabs.getCurrent((tab) => {
+            if (chrome.runtime.lastError) {
+              console.warn('Error getting current tab:', chrome.runtime.lastError.message);
+              reject(chrome.runtime.lastError);
+              return;
+            }
+            if (!tab) {
+              console.warn('No current tab found');
+              reject(new Error('No current tab'));
+              return;
+            }
+            resolve(tab.id!);
+          });
+        } catch (error) {
+          console.warn('Error in getCurrent:', error);
+          reject(error);
+        }
+      });
     }
   }
 
@@ -83,11 +104,23 @@ class InternalSidePanelController {
   constructor(tabId: number) {
     this.tabId = tabId;
     if (chrome?.runtime) {
-      this.port = chrome.runtime.connect({
-        name: 'internal-background-sidepanel-communication',
-      });
-      if (!Number.isInteger(this.tabId)) {
-        console.error("SidePanelController: invalid or missing tabId in URL!");
+      try {
+        this.port = chrome.runtime.connect({
+          name: 'internal-background-sidepanel-communication',
+        });
+        
+        // Handle port disconnection
+        this.port.onDisconnect.addListener(() => {
+          if (chrome.runtime.lastError) {
+            console.warn('SidePanel port disconnected with error:', chrome.runtime.lastError.message);
+          }
+        });
+        
+        if (!Number.isInteger(this.tabId)) {
+          console.error("SidePanelController: invalid or missing tabId in URL!");
+        }
+      } catch (error) {
+        console.warn('Error creating sidepanel runtime port:', error);
       }
     }
   }
@@ -150,20 +183,46 @@ class BackgroundController {
 
 export const Messaging = {
   sendToBackgroundFromOptions: async function (request: Message) {
-    return new Promise((resolve, _reject) =>
-      chrome.runtime.sendMessage(
-        { ...request, target: TARGET, sender: SENDER.options },
-        (response) => resolve(response)
-      )
-    );
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(
+          { ...request, target: TARGET, sender: SENDER.options },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn('Chrome runtime error in sendToBackgroundFromOptions:', chrome.runtime.lastError.message);
+              // Resolve with error object instead of rejecting to prevent unhandled promise rejections
+              resolve({ error: chrome.runtime.lastError.message });
+              return;
+            }
+            resolve(response);
+          }
+        );
+      } catch (error) {
+        console.warn('Error sending message to background from options:', error);
+        resolve({ error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    });
   },
   sendToBackground: async function (request: Message) {
-    return new Promise((resolve, _reject) =>
-      chrome.runtime.sendMessage(
-        { ...request, target: TARGET, sender: SENDER.webpage },
-        (response) => resolve(response)
-      )
-    );
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(
+          { ...request, target: TARGET, sender: SENDER.webpage },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn('Chrome runtime error in sendToBackground:', chrome.runtime.lastError.message);
+              // Resolve with error object instead of rejecting to prevent unhandled promise rejections
+              resolve({ error: chrome.runtime.lastError.message });
+              return;
+            }
+            resolve(response);
+          }
+        );
+      } catch (error) {
+        console.warn('Error sending message to background:', error);
+        resolve({ error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    });
   },
   sendToContent: function ({ method, data }: { method: string; data: any }) {
     return new Promise((resolve, reject) => {
@@ -204,7 +263,10 @@ export const Messaging = {
         function messageHandler(response: any) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
-            port.postMessage(request);
+            // Create a deep copy of the request to prevent mutations from affecting the original
+            // This is critical for transaction signing to ensure each signing attempt gets fresh data
+            const requestCopy = JSON.parse(JSON.stringify(request));
+            port.postMessage(requestCopy);
           }
           if (response.method === METHOD.returnData) {
             resolve(response);
@@ -229,18 +291,59 @@ export const Messaging = {
   },
   sendToSidePanelInternal: function (tabIdd: number, request: Message) {
     return new Promise((resolve, _reject) => {
-      chrome.runtime.onConnect.addListener(port => {
+      // Remove any existing listeners for this tab before adding new one
+      // This prevents old listeners from responding with stale request data
+      if ((this as any)._sidePanelListeners?.[tabIdd]) {
+        const oldListener = (this as any)._sidePanelListeners[tabIdd];
+        chrome.runtime.onConnect.removeListener(oldListener);
+      }
+
+      function connectionHandler(port: chrome.runtime.Port) {
         function messageHandler(response: any) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
-            port.postMessage(request);
+            // Create a deep copy of the request to prevent mutations
+            const requestCopy = JSON.parse(JSON.stringify(request));
+            port.postMessage(requestCopy);
           }
           if (response.method === METHOD.returnData) {
+            cleanup();
             resolve(response);
           }
         }
+
+        function disconnectHandler() {
+          cleanup();
+          // Resolve with user declined error when side panel closes without response
+          resolve({
+            target: TARGET,
+            sender: SENDER.extension,
+            error: APIError.Refused,
+            data: undefined
+          });
+        }
+
+        function cleanup() {
+          port.onMessage.removeListener(messageHandler);
+          port.onDisconnect.removeListener(disconnectHandler);
+          chrome.runtime.onConnect.removeListener(connectionHandler);
+          // Clean up listener tracking
+          if ((Messaging as any)._sidePanelListeners?.[tabIdd] === connectionHandler) {
+            delete (Messaging as any)._sidePanelListeners[tabIdd];
+          }
+        }
+
         port.onMessage.addListener(messageHandler);
-      });
+        port.onDisconnect.addListener(disconnectHandler);
+      }
+
+      // Track the listener so we can remove it later
+      if (!(this as any)._sidePanelListeners) {
+        (this as any)._sidePanelListeners = {};
+      }
+      (this as any)._sidePanelListeners[tabIdd] = connectionHandler;
+
+      chrome.runtime.onConnect.addListener(connectionHandler);
     });
   },
   createInternalController: () => new InternalController(),

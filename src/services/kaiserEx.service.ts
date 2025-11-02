@@ -3,12 +3,13 @@
  * Handles PKCE authentication flow for KaiserEx token reception
  */
 const viteBackendUrl = import.meta.env['VITE_BACKEND_URL'];
-const backendUrl = 'https://api.dev.kaiserex.cybro.cz';
+const backendUrl = 'https://oauth.kaiserex.com';
 
 export interface KaiserExTokenData {
   access_token: string;
   token_type?: string;
   expires_in?: number;
+  refresh_token?: string;
 }
 
 export interface KaiserExService {
@@ -74,6 +75,9 @@ class KaiserExServiceImpl implements KaiserExService {
 
   async auth(completeCallback?: (tokenData: KaiserExTokenData) => void): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Clean up any previous auth attempt before starting a new one
+      this.cleanup();
+
       if (completeCallback) this.completeCallback = completeCallback;
 
       this.generatePKCE().then(({ codeVerifier, codeChallenge }) => {

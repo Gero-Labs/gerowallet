@@ -1,14 +1,28 @@
 <template>
-  <v-card flat outlined class="mx-auto liquid-glass compact-swap-widget d-flex flex-column px-2" style="height: 100%;">
+  <v-card flat outlined class="mx-auto liquid-glass d-flex flex-column px-2" style="height: 100%;">
+    <!-- Overlay when swap is disabled by feature flag -->
+    <v-overlay
+      v-if="!isSwapEnabled"
+      absolute
+      :value="true"
+      opacity="0.9"
+      color="#000000"
+      z-index="999"
+    >
+      <div class="overlay-content text-center">
+        <v-icon size="64" color="warning">mdi-alert-circle-outline</v-icon>
+        <h2 class="mt-4 white--text" style="line-height: 1.5">{{ $t('common.underMaintenance') }}</h2>
+      </div>
+    </v-overlay>
     <v-card-text class="pa-0 flex-grow-1 d-flex flex-column" style="overflow: hidden;">
       <div class="swap-content-wrapper">
         <v-card-title class="pb-0 pt-3 px-0">
           <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
             <v-btn value="swap" x-small rounded>
-              SWAP
+              {{ $t('swap.swap') }}
             </v-btn>
             <v-btn value="limit" x-small rounded>
-              LIMIT
+              {{ $t('swap.limit') }}
             </v-btn>
           </v-btn-toggle>
           <v-spacer></v-spacer>
@@ -23,43 +37,37 @@
             </v-btn>
           </v-btn-toggle>
         </v-card-title>
-        <v-card-text class="pb-0 px-0 pt-2">
-          <div class="d-flex align-center justify-space-between mb-1 mt-1">
-            <span style="color: #FDA29B; font-size: 12px; font-weight: 200;">Selling</span>
-            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenA) }}</span>
-          </div>
+        <v-card-text class="pb-0 px-0 pt-4" style="text-align: -webkit-center;">
           <TokenSelector
             v-model="selectedTokenA"
             :available="availableTokens"
             :index="0"
-            title=""
+            :title="$t('swap.selling')"
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
+            @setMax="setMaxTokenA"
             :search="search"
             class="mt-n3"
             background-color="#101828"
           />
-          <v-btn icon class="my-1 z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto;">
+          <v-btn icon class="mt-1 mb-0 z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto;">
             <v-icon color="#1a1a1a">mdi-swap-vertical</v-icon>
           </v-btn>
-          <div class="d-flex align-center justify-space-between mb-1 mt-n2">
-            <span style="color: #75E0A7; font-size: 12px; font-weight: 200;">Buying</span>
-            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenB) }}</span>
-          </div>
           <TokenSelector
             v-model="selectedTokenB"
             :available="availableTokens"
             :index="0"
-            title=""
+            :title="$t('swap.buying')"
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"
-            class="mt-n3"
+            style="margin-top: -13px"
             :price="getPrice(selectedTokenB)"
             :price-impact="calculateWeightedPriceImpact"
             @change="tokenBQuantityChange"
             :search="search"
+            :show-balance="false"
           />
           <div class="text-left mt-2" v-if="swapType === 'swap'" style="display: flex;">
             <v-btn text plain x-small class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle" style="letter-spacing: normal">
@@ -78,7 +86,7 @@
             </v-btn>
           </div>
           <v-card style="border-radius: 8px;" flat class="transparent no-custom-styling" v-else>
-            <v-card-text class="pa-2">
+            <v-card-text class="px-2 py-1">
               <div class="text-left" style="font-size: 11px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
                 <div>
                   <span class="pr-1" style="font-weight: 600;">Limit Price</span>
@@ -155,7 +163,7 @@
             <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
           </div>
         </v-card-text>
-        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 8px" class="mx-3 mt-1 mb-0" />
+        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 8px" class="mx-0 mt-1 mb-0" />
       </div>
     </v-card-text>
     <v-card-actions class="px-3 pt-2 pb-3" style="justify-content: center;">
@@ -167,21 +175,22 @@
         @click="prepareSwap"
         :loading="loading"
       >
-        <span style="font-size: 13px; font-weight: 600;">{{ poolError ? 'Pool Not Found' : swapButtonText }}</span>
+        <span style="font-size: 13px; font-weight: 600;">{{ poolError ? $t('swap.poolNotFound') : swapButtonText }}</span>
       </v-btn>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch, getCurrentInstance } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import filters from '@/shared/utils/filters';
-import networks, { cardanoLogo } from '@/utils/networks';
+import networks from '@/utils/networks';
 import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
@@ -191,8 +200,16 @@ import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
+import cardanoSvg from '@/assets/svg/cardano.svg';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
-const emit = defineEmits(['onSwap'])
+const emit = defineEmits(['onSwap']);
+
+const { t } = useTranslation();
+
+const isSwapEnabled = computed(() => {
+  return featureFlagsStore.state.flags.swapEnabled;
+});
 
 const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
@@ -208,7 +225,7 @@ const swapType = ref<string>('swap');
 let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
-  img: cardanoLogo,
+  img: cardanoSvg,
   fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
   balance: 0,
   quantity: '0',
@@ -257,15 +274,15 @@ const limitSplit = ref<number>(1);
 
 const swapButtonText = computed(() => {
   if (isInsufficientBalance.value) {
-    return 'INSUFFICIENT BALANCE';
+    return t('swap.insufficientBalance');
   } else if (swapType.value === 'limit') {
     if (limitType.value === 'one' || limitType.value === 'split' && limitSplit.value === 1) {
-      return 'PLACE ORDER';
+      return t('swap.placeOrder');
     } else if (limitType.value === 'split') {
-      return `PLACE ${limitSplit.value} ORDERS`;
+      return t('swap.placeOrders', { count: limitSplit.value });
     }
   }
-  return 'SWAP'
+  return t('swap.swap')
 })
 
 const isSwapDisabled = computed(() => {
@@ -311,7 +328,7 @@ const nativeTokenComputed = computed(() => {
     return {
       name: 'Cardano',
       ticker: 'ADA',
-      img: cardanoLogo,
+      img: cardanoSvg,
       balance: 0,
       quantity: '0',
       decimals: 6,
@@ -362,8 +379,7 @@ const availableTokens = computed(() => {
     //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
     });
-  const gr = [nativeToken, ...availableTokens];
-  return gr;
+  return [nativeToken, ...availableTokens];
 });
 
 const calculateWeightedPriceImpact = computed(() => {
@@ -393,7 +409,7 @@ const slippageDisplay = computed(() => {
 
 const pairPrice = computed(() => {
   if (poolError.value) {
-    return 'Pool Not Found'
+    return t('swap.poolNotFound')
   }
   const tokenA = selectedTokenA.value?.ticker;
   const tokenB = selectedTokenB.value?.ticker === 'ADA' ? tokenA : selectedTokenB.value?.ticker;
@@ -510,13 +526,6 @@ const getPrice = (token) => {
   const lastPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
 
   return (Number(quantity) * multiplier * lastPrice).toLocaleString('en-US');
-}
-
-const getTokenBalance = (token) => {
-  if (!token) return '0';
-  const balance = token.balance || 0;
-  const decimals = token.decimals || 0;
-  return filters.toCurrency(balance, false, 2, '', '', true, decimals);
 }
 
 const setSlippage = (val) => {
@@ -659,6 +668,9 @@ const prepareSwap = async () => {
   let swapRes
   const amount = Number(selectedTokenA.value['quantity'].replaceAll(',', ''))
   try {
+    // Register address with DexHunter before swapping (if not already registered)
+    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+
     if (swapType.value === 'swap') {
       const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
       swapRes = await dexHunterApi.swap(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], slippage)
@@ -669,18 +681,15 @@ const prepareSwap = async () => {
     }
     const txCbor = swapRes.cbor
     const partialSign = true
-    console.log('txCbor', txCbor)
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign, mergeWitnesses: false },
+      data: { tx: txCbor, partialSign, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
     console.log('signaturesRes', signaturesRes)
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
     } else {
-      console.log(signaturesRes)
       const signRes: any = await dexHunterApi.swapSign(signaturesRes.data, txCbor)
-      console.log('signRes', signRes)
       await submit(signRes.cbor)
     }
   } catch (error: any) {
@@ -710,14 +719,51 @@ const submit = async (cborHex: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
+  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`)
+
+  // Clear the input fields after successful submission
+  clearInputs();
+
   emit('onSwap')
   console.log(txId)
+}
+
+const clearInputs = () => {
+  // Reset quantities to '0'
+  selectedTokenA.value.quantity = '0';
+  selectedTokenB.value.quantity = '0';
+
+  // Reset limit value for limit orders
+  if (swapType.value === 'limit') {
+    limit.value = price_ba2.value.toString();
+  }
 }
 
 const excludedChange = async (val) => {
   blacklisted_dexes.value = val
   await performPeriodicEstimate()
+}
+
+const setMaxTokenA = () => {
+  if (!selectedTokenA.value) return;
+
+  const balance = selectedTokenA.value.balance || 0;
+  const decimals = selectedTokenA.value.decimals || 0;
+  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+
+  // For ADA (native currency), reserve 3 ADA for tx fees, deposits, and DEX fees
+  if (selectedTokenA.value.ticker === nativeTicker) {
+    const reservedAmount = 3_000_000; // 3 ADA in lovelace
+    const maxBalanceLovelace = Math.max(0, Number(balance) - reservedAmount);
+    const maxBalance = filters.toCurrency(maxBalanceLovelace, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    selectedTokenA.value.quantity = maxBalance;
+    tokenAQuantityChange(maxBalance);
+  } else {
+    // For non-ADA tokens, use full balance (fees are paid in ADA)
+    const maxBalance = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    selectedTokenA.value.quantity = maxBalance;
+    tokenAQuantityChange(maxBalance);
+  }
 }
 
 onMounted(async () => {

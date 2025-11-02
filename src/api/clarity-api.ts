@@ -19,10 +19,4 @@ export default {
   async getGeroDetails() {
     return axiosInstance.get(`/api/clarity/dao/details`);
   },
-  // async getGeroGovernance() {
-  //   return axiosInstance.get(`/api/clarity/dao/governance`);
-  // },
-  // async getGeroTreasury() {
-  //   return axiosInstance.get(`/api/clarity/dao/treasury`);
-  // },
 };

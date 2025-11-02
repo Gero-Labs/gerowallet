@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { Blockchain, Network, PaginationParams, PaginatedResponse } from '@/models/types';
+import { Blockchain, Network, PaginationParams, PaginatedResponse, Tip } from '@/models/types';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
@@ -203,6 +203,33 @@ export default {
       if (error.response?.status === 404) {
         return null;
       }
+      throw parseHttpError(error);
+    }
+  },
+
+  /**
+   * Perform a REST sync for a wallet to get latest blockchain data
+   * @param syncRequest - Sync request parameters
+   * @returns Sync response with account info, transactions, assets, tip
+   */
+  async syncRest(syncRequest: {
+    chain: string;
+    network: string;
+    provider: string;
+    from: number;
+    to: Tip;
+    address: string;
+    rewards_sum: string;
+    controlled_amount: string;
+    withdrawable_amount: string;
+    epoch?: number;
+  }) {
+    try {
+      const { data, status } = await axiosInstance.post('/api/sync2', syncRequest);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      console.error('REST sync failed:', error);
       throw parseHttpError(error);
     }
   },

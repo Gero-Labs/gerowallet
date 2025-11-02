@@ -27,11 +27,11 @@
               <!-- Overlay badges -->
               <div class="card-badges">
                 <v-chip small outlined class="quantity-chip">
-                  {{ Number(collection.quantity || 1).toLocaleString() }} items
+                  {{ Number(collection.quantity || 1).toLocaleString() }} {{ $t('assets.items') }}
                 </v-chip>
                 <v-chip v-if="collection.isScam" small color="error">
                   <v-icon left x-small>mdi-alert-decagram</v-icon>
-                  Scam
+                  {{ $t('assets.scam') }}
                 </v-chip>
               </div>
             </v-img>
@@ -60,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch, onMounted, onUnmounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
@@ -113,17 +114,17 @@ const collectibles = computed(() => {
   return res;
 });
 
-const sortOptionsDropdown = computed(() => [
-  { text: 'Name (A-Z)', value: 'name' },
-  { text: 'Name (Z-A)', value: 'name_desc' },
-  { text: 'Quantity (High-Low)', value: 'quantity_desc' },
-  { text: 'Quantity (Low-High)', value: 'quantity' },
-]);
+// const sortOptionsDropdown = computed(() => [
+//   { text: 'Name (A-Z)', value: 'name' },
+//   { text: 'Name (Z-A)', value: 'name_desc' },
+//   { text: 'Quantity (High-Low)', value: 'quantity_desc' },
+//   { text: 'Quantity (Low-High)', value: 'quantity' },
+// ]);
 
 const cardSize = computed(() => {
   // Dynamically size cards based on available height
   const baseSize = props.containerHeight <= 200 ? 80 : 110;
-  
+
   if (screenWidth.value <= 480) {
     return baseSize - 10;
   } else if (screenWidth.value <= 768) {
@@ -141,7 +142,7 @@ const gridSizeClass = computed(() => {
 
 const dynamicItemsPerPage = computed(() => itemsPerPage);
 
-// Use the shared container height from parent
+// Use the shared container height from the parent
 const containerHeight = computed(() => props.containerHeight);
 
 const sortedCollectibles = computed(() => {

@@ -1,11 +1,14 @@
 <template>
   <v-card class="exchange-rate-card" outlined>
     <div class="card-header">
-      <h3 class="card-title">Exchange Rate</h3>
+      <h3 class="card-title">{{ $t('card.exchangeRate') }}</h3>
     </div>
 
     <div class="exchange-rate-content">
-      <div class="rate-item" v-for="rate in exchangeRates" :key="rate.id">
+      <div v-if="loadingError" class="error-message">
+        {{ $t('common.failed') }}: {{ $t('card.exchangeRate') }}
+      </div>
+      <div v-else class="rate-item" v-for="rate in exchangeRates" :key="rate.id">
         <div class="d-flex flex-column">
           <div class="rate-info">
             <div class="currency-icon">
@@ -16,14 +19,7 @@
               <div class="rate-value">{{ rate.value }}</div>
             </div>
           </div>
-          <div class="last-updated">Last updated: {{ lastUpdated }}</div>
-        </div>
-
-        <div class="rate-change">
-          <div class="change-indicator" :class="rate.trend">
-            <img :src="rate.trendIcon" :alt="rate.trend" class="trend-icon" />
-            <span class="change-percentage">{{ rate.change }}</span>
-          </div>
+          <div class="last-updated">{{ $t('dashboard.lastUpdated') }}: {{ lastUpdated }}</div>
         </div>
       </div>
     </div>
@@ -31,27 +27,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import type { ExchangeRate } from '@/models/types';
-import trendUpSvg from '@/assets/svg/trend-up-01.svg';
-import trendDownSvg from '@/assets/svg/trend-down-01.svg';
+import cardStore from '@/stores/modules/card';
 import currencyEuro from '@/modules/wallet/icons/currency-euro.svg?url';
-import currencyDollar from '@/modules/wallet/icons/currency-dollar.svg?url';
 
-const exchangeRates = ref<ExchangeRate[]>([
+// Get exchange rate from store
+const EXCHANGE_RATE = computed(() => {
+  return Number(cardStore.state.exchangeRate?.buy) || 0;
+});
+
+// Format exchange rate value
+const formattedRateValue = computed(() => {
+  if (!EXCHANGE_RATE.value || EXCHANGE_RATE.value === 0) {
+    return '—';
+  }
+  return EXCHANGE_RATE.value.toFixed(2);
+});
+
+// Compute exchange rates array dynamically
+const exchangeRates = computed<ExchangeRate[]>(() => [
   {
     id: 1,
     pair: 'ADA/EUR',
-    value: '0.65',
+    value: formattedRateValue.value,
     currency: 'EUR',
     icon: currencyEuro,
-    change: '3%',
-    trend: 'positive',
-    trendIcon: trendUpSvg,
+    change: '—', // Not displayed in UI (trend section removed)
+    trend: 'positive' as 'positive' | 'negative', // Not displayed in UI
+    trendIcon: '', // Not displayed in UI (unused import removed)
   },
 ]);
 
-const lastUpdated = ref('Today, 15:42');
+const lastUpdated = ref('');
+const loadingError = ref(false);
 
 const updateLastUpdated = () => {
   const now = new Date();
@@ -60,7 +69,27 @@ const updateLastUpdated = () => {
   lastUpdated.value = `Today, ${hours}:${minutes}`;
 };
 
-updateLastUpdated();
+// Watch for exchange rate changes and update timestamp
+watch(
+  () => cardStore.state.exchangeRate?.buy,
+  () => {
+    if (cardStore.state.exchangeRate?.buy) {
+      updateLastUpdated();
+      loadingError.value = false;
+    }
+  }
+);
+
+onMounted(() => {
+  updateLastUpdated();
+  // Fetch exchange rate if not already loaded
+  if (!cardStore.state.exchangeRate) {
+    cardStore.getExchangeRate().catch((err) => {
+      console.error(err);
+      loadingError.value = true;
+    });
+  }
+});
 </script>
 
 <style lang="scss" scoped>
@@ -146,40 +175,15 @@ updateLastUpdated();
         }
       }
 
-      .rate-change {
-        display: flex;
-        justify-content: center;
-        align-items: center;
+    }
 
-        .change-indicator {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-
-          &.positive {
-            .change-percentage {
-              color: #079455;
-            }
-          }
-
-          &.negative {
-            .change-percentage {
-              color: #f04438;
-            }
-          }
-
-          .trend-icon {
-            width: 20px;
-            height: 20px;
-          }
-
-          .change-percentage {
-            font-family: $font-family-primary;
-            font-weight: $font-weight-medium;
-            font-size: $font-size-sm;
-          }
-        }
-      }
+    .error-message {
+      font-family: $font-family-primary;
+      font-weight: $font-weight-medium;
+      font-size: 12px;
+      color: #f04438;
+      text-align: center;
+      padding: $spacing-md;
     }
 
     .last-updated {

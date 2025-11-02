@@ -2,6 +2,7 @@
  * Kraken WebSocket Service for real-time ADA/USD market data
  * Replaces the Binance API for Strike Finance integration
  */
+import { debugLog } from '@/utils/debug';
 
 interface KrakenTickerData {
   a: [string, string, string]; // ask [price, whole_lot_volume, lot_volume]
@@ -41,7 +42,7 @@ class KrakenWebSocketService {
   private tickerRequestInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    console.debug('🦑 Kraken WebSocket Service initialized');
+    debugLog('🦑 Kraken WebSocket Service initialized');
   }
 
   /**
@@ -52,13 +53,13 @@ class KrakenWebSocketService {
       try {
         //@ts-ignore
         const wsUrl = (import.meta.env.VITE_KRAKEN_WS_URL || 'wss://ws.kraken.com').replace(/['"]/g, '');
-        console.log('🦑 🔧 WebSocket URL:', wsUrl);
-        console.log('🦑 🔌 Creating WebSocket connection...');
+        debugLog('🦑 🔧 WebSocket URL:', wsUrl);
+        debugLog('🦑 🔌 Creating WebSocket connection...');
         this.ws = new WebSocket(wsUrl);
-        console.log('🦑 📡 WebSocket instance created, setting up event handlers...');
+        debugLog('🦑 📡 WebSocket instance created, setting up event handlers...');
 
         this.ws.onopen = () => {
-          console.log('🦑 ✅ Successfully connected to Kraken WebSocket');
+          debugLog('🦑 ✅ Successfully connected to Kraken WebSocket');
           this.isConnected = true;
           this.reconnectAttempts = 0;
           this.startPing();
@@ -71,7 +72,7 @@ class KrakenWebSocketService {
         };
 
         this.ws.onclose = (event) => {
-          console.debug('🦑 ❌ Disconnected from Kraken WebSocket:', event.code, event.reason);
+          debugLog('🦑 ❌ Disconnected from Kraken WebSocket:', event.code, event.reason);
           this.isConnected = false;
           this.stopPing();
           this.stopTickerMonitoring();
@@ -118,7 +119,7 @@ class KrakenWebSocketService {
       }
     };
 
-    console.debug('🦑 📡 Subscribing to ADA/USD ticker:', subscription);
+    debugLog('🦑 📡 Subscribing to ADA/USD ticker:', subscription);
     this.ws.send(JSON.stringify(subscription));
     this.subscriptions.add('ADA/USD');
   }
@@ -173,12 +174,12 @@ class KrakenWebSocketService {
   private handleTickerData(data: any[]): void {
     if (data.length < 4) return;
 
-    const [channelID, tickerData, channelName, pair] = data;
+    const [_channelID, tickerData, channelName, pair] = data;
 
     if (channelName === 'ticker' && pair === 'ADA/USD') {
       this.lastTickerTime = Date.now();
       const ticker = this.parseTickerData(tickerData);
-      
+
       if (this.onTickerUpdate) {
         this.onTickerUpdate(ticker);
       }
@@ -239,7 +240,7 @@ class KrakenWebSocketService {
   private startTickerMonitoring(): void {
     this.tickerRequestInterval = setInterval(() => {
       const timeSinceLastUpdate = Date.now() - this.lastTickerTime;
-      
+
       if (timeSinceLastUpdate > 120000) {
         if (this.isConnected && this.subscriptions.has('ADA/USD')) {
           this.subscribeToAdaUsd();

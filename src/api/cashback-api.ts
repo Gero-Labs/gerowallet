@@ -58,7 +58,7 @@ export default {
         requestBody['category'] = category;
       }
       if (search) {
-        requestBody['search'] = search
+        requestBody['search'] = search;
       }
       const { data, status } = await axiosInstance.post(`/api/bring/retailers`, requestBody);
       if (status === 200) return data;

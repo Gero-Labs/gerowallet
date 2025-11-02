@@ -4,7 +4,7 @@
       <div class="item-container">
         <v-row>
           <v-col cols="12" class="py-0 px-2">
-            <span>{{ isMultisigFunding ? "From Wallet" : "From Multisig Wallet" }}</span>
+            <span>{{ isMultisigFunding ? $t('multisig.fromWallet') : $t('multisig.fromMultisigWallet') }}</span>
             <v-select
               :disabled="true"
               dense
@@ -62,11 +62,11 @@
                     </v-list-item-avatar>
                     <v-list-item-content>
                       <v-list-item-title class="py-2">
-                        <v-text-field v-model="contact.name" dense outlined label="Name" hide-details :maxlength="40"
+                        <v-text-field v-model="contact.name" dense outlined :label="$t('common.name')" hide-details :maxlength="40"
                           counter="40"></v-text-field>
                       </v-list-item-title>
                       <v-list-item-title class="py-2">
-                        <v-text-field v-model="contact.address" dense outlined label="Address" hide-details
+                        <v-text-field v-model="contact.address" dense outlined :label="$t('common.address')" hide-details
                           :disabled="contacts && contacts[contact.address] != null"></v-text-field>
                       </v-list-item-title>
                     </v-list-item-content>
@@ -150,7 +150,7 @@
             </v-btn>
           </v-col>
           <v-col cols="12" class="py-0 px-2">
-            <v-textarea v-if="loggedWallet" v-model="recipientAddress" label="Recipient Address"
+            <v-textarea v-if="loggedWallet" v-model="recipientAddress" :label="$t('common.recipientAddress')"
               :placeholder="`Enter a Recipient Address${loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? ' or an ADA Handle' : ''}`"
               rows="3" outlined :rules="recipientRules" class="recipient-address" @input="resolveAddress"
               :loading="loading" hide-details dense clearable>
@@ -173,6 +173,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, onBeforeMount, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';
@@ -198,6 +199,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'updateRecipientAddress', address: string): void;
 }>();
+
+const { t } = useTranslation();
 
 // Store setup
 const { loggedWallet, contacts } = toRefs(walletStore);
@@ -362,8 +365,8 @@ onMounted(() => {
 
 // Constants
 const contactsHeaders = [
-  { text: 'Name', value: 'name' },
-  { text: 'Address', value: 'address' },
+  { text: t('common.name'), value: 'name' },
+  { text: t('common.address'), value: 'address' },
   { text: '', align: 'right', sortable: false, value: 'actions' },
 ];
 

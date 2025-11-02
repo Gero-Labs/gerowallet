@@ -7,14 +7,23 @@
 
     <!-- Title and Subtitle -->
     <div class="header-text">
-      <h2 class="modal-title">Top-up Success</h2>
-      <p class="modal-subtitle">Your balance has been updated and is ready to use</p>
-      <p class="transaction-id">Transaction ID: #{{ transactionId }}</p>
+      <h2 class="modal-title">{{ t('card.topUpSuccess') }}</h2>
+      <p class="modal-subtitle">{{ t('card.balanceUpdatedReady') }}</p>
+      <p class="transaction-id">
+        {{ t('card.transactionId') }}
+        <a :href="`https://cexplorer.io/tx/${transactionId}`" target="_blank"
+          >#{{ transactionId.slice(0, 8) }}...{{ transactionId.slice(-8) }}</a
+        >
+      </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+
+const { t } = useTranslation();
+
 // Props
 interface Props {
   transactionId?: string;

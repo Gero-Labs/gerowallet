@@ -20,7 +20,7 @@
         :key="index"
         :src="item.backgroundImage"
         :class="getItemClass(item)"
-        @click="!isLoading && handleItemClick(item)"
+        @click.stop="!isLoading && handleItemClick(item)"
       >
         <div class="carousel-overlay" :class="getOverlayClass(item)">
           <div class="carousel-content" :class="getContentClass(item)">
@@ -32,7 +32,7 @@
                   <div class="debit-card-3d-wrapper" @mousemove="handleCardMouseMove" @mouseleave="handleCardMouseLeave" :style="debitCardStyle">
                     <img
                       :src="item.cardImage"
-                      alt="Gero Debit Card"
+                      :alt="$t('card.geroDebitCard')"
                       class="debit-card-floating"
                     />
                   </div>
@@ -40,9 +40,8 @@
                 <div class="debit-card-text">
                   <v-card-title class="pt-0 pb-0 white--text text-center debit-card-title" style="margin-bottom: 0;">{{ item.title }}</v-card-title>
                   <div class="debit-card-description white--text text-center mb-2">
-                    Top up and pay with ADA
+                    {{item.subtitle}}
                   </div>
-                  <v-card-subtitle class="pb-0 white--text text-center debit-card-coming-soon">Coming soon</v-card-subtitle>
                 </div>
               </slot>
             </div>
@@ -53,7 +52,7 @@
                 <div class="cashback-container">
                   <img
                     :src="item.cardImage"
-                    alt="ADA Cashback"
+                    :alt="$t('cashback.adaCashback')"
                     class="cashback-floating"
                   />
                   <div class="debit-card-glow"></div>
@@ -74,6 +73,7 @@
             <div v-else class="carousel-content-center">
               <slot name="default" :item="item">
                 <img
+                  v-if="item.logo"
                   :src="item.logo"
                   :alt="item.logoAlt"
                   class="carousel-logo mb-3"
@@ -106,14 +106,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { ref, onMounted, onUnmounted } from 'vue';
 
 // Define and export carousel item interface
 export interface CarouselItem {
   id: string;
   title: string;
   subtitle: string;
-  logo: string;
+  logo?: string;
   logoAlt: string;
   backgroundImage: string;
   cardImage?: string;
@@ -268,7 +269,6 @@ onUnmounted(() => {
 .carousel-wrapper {
   position: relative;
   height: 100%;
-  min-height: 422px;
   border-radius: 12px;
   overflow: hidden;
   background-color: rgba(255, 255, 255, 0.05);
@@ -300,7 +300,6 @@ onUnmounted(() => {
 .carousel-wrapper .v-carousel .v-window__container,
 .carousel-wrapper .v-carousel-item {
   height: 100% !important;
-  min-height: 422px !important;
 }
 
 /* Prevent height flickering during transitions */
@@ -311,7 +310,6 @@ onUnmounted(() => {
 .carousel-wrapper .v-window-item {
   flex: 0 0 100% !important;
   height: 100% !important;
-  min-height: 422px !important;
 }
 
 .carousel-behind-overlay {
@@ -389,7 +387,7 @@ onUnmounted(() => {
 
 /* Midnight specific styles */
 .midnight-background {
-  background: linear-gradient(135deg, #1a0033 0%, #330066 50%, #4d0099 100%);
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
 }
 
 /* Apex specific styles */

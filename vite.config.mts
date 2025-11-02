@@ -1,8 +1,8 @@
 import wasm from 'vite-plugin-wasm';
 import { defineConfig, UserConfig } from 'vite';
 import Vue from '@vitejs/plugin-vue2';
-import { VuetifyResolver } from "unplugin-vue-components/resolvers";
-import Components from "unplugin-vue-components/vite";
+import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
+import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
@@ -14,28 +14,51 @@ export const sharedConfig: UserConfig = {
   root: r('src'),
   envDir: r('.'),
   base: './',
+  customLogger: {
+    info(msg, options) {
+      console.log(msg);
+    },
+    warn(msg, options) {
+      // Suppress externalized module warnings (vm, fs, etc. - expected in browser builds)
+      if (msg.includes('externalized for browser compatibility')) return;
+      // Suppress eval warnings from third-party dependencies (protobufjs)
+      if (msg.includes('Use of eval') && msg.includes('node_modules')) return;
+      // Show other warnings
+      console.warn(msg);
+    },
+    error(msg, options) {
+      console.error(msg);
+    },
+    clearScreen() {},
+    hasErrorLogged() { return false; },
+    hasWarned: false,
+    warnOnce(msg, options) {
+      // Apply same filtering as warn()
+      if (msg.includes('externalized for browser compatibility')) return;
+      if (msg.includes('Use of eval') && msg.includes('node_modules')) return;
+      console.warn(msg);
+    },
+  },
   resolve: {
     alias: {
       '@/': `${r('src')}/`,
-      buffer: 'buffer',
-      '@emurgo/cardano-serialization-lib-nodejs': '@emurgo/cardano-serialization-lib-browser',
+      'buffer': 'buffer',
       '@emurgo/cardano-message-signing-nodejs': '@emurgo/cardano-message-signing-browser',
       'lodash': 'lodash-es',
       'cbor': r('src/shims/cbor.js'),
-      stream: r('src/shims/stream.js'),
-      util: 'util',
-      'pbkdf2': 'pbkdf2/browser.js',
+      'stream': r('src/shims/stream.js'),
+      'util': 'util',
+      'pbkdf2': 'pbkdf2/browser',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
   define: {
-    global: 'window',
-    __DEV__: isDev,
-    __NAME__: JSON.stringify(packageJson.name),
-    APP_VERSION: JSON.stringify(packageJson.version),
+    // Note: 'global' is handled by nodePolyfills plugin below
+    // Don't define it here to avoid conflicts that create spurious window/window imports
+    '__DEV__': isDev,
+    '__NAME__': JSON.stringify(packageJson.name),
+    'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
-    TextDecoder: 'window.TextDecoder',
-    TextEncoder: 'window.TextEncoder',
   },
   plugins: [
     Vue({
@@ -70,18 +93,7 @@ export const sharedConfig: UserConfig = {
     AutoImport({
       imports: ['vue', { 'webextension-polyfill': [['=', 'browser']] }],
       dts: r('src/auto-imports.d.ts'),
-    }),
-    {
-      name: 'cbor-fix-dev',
-      resolveId(id, importer) {
-        if (id === 'cbor') {
-          return r('src/shims/cbor.js');
-        }
-        return null;
-      }
-    },
-    // TODO: Add image optimization later
-    // !isDev && viteImagemin({...}),
+    })
   ],
   optimizeDeps: {
     include: [
@@ -105,11 +117,7 @@ export const sharedConfig: UserConfig = {
       'blake2b',
       'crypto-ts',
     ],
-    exclude: [
-      'vue-demi',
-      '@emurgo/cardano-serialization-lib-browser',
-      'cbor'
-    ],
+    exclude: ['vue-demi', 'cbor'],
     esbuildOptions: {
       plugins: [],
       target: 'es2020',
@@ -124,14 +132,14 @@ export const sharedConfig: UserConfig = {
         '.ts': 'tsx',
       },
     },
-    force: false, // Enable caching
+    force: isDev, // Force re-optimization in dev mode to catch changes
     holdUntilCrawlEnd: false, // Don't wait for all files
   },
   worker: {
     plugins: [
       wasm(),
       // topLevelAwait() // Temporarily disabled
-    ]
+    ],
   },
   esbuild: {
     target: 'es2022',
@@ -147,8 +155,16 @@ export const sharedConfig: UserConfig = {
     rollupOptions: {
       output: {
         manualChunks: undefined, // Disable manual chunking for faster builds
-      }
-    }
+      },
+      onwarn(warning, warn) {
+        // Suppress externalized module warnings (vm, fs, etc. - expected in browser builds)
+        if (warning.code === 'PLUGIN_WARNING' && warning.message?.includes('externalized')) return;
+        // Suppress eval warnings from third-party dependencies (protobufjs)
+        if (warning.code === 'EVAL' && warning.id?.includes('node_modules')) return;
+        // Use default warning handler for everything else
+        warn(warning);
+      },
+    },
   },
 };
 
@@ -206,6 +222,19 @@ export default defineConfig(({ command }) => {
         input: {
           options: r('src/options/index.html'),
         },
+        onwarn(warning, warn) {
+          // Suppress window/window warnings - harmless artifacts from terser minification
+          if (warning.message && warning.message.includes('window/window')) return;
+          // Suppress eval warnings from third-party dependencies (protobufjs)
+          if (warning.code === 'EVAL' && warning.id?.includes('node_modules')) return;
+          // Use default warning handler for everything else
+          warn(warning);
+        },
+        external: (id) => {
+          // Ignore spurious window/window imports created by terser minification
+          if (id === 'window/window' || id.includes('window/window')) return true;
+          return false;
+        },
         output: {
           chunkFileNames: 'js/[name].[hash].js',
           assetFileNames: 'assets/[name].[hash][extname]',
@@ -219,7 +248,7 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/notifications/*', dest: 'extension/public' },
               // Skip large images for faster build
               {
-                src: 'src/assets/!(emptyState|welcome|Midnight|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
+                src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
                 dest: 'extension/assets'
               },
             ],
@@ -227,15 +256,6 @@ export default defineConfig(({ command }) => {
             copySync: false, // Async copying
             flatten: false,
           }) as any,
-          {
-            name: 'cbor-fix',
-            resolveId(id, importer) {
-              if (id === 'cbor') {
-                return r('src/shims/cbor.js');
-              }
-              return null;
-            }
-          }
         ]
       },
     },

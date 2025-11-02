@@ -2,11 +2,11 @@
   <v-card class="chart-card" outlined>
     <div class="chart-header">
       <div class="chart-title-section">
-        <h3 class="chart-title">Balance over time</h3>
+        <h3 class="chart-title">{{ $t('card.balanceOverTime') }}</h3>
         <div class="chart-value-section">
           <span class="chart-value">€{{ currentBalance }}</span>
           <div class="change-badge positive">
-            <img src="@/assets/svg/trend-up-01.svg" alt="Trend" class="change-icon" />
+            <img src="@/assets/svg/trend-up-01.svg" :alt="$t('common.trend')" class="change-icon" />
             <span class="change-text">+{{ balanceChangePercentage }}%</span>
           </div>
         </div>
@@ -15,8 +15,8 @@
         <v-menu offset-y :close-on-content-click="false">
           <template v-slot:activator="{ on, attrs }">
             <v-btn class="filter-btn" variant="outlined" size="small" v-bind="attrs" v-on="on">
-              <img src="@/modules/wallet/icons/filter.svg" alt="Filter" class="btn-icon" />
-              Date
+              <img src="@/modules/wallet/icons/filter.svg" :alt="$t('common.filter')" class="btn-icon" />
+              {{ $t('common.date') }}
             </v-btn>
           </template>
           <v-card outlined class="liquid-glass">
@@ -61,9 +61,13 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, watch, computed } from 'vue';
 import Highcharts from 'highcharts';
 import cardStore from '@/stores/modules/card';
+
+
+const { t } = useTranslation();
 
 const activeTab = ref('12months');
 const chartContainer = ref<HTMLElement>();

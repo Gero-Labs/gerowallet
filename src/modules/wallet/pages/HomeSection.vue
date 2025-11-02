@@ -1,130 +1,68 @@
 <template>
   <div class="home-section">
-    <!-- Account Overview Section -->
-    <!-- <WelcomeCard :user-name="userName" /> -->
-    <HeroSection />
-    <AccountOverviewHeader />
-
-    <BalanceCardsSection
-      :card-balance="cardBalanceFormatted"
-      :card-balance-ada="cardBalanceAda"
-      :gero-earned="geroEarnedFormatted"
-      :total-deposit="totalDepositFormatted"
-      :total-deposit-ada="totalDepositAda"
-    />
-    <div class="dashboard-layout">
-      <div class="left-column">
-        <RecentTransactionsSection :transactions="cardHistoryRecords" />
-      </div>
-      <div class="right-column">
-        <ChartSection @filter="handleFilter" />
-        <ExchangeRateSection />
-        <RecentActivitiesSection />
+    <div class="content-wrapper">
+      <HeroSection />
+      <!-- <ExchangeRateSection/> -->
+      <div class="dashboard-layout" v-if="selectedCard">
+        <!-- <div class="left-column"> -->
+        <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
+        <!-- </div> -->
+        <!-- <div class="right-column">
+           <ChartSection @filter="handleFilter" /
+        </div>> -->
       </div>
     </div>
+
+    <!-- Kaiserex Partnership Info - Always at bottom -->
+    <v-footer class="footer transparent px-0">
+      <KaiserexPartnershipBadge/>
+    </v-footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, onMounted, ref } from 'vue';
 import cardStore from '@/stores/modules/card';
-import { useMockCardData } from '@/models/card-example';
-import geroStore from '@/stores/geroStore';
-import WelcomeCard from '../components/dashboard/WelcomeCard.vue';
-import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
-import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
-import ChartSection from '../components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
-import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
-import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 import HeroSection from '../components/HeroSection.vue';
+import KaiserexPartnershipBadge from '../components/KaiserexPartnershipBadge.vue';
+import { useIntervalFn } from '@vueuse/core';
+import ExchangeRateSection from '@/modules/wallet/components/dashboard/ExchangeRateSection.vue';
 
-const { initializeMockData } = useMockCardData();
+const { t } = useTranslation();
+const loading = ref(false);
 
-// ADA to EUR conversion rate (hardcoded)
-const ADA_TO_EUR_RATE = 0.65;
+const currentState = computed(() => cardStore.currentState)
 
-// Computed properties for formatted data
-const userName = computed(() => {
-  if (cardStore.state.userInfo?.email) {
-    return cardStore.state.userInfo.email.split('@')[0]; // Extract name from email
+const selectedCard = computed(() => cardStore.getSelectedCard());
+
+onMounted(async () => {
+  loading.value = true;
+
+  await Promise.all([cardStore.fetchCardHistory(), cardStore.fetchCardBalance()])
+  loading.value = false;
+  useIntervalFn(() => { //TODO need to fix this to occur only when the card is active or becoming active - terminate when logging out
+    initData();
+  }, 60000);
+});
+
+const initData = () => {
+  if (cardStore.isAuthenticated && (currentState.value === 'approved' || currentState.value === 'new')) {
+    cardStore.fetchCardHistory();
+    cardStore.fetchCardBalance();
+    cardStore.getExchangeRate();
   }
-  return 'User';
-});
-
-const cardBalanceFormatted = computed(() => {
-  if (cardStore.state.cardBalance?.currentBalance) {
-    const amount = cardStore.state.cardBalance.currentBalance.amount;
-    const currency = cardStore.state.cardBalance.currentBalance.currencyCode;
-    return `${amount.toFixed(2)}`;
-  }
-  return '€0.00';
-});
-
-const cardBalanceAda = computed(() => {
-  // Calculate ADA equivalent of card balance
-  if (cardStore.state.cardBalance?.currentBalance) {
-    const eurAmount = cardStore.state.cardBalance.currentBalance.amount;
-    const adaAmount = eurAmount / ADA_TO_EUR_RATE;
-    return `₳${adaAmount.toFixed(2)}`;
-  }
-  return '₳0.00';
-});
-
-const geroEarnedFormatted = computed(() => {
-  // This would come from GERO rewards
-  return '0.00K';
-});
-
-const totalDepositFormatted = computed(() => {
-  // Start with the original hardcoded value and add new deposits
-  const baseAmount = 1692.31;
-  const additionalDeposits = cardStore.state.totalDeposits || 0;
-  return (baseAmount + additionalDeposits).toFixed(2);
-});
-
-const totalDepositAda = computed(() => {
-  // Calculate ADA equivalent of total deposits
-  const baseAmount = 1692.31;
-  const additionalDeposits = cardStore.state.totalDeposits || 0;
-  const totalEur = baseAmount + additionalDeposits;
-  const adaAmount = totalEur / ADA_TO_EUR_RATE;
-  return `₳${adaAmount.toFixed(2)}`;
-});
+};
 
 const cardHistoryRecords = computed(() => {
-  const records = cardStore.state.cardHistory?.history.records || [];
-  console.log('🏠 HomeSection cardHistoryRecords computed:', records.length, 'records');
+  const selectedCard = cardStore.getSelectedCard();
+  const records = selectedCard?.cardHistory?.records || [];
   if (records.length > 0) {
     console.log('🏠 First record:', records[0]);
   }
   return records;
 });
-
-// Initialize data
-onMounted(async () => {
-  console.log('HomeSection mounted, DEV mode:', import.meta.env.DEV);
-  console.log('🏠 Initial cardStore.state.activities:', cardStore.state.activities);
-  
-  if (import.meta.env.DEV) {
-    // Use mock data in development
-    console.log('Initializing mock data...');
-    await initializeMockData();
-    console.log('Mock data initialized');
-  } else {
-    // Use real API in production
-    console.log('Initializing real API...');
-    await cardStore.initialize(geroStore.state.wallets);
-    console.log('Real API initialized');
-  }
-  
-  console.log('🏠 After init cardStore.state.activities:', cardStore.state.activities);
-});
-
-const handleFilter = () => {
-  console.log('Filter clicked');
-  // Handle filter action
-};
 </script>
 
 <style lang="scss" scoped>
@@ -132,8 +70,18 @@ const handleFilter = () => {
 @import '../styles/mixins';
 
 .home-section {
-  min-height: 100vh;
-  padding: 12px 32px 96px;
+  padding: 12px 32px 0;
+  height: 100%;
+  position: relative;
+  overflow-y: auto;
+  min-height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  justify-content: space-between;
+}
+
+.content-wrapper {
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -143,19 +91,19 @@ const handleFilter = () => {
   display: flex;
   gap: $spacing-lg;
   align-items: flex-start;
+  width: 100%;
+  // .left-column {
+  //   flex: 1;
+  //   max-width: 100%;
+  // }
 
-  .left-column {
-    flex: 1;
-    width: calc(66% - 8px);
-  }
-
-  .right-column {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-lg;
-    width: calc(33% - 8px);
-    flex-shrink: 0;
-  }
+  // .right-column {
+  //   display: flex;
+  //   flex-direction: column;
+  //   gap: $spacing-lg;
+  //   width: calc(33% - 8px);
+  //   flex-shrink: 0;
+  // }
 }
 
 @media (max-width: 1600px) {
@@ -174,7 +122,7 @@ const handleFilter = () => {
 
 @media (max-width: $breakpoint-md) {
   .home-section {
-    padding: 8px 16px 64px;
+    padding: 8px 16px 0;
   }
 
   .dashboard-layout {

@@ -11,7 +11,7 @@
         <div class="step-icon" :class="{ active: currentStep >= 1 }">
           <div class="step-dot"></div>
         </div>
-        <span class="step-text">Your Details </span>
+        <span class="step-text">{{ $t('card.yourDetails') }}</span>
       </div>
 
       <!-- Step 2: Take a selfie -->
@@ -19,7 +19,7 @@
         <div class="step-icon" :class="{ active: currentStep >= 2 }">
           <div class="step-dot"></div>
         </div>
-        <span class="step-text">Take a selfie</span>
+        <span class="step-text">{{ $t('card.takeASelfie') }}</span>
       </div>
 
       <!-- Step 3: Pending Approval -->
@@ -27,7 +27,7 @@
         <div class="step-icon" :class="{ active: currentStep >= 3 }">
           <div class="step-dot"></div>
         </div>
-        <span class="step-text">Pending Approval</span>
+        <span class="step-text">{{ $t('card.pendingApproval') }}</span>
       </div>
     </div>
   </div>

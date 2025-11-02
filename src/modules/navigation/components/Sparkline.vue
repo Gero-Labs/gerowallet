@@ -14,10 +14,14 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, onUnmounted, toRefs, computed } from 'vue';
 import cryptoApi from '@/api/crypto-api';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
+
+
+const { t } = useTranslation();
 
 const width = ref<number>(2);
 const radius = ref<number>(0);
@@ -54,10 +58,14 @@ const fetch = async () => {
 }
 
 onMounted(async () => {
-  await fetch()
-  intervalId.value = setInterval(async () => {
+  // OPTIMIZATION: Defer chart data loading to improve initial page load
+  // Load after 500ms to not block wallet initialization
+  setTimeout(async () => {
     await fetch()
-  },60000);
+    intervalId.value = setInterval(async () => {
+      await fetch()
+    }, 60000);
+  }, 500);
 })
 
 onUnmounted(() => {

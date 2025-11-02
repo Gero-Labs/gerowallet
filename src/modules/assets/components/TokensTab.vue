@@ -9,8 +9,8 @@
     :items-per-page="-1"
     hide-default-footer
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-    :custom-sort="customSort"
     :style="{ minHeight: tableHeight + 'px' }"
+    @click:row="handleTokenRowClick"
   >
     <template v-slot:body.append>
       <tr v-if="tokensList.length > 6" class="no-hover">
@@ -85,10 +85,10 @@
               <v-tooltip top :open-delay="500" content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ filters.toCurrency(convertFiat(item.price), false, 4, getCurrencySymbol(), '', true, 0) }}
+                    {{ filters.toCurrency(item.price, false, 4, getCurrencySymbol(), '', true, 0) }}
                   </span>
                 </template>
-                {{ filters.toCurrency(convertFiat(item.price), false, 6, getCurrencySymbol(), '', false, 0) }}
+                {{ filters.toCurrency(item.price, false, 6, getCurrencySymbol(), '', false, 0) }}
               </v-tooltip>
             </span>
           </v-list-item-title>
@@ -119,10 +119,10 @@
         <v-tooltip top :open-delay="500" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <span v-bind="attrs" v-on="on">
-              {{ filters.toCurrency(convertFiat(item.value), false, 3, getCurrencySymbol(), '', true, 0) }}
+              {{ filters.toCurrency(item.value, false, 3, getCurrencySymbol(), '', true, 0) }}
             </span>
           </template>
-          {{ filters.toCurrency(convertFiat(item.value), false, 6, getCurrencySymbol(), '', false, 0) }}
+          {{ filters.toCurrency(item.value, false, 6, getCurrencySymbol(), '', false, 0) }}
         </v-tooltip>
       </span>
     </template>
@@ -130,10 +130,10 @@
       <v-tooltip v-if="item.mcap" top :open-delay="500" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
-            {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 2, getCurrencySymbol(), '', true, 0) }}
+            {{ filters.toCurrency(Number(item.mcap), false, 2, getCurrencySymbol(), '', true, 0) }}
           </span>
         </template>
-        {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 4, getCurrencySymbol(), '', false, 0) }}
+        {{ filters.toCurrency(Number(item.mcap), false, 4, getCurrencySymbol(), '', false, 0) }}
       </v-tooltip>
       <span v-else>N/A</span>
     </template>
@@ -144,7 +144,7 @@
         class="progress-bar"
         height="14"
         :value="(item.allocation / totalAllocation) * 100"
-        color="#00dff3"
+        color="primary"
       >
         <template v-slot:default="{ value }">
           <strong style="font-size: 8px">{{ value.toFixed(1) }}%</strong>
@@ -155,6 +155,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -189,7 +190,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits(['update:sortOptions']);
-
+const { t } = useTranslation();
 // Store references
 const { price } = toRefs(networkStore);
 const { loggedWallet, tokens } = toRefs(walletStore);
@@ -202,12 +203,12 @@ const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Headers for the data table
 const headers = ref<any[]>([
-  { text: 'Asset', align: 'start', sortable: true, value: 'name' },
-  { text: 'Quantity', align: 'center', sortable: true, value: 'quantity', width: '102' },
-  { text: 'Price', align: 'center', sortable: true, value: 'price', width: '100' },
-  { text: 'Value', align: 'center', sortable: true, value: 'value', width: '88' },
-  { text: 'M. Cap', align: 'center', sortable: true, value: 'mcap', width: '104' },
-  { text: 'Allocation', align: 'center', sortable: true, value: 'allocation', width: '130' },
+  { text: String(t('common.asset')), align: 'start', sortable: true, value: 'name' },
+  { text: String(t('common.quantity')), align: 'center', sortable: true, value: 'quantity', width: '102' },
+  { text: String(t('common.price')), align: 'center', sortable: true, value: 'price', width: '100' },
+  { text: String(t('common.value')), align: 'center', sortable: true, value: 'value', width: '88' },
+  { text: String(t('common.marketCap')), align: 'center', sortable: true, value: 'mcap', width: '104' },
+  { text: String(t('common.allocation')), align: 'center', sortable: true, value: 'allocation', width: '130' },
 ]);
 
 // Pagination
@@ -325,15 +326,18 @@ const tokensList = computed(() => {
   let res = Object.values(tokens.value).map((token: any) => {
     if (token.policy_id === '') {
       token.risk = 'AAA';
-      // Use Kraken WebSocket price for ADA, fallback to network store price
-      token.price = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      // Use Kraken WebSocket price for ADA, fallback to network store price (in USD)
+      // Convert to user's selected currency (USD or EUR)
+      const usdPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      token.price = convertFiat(usdPrice);
       let coinGeckoCurrency = 'cardano';
       if (token.name === 'Cardano') {
         coinGeckoCurrency = 'cardano';
       } else if (token.name === 'Apex Fusion') {
         coinGeckoCurrency = 'apex-2';
+        token.price = convertFiat(price.value?.lastPrice || 0);
       }
-      token.mcap = cache.value[coinGeckoCurrency]?.usd_market_cap;
+      token.mcap = convertFiat(cache.value[coinGeckoCurrency]?.usd_market_cap);
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
       );
@@ -343,8 +347,12 @@ const tokensList = computed(() => {
       token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
     } else {
       token.risk = risks.value[token.fingerprint]?.risk;
-      token.price = dexHunterTokens.value[token.unit]?.price;
-      token.mcap = dexHunterTokens.value[token.unit]?.mcap;
+      // DexHunter prices are in ADA, convert to USD first, then to user's selected currency
+      const priceInAda = dexHunterTokens.value[token.unit]?.price || 0;
+      const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      const priceInUsd = priceInAda * adaPriceUsd;
+      token.price = convertFiat(priceInUsd);
+      token.mcap = convertFiat(dexHunterTokens.value[token.unit]?.mcap);
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
       );
@@ -417,15 +425,8 @@ const totalAllocation = computed(() => {
   let total = 0;
   if (tokensList.value.length === 1) {
     const token = tokensList.value[0];
-    let res: any;
-    if (token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
-      // Use Kraken WebSocket price for ADA, fallback to network store price
-      const adaPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
-      res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * adaPrice
-    } else {
-      res = token.value;
-    }
-    return res;
+    // Use the already calculated value (already in correct currency)
+    return token.value || 0;
   }
   tokensList.value.forEach(token => {
     if (token.value) {
@@ -435,22 +436,37 @@ const totalAllocation = computed(() => {
   return total;
 });
 
+const handleTokenRowClick = (row: any) => {
+  console.log(row);
+};
+
+// Sort the full tokensList first, then paginate
+const sortedTokens = computed(() => {
+  const sortBy = [sortOptions.value.by];
+  const sortDesc = [sortOptions.value.desc];
+
+  // Apply custom sort to the entire tokensList
+  return customSort(tokensList.value, sortBy, sortDesc);
+});
+
 const paginatedTokens = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   const end = start + itemsPerPage;
 
-  // tokensList already includes search filtering and will be sorted by the data table's customSort
-  // So we just need to paginate the already filtered results
-  return tokensList.value.slice(start, end);
+  // Now paginate the already sorted and filtered results
+  return sortedTokens.value.slice(start, end);
 });
 
 // Use the shared container height from parent
 const tableHeight = computed(() => props.containerHeight);
 
 // Watch for search term changes to reset pagination
-watch(() => props.searchTerm, () => {
-  currentPage.value = 1;
-});
+watch(
+  () => props.searchTerm,
+  () => {
+    currentPage.value = 1;
+  }
+);
 </script>
 
 <style scoped>

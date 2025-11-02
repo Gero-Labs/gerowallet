@@ -2,9 +2,18 @@
   <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highcharts"></vue-highcharts>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, toRefs } from 'vue';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
+import { walletStore } from '@/stores/walletStore';
+import networks from '@/utils/networks';
+import { Blockchain } from '@/models/types';
+
+
+const { t } = useTranslation();
+
+const { loggedWallet } = toRefs(walletStore);
 
 const props = defineProps({
   chartData: {
@@ -17,6 +26,11 @@ const props = defineProps({
   },
 });
 
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
+
 const chartOptions = computed(() => {
   return {
     accessibility: {
@@ -25,10 +39,11 @@ const chartOptions = computed(() => {
     endOnTick: false,
     legend:{ enabled:false },
     title: {
-      text: 'Rewards History',
+      text: t('staking.rewardsHistory'),
       floating: true,
       align: 'center',
       verticalAlign: 'top',
+      y: 0,
       style: {
         color: "#FFF",
         fontWeight: 'bold',
@@ -39,6 +54,8 @@ const chartOptions = computed(() => {
       type: 'line',
       backgroundColor: 'transparent',
       height: 155,
+      spacingTop: 15,
+      spacingBottom: 5,
       style: {
         fontFamily: 'Quicksand',
       },
@@ -57,14 +74,24 @@ const chartOptions = computed(() => {
       enabled: false,
     },
     tooltip: {
-      positioner: function (labelWidth, labelHeight, point) {
-        return {
-          x: point.plotX + this.chart.plotLeft - labelWidth / 2,
-          y: point.plotY + this.chart.plotTop - labelHeight - 10
-        };
+      positioner: function (this: any, labelWidth: number, labelHeight: number, point: any) {
+        let x = point.plotX + this.chart.plotLeft - labelWidth / 2;
+        let y = point.plotY + this.chart.plotTop - labelHeight - 10;
+
+        // Prevent tooltip from overflowing left/right
+        if (x < 0) x = 5;
+        if (x + labelWidth > this.chart.chartWidth) x = this.chart.chartWidth - labelWidth - 5;
+
+        // Prevent tooltip from overflowing top
+        if (y < 0) y = point.plotY + this.chart.plotTop + 10;
+
+        return { x, y };
       },
+      headerFormat: `<b>${t('staking.epoch')} {point.key}</b><br/>`,
+      pointFormat: `{point.y} ${networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network)}`,
+      outside: false,
       backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      borderColor: '#00DFF3',
+      borderColor: isApex.value ? '#dc753e' : '#00c7f3',
       borderRadius: 8,
       borderWidth: 1,
       style: {
@@ -82,7 +109,8 @@ const chartOptions = computed(() => {
       labels: {
         style: {
           fontFamily: 'Inter',
-          color: '#fff'
+          color: '#fff',
+          fontSize: '10px'
         },
       },
       categories: Object.keys(props.chartData)
@@ -99,17 +127,17 @@ const chartOptions = computed(() => {
       min: 0,
       opposite: true,
     },
-    colors: ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
+    colors: [isApex.value ? '#dc753e' : '#00c7f3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
     series: [
       {
-        name: 'Rewards',
+        name: 'ADA',
         data: Object.values(props.chartData),
-        color: '#00DFF3',
+        color: isApex.value ? '#dc753e' : '#00c7f3',
         lineWidth: 2,
         marker: {
           radius: 2,
-          fillColor: '#00DFF3',
-          lineColor: '#00DFF3',
+          fillColor: isApex.value ? '#dc753e' : '#00c7f3',
+          lineColor: isApex.value ? '#dc753e' : '#00c7f3',
           lineWidth: 1
         }
       },

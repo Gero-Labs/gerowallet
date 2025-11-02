@@ -67,6 +67,8 @@ export default {
     await axiosInstance.post(`/api/v2/swap/reverseEstimate`, requestBody);
   },
   async swap(amount_in: number, buyer_address: string, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
+    token_in = token_in === "lovelace" ? '' : token_in;
+    token_out = token_out === "lovelace" ? '' : token_out;
     const requestBody = {
       amount_in,
       buyer_address,
@@ -74,6 +76,8 @@ export default {
       token_in,
       token_out,
       referrer,
+      blacklisted_dexes: [],
+      tx_optimization: true
     }
     const { data } = await axiosInstance.post(`/api/v2/swap`, requestBody);
     return data
@@ -106,5 +110,11 @@ export default {
   },
   async mCap(unit: string): Promise<any> {
     return axiosInstance.get(`/api/v2/mcap/${unit}`);
+  },
+  async walletBalance(addresses: string[]): Promise<any> {
+    const requestBody = {
+      addresses
+    };
+    return axiosInstance.post(`/api/v2/swap/wallet`, requestBody);
   }
 }

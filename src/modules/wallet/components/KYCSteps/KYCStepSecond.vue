@@ -1,16 +1,16 @@
 <template>
   <div class="step-content">
     <div class="modal-header">
-      <h2 class="modal-title">Take a Selfie</h2>
-      <p class="modal-subtitle">Real-time face scan to match ID</p>
+      <h2 class="modal-title">{{ $t('navigation.takeSelfie') }}</h2>
+      <p class="modal-subtitle">{{ $t('navigation.realTimeFaceScan') }}</p>
     </div>
 
     <div class="camera-section">
       <!-- Show captured photo if exists -->
       <div v-if="capturedPhoto" class="captured-photo">
-        <img :src="capturedPhoto" alt="Captured Photo" class="photo-image" />
+        <img :src="capturedPhoto" :alt="$t('card.capturedPhoto')" class="photo-image" />
         <div class="photo-actions">
-          <button class="retake-btn" @click="retakePhoto">Retake Photo</button>
+          <button class="retake-btn" @click="retakePhoto">{{ $t('navigation.retakePhoto') }}</button>
         </div>
       </div>
 
@@ -31,17 +31,17 @@
 
         <!-- Camera icon when not active -->
         <div v-else class="camera-icon" @click="startCamera()">
-          <img src="@/modules/wallet/icons/camera.svg" alt="camera" />
+          <img src="@/modules/wallet/icons/camera.svg" :alt="$t('common.camera')" />
         </div>
 
         <div class="camera-text">
-          <span v-if="!isCameraActive" class="camera-action" @click="startCamera()">Switch on your camera</span>
-          <span v-else class="camera-action">Position your face in the frame</span>
+          <span v-if="!isCameraActive" class="camera-action" @click="startCamera()">{{ $t('navigation.switchOnCamera') }}</span>
+          <span v-else class="camera-action">{{ $t('navigation.positionFaceInFrame') }}</span>
         </div>
 
         <!-- Capture button when camera is active -->
         <button v-if="isCameraActive" class="capture-btn" @click="capturePhoto">
-          <img src="@/modules/wallet/icons/capture.svg" alt="capture" />
+          <img src="@/modules/wallet/icons/capture.svg" :alt="$t('common.capture')" />
         </button>
       </div>
 

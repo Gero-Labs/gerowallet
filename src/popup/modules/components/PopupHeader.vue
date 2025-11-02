@@ -1,29 +1,29 @@
 <template>
   <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent" :disabled="disabled">
     <div style="width: 52px; margin-left: auto; margin-right: auto">
-      <img alt="Gero Logo" id="modal-logo-icon" width="52" :src="assets.geroLogo"/>
-      <img alt="Gero Text" id="modal-logo-text" width="52" :src="assets.geroText"/>
+      <img :alt="$t('common.geroLogo')" id="modal-logo-icon" width="52" :src="assets.geroLogo"/>
+      <img :alt="$t('common.geroText')" id="modal-logo-text" width="52" :src="assets.geroText"/>
     </div>
     <v-card-title class="justify-center py-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
     <v-card-title class="justify-center py-0" style="font-size: 16px;" v-if="showWebsite">
-      <span style="color: #ccc">Website:&nbsp;</span>
+      <span style="color: #ccc">{{ $t('navigation.websiteLabel') }}:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
         <v-avatar size="16">
-          <img :src="favicon" alt="Dapp Website favicon" />
+          <img :src="favicon" :alt="$t('common.dappWebsiteFavicon')" />
         </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white"
                              width="3"></v-progress-circular>
-        <v-avatar v-else tile size="16" class="ml-1">
-          <img :src="websiteRiskIcon" alt="Website Risk Icon" />
+        <v-avatar v-else tile size="16" class="ml-1 text-center">
+          <v-img contain :src="websiteRiskIcon" :alt="$t('common.websiteRiskIcon')" />
         </v-avatar>
       </div>
       <div v-else>
-        N/A
+        {{ $t('navigation.notAvailable') }}
       </div>
     </v-card-title>
     <Select
-      v-if="showWallet"
+      v-if="showWallet && loggedWallet"
       :value="loggedWallet"
       :items="[loggedWallet]"
       :readonly="true"
@@ -33,12 +33,14 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { getCurrentInstance, ref, toRefs, computed, onMounted } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+import filters from '@/shared/utils/filters';
 
 defineProps({
   title: {
@@ -75,7 +77,9 @@ const favicon = computed(() => {
 
 const domain = computed(() => {
   if (queryParams.value?.website) {
-    return extractHostname(queryParams.value?.website);
+    const hostname = filters.extractHostname(queryParams.value?.website);
+    validateDomain(hostname);
+    return hostname;
   }
   return '';
 });
@@ -84,26 +88,7 @@ const websiteRiskIcon = computed(() => {
   return assets.resolveDappRisk(dappRisk.value)
 });
 
-function extractHostname(url) {
-  let hostname;
-  //find & remove protocol (http, ftp, etc.) and get hostname
-
-  if (url.indexOf('//') > -1) {
-    hostname = url.split('/')[2];
-  } else {
-    hostname = url.split('/')[0];
-  }
-
-  //find & remove port number
-  hostname = hostname.split(':')[0];
-  //find & remove "?"
-  hostname = hostname.split('?')[0];
-
-  validateDomain(hostname);
-  return hostname;
-}
-
-function validateDomain(s) {
+function validateDomain(s: string) {
   try {
     new URL('https://' + s);
     return true;

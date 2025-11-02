@@ -14,7 +14,7 @@
         :size="props.tokenSize"
         :color="token.img ? '' : 'black'"
       >
-        <v-img v-if="token.img" :src="assts.resolveIcon(token.img)" :alt="token.asset_name"></v-img>
+        <v-img v-if="token.img" :src="token.img" :alt="token.asset_name"></v-img>
         <v-img v-else :src="assts.questionMarkDark" />
       </v-avatar>
     </v-btn>
@@ -35,16 +35,18 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref, watch, withDefaults } from 'vue';
 import { resolveAsset } from '@/shared/utils/resolver';
 import assts from '@/utils/assets';
 
 interface Props {
-  tokens: Array<any>
+  tokens?: Array<any>
   tokenSize?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  tokens: () => [],
   tokenSize: 40
 })
 
@@ -82,11 +84,11 @@ watch(() => props.tokens, (newVal) => {
 })
 
 const residue = computed(() => {
-  return props.tokens.length > 4 ? props.tokens.length - 4 : 0;
+  return props.tokens?.length > 4 ? props.tokens.length - 4 : 0;
 })
 
 onMounted(async () => {
-  if (props.tokens.length) {
+  if (props.tokens?.length) {
     await updateTokens(props.tokens);
   }
 })

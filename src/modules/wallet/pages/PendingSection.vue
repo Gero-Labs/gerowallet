@@ -3,22 +3,12 @@
     <ApplicationStatusSection />
     <div class="soon">
       <div class="soon-content">
-        <AccountOverviewHeader />
-
-        <BalanceCardsSection 
-          :card-balance="'0'" 
-          :card-balance-ada="'₳0.00'" 
-          :gero-earned="'0'" 
-          :total-deposit="'0'" 
-          :total-deposit-ada="'₳0.00'" 
-        />
         <div class="dashboard-layout">
           <div class="left-column">
             <RecentTransactionsSection :transactions="[]" />
           </div>
           <div class="right-column">
             <ChartSection />
-            <ExchangeRateSection />
             <RecentActivitiesSection />
           </div>
         </div>
@@ -33,11 +23,11 @@
               <path d="M12 6v6l4 2" stroke="#2DF0F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <h2 class="pending-title">Account Overview Pending</h2>
-          <p class="pending-description">Your account overview will be available once your card has been issued and activated.</p>
+          <h2 class="pending-title">{{ $t('card.accountOverviewPending') }}</h2>
+          <p class="pending-description">{{ $t('card.accountOverviewAvailableOnce') }}</p>
           <div class="pending-status">
             <div class="status-indicator"></div>
-            <span class="status-text">Processing your application...</span>
+            <span class="status-text">{{ $t('card.processingYourApplication') }}</span>
           </div>
         </div>
       </div>
@@ -50,22 +40,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
-import HeroSection from '@/modules/wallet/components/HeroSection.vue';
-import CallToActionSection from '@/modules/wallet/components/CallToActionSection.vue';
-import FeatureGridSection from '@/modules/wallet/components/FeatureGridSection.vue';
-import AccountOverviewHeader from '@/modules/wallet/components/dashboard/AccountOverviewHeader.vue';
-import BalanceCardsSection from '@/modules/wallet/components/dashboard/BalanceCardsSection.vue';
+// import AccountOverviewHeader from '@/modules/wallet/components/dashboard/AccountOverviewHeader.vue';
+// import BalanceCardsSection from '@/modules/wallet/components/dashboard/BalanceCardsSection.vue';
 import ChartSection from '@/modules/wallet/components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '@/modules/wallet/components/dashboard/RecentTransactionsSection.vue';
-import ExchangeRateSection from '@/modules/wallet/components/dashboard/ExchangeRateSection.vue';
 import RecentActivitiesSection from '@/modules/wallet/components/dashboard/RecentActivitiesSection.vue';
-import cardStore from '@/stores/modules/card';
-
-const cardHistoryRecords = computed(() => {
-  return cardStore.state.cardHistory?.history.records || [];
-});
 </script>
 
 <style lang="scss" scoped>
@@ -83,6 +64,8 @@ const cardHistoryRecords = computed(() => {
   flex-direction: column;
   gap: 32px;
   width: 100%;
+
+  position: relative;
   .soon-content {
     opacity: 0.4;
     cursor: not-allowed;

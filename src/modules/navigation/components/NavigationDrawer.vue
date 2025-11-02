@@ -13,7 +13,7 @@
       <v-list-item class="text-center">
         <v-list-item-content class="py-2">
           <v-list-item-title>
-            <img :src="assts.geroDashboard" width="100" alt="logo" />
+            <img :src="isApex ? assets.geroDashboardApex : assets.geroDashboard" width="100" alt="logo" />
           </v-list-item-title>
           <v-list-item-subtitle>
             <v-btn color="orange" text plain @click="changeLogRef.setEnabled(true)">
@@ -37,7 +37,7 @@
           :to="item.link"
           v-show="item.enabled || item.soon"
           :disabled="item.soon"
-          :active-class="themeDark ? 'activePageDark' : 'activePage'"
+          :active-class="themeDark ? (isApex ? 'activePageDark apex' : 'activePageDark') : (isApex ? 'activePage apex' : 'activePage')"
           link
           class="menuItem"
           style="height: 40px"
@@ -74,7 +74,7 @@
                   <v-icon size="16">mdi-play-box-multiple</v-icon>
                 </v-btn>
               </template>
-              <span>Mini Player</span>
+              <span>{{ $t('navigation.miniPlayer') }}</span>
             </v-tooltip>
           </v-list-item-action>
 
@@ -85,7 +85,7 @@
               color="primary"
               x-small
             >
-              NEW
+              {{ $t('common.new') }}
             </v-chip>
           </v-list-item-action>
         </v-list-item>
@@ -111,7 +111,7 @@
                 color="primary"
                 x-small
                 outlined>
-                Soon
+                {{ $t('common.comingSoon') }}
               </v-chip>
             </v-list-item-title>
           </v-list-item-content>
@@ -157,6 +157,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
@@ -167,6 +168,12 @@ import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import cardStore from '@/stores/modules/card';
+import LoadingState from '@/stores/loading';
+import { Blockchain } from '@/models/types';
+import assets from '@/utils/assets';
+import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { debugLog } from '@/utils/debug';
 
 interface NavigationItem {
   title?: string;
@@ -200,7 +207,6 @@ const router = vmProxy.$router
 const version = ref('')
 
 const { musicPlaylist, context } = toRefs(musicStore);
-
 const { loggedWallet, transactions } = toRefs(walletStore);
 
 const account = computed(() => {
@@ -224,6 +230,11 @@ function openExternalLink(href?: string) {
   }
 }
 
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
+
 const items = computed((): NavigationItemUnion[] => {
   let isStakingEnabled = false;
   if (loggedWallet.value?.baseAddress) {
@@ -237,23 +248,25 @@ const items = computed((): NavigationItemUnion[] => {
   const isReferralEnabled = false;
   const hasActivitiesRewardsItems = isClaimRewardsEnabled || isCashbackEnabled || isReferralEnabled;
 
+  const { t } = useTranslation();
+  
   return [
-    { title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true },
-    { title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
-    { header: 'Financial Hub', enabled: true },
-    { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
-    { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
-    { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', soon: true },
-    { title: 'Gero Card', icon: assts.card, link: '/card',  enabled: true, new: true },
-    { header: 'Activities & Rewards', enabled: hasActivitiesRewardsItems },
-    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
-    { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
-    { title: 'Referral', icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
+    { title: t('navigation.dashboard'), icon: assts.barChart, link: '/', enabled: true },
+    { title: t('navigation.blog'), icon: assts.blog, link: '/blog', enabled: true },
+    { header: t('navigation.financialHub'), enabled: true },
+    { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
+    { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
+    { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
+    { title: t('navigation.multisig'), icon: assts.multisigTree, link: '/multisig', enabled: false }, // Disabled - under maintenance
+    { title: t('navigation.geroCard'), icon: assts.card, link: '/card', enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
+    { header: t('navigation.activitiesRewards'), enabled: hasActivitiesRewardsItems },
+    { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
+    { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
+    { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
     // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
-    { header: 'Media', enabled: musicPlaylist.value?.length > 0 },
-    { title: 'Media Player', icon: assts.mediaPlayer, link: '/media-player', enabled: musicPlaylist.value?.length > 0 },
+    { header: t('navigation.media'), enabled: musicPlaylist.value?.length > 0 },
+    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: musicPlaylist.value?.length > 0 },
     // Uncomment to add more items:
     // { header: 'Tools' },
     // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
@@ -292,37 +305,30 @@ function toggleMiniPlayer() {
 
 async function submitLogout() {
   try {
+    LoadingState.setText('Logging out ...')
+    LoadingState.setLoading(true);
+    await cardStore.logout();
     // Send logout message to background
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
-
-    // Wait for store synchronization to complete before navigation
-    // Poll for loggedWallet to be cleared (indicating logout is complete)
-    const maxWaitTime = 3000; // 3 seconds max wait
-    const pollInterval = 50; // 50ms intervals
-    const startTime = Date.now();
-
-    while (loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    console.debug('🚪 Store logout synchronized, navigating to welcome');
-
+    updateVuetifyTheme(false, true);
     // Navigate to welcome page after store is cleared
-    router.push('/welcome').catch(err => {
-      console.debug('Navigation after logout handled (expected during logout):', err.message || err);
-      // Fallback: force page reload to welcome
-      window.location.hash = '#/welcome';
+    // Use replace to avoid adding to history, and catch navigation guard redirects
+    router.replace('/welcome').catch(err => {
+      debugLog('Navigation after logout handled (expected during logout):', err.message || err);
     });
   } catch (error) {
     console.error('Error during logout:', error);
     // Force navigation even on error
     router.replace('/welcome').catch(err => {
-      console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
+      debugLog('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';
     });
+  } finally {
+    LoadingState.setLoading(false);
+    LoadingState.setText('');
   }
 }
 
@@ -341,6 +347,10 @@ onMounted(() => {
   background: linear-gradient(45deg, #00c7f3, #00ffd1);
 }
 
+.activePage.apex {
+  background: linear-gradient(45deg, #F8A282, #FECB82);
+}
+
 .activePageDark {
   color: #FFFFFF;
   background: #0C0E12;
@@ -355,6 +365,23 @@ onMounted(() => {
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
+  }
+}
+
+.activePageDark.apex {
+  color: #FFFFFF;
+  background: #0C0E12;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: {
+    image: linear-gradient(to right, #0C0E12, #0C0E12),
+    linear-gradient(to right, #0C0E12 8%, #F8A282);
+    clip: padding-box, border-box;
+    origin: padding-box, border-box;
+  }
+
+  .v-image {
+    filter: brightness(0) saturate(100%) invert(92%) sepia(45%) saturate(5319%) hue-rotate(301deg) brightness(100%) contrast(95%) !important;
   }
 }
 

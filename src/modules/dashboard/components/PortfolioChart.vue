@@ -3,14 +3,15 @@
     <div v-if="isReadyToRender" class="portfolio-value-display">
       <div class="portfolio-header">
         <div class="portfolio-balance-section">
-          <div class="portfolio-label">Portfolio</div>
+          <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <div class="portfolio-amount-row">
             <div
               class="portfolio-amount"
               @click="toggleCurrency"
               :class="{ clickable: availableCurrencies.length > 1 }"
             >
-              {{ formatPortfolioValue() }}
+              <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
+              <OdometerCounter :value="Math.round(activePortfolioValue)" format="int" :duration="1000" :key="selectedCurrency" />
             </div>
             <div class="address-section" v-if="shortenAddress">
               <CopyButton
@@ -50,21 +51,70 @@
               </v-tab>
             </v-tabs>
           </div>
+
+          <!-- Chart Options Menu -->
+          <v-menu offset-y left>
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn
+                icon
+                x-small
+                class="ml-2"
+                v-bind="attrs"
+                v-on="on"
+              >
+                <v-icon small>mdi-dots-vertical</v-icon>
+              </v-btn>
+            </template>
+            <v-list dense>
+              <!-- Portfolio Mode Toggle (Cardano only) -->
+              <template v-if="!isApex">
+                <v-list-item @click="togglePortfolioMode">
+                  <v-list-item-icon class="mr-2">
+                    <v-icon small>{{ portfolioMode === 'full' ? 'mdi-chart-line' : 'mdi-circle' }}</v-icon>
+                  </v-list-item-icon>
+                  <v-list-item-content>
+                    <v-list-item-title>
+                      {{ portfolioMode === 'full' ? $t('dashboard.fullPortfolio') : $t('dashboard.adaOnly') }}
+                    </v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 10px;">
+                      {{ portfolioMode === 'full' ? $t('dashboard.switchToAdaBalance') : $t('dashboard.switchToFullPortfolio') }}
+                    </v-list-item-subtitle>
+                  </v-list-item-content>
+                </v-list-item>
+
+                <v-divider></v-divider>
+              </template>
+
+              <!-- Refresh Button -->
+              <v-list-item @click="handleRefresh" :disabled="isRefreshing">
+                <v-list-item-icon class="mr-2">
+                  <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
+                </v-list-item-icon>
+                <v-list-item-content>
+                  <v-list-item-title>{{ $t('dashboard.refreshData') }}</v-list-item-title>
+                </v-list-item-content>
+              </v-list-item>
+            </v-list>
+          </v-menu>
         </div>
       </div>
     </div>
-    <v-progress-circular v-if="!isReadyToRender" :indeterminate="true"></v-progress-circular>
+    <div v-if="globalLoading" class="loading-container">
+      <v-progress-circular indeterminate color="primary" :size="50" :width="4"></v-progress-circular>
+      <div class="loading-text">{{ $t('dashboard.loadingChart') }}</div>
+    </div>
     <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
     <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
       <v-avatar size="24">
-        <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
+        <v-img :src="assets.walletSvg" :alt="$t('common.wallet')"></v-img>
       </v-avatar>
-      <span>There seems to be no data in this wallet</span>
+      <span>{{ $t('dashboard.noDataInWallet') }}</span>
     </v-card-text>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, onMounted, ref, watch, toRefs, nextTick } from 'vue';
 import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
 import Highstock from 'highcharts/highstock';
 import isEqual from 'lodash/isEqual';
@@ -72,9 +122,14 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import OdometerCounter from '@/shared/components/OdometerCounter.vue';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+
+
+const { t } = useTranslation();
+const { convertFiat } = useCurrencyConverter();
 
 // Currency Types
 enum CurrencyType {
@@ -93,11 +148,11 @@ interface CurrencyConfig {
 const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
   [CurrencyType.ADA]: {
     symbol: '', // Will be defined dynamically
-    displayName: 'Native Currency',
+    displayName: t('dashboard.nativeCurrency'),
   },
   [CurrencyType.USD]: {
     symbol: '$',
-    displayName: 'US Dollar',
+    displayName: t('dashboard.usDollar'),
   },
   [CurrencyType.EUR]: {
     symbol: '€',
@@ -106,7 +161,6 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
 };
 
 const { loggedWallet } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
 
 const props = defineProps({
   chartData: {
@@ -145,12 +199,90 @@ const props = defineProps({
     type: String,
     default: null,
   },
+  // ADA-only mode values (just the current balance from UTXOs, no chart data needed)
+  adaOnlyValueAda: {
+    type: Number,
+    default: 0,
+  },
+  adaOnlyValueUsd: {
+    type: Number,
+    default: 0,
+  },
+  adaOnlyValueEur: {
+    type: Number,
+    default: 0,
+  },
 });
 
-// Load tab preference from localStorage or default to WEEK (7D)
+// Define emits
+const emit = defineEmits<{
+  (e: 'refresh'): void;
+}>();
+
+// Refresh state
+const isRefreshing = ref(false);
+
+// Portfolio mode: 'full' (TapTools) or 'ada-only' (UTXO)
+const portfolioMode = ref<'full' | 'ada-only'>('full');
+
+// Load portfolio mode preference from localStorage (scoped to wallet ID)
+const loadPortfolioMode = (): 'full' | 'ada-only' => {
+  try {
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return 'full';
+    const storageKey = `portfolioMode_${walletId}`;
+    return (localStorage.getItem(storageKey) as 'full' | 'ada-only') || 'full';
+  } catch {
+    return 'full';
+  }
+};
+
+// Save portfolio mode preference to localStorage (scoped to wallet ID)
+const savePortfolioMode = (mode: 'full' | 'ada-only'): void => {
+  try {
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return;
+    const storageKey = `portfolioMode_${walletId}`;
+    localStorage.setItem(storageKey, mode);
+  } catch {
+    // Silently fail if localStorage is not available
+  }
+};
+
+// Initialize portfolio mode from localStorage
+portfolioMode.value = loadPortfolioMode();
+
+// Toggle portfolio mode
+const togglePortfolioMode = async () => {
+  portfolioMode.value = portfolioMode.value === 'full' ? 'ada-only' : 'full';
+  savePortfolioMode(portfolioMode.value);
+
+  // Force chart reload
+  chartKey.value += 1;
+  await nextTick();
+  loadChart();
+  await nextTick();
+  handleTabClick(tab.value);
+};
+
+// Handle refresh button click
+const handleRefresh = async () => {
+  isRefreshing.value = true;
+  emit('refresh');
+
+  // Keep spinner for minimum 500ms for visual feedback
+  setTimeout(() => {
+    isRefreshing.value = false;
+  }, 500);
+};
+
+// Load tab preference from localStorage or default to WEEK (7D) (scoped to wallet ID)
 const loadPortfolioTabSetting = (): string => {
   try {
-    return localStorage.getItem('portfolioTab') || 'WEEK';
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return 'WEEK';
+    const storageKey = `portfolioTab_${walletId}`;
+    return localStorage.getItem(storageKey) || 'WEEK';
   } catch {
     return 'WEEK';
   }
@@ -159,17 +291,19 @@ const isReadyToRender = computed(() => {
   return hasAnyChartData.value && !globalLoading.value;
 });
 
-// Save tab preference to localStorage
+// Save tab preference to localStorage (scoped to wallet ID)
 const savePortfolioTabSetting = (tabValue: string): void => {
   try {
-    localStorage.setItem('portfolioTab', tabValue);
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return;
+    const storageKey = `portfolioTab_${walletId}`;
+    localStorage.setItem(storageKey, tabValue);
   } catch {
     // Silently fail if localStorage is not available
   }
 };
 
 const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: '7D', vsLabel: 'vs last week' });
-const lastPrice = ref(1);
 const chartInstance = ref(null);
 const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA); // Current selected currency
@@ -178,7 +312,7 @@ const chartKey = ref(0); // Force chart re-render when changed
 const lastLoadTime = ref(0); // Prevent too frequent loadChart calls
 
 // VueUse-powered timeout management - automatic cleanup!
-const createTimeout = (callback: Function, delay: number) => {
+const createTimeout = (callback: () => void, delay: number) => {
   const { start } = useTimeoutFn(callback, delay, { immediate: false });
   start();
 };
@@ -258,9 +392,9 @@ const firstAvailableCurrency = computed(() => {
 });
 
 const globalLoading = computed(() => {
-  // If progressive loading is enabled, only show loading when no data is available yet
+  // If progressive loading is enabled, show loading until first data arrives
   if (props.progressiveLoading) {
-    return props.loading && !hasAnyChartData.value;
+    return props.loading || !hasAnyChartData.value;
   }
   // Original behavior: show loading state
   return props.loading;
@@ -281,6 +415,7 @@ const currentCurrencyConfig = computed(() => {
 });
 
 const activeChartData = computed(() => {
+  // Chart data is the same for both modes (we just change the displayed value)
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
       return props.chartDataUsd || [];
@@ -293,14 +428,19 @@ const activeChartData = computed(() => {
 });
 
 const activePortfolioValue = computed(() => {
+  // Select value source based on portfolio mode
+  // ADA Only mode shows just the ADA balance from UTXOs
+  // Full Portfolio mode shows the complete portfolio value from TapTools API
+  const isAdaOnly = portfolioMode.value === 'ada-only';
+
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
-      return props.portfolioValueUsd;
+      return isAdaOnly ? props.adaOnlyValueUsd : props.portfolioValueUsd;
     case CurrencyType.EUR:
-      return props.portfolioValueEur;
+      return isAdaOnly ? props.adaOnlyValueEur : props.portfolioValueEur;
     case CurrencyType.ADA:
     default:
-      return props.portfolioValueAda;
+      return isAdaOnly ? props.adaOnlyValueAda : props.portfolioValueAda;
   }
 });
 
@@ -332,8 +472,9 @@ const availableCurrencies = computed(() => {
 
 // Portfolio value formatting for any currency
 const formatPortfolioValue = (): string => {
-  const value = activePortfolioValue.value;
   const config = currentCurrencyConfig.value;
+  // Don't convert - the API already provides values in the correct currency
+  const value = activePortfolioValue.value;
 
   if (value > 0) {
     return filters.toCurrency(value, false, 2, config.symbol, '', true, 0);
@@ -370,39 +511,6 @@ const convertStringToCurrencyType = (currencyString: string): CurrencyType | nul
       return null;
   }
 };
-
-// COMMENTED OUT: Dual-axis toggle functions
-// // Series toggle functions
-// const toggleAdaSeries = (): void => {
-//   showAda.value = !showAda.value;
-//   updateActiveToggle();
-//   if (props.chartData.length > 0 || props.chartDataUsd.length > 0) {
-//     loadChart(props.chartData);
-//   }
-// };
-
-// const toggleUsdSeries = (): void => {
-//   showUsd.value = !showUsd.value;
-//   updateActiveToggle();
-//   if (props.chartData.length > 0 || props.chartDataUsd.length > 0) {
-//     loadChart(props.chartData);
-//   }
-// };
-
-// const toggleDualAxis = (): void => {
-//   if (showAda.value && showUsd.value) {
-//     showDualAxis.value = !showDualAxis.value;
-//     if (props.chartData.length > 0 || props.chartDataUsd.length > 0) {
-//       loadChart(props.chartData);
-//     }
-//   }
-// };
-
-// const updateActiveToggle = (): void => {
-//   activeSeriesToggle.value = [];
-//   if (showAda.value) activeSeriesToggle.value.push('ada');
-//   if (showUsd.value) activeSeriesToggle.value.push('usd');
-// };
 
 // Format numbers with K, M, B abbreviations for Y-axis
 const formatAxisNumber = (value: number, currency: string = ''): string => {
@@ -461,14 +569,16 @@ const createChartSeries = (): any[] => {
       data: validData,
       showInLegend: false,
       color: seriesColor,
-      connectNulls: false,
-      gapSize: 5,
+      connectNulls: true,
+      gapSize: 0,
+      step: false,
       marker: {
         symbol: 'circle',
         enabled: false,
         radius: 3,
         lineWidth: 1,
-        lineColor: null,
+        lineColor: seriesColor,
+        fillColor: '#ffffff',
       },
       fillColor: {
         linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
@@ -483,88 +593,6 @@ const createChartSeries = (): any[] => {
   return series;
 };
 
-// COMMENTED OUT: Original dual-axis version
-// const createChartSeries = (chartData: any[]): any[] => {
-//   console.log('Creating chart series:');
-//   console.log('ADA chartData:', chartData.length, 'points');
-//   console.log('USD chartDataUsd:', props.chartDataUsd.length, 'points');
-//   console.log('Sample ADA data point:', chartData[0]);
-//   console.log('Sample USD data point:', props.chartDataUsd[0]);
-//
-//   const series = [];
-//
-//   if (showAda.value && chartData.length > 0) {
-//     console.log('Adding ADA series with', chartData.length, 'points');
-//     series.push({
-//       type: "areaspline",
-//       name: "ADA Balance",
-//       data: chartData,
-//       showInLegend: true,
-//       yAxis: showDualAxis.value ? 0 : undefined,
-//       color: primaryColor.value,
-//       marker: {
-//         symbol: "circle",
-//         enabled: false,
-//         radius: 3,
-//         lineWidth: 1,
-//         lineColor: null,
-//       },
-//       fillColor: {
-//         linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
-//         stops: [
-//           [0.1, primaryColor.value + '33'],
-//           [1, primaryColor.value + '00'],
-//         ],
-//       },
-//     });
-//   }
-//
-//   if (showUsd.value) {
-//     // Use dedicated USD data if available, otherwise calculate from ADA data
-//     const usdData = props.chartDataUsd.length > 0
-//       ? props.chartDataUsd
-//       : price.value?.lastPrice && chartData.length > 0
-//         ? chartData.map(point => [
-//             point[0], // timestamp
-//             point[1] * price.value.lastPrice // ADA value * current price (not historical)
-//           ])
-//         : [];
-//
-//     console.log('USD data source:', props.chartDataUsd.length > 0 ? 'props.chartDataUsd' : 'calculated from ADA');
-//     console.log('USD data length:', usdData.length);
-//     console.log('Sample USD data:', usdData[0]);
-//
-//     if (usdData.length > 0) {
-//       console.log('Adding USD series with', usdData.length, 'points');
-//       series.push({
-//         type: "areaspline",
-//         name: "USD Balance",
-//         data: usdData,
-//         showInLegend: true,
-//         yAxis: showDualAxis.value ? 1 : undefined,
-//         color: "#4CAF50",
-//         marker: {
-//           symbol: "circle",
-//           enabled: false,
-//           radius: 3,
-//           lineWidth: 1,
-//           lineColor: null,
-//         },
-//         fillColor: {
-//           linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
-//           stops: [
-//             [0.1, '#4CAF5033'],
-//             [1, '#4CAF5000'],
-//           ],
-//         },
-//       });
-//     }
-//   }
-//
-//
-//   console.log('Total series created:', series.length);
-//   return series;
-// };
 const loadChart = () => {
   // Prevent multiple simultaneous renders and too frequent calls
   const now = Date.now();
@@ -575,8 +603,6 @@ const loadChart = () => {
 
   const activeData = activeChartData.value;
   const config = currentCurrencyConfig.value;
-
-
 
   if (!activeData || !activeData.length) {
     return;
@@ -751,11 +777,13 @@ const loadChart = () => {
         style: {
           fontFamily: 'Inter',
           color: '#fff',
+          fontSize: '11px',
         },
         overflow: 'justify',
       },
       ordinal: false,
-      minTickInterval: 3600 * 1000, // 1 hour minimum to prevent crowding
+      minTickInterval: undefined, // Allow automatic tick interval
+      tickPixelInterval: 80, // Minimum pixels between ticks
       // COMMENTED OUT: Dual-axis Y-axis update events
       // events: {
       //   // Handle drag selection only (no wheel zoom)
@@ -876,6 +904,25 @@ const loadChart = () => {
     //     },
     //   ],
     // },
+    plotOptions: {
+      series: {
+        connectNulls: true,
+        lineWidth: 2,
+        marker: {
+          enabled: true,
+          radius: 3,
+        },
+        states: {
+          hover: {
+            enabled: true,
+            lineWidthPlus: 1,
+          },
+          inactive: {
+            opacity: 1,
+          },
+        },
+      },
+    },
     colors: chartColors.value,
     legend: {
       align: 'right',
@@ -975,108 +1022,11 @@ const handleTabClick = tabItem => {
     // Set time range first
     chartInstance.value.xAxis[0].setExtremes(startUTC, endUTC);
 
-    // COMMENTED OUT: Dual-axis Y-axis range update
-    // setTimeout(() => {
-    //   console.log('Executing scheduled Y-axis update...');
-    //   updateYAxisRange(startUTC, endUTC);
-    // }, 50);
-
     if (chartInstance.value?.title) {
       chartInstance.value.title.update({ text: '' });
     }
   }
 };
-
-// COMMENTED OUT: Dual-axis Y-axis range update
-// Optimized Y-axis range update
-// const updateYAxisRange = (startTime: number, endTime: number) => {
-//   if (!chartInstance.value || !chartInstance.value.yAxis) return;
-//
-//   // Early exit if no data
-//   if (!props.chartData.length && !props.chartDataUsd.length) return;
-//
-//   // Efficient binary search for time range filtering (assuming sorted data)
-//   const findDataInRange = (data: [number, number][]) => {
-//     if (!data.length) return [];
-//
-//     let start = 0;
-//     let end = data.length - 1;
-//
-//     // Find start index
-//     while (start < data.length && data[start][0] < startTime) start++;
-//
-//     // Find end index
-//     while (end >= 0 && data[end][0] > endTime) end--;
-//
-//     return data.slice(start, end + 1);
-//   };
-//
-//   const visibleAdaData = showAda.value ? findDataInRange(props.chartData) : [];
-//   const visibleUsdData = showUsd.value ? findDataInRange(props.chartDataUsd) : [];
-//
-//   // Calculate ranges efficiently
-//   if (showDualAxis.value && chartInstance.value.yAxis.length > 1) {
-//     // ADA axis (left)
-//     if (visibleAdaData.length > 0) {
-//       let adaMin = Infinity, adaMax = -Infinity;
-//       for (const point of visibleAdaData) {
-//         if (point[1] < adaMin) adaMin = point[1];
-//         if (point[1] > adaMax) adaMax = point[1];
-//       }
-//       const adaPadding = (adaMax - adaMin) * 0.05;
-//       chartInstance.value.yAxis[0].setExtremes(
-//         Math.max(0, adaMin - adaPadding),
-//         adaMax + adaPadding,
-//         false // Don't redraw yet
-//       );
-//     }
-//
-//     // USD axis (right)
-//     if (visibleUsdData.length > 0) {
-//       let usdMin = Infinity, usdMax = -Infinity;
-//       for (const point of visibleUsdData) {
-//         if (point[1] < usdMin) usdMin = point[1];
-//         if (point[1] > usdMax) usdMax = point[1];
-//       }
-//       const usdPadding = (usdMax - usdMin) * 0.05;
-//       chartInstance.value.yAxis[1].setExtremes(
-//         Math.max(0, usdMin - usdPadding),
-//         usdMax + usdPadding,
-//         true // Redraw after both axes are set
-//       );
-//     }
-//   } else {
-//     // Single axis mode
-//     const allVisibleData = [...visibleAdaData, ...visibleUsdData];
-//     if (allVisibleData.length === 0) return;
-//
-//     let dataMin = Infinity, dataMax = -Infinity;
-//     for (const point of allVisibleData) {
-//       if (point[1] < dataMin) dataMin = point[1];
-//       if (point[1] > dataMax) dataMax = point[1];
-//     }
-//
-//     const padding = (dataMax - dataMin) * 0.05;
-//     chartInstance.value.yAxis[0].setExtremes(
-//       Math.max(0, dataMin - padding),
-//       dataMax + padding
-//     );
-//   }
-// };
-
-const generateTitleText = () => {
-  return '';
-};
-watch(
-  price,
-  newVal => {
-    lastPrice.value = newVal.lastPrice;
-    if (chartInstance.value?.title) {
-      chartInstance.value.title.update({ text: generateTitleText() });
-    }
-  },
-  { deep: true }
-);
 
 // Watch currency chart data with immediate response to any data changes
 watch(
@@ -1103,7 +1053,7 @@ watch(
         break;
     }
 
-        // Skip if no actual data changes for the active currency
+    // Skip if no actual data changes for the active currency
     if (!activeDataChanged && !props.progressiveLoading) {
       return;
     }
@@ -1347,8 +1297,9 @@ onMounted(() => {
   font-size: 1.5rem;
   font-weight: 600;
   color: #ffffff;
-  display: flex;
-  align-items: center;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.1em;
   transition: opacity 0.2s ease;
 }
 
@@ -1358,6 +1309,13 @@ onMounted(() => {
 
 .portfolio-amount.clickable:hover {
   opacity: 0.8;
+}
+
+.currency-symbol {
+  font-weight: 600;
+  margin-right: 0.1em;
+  line-height: 1;
+  display: inline-block;
 }
 
 .currency-switch-icon {
@@ -1498,6 +1456,56 @@ onMounted(() => {
 
   .portfolio-amount {
     font-size: 1.125rem;
+  }
+}
+
+/* Refresh Button */
+.refresh-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.refresh-btn:hover {
+  opacity: 1;
+}
+
+.refresh-btn .v-icon.rotating {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 20px;
+  min-height: 200px;
+}
+
+.loading-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
   }
 }
 </style>

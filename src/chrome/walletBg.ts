@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { Api } from '@/api/api';
-import { Cardano, Serialization, util } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import {
   Bip32PrivateKey,
   Ed25519PrivateKey,
@@ -8,7 +8,7 @@ import {
   Hash28ByteBase16,
 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -27,7 +27,7 @@ import {
 } from '@/models/types';
 import {
   addrToSignWith,
-  decryptWithPassword,
+  convertTransactionsForStorage,
   getAddress,
   getCcColdKey,
   getCcHotKey,
@@ -38,9 +38,11 @@ import {
   getPaymentKeyInternal,
   getRewardAddress,
   getStakeKey,
+  hdPathToArray,
   keyHashFromAddress,
-  toPaymentCredential,
+  toValueCore,
 } from '@/chrome/serialization';
+import { decryptWithPassword } from '@/shared/utils/crypto';
 import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
 import DexHunterStore from '@/stores/dexHunterStore';
@@ -59,20 +61,13 @@ import CoinGeckoStore from '@/stores/coinGeckoStore';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
-import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
-import ledger from '@/shared/utils/ledger';
-import {
-  buildAndSignData,
-  convertTransactionsForStorage,
-  createCoseKey,
-  createCOSEKeyHex,
-  createSignDataBuilder,
-  toHexArray,
-} from '@/shared/utils/converter';
-import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
-import { deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
+import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
+import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
+import { debugLog } from '@/utils/debug';
+import { cip8 } from '@cardano-sdk/key-management';
+import type { GroupedAddress } from '@cardano-sdk/key-management';
 
 let blockchainDb: Dexie = null;
 
@@ -130,6 +125,7 @@ export class WalletBg {
       getDb: this.getDb.bind(this),
       getBlockchainDb: this.getBlockchainDb.bind(this),
       setUtxosAndAddresses: this.setUtxosAndAddresses.bind(this),
+      triggerResync: this.triggerResync.bind(this),
     });
     this.loaderFactory.createAllLoaders();
   }
@@ -186,16 +182,16 @@ export class WalletBg {
   }
 
   async setUtxosAndAddresses(transactions: any[]) {
-    console.debug('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
+    debugLog('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
 
     let stakeAddress: string = '';
     let address: string = '';
     if (this.isEnterpriseAddress()) {
       address = this.baseAddress;
-      console.debug('🏢 Using enterprise address:', address);
+      debugLog('🏢 Using enterprise address:', address);
     } else {
       stakeAddress = this.stakeAddress;
-      console.debug('🏛️ Using stake address:', stakeAddress);
+      debugLog('🏛️ Using stake address:', stakeAddress);
     }
 
     const utxos: Map<string, Cardano.Utxo> = new Map<string, Cardano.Utxo>();
@@ -203,78 +199,177 @@ export class WalletBg {
     addresses.add(this.baseAddress);
     const uniqueAssets: Set<string> = new Set<string>();
 
-    console.debug('🔍 Processing transactions for UTXOs...');
+    debugLog('🔍 Processing transactions for UTXOs...');
+
     for (const transaction of transactions) {
-      for (const inp of transaction.body.inputs) {
-        utxos.delete(`${inp.txId}#${inp.index}`);
+      if (transaction.body) {
+        transaction.body.outputs.forEach((out, idx) => {
+          let outAddress = out.address;
+          const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
+          try {
+            // TODO Support Byron Addresses
+            if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
+              const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
+              const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
+                this.networkId(),
+                baseAddress.getStakeCredential()
+              );
+              outAddress = rewardAddr.toAddress().toBech32();
+            }
+            if (address === outAddress || stakeAddress === outAddress) {
+              addresses.add(out.address);
+              const utxoId = `${transaction.id || transaction.tx_hash}#${idx}`;
+              utxos.set(utxoId, [
+                {
+                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
+                  index: idx,
+                  address: out.address,
+                },
+                {
+                  address: out.address,
+                  value: out.value,
+                  datumHash: out.datumHash,
+                  datum: out.datum,
+                  scriptReference: out.scriptReference,
+                },
+              ]);
+            }
+            if (out.value.assets) {
+              out.value.assets.keys().forEach((key: string) => {
+                if (!uniqueAssets.has(key)) {
+                  uniqueAssets.add(key);
+                }
+              });
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        });
+      } else {
+        transaction.utxo.outputs.forEach((out, idx) => {
+          let outAddress = out.address;
+          const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
+          try {
+            // TODO Support Byron Addresses
+            if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
+              const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
+              const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
+                this.networkId(),
+                baseAddress.getStakeCredential()
+              );
+              outAddress = rewardAddr.toAddress().toBech32();
+            }
+            if (address === outAddress || stakeAddress === outAddress) {
+              addresses.add(out.address);
+              const utxoId: string = `${transaction.id || transaction.tx_hash}#${out.output_index}`;
+              utxos.set(utxoId, [
+                {
+                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
+                  index: out.output_index,
+                  address: out.address,
+                },
+                {
+                  address: out.address,
+                  value: toValueCore(out.amount),
+                  datumHash: out.datum_hash ? Hash32ByteBase16.fromHexBlob(HexBlob(out.datum_hash)) : null,
+                  datum: out.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(out.inline_datum.bytes)).toCore() : null,
+                  scriptReference: out.reference_script ? Serialization.Script.fromCbor(HexBlob(out.reference_script.bytes)).toCore() : null
+                },
+              ]);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        });
+        Array.from(utxos.values()).forEach((utxo: Cardano.Utxo) => {
+          utxo[1].value.assets?.keys().forEach((key: string) => {
+            if (!uniqueAssets.has(key)) {
+              uniqueAssets.add(key);
+            }
+          });
+        })
       }
-      transaction.body.outputs.forEach((out, idx) => {
-        let outAddress = out.address;
-        const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
-        try {
-          // TODO Support Byron Addresses
-          if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
-            const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
-            const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
-              this.networkId(),
-              baseAddress.getStakeCredential()
-            );
-            outAddress = rewardAddr.toAddress().toBech32();
-          }
-          if (address === outAddress || stakeAddress === outAddress) {
-            addresses.add(out.address);
-            const utxoId = `${transaction.id || transaction.tx_hash}#${idx}`;
-            utxos.set(utxoId, [
-              {
-                txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
-                index: idx,
-                address: out.address,
-              },
-              {
-                address: out.address,
-                value: out.value,
-                datumHash: out.datumHash,
-                datum: out.datum,
-                scriptReference: out.scriptReference,
-              },
-            ]);
-          }
-          if (out.value.assets) {
-            out.value.assets.keys().forEach((key: string) => {
-              if (!uniqueAssets.has(key)) {
-                uniqueAssets.add(key);
-              }
-            });
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      });
     }
+
+    for (const transaction of transactions) {
+      if (transaction.body) {
+        for (const inp of transaction.body.inputs) {
+          const utxoKey = `${inp.txId}#${inp.index}`;
+          utxos.delete(utxoKey);
+        }
+      } else {
+        for (const inp of transaction.utxo.inputs) {
+          const utxoKey = `${inp.tx_hash}#${inp.output_index}`;
+          utxos.delete(utxoKey);
+        }
+      }
+    }
+
+    debugLog(`✅ UTXO processing complete: ${utxos.size} UTXOs remaining`);
 
     // Set Assets Info in Network DB
     await this.syncService.syncAssets(Array.from(uniqueAssets));
-    //TODO wait for network Store to Load Assets
+
+    // Wait for assets to be loaded into NetworkStore before resolving them
+    // Only needed on first-time wallet import/restore (when lastSyncInfo doesn't exist)
+    // For regular logins, assets are already cached in NetworkStore
+    const lastSyncInfo = await this.getLastSyncInfo();
+    if (!lastSyncInfo) {
+      debugLog('🔄 First-time import detected - waiting for assets to load...');
+      await this.waitForAssetsToLoad(Array.from(uniqueAssets));
+    } else {
+      debugLog('✅ Regular login - assets already cached in NetworkStore');
+    }
 
     // Resolve Assets from UTxOs
     this.setAssets(Array.from(utxos.values()));
 
     // Keys
-    console.debug('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
+    debugLog('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
     if (this.type !== WalletType.Google) {
-      console.debug('🔑 Syncing keys for addresses:', Array.from(addresses));
       const keys = await this.syncService.syncKeys(Array.from(addresses));
-      console.debug('🔑 Keys synced, result:', keys ? 'keys available' : 'keys null');
       WalletStore.setKeys(keys);
-      console.debug('🔑 Keys set in store');
     } else {
-      console.debug('🔑 Skipping key sync for Google wallet type');
+      debugLog('🔑 Skipping key sync for Google wallet type');
     }
 
     // UTxOs
-    console.debug('💰 Setting', utxos.size, 'UTXOs to store');
+    debugLog('💰 Setting', utxos.size, 'UTXOs to store');
     WalletStore.setUtxos(Array.from(utxos.values()));
-    console.debug('✅ setUtxosAndAddresses completed successfully');
+    debugLog('✅ setUtxosAndAddresses completed successfully');
+  }
+
+  /**
+   * Wait for assets to be loaded into NetworkStore from the blockchain database
+   * This prevents race conditions where assets are resolved before metadata is available
+   * @param assetUnits - Array of asset units to wait for
+   * @param timeoutMs - Maximum time to wait in milliseconds (default: 5000ms)
+   */
+  private async waitForAssetsToLoad(assetUnits: string[], timeoutMs: number = 5000): Promise<void> {
+    if (!assetUnits || assetUnits.length === 0) {
+      return;
+    }
+
+    debugLog(`⏳ Waiting for ${assetUnits.length} assets to load into NetworkStore...`);
+    const startTime = Date.now();
+    const checkInterval = 50; // Check every 50ms
+
+    while (Date.now() - startTime < timeoutMs) {
+      // Check if all assets are loaded in NetworkStore
+      const allAssetsLoaded = assetUnits.every(unit => NetworkStore.state.assets[unit]);
+
+      if (allAssetsLoaded) {
+        debugLog(`✅ All assets loaded into NetworkStore in ${Date.now() - startTime}ms`);
+        return;
+      }
+
+      // Wait before checking again
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+
+    // Timeout reached - log warning but continue (don't block wallet initialization)
+    const loadedCount = assetUnits.filter(unit => NetworkStore.state.assets[unit]).length;
+    console.warn(`⚠️ Timeout waiting for assets: ${loadedCount}/${assetUnits.length} loaded after ${timeoutMs}ms`);
   }
 
   setAssets(utxos?: Cardano.Utxo[]) {
@@ -349,7 +444,6 @@ export class WalletBg {
       chrome.alarms.create('refreshXerberusRisks', { delayInMinutes: 0, periodInMinutes: 720 });
       chrome.alarms.create('refreshTokenHistory', { delayInMinutes: 0, periodInMinutes: 20 });
       chrome.alarms.create(`portfolio|${this.stakeAddress}`, { delayInMinutes: 0, periodInMinutes: 60 });
-      chrome.alarms.create(`trendedPortfolio|${this.stakeAddress}`, { delayInMinutes: 0, periodInMinutes: 60 });
     }
     // Set Collections
     const collectibles = Object.fromEntries(resolvedAssets.filter(([, resolved]) => !Boolean(resolved.metadata)));
@@ -430,6 +524,21 @@ export class WalletBg {
     return this.loaderFactory.load('transactions');
   }
 
+  /**
+   * Trigger a resync operation to clear old data and fetch fresh data
+   * Used for migration scenarios when data format changes
+   */
+  public async triggerResync(): Promise<void> {
+    console.log('🔄 Starting migration resync...');
+    try {
+      await this.syncService.resync();
+      console.log('✅ Migration resync completed successfully');
+    } catch (error) {
+      console.error('❌ Migration resync failed:', error);
+      throw error;
+    }
+  }
+
   async getLastSyncInfo() {
     return this.getDb()
       .then(async db => {
@@ -467,7 +576,7 @@ export class WalletBg {
         return accountTable.where({ walletId: this.id }).first();
       })
       .catch(err => {
-        console.debug(`Failed to open database: ${err.stack || err}`);
+        debugLog(`Failed to open database: ${err.stack || err}`);
       });
   }
 
@@ -557,10 +666,21 @@ export class WalletBg {
 
           // Only update if there are changes
           if (txsToUpdate.length > 0) {
-            console.debug(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
+            debugLog(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
             await txsTable.bulkPut(txsToUpdate);
+
+            // IMPORTANT ARCHITECTURAL PATTERN:
+            // Don't manually call WalletStore.setTransactions() here. Instead, rely on the
+            // Dexie subscription pattern used throughout the codebase:
+            //   1. Database write (bulkPut) triggers Dexie subscription
+            //   2. TransactionsLoader in walletLoader.ts processes ALL transactions
+            //   3. Loader calculates derived fields (ada, assets, sentAssets, receivedAssets)
+            //   4. Loader updates WalletStore with fully processed transactions
+            //
+            // This ensures consistent processing for both pending and confirmed transactions
+            // and prevents duplicate processing or stale data issues.
           } else {
-            console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
+            debugLog(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
           }
         }
       })
@@ -656,8 +776,12 @@ export class WalletBg {
       if (!found) {
         consecutiveUnused++; // Increment unused address counter if no match is found
       }
-      // If we've resolved all missing addresses, we can break earlyCardano.
-      if (usedAddresses.length === resolvedAddresses.length) {
+      // Early exit optimization: If we've found all used addresses AND scanned 20 consecutive
+      // unused addresses after the last used one, we can stop early.
+      // This maintains BIP44 gap limit compliance while avoiding unnecessary scanning.
+      if (usedAddresses.length > 0 &&
+          usedAddresses.length === resolvedAddresses.length &&
+          consecutiveUnused >= BIP44_SCAN_SIZE) {
         break;
       }
       addressIndex++; // Move to the next address index
@@ -695,19 +819,12 @@ export class WalletBg {
     return getStakeKey(this.publicKey, 0);
   }
 
-  drepKey(): Ed25519PublicKey {
-    return getDrepKey(this.publicKey, 0);
-  }
-
   requestAccountKey(
+    type: 'stake' | 'payment' | 'change' | 'drep',
     password: string,
-    accountIndex: number
-  ): {
-    accountKey: Bip32PrivateKey;
-    paymentKey: Ed25519PrivateKey;
-    stakeKey: Ed25519PrivateKey;
-    drepKey: Ed25519PrivateKey;
-  } {
+    accountIndex: number,
+    index: number,
+  ): Ed25519PrivateKey {
     let accountKey: Bip32PrivateKey;
     try {
       const decrypted = decrypt(this.encryptedPrivateKey, password);
@@ -720,13 +837,15 @@ export class WalletBg {
     } catch (e) {
       throw ERROR.wrongPassword;
     }
-
-    return {
-      accountKey,
-      paymentKey: accountKey.derive([ChainDerivations.EXTERNAL, 0]).toRawKey(),
-      stakeKey: accountKey.derive([ChainDerivations.CHIMERIC_ACCOUNT, 0]).toRawKey(),
-      drepKey: accountKey.derive([ChainDerivations.DREP, 0]).toRawKey(),
-    };
+    if (type === 'stake') {
+      return accountKey.derive([ChainDerivations.CHIMERIC_ACCOUNT, index]).toRawKey();
+    } else if (type === 'payment') {
+      return accountKey.derive([ChainDerivations.EXTERNAL, index]).toRawKey()
+    } else if (type === 'change') {
+      return accountKey.derive([ChainDerivations.INTERNAL, index]).toRawKey()
+    } else { //drep
+      return accountKey.derive([ChainDerivations.DREP, index]).toRawKey()
+    }
   }
 
   async restore(tip: Tip): Promise<void> {
@@ -810,17 +929,18 @@ export class WalletBg {
 
     const rootPrivateKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
 
-      // Derive an account private key
-      const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
-        WalletTypePurpose.CIP1852,
-        CoinTypes.CARDANO,
-        HARDENED + accountIndex,
-      ]);
+    // Derive an account private key
+    const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex,
+    ]);
 
-      // Create a signature map for the witness
-      const signatures = new Map<string, string>();
+    // Create a signature map for the witness
+    const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
+    console.log('🔧 About to analyze transaction for signatures');
     const requiredSigners = analyzeTransactionForSignatures(
       transaction,
       utxos,
@@ -831,62 +951,32 @@ export class WalletBg {
       this.stakeKey.bind(this)
     );
 
-    console.debug('🔍 Required signers analysis:');
-    console.debug(`  Found ${requiredSigners.length} required signers`);
+    console.log('🔧 Required signers analysis:');
+    console.log(`🔧 Found ${requiredSigners.length} required signers`);
     requiredSigners.forEach((signer, index) => {
-      console.debug(`  Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
+      console.log(`🔧 Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
     });
 
     // Sign with each required key
     for (const signer of requiredSigners) {
-      console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
+      console.log(`🔧 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
+      const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
+      const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
+      console.log(`🔧 Public key hash: ${rawPublicKey.hash().hex()}`);
+      // Sign the transaction hash as a HexBlob type
+      const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
+      signatures.set(rawPublicKey.hex(), signature.hex());
+      console.log(`🔧 Added signature for public key: ${rawPublicKey.hex().substring(0, 16)}...`);
+    }
 
-        const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
-        const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
+    console.log(`🔧 Total signatures collected: ${signatures.size}`);
 
-        // Sign the transaction hash as a HexBlob type
-        const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
-
-      // Use the raw public key bytes (32 bytes) for the witness map, not the extended key
-      const rawPublicKeyBytes = rawPublicKey.bytes();
-      const rawPublicKeyHex = Buffer.from(rawPublicKeyBytes).toString('hex');
-
-      console.debug(`  Public key: ${rawPublicKeyHex}`);
-      console.debug(`  Signature: ${signature.hex().substring(0, 20)}...`);
-
-        signatures.set(rawPublicKey.hex(), signature.hex());
-      }
-
-    console.debug(`🔏 Total signatures created: ${signatures.size}`);
-    console.debug('🔏 Signature map entries:');
-    signatures.forEach((sig, pubKey) => {
-      console.debug(`  ${pubKey}: ${sig.substring(0, 20)}...`);
-    });
-
-      // Create a witness set - ensure a signature map is properly set
-      const witness: Cardano.Witness = {
-        signatures: new Map(signatures), // Create a new Map to ensure it's properly set
-      };
-      if (mergeWitnesses) {
-        // Merge existing signatures with new ones
-        if (transaction.witness?.signatures) {
-          transaction.witness.signatures.forEach((sig, pubKey) => {
-            witness.signatures.set(pubKey, sig);
-          });
-        }
-        witness.scripts = transaction.witness?.scripts
-        witness.datums = transaction.witness?.datums
-        witness.redeemers = transaction.witness?.redeemers
-        witness.bootstrap = transaction.witness?.bootstrap
-      }
-
-    // Serialize witness to CBOR hex
-    const witnessHex = serializeWitness(witness);
-
-    return {
-      witnesses: witnessHex,
+    // Create a witness set - ensure a signature map is properly set
+    const witness: Cardano.Witness = {
+      signatures: new Map(signatures), // Create a new Map to ensure it's properly set
     };
-
+    // Serialize witness to CBOR hex
+    return { witnesses: Serialization.TransactionWitnessSet.fromCore(witness).toCbor() };
   }
 
   /**
@@ -955,47 +1045,100 @@ export class WalletBg {
     payload: string,
     password: string,
     accountIndex: number,
-    isUsb: boolean
+    keys: Keys,
   ) {
-    let signatureHex: string, keyHex: string;
-    const addr: Cardano.PaymentAddress | Cardano.RewardAccount = addrToSignWith(address);
+    // Use Cardano SDK's cip30signData implementation directly (same as Lace)
+    // This ensures 100% compatibility with the Cardano SDK standard
 
-    if (this.type === WalletType.Ledger) {
-      const response: SignedMessageData = await ledger.signData(
-        addr,
-        payload,
-        networks.resolveNetwork(this.chain, this.network),
-        accountIndex,
-        isUsb
-      );
-      const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload);
-      signatureHex = buildAndSignData(builder, toHexArray(response.signatureHex), undefined);
-      keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
-    } else {
-      const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes());
-      const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
-      const keyHash: string = credential.hash;
-      let accountKey: Ed25519PrivateKey;
-      const { paymentKey, stakeKey, drepKey } = this.requestAccountKey(password, accountIndex);
-      if (keyHash === this.paymentKeyExternal(0).hash().hex()) {
-        accountKey = paymentKey;
-      } else if (keyHash === this.paymentKeyInternal(0).hash().hex()) {
-        accountKey = paymentKey;
-      } else if (keyHash === this.stakeKey().hash().hex()) {
-        accountKey = stakeKey;
-      } else if (keyHash === this.drepKey().hash().hex()) {
-        accountKey = drepKey;
-      } else {
-        throw DataSignError.ProofGeneration;
+    const signWith = addrToSignWith(address);
+    const knownAddresses = this.convertKeysToGroupedAddresses(keys, accountIndex);
+
+    // Create a minimal KeyAgent-like object that implements the required interface
+    const keyAgent = {
+      derivePublicKey: async (derivationPath: { role: number; index: number }) => {
+        // Derive public key based on role
+        if (derivationPath.role === ChainDerivations.DREP) {
+          return getDrepKey(this.publicKey, derivationPath.index).hex();
+        } else if (derivationPath.role === ChainDerivations.CHIMERIC_ACCOUNT) {
+          return getStakeKey(this.publicKey, derivationPath.index).hex();
+        } else if (derivationPath.role === ChainDerivations.EXTERNAL) {
+          return getPaymentKeyExternal(this.publicKey, derivationPath.index).hex();
+        } else if (derivationPath.role === ChainDerivations.INTERNAL) {
+          return getPaymentKeyInternal(this.publicKey, derivationPath.index).hex();
+        }
+        throw new Error(`Unknown derivation role: ${derivationPath.role}`);
+      },
+      signBlob: async (derivationPath: { role: number; index: number }, blob: string) => {
+        // Determine key type from role
+        let keyType: 'payment' | 'change' | 'stake' | 'drep';
+        if (derivationPath.role === ChainDerivations.DREP) {
+          keyType = 'drep';
+        } else if (derivationPath.role === ChainDerivations.CHIMERIC_ACCOUNT) {
+          keyType = 'stake';
+        } else if (derivationPath.role === ChainDerivations.EXTERNAL) {
+          keyType = 'payment';
+        } else if (derivationPath.role === ChainDerivations.INTERNAL) {
+          keyType = 'change';
+        } else {
+          throw new Error(`Unknown derivation role: ${derivationPath.role}`);
+        }
+
+        // Get the private key
+        const privateKey = this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
+
+        // Sign the blob
+        const signature = privateKey.sign(HexBlob(blob));
+
+        return {
+          publicKey: privateKey.toPublic().hex(),
+          signature: signature.hex()
+        };
       }
-      const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
-      const toSign = builder.make_data_to_sign().to_bytes();
-      signatureHex = buildAndSignData(builder, toSign, accountKey);
-      const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
-      keyHex = util.bytesToHex(coseKey.to_bytes());
-    }
+    };
 
-    return { signature: signatureHex, key: keyHex };
+    // Call SDK's cip30signData function (same as Lace does)
+    // Type assertion: cip30signData only uses derivePublicKey and signBlob from KeyAgent
+    return await cip8.cip30signData(keyAgent as any, {
+      knownAddresses,
+      signWith,
+      payload: HexBlob(payload)
+    });
+  }
+
+  /**
+   * Convert Gero's Keys structure to SDK's GroupedAddress[] format
+   * @private
+   */
+  private convertKeysToGroupedAddresses(keys: Keys, accountIndex: number): GroupedAddress[] {
+    const networkId = this.networkId();
+    const stakeAddress = this.stakeAddress;
+    const groupedAddresses: GroupedAddress[] = [];
+
+    // Convert payment addresses
+    keys.payment.forEach((key) => {
+      groupedAddresses.push({
+        type: ChainDerivations.EXTERNAL, // AddressType.External = 0
+        index: hdPathToArray(key.path)[4],
+        networkId,
+        accountIndex,
+        address: key.address,
+        rewardAccount: stakeAddress,
+      });
+    });
+
+    // Convert change addresses
+    keys.change.forEach((key) => {
+      groupedAddresses.push({
+        type: ChainDerivations.INTERNAL, // AddressType.Internal = 1
+        index: hdPathToArray(key.path)[4],
+        networkId,
+        accountIndex,
+        address: key.address,
+        rewardAccount: stakeAddress,
+      });
+    });
+
+    return groupedAddresses;
   }
 
   isEnterpriseAddress(): boolean {
@@ -1071,13 +1214,22 @@ export class WalletBg {
 }
 
 export function alarmListener(alarm) {
+
   if (alarm.name === 'refreshDexHunterPrices') {
     DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens));
-  } else if (alarm.name === 'refreshXerberusRisks') {
+  } else if (
+    alarm.name === 'refreshXerberusRisks' &&
+    WalletStore.state.account &&
+    Number(WalletStore.state.account.controlled_amount) > 0
+  ) {
     XerberusStore.updateRisks(Object.values(WalletStore.state.tokens).map((token: any) => token.fingerprint));
   } else if (alarm.name === 'refreshTokenHistory') {
     RealFiStore.updateTokenHistory(Object.values(WalletStore.state.tokens).map((token: any) => token.unit));
-  } else if (alarm.name.includes('portfolio')) {
+  } else if (
+    alarm.name.includes('portfolio') &&
+    WalletStore.state.account &&
+    Number(WalletStore.state.account.controlled_amount) > 0
+  ) {
     const stakeAddress = alarm.name.split('|')[1];
     TapToolsStore.loadPortfolio(stakeAddress);
   } else if (alarm.name === 'coinGeckoPrices') {

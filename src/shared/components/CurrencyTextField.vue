@@ -26,7 +26,11 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   value: {
@@ -187,5 +191,9 @@ let formattedValue = computed({
 .currency-text-field.dense {
   min-height: 30px!important;
   height: 30px!important;
+}
+.v-text-field.v-text-field--solo .v-input__control {
+  min-height: 30px;
+  padding: 0;
 }
 </style>

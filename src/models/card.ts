@@ -18,14 +18,22 @@ export interface UserInfo {
 }
 
 export interface CardanoAddress {
-  address: string;
+  wallet_address: string;
 }
 
 // Card Types
 export interface CardData {
+  id: number;
+  uuid: string;
+  card_uuid: string;
   pan: string;
   currentBalance: string;
   currency: string;
+  status: string;
+  type: string;
+  createdAt: string;
+  card_status: 'TEMPORARY_BLOCKED' | 'ACTIVE';
+  updatedAt: string;
 }
 
 export interface CardNumber {
@@ -37,7 +45,7 @@ export interface CardBalance {
     amount: number;
     currencyCode: string;
   };
-  state: string;
+  state: 'ACTIVE' | 'BLOCKED';
 }
 
 // Card Transaction Types
@@ -66,22 +74,18 @@ export interface CardTransactionHistory {
     amount: number;
     currencyCode: string;
   };
-  narrative: {
-    description: string;
-  };
+  narrative: string;
   debit: boolean;
   state: string;
 }
 
 export interface HistoryResponse {
-  history: {
-    meta: {
-      page: number;
-      records: number;
-      totalRecords: number;
-    };
-    records: CardTransactionHistory[];
+  meta: {
+    page: number;
+    records: number;
+    totalRecords: number;
   };
+  records: CardTransactionHistory[];
 }
 
 export interface HistoryParams {
@@ -100,16 +104,47 @@ export interface CardLoadingState {
   cardBalance: boolean;
   cardHistory: boolean;
   auth: boolean;
+  initialize: boolean;
 }
 
 export interface CardErrorState {
   userInfo: string | null;
   cardanoAddress: string | null;
   cardData: string | null;
+  cardDetails: string | null;
+  cardPin: string | null;
   cardNumber: string | null;
   cardBalance: string | null;
   cardHistory: string | null;
   auth: string | null;
+  initialize: string | null;
+}
+
+export interface CardDetails {
+  details: {
+    pan: string;
+    expiryDate: string;
+    cvc2: string;
+  };
+}
+
+export interface CardPin {
+  pin: string;
+}
+export interface ExchangeRate {
+  buy: string;
+  sell: string;
+}
+// Individual card data with all related information
+export interface CardInfo {
+  cardData: CardData;
+  cardDetails: CardDetails | null;
+  cardPin: CardPin | null;
+  cardNumber: CardNumber | null;
+  cardBalance: CardBalance | null;
+  cardHistory: HistoryResponse | null;
+  totalDeposits: number;
+  activities: Activity[];
 }
 
 export interface CardState {
@@ -122,17 +157,24 @@ export interface CardState {
   userInfo: UserInfo | null;
   cardanoAddress: CardanoAddress | null;
 
-  // Card data
-  cardData: CardData | null;
-  cardNumber: CardNumber | null;
-  cardBalance: CardBalance | null;
-  cardHistory: HistoryResponse | null;
-  totalDeposits: number;
-  activities: Activity[];
+  // Multiple cards support
+  cards: CardInfo[]; // Array of all user's cards
+  selectedCardId: string | null; // Currently selected card UUID
+  exchangeRate: ExchangeRate | null;
+
+  // Wallet status integration - ALL IN ONE!
+  walletStatus: {
+    currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
+    isKaiserexAuthenticated: boolean;
+    kycStatus: 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started';
+    kycData: any;
+    loadingMessage: string;
+    error: string | null;
+  };
 
   // Loading states
   loading: CardLoadingState;
 
   // Error states
   errors: CardErrorState;
-} 
+}

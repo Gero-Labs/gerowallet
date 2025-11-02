@@ -14,7 +14,7 @@
       <!-- Welcome message -->
       <div class="welcome-section">
         <h1 class="hero-title">
-          {{ isNewUser ? 'Welcome to Gero Wallet!' : 'Your wallet is empty' }}
+          {{ isNewUser ? $t('dashboard.welcomeToGeroWallet') : $t('dashboard.emptyWallet') }}
         </h1>
 
         <p class="hero-subtitle">
@@ -36,12 +36,12 @@
               </v-icon>
               <div>
                 <h3 class="backup-title mb-1">
-                  {{ isBackupComplete ? 'Wallet Secured' : 'Secure Your Wallet' }}
+                  {{ isBackupComplete ? $t('dashboard.walletSecured') : $t('dashboard.secureYourWallet') }}
                 </h3>
                 <p class="backup-subtitle mb-0">
                   {{ isBackupComplete
-                    ? 'Your seed phrase has been safely backed up'
-                    : 'Back up your seed phrase to protect your funds'
+                    ? $t('dashboard.seedPhraseBackedUp')
+                    : $t('dashboard.backupSeedPhrase')
                   }}
                 </p>
               </div>
@@ -54,8 +54,7 @@
                 text
                 class="mb-3 backup-alert"
               >
-                Your 24-word seed phrase is the only way to recover your wallet.
-                Store it securely offline.
+                {{ $t('dashboard.seedPhraseRecoveryWarning') }}
               </v-alert>
 
               <div class="text-center">
@@ -65,10 +64,10 @@
                   class="backup-btn"
                 >
                   <v-icon left small>mdi-content-save</v-icon>
-                  Export Seed Phrase
+                  {{ $t('dashboard.exportSeedPhrase') }}
                 </v-btn>
                 <p class="mt-1 mb-0 text-caption backup-help-text">
-                  Quick and secure • Takes 2 minutes
+                  {{ $t('dashboard.quickAndSecure') }}
                 </p>
               </div>
             </template>
@@ -81,7 +80,7 @@
                 class="mb-0 backup-alert"
                 :icon="false"
               >
-                Great job! Your wallet is protected. Keep your seed phrase safe.
+                {{ $t('dashboard.greatJobProtected') }}
               </v-alert>
             </template>
           </v-card-text>
@@ -92,7 +91,7 @@
       <!-- Feature cards with spanning background -->
       <v-row class="mt-8 feature-cards-grid" justify="center">
         <!-- Card 1: Buy Crypto (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex && !isTestnet">
+        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveBuySupported(loggedWallet?.chain, loggedWallet?.network)">
           <div class="feature-card-container buy-card-emphasized">
             <div
               class="feature-card-background card-1"
@@ -111,11 +110,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-credit-card-plus
                   </v-icon>
-                  <h3 class="feature-title">Buy {{ currencySymbol }}</h3>
-                  <p class="feature-description">Purchase with credit card</p>
+                  <h3 class="feature-title">{{ t('dashboard.buy') }} {{ currencySymbol }}</h3>
+                  <p class="feature-description">{{ t('dashboard.purchaseWithCreditCard') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Instant
+                  {{ t('dashboard.instant') }}
                 </v-chip>
               </div>
             </div>
@@ -140,8 +139,8 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-qrcode
                   </v-icon>
-                  <h3 class="feature-title">Receive</h3>
-                  <p class="feature-description">Share your address</p>
+                  <h3 class="feature-title">{{ t('dashboard.receiveAction') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.shareYourAddress') }}</p>
                 </div>
                 <v-chip
                   v-if="walletAddress"
@@ -151,7 +150,7 @@
                   @click.stop="copyToClipboard"
                 >
                   <v-icon small left>{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
-                  {{ copiedFeedback ? 'Copied!' : 'Copy Address' }}
+                  {{ copiedFeedback ? t('dashboard.copied') : t('dashboard.copyAddress') }}
                 </v-chip>
               </div>
             </div>
@@ -159,36 +158,36 @@
         </v-col>
 
         <!-- Card 3: Learn -->
-        <v-col cols="12" sm="6" md="4" lg="2">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-3"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: isApex ? '33% center' : '40% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="$emit('open-learn')">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-school
-                  </v-icon>
-                  <h3 class="feature-title">Learn</h3>
-                  <p class="feature-description">Discover {{ blockchain }} ecosystem</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  Learn
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
+<!--        <v-col cols="12" sm="6" md="4" lg="2">-->
+<!--          <div class="feature-card-container">-->
+<!--            <div-->
+<!--              class="feature-card-background card-3"-->
+<!--              :style="{-->
+<!--                backgroundImage: `url(${featureBackgroundImage})`,-->
+<!--                backgroundSize: cardBackgroundSize,-->
+<!--                backgroundPosition: isApex ? '33% center' : '40% center',-->
+<!--                backgroundRepeat: 'no-repeat'-->
+<!--              }"-->
+<!--            ></div>-->
+<!--            <div class="feature-card-glass" @click="$emit('open-learn')">-->
+<!--              <div class="feature-card-content">-->
+<!--                <div class="feature-card-main">-->
+<!--                  <v-icon size="48" :color="primaryColor" class="mb-3">-->
+<!--                    mdi-school-->
+<!--                  </v-icon>-->
+<!--                  <h3 class="feature-title">Learn</h3>-->
+<!--                  <p class="feature-description">Discover {{ blockchain }} ecosystem</p>-->
+<!--                </div>-->
+<!--                <v-chip small :color="primaryColor" text-color="white">-->
+<!--                  Learn-->
+<!--                </v-chip>-->
+<!--              </div>-->
+<!--            </div>-->
+<!--          </div>-->
+<!--        </v-col>-->
 
         <!-- Card 4: Gero Card (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex">
+        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveGeroCardSupport(loggedWallet?.chain, loggedWallet?.network)">
           <div class="feature-card-container">
             <div
               class="feature-card-background card-4"
@@ -198,18 +197,18 @@
                 backgroundPosition: '60% center',
                 backgroundRepeat: 'no-repeat'
               }"
-            ></div>
-            <div class="feature-card-glass">
+            />
+            <div class="feature-card-glass" @click="navigateToCard">
               <div class="feature-card-content">
                 <div class="feature-card-main">
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-credit-card
                   </v-icon>
-                  <h3 class="feature-title">Gero Card</h3>
-                  <p class="feature-description">Top up with ADA</p>
+                  <h3 class="feature-title">{{ t('dashboard.geroCard') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.topUpWithAda') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Coming Soon
+                  {{ t('dashboard.comingSoon') }}
                 </v-chip>
               </div>
             </div>
@@ -227,18 +226,18 @@
                 backgroundPosition: isApex ? '66% center' : '80% center',
                 backgroundRepeat: 'no-repeat'
               }"
-            ></div>
+            />
             <div class="feature-card-glass" @click="navigateToStaking">
               <div class="feature-card-content">
                 <div class="feature-card-main">
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-cash-clock
                   </v-icon>
-                  <h3 class="feature-title">Staking Rewards</h3>
-                  <p class="feature-description">Earn rewards by staking</p>
+                  <h3 class="feature-title">{{ t('dashboard.stakingRewards') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.earnRewardsByStakingShort') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Explore Staking
+                  {{ t('dashboard.exploreStaking') }}
                 </v-chip>
               </div>
             </div>
@@ -263,11 +262,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-cash-refund
                   </v-icon>
-                  <h3 class="feature-title">Cashback</h3>
-                  <p class="feature-description">Earn cashback online</p>
+                  <h3 class="feature-title">{{ t('dashboard.cashbackAction') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.earnCashbackOnline') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Browse Deals
+                  {{ t('dashboard.browseDeals') }}
                 </v-chip>
               </div>
             </div>
@@ -275,18 +274,6 @@
         </v-col>
       </v-row>
 
-      <!-- Sample data option for exploration -->
-      <div class="text-center mt-6" v-if="isDevelopment">
-        <v-btn
-          text
-          small
-          @click="$emit('load-sample-data')"
-          class="sample-data-btn"
-        >
-          <v-icon small left>mdi-test-tube</v-icon>
-          Load Sample Data to Explore
-        </v-btn>
-      </div>
     </v-card-text>
 
     <!-- Animated background elements -->
@@ -308,11 +295,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { toRefs, ref, getCurrentInstance, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();
@@ -320,14 +311,12 @@ const instance = getCurrentInstance();
 interface Props {
   isNewUser?: boolean;
   showTutorial?: boolean;
-  isDevelopment?: boolean;
   shouldBackup?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isNewUser: false,
-  showTutorial: true,
-  isDevelopment: false
+  showTutorial: true
 });
 
 const emit = defineEmits([
@@ -350,10 +339,6 @@ const isApex = computed(() => {
          loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
-const isTestnet = computed(() => {
-  return loggedWallet.value?.network !== Network.MAINNET;
-})
-
 const primaryColor = computed(() => {
   return isApex.value ? '#dc753e' : '#00c7f3';
 });
@@ -363,24 +348,16 @@ const cardBackgroundSize = computed(() => {
   return isApex.value ? '300% 100%' : '600% 100%';
 });
 
-const backgroundImage = computed(() => {
-  return isApex.value ? assets.apexBg : assets.cardanoBg;
-});
-
 // Background image for the feature cards spanning effect
 const featureBackgroundImage = computed(() => {
   return assets.emptyState;
 });
 
-const walletIcon = computed(() => {
-  return isApex.value ? assets.walletGeroApex : assets.walletSvg;
-});
-
 const subtitle = computed(() => {
   if (props.isNewUser) {
-    return `Let's get you started with some ${currencySymbol.value} to explore the ${blockchain.value} ecosystem`;
+    return t('dashboard.letsGetYouStarted', { currency: currencySymbol.value, blockchain: blockchain.value });
   }
-  return `Add ${currencySymbol.value} to start using your wallet and explore all features`;
+  return t('dashboard.addCurrencyToStart', { currency: currencySymbol.value });
 });
 
 const walletAddress = computed(() => loggedWallet.value?.baseAddress || '');
@@ -424,15 +401,22 @@ const copyToClipboard = async () => {
 };
 
 // Navigation functions
-const navigateToStaking = () => {
+const navigateToCard = () => {
   const router = instance?.proxy?.$router;
+  if (router) {
+    router.push('/card');
+  }
+};
+
+const navigateToStaking = () => {
+  const router = (instance?.proxy as any)?.$router;
   if (router) {
     router.push('/staking');
   }
 };
 
 const navigateToCashback = () => {
-  const router = instance?.proxy?.$router;
+  const router = (instance?.proxy as any)?.$router;
   if (router) {
     router.push('/cashback');
   }

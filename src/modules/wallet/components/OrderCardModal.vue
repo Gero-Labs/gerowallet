@@ -5,15 +5,15 @@
         <div class="modal-content">
           <div class="card-mockup-section">
             <div class="cards-wrapper">
-              <img src="@/modules/wallet/icons/multiCards.svg" alt="Cards" class="card" />
+              <img src="@/modules/wallet/icons/multiCards.svg" :alt="$t('card.cards')" class="card" />
             </div>
           </div>
 
           <div class="modal-header">
             <div class="header-content">
-              <h2 class="modal-title">Get Started with Gero Crypto Card</h2>
+              <h2 class="modal-title">{{ t('card.getStartedWithGeroCard') }}</h2>
               <p class="modal-subtitle">
-                You’ll be redirected to our banking partner’s secure portal to complete verification.
+                {{ t('card.firstCreateKaiserex') }}
               </p>
             </div>
 
@@ -22,30 +22,37 @@
                 <div class="check-icon">
                   <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
-                <span class="check-text">You will need your ID like passport, driving licence</span>
+                <span class="check-text">{{ t('card.step1CreateKaiserex') }}</span>
               </div>
               <div class="check-item">
                 <div class="check-icon">
                   <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
-                <span class="check-text">Real-time face scan to match ID</span>
+                <span class="check-text">{{ t('card.step2CompleteKYC') }}</span>
               </div>
               <div class="check-item">
                 <div class="check-icon">
                   <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
-                <span class="check-text">Proof of Address like Utility bill, bank statement</span>
+                <span class="check-text">{{ t('card.step3ReceiveCard') }}</span>
               </div>
             </div>
           </div>
 
           <div class="modal-actions">
-            <SecondaryButton text="Cancel" @click="closeModal()" />
-            <GradientButton text="Get Started" @click="handleGetStarted()" />
+            <SecondaryButton :text="t('common.cancel')" @click="closeModal()" />
+            <GradientButton :text="t('card.getStarted')" @click="handleGetStarted()" />
           </div>
         </div>
       </v-card>
     </v-dialog>
+
+    <!-- Kaiserex Registration Modal -->
+    <KaiserexRegistrationModal
+      :open="showKaiserexModal"
+      @close="handleKaiserexClose"
+      @complete="handleKaiserexComplete"
+    />
 
     <!-- KYC Modal -->
     <KYCModal :open="showKYCModal" @close="showKYCModal = false" @complete="setKYCStatus" />
@@ -53,10 +60,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
+import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
 import KYCModal from './KYCModal.vue';
 import { ref } from 'vue';
+import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 
 defineProps<{
   open: boolean;
@@ -66,6 +78,7 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
+const showKaiserexModal = ref(false);
 const showKYCModal = ref(false);
 
 const closeModal = () => {
@@ -73,11 +86,30 @@ const closeModal = () => {
 };
 
 const handleGetStarted = () => {
+  // Check if user has already registered with Kaiserex
+  const isRegistered = cardStore.state.walletStatus.isKaiserexAuthenticated;
+
+  if (isRegistered) {
+    // If already registered, go directly to KYC
+    showKYCModal.value = true;
+  } else {
+    // Otherwise, show Kaiserex registration first
+    showKaiserexModal.value = true;
+  }
+};
+
+const handleKaiserexClose = () => {
+  showKaiserexModal.value = false;
+};
+
+const handleKaiserexComplete = () => {
+  // Close Kaiserex modal and open KYC modal
+  showKaiserexModal.value = false;
   showKYCModal.value = true;
 };
 
 const setKYCStatus = () => {
-  localStorage.setItem('kycStatus', 'pending');
+  cardStore.state.walletStatus.kycStatus = 'pending';
   showKYCModal.value = false;
   closeModal();
 };

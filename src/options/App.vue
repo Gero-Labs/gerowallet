@@ -4,7 +4,6 @@
       <router-view></router-view>
     </component>
     <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
-      {{ `Loading: ${loading}, isRestoring: ${isRestoring}` }}
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
@@ -19,11 +18,14 @@
         <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
+    <notifications></notifications>
     <v-snackbar
+      content-class="custom-snackbar"
+      outlined
         v-model="snackbarPlugin.active"
         :timeout="snackbarPlugin.timeout"
         :color="snackbarPlugin.color"
-        top
+        bottom
         style="font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;"
         transition="scroll-y-transition"
     >
@@ -32,13 +34,13 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs } from 'vue'
+import { ref, computed, toRefs, watch, getCurrentInstance } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import Loading, { loadingState } from '@/stores/loading';
 import DexHunterStore from '@/stores/dexHunterStore';
 import CoinGeckoStore from '@/stores/coinGeckoStore';
-import WalletStore from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 import XerberusStore from '@/stores/xerberusStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import RealFiStore from '@/stores/realFiStore';
@@ -64,13 +66,31 @@ console.log('📱 Options page initializing charli3 store:', Charli3Store);
 
 
 const { loading, isRestoring, text } = toRefs(loadingState);
+const { config } = toRefs(walletStore);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
+const vmProxy = getCurrentInstance()!.proxy as any;
 
 const isLoading = computed(() => {
   return loading.value || isRestoring.value;
 });
+watch(() => config.value?.locale, async (newLocale, oldLocale) => {
+  if (newLocale && vmProxy.$i18n && newLocale !== oldLocale) {
+    // CRITICAL FIX: Load language file before switching (race condition fix)
+    const { loadLanguage } = await import('@/plugins/i18n');
+    try {
+      await loadLanguage(newLocale);
+      
+      // Update i18n locale ONLY after successful load
+      vmProxy.$i18n.locale = newLocale;
+      console.log('🌐 Language changed globally to:', newLocale);
+    } catch (error) {
+      console.error(`Failed to load language ${newLocale}:`, error);
+      // Don't update i18n if load failed
+    }
+  }
+}, { immediate: true, deep: true });
 </script>
 <style lang="scss">
 .v-application {
@@ -132,5 +152,35 @@ const isLoading = computed(() => {
   isolation: isolate !important;
   padding: 12px 16px !important;
   max-width: 300px !important;
+}
+.v-snack:not(.v-snack--has-background) .v-snack__wrapper {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: transparent;
+  border-radius: 12px !important;
+}
+
+.voerro-notification-theme-error {
+  border-radius: 12px !important;
+  border: 1px solid #ff6464d1!important;
+  color: #f5fff6;
+}
+
+.voerro-notification-theme-success {
+  border-radius: 12px !important;
+  border: 1px solid #47cd89d1!important;
+  color: #f5fbf8;
+}
+
+.voerro-notification {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
+  font-size: 14px !important;
+  overflow-wrap: anywhere;
 }
 </style>

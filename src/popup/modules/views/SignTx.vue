@@ -1,26 +1,23 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Transaction Summary" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
+    <PopupHeader :title="String($t('navigation.transactionSummary'))" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
-          You're giving
+          {{ $t('navigation.youreGiving') }}
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
-                mdi-information-outline
+                mdi-information-outlƒine
               </v-icon>
             </template>
             <div>
-              <span>{{ networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }} and/or tokens<br>shown here will be </span>
-              <span class="warn">sent<br>from your wallet</span>
-              <span> to the<br>address listed above.
-                <br /><br />Once signed, this action<br>is irreversible.</span>
+              <span>{{ $t('wallet.tokensWillBeSent', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }) }}</span>
             </div>
           </v-tooltip>
         </TransactionCard>
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.receive" :risk="risks?.receivingRisk">
-          You're receiving
+          {{ $t('navigation.youreReceiving') }}
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
@@ -28,9 +25,7 @@
               </v-icon>
             </template>
             <div>
-              <span>{{ networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }} and/or tokens<br>shown here will be </span>
-              <span class="succ">sent<br />to your wallet.</span>
-              <span><br /><br />Once signed, this action<br>is irreversible.</span>
+              <span>{{ $t('wallet.tokensWillBeReceived', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }) }}</span>
             </div>
           </v-tooltip>
         </TransactionCard>
@@ -60,8 +55,8 @@
                     v-model="spendingPassword"
                     outlined
                     hide-details
-                    placeholder="Type your spending password"
-                    label="Spending Password"
+                    :placeholder="$t('navigation.typeYourSpendingPassword')"
+                    :label="$t('wallet.spendingPassword')"
                     :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required()]"
                     required
@@ -80,22 +75,21 @@
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0">
               <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
                 <span style="color: white; font-size: 12px">
-                  Please review the transaction details carefully before proceeding. Confirm the transaction by signing with your
-                {{ loggedWallet.type }} device.
+                  {{ $t('wallet.pleaseReviewCarefully', { walletType: loggedWallet.type }) }}
                 </span>
               </v-alert>
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSignLoading" />
+                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSignLoading" />
               </v-card-subtitle>
             </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
-                Decline
+                {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>
             <v-col cols="6">
               <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading" :loading="txSignLoading">
-                {{txAutoSubmit ? 'Sign & Confirm' : !witnesses ? 'SIGN' : 'CONFIRM'}}
+                {{txAutoSubmit ? $t('wallet.signAndConfirm') : !witnesses ? $t('wallet.sign') : $t('common.confirm')}}
               </v-btn>
             </v-col>
           </v-row>
@@ -105,6 +99,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
@@ -130,6 +125,8 @@ import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+
+const { t } = useTranslation();
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
 const isBT = ref(false);
@@ -137,11 +134,11 @@ const risks = ref<any>(undefined);
 const spendingPassword = ref('');
 const showPassword = ref(false);
 const request = ref<any>(null);
-const tx = ref<Cardano.Tx>(undefined);
+const tx = ref<Cardano.Tx | undefined>(undefined);
 const valid = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.invalidSpendingPassword'),
 });
 const txSignLoading = ref(false);
 const loading = ref(true);
@@ -163,15 +160,15 @@ const useSidePanel = computed(() => {
   return config.value?.useSidePanel;
 });
 
-const txFee = computed<bigint>(() => {
+const txFee = computed<bigint | undefined>(() => {
   return txBody.value?.fee;
 });
 
 const txMetadata = computed(() => {
-  return tx.value.auxiliaryData?.blob;
+  return tx.value?.auxiliaryData?.blob;
 });
 
-const txBody = computed<Cardano.TxBody>(() => {
+const txBody = computed<Cardano.TxBody | undefined>(() => {
   return tx.value?.body;
 })
 
@@ -192,11 +189,11 @@ const script = computed(() => {
 });
 
 const outputs = computed<Cardano.TxOut[]>(() => {
-  return txBody.value.outputs;
+  return txBody.value?.outputs || [];
 });
 
 const inputs = computed<Cardano.TxIn[]>(() => {
-  return txBody.value.inputs;
+  return txBody.value?.inputs || [];
 });
 
 const changeAddress = computed(() => {
@@ -348,18 +345,56 @@ const sign = async () => {
         }
       } else if (loggedWallet.value.type === WalletType.Ledger) {
         const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
+
+        // Extract existing witnesses if this is a partial sign (multisig transaction)
+        let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
+        if (mergeWitnesses || partialSign) {
+          try {
+            const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
+            existingWitnesses = fullTx.witnessSet();
+          } catch (e) {
+            console.warn('[LEDGER-SIGN] Could not extract existing witnesses:', e);
+          }
+        }
+
         const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
           tx,
           keys.value,
           utxos.value,
           !isBT.value, // isUsb flag (inverted from isBT)
           networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+          txCbor // Pass original CBOR for multisig transactions to preserve exact byte representation
         );
-        const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-          signatures,
-        })
-        console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
-        witnesses.value = transactionWitnessSet.toCbor();
+
+        // Merge Ledger signatures with existing witnesses
+        let finalWitnessSet: Serialization.TransactionWitnessSet;
+        if (existingWitnesses) {
+          // Convert existing witnesses to Core format
+          const existingCore = existingWitnesses.toCore();
+
+          // Merge signatures (combine both Maps)
+          const mergedSignatures = new Map([
+            ...(existingCore.signatures || new Map()),
+            ...(signatures || new Map()),
+          ]);
+
+          // Create merged witness set - only include properties that are defined
+          const mergedWitnessCore: Cardano.Witness = {
+            signatures: mergedSignatures,
+            ...(existingCore.bootstrap && { bootstrap: existingCore.bootstrap }),
+            ...(existingCore.scripts && { scripts: existingCore.scripts }),
+            ...(existingCore.redeemers && { redeemers: existingCore.redeemers }),
+            ...(existingCore.datums && { datums: existingCore.datums }),
+          };
+
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore(mergedWitnessCore);
+        } else {
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+            signatures,
+          });
+        }
+
+        witnesses.value = finalWitnessSet.toCbor();
         if (txAutoSubmit.value) {
           await confirm();
         }
@@ -370,10 +405,10 @@ const sign = async () => {
         switch (error.code) {
           case 0x5515:
           case 0x6E11:
-            snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+            snackbar.setError(String(t('wallet.ledgerDeviceLocked')));
             break;
           default:
-            snackbar.setError('Ledger device error: ' + error.message);
+            snackbar.setError(String(t('wallet.ledgerDeviceError', { message: error.message })));
         }
       } else {
         console.log(e);
@@ -418,22 +453,37 @@ const init = async () => {
     txCbor = request.value?.data?.tx;
   }
   if (txCbor) {
-    console.log(txCbor);
+    loading.value = true;
     tx.value = deserializeCardanoJsSdkTx(txCbor);
     const queryParams = route.query;
-    try {
-      risks.value = await cardanoShieldApi.scanTx({
+
+    // Make Cardano Shield scan non-blocking with 5-second timeout
+    // Don't block the UI if the scan is slow or fails
+    const scanWithTimeout = Promise.race([
+      cardanoShieldApi.scanTx({
         cborHex: txCbor,
         toAddress: recipient.value,
         fromAddress: changeAddress.value,
         url: queryParams['website'] as string,
-      });
+      }),
+      new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 10000)
+      )
+    ]);
+
+    try {
+      risks.value = await scanWithTimeout;
+      console.log('SignTx received Cardano Shield response:', risks.value);
+      console.log('SignTx passing risks.score to TransactionRisk:', risks.value?.score);
     } catch (e) {
+      console.warn('Cardano Shield scan failed or timed out:', e);
       risks.value = {
         addressRisk: 'unknown',
+        score: 'unknown',  // Default score when scan fails
       };
+    } finally {
+      loading.value = false;
     }
-    loading.value = false;
   }
 };
 
@@ -447,6 +497,9 @@ onMounted(async () => {
   }
 
   await init();
+
+  // Set document title
+  document.title = `Gero Dashboard | ${t('wallet.signTransaction')}`;
 });
 </script>
 

@@ -7,7 +7,7 @@
               <Select
                 :value="sendData.selectedWallet"
                 :items="[sendData.selectedWallet]"
-                label="From"
+                :label="$t('wallet.from')"
                 :readonly="true"
               ></Select>
             </v-card-title>
@@ -24,9 +24,9 @@
                     </v-icon>
                   </template>
                   <div>
-                    <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} and/or tokens<br>shown here will be </span>
-                    <span style="color: #FF7777">sent<br>from your wallet</span>
-                    <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
+                    <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} {{ $t('common.andOrTokensShownHere') }}<br></span>
+                    <span style="color: #FF7777">{{ $t('common.sentFromYourWallet') }}<br></span>
+                    <span> {{ $t('common.toTheAddressListedAbove') }}<br /><br />{{ $t('common.onceSignedIrreversible') }}</span>
                   </div>
                 </v-tooltip>
               </TransactionCard>
@@ -40,24 +40,17 @@
     </v-card>
   </template>
   <script setup lang="ts">
+  import { useTranslation } from '@/shared/composables/useTranslation';
   import { ref, computed, toRefs } from 'vue';
   import { walletStore } from '@/stores/walletStore';
   import Select from '@/shared/components/Select.vue';
   import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
   import DappAddress from '@/popup/modules/components/DappAddress.vue';
   import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
-  import { BigNum, Value, Transaction } from '@emurgo/cardano-serialization-lib-browser';
-  import { Buffer } from 'buffer';
-  import { AssetWithQuantity } from '@/shared/models/asset-quantity';
   import networks from '@/utils/networks';
-  import {
-    diffAssetsFromIncomingToOutgoing,
-    getAssetsFromMultiAsset,
-    getPayAndReceiveTokens,
-  } from '@/shared/utils/builder';
   import cardanoShieldApi from '@/api/cardano-shield-api';
   import { DappRisk } from '@/models/cardano-shield-types';
-  import type { TxData, Risks, SwapDetails } from '@/modules/multisig/types/MultiSigTypes';
+  import type { TxData, Risks } from '@/modules/multisig/types/MultiSigTypes';
 
   interface SendData {
     selectedWallet: string;
@@ -172,20 +165,32 @@
     risks.value.score = undefined;
     loading.value = true;
     tx.value = txData;
-    try {
-      const response = await cardanoShieldApi.scanTx({
+
+    // Make Cardano Shield scan non-blocking with 5-second timeout
+    // Don't block the UI if the scan is slow or fails
+    const scanWithTimeout = Promise.race([
+      cardanoShieldApi.scanTx({
         cborHex: txData.to_hex(),
         toAddress: props.sendData.recipientAddress,
         fromAddress: changeAddress.value,
         url: 'https://gerowallet.io',
-      });
-      risks.value = response;
+      }),
+      new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000)
+      )
+    ]);
+
+    // Allow UI to proceed immediately
+    loading.value = false;
+
+    try {
+      risks.value = await scanWithTimeout;
     } catch (e) {
+      console.warn('Cardano Shield scan failed or timed out:', e);
       risks.value = {
         addressRisk: DappRisk.unknown,
       };
     }
-    loading.value = false;
   };
 
   defineExpose({

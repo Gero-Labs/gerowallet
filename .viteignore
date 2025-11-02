@@ -1,0 +1,23 @@
+# Windows temporary files
+DumpStack.log
+DumpStack.log.tmp
+*.tmp
+*.log
+
+# Node modules
+node_modules/
+
+# Git
+.git/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+extension/

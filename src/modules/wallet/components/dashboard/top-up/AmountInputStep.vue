@@ -2,26 +2,32 @@
   <div class="amount-input-step">
     <!-- Title and Subtitle -->
     <div class="header-text">
-      <h2 class="modal-title">Top up your Gero card balance</h2>
-      <p class="modal-subtitle">Swap your ADA to Euro with real-time exchange rate</p>
+      <h2 class="modal-title">{{ t('card.topUpCardBalance') }}</h2>
+      <p class="modal-subtitle">{{ t('card.swapAdaToEuro') }}</p>
     </div>
 
     <!-- Exchange Rate Table -->
     <div class="exchange-rate-table">
       <div class="rate-row">
-        <span class="rate-label">Today's Rate</span>
+        <span class="rate-label">{{ t('card.todaysRate') }}</span>
       </div>
       <div class="rate-row">
         <span class="rate-value">₳1 ADA</span>
         <span class="rate-equals">=</span>
-        <span class="rate-value">€0.65 EUR</span>
+        <span class="rate-value">€{{ EXCHANGE_RATE?.toFixed(2) }} EUR</span>
       </div>
     </div>
 
     <!-- Wallet Balance -->
     <div class="wallet-balance">
-      <span class="balance-label">Your ADA Balance:</span>
+      <span class="balance-label">{{ t('card.yourAdaBalance') }}</span>
       <span class="balance-value">₳{{ adaBalance }}</span>
+    </div>
+
+    <!-- Minimum Requirement Notice -->
+    <div class="minimum-notice">
+      <v-icon color="#00c7f3" size="16" class="notice-icon">mdi-information</v-icon>
+      <span class="notice-text">Minimum top-up amount: 2 ADA</span>
     </div>
 
     <!-- Amount Input Section -->
@@ -29,15 +35,15 @@
       <!-- First Input (ADA or EUR based on switch state) -->
       <div class="amount-input-container">
         <div class="input-header">
-          <span class="input-label">Amount</span>
+          <span class="input-label">{{ t('card.amount') }}</span>
         </div>
         <div class="input-content">
           <span class="currency-badge">{{ isSwitched ? '€' : '₳' }}</span>
-          <input 
-            v-model="firstInputValue" 
-            type="number" 
-            placeholder="0" 
-            class="custom-input" 
+          <input
+            v-model="firstInputValue"
+            type="number"
+            placeholder="0"
+            class="custom-input"
             @input="handleFirstInput"
             @focus="handleInputFocus"
           />
@@ -47,23 +53,23 @@
 
       <!-- Switch Button -->
       <div class="switch-button">
-        <v-btn icon class="switch-icon" @click="switchCurrencies">
-          <v-icon color="white" size="20">mdi-swap-vertical</v-icon>
-        </v-btn>
+        <v-avatar size="32" style="border: 1px solid #00c7f3">
+          <v-icon color="primary" size="20">mdi-arrow-down</v-icon>
+        </v-avatar>
       </div>
 
       <!-- Second Input (EUR or ADA based on switch state) -->
       <div class="amount-input-container">
         <div class="input-header">
-          <span class="input-label">Amount</span>
+          <span class="input-label">{{ t('card.amount') }}</span>
         </div>
         <div class="input-content">
           <span class="currency-badge">{{ isSwitched ? '₳' : '€' }}</span>
-          <input 
-            v-model="secondInputValue" 
-            type="number" 
-            placeholder="0" 
-            class="custom-input" 
+          <input
+            v-model="secondInputValue"
+            type="number"
+            placeholder="0"
+            class="custom-input"
             @input="handleSecondInput"
             @focus="handleInputFocus"
           />
@@ -75,8 +81,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
+import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 
 // Props
 interface Props {
@@ -87,7 +97,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
 // Emits
 const emit = defineEmits<{
   (e: 'update:modelValue', value: { adaAmount: string; eurAmount: string }): void;
@@ -102,7 +111,9 @@ const isUpdatingFromSecond = ref(false);
 const activeInput = ref<'first' | 'second' | null>(null);
 
 // Exchange rate
-const EXCHANGE_RATE = 0.65;
+const EXCHANGE_RATE = computed(() => {
+  return Number(cardStore.state.exchangeRate?.buy);
+});
 
 // Computed property for ADA balance
 const adaBalance = computed(() => {
@@ -116,25 +127,25 @@ const adaBalance = computed(() => {
 
 // Computed values for inputs based on switch state
 const firstInputValue = computed({
-  get: () => isSwitched.value ? eurAmount.value : adaAmount.value,
+  get: () => (isSwitched.value ? eurAmount.value : adaAmount.value),
   set: (value: string) => {
     if (isSwitched.value) {
       eurAmount.value = value;
     } else {
       adaAmount.value = value;
     }
-  }
+  },
 });
 
 const secondInputValue = computed({
-  get: () => isSwitched.value ? adaAmount.value : eurAmount.value,
+  get: () => (isSwitched.value ? adaAmount.value : eurAmount.value),
   set: (value: string) => {
     if (isSwitched.value) {
       adaAmount.value = value;
     } else {
       eurAmount.value = value;
     }
-  }
+  },
 });
 
 const handleInputFocus = (event: Event) => {
@@ -151,15 +162,15 @@ const handleFirstInput = () => {
 
   isUpdatingFromFirst.value = true;
   const firstValue = parseFloat(firstInputValue.value) || 0;
-  
+
   if (isSwitched.value) {
     // First input is EUR, second should be ADA
-    adaAmount.value = (firstValue / EXCHANGE_RATE).toFixed(2);
+    adaAmount.value = (firstValue / EXCHANGE_RATE.value).toFixed(2);
   } else {
     // First input is ADA, second should be EUR
-    eurAmount.value = (firstValue * EXCHANGE_RATE).toFixed(2);
+    eurAmount.value = (firstValue * EXCHANGE_RATE.value).toFixed(2);
   }
-  
+
   isUpdatingFromFirst.value = false;
 
   const emitData = {
@@ -175,15 +186,15 @@ const handleSecondInput = () => {
 
   isUpdatingFromSecond.value = true;
   const secondValue = parseFloat(secondInputValue.value) || 0;
-  
+
   if (isSwitched.value) {
     // Second input is ADA, first should be EUR
-    eurAmount.value = (secondValue * EXCHANGE_RATE).toFixed(2);
+    eurAmount.value = (secondValue * EXCHANGE_RATE.value).toFixed(2);
   } else {
     // Second input is EUR, first should be ADA
-    adaAmount.value = (secondValue / EXCHANGE_RATE).toFixed(2);
+    adaAmount.value = (secondValue / EXCHANGE_RATE.value).toFixed(2);
   }
-  
+
   isUpdatingFromSecond.value = false;
 
   const emitData = {
@@ -192,10 +203,6 @@ const handleSecondInput = () => {
   };
   console.log('🔢 AmountInputStep emitting update:modelValue:', emitData);
   emit('update:modelValue', emitData);
-};
-
-const switchCurrencies = () => {
-  isSwitched.value = !isSwitched.value;
 };
 
 // Watch for external changes
@@ -326,7 +333,31 @@ watch(
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #75E0A7;
+  color: #75e0a7;
+}
+
+.minimum-notice {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  justify-content: center;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(0, 199, 243, 0.1);
+  border: 1px solid rgba(0, 199, 243, 0.3);
+  border-radius: $border-radius-md;
+  width: fit-content;
+}
+
+.notice-icon {
+  flex-shrink: 0;
+}
+
+.notice-text {
+  font-family: Inter;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.43;
+  color: #00c7f3;
 }
 
 .amount-section {
@@ -386,7 +417,7 @@ watch(
   margin-left: -10px;
   width: 100%;
   min-width: 0;
-  
+
   &::placeholder {
     color: $text-secondary;
     opacity: 0.7;

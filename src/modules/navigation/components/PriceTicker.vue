@@ -1,63 +1,138 @@
 <template>
-  <div class="d-flex column">
-    <v-list-item two-line class="px-0" style="max-width: 96px">
-      <v-list-item-avatar size="32" class="mr-2">
-        <v-img :src="currencyLogo" contain></v-img>
-      </v-list-item-avatar>
-      <v-list-item-content v-if="price">
-        <v-list-item-title style="font-size: 14px; margin-bottom: 0" :style="{color: ticker.prevPrice === ticker.lastPrice ? '#fff' : (ticker.prevPrice > ticker.lastPrice ? '#ff6464' : '#47cd89')}">
-          {{ filters.toCurrency(ticker.lastPrice, false, 4, '$', '', false, 0) }}
-        </v-list-item-title>
-        <v-list-item-subtitle v-if="ticker.priceChangePercent" style="font-size: 12px" :style="{color: Number(ticker.priceChangePercent) === 0 ? '#fff' : (Number(ticker.priceChangePercent) < 0 ? '#ff6464' : '#47cd89')}">
-          {{ `${ticker.priceChangePercent}%` }}
-        </v-list-item-subtitle>
-      </v-list-item-content>
-    </v-list-item>
-    <v-divider vertical class="mx-1" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
+  <div :class="isApex ? 'apex-ticker' : 'gero-ticker'" class="d-flex align-center" v-if="displayPrice">
+    <div :class="isApex ? 'apex-ticker' : 'gero-ticker'" class="d-flex align-center" style="min-width: 120px; cursor: pointer" @click="cycleDisplayMode">
+      <div class="d-flex flex-column">
+        <span class="gero-label" style="font-size: 12px; font-weight: 600" :style="{ color: primaryColor }">{{
+          tokenName
+        }}</span>
+        <span class="gero-price" style="font-size: 10px; color: #fff"
+          >{{ currentCurrencySymbol }}{{ displayPrice }}</span
+        >
+      </div>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, toRefs, watch, ref, onMounted } from 'vue';
-import networks from '@/utils/networks';
-import { networkStore } from '@/stores/networkStore';
-import { priceStore } from '@/stores/priceStore';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { ref, computed, toRefs } from 'vue';
+import { Blockchain } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
-import filters from '@/shared/utils/filters';
 
-const { price } = toRefs(networkStore);
+
+const { t } = useTranslation();
+
 const { loggedWallet } = toRefs(walletStore);
-const ticker = ref<Object>({
-  prevPrice: 0,
-  lastPrice: 0,
-  priceChange: 0,
-  priceChangePercent: 0,
-})
 
-// Computed property for Kraken price with fallback to network store
-const krakenPrice = computed(() => {
-  return priceStore.adaUsd || {
-    lastPrice: price.value?.lastPrice || 0,
-    priceChange: price.value?.priceChange || 0,
-    priceChangePercentage: price.value?.priceChangePercent || 0
-  };
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
-watch(krakenPrice, (val) => {
-  ticker.value.prevPrice = ticker.value.lastPrice;
-  ticker.value.lastPrice = val.lastPrice;
-  ticker.value.priceChange = Number(val.priceChange || 0).toFixed(3);
-  ticker.value.priceChangePercent = Number(val.priceChangePercentage || 0).toFixed(2);
-}, { deep: true })
+// Display mode: 'ADA', 'USD', 'EUR'
+const displayMode = ref<'ADA' | 'USD' | 'EUR'>('USD');
 
-const currencyLogo = computed(() => {
-  return networks.resolveCurrencyImage(loggedWallet.value?.chain, loggedWallet.value?.network)
-})
+const props = defineProps({
+  primaryColor: {
+    type: String,
+    default: '#00c7f3',
+  },
+  tokenName: {
+    type: String,
+    default: 'GERO',
+  },
+  priceInAda: {
+    type: Number,
+    default: 0,
+  },
+  priceInUsd: {
+    type: Number,
+    default: 0,
+  },
+  priceInEur: {
+    type: Number,
+    default: 0,
+  },
+  isApex: {
+    type: Boolean,
+    default: false,
+  },
+});
 
-onMounted(() => {
-  const currentPrice = krakenPrice.value;
-  ticker.value.prevPrice = ticker.value.lastPrice;
-  ticker.value.lastPrice = currentPrice.lastPrice;
-  ticker.value.priceChange = Number(currentPrice.priceChange || 0).toFixed(3);
-  ticker.value.priceChangePercent = Number(currentPrice.priceChangePercentage || 0).toFixed(2);
-})
+const displayPrice = computed(() => {
+  switch (displayMode.value) {
+    case 'ADA':
+      return props.priceInAda.toFixed(6);
+    case 'USD':
+      return props.priceInUsd.toFixed(6);
+    case 'EUR':
+      return props.priceInEur.toFixed(6);
+    default:
+      return '0.000000';
+  }
+});
+
+const currentCurrencySymbol = computed(() => {
+  switch (displayMode.value) {
+    case 'ADA':
+      return '₳';
+    case 'USD':
+      return '$';
+    case 'EUR':
+      return '€';
+    default:
+      return '$';
+  }
+});
+
+function cycleDisplayMode() {
+  // For Apex: Cycle through USD → EUR → USD (no ADA)
+  // For Cardano: Cycle through USD → EUR → ADA → USD
+  if (isApex.value) {
+    // Apex: only USD and EUR
+    if (displayMode.value === 'USD') {
+      displayMode.value = 'EUR';
+    } else {
+      displayMode.value = 'USD';
+    }
+  } else {
+    // Cardano: USD, EUR, and ADA
+    if (displayMode.value === 'USD') {
+      displayMode.value = 'EUR';
+    } else if (displayMode.value === 'EUR') {
+      displayMode.value = 'ADA';
+    } else {
+      displayMode.value = 'USD';
+    }
+  }
+}
 </script>
+<style scoped lang="scss">
+.gero-ticker {
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.gero-ticker:hover {
+  background-color: rgba(0, 199, 243, 0.1);
+  transform: scale(1.05);
+}
+
+.gero-ticker:active {
+  transform: scale(0.98);
+}
+
+.apex-ticker {
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.apex-ticker:hover {
+  background-color: rgba(255, 165, 0, 0.1);
+  transform: scale(1.05);
+}
+
+.apex-ticker:active {
+  transform: scale(0.98);
+}
+</style>

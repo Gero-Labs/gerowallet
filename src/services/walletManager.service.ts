@@ -100,7 +100,7 @@ export class WalletManager {
 
         await walletBg.syncService.resync();
 
-        LoadingState.setText('Wallet is almost ready');
+        LoadingState.setText('Wallet ready');
 
         debugLog('Wallet login successful for wallet:', wallet.id);
         return walletBg;
@@ -173,7 +173,7 @@ export class WalletManager {
           // Fall back to regular Ably sync if REST fails
         });
 
-        LoadingState.setText('Wallet is almost ready');
+        LoadingState.setText('Wallet ready');
 
         debugLog('Wallet login successful for wallet:', wallet.id);
         return walletBg;

@@ -25,14 +25,14 @@
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
-                    This is a <b>Beta Version</b>. For the Official Release visit
+                    <span v-html="$t('navigation.betaVersionNotice')"></span>
                     <a
                       style="color: black; font-weight: 700"
                       href="https://chromewebstore.google.com/detail/gero-dashboard/bgpipimickeadkjlklgciifhnalhdjhe?hl=en-US&utm_source=ext_sidebar"
                       target="_blank"
-                      >Gero Dashboard</a
+                      >{{ $t('navigation.geroDashboard') }}</a
                     >
-                    in Chrome Store.
+                    {{ $t('navigation.inChromeStore') }}
                   </v-alert>
                 </v-col>
               </v-row>
@@ -40,25 +40,14 @@
                 <v-app-bar flat color="transparent" style="max-height: 55px">
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
 
-                  <!-- GERO Ticker -->
-                  <div
-                    v-if="
-                      loggedWallet?.chain !== Blockchain.APEX_PRIME && loggedWallet?.chain !== Blockchain.APEX_VECTOR
-                    "
-                    class="gero-ticker d-flex align-center"
-                    style="min-width: 120px; cursor: pointer"
-                    @click="openSwapDialog"
-                  >
-                    <div class="d-flex flex-column">
-                      <span
-                        class="gero-label"
-                        style="font-size: 12px; font-weight: 600"
-                        :style="{ color: primaryColor }"
-                        >GERO</span
-                      >
-                      <span class="gero-price" style="font-size: 10px; color: #fff">{{ getCurrencySymbol() }}{{ geroPrice }}</span>
-                    </div>
-                  </div>
+                  <!-- TOKEN TICKER -->
+                  <PriceTicker
+                    :primary-color="primaryColor"
+                    :token-name="tokenName"
+                    :price-in-ada="geroPriceInAda"
+                    :price-in-usd="geroPriceInUsd"
+                    :price-in-eur="geroPriceInEur"
+                  ></PriceTicker>
 
                   <v-spacer />
 
@@ -66,7 +55,16 @@
 
                   <v-spacer />
 
-                  <v-tooltip bottom :content-class="connected ? 'network-tooltip' : 'network-tooltip offline'">
+                  <v-tooltip
+                    bottom
+                    :content-class="
+                      connected
+                        ? 'network-tooltip'
+                        : connecting
+                        ? 'network-tooltip connecting'
+                        : 'network-tooltip offline'
+                    "
+                  >
                     <template v-slot:activator="{ on, attrs }">
                       <div
                         style="display: flex; align-items: center; gap: 4px; min-width: 60px"
@@ -75,10 +73,10 @@
                       >
                         <v-icon
                           small
-                          :color="connected ? primaryColor : '#ff6464'"
-                          :class="{ 'sync-animation': isSyncing }"
+                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
+                          :class="{ 'sync-animation': isSyncing, 'connecting-animation': connecting }"
                         >
-                          {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect' }}
+                          {{ connected ? 'mdi-lan-connect' : connecting ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                         </v-icon>
 
                         <!-- Small epoch progress bar -->
@@ -87,38 +85,50 @@
                           height="8"
                           :buffer-value="epochSlotPercentage"
                           :value="epochSlotPercentage"
-                          :color="connected ? primaryColor : '#ff6464'"
+                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
                           background-color="transparent"
                           style="width: 50px"
                           striped
                           :stream="connected"
+                          :indeterminate="connecting"
                         ></v-progress-linear>
                       </div>
                     </template>
 
                     <div class="network-tooltip-content">
-                      <div><strong>Network:</strong> {{ loggedWallet?.network }}</div>
-                      <div><strong>Last Sync:</strong> {{ tip?.time ? time.format(new Date(tip.time)) : 'N/A' }}</div>
-                      <div><strong>Epoch:</strong> {{ tip?.epoch || 'N/A' }}</div>
-                      <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
+                      <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
+                      <div><strong>{{ t('navigation.nextSync') }}:</strong> {{ nextSyncDisplay }}</div>
+                      <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
+                      <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
                       <div>
-                        <strong class="mr-1">Status:</strong>
-                        <span :style="connected ? { color: 'inherit' } : { color: '#ff6464' }">{{
-                          connected ? 'Online' : 'Offline'
-                        }}</span>
+                        <strong class="mr-1">{{ t('navigation.status') }}:</strong>
+                        <span
+                          :style="
+                            connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }
+                          "
+                          >{{ connected ? t('navigation.online') : connecting ? t('navigation.connecting') : t('navigation.offline') }}</span
+                        >
                       </div>
                     </div>
                   </v-tooltip>
 
                   <!-- Notifications Menu (preserved from current version) -->
-                  <v-menu offset-y :close-on-content-click="false" nudge-left="75" nudge-top="-10" eager transition="none">
+                  <v-menu
+                    offset-y
+                    :close-on-content-click="false"
+                    nudge-left="75"
+                    nudge-top="-10"
+                    eager
+                    transition="none"
+                  >
                     <template v-slot:activator="{ on, attrs }">
                       <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
                         <v-icon size="20">mdi-bell-outline</v-icon>
                       </v-btn>
                     </template>
                     <v-card outlined class="notifications-card" min-width="200">
-                      <v-card-title class="pa-2 text-h6"> Notifications </v-card-title>
+                      <v-card-title class="pa-2 text-h6"> {{ t('navigation.notifications') }} </v-card-title>
                       <v-card-text class="pa-0">
                         <v-list class="transparent">
                           <v-list-item>
@@ -127,7 +137,7 @@
                                 <v-avatar size="30" color="#333" class="mr-2">
                                   <v-icon small color="#CCC"> mdi-message-text-outline </v-icon>
                                 </v-avatar>
-                                Nothing New
+                                {{ t('navigation.nothingNew') }}
                               </v-list-item-title>
                             </v-list-item-content>
                           </v-list-item>
@@ -139,11 +149,11 @@
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup">
                       <v-avatar size="20">
-                        <img :src="assets.settingsSvg" alt="Settings" />
+                        <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="20" v-else>
-                      <img :src="assets.settingsSvg" alt="Settings" />
+                      <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
                     </v-avatar>
                   </v-btn>
                 </v-app-bar>
@@ -181,8 +191,6 @@
                   <keep-alive>
                     <router-view
                       @open-backup-dialog="handleOpenBackupDialog"
-                      @open-buy-dialog="handleOpenBuyDialog"
-                      @open-receive-dialog="handleOpenReceiveDialog"
                     />
                   </keep-alive>
                 </v-sheet>
@@ -205,18 +213,13 @@
       />
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
-
-      <SwapDialog :isOpen="isSwapDialogOpen" @close="closeSwapDialog" />
-
-      <BuyDialog :isOpen="buyDialog" @close="buyDialog = false" />
-
-      <ReceiveDialog :isOpen="receiveDialog" @close="receiveDialog = false" />
     </v-app>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs, watch, getCurrentInstance } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
 import Player from '@/modules/media-player/Player.vue';
@@ -224,75 +227,113 @@ import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue';
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
-import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
-import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
-import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
-import { themes, iconFilters } from '@/config/themes';
+import { iconFilters, themes } from '@/config/themes';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
-import timePlugin from '@/plugins/time';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
+import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
+import networks from '@/utils/networks';
 
+const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
 const currentPage = computed(() => vmProxy.$route);
-const { isSyncing, connected } = toRefs(loadingState);
+const { isSyncing, connected, connecting } = toRefs(loadingState);
 const { loggedWallet, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
+const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
+const { price } = toRefs(networkStore);
 
-const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+// Load exchange rate immediately
+loadExchangeRate();
+
+// GERO token unit
+const GERO_UNIT = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f';
+
+// Reactive GERO price fallback (used when token not in dexHunterTokens)
+const geroFallbackPrice = ref<number>(0);
+
+const geroPriceInAda = computed(() => {
+  // For Apex, we show the native token price (AP3X = 1, like ADA = 1 for Cardano)
+  if (isApex.value) {
+    return 1;
+  }
+
+  // For Cardano, show GERO token price in ADA
+  const geroToken = dexHunterTokens.value[GERO_UNIT];
+  if (geroToken?.price && geroToken.price > 0) {
+    return Number(geroToken.price);
+  }
+
+  // Fallback: Use separately fetched price if token not in wallet
+  if (geroFallbackPrice.value > 0) {
+    return geroFallbackPrice.value;
+  }
+
+  return 0;
+});
+
+const geroPriceInUsd = computed(() => {
+  // For Apex, AP3X price in USD is same as ADA price (1:1 peg assumption or oracle price)
+  if (isApex.value) {
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    return Number(adaPriceUsd.toFixed(6));
+  }
+
+  // For Cardano, calculate GERO token price in USD
+  const priceInAda = geroPriceInAda.value;
+  if (priceInAda === 0) return 0;
+
+  // Get ADA/USD price
+  const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  return Number((priceInAda * adaPriceUsd).toFixed(6));
+});
+
+const geroPriceInEur = computed(() => {
+  const priceInUsd = geroPriceInUsd.value;
+  if (priceInUsd === 0) return 0;
+
+  // Convert USD to EUR
+  return Number((priceInUsd * usdToEurRate.value).toFixed(6));
+});
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
-const swapDialog = ref(false);
-const buyDialog = ref(false);
-const receiveDialog = ref(false);
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
 
-// Computed for proper reactivity with Vue 2 components
-const isSwapDialogOpen = computed(() => swapDialog.value);
-
-const geroPrice = computed(() => {
-  const geroToken = dexHunterTokens.value['10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f'];
-  if (!geroToken) {
-    return 'GERO';
-  }
-  if (geroToken?.price && geroToken.price > 0) {
-    return convertFiat(geroToken.price).toFixed(6);
+const tokenName = computed(() => {
+  if (isApex.value) {
+    // Use the currency ticker from network configuration
+    return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) || 'AP3X';
   }
   return 'GERO';
 });
 
-const primaryColor = computed(() => {
-  const isApex =
-    loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-  return isApex ? themes.apex.primary : themes.cardano.primary;
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
-function openSwapDialog() {
-  swapDialog.value = true;
-}
+const primaryColor = computed(() => {
+  return isApex.value ? themes.apex.primary : themes.cardano.primary;
+});
 
-function closeSwapDialog() {
-  swapDialog.value = false;
-}
-const time = timePlugin;
 const changeLog = changeLogPlugin;
 const shouldBackup = computed(() => {
   // Use reactive config from store for proper sync between empty and populated states
@@ -305,6 +346,57 @@ const isWalletEmpty = computed(() => {
 });
 const epochSlotPercentage = computed(() => {
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;
+});
+
+// Reactive counter for updating the next sync countdown
+const currentTime = ref(Date.now());
+
+// Format last sync as timestamp (e.g., "2:45:32 PM")
+const lastSyncTimestamp = computed(() => {
+  if (!tip.value?.time) {
+    return 'N/A';
+  }
+
+  const date = new Date(tip.value.time);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+});
+
+// Calculate next sync display
+// Since Ably provides real-time sync based on blockchain events,
+// we show "Real-time" when connected, or estimate based on average block time (20 seconds for Cardano)
+const nextSyncDisplay = computed(() => {
+  if (!connected.value) {
+    return t('common.waitingForConnection');
+  }
+
+  if (connecting.value) {
+    return t('common.connecting');
+  }
+
+  // For connected state, show real-time sync
+  // Optionally, we could calculate the next expected block time based on tip.time + ~20 seconds
+  if (connected.value && tip.value?.time) {
+    const CARDANO_BLOCK_TIME = 20000; // 20 seconds in milliseconds
+    const lastSyncTime = new Date(tip.value.time).getTime();
+    const now = currentTime.value; // Use reactive time for countdown
+    const nextSyncEstimate = lastSyncTime + CARDANO_BLOCK_TIME;
+
+    // If we're past the expected next block time, sync is due now
+    if (now >= nextSyncEstimate) {
+      return t('common.realTimeAnyMoment');
+    }
+
+    // Otherwise calculate seconds until next expected sync
+    const secondsUntilNextSync = Math.ceil((nextSyncEstimate - now) / 1000);
+    return `~${secondsUntilNextSync}s`;
+  }
+
+  return t('common.realTime');
 });
 
 const isWelcomeDone = computed({
@@ -335,25 +427,13 @@ function handleOpenBackupDialog() {
   backupWalletDialog.value = true;
 }
 
-function handleOpenBuyDialog() {
-  console.log('Received buy dialog event from dashboard');
-  buyDialog.value = true;
-}
-
-function handleOpenReceiveDialog() {
-  console.log('Received receive dialog event from dashboard');
-  receiveDialog.value = true;
-}
-
-// Theme management - update colors when chain changes
+// Theme management - update colors when a chain changes
 const updateThemeColors = () => {
-  const isApex =
-    loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-  const currentTheme = isApex ? themes.apex : themes.cardano;
-  const currentFilter = isApex ? iconFilters.apex : iconFilters.cardano;
+  const currentTheme = isApex.value ? themes.apex : themes.cardano;
+  const currentFilter = isApex.value ? iconFilters.apex : iconFilters.cardano;
 
   // Update Vuetify theme
-  updateVuetifyTheme(isApex, true); // Always dark theme for now
+  updateVuetifyTheme(isApex.value, true); // Always a dark theme for now
 
   // Set CSS custom properties
   Object.entries(currentTheme).forEach(([key, value]) => {
@@ -372,6 +452,30 @@ watch(
   },
   { immediate: true }
 );
+
+// Fetch GERO price even if user doesn't own the token
+const fetchGeroPrice = async () => {
+  try {
+    // Only fetch for Cardano chains
+    if (isApex.value) return;
+
+    // Check if GERO is already loaded
+    const geroToken = dexHunterTokens.value[GERO_UNIT];
+    if (geroToken?.price && geroToken.price > 0) {
+      return; // Already have the price
+    }
+
+    // Import dexHunterApi directly to fetch price in browser context
+    const dexHunterApi = await import('@/api/dexhunter-api');
+    const res = await dexHunterApi.default.mCap(GERO_UNIT);
+
+    if (res.status === 200 && res.data?.price) {
+      geroFallbackPrice.value = Number(res.data.price);
+    }
+  } catch (error) {
+    console.warn('Failed to fetch GERO price for ticker:', error);
+  }
+};
 
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
@@ -394,10 +498,16 @@ const preloadBackgroundImage = () => {
   img.src = imageUrl;
 };
 
+// Update current time every second for next sync countdown
+let timeInterval: ReturnType<typeof setInterval> | null = null;
+
 // Lifecycle
 onMounted(async () => {
   // Ensure colors are set on mount
   updateThemeColors();
+
+  // Fetch GERO price for ticker (non-blocking)
+  fetchGeroPrice();
 
   // Preload background image after critical content
   requestIdleCallback(
@@ -406,6 +516,18 @@ onMounted(async () => {
     },
     { timeout: 2000 }
   );
+
+  // Start interval for next sync countdown
+  timeInterval = setInterval(() => {
+    currentTime.value = Date.now();
+  }, 1000);
+});
+
+// Clean up interval on unmount
+onBeforeUnmount(() => {
+  if (timeInterval) {
+    clearInterval(timeInterval);
+  }
 });
 </script>
 
@@ -499,6 +621,10 @@ div.v-toolbar__content {
   animation: sync-pulse 2s ease-in-out infinite;
 }
 
+.connecting-animation {
+  animation: connecting-pulse 1.5s ease-in-out infinite;
+}
+
 @keyframes sync-pulse {
   0%,
   100% {
@@ -508,6 +634,18 @@ div.v-toolbar__content {
   50% {
     opacity: 0.6;
     transform: scale(1.1);
+  }
+}
+
+@keyframes connecting-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
   }
 }
 
@@ -545,6 +683,11 @@ div.v-toolbar__content {
   isolation: isolate !important;
   padding: 12px 16px !important;
 
+  &.connecting {
+    border: 1px solid rgba(255, 165, 0, 0.3) !important;
+    box-shadow: 0 8px 32px rgba(255, 165, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+
   &.offline {
     border: 1px solid rgba(255, 100, 100, 0.3) !important;
     box-shadow: 0 8px 32px rgba(255, 100, 100, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
@@ -571,21 +714,6 @@ div.v-toolbar__content {
 .v-dialog__content--active {
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
-}
-
-.gero-ticker {
-  transition: all 0.2s ease;
-  border-radius: 6px;
-  padding: 4px 8px;
-}
-
-.gero-ticker:hover {
-  background-color: rgba(0, 199, 243, 0.1);
-  transform: scale(1.05);
-}
-
-.gero-ticker:active {
-  transform: scale(0.98);
 }
 
 .toolbar-icon-btn {

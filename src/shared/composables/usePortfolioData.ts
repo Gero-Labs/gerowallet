@@ -1,5 +1,5 @@
-import { ref, computed } from 'vue';
-import { PortfolioCacheService } from '@/db/portfolio-cache';
+import { computed, ref } from 'vue';
+import { PortfolioCacheService, PortfolioDataPoint } from '@/db/portfolio-cache';
 
 interface UsePortfolioDataOptions {
   cacheTimeMs?: number; // Cache time in milliseconds, default 1 minute for testing
@@ -8,11 +8,11 @@ interface UsePortfolioDataOptions {
 
 export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const {
-    cacheTimeMs = 4 * 60 * 60 * 1000, // 4 hours default
+    cacheTimeMs = 4 * 60 * 60 * 1000, // 4-hour default
     enableCache = true,
   } = options;
 
-  // Create cache service instance with options
+  // Create a cache service instance with options
   const cacheService = new PortfolioCacheService({
     cacheTimeMs,
     enableCache,
@@ -24,9 +24,9 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const loadingEur = ref(false);
 
   // Data refs
-  const adaData = ref<any[]>([]);
-  const usdData = ref<any[]>([]);
-  const eurData = ref<any[]>([]);
+  const adaData = ref<PortfolioDataPoint[]>([]);
+  const usdData = ref<PortfolioDataPoint[]>([]);
+  const eurData = ref<PortfolioDataPoint[]>([]);
 
   // Track loading order
   const loadingOrder = ref<Array<'ADA' | 'USD' | 'EUR'>>([]);
@@ -41,8 +41,52 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     return loadingOrder.value.length > 0 ? loadingOrder.value[0] : null;
   });
 
+  // Get latest portfolio values (most recent data point from each currency)
+  // CRITICAL FIX: Find the data point with the MAXIMUM timestamp to ensure we get the most recent value
+  // This fixes the issue where cached/merged data might not be properly sorted
+  const latestPortfolioValues = computed(() => {
+    const getLatestValue = (data: PortfolioDataPoint[], currency: string): number | null => {
+      if (!data || data.length === 0) return null;
+
+      // Find the data point with the maximum timestamp (most recent) using Math.max for better performance
+      // Add validation to ensure data points are valid before processing
+      const validData = data.filter(point =>
+        Array.isArray(point) &&
+        typeof point[0] === 'number' &&
+        !isNaN(point[0]) &&
+        typeof point[1] === 'number' &&
+        !isNaN(point[1])
+      );
+
+      if (validData.length === 0) return null;
+
+      const timestamps = validData.map(point => point[0]);
+      const maxTimestamp = Math.max(...timestamps);
+      const maxIndex = timestamps.indexOf(maxTimestamp);
+      const latestValue = maxIndex !== -1 ? validData[maxIndex][1] : null;
+
+      // Check if data is stale (older than 15 minutes to match cache service) and return null to trigger fallback
+      const now = Date.now();
+      const fifteenMinutesAgo = now - (15 * 60 * 1000);
+      const isStale = maxTimestamp < fifteenMinutesAgo;
+
+      // If data is stale, return null to force fallback to computedValues
+      if (isStale) {
+        return null;
+      }
+
+      return latestValue;
+    };
+
+    return {
+      ada: getLatestValue(adaData.value, 'ADA'),
+      usd: getLatestValue(usdData.value, 'USD'),
+      eur: getLatestValue(eurData.value, 'EUR'),
+    };
+  });
+
   // Load portfolio data for specific currency
-  const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> => {
+  const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> => {
     if (!address) {
       console.warn('No address provided for portfolio data');
       return [];
@@ -53,8 +97,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     loadingRef.value = true;
 
     try {
-      const data = await cacheService.loadPortfolioData(address, currency);
-      return data;
+      return cacheService.loadPortfolioData(address, currency);
     } catch (error) {
       console.error(`Error loading ${currency} portfolio data:`, error);
       return [];
@@ -173,8 +216,6 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
       return;
     }
 
-
-
     // Reset loading order and set all loading states to true
     loadingOrder.value = [];
     loadingAda.value = true;
@@ -189,12 +230,10 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
 
         const data = await loadPortfolioData(address, currency);
 
-        // Track loading order and update the corresponding ref immediately
+        // Track the loading order and update the corresponding ref immediately
         if (!loadingOrder.value.includes(currency)) {
           loadingOrder.value.push(currency);
         }
-
-        const isFirst = loadingOrder.value.length === 1;
 
         if (currency === 'ADA') {
           adaData.value = data;
@@ -266,6 +305,9 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     // Loading order tracking
     loadingOrder,
     firstLoadedCurrency,
+
+    // Latest values
+    latestPortfolioValues,
 
     // Methods
     loadPortfolioData,
