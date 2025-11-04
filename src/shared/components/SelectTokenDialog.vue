@@ -49,10 +49,10 @@
             </v-list-item-content>
             <v-list-item-content class="text-right">
               <v-list-item-title v-if="item['balance']">
-                {{ filters.toCurrency(item['balance'], false, 4, '', ' ' + item['ticker'], true, item['decimals']) }}
+                {{ convertFiat(item['balance']) }}
               </v-list-item-title>
               <v-list-item-subtitle v-if="item['price'] && item['price'] > 0">
-                {{ filters.toCurrency(item['price'], false, 6, '$', '', false, 0) }}
+                {{ '~' + getCurrencySymbol() + convertFiat(item['price']).toFixed(4) }}
               </v-list-item-subtitle>
               <v-list-item-subtitle v-else-if="item['price'] === 0"> N/A </v-list-item-subtitle>
             </v-list-item-content>
@@ -85,6 +85,7 @@ import { priceStore } from '@/stores/priceStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 interface Props {
   value?: any;
@@ -102,6 +103,7 @@ const emit = defineEmits(['close', 'input']);
 
 const { price } = toRefs(networkStore);
 const { loggedWallet } = toRefs(walletStore);
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 const search = ref('');
 const additional = ref<any[]>([]);

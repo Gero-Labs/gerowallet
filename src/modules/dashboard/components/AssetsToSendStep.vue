@@ -384,13 +384,28 @@ function getAvailableTokens(currentIndex) {
 
 function getPrice(token) {
   if (!token) return '';
-  // Use Kraken WebSocket price for ADA, fallback to network store price
-  let prce = priceStore.adaUsd?.lastPrice || price.value.lastPrice;
+
+  // Get token price per unit (same logic as getTokenPriceInUsd)
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-  if (token.ticker !== nativeTicker) {
-    prce = token.last_price;
+
+  // For native tokens (ADA)
+  if (token.ticker === nativeTicker || token.policy_id === '') {
+    const priceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    return priceUsd > 0 ? priceUsd.toString() : '';
   }
-  return (Number(token.quantity) * prce).toLocaleString('en-US');
+
+  // For other tokens: get price from DexHunter (in ADA), convert to USD
+  const unit = token.unit;
+  if (unit && dexHunterStore.dexHunterTokens[unit]) {
+    const priceInAda = dexHunterStore.dexHunterTokens[unit].price || 0;
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    const priceUsd = priceInAda * adaPriceUsd;
+    return priceUsd > 0 ? priceUsd.toString() : '';
+  }
+
+  // Fallback to last_price if available
+  const lastPrice = token.last_price || 0;
+  return lastPrice > 0 ? lastPrice.toString() : '';
 }
 
 function decreaseQuantityToSend(item) {
