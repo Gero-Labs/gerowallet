@@ -1721,5 +1721,5 @@ export default {
   'welcome.welcomeMessage': 'Welcome!',
   'welcome.welcomeTo': 'Welcome to',
   'welcome.youllUseThisToLogin': 'You\\\'ll use this to log into your wallet and make transactions.',
-  'welcome.yourNew': 'Your New',
+  'welcome.yourNew': 'Your New'
 }

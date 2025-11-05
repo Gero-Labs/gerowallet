@@ -7,12 +7,20 @@
     <v-card-text style="display: flex; flex-direction: column" class="pa-0">
       <v-row no-gutters class="pb-1" v-if="!bottomTitle">
         <v-col cols="12" style="display: flex; align-items: center">
-          <v-list-item class="px-0" style="padding-bottom: 0!important; min-height: 0">
-            <v-list-item-content class="pa-0" style="padding-bottom: 0!important;">
-              <v-list-item-title class="ma-0" :style="{ marginRight: index !=0 ? '30px!important' : '0' , flexFlow: 'row', display: 'flex', paddingBottom: '2px!important' }">
+          <v-list-item class="px-0" style="padding-bottom: 0 !important; min-height: 0">
+            <v-list-item-content class="pa-0" style="padding-bottom: 0 !important">
+              <v-list-item-title
+                class="ma-0"
+                :style="{
+                  marginRight: index != 0 ? '30px!important' : '0',
+                  flexFlow: 'row',
+                  display: 'flex',
+                  paddingBottom: '2px!important',
+                }"
+              >
                 <span v-if="title" :style="{ color: titleColor, alignSelf: 'end', fontSize: '12px' }">{{ title }}</span>
                 <v-spacer></v-spacer>
-                <div style="flex-flow: column; display: flex; justify-self: right; align-self: end;">
+                <div style="flex-flow: column; display: flex; justify-self: right; align-self: end">
                   <v-btn
                     text
                     plain
@@ -22,9 +30,15 @@
                     color="#00DFF3"
                     class="px-0 mx-0"
                     v-if="maxButtonEnabled"
-                    style="justify-content: right; height: 14px;"
-                  >MAX</v-btn>
-                  <span v-if="externalBalance" class="caption grey--text" style="text-box-trim: trim-end;">Balance: {{filters.toCurrency(selectedToken.balance, false, 2, '', '', true, selectedToken.decimals) }}</span>
+                    style="justify-content: right; height: 14px"
+                    >MAX</v-btn
+                  >
+                  <span v-if="externalBalance" class="caption grey--text" style="text-box-trim: trim-end"
+                    >Balance:
+                    {{
+                      filters.toCurrency(selectedToken.balance, false, 2, '', '', true, selectedToken.decimals)
+                    }}</span
+                  >
                 </div>
               </v-list-item-title>
             </v-list-item-content>
@@ -53,7 +67,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="34+props.badgeOffsetY"
+                      :offset-y="34 + props.badgeOffsetY"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -85,7 +99,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="34+props.badgeOffsetY"
+                      :offset-y="34 + props.badgeOffsetY"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -107,7 +121,7 @@
                     >
                   </v-btn>
                 </v-list-item-title>
-                <v-list-item-subtitle class="light-text" style="align-content: end;">
+                <v-list-item-subtitle class="light-text" style="align-content: end">
                   {{ selectedToken.name }}
                 </v-list-item-subtitle>
               </v-list-item-content>
@@ -160,11 +174,11 @@
                   class="light-text"
                   :style="{
                     alignContent: 'end',
-                    color: priceImpact > 3 ? '#FEC84B!important' : ''
+                    color: priceImpact > 3 ? '#FEC84B!important' : '',
                   }"
-                  v-else-if="!isNaN(Number(price.replaceAll(',', '')))"
+                  v-else
                 >
-                  {{ '~' + getCurrencySymbol() + convertFiat(Number(price.replaceAll(',', ''))).toFixed(2)
+                  {{ getCurrencySymbol() }}{{ convertFiat(tokenPricePerUnit).toFixed(4)
                   }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="#FEC84B"
                     >mdi-alert-rhombus-outline</v-icon
                   >
@@ -201,8 +215,10 @@ import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
+import { dexHunterStore } from '@/stores/dexHunterStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-
 
 const { t } = useTranslation();
 
@@ -273,12 +289,83 @@ const props = defineProps({
   badgeOffsetY: {
     type: Number,
     default: 0,
-  }
+  },
 });
 const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
 
 const { loggedWallet } = toRefs(walletStore);
+const { price } = toRefs(networkStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+
+// Get token price in USD (same logic as AssetsToSendStep)
+function getTokenPriceInUsd(token: any): number {
+  if (!token) return 0;
+
+  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+
+  // For native tokens (ADA)
+  if (token.ticker === nativeTicker || token.policy_id === '') {
+    return priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  }
+
+  // For other tokens: get price from DexHunter (in ADA), convert to USD
+  const unit = token.unit;
+  if (unit && dexHunterStore.dexHunterTokens[unit]) {
+    const priceInAda = dexHunterStore.dexHunterTokens[unit].price || 0;
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    return priceInAda * adaPriceUsd;
+  }
+
+  // Fallback to last_price if available
+  return token.last_price || 0;
+}
+
+// Get token price per unit (for display)
+// Use price prop if provided, otherwise calculate from token
+const tokenPricePerUnit = computed(() => {
+  if (!selectedToken.value) return 0;
+
+  // If price prop is provided and valid, use it (convert from string to number)
+  if (props.price && props.price !== '') {
+    const priceStr = String(props.price).replaceAll(',', '').replace(/\s/g, '');
+    const priceNum = parseFloat(priceStr);
+    if (!isNaN(priceNum) && priceNum > 0) {
+      return priceNum;
+    }
+  }
+
+  // Otherwise calculate from token
+  const calculatedPrice = getTokenPriceInUsd(selectedToken.value);
+  return calculatedPrice || 0;
+});
+
+// Calculate token value in USD based on quantity
+const tokenValue = computed(() => {
+  if (!selectedToken.value || !selectedToken.value.quantity) return 0;
+
+  const quantityStr = String(selectedToken.value.quantity || '0')
+    .replace(/,/g, '')
+    .replace(/\s/g, '');
+  const quantity = parseFloat(quantityStr);
+  if (!quantity || quantity <= 0 || isNaN(quantity)) return 0;
+
+  return quantity * tokenPricePerUnit.value;
+});
+
+// Format price string for display (fallback to prop if provided, otherwise use calculated)
+const displayPrice = computed(() => {
+  // If price prop is provided and valid, use it
+  if (props.price && !isNaN(Number(props.price.replaceAll(',', '')))) {
+    return props.price;
+  }
+
+  // Otherwise calculate from token value
+  if (tokenValue.value > 0) {
+    return tokenValue.value.toLocaleString('en-US');
+  }
+
+  return '';
+});
 
 const selectTokenDialog = ref<boolean>(false);
 const amount = ref('');
@@ -336,7 +423,7 @@ function quantityChange(val) {
 }
 
 function setMax() {
-  emit('setMax', props.index)
+  emit('setMax', props.index);
   // Don't set quantity here - let the parent handle it
   // selectedToken.value.quantity = balance.value.replaceAll(',', '');
 }
