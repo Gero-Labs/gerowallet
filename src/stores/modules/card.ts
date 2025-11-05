@@ -191,7 +191,7 @@ function getCardApi(): Api {
         // Prevent infinite retry loops
         if (originalRequest._retry) {
           console.warn('Token refresh failed, clearing session');
-          await cardStoreInstance.logout();
+        //  await cardStoreInstance.logout();
           throw error;
         }
 
@@ -206,7 +206,7 @@ function getCardApi(): Api {
             return api.axiosInstance(originalRequest);
           } catch (refreshError) {
             console.warn('Token refresh failed, clearing session');
-            await cardStoreInstance.logout();
+        //    await cardStoreInstance.logout();
             throw refreshError;
           }
         } else {
@@ -243,7 +243,7 @@ const cardStoreInstance = {
   async refreshAccessToken(): Promise<void> {
     if (!cardStore.refreshToken) {
       console.warn('No refresh token available for refresh');
-      await this.logout();
+    //  await this.logout();
       throw new Error('No refresh token available');
     }
 
@@ -263,7 +263,7 @@ const cardStoreInstance = {
     } catch (error) {
       // Refresh failed - logout and clear cookies
       console.warn('Token refresh failed, logging out');
-      await this.logout();
+    //  await this.logout();
       throw error;
     }
   },
@@ -488,7 +488,7 @@ export default {
 
     // Auto-logout if token expired
     if (!isValid && cardStore.accessToken) {
-      this.logout();
+    //  this.logout();
     }
 
     return isValid;
@@ -816,6 +816,53 @@ export default {
       throw error;
     } finally {
       cardStore.loading.cardHistory = false;
+    }
+  },
+
+  // Fetch card history for export without updating store
+  async fetchCardHistoryForExport(params: HistoryParams, cardId?: string): Promise<CardTransactionHistory[]> {
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) {
+      throw new Error('No card selected');
+    }
+
+    try {
+      const api = getCardApi();
+      const queryParams = new URLSearchParams();
+
+      // Format dates as dd/mm/yyyy
+      const formatDate = (dateStr: string): string => {
+        // If dateStr is already in dd.mm.yyyy format, return as is
+        if (dateStr.includes('.')) {
+          return dateStr;
+        }
+        // Otherwise parse and format
+        const date = new Date(dateStr);
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}.${month}.${year}`;
+      };
+
+      const periodFrom = params.periodFrom ? formatDate(params.periodFrom) : '';
+      const periodTo = params.periodTo ? formatDate(params.periodTo) : '';
+
+      if (!periodFrom || !periodTo) {
+        throw new Error('Period from and to are required');
+      }
+
+      queryParams.append('periodFrom', periodFrom);
+      queryParams.append('periodTo', periodTo);
+      if (params.page) queryParams.append('page', params.page.toString());
+      if (params.size) queryParams.append('size', params.size.toString());
+
+      const url = `/api/kaiserex/cards/history/${targetCardId}?${queryParams.toString()}`;
+      const response = await api.axiosInstance.get(url);
+
+      // Return transactions without updating store
+      return response.data?.records || [];
+    } catch (error) {
+      throw error;
     }
   },
 

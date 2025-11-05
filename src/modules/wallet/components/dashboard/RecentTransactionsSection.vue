@@ -1,7 +1,10 @@
 <template>
   <v-card class="transactions-card" outlined>
-    <v-card-title>
-      {{ t('card.transactions') }}
+    <v-card-title class="d-flex justify-space-between align-center">
+      <span>{{ t('card.transactions') }}</span>
+      <div class="d-flex align-center gap-2">
+        <ExportPeriodMenu :disabled="loading" />
+      </div>
     </v-card-title>
     <v-card-text>
       <v-data-table
@@ -22,7 +25,8 @@
           <v-list-item class="px-0">
             <v-list-item-content class="px-0">
               <v-list-item-title class="px-0">
-                {{ filters.truncate(item.reference) }}<CopyButton style="margin-bottom: 1px;" x-small :value="item.reference" />
+                {{ filters.truncate(item.reference)
+                }}<CopyButton style="margin-bottom: 1px" x-small :value="item.reference" />
               </v-list-item-title>
             </v-list-item-content>
           </v-list-item>
@@ -51,10 +55,7 @@
                   {{ filters.toCurrency(item.amount, true, 2, item.currency, '', true, 0) }}
                 </span>
               </v-list-item-title>
-              <v-list-item-subtitle 
-                v-if="item.isTopUp && item.adaAmount" 
-                class="px-0 ada-equivalent"
-              >
+              <v-list-item-subtitle v-if="item.isTopUp && item.adaAmount" class="px-0 ada-equivalent">
                 ₳{{ filters.toCurrency(item.adaAmount, false, 2, '', '', false, 0) }}
               </v-list-item-subtitle>
             </v-list-item-content>
@@ -81,17 +82,17 @@
     </v-card-actions>
 
     <!-- Vuetify Pagination -->
-
   </v-card>
 </template>
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import type { CardTransactionHistory } from '@/models/card';
 import cardStore from '@/stores/modules/card';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExportPeriodMenu from './ExportPeriodMenu.vue';
 
 interface Props {
   transactions?: CardTransactionHistory[];
@@ -100,11 +101,42 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const emit = defineEmits(['orderCard']);
+const emit = defineEmits(['orderCard', 'dateRangeChange']);
 
 const { t } = useTranslation();
 
-// Exchange rate from store (same as AmountInputStep.vue)
+// Initialize with default date range (last 30 days)
+onMounted(() => {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 30);
+
+  const params = {
+    periodFrom: formatDateForAPI(start),
+    periodTo: formatDateForAPI(end),
+    page: 1,
+    size: 1000,
+  };
+
+  cardStore
+    .fetchCardHistory(params)
+    .then(() => {
+      currentPage.value = 1;
+    })
+    .catch(error => {
+      console.error('Failed to fetch transactions:', error);
+    });
+});
+
+// Format date for API (dd.mm.yyyy)
+const formatDateForAPI = (date: Date): string => {
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
+};
+
+// Exchange rate from store (same as other components)
 const EXCHANGE_RATE = computed(() => {
   return Number(cardStore.state.exchangeRate?.buy) || 0;
 });
@@ -126,22 +158,16 @@ const parseEuropeanDate = (dateStr: string): Date => {
   const [hours, minutes] = timePart.split(':');
 
   // Create Date object (month is 0-indexed)
-  return new Date(
-    parseInt(year),
-    parseInt(month) - 1,
-    parseInt(day),
-    parseInt(hours),
-    parseInt(minutes)
-  );
+  return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
 };
 
 const resolveCurrencySymbol = (currencyName: string) => {
   switch (currencyName) {
-    case "EUR":
+    case 'EUR':
     default:
-      return '€'
+      return '€';
   }
-}
+};
 
 // Transform API transactions to UI format
 const formattedTransactions = computed(() => {
@@ -162,9 +188,7 @@ const formattedTransactions = computed(() => {
     const isTopUp = tx.mcc.code === '6012';
 
     // Calculate ADA equivalent for top-up transactions
-    const adaAmount = isTopUp && EXCHANGE_RATE.value > 0
-      ? tx.amount.amount / EXCHANGE_RATE.value
-      : null;
+    const adaAmount = isTopUp && EXCHANGE_RATE.value > 0 ? tx.amount.amount / EXCHANGE_RATE.value : null;
 
     // Parse date and convert to local time
     const localDate = parseEuropeanDate(tx.createTime);
@@ -173,14 +197,14 @@ const formattedTransactions = computed(() => {
     const dateFormatted = localDate.toLocaleDateString('en-US', {
       month: '2-digit',
       day: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
     });
 
     // Format time as HH:mm AM/PM
     const timeFormatted = localDate.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
 
     return {
@@ -268,7 +292,6 @@ const handlePageChange = (page: number) => {
   console.log('Page changed to:', page);
   // TODO: Emit event or call API to fetch new page data
 };
-
 </script>
 
 <style lang="scss" scoped>
@@ -407,14 +430,30 @@ const handlePageChange = (page: number) => {
       border-radius: 50%;
       flex-shrink: 0;
 
-      &.dot-pink { background: #ee46bc; }
-      &.dot-green { background: #17b26a; }
-      &.dot-blue { background: #36bffa; }
-      &.dot-red { background: #fecdca; }
-      &.dot-orange { background: #ff9f00; }
-      &.dot-purple { background: #9c27b0; }
-      &.dot-cyan { background: #00bcd4; }
-      &.dot-gray { background: #fecdca; }
+      &.dot-pink {
+        background: #ee46bc;
+      }
+      &.dot-green {
+        background: #17b26a;
+      }
+      &.dot-blue {
+        background: #36bffa;
+      }
+      &.dot-red {
+        background: #fecdca;
+      }
+      &.dot-orange {
+        background: #ff9f00;
+      }
+      &.dot-purple {
+        background: #9c27b0;
+      }
+      &.dot-cyan {
+        background: #00bcd4;
+      }
+      &.dot-gray {
+        background: #fecdca;
+      }
     }
 
     .category-text {
@@ -531,6 +570,21 @@ const handlePageChange = (page: number) => {
 
 @media (max-width: $breakpoint-md) {
   .transactions-card {
+    .v-card-title {
+      flex-direction: column;
+      align-items: flex-start !important;
+      gap: 12px;
+
+      .date-filter-container {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .quick-date-buttons {
+        flex-wrap: wrap;
+      }
+    }
+
     .pagination-container {
       flex-direction: column;
       gap: $spacing-lg;
