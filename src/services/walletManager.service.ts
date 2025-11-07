@@ -1,7 +1,6 @@
 import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
-import zkFoldApi from '@/api/zk-fold.api';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Tip } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
@@ -203,15 +202,15 @@ export class WalletManager {
 
     if (walletBg.type === WalletType.Google) {
       const googleStart = performance.now();
-      promises.push(
-        zkFoldApi.walletAddress(walletBg.userId).then(res => {
-          console.log(`⏱️ PERF: zkFoldApi.walletAddress took ${performance.now() - googleStart}ms`);
-          if (res['status'] !== 200) {
-            throw new Error('Failed to get address');
-          }
-          walletBg.baseAddress = res['data']['address'];
-        })
-      );
+      // promises.push(
+      //   zkFoldApi.walletAddress(walletBg.userId).then(res => {
+      //     console.log(`⏱️ PERF: zkFoldApi.walletAddress took ${performance.now() - googleStart}ms`);
+      //     if (res['status'] !== 200) {
+      //       throw new Error('Failed to get address');
+      //     }
+      //     walletBg.baseAddress = res['data']['address'];
+      //   })
+      // );
     }
 
     LoadingState.setText('Loading blockchain data...');

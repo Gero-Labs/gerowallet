@@ -37,8 +37,6 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
-import { generateWalletProof, getPaymentKeyHash } from '@/shared/utils/zkfold';
-import zkFoldApi from '@/api/zk-fold.api';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -1088,14 +1086,14 @@ app.addToOptions(MessageTypes.SIGN_WITH_GOOGLE, async (request, sendResponse) =>
 app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendResponse) => {
   try {
     console.log('🔐 Activating Google wallet...');
-    const { walletData, proverURL, activationId } = request.data;
+    const { walletData } = request.data;
 
     if (!walletData) {
       throw new Error('Wallet data is required');
     }
 
-    const { name, icon, theme, password, chain, network, jwt } = walletData;
-
+    const { name, icon, theme, password, chain, network } = walletData;
+    let jwt = walletData.jwt
     if (!jwt) {
       throw new Error('JWT not found');
     }
@@ -1110,6 +1108,12 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     const { Bip32PrivateKey, SodiumBip32Ed25519 } = await import('@cardano-sdk/crypto');
     const { WalletTypePurpose, CoinTypes, HARDENED, WalletType } = await import('../models/types');
     const { encryptPrivateKey } = await import('../shared/utils/crypto');
+    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkFold/google.api');
+    const { BigIntWrap } = await import('@/services/zkFold/types');
+    const { b64ToBn } = await import('@/services/zkFold/utils/json.utils');
+    const { Prover } = await import('@/services/zkFold/prover');
+    const { Backend } = await import('@/services/zkFold/backend');
+
 
     // Extract user ID from JWT
     const parts = jwt.split(".");
@@ -1141,25 +1145,35 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
       CoinTypes.CARDANO,
       HARDENED + accountIndex,
     ]);
-    const paymentKey = accountKey.derive([0, 0]);
+    const paymentKey = accountKey.derive([0, 0]); //tokenSKey
+    const pubkeyHex = paymentKey.toPublic().toRawKey().hash().hex();
+    const keyId = getKeyId(jwt);
+    const matchingKey = await getMatchingKey(keyId)
+    if (!matchingKey) {
+      throw new Error(`Failed to find matching Google cert for key ${keyId}`)
+    }
+    const signature = getSignature(jwt)
+    console.log('jwt', jwt)
+    const empi = {
+      piPubE: b64ToBn(matchingKey.e),
+      piPubN: b64ToBn(matchingKey.n),
+      piSignature: b64ToBn(signature),
+      piTokenName: new BigIntWrap("0x" + pubkeyHex)
+    }
 
-    // Generate proof (with activationId for abort checking)
+    const strippedJwt = stripSignature(jwt)
+    const prover = new Prover();
     console.log('🔐 Generating ZK proof (this may take several minutes)...');
-    const proof = await generateWalletProof(proverURL, jwt, paymentKey, activationId);
+    const proof = await prover.prove(empi)
 
-    // Activate wallet via zkFold backend
-    const paymentKeyHash = getPaymentKeyHash(paymentKey);
-
-    console.log('🔐 background.ts - paymentKeyHash before API call:', paymentKeyHash);
-    console.log('🔐 background.ts - paymentKeyHash type:', typeof paymentKeyHash);
-    console.log('🔐 background.ts - paymentKeyHash length:', paymentKeyHash.length);
+    const backend = new Backend('https://wallet-api.zkfold.io', '123456');
+    // window.dispatchEvent(new CustomEvent('proof_computed'))
+    // Generate proof (with activationId for abort checking and Gmail email for resumption)
 
     console.log('🔐 Activating wallet on blockchain...');
-    const result = await zkFoldApi.activateWallet(jwt, paymentKeyHash, proof);
+    const createWalletResponse = await backend.activateWallet(strippedJwt, paymentKey.toPublic().hash(), proof); //TODO not sure
 
-    console.log('✅ Wallet activated successfully!');
-    console.log('📍 Wallet address:', result.address);
-    console.log('📝 Activation tx:', result.tx);
+    console.log('✅ Wallet activated successfully!', createWalletResponse);
 
     // NOW create the wallet in DB (ONLY after successful proof and activation)
     const { getDb, createNewWalletDb, getLatestWalletByOrder } = await import('../db/gero-db');
@@ -1201,10 +1215,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
       id: request.id,
       data: {
         success: true,
-        walletId,
-        address: result.address,
-        txHash: result.tx,
-        txFee: result.tx_fee,
+        // walletId,
+        // createWalletResponse
       },
       target: TARGET,
       sender: SENDER.extension,

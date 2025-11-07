@@ -54,10 +54,15 @@
             :type="show1 ? 'text' : 'password'"
             :label="$t('welcome.password')"
             required
-            :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append="show1 = !show1"
             :disabled="activationInProgress"
-          ></v-text-field>
+          >
+            <template v-slot:append>
+              <v-icon @click="show1 = !show1" tabindex="-1">
+                {{show1 ? 'mdi-eye' : 'mdi-eye-off'}}
+              </v-icon>
+            </template>
+          </v-text-field>
 
           <v-text-field
             filled
@@ -68,10 +73,15 @@
             :type="show2 ? 'text' : 'password'"
             :label="$t('welcome.confirmPassword')"
             required
-            :append-inner-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append="show2 = !show2"
             :disabled="activationInProgress"
-          ></v-text-field>
+          >
+            <template v-slot:append>
+              <v-icon @click="show2 = !show2" tabindex="-1">
+                {{show2 ? 'mdi-eye' : 'mdi-eye-off'}}
+              </v-icon>
+            </template>
+          </v-text-field>
 
           <v-checkbox
             class="mt-0"
@@ -151,13 +161,12 @@
         :disabled="!valid || creatingWalletLoader || activationInProgress"
         @click="walletCreation"
       >
-        CREATE WALLET
+        {{ $t('welcome.createWallet') }}
       </v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
 import { Theme } from '@/models/types';
 import rules from '@/utils/rules';
@@ -165,7 +174,6 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-
 
 interface NewWallet {
   name: string;
@@ -210,7 +218,6 @@ const activationStep = ref<'proof' | 'blockchain' | 'complete'>('proof');
 const activationStatus = ref('');
 const activationError = ref('');
 const pollingAttempts = ref(0);
-const maxPollingAttempts = ref(60); // 30 minutes max (30 seconds * 60)
 const abortController = ref<AbortController | null>(null);
 const currentActivationId = ref<string | null>(null);
 
@@ -272,10 +279,7 @@ const walletCreation = async (): Promise<void> => {
     // Store activation ID in chrome storage so background can check if aborted
     await chrome.storage.local.set({ [`activation_${activationId}`]: { active: true } });
 
-    // zkFold prover URL (TODO: Move to env variable)
-    const proverURL = 'https://wallet-prover.zkfold.io';
-
-    const activationResponse = await Messaging.sendToBackgroundFromOptions({
+    const activationResponse: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.ACTIVATE_GOOGLE_WALLET,
       data: {
         activationId, // Pass activation ID for abort checking
@@ -289,7 +293,6 @@ const walletCreation = async (): Promise<void> => {
           network: newWallet.network,
           jwt: props.tokens.idToken,
         },
-        proverURL,
       },
     });
 
@@ -316,7 +319,7 @@ const walletCreation = async (): Promise<void> => {
       throw new Error('Wallet not found after creation');
     }
 
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const response: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet: walletToLogin },
     });
@@ -339,7 +342,7 @@ const walletCreation = async (): Promise<void> => {
         router.push('/').catch(() => {});
       });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating/activating wallet:', error);
     activationError.value = error.message || 'An error occurred during wallet creation/activation';
     activationInProgress.value = false;
