@@ -9,7 +9,7 @@
               <v-window-item
                 v-for="(card, index) in cardsWithOrderSlot"
                 :key="card.cardData?.card_uuid || `empty-${index}`"
-                style="height: 280px;"
+                style="height: 280px"
               >
                 <div
                   class="credit-card"
@@ -48,11 +48,7 @@
             </v-window>
             <!-- Status Chip under the card -->
             <div class="card-status-chip-container">
-              <v-chip
-                v-if="currentCardHasUUID"
-                class="card-status-chip active-chip"
-                small
-              >
+              <v-chip v-if="currentCardHasUUID" class="card-status-chip active-chip" small>
                 <v-icon small left>mdi-check-circle</v-icon>
                 {{ t('card.active') }}
               </v-chip>
@@ -87,8 +83,20 @@
               <!-- Action Buttons -->
               <div class="balance-actions">
                 <v-btn class="action-btn top-up-btn" variant="outlined" @click="handleTopUp">
-                  <img src="@/modules/wallet/icons/currency-euro.svg" :alt="$t('card.topUp')" class="btn-icon" />
+                  <img
+                    src="@/modules/wallet/icons/currency-euro.svg"
+                    :alt="String($t('card.topUp'))"
+                    class="btn-icon"
+                  />
                   {{ t('card.topUp') }}
+                </v-btn>
+                <v-btn
+                  class="action-btn order-physical-btn"
+                  variant="outlined"
+                  @click="showOrderPhysicalCardModal = true"
+                >
+                  <v-icon left>mdi-credit-card-outline</v-icon>
+                  {{ String(t('card.orderPhysicalCard')) }}
                 </v-btn>
                 <v-btn
                   class="action-btn eye-btn"
@@ -155,7 +163,12 @@
               </div>
 
               <!-- Button -->
-              <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
+              <v-btn
+                class="order-card-btn"
+                large
+                :loading="orderingCard"
+                @click="showOrderCardConfirmationModal = true"
+              >
                 <v-icon left>mdi-credit-card-plus</v-icon>
                 {{ t('card.orderNewCard') }}
               </v-btn>
@@ -169,6 +182,7 @@
     <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
     <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
+    <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="showOrderPhysicalCardModal = false" />
 
     <!-- Confirmation Modal -->
     <ConfirmationPasswordModal
@@ -203,10 +217,10 @@ import { ref, computed, watch } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import PromotionModal from './PromotionModal.vue';
+import OrderPhysicalCardModal from './dashboard/OrderPhysicalCardModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
-
 
 const { t } = useTranslation();
 
@@ -220,6 +234,7 @@ const showPromotionModal = ref(false);
 const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
 const showOrderCardConfirmationModal = ref(false);
+const showOrderPhysicalCardModal = ref(false);
 const orderingCard = ref(false);
 const emptyCard = {
   cardData: {
@@ -270,13 +285,15 @@ const handleOrderCard = async () => {
     }
     // Otherwise check for object-based error formats
     else {
-      errorReason = t('card.failedToOrderCard') + ' ' +
-        (error?.response?.data?.error?.message ||  // Laravel-style error object
-        error?.response?.data?.error ||            // Direct error string in error field
-        error?.response?.data?.reason ||           // Custom reason field
-        error?.response?.data?.message ||          // Standard message field
-        error?.message ||                          // Axios error message
-        t('card.pleaseTryAgain')); // Fallback
+      errorReason =
+        t('card.failedToOrderCard') +
+        ' ' +
+        (error?.response?.data?.error?.message || // Laravel-style error object
+          error?.response?.data?.error || // Direct error string in error field
+          error?.response?.data?.reason || // Custom reason field
+          error?.response?.data?.message || // Standard message field
+          error?.message || // Axios error message
+          t('card.pleaseTryAgain')); // Fallback
     }
 
     // Show error message with reason
@@ -505,7 +522,6 @@ const formatADA = (eurAmount: number) => {
     border: 1px solid rgba(0, 199, 243, 0.4) !important;
     color: $primary-cyan !important;
 
-
     .v-icon {
       color: $primary-cyan !important;
     }
@@ -665,6 +681,7 @@ const formatADA = (eurAmount: number) => {
     gap: $spacing-md;
     justify-content: center;
     align-items: center;
+    flex-wrap: wrap;
   }
 
   .action-btn {
@@ -695,6 +712,28 @@ const formatADA = (eurAmount: number) => {
         width: 20px;
         height: 20px;
         flex-shrink: 0;
+        margin-right: 6px;
+      }
+    }
+
+    &.order-physical-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px;
+      background: $background-card;
+      color: $text-primary;
+      border: 1px solid $primary-cyan !important;
+
+      &:hover {
+        background: lighten($background-card, 5%);
+      }
+
+      &:focus {
+        outline: none;
+      }
+
+      :deep(.v-icon) {
         margin-right: 6px;
       }
     }
