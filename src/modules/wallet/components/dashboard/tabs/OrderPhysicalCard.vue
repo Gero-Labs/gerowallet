@@ -35,6 +35,7 @@
                 :items="countries"
                 item-text="label"
                 item-value="code"
+                attach=".order-physical-card"
                 dense
                 outlined
                 class="form-input country-input"
@@ -111,6 +112,8 @@ const translateOrFallback = (key: string, fallback: string) => {
   return translation === key ? fallback : translation;
 };
 
+const phoneRegex = /^\+?[0-9\s\-()]{7,20}$/;
+
 const shippingOptions = computed(() => [
   {
     id: 'regular',
@@ -133,7 +136,7 @@ const shippingFee = computed(() => {
     'express-worldwide': '€19.99',
   };
 
-  return fees[formData.deliveryMethod] || fees.regular;
+  return fees[formData.deliveryMethod] || fees['regular'];
 });
 
 const createInitialFormState = () => ({
@@ -161,11 +164,17 @@ const isFormValid = computed(() => {
     formData.city.trim() &&
     formData.zipCode.trim() &&
     formData.countryCode &&
-    formData.phone.trim()
+    formData.phone.trim() &&
+    phoneRegex.test(formData.phone.trim())
   );
 });
 
 const placeOrder = async () => {
+  if (!formData.phone.trim() || !phoneRegex.test(formData.phone.trim())) {
+    snackbar.setError(translateOrFallback('card.invalidPhone', 'Please enter a valid phone number.'));
+    return;
+  }
+
   if (!isFormValid.value) {
     snackbar.setError(
       translateOrFallback('card.orderPhysicalCardValidationError', 'Please fill in all required fields.')
