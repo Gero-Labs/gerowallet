@@ -83,11 +83,7 @@
               <!-- Action Buttons -->
               <div class="balance-actions">
                 <v-btn class="action-btn top-up-btn" variant="outlined" @click="handleTopUp">
-                  <img
-                    src="@/modules/wallet/icons/currency-euro.svg"
-                    :alt="String($t('card.topUp'))"
-                    class="btn-icon"
-                  />
+                  <img src="@/modules/wallet/icons/currency-euro.svg" :alt="t('card.topUp')" class="btn-icon" />
                   {{ t('card.topUp') }}
                 </v-btn>
                 <v-btn
@@ -96,7 +92,7 @@
                   @click="showOrderPhysicalCardModal = true"
                 >
                   <v-icon left>mdi-credit-card-outline</v-icon>
-                  {{ String(t('card.orderPhysicalCard')) }}
+                  {{ t('card.orderPhysicalCard') }}
                 </v-btn>
                 <v-btn
                   class="action-btn eye-btn"
