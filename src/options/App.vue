@@ -3,6 +3,8 @@
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
+    <SessionActivityTracker />
+    <SessionLockOverlay />
     <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
@@ -49,6 +51,8 @@ import MusicStore from '@/stores/musicStore';
 import GeroStore from '@/stores/geroStore';
 import BringStore from '@/stores/bringStore';
 import Charli3Store from '@/stores/charli3Store';
+import SessionLockOverlay from '@/shared/components/SessionLockOverlay.vue';
+import SessionActivityTracker from '@/shared/components/SessionActivityTracker.vue';
 
 // Ensure the store modules are initialized (which sets up messaging)
 console.log('📱 Options page initializing loading store:', Loading);

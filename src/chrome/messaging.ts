@@ -171,9 +171,21 @@ class BackgroundController {
       chrome.runtime.onMessage.addListener((request, sender: chrome.runtime.MessageSender, sendResponse) => {
         request.send = sender
         if (request.sender === SENDER.webpage) {
-          this.methodList[request.method](request, sendResponse);
+          const handler = this.methodList[request.method];
+          if (typeof handler === 'function') {
+            handler(request, sendResponse);
+          } else {
+            console.warn(`Messaging: no background handler registered for method ${request.method} (webpage sender)`);
+            sendResponse({ error: `No handler for method ${request.method}` });
+          }
         } else if (request.sender === SENDER.options) {
-          this.optionsMethodList[request.method](request, sendResponse);
+          const handler = this.optionsMethodList[request.method];
+          if (typeof handler === 'function') {
+            handler(request, sendResponse);
+          } else {
+            console.warn(`Messaging: no options handler registered for method ${request.method}`);
+            sendResponse({ error: `No handler for method ${request.method}` });
+          }
         }
         return true;
       });

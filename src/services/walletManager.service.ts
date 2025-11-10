@@ -14,6 +14,7 @@ import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
+import sessionService from '@/services/session.service';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -23,12 +24,17 @@ export class WalletManager {
   private static instance: WalletManager;
   private walletBg: WalletBg | null = null;
   private currentWalletId: number | null = null;
+  private idleSyncInterval: ReturnType<typeof setInterval> | null = null;
+  private pendingTip: Tip | null = null;
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
   public syncMutex = withTimeout(new Mutex(), 2 * 60_000);
 
-  private constructor() {}
+  private constructor() {
+    sessionService.onLock(this.handleSessionLocked);
+    sessionService.onUnlock(this.handleSessionUnlocked);
+  }
 
   /**
    * Get a singleton instance of WalletManager
@@ -53,7 +59,10 @@ export class WalletManager {
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
    */
-  async restore(wallet: any): Promise<WalletBg | null> {
+  async restore(
+    wallet: any,
+    options: { password?: string; skipPasswordValidation?: boolean } = {}
+  ): Promise<WalletBg | null> {
     debugLog('WalletManager: Starting restore process');
     LoadingState.setText('Restoring wallet instance...');
     LoadingState.setLoading(true);
@@ -73,6 +82,12 @@ export class WalletManager {
         TapToolsStore.clear();
 
         const walletBg: WalletBg = new WalletBg(wallet);
+      const skipPasswordValidation = options.skipPasswordValidation === true;
+      if (walletBg.type === WalletType.Normal && !skipPasswordValidation) {
+        if (!options.password || !walletBg.verifySpendingPassword(options.password)) {
+          throw new Error('INVALID_SPENDING_PASSWORD');
+        }
+      }
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -99,6 +114,13 @@ export class WalletManager {
         this.currentWalletId = wallet.id;
 
         await walletBg.syncService.resync();
+      this.pendingTip = null;
+      this.stopIdleSync();
+      if (skipPasswordValidation) {
+        sessionService.lock('manual');
+      } else {
+        sessionService.unlock();
+      }
 
         LoadingState.setText('Wallet ready');
 
@@ -119,7 +141,10 @@ export class WalletManager {
    * @param wallet - Wallet data to log in with
    * @returns WalletBg instance or null if failed
    */
-  async login(wallet: any): Promise<WalletBg | null> {
+  async login(
+    wallet: any,
+    options: { password?: string; skipPasswordValidation?: boolean } = {}
+  ): Promise<WalletBg | null> {
     debugLog('WalletManager: Starting login process');
     LoadingState.setText('Creating wallet instance...');
     LoadingState.setLoading(true);
@@ -139,6 +164,12 @@ export class WalletManager {
         TapToolsStore.clear();
 
         const walletBg: WalletBg = new WalletBg(wallet);
+        const skipPasswordValidation = options.skipPasswordValidation === true;
+        if (walletBg.type === WalletType.Normal && !skipPasswordValidation) {
+          if (!options.password || !walletBg.verifySpendingPassword(options.password)) {
+            throw new Error('INVALID_SPENDING_PASSWORD');
+          }
+        }
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -163,6 +194,8 @@ export class WalletManager {
 
         this.walletBg = walletBg;
         this.currentWalletId = wallet.id;
+        this.pendingTip = null;
+        this.stopIdleSync();
 
         // OPTIMIZATION: Use REST sync on login to get tip immediately
         // This prevents "Cannot read properties of null (reading 'slot')" errors
@@ -174,6 +207,11 @@ export class WalletManager {
         });
 
         LoadingState.setText('Wallet ready');
+        if (skipPasswordValidation) {
+          sessionService.lock('manual');
+        } else {
+          sessionService.unlock();
+        }
 
         debugLog('Wallet login successful for wallet:', wallet.id);
         return walletBg;
@@ -380,6 +418,12 @@ export class WalletManager {
 
               debugLog('TIP', tip);
 
+              if (!sessionService.isUnlocked()) {
+                this.pendingTip = tip;
+                return;
+              }
+              this.pendingTip = null;
+
               // Acquire mutex and process tip
               await this.tipMutex.runExclusive(async () => {
                 await walletBg.syncService.sync(tip);
@@ -554,10 +598,87 @@ export class WalletManager {
     return this.walletBg;
   }
 
+  async unlockSession(password?: string): Promise<void> {
+    if (!this.walletBg) {
+      throw new Error('NO_WALLET');
+    }
+
+    if (this.walletBg.type === WalletType.Normal) {
+      if (!password || !this.walletBg.verifySpendingPassword(password)) {
+        throw new Error('INVALID_SPENDING_PASSWORD');
+      }
+    }
+
+    this.pendingTip = null;
+    this.stopIdleSync();
+    sessionService.unlock();
+  }
+
   /**
    * Close all other extension popup windows
    * TODO Close sideBar
    */
+  private startIdleSync() {
+    if (this.idleSyncInterval || !this.walletBg) {
+      return;
+    }
+
+    this.idleSyncInterval = setInterval(async () => {
+      if (!this.walletBg) {
+        return;
+      }
+
+      try {
+        await this.syncMutex.runExclusive(async () => {
+          if (this.walletBg) {
+            await this.walletBg.syncService.sync();
+          }
+        });
+      } catch (error) {
+        console.warn('Idle sync error:', error);
+      }
+    }, 100_000);
+  }
+
+  private stopIdleSync() {
+    if (this.idleSyncInterval) {
+      clearInterval(this.idleSyncInterval);
+      this.idleSyncInterval = null;
+    }
+  }
+
+  private handleSessionLocked = () => {
+    if (!this.walletBg) {
+      return;
+    }
+    this.startIdleSync();
+  };
+
+  private handleSessionUnlocked = () => {
+    this.stopIdleSync();
+
+    if (!this.walletBg) {
+      return;
+    }
+
+    const tipToSync = this.pendingTip;
+    this.pendingTip = null;
+
+    this.syncMutex
+      .runExclusive(async () => {
+        if (!this.walletBg) {
+          return;
+        }
+
+        if (tipToSync) {
+          await this.walletBg.syncService.sync(tipToSync);
+        } else {
+          await this.walletBg.syncService.sync();
+        }
+      })
+      .catch(error => console.warn('Failed to sync after unlock:', error));
+  };
+
   private closeAllOtherExtensionPopups(): void {
     if (typeof chrome !== 'undefined' && chrome.windows) {
       chrome.windows.getCurrent(function (currentWindow) {

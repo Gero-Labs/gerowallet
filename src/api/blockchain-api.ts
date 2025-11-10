@@ -1,15 +1,9 @@
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { Blockchain, Network, PaginationParams, PaginatedResponse, Tip } from '@/models/types';
+import { createHttpClient } from '@/api/httpClient';
 
-const axiosInstance = axios.create({
-  baseURL: import.meta.env['VITE_BACKEND_URL'],
-  timeout: 120000,
-  headers: {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  },
-});
+const axiosInstance = createHttpClient();
 
 export default {
   async getPoolById(poolId: string, chain: string, network: string) {

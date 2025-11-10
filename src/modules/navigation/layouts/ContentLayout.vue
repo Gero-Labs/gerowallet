@@ -20,7 +20,7 @@
           ></div>
 
           <v-layout :align-start="true">
-            <NavigationDrawer v-model="drawer" />
+            <NavigationDrawer v-model:value="drawer" />
             <v-sheet style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent">
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
@@ -96,18 +96,34 @@
                     </template>
 
                     <div class="network-tooltip-content">
-                      <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
-                      <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
-                      <div><strong>{{ t('navigation.nextSync') }}:</strong> {{ nextSyncDisplay }}</div>
-                      <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
-                      <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      <div>
+                        <strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}
+                      </div>
+                      <div>
+                        <strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}
+                      </div>
+                      <div>
+                        <strong>{{ t('navigation.nextSync') }}:</strong> {{ nextSyncDisplay }}
+                      </div>
+                      <div>
+                        <strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}
+                      </div>
+                      <div>
+                        <strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%
+                      </div>
                       <div>
                         <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                         <span
                           :style="
                             connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }
                           "
-                          >{{ connected ? t('navigation.online') : connecting ? t('navigation.connecting') : t('navigation.offline') }}</span
+                          >{{
+                            connected
+                              ? t('navigation.online')
+                              : connecting
+                              ? t('navigation.connecting')
+                              : t('navigation.offline')
+                          }}</span
                         >
                       </div>
                     </div>
@@ -149,11 +165,11 @@
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup">
                       <v-avatar size="20">
-                        <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
+                        <img :src="assets.settingsSvg" :alt="String($t('common.settings'))" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="20" v-else>
-                      <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
+                      <img :src="assets.settingsSvg" :alt="String($t('common.settings'))" />
                     </v-avatar>
                   </v-btn>
                 </v-app-bar>
@@ -189,10 +205,9 @@
                 <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" @close="closeDialog" />
                 <v-sheet class="transparent pt-2">
                   <keep-alive>
-                    <router-view
-                      @open-backup-dialog="handleOpenBackupDialog"
-                    />
+                    <router-view @open-backup-dialog="handleOpenBackupDialog" />
                   </keep-alive>
+                  <SessionActivityTracker />
                 </v-sheet>
               </v-layout>
               <Player
@@ -243,6 +258,7 @@ import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 import networks from '@/utils/networks';
+import SessionActivityTracker from '@/shared/components/SessionActivityTracker.vue';
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -362,7 +378,7 @@ const lastSyncTimestamp = computed(() => {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: true
+    hour12: true,
   });
 });
 

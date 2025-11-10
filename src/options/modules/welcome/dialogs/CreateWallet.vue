@@ -214,10 +214,10 @@ const walletCreationStep = async () => {
     dialogLocal.value = false;
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
-      data: { wallet },
+      data: { wallet, password: newWallet.password },
     });
 
-    if (response && !response.error) {
+    if (response && !(response as any).error) {
       vmProxy.$nextTick(() => {
         resetDialog();
         router.push('/').catch(err => {
@@ -226,8 +226,8 @@ const walletCreationStep = async () => {
           }
         });
       });
-    } else if (response?.error) {
-      console.warn('Login response error:', response.error);
+    } else if ((response as any).error) {
+      console.warn('Login response error:', (response as any).error);
       vmProxy.$nextTick(() => {
         resetDialog();
         router.push('/').catch(() => {});

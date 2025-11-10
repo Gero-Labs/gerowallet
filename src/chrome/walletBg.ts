@@ -58,6 +58,7 @@ import { getDb } from '@/db/wallet-db';
 import RealFiStore from '@/stores/realFiStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import CoinGeckoStore from '@/stores/coinGeckoStore';
+import SessionStore from '@/stores/sessionStore';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
@@ -1190,13 +1191,29 @@ export class WalletBg {
     };
 
     if (!NetworkStore.state.tickerStatisticsIntervalId) {
-      await updateTickerStatistics();
-      NetworkStore.setTickerStatisticsIntervalId(setInterval(updateTickerStatistics, 20000));
+      if (SessionStore.state.isUnlocked) {
+        await updateTickerStatistics();
+      }
+      NetworkStore.setTickerStatisticsIntervalId(
+        setInterval(() => {
+          if (SessionStore.state.isUnlocked) {
+            updateTickerStatistics();
+          }
+        }, 20000)
+      );
     }
 
     if (!WalletStore.state.fiatRatesIntervalId) {
-      await updateFiatRates();
-      WalletStore.setFiatRatesIntervalId(setInterval(updateFiatRates, 14400000));
+      if (SessionStore.state.isUnlocked) {
+        await updateFiatRates();
+      }
+      WalletStore.setFiatRatesIntervalId(
+        setInterval(() => {
+          if (SessionStore.state.isUnlocked) {
+            updateFiatRates();
+          }
+        }, 14400000)
+      );
     }
   }
 
@@ -1214,6 +1231,9 @@ export class WalletBg {
 }
 
 export function alarmListener(alarm) {
+  if (!SessionStore.state.isUnlocked) {
+    return;
+  }
 
   if (alarm.name === 'refreshDexHunterPrices') {
     DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens));

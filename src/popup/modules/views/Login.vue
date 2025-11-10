@@ -2,8 +2,8 @@
   <v-form ref="form" class="fill-height">
     <v-card outlined class="pa-4 fill-height transparent">
       <div style="width: 100px; margin: auto" class="py-3">
-        <img :alt="$t('common.geroLogo')" id="modal-logo-icon" width="100" :src="assets.geroLogo"/>
-        <img :alt="$t('common.geroLogo')" id="modal-logo-text" width="100" :src="assets.geroText"/>
+        <img :alt="String($t('common.geroLogo'))" id="modal-logo-icon" width="100" :src="assets.geroLogo"/>
+        <img :alt="String($t('common.geroLogo'))" id="modal-logo-text" width="100" :src="assets.geroText"/>
       </div>
       <v-card-title class="justify-center" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">{{ $t('wallet.selectWalletToLogin') }}</v-card-title>
       <v-card-text class="px-2 py-0 fill-height" style="max-width: 400px; margin: auto; height: 100%; max-height: 220px; overflow-y: auto">
@@ -56,7 +56,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs } from 'vue';
 import networks from '@/utils/networks';
-import { Blockchain, Network, WalletType } from '@/models/types';
+import { Blockchain, Network } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import assets from '@/utils/assets';
 import { geroStore } from '@/stores/geroStore';
@@ -69,7 +69,7 @@ const { t } = useTranslation();
 const { wallets } = toRefs(geroStore);
 const { config } = toRefs(walletStore);
 
-const selectedWallet = ref({});
+const selectedWallet = ref<any | null>(null);
 const controller = ref<any>(null);
 const tabId = ref<number>();
 
@@ -81,14 +81,27 @@ const availableWallets = computed(() => {
   return wallets.value.filter(wallet => wallet.chain === Blockchain.CARDANO && wallet.network === Network.MAINNET);
 });
 
-const submitLogin = async (wallet: string) => {
-  await Messaging.sendToBackgroundFromOptions({
+const submitLogin = async (wallet: any) => {
+  selectedWallet.value = wallet;
+  await executeLogin(wallet);
+};
+
+const executeLogin = async (wallet: any) => {
+  try {
+    const response: any = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.LOGIN,
     data: { wallet },
-  }).then(async () => {
-    await controller.value.returnData({ data: 'login', error: undefined });
+    });
+
+    if (response?.data?.success) {
+      await controller.value?.returnData({ data: 'login', error: undefined });
     window.close();
-  });
+    } else if (response?.error) {
+      console.warn('Login error:', response.error);
+    }
+  } catch (error: any) {
+    console.warn('Login exception:', error?.message || error);
+  }
 };
 
 const resolveIcon = (icon: string) => {

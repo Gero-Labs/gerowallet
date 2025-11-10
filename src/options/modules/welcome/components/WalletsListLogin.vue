@@ -1,52 +1,54 @@
 <template>
-  <v-card class="transparent-override" flat style="max-width: 600px; margin: auto; box-shadow: unset!important; background: transparent!important;">
-    <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
-      {{ $t('welcome.welcomeMessage') }}
-    </v-card-title>
-    <v-card-subtitle class="text-center px-6" style="font-size: 20px">
-      {{ $t('welcome.chooseAWallet') }}
-    </v-card-subtitle>
-    <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
-      <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
-        <v-list-item-group v-model="selectedWallet" color="primary">
-          <v-list-item class="wallet-row" v-for="(item, i) in availableWallets" :key="i" @click="submitLogin(item.id)">
-            <v-list-item-icon style="height: 40px" class="mr-4">
-              <v-badge
-                overlap
-                avatar
-                bottom
-                bordered
-                offset-y="20"
-              >
-                <template v-slot:badge>
-                  <v-avatar>
-                    <v-img :src="resolveNetworkIcon(item)"></v-img>
+  <div class="wallet-login-root">
+    <v-card class="transparent-override" flat style="max-width: 600px; margin: auto; box-shadow: unset!important; background: transparent!important;">
+      <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
+        {{ $t('welcome.welcomeMessage') }}
+      </v-card-title>
+      <v-card-subtitle class="text-center px-6" style="font-size: 20px">
+        {{ $t('welcome.chooseAWallet') }}
+      </v-card-subtitle>
+      <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
+        <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
+          <v-list-item-group v-model="selectedWalletId" color="primary">
+            <v-list-item class="wallet-row" v-for="(item, i) in availableWallets" :key="i" @click="submitLogin(item)">
+              <v-list-item-icon style="height: 40px" class="mr-4">
+                <v-badge
+                  overlap
+                  avatar
+                  bottom
+                  bordered
+                  offset-y="20"
+                >
+                  <template v-slot:badge>
+                    <v-avatar>
+                      <v-img :src="resolveNetworkIcon(item)"></v-img>
+                    </v-avatar>
+                  </template>
+                  <v-avatar size="40">
+                    <v-img :src="assets.resolveIcon(item.icon)"></v-img>
                   </v-avatar>
-                </template>
-                <v-avatar size="40">
-                  <v-img :src="assets.resolveIcon(item.icon)"></v-img>
-                </v-avatar>
-              </v-badge>
-            </v-list-item-icon>
-            <v-list-item-content>
-              <v-list-item-title>
-                {{ item.name }}
-              </v-list-item-title>
-              <v-list-item-subtitle>
-                {{ item.chain }} - {{item.network}}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
-              <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
-            </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
-              <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
-            </v-list-item-avatar>
-          </v-list-item>
-        </v-list-item-group>
-      </v-list>
-    </v-card-text>
-  </v-card>
+                </v-badge>
+              </v-list-item-icon>
+              <v-list-item-content>
+                <v-list-item-title>
+                  {{ item.name }}
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  {{ item.chain }} - {{item.network}}
+                </v-list-item-subtitle>
+              </v-list-item-content>
+              <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
+                <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
+              </v-list-item-avatar>
+              <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
+                <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
+              </v-list-item-avatar>
+            </v-list-item>
+          </v-list-item-group>
+        </v-list>
+      </v-card-text>
+    </v-card>
+  </div>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -63,8 +65,8 @@ import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
 
-const selectedWallet = ref<string | null>(null);
-
+const selectedWalletId = ref<string | null>(null);
+const selectedWallet = ref<Wallet | null>(null);
 const { loggedWallet } = toRefs(walletStore);
 
 type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
@@ -97,53 +99,61 @@ const resolveNetworkIcon = (item: Wallet): string => {
 
 const vmProxy = getCurrentInstance()!.proxy as any
 
-const submitLogin = async (walletId: string): Promise<void> => {
-  console.log('submitLogin')
-  try {
-    const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
+const handlePostLoginNavigation = async () => {
+  // Small delay to ensure store messaging has propagated
+  await new Promise(resolve => setTimeout(resolve, 100));
 
-    const response = await Messaging.sendToBackgroundFromOptions({
+  debugLog('✅ Login complete, wallet logged in:', !!loggedWallet.value);
+
+  const queryParams = vmProxy.$route.query;
+  debugLog('🧭 Starting navigation, current route:', vmProxy.$route.path);
+  debugLog('🧭 Query params:', queryParams);
+
+  if (queryParams['redirect']) {
+    const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
+    debugLog('🧭 Navigating to redirect path:', redirectPath);
+    await vmProxy.$router.push(redirectPath).catch(err => {
+      if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+        console.error('Navigation error:', err);
+      }
+    });
+  } else {
+    debugLog('🧭 Navigating to home page: /');
+    await vmProxy.$router.push('/').catch(err => {
+      if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+        console.error('Navigation error:', err);
+      }
+    });
+  }
+
+  debugLog('🧭 Navigation completed, new route:', vmProxy.$route.path);
+};
+
+const executeLogin = async (wallet: Wallet) => {
+  try {
+    const response: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
 
-    // OPTIMIZATION: Trust the background response instead of polling for up to 5 seconds
-    // The background script sets the store and returns success/failure
-    if (!response || (response as any).error) {
-      console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
-      return;
-    }
-
-    // Small delay to ensure store messaging has propagated (100ms vs 5000ms max before)
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    debugLog('✅ Login complete, wallet logged in:', !!loggedWallet.value);
-
-    const queryParams = vmProxy.$route.query;
-    debugLog('🧭 Starting navigation, current route:', vmProxy.$route.path);
-    debugLog('🧭 Query params:', queryParams);
-
-    if (queryParams['redirect']) {
-      const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
-      debugLog('🧭 Navigating to redirect path:', redirectPath);
-      await vmProxy.$router.push(redirectPath).catch(err => {
-        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-          console.error('Navigation error:', err);
-        }
-      });
+    if (response?.data?.success) {
+      await handlePostLoginNavigation();
+    } else if (response?.data?.errorCode === 'INVALID_SPENDING_PASSWORD') {
+      console.warn('Unexpected password requirement during login');
+    } else if (response?.error) {
+      console.warn('Login error:', response.error);
     } else {
-      debugLog('🧭 Navigating to home page: /');
-      await vmProxy.$router.push("/").catch(err => {
-        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-          console.error('Navigation error:', err);
-        }
-      });
+      console.warn('Login failed without explicit error');
     }
-
-    debugLog('🧭 Navigation completed, new route:', vmProxy.$route.path);
   } catch (error) {
     console.error(error);
   }
+};
+
+const submitLogin = async (wallet: Wallet): Promise<void> => {
+  selectedWalletId.value = wallet.id;
+  selectedWallet.value = wallet;
+  await executeLogin(wallet);
 };
 </script>
 <style scoped>
@@ -216,5 +226,15 @@ const submitLogin = async (walletId: string): Promise<void> => {
   .wallet-row:hover {
     background-color: rgba(19, 22, 27, 0.95) !important;
   }
+}
+
+.wallet-login-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
 }
 </style>

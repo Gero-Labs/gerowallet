@@ -51,6 +51,10 @@ export const APIError = {
     code: -2,
     info: 'An error occurred during execution of this API call.',
   },
+  AccountLocked: {
+    code: -5,
+    info: 'Wallet session locked. Please unlock your wallet.',
+  },
   Refused: {
     code: -3,
     info: 'The request was refused due to lack of access - e.g. wallet disconnects.',

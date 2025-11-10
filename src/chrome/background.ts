@@ -37,6 +37,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
+import sessionService from '@/services/session.service';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -44,6 +45,8 @@ if (import.meta.hot) {
   // load latest content script
   import('./contentScriptHMR').catch(console.error)
 }
+
+sessionService.initialize();
 
 loadConfig().then(() => {
   debugLog('Gero Config loaded')
@@ -57,7 +60,7 @@ loadWallets().then(async () => {
 
   if (walletStore.loggedWallet) {
     debugLog('Login in wallet: ', walletStore.loggedWallet.name);
-    await walletManager.login(walletStore.loggedWallet);
+    await walletManager.login(walletStore.loggedWallet, { skipPasswordValidation: true });
   } else {
     debugLog('No logged wallet found after hydration');
     Loading.setLoading(false)
@@ -149,6 +152,14 @@ chrome.alarms.create('clearProcessedDomains', {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'clearProcessedDomains') {
     clearProcessedDomains();
+  }
+});
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'session-unlock') {
+    port.onDisconnect.addListener(() => {
+      debugLog('session-unlock port disconnected');
+    });
   }
 });
 
@@ -1116,6 +1127,17 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
 
 app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
   try {
+    if (!sessionService.isUnlocked()) {
+      sendResponse({
+        id: request.id,
+        data: { error: APIError.AccountLocked },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+    sessionService.touch();
+
     console.log('sign data', request);
     const walletBg = walletManager.getWallet();
     if (walletBg) {
@@ -1153,6 +1175,17 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   try {
+    if (!sessionService.isUnlocked()) {
+      sendResponse({
+        id: request.id,
+        data: { error: APIError.AccountLocked },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+    sessionService.touch();
+
     console.log('sign tx', request);
     const walletBg = walletManager.getWallet();
     if (walletBg) {
@@ -1206,6 +1239,17 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
   try {
+    if (!sessionService.isUnlocked()) {
+      sendResponse({
+        id: request.id,
+        data: { error: APIError.AccountLocked },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+    sessionService.touch();
+
     console.log('submit tx', request);
     const walletBg = walletManager.getWallet();
     if (walletBg) {
@@ -1276,8 +1320,9 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
   try {
-    console.log('restore', request)
-    const currentWallet = await walletManager.restore(request.data.wallet);
+    console.log('restore', request);
+    const { wallet, password } = request.data ?? {};
+    const currentWallet = await walletManager.restore(wallet, { password });
     if (currentWallet) {
       sendResponse({
         id: request.id,
@@ -1294,7 +1339,17 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
       })
     }
   } catch (err) {
-    console.log('login error', err)
+    console.log('restore error', err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    if (errorMessage === 'INVALID_SPENDING_PASSWORD') {
+      sendResponse({
+        id: request.id,
+        data: { success: false, errorCode: 'INVALID_SPENDING_PASSWORD' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
     sendResponse({
       id: request.id,
       data: { success: false },
@@ -1307,8 +1362,13 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
-    console.log('login', request)
-    const walletBg = await walletManager.login(request.data.wallet);
+    console.log('login', request);
+    const { wallet, password } = request.data ?? {};
+    const loginOptions =
+      password && password.length > 0
+        ? { password }
+        : { skipPasswordValidation: true };
+    const walletBg = await walletManager.login(wallet, loginOptions);
     if (walletBg) {
       sendResponse({
         id: request.id,
@@ -1325,7 +1385,17 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
       })
     }
   } catch (err) {
-    console.log('login error', err)
+    console.log('login error', err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    if (errorMessage === 'INVALID_SPENDING_PASSWORD') {
+      sendResponse({
+        id: request.id,
+        data: { success: false, errorCode: 'INVALID_SPENDING_PASSWORD' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
     sendResponse({
       id: request.id,
       data: { success: false },
@@ -1333,6 +1403,38 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
       sender: SENDER.extension,
       error: err,
     })
+  }
+});
+
+app.addToOptions(MessageTypes.UNLOCK_SESSION, async (request, sendResponse) => {
+  try {
+    const { password } = request.data ?? {};
+    await walletManager.unlockSession(password);
+    sessionService.touch();
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    if (errorMessage === 'INVALID_SPENDING_PASSWORD') {
+      sendResponse({
+        id: request.id,
+        data: { success: false, errorCode: 'INVALID_SPENDING_PASSWORD' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    });
   }
 });
 
@@ -1354,6 +1456,48 @@ app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
       sender: SENDER.extension,
       error: err,
     })
+  }
+});
+
+app.addToOptions(MessageTypes.SESSION_ACTIVITY, async (_request, sendResponse) => {
+  try {
+    console.log('[Background] SESSION_ACTIVITY received');
+    sessionService.touch();
+    sendResponse({
+      id: _request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: _request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.LOCK_SESSION, async (request, sendResponse) => {
+  try {
+    console.log('[Background] LOCK_SESSION request received', request?.data);
+    sessionService.lock('idle');
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error,
+    });
   }
 });
 

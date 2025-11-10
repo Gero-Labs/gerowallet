@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import realfiApi from '@/api/realfi-api';
+import SessionStore from '@/stores/sessionStore';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -103,6 +104,9 @@ export default {
   },
   
   async updateTokenHistory(tokensUnits: string[]) {
+    if (!SessionStore.state.isUnlocked) {
+      return;
+    }
     for (const unit of tokensUnits) {
       try {
         if (unit !== 'lovelace') {

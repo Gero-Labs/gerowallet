@@ -1,17 +1,15 @@
-import axios, { AxiosResponse } from 'axios';
+import { AxiosResponse } from 'axios';
+import { createHttpClient } from '@/api/httpClient';
 
 /**
  * Strike Finance API client for perpetual trading
  * Proxy endpoints via GeroWallet backend API
  */
 
-const axiosInstance = axios.create({
-  // @ts-ignore
-  baseURL: import.meta.env.VITE_BACKEND_URL || 'https://dev.gerowallet.io',
+const axiosInstance = createHttpClient({
   timeout: 30000,
   headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
+    Accept: 'application/json',
   },
 });
 

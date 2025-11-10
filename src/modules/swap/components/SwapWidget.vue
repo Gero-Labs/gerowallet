@@ -42,7 +42,7 @@
             v-model="selectedTokenA"
             :available="availableTokens"
             :index="0"
-            :title="$t('swap.selling')"
+            :title="sellingTitle"
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
@@ -58,7 +58,7 @@
             v-model="selectedTokenB"
             :available="availableTokens"
             :index="0"
-            :title="$t('swap.buying')"
+            :title="buyingTitle"
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"
@@ -182,7 +182,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch, getCurrentInstance } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
@@ -202,6 +202,7 @@ import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import SessionStore from '@/stores/sessionStore';
 
 const emit = defineEmits(['onSwap']);
 
@@ -211,10 +212,14 @@ const isSwapEnabled = computed(() => {
   return featureFlagsStore.state.flags.swapEnabled;
 });
 
+const sellingTitle = computed(() => String(t('swap.selling')));
+const buyingTitle = computed(() => String(t('swap.buying')));
+
 const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { utxos } = toRefs(walletStore);
+const sessionUnlocked = computed(() => SessionStore.state.isUnlocked);
 
 const isUpdating = ref<boolean>(false);
 const lastNonADATokenA = ref(null);
@@ -559,7 +564,7 @@ const switchPair = () => {
 }
 
 const estimate = (token_in: string, token_out: string, amount_in, update) => {
-  if (!loggedWallet.value) {
+  if (!loggedWallet.value || !sessionUnlocked.value) {
     return
   }
   if (!token_in && !token_out) {
@@ -591,7 +596,7 @@ const estimate = (token_in: string, token_out: string, amount_in, update) => {
 }
 
 const reverseEstimate = async (token_in, token_out, amount_out, update) => {
-  if (!loggedWallet.value) {
+  if (!loggedWallet.value || !sessionUnlocked.value) {
     return
   }
   if (!token_in && !token_out) {
@@ -621,7 +626,7 @@ const reverseEstimate = async (token_in, token_out, amount_out, update) => {
 }
 
 const averagePrice = (token_in, token_out) => {
-  if (!loggedWallet.value) {
+  if (!loggedWallet.value || !sessionUnlocked.value) {
     return
   }
   if (!token_in && !token_out) {
@@ -641,6 +646,10 @@ const performPeriodicEstimate = async () => {
   // Add defensive checks for undefined tokens
   if (!selectedTokenA.value || !selectedTokenB.value) {
     console.warn('Tokens not properly initialized');
+    return;
+  }
+
+  if (!sessionUnlocked.value) {
     return;
   }
 
@@ -767,8 +776,30 @@ const setMaxTokenA = () => {
 }
 
 onMounted(async () => {
-  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
-  intervalId.value = setInterval(performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
+  if (sessionUnlocked.value) {
+    await averagePrice(
+      !selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit,
+      !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit
+    );
+  }
+
+  const startInterval = async () => {
+    clearInterval(intervalId.value);
+    await performPeriodicEstimate();
+    intervalId.value = setInterval(performPeriodicEstimate, 10000);
+  };
+
+  watch(
+    sessionUnlocked,
+    unlocked => {
+      if (unlocked) {
+        startInterval();
+      } else {
+        clearInterval(intervalId.value);
+      }
+    },
+    { immediate: true }
+  );
 })
 
 onBeforeUnmount(() => {

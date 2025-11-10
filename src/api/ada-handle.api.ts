@@ -1,12 +1,7 @@
-import axios from 'axios';
+import { createHttpClient } from '@/api/httpClient';
 
-const axiosInstance = axios.create({
+const axiosInstance = createHttpClient({
   baseURL: import.meta.env['VITE_ADA_HANDLE_BASE_URL'],
-  timeout: 120000,
-  headers: {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  },
 });
 
 export default {

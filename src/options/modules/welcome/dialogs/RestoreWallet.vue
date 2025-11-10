@@ -384,10 +384,10 @@ const walletCreationStep2 = async () => {
       dialogLocal.value = false;
       const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,
-        data: { wallet },
+        data: { wallet, password: newWallet.value.password },
       });
 
-      if (response && !response.error) {
+      if (response && !(response as any).error) {
         vmProxy.$nextTick(() => {
           router.push('/').catch(err => {
             // Suppress redirect errors (expected when already on target route)
@@ -396,8 +396,8 @@ const walletCreationStep2 = async () => {
             }
           });
         });
-      } else if (response?.error) {
-        console.warn('Login response error:', response.error);
+      } else if ((response as any).error) {
+        console.warn('Login response error:', (response as any).error);
         // Still navigate even if there's a connection error, as the wallet might have been created
         vmProxy.$nextTick(() => {
           router.push('/').catch(() => {});

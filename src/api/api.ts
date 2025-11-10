@@ -1,6 +1,7 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
+import { AxiosError, AxiosInstance } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { Blockchain, Network, Proof, Provider } from '@/models/types';
+import { createHttpClient } from '@/api/httpClient';
 
 export class Api {
   public chain: string;
@@ -12,14 +13,7 @@ export class Api {
     this.chain = Object.keys(Blockchain).find(key => Blockchain[key] === wallet.chain);
     this.network = Object.keys(Network).find(key => Network[key] === wallet.network);
     this.provider = Provider[provider];
-    this.axiosInstance = axios.create({
-      baseURL: import.meta.env['VITE_BACKEND_URL'],
-      timeout: 120000,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-    });
+    this.axiosInstance = createHttpClient();
   }
 
   async ablyToken(baseAddress: string) {
@@ -156,13 +150,13 @@ export class Api {
   async fetchTickerStatistics() {
     const { data, status } = await this.axiosInstance.get(`/api/price/ticker?chain=${this.chain}`);
     if (status === 200) return data;
-    return parseHttpError(data);
+    throw parseHttpError(data);
   }
 
   async fetchFiatRates() {
     const { data, status } = await this.axiosInstance.get(`/api/price/fiatRates`);
     if (status === 200) return data;
-    return parseHttpError(data);
+    throw parseHttpError(data);
   }
 
   async fetchADAStatistics() {
