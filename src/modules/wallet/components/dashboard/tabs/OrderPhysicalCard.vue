@@ -100,13 +100,6 @@ const loading = ref(false);
 const { t } = useTranslation();
 const emit = defineEmits<{ (e: 'close'): void }>();
 
-const userName = computed(() => {
-  if (cardStore.state.userInfo?.email) {
-    return cardStore.state.userInfo.email.split('@')[0];
-  }
-  return '';
-});
-
 const translateOrFallback = (key: string, fallback: string) => {
   const translation = t(key);
   return translation === key ? fallback : translation;
@@ -140,7 +133,6 @@ const shippingFee = computed(() => {
 });
 
 const createInitialFormState = () => ({
-  recipientName: userName.value,
   address: '',
   region: '',
   city: '',
@@ -158,7 +150,6 @@ const resetForm = () => {
 
 const isFormValid = computed(() => {
   return (
-    formData.recipientName.trim() &&
     formData.address.trim() &&
     formData.region.trim() &&
     formData.city.trim() &&
@@ -185,9 +176,7 @@ const placeOrder = async () => {
   loading.value = true;
 
   const payload: OrderPhysicalCardPayload = {
-    address: formData.recipientName.trim()
-      ? `${formData.recipientName.trim()}, ${formData.address.trim()}`
-      : formData.address.trim(),
+    address: formData.address.trim(),
     region: formData.region.trim(),
     city: formData.city.trim(),
     zipCode: formData.zipCode.trim(),
