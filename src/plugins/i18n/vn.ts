@@ -219,6 +219,7 @@ export default {
   'card.physicalVirtual': 'Physical / Virtual',
   'card.pin': 'PIN',
   'card.phone': 'Phone',
+  'card.invalidPhone': 'Please enter a valid phone number.',
   'card.placeOrder': 'Place Order',
   'card.pleaseEnterPassword': 'Please enter your password to continue.',
   'card.pleaseReviewLedger': 'Please review and approve the transaction on your Ledger device to continue.',
