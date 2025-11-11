@@ -3,8 +3,8 @@
     :img="cardanoShieldLogo"
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="reportSite ? String($t('navigation.reportWebsite')) : String($t('navigation.reportTransaction'))"
-    :subtitle="String($t('navigation.improveCardanoShield', { type: reportSite ? String($t('navigation.website')).toLowerCase() : String($t('navigation.transactionId')).toLowerCase() }))"
+    :title="dialogTitle"
+    :subtitle="dialogSubtitle"
     :min-height="0"
     :persistent="false"
   >
@@ -13,7 +13,6 @@
         <v-stepper-header>
           <template v-for="(item, index) in steps">
             <div
-              :key="item.name"
               class="custom-step"
               :class="{
                 active: currentStep === index + 1,
@@ -45,15 +44,25 @@
     >
       <CustomStepper :currentStep="currentStep" :steps="steps">
         <v-stepper-content step="1">
-          <v-form ref="form" v-model="valid" >
+          <v-form ref="form" v-model="valid">
             <div class="d-flex mb-1" v-if="reportSite">
-              <v-label small class="white--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}:</v-label>
+              <v-label small class="white--text pr-1" style="align-content: center"
+                >{{ $t('navigation.website') }}:</v-label
+              >
               {{ reportSite }}
             </div>
             <div class="d-flex mb-3" v-if="reportTx">
-              <v-label small class="white--text" style="align-content: center;">{{ $t('navigation.transactionId') }}:</v-label>
+              <v-label small class="white--text" style="align-content: center"
+                >{{ $t('navigation.transactionId') }}:</v-label
+              >
               <div>
-                <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
+                <a
+                  class="ml-1"
+                  style="color: #00dff3; align-items: center"
+                  :href="`https://cexplorer.io/tx/${reportTx}`"
+                  target="_blank"
+                  >{{ truncate(reportTx) }}</a
+                >
                 <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               </div>
             </div>
@@ -102,8 +111,10 @@
             <v-file-input
               class="mt-4"
               v-model="uploadFile"
-              dense hide-details
-              outlined type="file"
+              dense
+              hide-details
+              outlined
+              type="file"
               ref="fileInput"
               @change="onFileChange"
               :label="$t('navigation.referenceFile')"
@@ -113,12 +124,7 @@
               :show-size="1000"
             >
               <template v-slot:selection="{ text }">
-                <v-chip
-                  color="primary"
-                  dark
-                  label
-                  small
-                >
+                <v-chip color="primary" dark label small>
                   {{ text }}
                 </v-chip>
               </template>
@@ -126,17 +132,31 @@
           </v-form>
         </v-stepper-content>
         <v-stepper-content step="2">
-          <div class="mb-1" style="align-items: center;">
-            <v-label v-if="reportSite" small class="grey--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}</v-label>
-            <p class="d-flex" v-if="reportSite" style="align-items: center;">
+          <div class="mb-1" style="align-items: center">
+            <v-label v-if="reportSite" small class="grey--text pr-1" style="align-content: center">{{
+              $t('navigation.website')
+            }}</v-label>
+            <p class="d-flex" v-if="reportSite" style="align-items: center">
               {{ reportSite }}
-              <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
+              <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{
+                label
+              }}</v-chip>
             </p>
-            <v-label small class="grey--text" style="align-content: center;" v-if="reportTx">{{ $t('navigation.transactionId') }}</v-label>
-            <p class="d-flex" v-if="reportTx" style="align-items: center;">
-              <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
+            <v-label small class="grey--text" style="align-content: center" v-if="reportTx">{{
+              $t('navigation.transactionId')
+            }}</v-label>
+            <p class="d-flex" v-if="reportTx" style="align-items: center">
+              <a
+                class="ml-1"
+                style="color: #00dff3; align-items: center"
+                :href="`https://cexplorer.io/tx/${reportTx}`"
+                target="_blank"
+                >{{ truncate(reportTx) }}</a
+              >
               <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
-              <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
+              <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{
+                label
+              }}</v-chip>
             </p>
           </div>
           <v-label small class="grey--text">{{ $t('navigation.descriptionOfScam') }}</v-label>
@@ -156,20 +176,32 @@
         {{ $t('navigation.back') }}
       </v-btn>
       <v-spacer></v-spacer>
-      <v-btn v-if="currentStep === 1" :disabled="!valid" @click="nextStep" class="geroButton" style="color: black!important; text-transform: uppercase">
+      <v-btn
+        v-if="currentStep === 1"
+        :disabled="!valid"
+        @click="nextStep"
+        class="geroButton"
+        style="color: black !important; text-transform: uppercase"
+      >
         {{ $t('navigation.continue') }}
-        <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+        <v-icon style="color: black !important" small class="ml-1">mdi-arrow-right</v-icon>
       </v-btn>
-      <v-btn v-if="currentStep === 2" @click="submitReport" :loading="loading" class="geroButton" style="color: black!important; text-transform: uppercase">
+      <v-btn
+        v-if="currentStep === 2"
+        @click="submitReport"
+        :loading="loading"
+        class="geroButton"
+        style="color: black !important; text-transform: uppercase"
+      >
         {{ $t('navigation.submitReport') }}
-        <v-icon style="color: black!important;" small class="ml-1">mdi-file-document-outline</v-icon>
+        <v-icon style="color: black !important" small class="ml-1">mdi-file-document-outline</v-icon>
       </v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -190,11 +222,20 @@ const props = defineProps({
     default: false,
   },
   reportSite: {
-    type: String
+    type: String,
   },
   reportTx: {
-    type: String
-  }
+    type: String,
+  },
+});
+
+const dialogTitle = computed(
+  () => (props.reportSite ? t('navigation.reportWebsite') : t('navigation.reportTransaction')) as string
+);
+const dialogSubtitle = computed(() => {
+  const labelKey = props.reportSite ? 'navigation.website' : 'navigation.transactionId';
+  const label = (t(labelKey) as string).toLowerCase();
+  return t('navigation.improveCardanoShield', { type: label }) as string;
 });
 
 const emit = defineEmits(['close']);
@@ -217,11 +258,11 @@ const fileInput = ref<any>(null);
 const steps = [
   {
     name: 'details',
-    label: String(t('navigation.details')),
+    label: t('navigation.details') as string,
   },
   {
     name: 'summary',
-    label: String(t('navigation.summary')),
+    label: t('navigation.summary') as string,
   },
 ];
 
@@ -231,7 +272,7 @@ const loggedWallet = ref({ type: WalletType.Normal });
 const onFileChange = (file: File | null) => {
   const maxSize = 3 * 1024 * 1024; // 3 MB
   if (file && file.size > maxSize) {
-    alert(String(t('navigation.fileTooLarge')));
+    alert(t('navigation.fileTooLarge') as string);
     uploadFile.value = null;
     return;
   }
@@ -247,7 +288,7 @@ const onFileChange = (file: File | null) => {
 const createImage = (file: File) => {
   const reader = new FileReader();
 
-  reader.onload = (e) => {
+  reader.onload = e => {
     imageUrl.value = e.target?.result as string;
   };
   reader.readAsDataURL(file);
@@ -279,18 +320,18 @@ const clearForm = () => {
 const submitReport = async () => {
   loading.value = true;
   const reportType = props.reportTx ? ReportType.transaction : ReportType.website;
-  const reportTypeStr = reportType === ReportType.transaction ? "Transaction" : "Website";
+  const reportTypeStr = reportType === ReportType.transaction ? 'Transaction' : 'Website';
   const ref = props.reportTx ? props.reportTx : props.reportSite;
 
   const formData = new FormData();
-  formData.append("title", reportTypeStr + " Report - " + ref);
-  formData.append("description", description.value);
-  formData.append("evidence", evidence.value);
-  formData.append("type", ReportType[reportType]);
-  formData.append("label", ReportLabel[label.value === 'Safe' ? ReportLabel.safe : ReportLabel.scam]);
+  formData.append('title', reportTypeStr + ' Report - ' + ref);
+  formData.append('description', description.value);
+  formData.append('evidence', evidence.value);
+  formData.append('type', ReportType[reportType]);
+  formData.append('label', ReportLabel[label.value === 'Safe' ? ReportLabel.safe : ReportLabel.scam]);
 
   if (uploadFile.value) {
-    formData.append("reference", uploadFile.value);
+    formData.append('reference', uploadFile.value);
   }
   try {
     await cardanoShieldApi.submitReport(formData);
@@ -309,11 +350,14 @@ const submitReport = async () => {
   }
 };
 
-watch(() => props.isOpen, (val) => {
-  if (!val) {
-    emit('close');
+watch(
+  () => props.isOpen,
+  val => {
+    if (!val) {
+      emit('close');
+    }
   }
-});
+);
 </script>
 
 <style scoped>

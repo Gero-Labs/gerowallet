@@ -165,11 +165,11 @@
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup">
                       <v-avatar size="20">
-                        <img :src="assets.settingsSvg" :alt="String($t('common.settings'))" />
+                        <img :src="assets.settingsSvg" :alt="settingsAltText" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="20" v-else>
-                      <img :src="assets.settingsSvg" :alt="String($t('common.settings'))" />
+                      <img :src="assets.settingsSvg" :alt="settingsAltText" />
                     </v-avatar>
                   </v-btn>
                 </v-app-bar>
@@ -261,6 +261,7 @@ import networks from '@/utils/networks';
 import SessionActivityTracker from '@/shared/components/SessionActivityTracker.vue';
 
 const { t } = useTranslation();
+const settingsAltText = computed(() => String(t('common.settings')));
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
 const currentPage = computed(() => vmProxy.$route);

@@ -2,8 +2,8 @@
   <v-form ref="form" class="fill-height">
     <v-card outlined class="pa-4 fill-height transparent">
       <div style="width: 100px; margin: auto" class="py-3">
-        <img :alt="String($t('common.geroLogo'))" id="modal-logo-icon" width="100" :src="assets.geroLogo"/>
-        <img :alt="String($t('common.geroLogo'))" id="modal-logo-text" width="100" :src="assets.geroText"/>
+        <img :alt="logoAlt" id="modal-logo-icon" width="100" :src="assets.geroLogo"/>
+        <img :alt="logoAlt" id="modal-logo-text" width="100" :src="assets.geroText"/>
       </div>
       <v-card-title class="justify-center" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">{{ $t('wallet.selectWalletToLogin') }}</v-card-title>
       <v-card-text class="px-2 py-0 fill-height" style="max-width: 400px; margin: auto; height: 100%; max-height: 220px; overflow-y: auto">
@@ -74,9 +74,11 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import PasswordConfirmModal from '@/modules/wallet/components/dashboard/PasswordConfirmModal.vue';
+import SessionStore from '@/stores/sessionStore';
 
 
 const { t } = useTranslation();
+const logoAlt = computed(() => String(t('common.geroLogo')));
 
 const { wallets } = toRefs(geroStore);
 const { config } = toRefs(walletStore);
@@ -131,17 +133,16 @@ const handlePasswordModalConfirm = async ({ password }: { password: string }) =>
   }
 
   if (result.errorCode === 'INVALID_SPENDING_PASSWORD') {
-    openPasswordModal(t('wallet.pleaseEnterPasswordToContinue'), t('navigation.invalidPassword'));
+    passwordModalError.value = t('navigation.invalidPassword');
     return;
   }
 
   if (result.errorCode === 'PASSWORD_REQUIRED_WHEN_LOCKED') {
-    openPasswordModal();
+    passwordModalError.value = '';
     return;
   }
 
-  const message = result.error ?? t('wallet.somethingWentWrong');
-  openPasswordModal(undefined, message);
+  passwordModalError.value = result.error ?? t('wallet.somethingWentWrong');
 };
 
 const submitLogin = async (wallet: any) => {
@@ -170,6 +171,31 @@ const executeLogin = async (
   password?: string
 ): Promise<{ success: boolean; errorCode?: string; error?: string }> => {
   try {
+    const isSessionLocked = !SessionStore.state.isUnlocked;
+    const loggedWalletId = walletStore.loggedWallet?.id;
+    const isSameWallet = loggedWalletId === wallet.id;
+
+    if (isSessionLocked && isSameWallet && wallet.type === WalletType.Normal) {
+      if (!password) {
+        return { success: false, errorCode: 'PASSWORD_REQUIRED_WHEN_LOCKED' };
+      }
+
+      const response: any = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.UNLOCK_SESSION,
+        data: { password },
+      });
+
+      if (response?.data?.success) {
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        errorCode: response?.data?.errorCode,
+        error: response?.error,
+      };
+    }
+
     const requestData: Record<string, unknown> = { wallet };
     if (password) {
       requestData['password'] = password;

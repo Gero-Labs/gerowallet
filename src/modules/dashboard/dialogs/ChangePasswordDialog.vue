@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
-    :title="String($t('dashboard.spendingSecuritySettings'))"
-    :subtitle="String($t('dashboard.modifySecuritySettings'))"
+    :title="dialogTitle"
+    :subtitle="dialogSubtitle"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
@@ -76,13 +76,16 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-const { t } = useTranslation();
-import { getCurrentInstance, nextTick, ref, watch, toRefs } from 'vue';
+import { computed, getCurrentInstance, nextTick, ref, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import rules from '@/utils/rules';
 import geroStoreDefault from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
+
+const { t } = useTranslation();
+const dialogTitle = computed(() => t('dashboard.spendingSecuritySettings'));
+const dialogSubtitle = computed(() => t('dashboard.modifySecuritySettings'));
 
 interface Props {
   isOpen: boolean;

@@ -95,8 +95,8 @@
     </div>
 
     <div class="modal-actions">
-      <SecondaryButton :text="String($t('card.back'))" @click="$emit('close')" />
-      <GradientButton :text="String($t('card.placeOrder'))" @click="placeOrder" :loading="loading" />
+      <SecondaryButton :text="backButtonText" @click="$emit('close')" />
+      <GradientButton :text="placeOrderText" @click="placeOrder" :loading="loading" />
     </div>
   </div>
 </template>
@@ -106,6 +106,11 @@ import { reactive, ref, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
 import GradientButton from '../../GradientButton.vue';
 import SecondaryButton from '../../SecondaryButton.vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+
+const { t } = useTranslation();
+const backButtonText = computed(() => String(t('card.back')));
+const placeOrderText = computed(() => String(t('card.placeOrder')));
 
 const loading = ref(false);
 

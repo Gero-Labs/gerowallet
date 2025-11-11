@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader :title="String($t('navigation.signData'))" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
+    <PopupHeader :title="$t('navigation.signData') as string" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
       <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
         <v-card-title class="pa-0" style="color: white; font-size: 14px">
           The website requested a signature
@@ -49,7 +49,15 @@
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" :value="isBT" @input="isBT = $event" :disabled="loading" />
+                <ToggleSwitch
+                  :text-left="$t('wallet.usb') as string"
+                  icon-left="mdi-usb"
+                  :text-right="$t('wallet.bluetooth') as string"
+                  icon-right="mdi-bluetooth"
+                  :value="isBT"
+                  @input="isBT = $event"
+                  :disabled="loading"
+                />
               </v-card-subtitle>
             </v-col>
             <v-col cols="6">

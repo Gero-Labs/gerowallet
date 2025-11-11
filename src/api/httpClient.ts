@@ -21,6 +21,9 @@ const attachInterceptors = (instance: AxiosInstance): AxiosInstance => {
     if (allowWhenLocked) {
       delete headers['x-allow-locked'];
       if (context === 'background') {
+        // Only background processes (service worker) are allowed to bypass the lock.
+        // UI contexts must never set this header to avoid leaking requests while the session is closed.
+        // This also guards against races where the UI fires a request before the latest lock state propagates.
         return config;
       }
       const error = new AxiosError('SESSION_LOCKED', AxiosError.ERR_CANCELED);

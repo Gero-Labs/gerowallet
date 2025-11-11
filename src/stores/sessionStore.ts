@@ -18,7 +18,7 @@ const STORE_NAME = 'sessionStore';
 const context = getContextType();
 
 const sessionState = Vue.observable<SessionState>({
-  isUnlocked: true,
+  isUnlocked: false,
   lockedReason: null,
   lockedAt: null,
   lastActivityAt: Date.now(),
@@ -94,5 +94,6 @@ export default {
 
 if (context === 'background') {
   persistState();
+  broadcastFromBackground(serializeSessionState());
 }
 

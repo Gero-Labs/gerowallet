@@ -609,7 +609,6 @@ export class WalletManager {
       }
     }
 
-    this.pendingTip = null;
     this.stopIdleSync();
     sessionService.unlock();
   }

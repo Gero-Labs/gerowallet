@@ -73,6 +73,7 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 import PasswordConfirmModal from '@/modules/wallet/components/dashboard/PasswordConfirmModal.vue';
+import SessionStore from '@/stores/sessionStore';
 
 
 const { t } = useTranslation();
@@ -149,17 +150,16 @@ const handlePasswordModalConfirm = async ({ password }: { password: string }) =>
   }
 
   if (result.errorCode === 'INVALID_SPENDING_PASSWORD') {
-    openPasswordModal(t('wallet.pleaseEnterPasswordToContinue'), t('navigation.invalidPassword'));
+    passwordModalError.value = t('navigation.invalidPassword');
     return;
   }
 
   if (result.errorCode === 'PASSWORD_REQUIRED_WHEN_LOCKED') {
-    openPasswordModal();
+    passwordModalError.value = '';
     return;
   }
 
-  const message = result.error ?? t('wallet.somethingWentWrong');
-  openPasswordModal(undefined, message);
+  passwordModalError.value = result.error ?? t('wallet.somethingWentWrong');
 };
 
 const handlePostLoginNavigation = async () => {
@@ -197,6 +197,31 @@ const executeLogin = async (
   password?: string
 ): Promise<{ success: boolean; errorCode?: string; error?: string }> => {
   try {
+    const isSessionLocked = !SessionStore.state.isUnlocked;
+    const loggedWalletId = walletStore.loggedWallet?.id;
+    const isSameWallet = loggedWalletId === wallet.id;
+
+    if (isSessionLocked && isSameWallet && wallet.type === WalletType.Normal) {
+      if (!password) {
+        return { success: false, errorCode: 'PASSWORD_REQUIRED_WHEN_LOCKED' };
+      }
+
+      const response: any = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.UNLOCK_SESSION,
+        data: { password },
+      });
+
+      if (response?.data?.success) {
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        errorCode: response?.data?.errorCode,
+        error: response?.error,
+      };
+    }
+
     const requestData: Record<string, unknown> = { wallet };
     if (password) {
       requestData['password'] = password;
