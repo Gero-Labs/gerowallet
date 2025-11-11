@@ -384,7 +384,7 @@ const walletCreationStep2 = async () => {
       dialogLocal.value = false;
       const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,
-        data: { wallet, password: newWallet.value.password },
+        data: { wallet },
       });
 
       if (response && !(response as any).error) {
