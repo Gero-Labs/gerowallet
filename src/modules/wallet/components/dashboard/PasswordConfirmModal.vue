@@ -11,9 +11,9 @@
           </div>
 
           <div class="text-section">
-            <h3 class="modal-title">{{ title }}</h3>
+            <h3 class="modal-title">{{ resolvedTitle }}</h3>
             <p class="modal-subtitle">
-              {{ subtitle }}
+              {{ resolvedSubtitle }}
             </p>
           </div>
         </div>
@@ -36,13 +36,18 @@
               class="password-input"
               hide-details
               placeholder="**********"
+              :disabled="isBusy"
               @keyup.enter="confirmAction"
             />
           </div>
 
+          <v-alert v-if="errorText" dense type="error" class="mt-3">
+            {{ errorText }}
+          </v-alert>
+
           <div class="buttons-section">
-            <SecondaryButton :text="t('common.cancel')" @click="closeModal()" />
-            <GradientButton :text="confirmButtonText" @click="confirmAction" />
+            <SecondaryButton :text="t('common.cancel')" :disabled="isBusy" @click="closeModal()" />
+            <GradientButton :text="resolvedConfirmText" :loading="isBusy" :disabled="isBusy" @click="confirmAction" />
           </div>
         </div>
       </div>
@@ -52,7 +57,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import SecondaryButton from '../SecondaryButton.vue';
 import GradientButton from '../GradientButton.vue';
 
@@ -64,42 +69,53 @@ interface Props {
   subtitle?: string;
   confirmButtonText?: string;
   action?: string;
+  loading?: boolean;
+  errorMessage?: string;
 }
 
 interface Emits {
   (e: 'close'): void;
-  (e: 'confirm', password: string, action: string): void;
+  (e: 'confirm', payload: { password: string; action: string }): void;
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  title: t('wallet.confirmAction'),
-  subtitle: t('wallet.pleaseEnterPasswordToContinue'),
-  confirmButtonText: t('common.confirm'),
-  action: 'default',
-});
+const props = defineProps<Props>();
 
 const emit = defineEmits<Emits>();
 
 const password = ref('');
-const loading = ref(false);
+const resolvedTitle = computed(() => props.title ?? t('wallet.confirmAction'));
+const resolvedSubtitle = computed(() => props.subtitle ?? t('wallet.pleaseEnterPasswordToContinue'));
+const resolvedConfirmText = computed(() => props.confirmButtonText ?? t('common.confirm'));
+const resolvedAction = computed(() => props.action ?? 'default');
+const isBusy = computed(() => !!props.loading);
+const errorText = computed(() => props.errorMessage ?? '');
+
+const resetState = () => {
+  password.value = '';
+};
 
 const closeModal = () => {
-  password.value = '';
+  resetState();
   emit('close');
 };
 
-const confirmAction = async () => {
-  if (!password.value) return;
+const confirmAction = () => {
+  if (!password.value || isBusy.value) return;
 
-  loading.value = true;
-
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  loading.value = false;
-
-  emit('confirm', password.value, props.action);
-  closeModal();
+  emit('confirm', {
+    password: password.value,
+    action: resolvedAction.value,
+  });
 };
+
+watch(
+  () => props.open,
+  newValue => {
+    if (!newValue) {
+      resetState();
+    }
+  }
+);
 </script>
 
 <style lang="scss" scoped>

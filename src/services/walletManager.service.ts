@@ -647,10 +647,16 @@ export class WalletManager {
     }
   }
 
-  private handleSessionLocked = () => {
+  private handleSessionLocked = (reason: 'idle' | 'manual') => {
     if (!this.walletBg) {
       return;
     }
+
+    if (reason === 'idle') {
+      this.startIdleSync();
+      return;
+    }
+
     this.startIdleSync();
   };
 

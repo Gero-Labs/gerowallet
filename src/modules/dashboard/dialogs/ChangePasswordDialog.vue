@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
-    :title="$t('dashboard.spendingSecuritySettings')"
-    :subtitle="$t('dashboard.modifySecuritySettings')"
+    :title="String($t('dashboard.spendingSecuritySettings'))"
+    :subtitle="String($t('dashboard.modifySecuritySettings'))"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
@@ -101,7 +101,6 @@ const spendingPasswordType = ref<string>('password');
 const currentPassword = ref<string>('');
 const newPassword = ref<string>('');
 const confirmNewPassword = ref<string>('');
-
 const vmProxy = getCurrentInstance()!.proxy as any
 
 watch(() => props.isOpen, (newValue, _oldValue) => {
@@ -137,7 +136,7 @@ const resetDialog = (): void => {
     vmProxy.$refs.form.resetValidation();
   })
 };
+
 </script>
 <style scoped>
-
 </style>

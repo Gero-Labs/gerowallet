@@ -53,6 +53,7 @@ import BringStore from '@/stores/bringStore';
 import Charli3Store from '@/stores/charli3Store';
 import SessionLockOverlay from '@/shared/components/SessionLockOverlay.vue';
 import SessionActivityTracker from '@/shared/components/SessionActivityTracker.vue';
+import SessionStore from '@/stores/sessionStore';
 
 // Ensure the store modules are initialized (which sets up messaging)
 console.log('📱 Options page initializing loading store:', Loading);
@@ -95,6 +96,28 @@ watch(() => config.value?.locale, async (newLocale, oldLocale) => {
     }
   }
 }, { immediate: true, deep: true });
+
+watch(
+  () => SessionStore.state.isUnlocked,
+  isUnlocked => {
+    if (isUnlocked) {
+      return;
+    }
+    const currentRoute = vmProxy.$route;
+    if (!currentRoute || currentRoute.name === 'welcome') {
+      return;
+    }
+
+    const redirectTarget =
+      currentRoute.fullPath && currentRoute.fullPath !== '/' ? currentRoute.fullPath : undefined;
+
+    const routePayload = redirectTarget
+      ? { path: '/welcome', query: { redirect: redirectTarget } }
+      : { path: '/welcome' };
+
+    vmProxy.$router.replace(routePayload).catch(() => undefined);
+  }
+);
 </script>
 <style lang="scss">
 .v-application {

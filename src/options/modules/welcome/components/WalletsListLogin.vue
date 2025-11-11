@@ -48,6 +48,17 @@
         </v-list>
       </v-card-text>
     </v-card>
+
+    <PasswordConfirmModal
+      :open="passwordModalOpen"
+      :title="passwordModalTitle"
+      :subtitle="passwordModalSubtitle"
+      :confirm-button-text="passwordModalConfirmText"
+      :loading="passwordModalLoading"
+      :error-message="passwordModalError"
+      @close="handlePasswordModalClose"
+      @confirm="handlePasswordModalConfirm"
+    />
   </div>
 </template>
 <script setup lang="ts">
@@ -61,6 +72,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
+import PasswordConfirmModal from '@/modules/wallet/components/dashboard/PasswordConfirmModal.vue';
 
 
 const { t } = useTranslation();
@@ -89,6 +101,13 @@ const availableWallets = computed<Wallet[]>(() => {
     });
 });
 
+const passwordModalOpen = ref(false);
+const passwordModalSubtitle = ref('');
+const passwordModalTitle = computed(() => t('wallet.confirmAction'));
+const passwordModalConfirmText = computed(() => t('session.unlockButton'));
+const passwordModalError = ref('');
+const passwordModalLoading = ref(false);
+
 const resolveNetworkIcon = (item: Wallet): string => {
   const network = networks.resolveNetwork(item.chain, item.network);
   if (network) {
@@ -98,6 +117,50 @@ const resolveNetworkIcon = (item: Wallet): string => {
 };
 
 const vmProxy = getCurrentInstance()!.proxy as any
+
+const openPasswordModal = (subtitle?: string, error?: string) => {
+  passwordModalSubtitle.value = subtitle ?? t('wallet.pleaseEnterPasswordToContinue');
+  passwordModalError.value = error ?? '';
+  passwordModalLoading.value = false;
+  passwordModalOpen.value = true;
+};
+
+const handlePasswordModalClose = () => {
+  passwordModalOpen.value = false;
+  passwordModalLoading.value = false;
+  passwordModalError.value = '';
+};
+
+const handlePasswordModalConfirm = async ({ password }: { password: string }) => {
+  if (!selectedWallet.value) {
+    return;
+  }
+  passwordModalLoading.value = true;
+  passwordModalError.value = '';
+  const result = await executeLogin(selectedWallet.value, password);
+  passwordModalLoading.value = false;
+
+  if (result.success) {
+    passwordModalOpen.value = false;
+    passwordModalSubtitle.value = '';
+    passwordModalError.value = '';
+    await handlePostLoginNavigation();
+    return;
+  }
+
+  if (result.errorCode === 'INVALID_SPENDING_PASSWORD') {
+    openPasswordModal(t('wallet.pleaseEnterPasswordToContinue'), t('navigation.invalidPassword'));
+    return;
+  }
+
+  if (result.errorCode === 'PASSWORD_REQUIRED_WHEN_LOCKED') {
+    openPasswordModal();
+    return;
+  }
+
+  const message = result.error ?? t('wallet.somethingWentWrong');
+  openPasswordModal(undefined, message);
+};
 
 const handlePostLoginNavigation = async () => {
   // Small delay to ensure store messaging has propagated
@@ -129,31 +192,65 @@ const handlePostLoginNavigation = async () => {
   debugLog('🧭 Navigation completed, new route:', vmProxy.$route.path);
 };
 
-const executeLogin = async (wallet: Wallet) => {
+const executeLogin = async (
+  wallet: Wallet,
+  password?: string
+): Promise<{ success: boolean; errorCode?: string; error?: string }> => {
   try {
+    const requestData: Record<string, unknown> = { wallet };
+    if (password) {
+      requestData['password'] = password;
+    }
+
     const response: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
-      data: { wallet },
+      data: requestData,
     });
 
     if (response?.data?.success) {
-      await handlePostLoginNavigation();
-    } else if (response?.data?.errorCode === 'INVALID_SPENDING_PASSWORD') {
-      console.warn('Unexpected password requirement during login');
-    } else if (response?.error) {
+      return { success: true };
+    }
+
+    const errorCode: string | undefined = response?.data?.errorCode;
+
+    if (response?.error) {
       console.warn('Login error:', response.error);
-    } else {
+      return { success: false, errorCode, error: response.error };
+    }
+
+    if (!errorCode) {
       console.warn('Login failed without explicit error');
     }
-  } catch (error) {
+
+    return { success: false, errorCode };
+  } catch (error: any) {
     console.error(error);
+    return {
+      success: false,
+      error: error?.message || t('wallet.somethingWentWrong'),
+    };
   }
 };
 
 const submitLogin = async (wallet: Wallet): Promise<void> => {
   selectedWalletId.value = wallet.id;
   selectedWallet.value = wallet;
-  await executeLogin(wallet);
+  if (wallet.type === WalletType.Normal) {
+    openPasswordModal();
+    return;
+  }
+
+  const result = await executeLogin(wallet);
+  if (result.success) {
+    await handlePostLoginNavigation();
+    return;
+  }
+
+  const message =
+    result.errorCode === 'INVALID_SPENDING_PASSWORD'
+      ? t('navigation.invalidPassword')
+      : result.error ?? t('wallet.somethingWentWrong');
+  openPasswordModal(undefined, message);
 };
 </script>
 <style scoped>

@@ -50,18 +50,30 @@
         </div>
       </v-card-text>
     </v-card>
+
+    <PasswordConfirmModal
+      :open="passwordModalOpen"
+      :title="passwordModalTitle"
+      :subtitle="passwordModalSubtitle"
+      :confirm-button-text="passwordModalConfirmText"
+      :loading="passwordModalLoading"
+      :error-message="passwordModalError"
+      @close="handlePasswordModalClose"
+      @confirm="handlePasswordModalConfirm"
+    />
   </v-form>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs } from 'vue';
 import networks from '@/utils/networks';
-import { Blockchain, Network } from '@/models/types';
+import { Blockchain, Network, WalletType } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import assets from '@/utils/assets';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
+import PasswordConfirmModal from '@/modules/wallet/components/dashboard/PasswordConfirmModal.vue';
 
 
 const { t } = useTranslation();
@@ -72,6 +84,12 @@ const { config } = toRefs(walletStore);
 const selectedWallet = ref<any | null>(null);
 const controller = ref<any>(null);
 const tabId = ref<number>();
+const passwordModalOpen = ref(false);
+const passwordModalSubtitle = ref('');
+const passwordModalTitle = computed(() => t('wallet.confirmAction'));
+const passwordModalConfirmText = computed(() => t('session.unlockButton'));
+const passwordModalError = ref('');
+const passwordModalLoading = ref(false);
 
 const useSidePanel = computed(() => {
   return config.value?.useSidePanel || true;
@@ -81,26 +99,102 @@ const availableWallets = computed(() => {
   return wallets.value.filter(wallet => wallet.chain === Blockchain.CARDANO && wallet.network === Network.MAINNET);
 });
 
-const submitLogin = async (wallet: any) => {
-  selectedWallet.value = wallet;
-  await executeLogin(wallet);
+const openPasswordModal = (subtitle?: string, error?: string) => {
+  passwordModalSubtitle.value = subtitle ?? t('wallet.pleaseEnterPasswordToContinue');
+  passwordModalError.value = error ?? '';
+  passwordModalLoading.value = false;
+  passwordModalOpen.value = true;
 };
 
-const executeLogin = async (wallet: any) => {
+const handlePasswordModalClose = () => {
+  passwordModalOpen.value = false;
+  passwordModalLoading.value = false;
+  passwordModalError.value = '';
+};
+
+const handlePasswordModalConfirm = async ({ password }: { password: string }) => {
+  if (!selectedWallet.value) {
+    return;
+  }
+  passwordModalLoading.value = true;
+  passwordModalError.value = '';
+  const result = await executeLogin(selectedWallet.value, password);
+  passwordModalLoading.value = false;
+
+  if (result.success) {
+    passwordModalOpen.value = false;
+    passwordModalSubtitle.value = '';
+    passwordModalError.value = '';
+    await controller.value?.returnData({ data: 'login', error: undefined });
+    window.close();
+    return;
+  }
+
+  if (result.errorCode === 'INVALID_SPENDING_PASSWORD') {
+    openPasswordModal(t('wallet.pleaseEnterPasswordToContinue'), t('navigation.invalidPassword'));
+    return;
+  }
+
+  if (result.errorCode === 'PASSWORD_REQUIRED_WHEN_LOCKED') {
+    openPasswordModal();
+    return;
+  }
+
+  const message = result.error ?? t('wallet.somethingWentWrong');
+  openPasswordModal(undefined, message);
+};
+
+const submitLogin = async (wallet: any) => {
+  selectedWallet.value = wallet;
+  if (wallet.type === WalletType.Normal) {
+    openPasswordModal();
+    return;
+  }
+
+  const result = await executeLogin(wallet);
+  if (result.success) {
+    await controller.value?.returnData({ data: 'login', error: undefined });
+    window.close();
+    return;
+  }
+
+  const message =
+    result.errorCode === 'INVALID_SPENDING_PASSWORD'
+      ? t('navigation.invalidPassword')
+      : result.error ?? t('wallet.somethingWentWrong');
+  openPasswordModal(undefined, message);
+};
+
+const executeLogin = async (
+  wallet: any,
+  password?: string
+): Promise<{ success: boolean; errorCode?: string; error?: string }> => {
   try {
+    const requestData: Record<string, unknown> = { wallet };
+    if (password) {
+      requestData['password'] = password;
+    }
+
     const response: any = await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.LOGIN,
-    data: { wallet },
+      method: MessageTypes.LOGIN,
+      data: requestData,
     });
 
     if (response?.data?.success) {
-      await controller.value?.returnData({ data: 'login', error: undefined });
-    window.close();
-    } else if (response?.error) {
-      console.warn('Login error:', response.error);
+      return { success: true };
     }
+
+    const errorCode: string | undefined = response?.data?.errorCode;
+
+    if (response?.error) {
+      console.warn('Login error:', response.error);
+      return { success: false, errorCode, error: response.error };
+    }
+
+    return { success: false, errorCode };
   } catch (error: any) {
     console.warn('Login exception:', error?.message || error);
+    return { success: false, error: error?.message || String(error) };
   }
 };
 

@@ -27,6 +27,7 @@ const Blog = () => import('@/modules/blog/Blog.vue');
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 
 import WalletStore from '@/stores/walletStore';
+import SessionStore from '@/stores/sessionStore';
 
 const routes = [
   {
@@ -198,6 +199,7 @@ const router = new VueRouter({
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
+  const isSessionUnlocked: boolean = SessionStore.state.isUnlocked;
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
 
@@ -206,7 +208,7 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     return next();
   }
 
-  if (needsAuth && !isLoggedIn) {
+  if (needsAuth && (!isLoggedIn || !isSessionUnlocked)) {
     // not logged in → send to /welcome (with optional redirect)
     let redirectTo = '/welcome';
     if (to.path !== '/') {
@@ -214,7 +216,7 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn) {
+  if (isWelcome && isLoggedIn && isSessionUnlocked) {
     // already logged in → don't show welcome again
     return next({ path: '/' });
   }

@@ -68,6 +68,7 @@ const scheduleAutoLock = () => {
     }
     isLocking = true;
     clearInactivityTimer();
+    SessionStore.setUnlocked(false, 'idle');
     requestBackgroundLock();
   }, SessionStore.state.autoLockTimeoutMs);
 };

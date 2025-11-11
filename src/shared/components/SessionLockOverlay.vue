@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, getCurrentInstance, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import SessionStore from '@/stores/sessionStore';
 import { walletStore } from '@/stores/walletStore';
@@ -78,7 +78,15 @@ const showPassword = ref(false);
 let keepAlivePort: chrome.runtime.Port | null = null;
 
 const loggedWallet = computed(() => walletStore.loggedWallet);
-const shouldShow = computed(() => !!loggedWallet.value && !SessionStore.state.isUnlocked);
+const vm = getCurrentInstance();
+const currentRouteName = computed<string | null>(() => vm?.proxy?.$route?.name ?? null);
+const suppressedRoutes = new Set(['welcome', 'plogin']);
+const shouldShow = computed(() => {
+  if (!loggedWallet.value || SessionStore.state.isUnlocked) {
+    return false;
+  }
+  return !suppressedRoutes.has(currentRouteName.value ?? '');
+});
 const requiresPassword = computed(() => loggedWallet.value?.type === WalletType.Normal);
 const isUnlockDisabled = computed(() => loading.value || (requiresPassword.value && password.value.length === 0));
 
@@ -127,129 +135,44 @@ watch(shouldShow, value => {
   }
 });
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-const wakeBackground = async () => {
-  await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.SESSION_ACTIVITY,
-    data: { keepAlive: true },
-  }).catch(() => undefined);
-};
-
-const verifyPassword = async () => {
-  if (!requiresPassword.value) {
-    return true;
-  }
-
-  try {
-    const verification = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: password.value },
-    })) as { data: { isValid: boolean; error?: string } };
-    if (verification?.data?.isValid) {
-      return true;
-    }
-
-    errorMessage.value = t('navigation.invalidPassword');
-    loading.value = false;
-    closeKeepAlivePort();
-    return false;
-  } catch (error: any) {
-    errorMessage.value = error?.message || t('navigation.invalidPassword');
-    loading.value = false;
-    closeKeepAlivePort();
-    return false;
-  }
-};
-
 const unlock = async () => {
   if (isUnlockDisabled.value) {
     return;
   }
+
   loading.value = true;
   errorMessage.value = '';
 
-  const MAX_ATTEMPTS = 3;
   openKeepAlivePort();
 
-  const isPasswordValid = await verifyPassword();
-  if (!isPasswordValid) {
-    return;
-  }
+  try {
+    const response: any = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.UNLOCK_SESSION,
+      data: { password: password.value },
+    });
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-    try {
-      if (attempt > 0) {
-        await delay(150 * attempt);
-      }
-      await wakeBackground();
-
-      const response: any = (await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: password.value },
-      })) as { data: { isValid: boolean; error?: string } };
-
-      if (response?.data?.isValid) {
-        SessionStore.setUnlocked(true, null);
-        resetFields();
-        loading.value = false;
-        closeKeepAlivePort();
-        return;
-      }
-
-      if (SessionStore.state.isUnlocked) {
-        resetFields();
-        loading.value = false;
-        closeKeepAlivePort();
-        return;
-      }
-
-      const responseError: string | undefined = response?.error || response?.data?.error || response?.data?.errorCode;
-
-      if (typeof responseError === 'string' && responseError.includes('message port closed')) {
-        continue;
-      }
-
-      if (response?.data?.errorCode === 'INVALID_SPENDING_PASSWORD') {
-        errorMessage.value = t('navigation.invalidPassword');
-      } else if (responseError) {
-        errorMessage.value = responseError;
-      } else {
-        errorMessage.value = t('navigation.invalidPassword');
-      }
-      loading.value = false;
-      closeKeepAlivePort();
-      return;
-    } catch (error: any) {
-      const message = error?.message || String(error);
-      if (message.includes('The message port closed before a response was received.') && attempt < MAX_ATTEMPTS - 1) {
-        continue;
-      }
-
-      if (SessionStore.state.isUnlocked) {
-        resetFields();
-        loading.value = false;
-        closeKeepAlivePort();
-        return;
-      }
-
-      errorMessage.value = message || t('navigation.invalidPassword');
+    if (response?.data?.success) {
+      SessionStore.setUnlocked(true, null);
+      resetFields();
       loading.value = false;
       closeKeepAlivePort();
       return;
     }
-  }
 
-  if (SessionStore.state.isUnlocked) {
-    resetFields();
+    if (response?.data?.errorCode === 'INVALID_SPENDING_PASSWORD') {
+      errorMessage.value = t('navigation.invalidPassword');
+    } else if (response?.error) {
+      errorMessage.value = response.error;
+    } else {
+      errorMessage.value = t('navigation.invalidPassword');
+    }
+  } catch (error: any) {
+    const message = error?.message || String(error);
+    errorMessage.value = message || t('navigation.invalidPassword');
+  } finally {
     loading.value = false;
     closeKeepAlivePort();
-    return;
   }
-
-  errorMessage.value = t('navigation.invalidPassword');
-  loading.value = false;
-  closeKeepAlivePort();
 };
 </script>
 
