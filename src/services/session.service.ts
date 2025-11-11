@@ -11,6 +11,8 @@ class SessionService {
   private unlockCallbacks = new Set<UnlockCallback>();
   private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
   private isInitialized = false;
+  private lastIdleDetectionInterval: number | null = null;
+  private static readonly IDLE_DETECTION_BUFFER_SECONDS = 30;
 
   initialize() {
     if (this.isInitialized) return;
@@ -72,8 +74,7 @@ class SessionService {
       return;
     }
 
-    const intervalInSeconds = Math.max(15, Math.floor(SessionStore.state.autoLockTimeoutMs / 1000));
-    chrome.idle.setDetectionInterval(intervalInSeconds);
+    this.updateIdleDetectionInterval();
 
     chrome.idle.onStateChanged.addListener(state => {
       if (state === 'idle' || state === 'locked') {
@@ -84,12 +85,32 @@ class SessionService {
     });
   }
 
+  private updateIdleDetectionInterval() {
+    if (!chrome?.idle) {
+      return;
+    }
+
+    const lockTimeoutSeconds = Math.max(1, Math.ceil(SessionStore.state.autoLockTimeoutMs / 1000));
+    const desiredInterval = Math.max(
+      15,
+      lockTimeoutSeconds + SessionService.IDLE_DETECTION_BUFFER_SECONDS
+    );
+
+    if (this.lastIdleDetectionInterval === desiredInterval) {
+      return;
+    }
+
+    chrome.idle.setDetectionInterval(desiredInterval);
+    this.lastIdleDetectionInterval = desiredInterval;
+  }
+
   private resetInactivityTimer() {
     this.clearInactivityTimer();
     const timeout = SessionStore.state.autoLockTimeoutMs;
     this.inactivityTimer = setTimeout(() => {
       this.lock('idle');
     }, timeout);
+    this.updateIdleDetectionInterval();
   }
 
   private clearInactivityTimer() {

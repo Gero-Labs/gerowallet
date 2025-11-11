@@ -184,7 +184,7 @@ const unlock = async () => {
       }
       await wakeBackground();
 
-      const response: any = (await await Messaging.sendToBackgroundFromOptions({
+      const response: any = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: password.value },
       })) as { data: { isValid: boolean; error?: string } };

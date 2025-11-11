@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import SessionStore from '@/stores/sessionStore';
+import { getContextType } from '@/utils/storageSync';
 
 const DEFAULT_TIMEOUT = 120000;
 
@@ -11,12 +12,19 @@ const baseConfig: AxiosRequestConfig = {
   },
 };
 
+const context = getContextType();
+
 const attachInterceptors = (instance: AxiosInstance): AxiosInstance => {
   instance.interceptors.request.use(config => {
-    const allowWhenLocked = config.headers && (config.headers as any)['x-allow-locked'];
+    const headers = config.headers as Record<string, any> | undefined;
+    const allowWhenLocked = headers?.['x-allow-locked'];
     if (allowWhenLocked) {
-      delete (config.headers as any)['x-allow-locked'];
-      return config;
+      delete headers['x-allow-locked'];
+      if (context === 'background') {
+        return config;
+      }
+      const error = new AxiosError('SESSION_LOCKED', AxiosError.ERR_CANCELED);
+      return Promise.reject(error);
     }
 
     if (!SessionStore.state.isUnlocked) {

@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import { getContextType } from '@/utils/storageSync';
+import { getContextType, smartPersist } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
@@ -13,7 +13,7 @@ export interface SessionState {
   autoLockTimeoutMs: number;
 }
 
-const DEFAULT_AUTO_LOCK_TIMEOUT_MS = 1 * 30 * 1000; // 2 minutes
+const DEFAULT_AUTO_LOCK_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 const STORE_NAME = 'sessionStore';
 const context = getContextType();
 
@@ -29,6 +29,23 @@ function broadcastFromBackground(updates: Partial<SessionState>) {
   if (context === 'background') {
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
   }
+}
+
+function serializeSessionState(): SessionState {
+  return {
+    isUnlocked: sessionState.isUnlocked,
+    lockedReason: sessionState.lockedReason,
+    lockedAt: sessionState.lockedAt,
+    lastActivityAt: sessionState.lastActivityAt,
+    autoLockTimeoutMs: sessionState.autoLockTimeoutMs,
+  };
+}
+
+function persistState() {
+  if (context !== 'background') {
+    return;
+  }
+  void smartPersist(STORE_NAME, serializeSessionState());
 }
 
 if (context === 'browser') {
@@ -54,6 +71,7 @@ export default {
       lockedReason: sessionState.lockedReason,
       lockedAt: sessionState.lockedAt,
     });
+    persistState();
   },
 
   touchLastActivity(options: { broadcast?: boolean } = {}) {
@@ -61,6 +79,7 @@ export default {
     if (options.broadcast) {
       broadcastFromBackground({ lastActivityAt: sessionState.lastActivityAt });
     }
+    persistState();
   },
 
   setAutoLockTimeout(timeoutMs: number) {
@@ -69,6 +88,11 @@ export default {
     }
     sessionState.autoLockTimeoutMs = timeoutMs;
     broadcastFromBackground({ autoLockTimeoutMs: timeoutMs });
+    persistState();
   },
 };
+
+if (context === 'background') {
+  persistState();
+}
 

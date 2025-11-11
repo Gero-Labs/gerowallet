@@ -25,7 +25,7 @@ import {
   urlScan,
   getUnusedAddresses,
 } from '@/chrome/serialization';
-import { ERROR } from '@/models/types';
+import { ERROR, WalletType } from '@/models/types';
 import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -38,6 +38,7 @@ import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import sessionService from '@/services/session.service';
+import SessionStore from '@/stores/sessionStore';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -1362,13 +1363,24 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
-    console.log('login', request);
     const { wallet, password } = request.data ?? {};
-    const loginOptions =
-      password && password.length > 0
-        ? { password }
-        : { skipPasswordValidation: true };
+    const isSessionLocked = !SessionStore.state.isUnlocked;
+    const requiresPassword = wallet?.type === WalletType.Normal;
+    const hasPassword = typeof password === 'string' && password.length > 0;
+
+    if (isSessionLocked && requiresPassword && !hasPassword) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, errorCode: 'PASSWORD_REQUIRED_WHEN_LOCKED' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    const loginOptions = hasPassword ? { password } : { skipPasswordValidation: true };
     const walletBg = await walletManager.login(wallet, loginOptions);
+
     if (walletBg) {
       sendResponse({
         id: request.id,
@@ -1382,10 +1394,9 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
         data: { success: false },
         target: TARGET,
         sender: SENDER.extension,
-      })
+      });
     }
   } catch (err) {
-    console.log('login error', err);
     const errorMessage = err instanceof Error ? err.message : String(err);
     if (errorMessage === 'INVALID_SPENDING_PASSWORD') {
       sendResponse({
@@ -1402,7 +1413,7 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
       error: err,
-    })
+    });
   }
 });
 

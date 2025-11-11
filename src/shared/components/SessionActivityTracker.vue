@@ -68,7 +68,6 @@ const scheduleAutoLock = () => {
     }
     isLocking = true;
     clearInactivityTimer();
-    SessionStore.setUnlocked(false, 'idle');
     requestBackgroundLock();
   }, SessionStore.state.autoLockTimeoutMs);
 };
@@ -188,6 +187,7 @@ watch(
       scheduleAutoLock();
       sendActivityPing();
     } else {
+      isLocking = false;
       clearInactivityTimer();
     }
   }
