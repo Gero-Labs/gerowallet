@@ -42,7 +42,7 @@ export class Api {
 
   async getAccountRewards(rewardAddress: string) {
     try {
-      const size = this.provider === Provider[Provider.BLOCKFROST] ? 100 : 1000;
+      const size = 100;
       let page = 1;
       let allRewards: any[] = []; // Accumulator for all rewards
       let morePages = true; // Condition to control the loop
