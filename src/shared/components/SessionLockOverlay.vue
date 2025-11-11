@@ -104,7 +104,7 @@ const openKeepAlivePort = () => {
       keepAlivePort = null;
     });
   } catch (error) {
-    console.warn('[SessionLockOverlay] Failed to open keep-alive port:', error);
+    keepAlivePort = null;
   }
 };
 
@@ -115,7 +115,7 @@ const closeKeepAlivePort = () => {
   try {
     keepAlivePort.disconnect();
   } catch (error) {
-    console.warn('[SessionLockOverlay] Failed to disconnect keep-alive port:', error);
+    /* no-op */
   } finally {
     keepAlivePort = null;
   }
@@ -130,14 +130,10 @@ watch(shouldShow, value => {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const wakeBackground = async () => {
-  try {
-    await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SESSION_ACTIVITY,
-      data: { keepAlive: true },
-    });
-  } catch (error) {
-    console.warn('[SessionLockOverlay] Failed to wake background:', error);
-  }
+  await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SESSION_ACTIVITY,
+    data: { keepAlive: true },
+  }).catch(() => undefined);
 };
 
 const verifyPassword = async () => {
@@ -150,7 +146,6 @@ const verifyPassword = async () => {
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: password.value },
     })) as { data: { isValid: boolean; error?: string } };
-    console.log('[SessionLockOverlay] VERIFY_SPENDING_PASSWORD response:', verification);
     if (verification?.data?.isValid) {
       return true;
     }

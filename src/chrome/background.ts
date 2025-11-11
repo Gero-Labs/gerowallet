@@ -1461,7 +1461,6 @@ app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.SESSION_ACTIVITY, async (_request, sendResponse) => {
   try {
-    console.log('[Background] SESSION_ACTIVITY received');
     sessionService.touch();
     sendResponse({
       id: _request.id,
@@ -1482,8 +1481,8 @@ app.addToOptions(MessageTypes.SESSION_ACTIVITY, async (_request, sendResponse) =
 
 app.addToOptions(MessageTypes.LOCK_SESSION, async (request, sendResponse) => {
   try {
-    console.log('[Background] LOCK_SESSION request received', request?.data);
-    sessionService.lock('idle');
+    const reason = request?.data?.reason === 'manual' ? 'manual' : 'idle';
+    sessionService.lock(reason);
     sendResponse({
       id: request.id,
       data: { success: true },
