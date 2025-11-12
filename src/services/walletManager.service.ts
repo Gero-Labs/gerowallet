@@ -82,12 +82,8 @@ export class WalletManager {
         TapToolsStore.clear();
 
         const walletBg: WalletBg = new WalletBg(wallet);
-      const skipPasswordValidation = options.skipPasswordValidation === true;
-      if (walletBg.type === WalletType.Normal && !skipPasswordValidation) {
-        if (!options.password || !walletBg.verifySpendingPassword(options.password)) {
-          throw new Error('INVALID_SPENDING_PASSWORD');
-        }
-      }
+        this.validatePasswordIfRequired(walletBg, options);
+        const skipPasswordValidation = options.skipPasswordValidation === true;
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -164,12 +160,8 @@ export class WalletManager {
         TapToolsStore.clear();
 
         const walletBg: WalletBg = new WalletBg(wallet);
+        this.validatePasswordIfRequired(walletBg, options);
         const skipPasswordValidation = options.skipPasswordValidation === true;
-        if (walletBg.type === WalletType.Normal && !skipPasswordValidation) {
-          if (!options.password || !walletBg.verifySpendingPassword(options.password)) {
-            throw new Error('INVALID_SPENDING_PASSWORD');
-          }
-        }
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -225,6 +217,24 @@ export class WalletManager {
       throw error;
     } finally {
       LoadingState.setLoading(false);
+    }
+  }
+
+  /**
+   * Validate password if required for normal wallets
+   * @param walletBg - WalletBg instance to validate password for
+   * @param options - Login options containing password and skipPasswordValidation flag
+   * @throws Error with code 'INVALID_SPENDING_PASSWORD' if validation fails
+   */
+  private validatePasswordIfRequired(
+    walletBg: WalletBg,
+    options: { password?: string; skipPasswordValidation?: boolean }
+  ): void {
+    const skipPasswordValidation = options.skipPasswordValidation === true;
+    if (walletBg.type === WalletType.Normal && !skipPasswordValidation) {
+      if (!options.password || !walletBg.verifySpendingPassword(options.password)) {
+        throw new Error('INVALID_SPENDING_PASSWORD');
+      }
     }
   }
 
