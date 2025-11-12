@@ -66,18 +66,19 @@ loadWallets().then(async () => {
 
   if (walletStore.loggedWallet) {
     debugLog('Login in wallet: ', walletStore.loggedWallet.name);
-    await walletManager.login(walletStore.loggedWallet, { skipPasswordValidation: true });
     
-    // Restore previous session lock state after login
-    // If session was unlocked before restart, unlock it now
-    // If session was locked, it will remain locked (default behavior with skipPasswordValidation)
+    // Restore previous session lock state BEFORE login to avoid race conditions
+    // During login, multiple async operations occur (Ably connection, API calls, store broadcasts)
+    // Setting the session state first ensures these operations see the correct lock state
     const wasUnlocked = SessionStore.state.isUnlocked;
     if (wasUnlocked) {
-      debugLog('Restoring unlocked session state');
+      debugLog('Restoring unlocked session state before login');
       sessionService.unlock();
     } else {
-      debugLog('Session was locked before restart, keeping locked');
+      debugLog('Session was locked before restart, will remain locked after login');
     }
+    
+    await walletManager.login(walletStore.loggedWallet, { skipPasswordValidation: true });
   } else {
     debugLog('No logged wallet found after hydration');
     Loading.setLoading(false)

@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import SessionStore from '@/stores/sessionStore';
 import { getContextType } from '@/utils/storageSync';
+import { debugLog } from '@/utils/debug';
 
 const DEFAULT_TIMEOUT = 120000;
 
@@ -38,6 +39,7 @@ const attachInterceptors = (instance: AxiosInstance): AxiosInstance => {
     }
 
     if (!SessionStore.state.isUnlocked) {
+      debugLog('HTTP request blocked - session locked', { url: config.url, method: config.method });
       const error = new AxiosError('SESSION_LOCKED', AxiosError.ERR_CANCELED);
       return Promise.reject(error);
     }

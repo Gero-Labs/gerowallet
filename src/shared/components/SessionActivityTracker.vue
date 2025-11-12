@@ -8,6 +8,14 @@ import SessionStore from '@/stores/sessionStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 
+/**
+ * Timer configuration constants
+ */
+const ACTIVITY_THROTTLE_MS = 5_000; // Throttle activity pings to background (5 seconds)
+const ACTIVITY_DEBOUNCE_MS = 600; // Debounce activity events to reduce noise (600ms)
+const LOCK_RETRY_DELAYS_MS = [1000, 2000, 3000]; // Retry delays for failed lock requests (1s, 2s, 3s)
+const SCHEDULE_THROTTLE_MS = 250; // Minimum time between auto-lock schedule calls (250ms)
+
 const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
   'mousemove',
   'mousedown',
@@ -16,6 +24,13 @@ const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
   'wheel',
 ];
 
+/**
+ * Timer references for activity tracking and session locking
+ * - inactivityTimer: Auto-lock timer (uses SessionStore.state.autoLockTimeoutMs, typically 2+ minutes)
+ * - activityThrottleTimer: Throttles activity pings to background to prevent excessive messaging
+ * - activityDebounceTimer: Debounces activity events to reduce processing overhead
+ * - lockRetryTimer: Retries failed lock requests with exponential backoff
+ */
 let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 let activityThrottleTimer: ReturnType<typeof setTimeout> | null = null;
 let activityDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -39,7 +54,7 @@ const sendActivityPing = () => {
 
   activityThrottleTimer = setTimeout(() => {
     activityThrottleTimer = null;
-  }, 5_000);
+  }, ACTIVITY_THROTTLE_MS);
 
   Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SESSION_ACTIVITY,
@@ -57,7 +72,7 @@ const scheduleAutoLock = () => {
   }
 
   const now = Date.now();
-  if (now - lastScheduleTimestamp < 250) {
+  if (now - lastScheduleTimestamp < SCHEDULE_THROTTLE_MS) {
     return;
   }
   lastScheduleTimestamp = now;
@@ -97,13 +112,13 @@ const requestBackgroundLock = (attempt = 0) => {
 };
 
 const scheduleLockRetry = (attempt: number) => {
-  if (attempt >= 3) {
+  if (attempt >= LOCK_RETRY_DELAYS_MS.length) {
     isLocking = false;
     return;
   }
   lockRetryTimer = setTimeout(() => {
     requestBackgroundLock(attempt + 1);
-  }, 1000 * (attempt + 1));
+  }, LOCK_RETRY_DELAYS_MS[attempt]);
 };
 
 const processActivity = () => {
@@ -115,8 +130,10 @@ const processActivity = () => {
   scheduleAutoLock();
 };
 
-const ACTIVITY_DEBOUNCE_MS = 600;
-
+/**
+ * Debounced activity handler to reduce processing overhead
+ * Waits for ACTIVITY_DEBOUNCE_MS before processing activity events
+ */
 const debouncedActivity = () => {
   if (activityDebounceTimer) {
     clearTimeout(activityDebounceTimer);
