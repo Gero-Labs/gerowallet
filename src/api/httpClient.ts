@@ -21,9 +21,16 @@ const attachInterceptors = (instance: AxiosInstance): AxiosInstance => {
     if (allowWhenLocked) {
       delete headers['x-allow-locked'];
       if (context === 'background') {
-        // Only background processes (service worker) are allowed to bypass the lock.
-        // UI contexts must never set this header to avoid leaking requests while the session is closed.
-        // This also guards against races where the UI fires a request before the latest lock state propagates.
+        // SECURITY: Only background processes (service worker) are allowed to bypass the lock.
+        // This enables critical background operations (idle sync, tip updates) to continue
+        // even when the UI is locked, ensuring dApps remain functional.
+        //
+        // UI contexts (popup, options) must NEVER set this header to prevent:
+        // 1. Leaking sensitive requests while the session is closed
+        // 2. Race conditions where UI fires requests before lock state propagates
+        // 3. Potential DDoS attacks by malicious websites injecting requests
+        //
+        // If a UI context attempts to use this header, the request is rejected.
         return config;
       }
       const error = new AxiosError('SESSION_LOCKED', AxiosError.ERR_CANCELED);

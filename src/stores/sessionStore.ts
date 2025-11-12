@@ -92,8 +92,36 @@ export default {
   },
 };
 
+let hydrationPromise: Promise<void> | null = null;
+
 if (context === 'background') {
-  persistState();
-  broadcastFromBackground(serializeSessionState());
+  // Hydrate session state from storage on startup
+  hydrationPromise = (async () => {
+    try {
+      const result = await chrome.storage.local.get(STORE_NAME);
+      const storedData = result[STORE_NAME] as SessionState | undefined;
+      if (storedData) {
+        Object.assign(sessionState, storedData);
+        // Ensure autoLockTimeoutMs is at least 2 minutes
+        if (sessionState.autoLockTimeoutMs < DEFAULT_AUTO_LOCK_TIMEOUT_MS) {
+          sessionState.autoLockTimeoutMs = DEFAULT_AUTO_LOCK_TIMEOUT_MS;
+        }
+        broadcastFromBackground(serializeSessionState());
+      } else {
+        // First time initialization - persist defaults
+        persistState();
+        broadcastFromBackground(serializeSessionState());
+      }
+    } catch (error) {
+      console.error('Failed to hydrate session store:', error);
+      // Fallback to defaults
+      persistState();
+      broadcastFromBackground(serializeSessionState());
+    }
+  })();
+}
+
+export function waitForHydration(): Promise<void> {
+  return hydrationPromise || Promise.resolve();
 }
 

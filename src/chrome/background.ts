@@ -55,6 +55,11 @@ loadConfig().then(() => {
 loadWallets().then(async () => {
   debugLog('Wallets loaded')
 
+  // Wait for session state hydration to complete before checking lock state
+  const { waitForHydration } = await import('@/stores/sessionStore');
+  await waitForHydration();
+  debugLog('Session state hydrated');
+
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
   debugLog('Wallet store hydrated, checking for logged wallet...');
@@ -62,6 +67,17 @@ loadWallets().then(async () => {
   if (walletStore.loggedWallet) {
     debugLog('Login in wallet: ', walletStore.loggedWallet.name);
     await walletManager.login(walletStore.loggedWallet, { skipPasswordValidation: true });
+    
+    // Restore previous session lock state after login
+    // If session was unlocked before restart, unlock it now
+    // If session was locked, it will remain locked (default behavior with skipPasswordValidation)
+    const wasUnlocked = SessionStore.state.isUnlocked;
+    if (wasUnlocked) {
+      debugLog('Restoring unlocked session state');
+      sessionService.unlock();
+    } else {
+      debugLog('Session was locked before restart, keeping locked');
+    }
   } else {
     debugLog('No logged wallet found after hydration');
     Loading.setLoading(false)

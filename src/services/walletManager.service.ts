@@ -610,7 +610,23 @@ export class WalletManager {
     }
 
     this.stopIdleSync();
+    
+    // Process any pending tip that was received while locked
+    const tipToSync = this.pendingTip;
+    this.pendingTip = null;
+    
     sessionService.unlock();
+    
+    // Process pending tip after unlock to ensure blockchain state is up to date
+    if (tipToSync) {
+      this.syncMutex
+        .runExclusive(async () => {
+          if (this.walletBg) {
+            await this.walletBg.syncService.sync(tipToSync);
+          }
+        })
+        .catch(error => console.warn('Failed to sync pending tip after unlock:', error));
+    }
   }
 
   /**
