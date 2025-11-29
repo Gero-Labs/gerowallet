@@ -244,8 +244,8 @@ export default defineConfig(({ command }) => {
         plugins: [
           copy({
             targets: [
-              { src: 'src/assets/public/*', dest: 'extension/public' },
-              { src: 'src/assets/notifications/*', dest: 'extension/public' },
+              { src: 'src/assets/public/*', dest: 'extension/public', flatten: true },
+              { src: 'src/assets/notifications/*', dest: 'extension/public/notifications', flatten: true },
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
@@ -254,7 +254,6 @@ export default defineConfig(({ command }) => {
             ],
             hook: 'writeBundle',
             copySync: false, // Async copying
-            flatten: false,
           }) as any,
         ]
       },
