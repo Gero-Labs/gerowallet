@@ -1,13 +1,12 @@
 import Dexie from 'dexie';
 import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import * as bip39 from 'bip39';
-import { encrypt } from '@/shared/utils/crypto';
-import { HARDENED, CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
+import { encrypt, encryptPrivateKey } from '@/shared/utils/crypto';
+import { CoinTypes, Currency, HARDENED, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
-import { encryptPrivateKey } from '@/shared/utils/crypto';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
-import { Bip32PrivateKey, Bip32Ed25519, SodiumBip32Ed25519, Bip32PublicKeyHex } from '@cardano-sdk/crypto';
+import { Bip32Ed25519, Bip32PrivateKey, Bip32PublicKeyHex, SodiumBip32Ed25519 } from '@cardano-sdk/crypto';
 
 let cachedDb: Dexie | null = null;
 
@@ -160,16 +159,9 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
   const encryptedMnemonic: string = encrypt(mnemonic, password);
   const rootKey: Bip32PrivateKey = resolvePrivateKey(mnemonic);
   const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
-  const accountIndex = 0;
-  const bip32Ed25519: Bip32Ed25519 = await SodiumBip32Ed25519.create();
-  const xpubHex: Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
-  let words: number[]
-  try {
-    words = bech32.toWords(Buffer.from(xpubHex, 'hex'))
-  } catch (e) {
-    words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
-  }
-  const publicKey = bech32.encode('xpub', words, 120);
+
+  // Use shared helper function for public key derivation
+  const publicKey = await derivePublicKeyFromMnemonic(mnemonic);
 
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
@@ -254,7 +246,12 @@ export async function createNewGoogleWallet(
     ]).hex()
   );
 
-  const walletId = await db['wallets'].add({
+  // NOTE: We DON'T create the wallet database yet!
+  // The wallet DB will be created AFTER successful proof generation
+  // This prevents creating orphaned databases if proof generation fails
+  // await createNewWalletDb(walletId, false);
+
+  return await db['wallets'].add({
     name,
     icon,
     type: WalletType.Google,
@@ -268,13 +265,6 @@ export async function createNewGoogleWallet(
     userId,
     jwt, // Store JWT for proof generation later
   });
-
-  // NOTE: We DON'T create the wallet database yet!
-  // The wallet DB will be created AFTER successful proof generation
-  // This prevents creating orphaned databases if proof generation fails
-  // await createNewWalletDb(walletId, false);
-
-  return walletId;
 }
 
 export async function deleteWallet(walletId: number|string) {
@@ -357,4 +347,43 @@ export async function getGoogleWalletByUserId(userId: string) {
 export async function googleWalletExists(email: string): Promise<boolean> {
   const wallet = await getGoogleWalletWithEmail(email);
   return wallet !== null;
+}
+
+/**
+ * Get wallet by public key (xpub)
+ * @param publicKey - The public key (xpub) to search for
+ * @returns The wallet object if found, null otherwise
+ */
+export async function getWalletByPublicKey(publicKey: string) {
+  const db: Dexie = await getDb();
+  const wallets = await db['wallets'].where('publicKey').equals(publicKey).toArray();
+  if (wallets && wallets.length > 0) {
+    return wallets[0];
+  }
+  return null;
+}
+
+/**
+ * Derive BIP32 public key (xpub) from mnemonic phrase
+ * @param mnemonic - The mnemonic phrase
+ * @returns The public key (xpub) in bech32 format
+ */
+export async function derivePublicKeyFromMnemonic(mnemonic: string): Promise<string> {
+  const rootKey: Bip32PrivateKey = resolvePrivateKey(mnemonic);
+  const accountIndex = 0;
+  const bip32Ed25519: Bip32Ed25519 = await SodiumBip32Ed25519.create();
+  const xpubHex: Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(
+    rootKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex
+    ]).hex()
+  );
+  let words: number[];
+  try {
+    words = bech32.toWords(Buffer.from(xpubHex, 'hex'));
+  } catch (e) {
+    words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
+  }
+  return bech32.encode('xpub', words, 120);
 }
