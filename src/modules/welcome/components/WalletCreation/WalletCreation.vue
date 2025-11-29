@@ -1,44 +1,3 @@
-<script setup lang="ts">
-import { ref, computed } from 'vue';
-import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
-import NetworkSelector from '@/options/modules/navigation/components/NetworkSelector.vue';
-import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
-import GButton from '@/shared/components/GButton/GButton.vue';
-
-const emits = defineEmits<{
-  (e: 'networkChanged', network: any): void;
-  (e: 'createOrImportSeedPhrase'): void;
-}>();
-
-const props = defineProps<{
-  selectedNetwork: any;
-  createOrImportSeedPhrase: any;
-}>();
-
-const isApex = ref(false);
-
-const onNetworkChanged = (network: any) => {
-    emits('networkChanged', network);
-};
-
-const enableCreateOrImportSeedPhrase = (): void => {
-    emits('createOrImportSeedPhrase');
-};
-
-const logo = computed(() => {
-  if (props.selectedNetwork && props.selectedNetwork.blockchain?.includes('Apex')) {
-    isApex.value = true;
-    return geroDashboardApex;
-  }
-  isApex.value = false;
-  return geroDashboard;
-});
-
-const gradientClass = computed(() =>
-  isApex.value ? 'apex-gradient-text' : 'gradient-text'
-);
-</script>
-
 <template>
   <div class="welcome-glass-panel">
     <div class="welcome-content">
@@ -84,7 +43,47 @@ const gradientClass = computed(() =>
     <div class="footer-left">&#169; 2025 {{ $t('welcome.adLabs') }}</div>
   </div>
 </template>
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
+import NetworkSelector from '@/options/modules/navigation/components/NetworkSelector.vue';
+import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import { NetworkInfo } from '@/utils/networks';
 
+const emits = defineEmits<{
+  (e: 'networkChanged', network: any): void;
+  (e: 'createOrImportSeedPhrase'): void;
+}>();
+
+const props = defineProps<{
+  selectedNetwork: NetworkInfo;
+  createOrImportSeedPhrase: any;
+}>();
+
+const isApex = ref(false);
+
+const onNetworkChanged = (network: any) => {
+    emits('networkChanged', network);
+};
+
+const enableCreateOrImportSeedPhrase = (): void => {
+    emits('createOrImportSeedPhrase');
+};
+
+const logo = computed(() => {
+  if (props.selectedNetwork && props.selectedNetwork.blockchain?.includes('Apex')) {
+    isApex.value = true;
+    return geroDashboardApex;
+  }
+  isApex.value = false;
+  return geroDashboard;
+});
+
+const gradientClass = computed(() =>
+  isApex.value ? 'apex-gradient-text' : 'gradient-text'
+);
+</script>
 <style scoped>
 .welcome-left-column {
   width: 38%;

@@ -8,6 +8,17 @@ const WalletType = {
   Google: 'Google',
 };
 
+type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
+
+export interface Wallet {
+  id: string;
+  name: string;
+  chain: string;
+  network: string;
+  icon?: string;
+  type?: WalletTypeValue;
+}
+
 export type NetworkScheme = {
   blockchain: string;
   network: string;

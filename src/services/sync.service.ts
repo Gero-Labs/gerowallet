@@ -51,7 +51,7 @@ export class SyncService {
         const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
         const from = latestTxBlockHeight + 1 || 0
         let address: string;
-        if (this.walletBg.isEnterpriseAddress()) {
+        if (this.walletBg.isEnterpriseAddress() || this.walletBg.type == 'Google') {
           address = this.walletBg.baseAddress;
         } else {
           address = this.walletBg.stakeAddress;
@@ -151,7 +151,7 @@ export class SyncService {
       const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
       const from = latestTxBlockHeight + 1 || 0;
       let address: string;
-      if (this.walletBg.isEnterpriseAddress()) {
+      if (this.walletBg.isEnterpriseAddress() || this.walletBg.type == 'Google') {
         address = this.walletBg.baseAddress;
       } else {
         address = this.walletBg.stakeAddress;

@@ -17,7 +17,7 @@
 </template>
 <script setup lang="ts">
 
-export interface GeroButtonProps{
+export interface GeroButtonProps {
   block?: boolean;
   outlined?: boolean;
   large?: boolean;
