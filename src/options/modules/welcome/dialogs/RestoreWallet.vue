@@ -372,15 +372,29 @@ const walletCreationStep2 = async () => {
   if (form2.value?.validate()) {
     creatingWalletLoader.value = true;
     try {
-      const wallet = await GeroStore.createNewWallet(
-        newWallet.value.name,
-        newWallet.value.icon,
-        Theme.GERO,
-        seedToStr.value,
-        newWallet.value.password,
-        props.network.blockchain,
-        props.network.network
-      );
+      // Check if wallet with same mnemonic already exists
+      const { derivePublicKeyFromMnemonic, getWalletByPublicKey } = await import('@/db/gero-db');
+      const publicKey = await derivePublicKeyFromMnemonic(seedToStr.value);
+      const existingWallet = await getWalletByPublicKey(publicKey);
+
+      let wallet;
+      if (existingWallet) {
+        // Wallet already exists - log into it instead of creating a new one
+        console.log(`Wallet with same mnemonic already exists (ID: ${existingWallet.id}, Name: "${existingWallet.name}"). Logging in instead of creating duplicate.`);
+        wallet = existingWallet;
+      } else {
+        // Wallet doesn't exist - create new one
+        wallet = await GeroStore.createNewWallet(
+          newWallet.value.name,
+          newWallet.value.icon,
+          Theme.GERO,
+          seedToStr.value,
+          newWallet.value.password,
+          props.network.blockchain,
+          props.network.network
+        );
+      }
+
       dialogLocal.value = false;
       const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,

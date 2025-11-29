@@ -358,3 +358,43 @@ export async function googleWalletExists(email: string): Promise<boolean> {
   const wallet = await getGoogleWalletWithEmail(email);
   return wallet !== null;
 }
+
+/**
+ * Get wallet by public key (xpub)
+ * @param publicKey - The public key (xpub) to search for
+ * @returns The wallet object if found, null otherwise
+ */
+export async function getWalletByPublicKey(publicKey: string) {
+  const db: Dexie = await getDb();
+  const wallets = await db['wallets'].where('publicKey').equals(publicKey).toArray();
+  if (wallets && wallets.length > 0) {
+    return wallets[0];
+  }
+  return null;
+}
+
+/**
+ * Derive public key from mnemonic phrase
+ * @param mnemonic - The mnemonic phrase
+ * @returns The public key (xpub) derived from the mnemonic
+ */
+export async function derivePublicKeyFromMnemonic(mnemonic: string): Promise<string> {
+  const rootKey: Bip32PrivateKey = resolvePrivateKey(mnemonic);
+  const accountIndex = 0;
+  const bip32Ed25519: Bip32Ed25519 = await SodiumBip32Ed25519.create();
+  const xpubHex: Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(
+    rootKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex
+    ]).hex()
+  );
+  let words: number[];
+  try {
+    words = bech32.toWords(Buffer.from(xpubHex, 'hex'));
+  } catch (e) {
+    words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
+  }
+  const publicKey = bech32.encode('xpub', words, 120);
+  return publicKey;
+}

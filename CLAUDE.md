@@ -145,16 +145,16 @@ const store = Vue.observable({
 The application uses a two-tier database system:
 
 1. **Application-Level Database** (`src/db/gero-db.ts`)
-   - **Purpose**: Global application data (wallets list, providers, global config)
-   - **Database Name**: `GeroWalletDatabase` (single instance)
-   - **Tables**: `wallets`, `config`, `provider`
-   - **Access**: Use `getDb()` and helper functions (`getAllWallets()`, `createNewWallet()`, etc.)
+  - **Purpose**: Global application data (wallets list, providers, global config)
+  - **Database Name**: `GeroWalletDatabase` (single instance)
+  - **Tables**: `wallets`, `config`, `provider`
+  - **Access**: Use `getDb()` and helper functions (`getAllWallets()`, `createNewWallet()`, etc.)
 
 2. **Wallet-Specific Databases** (`src/db/wallet-db.ts`)
-   - **Purpose**: Individual wallet data (transactions, addresses, contacts, etc.)
-   - **Database Name**: `wallet-{walletId}` (one per wallet)
-   - **Tables**: `config`, `sync`, `account`, `addresses`, `contacts`, `rewards`, `transactions`, `connected_dapps`, `multisig`
-   - **Access**: Use `getDb(walletId)` and helper functions
+  - **Purpose**: Individual wallet data (transactions, addresses, contacts, etc.)
+  - **Database Name**: `wallet-{walletId}` (one per wallet)
+  - **Tables**: `config`, `sync`, `account`, `addresses`, `contacts`, `rewards`, `transactions`, `connected_dapps`, `multisig`
+  - **Access**: Use `getDb(walletId)` and helper functions
 
 **Database Versioning Pattern:**
 ```typescript
@@ -239,14 +239,14 @@ public setAuthParams(chain: string, network: string, address: string): void {
 The application uses a dual messaging system for cross-context communication:
 
 1. **Browser Context** (`src/services/storeMessaging.service.ts`)
-   - Subscribes to store updates from background
-   - Uses `chrome.runtime.connect` for WebSocket-like connection
-   - Non-blocking initialization to prevent login freezing
+  - Subscribes to store updates from background
+  - Uses `chrome.runtime.connect` for WebSocket-like connection
+  - Non-blocking initialization to prevent login freezing
 
 2. **Background Context** (`src/chrome/storeMessagingBg.ts`)
-   - Broadcasts store updates to all connected browser contexts
-   - Port-based broadcasting to multiple windows/tabs
-   - Serializes complex data types (BigInt, Map, Set)
+  - Broadcasts store updates to all connected browser contexts
+  - Port-based broadcasting to multiple windows/tabs
+  - Serializes complex data types (BigInt, Map, Set)
 
 **Critical Pattern - Race Condition Prevention:**
 ```typescript
@@ -275,22 +275,22 @@ const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
 Recent optimizations reduced wallet login time from **~11 seconds to <200ms**:
 
 1. **API Provider Optimization** (`src/api/api.ts:165`)
-   - Changed `getTip()` from KOIOS to BLOCKFROST provider (saved ~400ms)
+  - Changed `getTip()` from KOIOS to BLOCKFROST provider (saved ~400ms)
 
 2. **Non-Critical Data Deferral** (`src/services/walletManager.service.ts:404-412`)
-   - DexHunter tokens/blacklists load in background (`setTimeout`, saved ~26ms)
-   - BringCache loads in background (saved ~349ms)
+  - DexHunter tokens/blacklists load in background (`setTimeout`, saved ~26ms)
+  - BringCache loads in background (saved ~349ms)
 
 3. **Ably Non-Blocking Connection** (`src/services/walletManager.service.ts:299-391`)
-   - Ably connection happens fully in background (saved **~10,000ms**)
-   - No longer blocks `Promise.all(promises)` in wallet initialization
+  - Ably connection happens fully in background (saved **~10,000ms**)
+  - No longer blocks `Promise.all(promises)` in wallet initialization
 
 4. **Chart Data Deferral** (`src/modules/navigation/components/Sparkline.vue:59-64`)
-   - Kraken chart data loads after 500ms delay (saved ~181ms)
+  - Kraken chart data loads after 500ms delay (saved ~181ms)
 
 5. **Login Response Trust** (`src/options/modules/welcome/components/WalletsListLogin.vue:100-115`)
-   - Replaced 5-second polling loop with response-based flow (saved up to 5000ms)
-   - Trust background response + 100ms propagation delay
+  - Replaced 5-second polling loop with response-based flow (saved up to 5000ms)
+  - Trust background response + 100ms propagation delay
 
 **Performance Monitoring:**
 - Use `⏱️ PERF:` console logs to track timing
@@ -458,75 +458,20 @@ const encrypted = encryptWithPassword(password, rootKeyBytes);
 const decrypted = decryptWithPassword(password, encrypted);
 ```
 
-**Implementation Details** (`src/shared/utils/crypto.ts`):
-- **Algorithm**: ChaCha20-Poly1305 AEAD (Authenticated Encryption with Associated Data)
-- **Key Derivation**: PBKDF2 with HMAC-SHA512, 19,162 iterations (matches CSL/EMIP3)
-- **Salt**: 32 random bytes (generated per encryption)
-- **Nonce**: 12 random bytes (generated per encryption)
-- **Format**: `salt (32B) + nonce (12B) + tag (16B) + ciphertext` (**tag before ciphertext**, non-standard)
-- **Libraries**: `@noble/ciphers` v2.0.1, `@noble/hashes` v2.0.1
-- **Security**: Empty passwords rejected, authenticated encryption prevents tampering
-- **Compatibility**: 100% compatible with CSL's `encrypt_with_password`/`decrypt_with_password` (EMIP3)
-
-**Password Processing** (matches CSL exactly):
-1. Convert password to hex string: `Buffer.from(password, 'utf8').toString('hex')`
-2. Decode hex back to bytes: `Buffer.from(passwordHex, 'hex')` (preserves original bytes)
-3. Use decoded bytes in PBKDF2-HMAC-SHA512 with 19,162 iterations
-
-**Critical Implementation Details**:
-- **Tag Position**: CSL uses non-standard format with tag BEFORE ciphertext (not after)
-- **Password Encoding**: CSL does UTF-8 → hex → bytes roundtrip (not direct UTF-8 bytes)
-- **Backward Compatible**: Can decrypt wallets encrypted with legacy CSL without CSL dependency
-- **Forward Compatible**: New encryptions use same format as CSL (verified with CSL test vectors)
-
-**Note**: The `encryptPrivateKey()` function uses double encryption (ChaCha20-Poly1305 + AES) for additional security layers.
+**Implementation** (`src/shared/utils/crypto.ts`):
+- ChaCha20-Poly1305 AEAD with PBKDF2-HMAC-SHA512 (19,162 iterations)
+- Format: `salt (32B) + nonce (12B) + tag (16B) + ciphertext` (tag BEFORE ciphertext)
+- 100% compatible with CSL's `encrypt_with_password`/`decrypt_with_password` (EMIP3)
+- Libraries: `@noble/ciphers`, `@noble/hashes`
 
 ## External Integrations
-
-### Blockchain APIs
-- **Blockfrost**: Primary Cardano blockchain data provider (preferred for getTip)
-- **Koios**: Alternative Cardano blockchain data provider
-- **Backend API** (`localhost:8081` in dev): Proxy for blockchain data, caching, Ably tokens
-
-### Price Data
-- **Kraken WebSocket** (`src/services/krakenWebSocket.service.ts`): Real-time ADA/USD price
-- **CoinGecko** (`src/api/coinGecko.api.ts`): Historical price data, market info
-
-### DeFi & Trading
-- **DEX Hunter** (`src/api/dexhunter-api.ts`): DEX aggregation, token swaps
-- **TapTools** (`src/api/tap-tools-api.ts`): Token analytics, portfolio tracking
-- **Strike Finance** (`src/api/strike-finance.api.ts`): Perpetuals trading
-
-### Security & Analytics
-- **Cardano Shield** (`src/api/cardano-shield-api.ts`): Transaction risk assessment, malicious address detection
-- **Xerberus** (`src/api/xerberus.api.ts`): Token risk ratings
-
-### Fiat On/Off Ramps
-- **Moonpay** (`src/api/moonpay-api.ts`): Buy crypto with fiat
-- **Guardarian**: Alternative fiat gateway
-
-### Other Services
-- **Bring Cashback** (`@bringweb3/chrome-extension-kit`): Cashback rewards
-- **Ably** (`src/services/ably.service.ts`): Real-time blockchain updates
-- **ADA Handle** (`src/api/ada-handle.api.ts`): Cardano name service
-- **Charli3** (`src/api/charli3-api.ts`): Oracle price feeds
-
-### Hardware Wallets
-- **Ledger**: WebUSB/WebBLE communication (`@cardano-foundation/ledgerjs-hw-app-cardano`)
-- **Trezor**: Connect API integration (`@trezor/connect-webextension`)
-- **Keystone**: QR code communication (`@keystonehq/keystone-sdk`)
-
-## Testing & Quality
-
-### Current Setup
-- ESLint with TypeScript support (minimal rules for rapid development)
-- TypeScript compilation checking (`npm run typecheck`)
-- Manual testing workflows (no automated tests yet)
-
-### Building & Deployment
-- Multi-environment builds (dev/beta/prod with `.env` files)
-- Automated packaging for Chrome (.zip, .crx) and Firefox (.xpi)
-- Version management in `package.json` and `manifest.json`
+- **Blockchain**: Blockfrost (primary), Koios, Backend API
+- **Price Data**: Kraken WebSocket, CoinGecko
+- **DeFi**: DEX Hunter, TapTools, Strike Finance
+- **Security**: Cardano Shield, Xerberus
+- **Fiat**: Moonpay, Guardarian
+- **Other**: Ably, ADA Handle, Charli3, Bring Cashback
+- **Hardware Wallets**: Ledger, Trezor, Keystone
 
 ## Common Issues & Solutions
 
@@ -644,111 +589,14 @@ if (isCertificateOrWithdrawalOnly) {
   - Solution: Connect in background async IIFE, don't await
 
 ### 8. **"window/window" Module Resolution Error**
-**Critical Fix** (2025-01-19): Resolved "Failed to resolve module specifier 'window/window'" errors in production builds
+**Problem**: Conflicting `global` variable handling between Vite's `define` and `nodePolyfills` plugin caused spurious `import ... from "window/window"` statements.
 
-**Problem**:
-1. Runtime error in browser: `Uncaught TypeError: Failed to resolve module specifier "window/window"`
-2. Build output contained actual ES6 import statements: `import require$$0$8 from "window/window";`
-3. Root cause: Conflicting handling of the `global` variable between Vite's `define` and `nodePolyfills` plugin
-
-**Root Cause Analysis**:
-- `vite.config.mts` had `define: { 'global': 'window' }` for browser context
-- `vite.config.background.mts` had `define: { 'global': 'globalThis' }` for service worker
-- `nodePolyfills` plugin also had `globals: { global: true }`
-- These two mechanisms conflicted, causing Rollup to generate spurious `import ... from "window/window"` statements
-- In ES module builds (options page), these became actual import statements that browsers couldn't resolve
-
-**Solution** (applied to both configs):
-
-1. **Remove conflicting `define` entries** - Let `nodePolyfills` handle `global` exclusively:
-```typescript
-// vite.config.mts and vite.config.background.mts
-define: {
-  // Note: 'global' is handled by nodePolyfills plugin
-  // Don't define it here to avoid conflicts that create spurious window/window imports
-  '__DEV__': isDev,
-  '__NAME__': JSON.stringify(packageJson.name),
-  'APP_VERSION': JSON.stringify(packageJson.version),
-  'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
-},
-```
-
-2. **Remove `type: 'module'` from background service worker** (`scripts/manifest.ts`):
-```typescript
-background: {
-  service_worker: './background/index.js',
-  // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
-  // This was causing "Failed to resolve module specifier" errors
-},
-```
-
-3. **Add safety handlers** (optional, not strictly needed after removing `define`):
-```typescript
-// vite.config.mts - rollupOptions
-onwarn(warning, warn) {
-  if (warning.message && warning.message.includes('window/window')) return;
-  warn(warning);
-},
-external: (id) => {
-  if (id === 'window/window' || id.includes('window/window')) return true;
-  return false;
-},
-```
-
-**Results**:
-- ✅ No more `window/window` import errors in browser console
-- ✅ Build completes cleanly without warnings
-- ✅ No spurious import statements in built files
-- ✅ Extension loads and runs correctly in both background and options contexts
-
-**Key Insight**: When using `vite-plugin-node-polyfills` with `global: true`, **do not** also use `define: { 'global': ... }`. Let the plugin handle it exclusively to avoid conflicts.
+**Solution**: Don't use `define: { 'global': ... }` when using `vite-plugin-node-polyfills` with `globals: { global: true }`. Let the plugin handle it exclusively.
 
 ### 9. **pbkdf2 Build Issues (CommonJS/ESM Interop)**
-**Critical Fix** (2025-01-18): Resolved intermittent build warnings and runtime errors with pbkdf2 module
+**Problem**: Race condition where Rollup processed pbkdf2 before commonjs plugin transformed it.
 
-**Problem**:
-1. Intermittent build warnings: `"pbkdf2Sync" is not exported by "node_modules/pbkdf2/browser.js"`
-2. Runtime error: `ReferenceError: Cannot access 'pbkdf2Async$1' before initialization`
-3. Root cause: Race condition where Rollup processed pbkdf2 before commonjs plugin could transform it
-
-**Solution** (`vite.config.background.mts`):
-Virtual module plugin that intercepts pbkdf2 imports and provides proper ESM exports:
-
-```typescript
-{
-  name: 'pbkdf2-virtual-module',
-  enforce: 'pre',
-  resolveId(source) {
-    if (source === 'pbkdf2') return '\0virtual:pbkdf2';
-    return null;
-  },
-  load(id) {
-    if (id === '\0virtual:pbkdf2') {
-      return `
-import pbkdf2Browser from 'pbkdf2/browser.js';
-export const pbkdf2 = pbkdf2Browser.pbkdf2 || pbkdf2Browser;
-export const pbkdf2Sync = pbkdf2Browser.pbkdf2Sync;
-export default pbkdf2Browser;
-`;
-    }
-    return null;
-  }
-}
-```
-
-**Why This Works**:
-- Plugin runs first with `enforce: 'pre'`
-- Intercepts all `import 'pbkdf2'` statements
-- Creates virtual module (`\0virtual:pbkdf2`) that wraps `pbkdf2/browser.js`
-- Lets commonjs plugin transform the actual `pbkdf2/browser.js` file
-- Re-exports named exports (`pbkdf2`, `pbkdf2Sync`) from transformed module
-- Avoids circular dependencies and race conditions
-
-**Results**:
-- ✅ 100% build success rate (verified with 60+ consecutive builds)
-- ✅ No build warnings about missing exports
-- ✅ No runtime circular dependency errors
-- ✅ Extension loads and runs correctly
+**Solution**: Virtual module plugin in `vite.config.background.mts` that intercepts pbkdf2 imports with `enforce: 'pre'` and provides proper ESM exports.
 
 ## Best Practices
 
@@ -816,106 +664,13 @@ export default pbkdf2Browser;
 - **Why**: Without `attach`, the dropdown menu stays at a fixed position when the parent scrolls, causing misalignment
 - **Apply to**: All `v-select`, `v-autocomplete`, `v-combobox` components throughout the application
 
-## Troubleshooting
+## Quick Reference
 
-### Build Issues
-- Clear node_modules and reinstall (`rm -rf node_modules && npm install`)
-- Check for conflicting dependencies (`npm ls [package-name]`)
-- Verify Node.js version compatibility (use Node 18+)
-- Clear build artifacts (`npm run clear`)
-- Check for TypeScript errors (`npm run typecheck`)
+**Key Files**: `background.ts`, `walletBg.ts`, `walletManager.service.ts`, `walletStore.ts`, `geroStore.ts`
 
-### Extension Loading
-- Check manifest.json syntax (valid JSON, correct permissions)
-- Verify all referenced files exist in `extension/` folder
-- Check Chrome developer tools for errors (background page, options page)
-- Reload extension after changes (click "Reload" in chrome://extensions/)
-- Check for service worker errors in chrome://serviceworker-internals/
+**Wallet Types**: Normal, Ledger, Trezor, Keystone, Google (zkFold)
 
-### Database Issues
-- Check Dexie version compatibility (4.0.7)
-- Verify schema migrations (check console for upgrade logs)
-- Clear IndexedDB for testing (Application tab in DevTools)
-- Test across contexts (background vs options page access)
-
-### Cross-Context Communication
-- Verify port connections (`chrome.runtime.connect`)
-- Check message passing (`chrome.runtime.sendMessage`, `port.postMessage`)
-- Test store sync across contexts (background ↔ options ↔ popup)
-- Monitor Chrome storage updates (`chrome.storage.onChanged`)
-
----
-
-## Quick Start for New Developers
-
-1. **Clone and Install**:
-   ```bash
-   git clone [repo-url]
-   cd gerowallet
-   npm install
-   ```
-
-2. **Development**:
-   ```bash
-   npm run dev
-   ```
-
-3. **Load Extension**:
-   - Open Chrome extensions page (`chrome://extensions/`)
-   - Enable developer mode (toggle in top right)
-   - Click "Load unpacked"
-   - Select `extension/` folder from project root
-
-4. **Key Files to Understand**:
-   - `src/chrome/background.ts` - Main service worker (wallet lifecycle, message handling)
-   - `src/chrome/walletBg.ts` - Wallet operations (transactions, UTXOs, addresses)
-   - `src/services/walletManager.service.ts` - Wallet login/logout, initialization
-   - `src/stores/walletStore.ts` - Active wallet state (UTXOs, keys, addresses)
-   - `src/stores/geroStore.ts` - Global app state (wallets list, config)
-   - `src/modules/navigation/router.ts` - Vue Router configuration
-   - `src/modules/dashboard/` - Main dashboard (good example of module structure)
-
-5. **Understanding the Flow**:
-   - User logs in → `WalletsListLogin.vue` sends LOGIN message to background
-   - Background → `walletManager.login()` creates WalletBg instance
-   - WalletBg → Loads genesis, assets, epoch params, rewards, transactions
-   - Ably → Connects in background for real-time updates
-   - Store → Broadcasts wallet state to all browser contexts
-   - Dashboard → Displays wallet data, portfolio, quick actions
-
-**Remember**: This is a financial application handling real cryptocurrency. Always prioritize security and thoroughly test any changes.
-
-## Important Implementation Notes
-
-### Message Reconstruction Service
-- **Purpose**: Reassembles large messages split across multiple Ably messages
-- **Location**: `src/services/messageReconstruction.service.ts`
-- **Usage**: Automatic for SYNC messages exceeding Ably's message size limit
-- **Logging**: Minimal logging to reduce console spam (only errors and final reconstruction)
-
-### Portfolio Cache
-- **Purpose**: Cache portfolio data to reduce API calls and improve performance
-- **Location**: `src/db/portfolio-cache.ts`
-- **Tables**: `portfolio_cache` (in wallet-specific database)
-- **Invalidation**: Automatic on wallet sync, manual on user refresh
-
-### Debug Mode
-- **Global Flag**: `window.DEBUG_MODE` (set in browser console)
-- **Purpose**: Enable/disable `debugLog()` output
-- **Default**: `false` in production, `true` in development
-- **Usage**: `debugLog('message', data)` instead of `console.log()`
-
-### Wallet Types
-- **Normal**: Standard wallet with mnemonic phrase
-- **Ledger**: Hardware wallet (Ledger device)
-- **Trezor**: Hardware wallet (Trezor device)
-- **Keystone**: Hardware wallet (QR-based air-gapped)
-- **Google**: Cloud-based wallet (zkFold Smart Wallet integration)
-
-### Network Support
-- **Cardano Mainnet**: Full support (staking, governance, DeFi, etc.)
-- **Cardano Preprod**: Testnet support (same features as mainnet)
-- **Cardano Preview**: Testnet support (same features as mainnet)
+**Networks**: Mainnet, Preprod, Preview
 
 ---
 
@@ -963,4 +718,4 @@ export default pbkdf2Browser;
 
 ---
 
-**Last Updated**: 2025-01-19 (after loading state connection race condition fix)
+**Last Updated**: 2025-11-29

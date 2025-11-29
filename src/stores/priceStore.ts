@@ -47,8 +47,16 @@ class PriceService {
       // Register ticker callback
       this.registerTickerCallback();
 
-      // Connect to Kraken WebSocket
-      await krakenWebSocketService.connect();
+      // Add connection timeout (10 seconds)
+      const connectionTimeout = new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      });
+
+      // Race between connection and timeout
+      await Promise.race([
+        krakenWebSocketService.connect(),
+        connectionTimeout
+      ]);
 
       // Subscribe to ADA/USD ticker
       krakenWebSocketService.subscribeToAdaUsd();
