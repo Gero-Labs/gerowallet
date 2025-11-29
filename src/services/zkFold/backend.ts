@@ -69,20 +69,6 @@ export class Backend {
   }
 
   /**
-   * Return wallet's address by email. The wallet can be not initialised, i.e. this function will return the address for any email.
-   * @async
-   * @param {string} email
-   * @returns {Cardano.Address}
-   */
-  async walletAddress(email: string): Promise<Cardano.Address> {
-    const { data } = await axios.post(`${this.url}/v0/wallet/address`, {
-      'email': email
-    }, this.headers())
-
-    return Cardano.Address.fromBech32(data.address)
-  }
-
-  /**
    * Activate a Smart Wallet.
    * This will create a minting transaction which should be signed and submitted.
    * @async

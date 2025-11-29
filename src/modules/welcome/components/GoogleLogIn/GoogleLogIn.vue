@@ -105,11 +105,15 @@ const submitLogin = async (walletId: string): Promise<void> => {
   try {
     console.log('submitLogin', walletId);
     const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
-
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.LOGIN,
-      data: { wallet },
-    });
+    if (!wallet) {
+      newGoogleWalletDialog.value = true;
+    } else {
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
+      });
+      console.log('submitLogin response', response);
+    }
   } catch (error) {
     console.error(error);
   }

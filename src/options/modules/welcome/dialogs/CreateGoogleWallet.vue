@@ -174,6 +174,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { NetworkInfo } from '@/utils/networks';
 
 interface NewWallet {
   name: string;
@@ -184,7 +185,7 @@ interface NewWallet {
   termsChecked: boolean;
   recoverPasswordChecked: boolean;
   chain: string;
-  network: any;
+  network: string;
 }
 
 interface Props {
@@ -195,7 +196,7 @@ interface Props {
     idToken: string,
     accessToken: string,
   };
-  network: any;
+  network: NetworkInfo;
 }
 
 const props = defineProps<Props>();
@@ -218,8 +219,6 @@ const activationStep = ref<'proof' | 'blockchain' | 'complete'>('proof');
 const activationStatus = ref('');
 const activationError = ref('');
 const pollingAttempts = ref(0);
-const abortController = ref<AbortController | null>(null);
-const currentActivationId = ref<string | null>(null);
 
 let newWallet = reactive<NewWallet>({
   name: '',
@@ -229,19 +228,12 @@ let newWallet = reactive<NewWallet>({
   confirmPassword: '',
   termsChecked: false,
   recoverPasswordChecked: false,
-  chain: props.network?.chain,
+  chain: props.network?.blockchain,
   network: props.network?.network
 });
 
 watch(() => props.isOpen, async (newValue, _oldValue) => {
   if (!newValue) {
-    // If dialog is closed during activation, abort the process
-    if (activationInProgress.value && currentActivationId.value) {
-      console.log('🚫 Wallet activation aborted by user - marking as inactive');
-      // Mark activation as aborted in chrome storage
-      await chrome.storage.local.set({ [`activation_${currentActivationId.value}`]: { active: false } });
-      currentActivationId.value = null;
-    }
     resetDialog();
   }
 })
@@ -263,68 +255,89 @@ const walletCreation = async (): Promise<void> => {
   activationError.value = '';
 
   try {
-    // Step 1: Activate the wallet with ZK proof (this will create wallet in DB if successful)
-    console.log('Starting Google wallet creation and activation...');
+    // Extract user email from Google account
+    const userEmail = props.googleAccount['email'];
+    console.log('🔍 Checking for existing wallet for:', userEmail);
+
+    // Step 1: Check if wallet already exists (in case user clicked create button again)
+    const { getGoogleWalletWithEmail } = await import('@/db/gero-db');
+    const existingWallet = await getGoogleWalletWithEmail(userEmail);
+
+    if (existingWallet) {
+      console.log('✅ Wallet already exists, logging in...');
+      // Wallet already exists - just login
+      const response: any = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet: existingWallet },
+      });
+
+      if (response && !response.error) {
+        emit('close');
+        nextTick(() => {
+          resetDialog();
+          router.push('/').catch(err => {
+            if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+              console.error('Navigation error:', err);
+            }
+          });
+        });
+      }
+      return;
+    }
+
+    // Step 2: Wallet doesn't exist - create it (activation happens in background)
+    console.log('🔐 Creating Google wallet...', newWallet);
+    console.log('props', props)
     activationInProgress.value = true;
     activationStep.value = 'proof';
-    activationStatus.value = 'Generating cryptographic proof...';
+    activationStatus.value = 'Creating wallet...';
 
-    // Generate unique activation ID for abort tracking
-    const activationId = `google-wallet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    currentActivationId.value = activationId;
-
-    // Create AbortController
-    abortController.value = new AbortController();
-
-    // Store activation ID in chrome storage so background can check if aborted
-    await chrome.storage.local.set({ [`activation_${activationId}`]: { active: true } });
-
-    const activationResponse: any = await Messaging.sendToBackgroundFromOptions({
+    const creationResponse: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.ACTIVATE_GOOGLE_WALLET,
       data: {
-        activationId, // Pass activation ID for abort checking
-        // Pass wallet creation data (wallet will be created AFTER proof succeeds)
         walletData: {
           name: newWallet.name,
           icon: newWallet.icon,
           theme: newWallet.theme,
           password: newWallet.password,
-          chain: newWallet.chain,
-          network: newWallet.network,
+          chain: props.network.blockchain,
+          network: props.network.network,
           jwt: props.tokens.idToken,
         },
       },
     });
 
-    if (!activationResponse || !activationResponse.data || !activationResponse.data.success) {
-      throw new Error(activationResponse?.error || 'Wallet activation failed');
+    if (!creationResponse || !creationResponse.data || !creationResponse.data.success) {
+      throw new Error(creationResponse?.error || 'Wallet creation failed');
     }
 
-    // Step 2: Activation successful - wallet is now created in DB
-    activationStep.value = 'complete';
-    activationStatus.value = 'Wallet activated successfully!';
-    console.log('Wallet activated:', activationResponse.data);
-    const walletId = activationResponse.data.walletId;
+    console.log('✅ Wallet created:', creationResponse.data);
+
+    const walletId = creationResponse.data.walletId;
+    const activating = creationResponse.data.activating;
+
+    if (activating) {
+      console.log('ℹ️ Wallet activation is happening in the background');
+    }
 
     // Refresh wallets list from DB
     await GeroStore.refreshWallets();
 
-    // Wait a moment to show success message
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Step 3: Login to the wallet
+    // Step 3: Login to the wallet immediately
     const walletToLogin = GeroStore.state.wallets[walletId];
 
     if (!walletToLogin) {
       throw new Error('Wallet not found after creation');
     }
 
+    console.log('🔐 Logging into wallet...');
     const response: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet: walletToLogin },
     });
 
     if (response && !response.error) {
+      console.log('✅ Login successful');
       emit('close');
       nextTick(() => {
         resetDialog();
@@ -343,8 +356,8 @@ const walletCreation = async (): Promise<void> => {
       });
     }
   } catch (error: any) {
-    console.error('Error creating/activating wallet:', error);
-    activationError.value = error.message || 'An error occurred during wallet creation/activation';
+    console.error('❌ Error creating wallet:', error);
+    activationError.value = error.message || 'An error occurred during wallet creation';
     activationInProgress.value = false;
   } finally {
     creatingWalletLoader.value = false;
@@ -360,7 +373,7 @@ const resetDialog = (): void => {
     confirmPassword: '',
     termsChecked: false,
     recoverPasswordChecked: false,
-    chain: props.network?.chain,
+    chain: props.network?.blockchain,
     network: props.network?.network
   };
   valid.value = false;

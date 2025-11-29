@@ -343,3 +343,18 @@ export async function getGoogleWalletWithEmail(email: string) {
   }
   return null;
 }
+
+/**
+ * Get Google wallet by userId (same as email for Google wallets)
+ */
+export async function getGoogleWalletByUserId(userId: string) {
+  return await getGoogleWalletWithEmail(userId);
+}
+
+/**
+ * Check if a Google wallet exists for the given email/userId
+ */
+export async function googleWalletExists(email: string): Promise<boolean> {
+  const wallet = await getGoogleWalletWithEmail(email);
+  return wallet !== null;
+}

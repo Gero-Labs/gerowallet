@@ -49,6 +49,7 @@ import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
 import NetworkSelector from '@/options/modules/navigation/components/NetworkSelector.vue';
 import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import { NetworkInfo } from '@/utils/networks';
 
 const emits = defineEmits<{
   (e: 'networkChanged', network: any): void;
@@ -56,7 +57,7 @@ const emits = defineEmits<{
 }>();
 
 const props = defineProps<{
-  selectedNetwork: any;
+  selectedNetwork: NetworkInfo;
   createOrImportSeedPhrase: any;
 }>();
 

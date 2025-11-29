@@ -88,8 +88,25 @@ const decimals = (unit: string) => {
 };
 
 const getAssetName = (assetId: any) => {
-  const assetName = Cardano.AssetId.getAssetName(assetId);
-  return Cardano.AssetName.toUTF8(assetName, true);
+  try {
+    const assetName = Cardano.AssetId.getAssetName(assetId);
+    return Cardano.AssetName.toUTF8(assetName, true);
+  } catch (error) {
+    // Fallback: extract asset name hex from asset ID (after policy ID)
+    const assetNameHex = assetId.slice(56) || '';
+
+    // CIP-68 assets have a 4-byte label prefix (e.g., 000643b0 for reference NFTs, 000de140 for user tokens)
+    // Strip the first 8 hex characters (4 bytes) if it looks like a CIP-68 label
+    const isCip68 = assetNameHex.length > 8 && (
+      assetNameHex.startsWith('000643b0') || // (222) Reference NFT
+      assetNameHex.startsWith('000de140') || // (100) User token
+      assetNameHex.startsWith('001bc280') || // (500) RFT
+      assetNameHex.startsWith('0014df10')    // (333) FT with metadata
+    );
+
+    const nameHex = isCip68 ? assetNameHex.slice(8) : assetNameHex;
+    return Buffer.from(nameHex, 'hex').toString('utf-8');
+  }
 }
 
 const toggleAllAssets = () => {

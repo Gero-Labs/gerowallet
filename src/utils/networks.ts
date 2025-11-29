@@ -80,7 +80,7 @@ export default {
       transactionSupport:true,
       swapSupport: true,
       buySupport: true,
-      zkFoldSupport: true,
+      zkFoldSupport: false,
       perpetualsSupport: true,
       multiSigSupport: false,
       geroCardSupport: true,

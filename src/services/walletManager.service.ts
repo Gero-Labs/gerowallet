@@ -13,6 +13,8 @@ import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
+import { Cardano } from '@cardano-sdk/core';
+import zkFoldApi from '@/api/zkFoldApi';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -25,7 +27,8 @@ export class WalletManager {
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
-  public syncMutex = withTimeout(new Mutex(), 2 * 60_000);
+  // public syncMutex = withTimeout(new Mutex(), 2 * 60_000);
+
 
   private constructor() {}
 
@@ -136,8 +139,13 @@ export class WalletManager {
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
         TapToolsStore.clear();
-
-        const walletBg: WalletBg = new WalletBg(wallet);
+        let walletBg: WalletBg
+        if (wallet.type === WalletType.Google) {
+          const smartBaseAddress: Cardano.Address = await zkFoldApi.walletAddress(wallet.userId)
+          walletBg = new WalletBg(wallet, smartBaseAddress.toBech32())
+        } else {
+          walletBg = new WalletBg(wallet);
+        }
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -199,9 +207,9 @@ export class WalletManager {
 
     LoadingState.setText('Setting up wallet address...');
     const promises = [];
-
+    console.log('walletBg', walletBg)
     if (walletBg.type === WalletType.Google) {
-      const googleStart = performance.now();
+      // const googleStart = performance.now();
       // promises.push(
       //   zkFoldApi.walletAddress(walletBg.userId).then(res => {
       //     console.log(`⏱️ PERF: zkFoldApi.walletAddress took ${performance.now() - googleStart}ms`);
@@ -257,7 +265,7 @@ export class WalletManager {
     const chain: string = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network: string = Object.keys(Network).find(key => Network[key] === walletBg.network);
     let address: string;
-    if (walletBg.isEnterpriseAddress()) {
+    if (walletBg.isEnterpriseAddress() || walletBg.type === WalletType.Google) {
       address = walletBg.baseAddress;
     } else {
       address = walletBg.stakeAddress;
