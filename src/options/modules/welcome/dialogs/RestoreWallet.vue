@@ -236,10 +236,35 @@
         </v-stepper-items>
       </v-stepper>
     </v-card>
+
+    <!-- Existing Wallet Confirmation Dialog -->
+    <v-dialog v-model="showConfirmDialog" max-width="500" persistent>
+      <v-card class="rounded-xl">
+        <v-card-title class="text-h6">
+          {{ $t('welcome.walletAlreadyExists') }}
+        </v-card-title>
+        <v-card-text v-if="existingWalletInfo">
+          <p class="mb-2">
+            {{ $t('welcome.walletExistsMessage', { name: existingWalletInfo.name }) }}
+          </p>
+          <p class="text--secondary">
+            {{ $t('welcome.wouldYouLikeToLogin') }}
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="handleCancelLogin">
+            {{ $t('common.cancel') }}
+          </v-btn>
+          <v-btn color="primary" @click="handleConfirmLogin" :loading="creatingWalletLoader">
+            {{ $t('wallet.login') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-dialog>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onUnmounted, getCurrentInstance } from 'vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
@@ -249,6 +274,7 @@ import assets from '@/utils/assets';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import GeroStore from '@/stores/geroStore';
+import { debugLog } from '@/utils/debug';
 
 // Props
 interface Props {
@@ -289,6 +315,8 @@ const creatingWalletLoader = ref<boolean>(false);
 const seedPhraseLength = ref<string>('24');
 const emptySeedPhrase: string[] = Array(Number(seedPhraseLength.value)).fill('');
 const recoverySeedPhrase = ref<string[]>(emptySeedPhrase);
+const showConfirmDialog = ref<boolean>(false);
+const existingWalletInfo = ref<any>(null);
 
 // Computed properties
 const seedToStr = computed(() => {
@@ -372,6 +400,21 @@ const walletCreationStep2 = async () => {
   if (form2.value?.validate()) {
     creatingWalletLoader.value = true;
     try {
+      // Check if wallet with same mnemonic already exists
+      const { derivePublicKeyFromMnemonic, getWalletByPublicKey } = await import('@/db/gero-db');
+      const publicKey = await derivePublicKeyFromMnemonic(seedToStr.value);
+      const existingWallet = await getWalletByPublicKey(publicKey);
+
+      if (existingWallet) {
+        // Wallet already exists - show confirmation dialog
+        debugLog(`🔐 Wallet with same mnemonic already exists (ID: ${existingWallet.id}, Name: "${existingWallet.name}"). Showing confirmation dialog.`);
+        existingWalletInfo.value = existingWallet;
+        showConfirmDialog.value = true;
+        creatingWalletLoader.value = false;
+        return;
+      }
+
+      // Wallet doesn't exist - create new one
       const wallet = await GeroStore.createNewWallet(
         newWallet.value.name,
         newWallet.value.icon,
@@ -381,34 +424,58 @@ const walletCreationStep2 = async () => {
         props.network.blockchain,
         props.network.network
       );
-      dialogLocal.value = false;
-      const response = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.LOGIN,
-        data: { wallet },
-      });
 
-      if (response && !response.error) {
-        vmProxy.$nextTick(() => {
-          router.push('/').catch(err => {
-            // Suppress redirect errors (expected when already on target route)
-            if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-              console.error('Navigation error:', err);
-            }
-          });
-        });
-      } else if (response?.error) {
-        console.warn('Login response error:', response.error);
-        // Still navigate even if there's a connection error, as the wallet might have been created
-        vmProxy.$nextTick(() => {
-          router.push('/').catch(() => {});
-        });
-      }
+      await performLogin(wallet);
     } catch (error) {
       console.error('Error creating wallet:', error);
-    } finally {
       creatingWalletLoader.value = false;
     }
   }
+};
+
+const performLogin = async (wallet: any) => {
+  try {
+    dialogLocal.value = false;
+    showConfirmDialog.value = false;
+
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    });
+
+    if (response && !response.error) {
+      vmProxy.$nextTick(() => {
+        router.push('/').catch(err => {
+          // Suppress redirect errors (expected when already on target route)
+          if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+            console.error('Navigation error:', err);
+          }
+        });
+      });
+    } else if (response?.error) {
+      console.warn('Login response error:', response.error);
+      // Still navigate even if there's a connection error, as the wallet might have been created
+      vmProxy.$nextTick(() => {
+        router.push('/').catch(() => {});
+      });
+    }
+  } catch (error) {
+    console.error('Error during login:', error);
+  } finally {
+    creatingWalletLoader.value = false;
+  }
+};
+
+const handleConfirmLogin = async () => {
+  if (existingWalletInfo.value) {
+    creatingWalletLoader.value = true;
+    await performLogin(existingWalletInfo.value);
+  }
+};
+
+const handleCancelLogin = () => {
+  showConfirmDialog.value = false;
+  existingWalletInfo.value = null;
 };
 
 const resetDialog = () => {
