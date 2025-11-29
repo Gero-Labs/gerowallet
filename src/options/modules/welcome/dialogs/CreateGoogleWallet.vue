@@ -30,8 +30,8 @@
             </v-list-item-avatar>
           </v-list-item>
           <v-divider class="mb-2"></v-divider>
-          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.</h3>
+          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpWalletName') }}</h2>
+          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.chooseNameToIdentify') }}</h3>
           <v-text-field
             filled
             dense
@@ -43,8 +43,8 @@
             required
             :disabled="activationInProgress"
           ></v-text-field>
-          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
-          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet and make transactions.</h3>
+          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpSpendingPassword') }}</h2>
+          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.youllUseThisToLogin') }}</h3>
           <v-text-field
             filled
             dense
@@ -89,7 +89,7 @@
             color="primary"
             v-model="newWallet.termsChecked"
             :rules="[rules.required()]"
-            label="I understand that Gero cannot recover this password for me."
+            :label="$t('welcome.understandPasswordRecovery')"
             required
             hide-details
             :disabled="activationInProgress"
@@ -101,7 +101,7 @@
             color="primary"
             v-model="newWallet.recoverPasswordChecked"
             :rules="[rules.required()]"
-            label="I have read and agree to the Terms of Service."
+            :label="`${$t('welcome.iHaveReadTerms')} ${$t('welcome.termsOfService')}.`"
             required
             hide-details
             :disabled="activationInProgress"
@@ -128,15 +128,15 @@
                 <v-col cols="12" class="text-center">
                   <h2 class="white--text mb-2">{{ activationStatus }}</h2>
                   <p class="text--secondary" v-if="activationStep === 'proof'">
-                    Generating zero-knowledge proof...<br>This may take 5-10 minutes.
+                    {{ $t('welcome.generatingProof') }}<br>{{ $t('welcome.proofMayTakeTime') }}
                     <br />
-                    <small v-if="pollingAttempts > 0">Checked {{ pollingAttempts }} time{{ pollingAttempts === 1 ? '' : 's' }}</small>
+                    <small v-if="pollingAttempts > 0">{{ $tc('welcome.checkedTimes', pollingAttempts, { count: pollingAttempts }) }}</small>
                   </p>
                   <p class="text--secondary" v-if="activationStep === 'blockchain'">
-                    Submitting activation transaction to Cardano blockchain...
+                    {{ $t('welcome.submittingActivation') }}
                   </p>
                   <p class="text--secondary" v-if="activationStep === 'complete'">
-                    Your wallet is now ready to use!
+                    {{ $t('welcome.walletReadyToUse') }}
                   </p>
                 </v-col>
               </v-row>

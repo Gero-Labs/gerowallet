@@ -58,23 +58,41 @@ if (context === 'browser') {
   });
 }
 
+// Debounced storage write to reduce I/O operations
+let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
+
 /**
  * Broadcast updates from background context
+ * Per CLAUDE.md: Use debounced writes for non-critical updates (300ms delay),
+ * immediate writes only for critical state changes (activation, clear)
  */
-function broadcastFromBackground(updates: Partial<ZkFoldStore>, immediate = true) {
+function broadcastFromBackground(updates: Partial<ZkFoldStore>, immediate = false) {
   if (context === 'background') {
     // Apply updates to local store
     Object.assign(zkFoldStore, updates);
 
-    // Broadcast to all connected browser contexts
+    // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
 
-    // Persist to storage (immediately for critical data)
+    // For critical state changes (activation, clear), write immediately to storage
+    // so browser context gets correct state on hydration
     if (immediate) {
-      chrome.storage.local.set({
-        [STORE_NAME]: zkFoldStore
-      });
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+        storageWriteTimeout = null;
+      }
+      chrome.storage.local.set({ [STORE_NAME]: zkFoldStore });
       debugLog('💾 zkFold store persisted immediately');
+    } else {
+      // Debounced storage write for other updates to reduce I/O
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+      }
+
+      storageWriteTimeout = setTimeout(() => {
+        chrome.storage.local.set({ [STORE_NAME]: zkFoldStore });
+        debugLog('💾 zkFold store persisted (debounced)');
+      }, 300); // 300ms debounce
     }
   }
 }
@@ -137,7 +155,7 @@ const ZkFoldStoreModule = {
       zkFoldStore.wallets[email].walletId = walletId;
     }
 
-    broadcastFromBackground({ wallets: zkFoldStore.wallets });
+    broadcastFromBackground({ wallets: zkFoldStore.wallets }, true); // Critical: activation state
     debugLog('✅ Marked wallet as activated in store:', email);
   },
 
@@ -197,7 +215,7 @@ const ZkFoldStoreModule = {
    */
   async clear() {
     zkFoldStore.wallets = {};
-    broadcastFromBackground({ wallets: {} });
+    broadcastFromBackground({ wallets: {} }, true); // Critical: clear operation
 
     if (chrome?.storage?.local) {
       try {

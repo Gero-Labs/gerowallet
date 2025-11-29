@@ -1740,4 +1740,10 @@ export default {
   'welcome.welcomeTo': 'Welcome to',
   'welcome.youllUseThisToLogin': 'You\'ll use this to log into your wallet and make transactions.',
   'welcome.yourNew': 'Your New',
+  // Google Wallet activation messages
+  'welcome.generatingProof': 'Generating zero-knowledge proof...',
+  'welcome.proofMayTakeTime': 'This may take 5-10 minutes.',
+  'welcome.checkedTimes': 'Checked {count} time | Checked {count} times',
+  'welcome.submittingActivation': 'Submitting activation transaction to Cardano blockchain...',
+  'welcome.walletReadyToUse': 'Your wallet is now ready to use!',
 }
