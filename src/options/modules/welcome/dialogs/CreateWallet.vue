@@ -211,8 +211,9 @@ const walletCreationStep = async () => {
       props.network.blockchain,
       props.network.network
     );
+    console.log('walletCreationStep', wallet);
     dialogLocal.value = false;
-    const response = await Messaging.sendToBackgroundFromOptions({
+    const response: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });

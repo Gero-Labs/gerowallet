@@ -187,6 +187,37 @@ export function clearDbCache(id: number) {
   }
 }
 
+export async function removePendingTransaction(walletId: number, txId: string) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const txTable = db.table('transactions');
+
+    if (!txTable) throw new Error('No Transactions Table.');
+
+    // Get the transaction to verify it's pending
+    const transaction = await txTable.get(txId);
+
+    if (!transaction) {
+      console.warn(`Transaction ${txId} not found`);
+      return false;
+    }
+
+    if (!transaction.pending) {
+      console.warn(`Transaction ${txId} is not pending, cannot remove`);
+      return false;
+    }
+
+    // Remove the transaction
+    await txTable.delete(txId);
+    console.log(`Pending transaction ${txId} removed successfully`);
+
+    return true;
+  } catch (err) {
+    console.error(`Failed to remove pending transaction: ${err}`);
+    throw err;
+  }
+}
+
 // Note: Portfolio data is now stored directly in wallet databases
 // Old portfolio_* databases will be migrated during upgrade
 

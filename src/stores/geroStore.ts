@@ -147,6 +147,16 @@ export default {
   },
 
   /**
+   * Refresh wallets from database
+   * Used after operations that modify wallets outside the store (e.g., Google wallet activation)
+   */
+  async refreshWallets() {
+    const updatedWallets = await getAllWallets();
+    geroStore.wallets = updatedWallets;
+    broadcastFromBackground({ wallets: updatedWallets });
+  },
+
+  /**
    * Set wallet name
    * @param walletId - The wallet ID
    * @param name - The new wallet name

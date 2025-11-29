@@ -22,9 +22,8 @@
   </v-menu>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, onMounted } from 'vue';
-import networks from "@/utils/networks";
+import networks, { NetworkInfo } from '@/utils/networks';
 
 interface Props {
   modelValue?: any;
@@ -34,7 +33,7 @@ const props = defineProps<Props>();
 
 const emit = defineEmits(['update:modelValue', 'network-changed']);
 
-const selectedNetwork = ref<any>(undefined);
+const selectedNetwork = ref<NetworkInfo>(undefined);
 
 watch(selectedNetwork, (val) => {
   if (val) {
