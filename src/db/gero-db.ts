@@ -2,12 +2,12 @@ import Dexie from 'dexie';
 import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import * as bip39 from 'bip39';
 import { encrypt } from '@/shared/utils/crypto';
-import * as Crypto from '@cardano-sdk/crypto';
 import { HARDENED, CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
 import { encryptPrivateKey } from '@/shared/utils/crypto';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
+import { Bip32PrivateKey, Bip32Ed25519, SodiumBip32Ed25519, Bip32PublicKeyHex } from '@cardano-sdk/crypto';
 
 let cachedDb: Dexie | null = null;
 
@@ -71,7 +71,7 @@ export async function getDb() {
   });
 
   db.version(geroDBVersion).stores(geroDBSchema)
-  
+
   await db.open().catch(err => {
     console.error(`Failed to open database: ${err.stack || err}`);
   });
@@ -158,11 +158,11 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
     mnemonic = bip39.generateMnemonic(256);
   }
   const encryptedMnemonic: string = encrypt(mnemonic, password);
-  const rootKey: Crypto.Bip32PrivateKey = resolvePrivateKey(mnemonic);
+  const rootKey: Bip32PrivateKey = resolvePrivateKey(mnemonic);
   const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
   const accountIndex = 0;
-  const bip32Ed25519: Crypto.Bip32Ed25519 = await Crypto.SodiumBip32Ed25519.create();
-  const xpubHex: Crypto.Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
+  const bip32Ed25519: Bip32Ed25519 = await SodiumBip32Ed25519.create();
+  const xpubHex: Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
   let words: number[]
   try {
     words = bech32.toWords(Buffer.from(xpubHex, 'hex'))
@@ -212,7 +212,15 @@ export async function  createNewHardwareWallet(wallet: any) {
   return walletId;
 }
 
-export async function createNewGoogleWallet(name: string, icon: string, theme: string, password: string, chain: string, network: string, jwt: string) {
+export async function createNewGoogleWallet(
+  name: string,
+  icon: string,
+  theme: string,
+  password: string,
+  chain: string,
+  network: string,
+  jwt: string
+) {
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
   if (order == null) {
@@ -220,23 +228,52 @@ export async function createNewGoogleWallet(name: string, icon: string, theme: s
   } else {
     order++;
   }
+
+  // Extract user ID from JWT
   const parts = jwt.split(".");
   const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
   const userId = payload.email;
+
+  // Generate random 96 bytes for BIP32 Ed25519 key
+  // BIP32 private key = 64 bytes (private key) + 32 bytes (chain code)
+  const randomBytes = new Uint8Array(96);
+  crypto.getRandomValues(randomBytes);
+  const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(Buffer.from(randomBytes));
+
+  // Encrypt the root key with password (more secure than zkFold's plaintext storage)
+  const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
+
+  // Get the public key for account #0
+  const accountIndex = 0;
+  const bip32Ed25519: Bip32Ed25519 = await SodiumBip32Ed25519.create();
+  const xpubHex: Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(
+    rootKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex
+    ]).hex()
+  );
+
   const walletId = await db['wallets'].add({
     name,
     icon,
     type: WalletType.Google,
     theme,
     order,
-    encryptedPrivateKey: null,
-    publicKey: null,
+    encryptedPrivateKey,
+    publicKey: xpubHex,
     passwordLastUpdate: new Date(),
     chain,
     network,
     userId,
+    jwt, // Store JWT for proof generation later
   });
-  await createNewWalletDb(walletId, false);
+
+  // NOTE: We DON'T create the wallet database yet!
+  // The wallet DB will be created AFTER successful proof generation
+  // This prevents creating orphaned databases if proof generation fails
+  // await createNewWalletDb(walletId, false);
+
   return walletId;
 }
 
@@ -296,4 +333,28 @@ export async function updatePrivateKeyAndMnemonic(
   }
 
   await db['wallets'].update(walletId, updateData);
+}
+
+export async function getGoogleWalletWithEmail(email: string) {
+  const db: Dexie = await getDb();
+  const wallets = await db['wallets'].where('userId').equals(email).toArray();
+  if (wallets && wallets.length > 0) {
+    return wallets[0];
+  }
+  return null;
+}
+
+/**
+ * Get Google wallet by userId (same as email for Google wallets)
+ */
+export async function getGoogleWalletByUserId(userId: string) {
+  return await getGoogleWalletWithEmail(userId);
+}
+
+/**
+ * Check if a Google wallet exists for the given email/userId
+ */
+export async function googleWalletExists(email: string): Promise<boolean> {
+  const wallet = await getGoogleWalletWithEmail(email);
+  return wallet !== null;
 }

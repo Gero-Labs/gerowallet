@@ -1,5 +1,5 @@
 /**
- * EN translations
+ * VN translations
  */
 export default {
   'assets.allAssets': 'All Assets',
@@ -562,6 +562,7 @@ export default {
   'dashboard.claim': 'Claim',
   'dashboard.claimYourTokens': 'Claim your {assetType} tokens from an airdrop or faucet',
   'dashboard.comingSoon': 'Coming Soon',
+  'dashboard.orderNow': 'Đặt hàng ngay',
   'dashboard.compareRatesTip': 'Compare rates across multiple DEXs',
   'dashboard.confirmNewPassword': 'Confirm New Password',
   'dashboard.considerSupportingUs': 'Consider supporting us by delegating to the Gero Pool (we\'ve built the best tools we could for the community)',
@@ -1736,5 +1737,5 @@ export default {
   'welcome.welcomeMessage': 'Welcome!',
   'welcome.welcomeTo': 'Welcome to',
   'welcome.youllUseThisToLogin': 'You\'ll use this to log into your wallet and make transactions.',
-  'welcome.yourNew': 'Your New'
+  'welcome.yourNew': 'Your New',
 }

@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
-import { WalletType } from '@/models/types';
+import { Wallet, WalletType } from '@/models/types';
 import { computed, ref, toRefs, getCurrentInstance } from 'vue';
 import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
@@ -66,17 +66,6 @@ const { t } = useTranslation();
 const selectedWallet = ref<string | null>(null);
 
 const { loggedWallet } = toRefs(walletStore);
-
-type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
-
-interface Wallet {
-  id: string;
-  name: string;
-  chain: string;
-  network: string;
-  icon?: string;
-  type?: WalletTypeValue;
-}
 
 const { wallets } = toRefs(geroStore);
 

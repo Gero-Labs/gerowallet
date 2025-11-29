@@ -542,7 +542,7 @@
         <v-expansion-panel-content class="content-container">
           <v-card
             flat
-            v-for="(redeemer, index) in getRedeemers(transactionInfo.witness.redeemers)"
+            v-for="(redeemer, index) in transactionInfo.witness.redeemers"
             :key="`contracts_${index}`"
             class="mb-2 transparent"
           >
@@ -550,64 +550,64 @@
             <v-card-text>
               <v-simple-table dense style="background-color: transparent">
                 <tbody>
-                  <tr>
-                    <td class="text-left grey--text">Hash</td>
+                  <tr v-if="getRedeemer(redeemer)?.hash()">
+                    <td class="text-left grey--text" style="width: 112px; min-width: 112px;">Hash</td>
                     <td class="text-left">
-                      {{ filters.truncate(redeemer.hash()) }}
-                      <CopyButton v-if="redeemer.hash()" x-small class="ml-1" :value="redeemer.hash()"></CopyButton>
+                      {{ filters.truncate(getRedeemer(redeemer)?.hash()) }}
+                      <CopyButton v-if="getRedeemer(redeemer)?.hash()" x-small class="ml-1" :value="getRedeemer(redeemer)?.hash()"></CopyButton>
                     </td>
                   </tr>
                   <tr>
-                    <td class="text-left grey--text">Purpose</td>
+                    <td class="text-left grey--text" style="width: 112px;">Purpose</td>
                     <td class="text-left">
-                      {{ redeemer.toCore().purpose.toUpperCase() }}
+                      {{ redeemer.purpose.toUpperCase() }}
                     </td>
                   </tr>
                   <tr>
-                    <td class="text-left grey--text">Memory</td>
+                    <td class="text-left grey--text" style="width: 112px;">Memory</td>
                     <td class="text-left">
-                      {{ filters.humanFileSize(redeemer.exUnits().mem().toString()) }}
+                      {{ filters.humanFileSize(redeemer.executionUnits.memory.toString()) }}
                     </td>
                   </tr>
                   <tr>
-                    <td class="text-left grey--text">Steps</td>
+                    <td class="text-left grey--text" style="width: 112px;">Steps</td>
                     <td class="text-left">
-                      {{ Number(redeemer.exUnits().steps().toString()).toLocaleString('en-US') }}
+                      {{ Number(redeemer.executionUnits.steps.toString()).toLocaleString('en-US') }}
                     </td>
                   </tr>
-                  <tr>
-                    <td class="text-left grey--text">Data CBOR</td>
+                  <tr v-if="redeemer.data?.cbor">
+                    <td class="text-left grey--text" style="width: 112px;">Data CBOR</td>
                     <td class="text-left">
-                      {{ filters.truncate(redeemer.data()?.toCbor()) }}
+                      {{ filters.truncate(redeemer.data?.cbor?.toString()) }}
                       <CopyButton
-                        v-if="redeemer.data()?.toCbor()"
+                        v-if="redeemer.data?.cbor"
                         x-small
                         class="ml-1"
-                        :value="redeemer.data()?.toCbor()"
+                        :value="redeemer.data?.cbor.toString()"
                       />
                     </td>
                   </tr>
-                  <tr>
-                    <td class="text-left grey--text">Data Hash</td>
+                  <tr v-if="getRedeemer(redeemer)?.data()?.hash()">
+                    <td class="text-left grey--text" style="width: 112px;">Data Hash</td>
                     <td class="text-left">
-                      {{ filters.truncate(redeemer.data().hash()) }}
+                      {{ filters.truncate(getRedeemer(redeemer)?.data()?.hash()) }}
                       <CopyButton
-                        v-if="redeemer.data().hash()"
+                        v-if="getRedeemer(redeemer)?.data().hash()"
                         x-small
                         class="ml-1"
-                        :value="redeemer.data().hash()"
+                        :value="getRedeemer(redeemer)?.data()?.hash()"
                       ></CopyButton>
                     </td>
                   </tr>
-                  <tr>
-                    <td class="text-left grey--text">Data JSON</td>
+                  <tr v-if="redeemer.data">
+                    <td class="text-left grey--text" style="width: 112px;">Data JSON</td>
                     <td class="text-left">
                       <v-card outlined class="my-1">
-                        <v-card-title class="pb-0" style="position: absolute; right: 0">
-                          <CopyButton :value="getRedeemerDataJson(redeemer.data().toCore())" small></CopyButton>
+                        <v-card-title class="pa-1" style="position: absolute; right: 0">
+                          <CopyButton :value="getRedeemerDataJson(redeemer.data)" small></CopyButton>
                         </v-card-title>
                         <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
-                          <pre>{{ getRedeemerDataJson(redeemer.data().toCore()) }}</pre>
+                          <pre>{{ getRedeemerDataJson(redeemer.data) }}</pre>
                         </v-card-text>
                       </v-card>
                     </td>
@@ -627,7 +627,7 @@
               <v-simple-table dense style="background-color: transparent">
                 <tbody>
                 <tr>
-                  <td class="text-left grey--text">Type</td>
+                  <td class="text-left grey--text" style="width: 112px; min-width: 112px;">Type</td>
                   <td class="text-left">
                     {{ scriptType(script.language()) }}
                   </td>
@@ -807,10 +807,12 @@ function findLovelace(io: { unit: string; quantity: number }[]) {
   return tok ? tok.quantity : 0;
 }
 
-const getRedeemers = (redeemers: Cardano.Redeemer[]) => {
-  return redeemers.map(redeemer => {
+const getRedeemer = (redeemer: Cardano.Redeemer): Serialization.Redeemer => {
+  try {
     return Serialization.Redeemer.fromCore(redeemer);
-  });
+  } catch (e) {
+    return null
+  }
 };
 
 const getRedeemerDataJson = (redeemerData: Cardano.PlutusData) => {

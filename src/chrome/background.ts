@@ -1083,6 +1083,222 @@ app.addToOptions(MessageTypes.SIGN_WITH_GOOGLE, async (request, sendResponse) =>
   }
 });
 
+app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendResponse) => {
+  try {
+    console.log('🔐 Processing Google wallet creation...');
+    const { walletData } = request.data;
+
+    if (!walletData) {
+      throw new Error('Wallet data is required');
+    }
+
+    const { name, icon, theme, password, chain, network } = walletData;
+    let jwt = walletData.jwt
+    if (!jwt) {
+      throw new Error('JWT not found');
+    }
+
+    if (!password) {
+      throw new Error('Password is required');
+    }
+
+    // Extract user ID from JWT
+    const parts = jwt.split(".");
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const userId = payload.email;
+
+    console.log('🔍 Checking if wallet exists for:', userId);
+
+    // Import database helpers
+    const { getGoogleWalletWithEmail } = await import('../db/gero-db');
+    const { upsertZkFoldWallet, isWalletActivated: checkActivated } = await import('../db/zkfold-db');
+    const { default: ZkFoldStore } = await import('../stores/zkFoldStore');
+
+    // Check if wallet already exists in main database
+    const existingWallet = await getGoogleWalletWithEmail(userId);
+
+    if (existingWallet) {
+      console.log('✅ Wallet already exists with ID:', existingWallet.id);
+
+      // Check if already activated
+      const isActivated = await checkActivated(userId);
+
+      sendResponse({
+        id: request.id,
+        data: {
+          success: true,
+          walletId: existingWallet.id,
+          alreadyExists: true,
+          isActivated
+        },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return true;
+    }
+
+    // Wallet doesn't exist - create new wallet
+    console.log('🔐 Creating new Google wallet:', name);
+
+    // Import required utilities
+    const { Bip32PrivateKey, SodiumBip32Ed25519 } = await import('@cardano-sdk/crypto');
+    const { WalletTypePurpose, CoinTypes, HARDENED, WalletType } = await import('../models/types');
+    const { encryptPrivateKey } = await import('../shared/utils/crypto');
+    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkFold/google.api');
+    const { BigIntWrap } = await import('@/services/zkFold/types');
+    const { b64ToBn } = await import('@/services/zkFold/utils/json.utils');
+    const { Prover } = await import('@/services/zkFold/prover');
+    const { Backend } = await import('@/services/zkFold/backend');
+
+    // Generate random 96 bytes for BIP32 Ed25519 key
+    const randomBytes = new Uint8Array(96);
+    crypto.getRandomValues(randomBytes);
+    const rootKey = Bip32PrivateKey.fromBytes(Buffer.from(randomBytes));
+
+    // Encrypt the root key with password
+    const encryptedPrivateKey = encryptPrivateKey(rootKey, password);
+
+    // Get the public key for account #0
+    const accountIndex = 0;
+    const bip32Ed25519 = await SodiumBip32Ed25519.create();
+    const xpubHex = bip32Ed25519.getBip32PublicKey(
+      rootKey.derive([
+        WalletTypePurpose.CIP1852,
+        CoinTypes.CARDANO,
+        HARDENED + accountIndex
+      ]).hex()
+    );
+
+    // Derive payment key (m/1852'/1815'/0'/0/0)
+    const accountKey = rootKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex,
+    ]);
+    const paymentKey = accountKey.derive([0, 0]); //tokenSKey
+    const pubkeyHex = paymentKey.toPublic().toRawKey().hash().hex();
+    const keyId = getKeyId(jwt);
+    const matchingKey = await getMatchingKey(keyId);
+    if (!matchingKey) {
+      throw new Error(`Failed to find matching Google cert for key ${keyId}`);
+    }
+
+    const signature = getSignature(jwt);
+    const empi = {
+      piPubE: b64ToBn(matchingKey.e),
+      piPubN: b64ToBn(matchingKey.n),
+      piSignature: b64ToBn(signature),
+      piTokenName: new BigIntWrap("0x" + pubkeyHex)
+    };
+
+    const strippedJwt = stripSignature(jwt);
+    const prover = new Prover();
+
+    console.log('🔐 Requesting ZK proof...');
+    const proofId = await prover.requestProof(empi);
+    console.log('✅ Proof request submitted, ID:', proofId);
+
+    // Create wallet in main database
+    const { getDb, createNewWalletDb, getLatestWalletByOrder } = await import('../db/gero-db');
+    const db = await getDb();
+
+    let order = await getLatestWalletByOrder();
+    if (order == null) {
+      order = 1;
+    } else {
+      order++;
+    }
+
+    const walletId = await db['wallets'].add({
+      name,
+      icon,
+      type: WalletType.Google,
+      theme,
+      order,
+      encryptedPrivateKey,
+      publicKey: xpubHex,
+      passwordLastUpdate: new Date(),
+      chain,
+      network,
+      userId,
+      jwt,
+    });
+
+    console.log('✅ Wallet created in DB with ID:', walletId);
+
+    // Create wallet-specific database
+    await createNewWalletDb(walletId, false);
+    console.log('✅ Wallet database created');
+
+    // Store proofId in zkFold database and store
+    await upsertZkFoldWallet({
+      email: userId,
+      userId,
+      proofId,
+      isActivated: false,
+      walletId,
+      createdAt: new Date()
+    });
+    ZkFoldStore.setProofId(userId, proofId);
+    console.log('✅ ProofId stored in zkFold DB and store');
+
+    // Update geroStore
+    const { default: GeroStore } = await import('../stores/geroStore');
+    await GeroStore.refreshWallets();
+
+    // Send response immediately so wallet can be logged into
+    sendResponse({
+      id: request.id,
+      data: {
+        success: true,
+        walletId,
+        proofId,
+        activating: true // Indicates activation is happening in background
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+
+    // Continue activation in the background (non-blocking)
+    (async () => {
+      try {
+        console.log('🔐 Starting background activation for wallet:', walletId);
+        console.log('🔐 Waiting for proof completion (this may take several minutes)...');
+
+        const proof = await prover.prove(empi);
+        console.log('✅ Proof generated successfully for wallet:', walletId);
+
+        const backend = new Backend('https://wallet-api.zkfold.io', '123456');
+
+        console.log('🔐 Activating wallet on blockchain...');
+        const createWalletResponse = await backend.activateWallet(strippedJwt, paymentKey.toPublic().hash(), proof);
+        console.log('✅ Wallet activated successfully on blockchain!', createWalletResponse);
+
+        // Mark as activated in zkFold database and store
+        const { markWalletAsActivated } = await import('../db/zkfold-db');
+        await markWalletAsActivated(userId, walletId);
+        ZkFoldStore.markAsActivated(userId, walletId);
+
+        console.log('✅ Background activation completed for wallet:', walletId);
+      } catch (error) {
+        console.error('❌ Background activation failed for wallet:', walletId, error);
+        // Wallet is still usable, activation can be retried later
+      }
+    })();
+
+  } catch (err) {
+    console.error('❌ Wallet creation failed:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: (err instanceof Error ? err.message : String(err)) || 'Wallet creation failed',
+    });
+  }
+  return true; // Keep message channel open for async response
+});
+
 app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
   try {
     console.log('verify spending password', request);
@@ -1385,6 +1601,41 @@ app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
       sender: SENDER.extension,
       error: err,
     })
+  }
+});
+
+app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendResponse) => {
+  try {
+    const currentWallet = walletManager.getWallet();
+    if (currentWallet) {
+      const { txId } = request.data;
+      const { removePendingTransaction } = await import('@/db/wallet-db');
+
+      // Remove from database - the TransactionsLoader subscription will auto-update the UI
+      const success = await removePendingTransaction(currentWallet.id, txId);
+
+      sendResponse({
+        id: request.id,
+        data: { success },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (err) {
+    console.error('Error removing pending transaction:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(err) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
   }
 });
 
