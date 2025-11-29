@@ -1,6 +1,9 @@
 import Vue from 'vue';
 import krakenWebSocketService from '@/services/krakenWebSocket.service';
 import { debugLog } from '@/utils/debug';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 interface PriceData {
   lastPrice: number;
@@ -20,12 +23,34 @@ export interface PriceStore {
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
 }
 
+const STORE_NAME = 'priceStore';
+const context = getContextType();
+
 // Create observable price store
 export const priceStore = Vue.observable<PriceStore>({
   adaUsd: null,
   isConnected: false,
-  connectionStatus: 'connecting'
+  connectionStatus: 'disconnected'
 });
+
+/**
+ * Broadcast store updates from background to browser contexts
+ */
+function broadcastFromBackground(updates: Partial<PriceStore>) {
+  if (context === 'background') {
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
+    debugLog('📡 Broadcasting priceStore update:', updates);
+  }
+}
+
+// Subscribe to store updates in browser context
+if (context === 'browser') {
+  debugLog('🔌 Initializing price store messaging in browser context');
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<PriceStore>) => {
+    Object.assign(priceStore, updates);
+    debugLog('📥 Received price store update:', updates);
+  });
+}
 
 class PriceService {
   private isInitialized = false;
@@ -43,8 +68,10 @@ class PriceService {
     try {
       debugLog('🦑 Initializing price service...');
       priceStore.connectionStatus = 'connecting';
+      broadcastFromBackground({ connectionStatus: 'connecting' });
 
-      // Register ticker callback
+      // Register ticker callback BEFORE connecting
+      // This ensures we can receive the connected status from the first ticker
       this.registerTickerCallback();
 
       // Connect to Kraken WebSocket
@@ -53,10 +80,6 @@ class PriceService {
       // Subscribe to ADA/USD ticker
       krakenWebSocketService.subscribeToAdaUsd();
 
-      // Set to connected after successful connection
-      Vue.set(priceStore, 'connectionStatus', 'connected');
-      Vue.set(priceStore, 'isConnected', true);
-
       this.isInitialized = true;
       debugLog('🦑 Price service initialized successfully');
 
@@ -64,6 +87,7 @@ class PriceService {
       console.error('🦑 Failed to initialize price service:', error);
       priceStore.connectionStatus = 'error';
       priceStore.isConnected = false;
+      broadcastFromBackground({ connectionStatus: 'error', isConnected: false });
     }
   }
 
@@ -76,6 +100,12 @@ class PriceService {
       Vue.set(priceStore, 'adaUsd', ticker);
       Vue.set(priceStore, 'isConnected', true);
       Vue.set(priceStore, 'connectionStatus', 'connected');
+      // Broadcast to browser context
+      broadcastFromBackground({
+        adaUsd: ticker,
+        isConnected: true,
+        connectionStatus: 'connected'
+      });
       // Use debugLog to reduce console noise for frequent price updates
       debugLog('🦑 Price updated:', `$${ticker.lastPrice}`);
     });
@@ -84,7 +114,8 @@ class PriceService {
     if (krakenWebSocketService.getConnectionStatus()) {
       Vue.set(priceStore, 'connectionStatus', 'connected');
       Vue.set(priceStore, 'isConnected', true);
-      console.log('🦑 Kraken already connected, setting status to connected');
+      broadcastFromBackground({ connectionStatus: 'connected', isConnected: true });
+      debugLog('🦑 Kraken already connected, setting status to connected');
     }
   }
 
@@ -100,6 +131,11 @@ class PriceService {
     priceStore.adaUsd = null;
     priceStore.isConnected = false;
     priceStore.connectionStatus = 'disconnected';
+    broadcastFromBackground({
+      adaUsd: null,
+      isConnected: false,
+      connectionStatus: 'disconnected'
+    });
 
     this.isInitialized = false;
     debugLog('🦑 Price service disconnected');
