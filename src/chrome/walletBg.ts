@@ -39,7 +39,7 @@ import {
   getRewardAddress,
   getStakeKey,
   hdPathToArray,
-  keyHashFromAddress,
+  keyHashFromAddress, toStakeAddress,
   toValueCore,
 } from '@/chrome/serialization';
 import { decryptWithPassword } from '@/shared/utils/crypto';
@@ -95,7 +95,7 @@ export class WalletBg {
   stakeAddress?: string;
   token?: string;
 
-  constructor(wallet: any) {
+  constructor(wallet: any, googleBaseAddress?: string) {
     this.id = wallet.id;
     this.name = wallet.name;
     this.icon = wallet.icon;
@@ -111,8 +111,14 @@ export class WalletBg {
     this.encryptedMnemonic = wallet.encryptedMnemonic;
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.api = new Api(wallet, this.provider);
-    this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
-    this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
+    if (wallet.type === WalletType.Google) {
+      this.baseAddress = googleBaseAddress
+      this.stakeAddress = toStakeAddress(googleBaseAddress, networks.resolveNetworkId(wallet.chain, wallet.network) as Cardano.NetworkId)
+      console.log('wallet', wallet)
+    } else {
+      this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
+      this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
+    }
     this.syncService = new SyncService(this);
     this.loaderFactory = new LoaderFactory({
       id: this.id,
@@ -183,7 +189,6 @@ export class WalletBg {
 
   async setUtxosAndAddresses(transactions: any[]) {
     debugLog('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
-
     let stakeAddress: string = '';
     let address: string = '';
     if (this.isEnterpriseAddress()) {

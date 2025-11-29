@@ -39,12 +39,19 @@
             <v-list-item two-line class="px-0 py-1" style="height: 55px">
               <v-list-item-content class="px-0 py-1">
                 <v-list-item-title class="activity-title">
-                  <span class="activity-text">{{ getTransactionStatus(item) }}</span>
+                  <span class="activity-text" :class="{ 'failed-transaction-text': isPendingTooLong(item) }">{{ getTransactionStatus(item) }}</span>
                   <v-tooltip v-if="item.pending" content-class="custom-tooltip" top>
                     <template v-slot:activator="{ on, attrs }">
-                      <span v-bind="attrs" v-on="on" class="pending-indicator"></span>
+                      <span
+                        v-bind="attrs"
+                        v-on="on"
+                        :class="isPendingTooLong(item) ? 'pending-indicator-remove' : 'pending-indicator'"
+                        @click.stop="isPendingTooLong(item) && handleRemovePendingTransaction(item)"
+                      >
+                        <v-icon v-if="isPendingTooLong(item)" x-small color="error">mdi-close-circle</v-icon>
+                      </span>
                     </template>
-                    <span>{{ $t('dashboard.transactionPendingConfirmation') }}</span>
+                    <span>{{ isPendingTooLong(item) ? $t('transactions.removePendingTransaction') : $t('dashboard.transactionPendingConfirmation') }}</span>
                   </v-tooltip>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
@@ -441,6 +448,11 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
 
 // Get transaction status (reactive)
 const getTransactionStatus = (item: any): string => {
+  // Check if transaction is pending for too long (> 1 hour) - show as "Failed Transaction"
+  if (isPendingTooLong(item)) {
+    return t('transactions.failedTransaction');
+  }
+
   const txId = item.id;
 
   // Return cached status or basic status as fallback
@@ -498,9 +510,9 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
 // Add fund transfer status if applicable
 const addFundTransferStatus = (item: any, statuses: string[]): void => {
   // Skip if transaction has certificates (delegation, registration, etc.)
-  if (item.body?.certificates && item.body.certificates.length > 0) {
-    return;
-  }
+  // if (item.body?.certificates && item.body.certificates.length > 0) {
+  //   return;
+  // }
 
   const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
   const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
@@ -1077,7 +1089,8 @@ const isStakeRegistration = item => {
     item.body.certificates.some(
       certificate =>
         certificate.__typename === Cardano.CertificateType.StakeRegistration ||
-        certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation
+        certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
+        certificate.__typename === Cardano.CertificateType.Registration
     )
   );
 };
@@ -1116,6 +1129,38 @@ const handlePageChange = async (page: number) => {
   currentPage.value = page;
   hasReachedEnd.value = false;
   await loadMoreTransactions();
+};
+
+// Check if transaction has been pending for more than 1 hour
+const isPendingTooLong = (item: any): boolean => {
+  if (!item.pending) return false;
+
+  const currentTime = Date.now() / 1000; // Current time in seconds
+  const pendingDuration = currentTime - item.tx_timestamp; // Duration in seconds
+  const oneHourInSeconds = 60 * 60; // 1 hour = 3600 seconds
+
+  return pendingDuration > oneHourInSeconds;
+};
+
+// Remove pending transaction
+const handleRemovePendingTransaction = async (item: any) => {
+  try {
+    const { Messaging } = await import('@/chrome/messaging');
+    const { MessageTypes } = await import('@/models/MessageTypes');
+
+    const response: any = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.REMOVE_PENDING_TRANSACTION,
+      data: { txId: item.id }
+    });
+
+    if (response.data?.success) {
+      console.log('Pending transaction removed successfully');
+    } else {
+      console.error('Failed to remove pending transaction:', response.data?.error || response.error);
+    }
+  } catch (error) {
+    console.error('Error removing pending transaction:', error);
+  }
 };
 
 // Lifecycle hooks
@@ -1611,6 +1656,21 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* Pending indicator for transactions pending > 1 hour - red X icon, clickable */
+.pending-indicator-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.pending-indicator-remove:hover {
+  transform: scale(1.2);
+}
+
 @keyframes pulse-pending {
   0%, 100% {
     opacity: 1;
@@ -1620,5 +1680,10 @@ onUnmounted(() => {
     opacity: 0.4;
     transform: scale(0.85);
   }
+}
+
+/* Failed transaction text - red/error color */
+.failed-transaction-text {
+  color: #F97066 !important;
 }
 </style>

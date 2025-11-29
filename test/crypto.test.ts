@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { encryptWithPassword, decryptWithPassword } from './crypto';
 import { Buffer } from 'buffer';
+import { decryptWithPassword, encryptWithPassword } from '../src/shared/utils/crypto';
 
 describe('crypto utilities', () => {
   describe('encryptWithPassword and decryptWithPassword', () => {

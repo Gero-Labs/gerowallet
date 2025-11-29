@@ -208,7 +208,7 @@
                   <p class="feature-description">{{ t('dashboard.topUpWithAda') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.comingSoon') }}
+                  {{ t('dashboard.orderNow') }}
                 </v-chip>
               </div>
             </div>

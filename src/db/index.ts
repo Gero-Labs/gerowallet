@@ -52,14 +52,6 @@ export default {
   async getAllWallets() {
     return db['wallets'].toArray();
   },
-
-  async getGoogleWalletWithEmail(email: string) {
-    const wallets = await db['wallets'].where('userId').equals(email).toArray();
-    if (wallets && wallets.length > 0) {
-      return wallets[0];
-    }
-    return null;
-  },
   async checkAndCreateBlockchainDatabase(dbName: string) {
     try {
       // Attempt to open the database

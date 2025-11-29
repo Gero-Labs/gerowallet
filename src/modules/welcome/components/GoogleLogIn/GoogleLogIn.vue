@@ -1,15 +1,55 @@
+<template>
+  <div class="google-btn-container">
+    <GButton
+      block
+      outlined
+      color="black"
+      class="google-btn"
+      large
+      @click="googleLogin"
+      :loading="loadingGoogleLogin"
+      :disabled="!props.selectedNetwork?.zkFoldSupport"
+    >
+      <v-avatar size="24" class="mr-2">
+        <v-img :src="google" />
+      </v-avatar>
+      Google Sign In
+      <v-chip
+        color="primary"
+        outlined
+        x-small
+        class="px-1 ml-2"
+        v-if="!props.selectedNetwork?.zkFoldSupport"
+      >Soon</v-chip>
+    </GButton>
+
+    <CreateGoogleWallet
+      :isOpen="newGoogleWalletDialog"
+      @close="newGoogleWalletDialog = false"
+      :persistent="false"
+      :google-account="profile"
+      :tokens="{ accessToken, idToken }"
+      :network="props.selectedNetwork"
+    />
+  </div>
+</template>
 <script setup lang="ts">
-import { ref, getCurrentInstance } from 'vue';
+import { ref, getCurrentInstance, toRefs } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import db from '@/db';
 import CreateGoogleWallet from '@/options/modules/welcome/dialogs/CreateGoogleWallet.vue';
 import { google } from '@/utils/assets';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import { getGoogleWalletWithEmail } from '@/db/gero-db';
+import networks from '@/utils/networks';
+import { geroStore } from '@/stores/geroStore';
+import { Wallet } from '@/models/types';
 
 const props = defineProps<{
   selectedNetwork: any;
 }>();
+
+const { wallets } = toRefs(geroStore);
 
 const loadingGoogleLogin = ref(false);
 const googleLoginError = ref('');
@@ -28,12 +68,14 @@ const googleLogin = async () => {
     if (!resp || !resp['data'] || !resp['data']['success']) {
       throw new Error(resp['error'] || 'Unknown error');
     }
+
     accessToken.value = resp['data']['tokens']['accessToken'];
     idToken.value = resp['data']['tokens']['idToken'];
-
+    console.log('accessToken', accessToken.value);
     const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: `Bearer ${accessToken.value}` },
     });
+    console.log('profileResp', profileResp);
     if (!profileResp.ok) {
       throw new Error('Failed to fetch Google profile');
     }
@@ -41,10 +83,12 @@ const googleLogin = async () => {
     if (!profile.value['email_verified']) {
       throw new Error('Google profile email is not verified');
     }
-    const googleWallet = await db.getGoogleWalletWithEmail(profile.value['email']);
+    const googleWallet = await getGoogleWalletWithEmail(profile.value['email']);
+    console.log('googleWallet', googleWallet);
     if (!googleWallet) {
       newGoogleWalletDialog.value = true;
     } else {
+      console.log('googleWallet', googleWallet);
       await submitLogin(googleWallet.id);
     }
   } catch (err: any) {
@@ -60,6 +104,16 @@ const vmProxy = getCurrentInstance()!.proxy as any;
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
     console.log('submitLogin', walletId);
+    const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
+    if (!wallet) {
+      newGoogleWalletDialog.value = true;
+    } else {
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
+      });
+      console.log('submitLogin response', response);
+    }
   } catch (error) {
     console.error(error);
   }
@@ -71,37 +125,6 @@ const submitLogin = async (walletId: string): Promise<void> => {
   }
 };
 </script>
-
-<template>
-  <div class="google-btn-container">
-
-    <GButton
-      block
-      outlined
-      class="google-btn"
-      large
-      @click="googleLogin"
-      :loading="loadingGoogleLogin"
-      :disabled="!props.selectedNetwork?.zkFoldSupport"
-    >
-      <v-avatar size="24" class="mr-2">
-        <v-img :src="google" />
-      </v-avatar>
-      Google Sign In
-      <v-chip color="primary" outlined x-small class="px-1 ml-2" v-if="!props.selectedNetwork?.zkFoldSupport">Soon</v-chip>
-    </GButton>
-
-    <CreateGoogleWallet
-      :isOpen="newGoogleWalletDialog"
-      @close="newGoogleWalletDialog = false"
-      :persistent="false"
-      :google-account="profile"
-      :tokens="{ accessToken, idToken }"
-      :network="props.selectedNetwork"
-    />
-  </div>
-</template>
-
 <style scoped>
 .google-btn-container{
   width: 100%;
