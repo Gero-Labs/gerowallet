@@ -885,7 +885,7 @@ export default {
   async orderCard(): Promise<any> {
     try {
       const api = getCardApi();
-      const response = await api.axiosInstance.post('/api/kaiserex/cards/order');
+      const response = await api.axiosInstance.post('/api/kaiserex/cards/order/virtual');
       return response.data;
     } catch (error) {
       throw error;
