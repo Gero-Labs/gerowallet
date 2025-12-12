@@ -31,7 +31,6 @@
       <div class="tab-content">
         <ViewCardDetails v-if="activeTab === 'view'" />
         <BlockCard v-if="activeTab === 'block'" />
-        <OrderPhysicalCard v-if="activeTab === 'order'" @close="closeDialog" />
       </div>
     </v-card>
   </v-dialog>
@@ -41,7 +40,6 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import BlockCard from './tabs/BlockCard.vue';
-import OrderPhysicalCard from './tabs/OrderPhysicalCard.vue';
 import ViewCardDetails from './tabs/ViewCardDetails.vue';
 
 defineProps<{
@@ -55,12 +53,6 @@ interface Emits {
 const emit = defineEmits<Emits>();
 
 const { t } = useTranslation();
-
-const tabs = [
-  // { id: 'view', label: t('card.viewCardDetailsTab') },
-  { id: 'block', label: t('card.blockCardTab') },
-  // { id: 'order', label: t('card.orderPhysicalCardTab') },
-];
 
 const activeTab = ref('block');
 
