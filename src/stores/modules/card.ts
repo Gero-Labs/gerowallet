@@ -6,6 +6,16 @@ import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 
+export interface OrderPhysicalCardPayload {
+  address: string;
+  region: string;
+  city: string;
+  zipCode: string;
+  countryCode: string;
+  phone: string;
+  deliveryMethod: string;
+}
+
 export const cardStore = Vue.observable<CardState>({
   // Auth
   accessToken: null,
@@ -886,6 +896,16 @@ export default {
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.post('/api/kaiserex/cards/order/virtual');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async orderPhysicalCard(payload: OrderPhysicalCardPayload): Promise<any> {
+    try {
+      const api = getCardApi();
+      const response = await api.axiosInstance.post('/api/kaiserex/cards/order/physical', payload);
       return response.data;
     } catch (error) {
       throw error;
