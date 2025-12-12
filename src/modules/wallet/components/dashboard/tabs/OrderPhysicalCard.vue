@@ -1,30 +1,11 @@
 <template>
   <div class="order-physical-card">
     <div class="order-content">
-      <div class="info-section">
-        <h3 class="info-title">{{ $t('card.orderPhysicalCard') }}</h3>
-        <p class="info-text">{{ $t('card.writeDeliveryDetails') }}</p>
-      </div>
-
       <div class="form-section">
         <div class="form-row">
           <div class="input-full">
-            <label class="input-label">{{ $t('card.nameWithAsterisk') }}</label>
-            <v-text-field
-              v-model="formData.name"
-              dense
-              outlined
-              class="form-input"
-              hide-details
-              :placeholder="userName || $t('card.enterYourName')"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="input-full">
             <label class="input-label">{{ $t('card.streetAddress') }}</label>
-            <v-text-field v-model="formData.streetAddress" dense outlined class="form-input" hide-details />
+            <v-text-field v-model="formData.address" dense outlined class="form-input" hide-details />
           </div>
         </div>
 
@@ -39,8 +20,8 @@
           <div class="input-full">
             <label class="input-label">{{ $t('card.stateProvince') }}</label>
             <div class="state-province-row">
-              <v-text-field v-model="formData.state" dense outlined class="form-input state-input" hide-details />
-              <v-text-field v-model="formData.postalCode" dense outlined class="form-input postal-input" hide-details />
+              <v-text-field v-model="formData.region" dense outlined class="form-input state-input" hide-details />
+              <v-text-field v-model="formData.zipCode" dense outlined class="form-input postal-input" hide-details />
             </div>
           </div>
         </div>
@@ -50,14 +31,24 @@
             <label class="input-label">{{ $t('card.country') }}</label>
             <div class="country-select">
               <v-select
-                v-model="formData.country"
+                v-model="formData.countryCode"
                 :items="countries"
+                item-text="label"
+                item-value="code"
+                attach=".order-physical-card"
                 dense
                 outlined
                 class="form-input country-input"
                 hide-details
               />
             </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="input-full">
+            <label class="input-label">{{ $t('card.phone') || 'Phone' }}</label>
+            <v-text-field v-model="formData.phone" dense outlined class="form-input" hide-details />
           </div>
         </div>
       </div>
@@ -69,18 +60,13 @@
           <label class="input-label">{{ $t('card.shippingMethod') }}</label>
           <div class="shipping-options">
             <div
+              v-for="option in shippingOptions"
+              :key="option.id"
               class="shipping-option"
-              :class="{ active: selectedShipping === 'express' }"
-              @click="selectedShipping = 'express'"
+              :class="{ active: formData.deliveryMethod === option.id }"
+              @click="formData.deliveryMethod = option.id"
             >
-              <span class="shipping-text">{{ $t('card.expressShipping') }}</span>
-            </div>
-            <div
-              class="shipping-option"
-              :class="{ active: selectedShipping === 'normal' }"
-              @click="selectedShipping = 'normal'"
-            >
-              <span class="shipping-text">Normal 7-14 days</span>
+              <span class="shipping-text">{{ option.label }}</span>
             </div>
           </div>
         </div>
@@ -89,7 +75,7 @@
       <div class="shipping-fee">
         <div class="form-row">
           <label class="input-label">{{ $t('card.shippingFee') }}</label>
-          <span class="fee-amount">$3.99</span>
+          <span class="fee-amount">{{ shippingFee }}</span>
         </div>
       </div>
     </div>
@@ -103,83 +89,117 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue';
-import cardStore from '@/stores/modules/card';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import cardStore, { OrderPhysicalCardPayload } from '@/stores/modules/card';
 import GradientButton from '../../GradientButton.vue';
 import SecondaryButton from '../../SecondaryButton.vue';
-
+import snackbar from '@/plugins/snackbar';
+import countries from '@/plugins/countries';
 const loading = ref(false);
 
-// Extract user name from email
-const userName = computed(() => {
-  if (cardStore.state.userInfo?.email) {
-    return cardStore.state.userInfo.email.split('@')[0];
-  }
-  return '';
+const { t } = useTranslation();
+const emit = defineEmits<{ (e: 'close'): void }>();
+
+const translateOrFallback = (key: string, fallback: string) => {
+  const translation = t(key);
+  return translation === key ? fallback : translation;
+};
+
+const phoneRegex = /^\+?[0-9\s\-()]{7,20}$/;
+
+const shippingOptions = computed(() => [
+  {
+    id: 'regular',
+    label: translateOrFallback('card.normalShipping', 'Normal 7-14 days'),
+  },
+  {
+    id: 'express-eu',
+    label: translateOrFallback('card.expressShipping', 'Express (EU)'),
+  },
+  {
+    id: 'express-worldwide',
+    label: translateOrFallback('card.expressWorldwide', 'Express (Worldwide)'),
+  },
+]);
+
+const shippingFee = computed(() => {
+  const fees: Record<string, string> = {
+    regular: '€3.99',
+    'express-eu': '€9.99',
+    'express-worldwide': '€19.99',
+  };
+
+  return fees[formData.deliveryMethod] || fees['regular'];
 });
 
-const formData = reactive({
-  name: userName.value,
-  streetAddress: '',
+const createInitialFormState = () => ({
+  address: '',
+  region: '',
   city: '',
-  state: '',
-  postalCode: '',
-  country: '',
+  zipCode: '',
+  countryCode: '',
+  phone: '',
+  deliveryMethod: 'regular',
 });
 
-const countries = [
-  'United States',
-  'Canada',
-  'United Kingdom',
-  'Germany',
-  'France',
-  'Spain',
-  'Italy',
-  'Netherlands',
-  'Belgium',
-  'Switzerland',
-  'Austria',
-  'Sweden',
-  'Norway',
-  'Denmark',
-  'Finland',
-  'Poland',
-  'Czech Republic',
-  'Hungary',
-  'Slovakia',
-  'Slovenia',
-  'Croatia',
-  'Bulgaria',
-  'Romania',
-  'Greece',
-  'Portugal',
-  'Ireland',
-  'Luxembourg',
-  'Malta',
-  'Cyprus',
-  'Estonia',
-  'Latvia',
-  'Lithuania',
-];
+const formData = reactive(createInitialFormState());
 
-const selectedShipping = ref('normal');
+const resetForm = () => {
+  Object.assign(formData, createInitialFormState());
+};
+
+const isFormValid = computed(() => {
+  return (
+    formData.address.trim() &&
+    formData.region.trim() &&
+    formData.city.trim() &&
+    formData.zipCode.trim() &&
+    formData.countryCode &&
+    formData.phone.trim() &&
+    phoneRegex.test(formData.phone.trim())
+  );
+});
 
 const placeOrder = async () => {
+  if (!formData.phone.trim() || !phoneRegex.test(formData.phone.trim())) {
+    snackbar.setError(translateOrFallback('card.invalidPhone', 'Please enter a valid phone number.'));
+    return;
+  }
+
+  if (!isFormValid.value) {
+    snackbar.setError(
+      translateOrFallback('card.orderPhysicalCardValidationError', 'Please fill in all required fields.')
+    );
+    return;
+  }
+
   loading.value = true;
+
+  const payload: OrderPhysicalCardPayload = {
+    address: formData.address.trim(),
+    region: formData.region.trim(),
+    city: formData.city.trim(),
+    zipCode: formData.zipCode.trim(),
+    countryCode: formData.countryCode,
+    phone: formData.phone.trim(),
+    deliveryMethod: formData.deliveryMethod,
+  };
+
   try {
-    // Here you would call the API to place the order
-    console.log('Placing order with data:', {
-      ...formData,
-      shipping: selectedShipping.value,
-      userEmail: cardStore.state.userInfo?.email,
-    });
+    await cardStore.orderPhysicalCard(payload);
+    await cardStore.fetchCardData();
+    snackbar.fireSuccess(translateOrFallback('card.orderPhysicalCardSuccess', 'Card ordered successfully.'));
+    resetForm();
+    emit('close');
+  } catch (error: any) {
+    const responseMessage =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      translateOrFallback('card.pleaseTryAgain', 'Please try again.');
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    console.log('Order placed successfully');
-    // You could emit an event or navigate to success page
-  } catch (error) {
-    console.error('Failed to place order:', error);
+    const failedMessage = translateOrFallback('card.failedToOrderCard', 'Failed to order card.');
+    snackbar.setError(`${failedMessage} ${responseMessage}`);
   } finally {
     loading.value = false;
   }
