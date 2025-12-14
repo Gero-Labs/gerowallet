@@ -12,20 +12,32 @@
         </v-btn>
       </div>
 
-      <!-- Progress Indicator -->
-      <div v-if="selectedCardType === 'physical' && currentStep > 1 && currentStep < 6" class="progress-indicator">
-        <div
-          v-for="step in physicalSteps"
-          :key="step"
-          class="progress-step"
-          :class="{
-            active: currentStep === step,
-            completed: currentStep > step,
-          }"
-        >
-          <div class="step-number">{{ step - 1 }}</div>
-        </div>
-      </div>
+      <!-- Progress Stepper -->
+      <v-stepper
+        v-if="selectedCardType === 'physical' && currentStep > 1 && currentStep < 6"
+        v-model="currentStep"
+        class="order-stepper"
+        flat
+        non-linear
+      >
+        <v-stepper-header>
+          <v-stepper-step :complete="currentStep > 2" step="2" color="#00c7f3">
+            {{ $t('card.shippingAddress') }}
+          </v-stepper-step>
+          <v-divider></v-divider>
+          <v-stepper-step :complete="currentStep > 3" step="3" color="#00c7f3">
+            {{ $t('card.shippingMethod') }}
+          </v-stepper-step>
+          <v-divider></v-divider>
+          <v-stepper-step :complete="currentStep > 4" step="4" color="#00c7f3">
+            {{ $t('card.paymentDetails') }}
+          </v-stepper-step>
+          <v-divider></v-divider>
+          <v-stepper-step step="5" color="#00c7f3">
+            {{ $t('card.confirm') }}
+          </v-stepper-step>
+        </v-stepper-header>
+      </v-stepper>
 
       <!-- Step Content -->
       <div class="modal-content">
@@ -125,7 +137,6 @@ const dialog = computed({
 
 // Step management
 const currentStep = ref(1);
-const physicalSteps = [2, 3, 4, 5];
 
 // Card type selection
 const selectedCardType = ref<'virtual' | 'physical' | null>(null);
@@ -404,40 +415,69 @@ watch(
   }
 }
 
-.progress-indicator {
-  display: flex;
-  justify-content: center;
-  gap: $spacing-md;
-  padding: 0 $spacing-3xl $spacing-lg;
-}
+.order-stepper {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 $spacing-xl $spacing-lg;
 
-.progress-step {
-  .step-number {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: $background-secondary;
-    border: 2px solid $border-primary;
-    color: $text-muted;
-    font-family: $font-family-primary;
-    font-weight: $font-weight-semibold;
-    font-size: $font-size-sm;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease;
+  :deep(.v-stepper__header) {
+    box-shadow: none;
+    background: transparent;
+    padding: 0;
   }
 
-  &.active .step-number {
-    background: rgba($primary-cyan, 0.2);
-    border-color: $primary-cyan;
+  :deep(.v-stepper__step) {
+    padding: $spacing-xs;
+
+    .v-stepper__step__step {
+      background: $background-secondary;
+      border: 2px solid $border-primary;
+      color: $text-muted;
+      font-family: $font-family-primary;
+      font-weight: $font-weight-semibold;
+      font-size: $font-size-sm;
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+    }
+
+    &.v-stepper__step--active .v-stepper__step__step {
+      background: rgba($primary-cyan, 0.2);
+      border-color: $primary-cyan;
+      color: $primary-cyan;
+    }
+
+    &.v-stepper__step--complete .v-stepper__step__step {
+      background: $primary-cyan;
+      border-color: $primary-cyan;
+      color: $background-dark;
+
+      .v-icon {
+        color: $background-dark;
+        font-size: $font-size-base;
+      }
+    }
+  }
+
+  :deep(.v-stepper__label) {
+    font-family: $font-family-primary;
+    font-size: $font-size-xs;
+    color: $text-muted;
+    text-align: center;
+    line-height: $line-height-tight;
+  }
+
+  :deep(.v-stepper__step--active .v-stepper__label) {
     color: $primary-cyan;
   }
 
-  &.completed .step-number {
-    background: $primary-cyan;
-    border-color: $primary-cyan;
-    color: $background-dark;
+  :deep(.v-stepper__step--complete .v-stepper__label) {
+    color: $text-secondary;
+  }
+
+  :deep(.v-divider) {
+    border-color: $border-primary;
+    margin: 0 $spacing-xs;
   }
 }
 
