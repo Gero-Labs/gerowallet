@@ -110,6 +110,14 @@ import CardOrderPaymentStep from './card-order-steps/CardOrderPaymentStep.vue';
 import PaymentConfirmationStep from './card-order-steps/PaymentConfirmationStep.vue';
 import cardStore from '@/stores/modules/card';
 import snackbar from '@/plugins/snackbar';
+import { OrderPhysicalCardPayload } from '@/stores/modules/card';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import { Cardano } from '@cardano-sdk/core';
+import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
 
 const { t } = useTranslation();
 const router = useRouter();
@@ -267,53 +275,118 @@ const handleShippingMethodSelect = (method: 'regular' | 'express-eu' | 'express-
   shippingMethod.value = method;
   // Update payment amount based on shipping method
   const fees: Record<string, { ada: number; eur: number }> = {
-    regular: { ada: 12.5, eur: 3.99 },
+    'regular': { ada: 12.5, eur: 3.99 },
     'express-eu': { ada: 31.2, eur: 9.99 },
     'express-worldwide': { ada: 62.5, eur: 19.99 },
   };
-  paymentAmount.value = fees[method] || fees.regular;
+  paymentAmount.value = fees[method] || fees['regular'];
   currentStep.value = 4;
 };
 
-const handlePaymentConfirm = async () => {
+const handlePaymentConfirm = async (spendingPassword: string) => {
   // Move to confirmation step
   currentStep.value = 5;
   isProcessing.value = true;
 
-  // Simulate payment processing (placeholder for backend integration)
   try {
-    // TODO: Backend integration required
-    // In the future, this will:
-    // 1. Get payment address from backend
-    // 2. Sign and submit transaction with spending password
-    // 3. Poll for payment confirmation
-    // 4. Call orderPhysicalCard with payment_tx_id
+    // Password is already verified in CardOrderPaymentStep
+    console.log('✅ Password verified, proceeding with transaction');
 
-    // For now, simulate a delay for payment confirmation
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Hardcoded Cardano address for payment
+    const cardanoAddress =
+      'addr1qxzdsrps5m46ch53tdnaxmzlpwmv6dyzccpsrr3h2lrss0z9su4t9radfkkl2k0ypxyg9pqeahzwphh8e85c49kypqksj3wjrv';
+    console.log('💰 Cardano address:', cardanoAddress);
 
-    // TODO: Uncomment when backend is ready
-    // Build the payload for physical card order
-    // const payload = {
-    //   address: useExistingAddress.value ? '' : shippingAddress.value.streetAddress,
-    //   region: useExistingAddress.value ? '' : shippingAddress.value.stateProvince,
-    //   city: useExistingAddress.value ? '' : shippingAddress.value.city,
-    //   zipCode: useExistingAddress.value ? '' : shippingAddress.value.zipCode,
-    //   countryCode: useExistingAddress.value ? '' : shippingAddress.value.countryCode,
-    //   phone: useExistingAddress.value ? '' : shippingAddress.value.phone,
-    //   deliveryMethod: shippingMethod.value,
-    //   // payment_tx_id: txId, // Add after transaction is submitted
-    // };
-    //
-    // await cardStore.orderPhysicalCard(payload);
-    // await cardStore.fetchCardData();
+    // Parse ADA amount and convert to Lovelace
+    const adaAmount = paymentAmount.value.ada;
+    if (isNaN(adaAmount) || adaAmount <= 0) {
+      throw new Error(t('errors.invalidAmount'));
+    }
 
-    // Simulate success for now
+    const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
+    console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${cardanoAddress}`);
+
+    // Create output
+    const outputs: Cardano.TxOut[] = [
+      {
+        address: cardanoAddress as Cardano.PaymentAddress,
+        value: {
+          coins: lovelaceAmount,
+          assets: new Map(),
+        },
+      },
+    ];
+
+    // Build transaction
+    const tx = await buildCardanoTransaction({
+      outputs,
+      utxos: walletStore.utxos,
+      epochParams: networkStore.epochParams,
+      changeAddress: walletStore.loggedWallet.baseAddress,
+      tip: networkStore.tip,
+    });
+
+    console.log('✅ Transaction built successfully');
+
+    // Serialize transaction
+    const txCbor = serializeCardanoJsSdkTx(tx);
+    console.log('📦 Serialized transaction CBOR');
+
+    // Sign transaction
+    const witnessResult = (await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_TX,
+      data: {
+        txCbor: txCbor,
+        partialSign: false,
+        password: spendingPassword,
+        accountIndex: 0,
+        utxos: walletStore.utxos,
+        addresses: walletStore.keys,
+        mergeWitnesses: false,
+      },
+    })) as { data: { witnesses?: any; error?: string } };
+
+    if (witnessResult.data.error) {
+      throw new Error(witnessResult.data.error);
+    }
+
+    console.log('✅ Transaction signed successfully');
+    const txWitnesses = witnessResult.data.witnesses;
+
+    // Submit transaction
+    const submitResult = (await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: {
+        txCbor: txCbor,
+        witnessHex: txWitnesses,
+        utxos: walletStore.utxos,
+      },
+    })) as { data: { txId?: string; error?: string } };
+
+    if (submitResult.data.error) {
+      throw new Error(submitResult.data.error);
+    }
+
+    console.log('✅ Transaction submitted successfully');
+    console.log('📝 Transaction ID:', submitResult.data.txId);
+    snackbar.fireSuccess(t('notifications.transactionSubmitted'));
+
+    //,  payment_tx_id: submitResult.data.txId, TODO: Uncomment when backend is ready
+    const payload: OrderPhysicalCardPayload = {
+      address: useExistingAddress.value ? '' : shippingAddress.value.streetAddress,
+      region: useExistingAddress.value ? '' : shippingAddress.value.stateProvince,
+      city: useExistingAddress.value ? '' : shippingAddress.value.city,
+      zipCode: useExistingAddress.value ? '' : shippingAddress.value.zipCode,
+      countryCode: useExistingAddress.value ? '' : shippingAddress.value.countryCode,
+      phone: useExistingAddress.value ? '' : shippingAddress.value.phone,
+      deliveryMethod: shippingMethod.value,
+    };
+    await cardStore.orderPhysicalCard(payload);
+    await cardStore.fetchCardData();
     orderSuccess.value = true;
   } catch (error: any) {
-    console.error('Failed to order physical card:', error);
-    snackbar.setError(t('card.failedToOrderCard') + ' ' + (error?.message || t('card.pleaseTryAgain')));
-    // Go back to payment step on error
+    console.error('❌ Failed to process payment:', error);
+    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
     currentStep.value = 4;
   } finally {
     isProcessing.value = false;

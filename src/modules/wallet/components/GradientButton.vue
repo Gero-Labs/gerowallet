@@ -7,7 +7,7 @@
 
 <script setup lang="ts">
 interface Props {
-  text: string;
+  text: string | any;
   disabled?: boolean;
   loading?: boolean;
 }

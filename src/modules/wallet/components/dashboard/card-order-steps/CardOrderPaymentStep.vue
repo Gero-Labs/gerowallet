@@ -51,8 +51,13 @@
 
     <!-- Actions -->
     <div class="step-actions">
-      <SecondaryButton :text="$t('card.back')" @click="handleBack" />
-      <GradientButton :text="$t('card.confirmPayment')" @click="handleConfirm" :disabled="!spendingPassword" />
+      <SecondaryButton :text="$t('card.back')" @click="handleBack" :disabled="isValidating" />
+      <GradientButton 
+        :text="$t('card.confirmPayment')" 
+        @click="handleConfirm" 
+        :disabled="!spendingPassword || isValidating"
+        :loading="isValidating"
+      />
     </div>
   </div>
 </template>
@@ -61,6 +66,10 @@
 import { ref } from 'vue';
 import SecondaryButton from '../../SecondaryButton.vue';
 import GradientButton from '../../GradientButton.vue';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import snackbar from '@/plugins/snackbar';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 interface Props {
   amountAda: number;
@@ -69,26 +78,50 @@ interface Props {
 
 interface Emits {
   (e: 'back'): void;
-  (e: 'confirm'): void;
+  (e: 'confirm', password: string): void;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+const { t } = useTranslation();
 
 // Local state
 const spendingPassword = ref('');
 const showPassword = ref(false);
+const isValidating = ref(false);
 
 // Handlers
 const handleBack = () => {
   emit('back');
 };
 
-const handleConfirm = () => {
-  // In the future, this will include password verification and transaction signing
-  // For now, just emit confirm to proceed to the confirmation step
-  emit('confirm');
+const handleConfirm = async () => {
+  isValidating.value = true;
+  try {
+    // Verify spending password
+    const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value },
+    })) as { data: { isValid: boolean; error?: string } };
+    
+    if (!passwordVerification.data.isValid) {
+      snackbar.setError(t('wallet.invalidSpendingPassword'));
+      isValidating.value = false;
+      return;
+    }
+
+    console.log('✅ Password verified successfully');
+    // Password is valid, emit to parent for transaction handling
+    emit('confirm', spendingPassword.value);
+  } catch (error) {
+    console.error('❌ Error verifying password:', error);
+    snackbar.setError(t('wallet.invalidSpendingPassword'));
+  } finally {
+    isValidating.value = false;
+  }
 };
+
 </script>
 
 <style lang="scss" scoped>
