@@ -1,6 +1,6 @@
 <template>
   <v-card outlined class="card-container justify-center liquid-glass">
-    <v-card-title class="subtitle-1">{{ $t('dashboard.welcomeToDashboard') }}</v-card-title>
+    <v-card-title class="subtitle-1">{{ $t('dashboard.welcomeToGeroDashboard') }}</v-card-title>
 
     <section v-if="!hasAssets" class="mb-10">
       <p class="display-1">{{ $t('dashboard.letsGetStarted', { assetType }) }}</p>

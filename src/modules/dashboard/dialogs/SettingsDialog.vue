@@ -1,5 +1,6 @@
 <template>
   <BaseDialog
+    icon="mdi-cog"
     :isOpen="isOpen"
     @close="$emit('close')"
     :title="t('settings.settings')"
@@ -68,7 +69,7 @@ import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
 const { t } = useTranslation();
 
 // Props & Emitting
-const props = defineProps<{ isOpen: boolean }>()
+defineProps<{ isOpen: boolean }>()
 const emit  = defineEmits<{ (e: 'close'): void }>()
 
 // Derive whether we've ever loaded a backup setting

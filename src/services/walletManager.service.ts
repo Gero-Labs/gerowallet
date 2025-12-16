@@ -104,6 +104,9 @@ export class WalletManager {
 
         LoadingState.setText('Wallet ready');
 
+        // Initialize lastActivityTimestamp for auto-lock functionality
+        await this.initializeLastActivityTimestamp(wallet.id);
+
         debugLog('Wallet login successful for wallet:', wallet.id);
         return walletBg;
       }
@@ -181,6 +184,9 @@ export class WalletManager {
         });
 
         LoadingState.setText('Wallet ready');
+
+        // Initialize lastActivityTimestamp for auto-lock functionality
+        await this.initializeLastActivityTimestamp(wallet.id);
 
         debugLog('Wallet login successful for wallet:', wallet.id);
         return walletBg;
@@ -550,6 +556,290 @@ export class WalletManager {
       WalletStore.logout();
       TapToolsStore.clear();
       await MusicStore.logout();
+    }
+  }
+
+  /**
+   * Lock the current wallet
+   * Keeps WalletBg instance intact for CIP-30 functionality
+   * User must unlock with PIN/Pattern/Biometrics + 2FA to access UI
+   */
+  async lock(): Promise<void> {
+    debugLog('WalletManager: Locking wallet');
+
+    try {
+      // Set locked state
+      WalletStore.setLocked(true);
+      // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again
+      debugLog('WalletManager: Wallet locked successfully');
+    } catch (error) {
+      console.error('Error locking wallet:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Shared verification logic for unlock credentials
+   * Verifies PIN, Pattern, Biometrics, Password, and optional 2FA
+   * @param walletId - Wallet ID to verify against
+   * @param unlockCredential - PIN, pattern, password, or biometric credential
+   * @param totpCode - Optional TOTP code if 2FA is enabled
+   * @param password - Spending password to decrypt security data
+   * @param providedUnlockMethod - Optional unlock method override (for biometric)
+   * @param useWalletBg - If true, use walletBg for password verification (post-login); if false, use database (pre-login)
+   * @returns True if verification successful
+   */
+  private async verifyUnlockCredentials(
+    walletId: number,
+    unlockCredential: string | number[],
+    totpCode?: string,
+    password?: string,
+    providedUnlockMethod?: string,
+    useWalletBg: boolean = false
+  ): Promise<boolean> {
+    // Import security utilities
+    const { verifyPin, verifyPattern, verifyTotpCode, decryptSecurityData } = await import('@/shared/utils/security');
+    const { getDb } = await import('@/db/wallet-db');
+
+    // Get security config from wallet database
+    const db = await getDb(walletId);
+    const configTable = db.table('config');
+
+    const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
+    const twoFactorConfig = await configTable.where({ key: 'twoFactorEnabled' }).first();
+
+    // Use provided unlock method (for biometric override) or read from database
+    const unlockMethod = providedUnlockMethod || unlockMethodConfig?.value;
+
+    if (!unlockMethod) {
+      // No unlock method set, verification succeeds
+      return true;
+    }
+
+    // Verify unlock credential based on method
+    let unlockValid = false;
+
+    if (unlockMethod === 'password') {
+      // Spending password unlock method
+      if (useWalletBg) {
+        // Post-login: use walletBg instance
+        if (!this.walletBg || !walletStore.loggedWallet) {
+          throw new Error('Wallet instance not available for password verification');
+        }
+
+        const walletType = walletStore.loggedWallet.type;
+        if (walletType !== WalletType.Normal) {
+          console.warn('Password unlock not supported for wallet type:', walletType);
+          throw new Error('Password unlock is only supported for Normal wallets');
+        }
+
+        const encryptedPrivateKey = walletStore.loggedWallet.encryptedPrivateKey;
+        if (!encryptedPrivateKey || !unlockCredential) {
+          throw new Error('Encrypted private key not found or password not provided');
+        }
+
+        unlockValid = this.walletBg.verifySpendingPassword(unlockCredential as string);
+      } else {
+        // Pre-login: load wallet from database
+        const { getAllWallets } = await import('@/db/gero-db');
+        const wallets = await getAllWallets();
+        const wallet = wallets.find(w => w.id === walletId);
+
+        if (!wallet || wallet.type !== WalletType.Normal) {
+          throw new Error('Password unlock is only supported for Normal wallets');
+        }
+
+        const encryptedPrivateKey = wallet.encryptedPrivateKey;
+        if (!encryptedPrivateKey || !unlockCredential) {
+          throw new Error('Encrypted private key not found or password not provided');
+        }
+
+        // Verify password by attempting to decrypt
+        try {
+          const { decryptWithPassword } = await import('@/shared/utils/crypto');
+          decryptWithPassword(unlockCredential as string, encryptedPrivateKey);
+          unlockValid = true;
+        } catch (error) {
+          unlockValid = false;
+        }
+      }
+    } else if (unlockMethod === 'pin') {
+      // Check for new format (pinHash) or old format (encryptedPinHash)
+      const pinHashConfig = await configTable.where({ key: 'pinHash' }).first();
+      const encryptedPinHashConfig = await configTable.where({ key: 'encryptedPinHash' }).first();
+
+      if (pinHashConfig) {
+        // New format: PIN hash is stored directly (unencrypted)
+        unlockValid = await verifyPin(unlockCredential as string, pinHashConfig.value);
+      } else if (encryptedPinHashConfig && password) {
+        // Old format: PIN hash is encrypted with password
+        const pinHash = decryptSecurityData(encryptedPinHashConfig.value, password) as string;
+        unlockValid = await verifyPin(unlockCredential as string, pinHash);
+      } else {
+        throw new Error('PIN configuration not found');
+      }
+    } else if (unlockMethod === 'pattern') {
+      // Pattern hash is stored directly (unencrypted)
+      const patternHashConfig = await configTable.where({ key: 'encryptedPatternHash' }).first();
+      if (!patternHashConfig) {
+        throw new Error('Pattern configuration not found');
+      }
+
+      // Verify pattern directly (no decryption needed)
+      unlockValid = await verifyPattern(unlockCredential as number[], patternHashConfig.value);
+    } else if (unlockMethod === 'biometrics') {
+      // Biometrics verification handled by WebAuthn in the UI
+      // If we reach here, biometric verification already passed
+      unlockValid = true;
+    }
+
+    if (!unlockValid) {
+      return false;
+    }
+
+    // Verify 2FA if enabled
+    if (twoFactorConfig && twoFactorConfig.value === true) {
+      if (!totpCode || !password) {
+        throw new Error('2FA enabled but TOTP code or password not provided');
+      }
+
+      const totpSecretConfig = await configTable.where({ key: 'encryptedTotpSecret' }).first();
+      if (!totpSecretConfig) {
+        throw new Error('TOTP secret not found');
+      }
+
+      const totpSecret = decryptSecurityData(totpSecretConfig.value, password) as string;
+      const totpValid = verifyTotpCode(totpCode, totpSecret);
+
+      if (!totpValid) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Unlock the wallet with PIN/Pattern/Biometrics + optional 2FA
+   * @param unlockCredential - PIN, pattern, or biometric credential
+   * @param totpCode - Optional TOTP code if 2FA is enabled
+   * @param password - Spending password to decrypt security data
+   * @returns True if unlock successful
+   */
+  async unlock(unlockCredential: string | number[], totpCode?: string, password?: string, providedUnlockMethod?: string): Promise<boolean> {
+    debugLog('WalletManager: Starting unlock process');
+
+    try {
+      if (!this.walletBg || !walletStore.loggedWallet) {
+        throw new Error('No wallet to unlock');
+      }
+
+      // Verify credentials using shared method (with walletBg for password verification)
+      const isValid = await this.verifyUnlockCredentials(
+        walletStore.loggedWallet.id,
+        unlockCredential,
+        totpCode,
+        password,
+        providedUnlockMethod,
+        true // Use walletBg for password verification
+      );
+
+      if (!isValid) {
+        console.warn('Invalid unlock credential');
+        return false;
+      }
+
+      // Unlock successful - restore keys and clear locked state
+      WalletStore.setLocked(false);
+
+      // Initialize lastActivityTimestamp for auto-lock functionality
+      await this.initializeLastActivityTimestamp(walletStore.loggedWallet.id);
+
+      // Start auto-lock timer
+      await this.startAutoLockTimer();
+
+      debugLog('WalletManager: Wallet unlocked successfully');
+      return true;
+    } catch (error) {
+      console.error('Error unlocking wallet:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Verify pre-login unlock credentials for a wallet (without logging in)
+   * This is used for the pre-login security check
+   */
+  async verifyPreLoginUnlock(walletId: number, unlockCredential: string | number[], totpCode?: string, password?: string, providedUnlockMethod?: string): Promise<boolean> {
+    debugLog('WalletManager: Starting pre-login unlock verification');
+
+    try {
+      // Verify credentials using shared method (without walletBg, loads from database)
+      const isValid = await this.verifyUnlockCredentials(
+        walletId,
+        unlockCredential,
+        totpCode,
+        password,
+        providedUnlockMethod,
+        false // Don't use walletBg, load from database instead
+      );
+
+      if (isValid) {
+        debugLog('WalletManager: Pre-login unlock verification successful');
+      } else {
+        console.warn('Invalid pre-login unlock credential');
+      }
+
+      return isValid;
+    } catch (error) {
+      console.error('Error verifying pre-login unlock:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Start the auto-lock timer based on wallet configuration
+   */
+  private async startAutoLockTimer(): Promise<void> {
+    try {
+      if (!walletStore.loggedWallet) return;
+
+      const { getDb } = await import('@/db/wallet-db');
+      const db = await getDb(walletStore.loggedWallet.id);
+      const configTable = db.table('config');
+
+      const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
+
+      if (autoLockConfig && autoLockConfig.value > 0) {
+        const minutes = autoLockConfig.value;
+
+        // Create Chrome alarm for auto-lock
+        chrome.alarms.create('auto-lock', {
+          delayInMinutes: minutes
+        });
+
+        debugLog(`Auto-lock timer set for ${minutes} minutes`);
+      }
+    } catch (error) {
+      console.warn('Failed to start auto-lock timer:', error);
+    }
+  }
+
+  /**
+   * Initialize lastActivityTimestamp for auto-lock functionality
+   * Called when wallet logs in or unlocks
+   */
+  private async initializeLastActivityTimestamp(walletId: number): Promise<void> {
+    try {
+      const { getDb } = await import('@/db/wallet-db');
+      const db = await getDb(walletId);
+      const configTable = db.table('config');
+
+      const now = Date.now();
+      await configTable.put({ key: 'lastActivityTimestamp', value: now });
+      debugLog(`⏱️ Initialized lastActivityTimestamp: ${new Date(now).toISOString()}`);
+    } catch (error) {
+      console.warn('Failed to initialize lastActivityTimestamp:', error);
     }
   }
 

@@ -42,35 +42,21 @@
         <v-layout>
           <v-row>
             <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal">
-              <v-tooltip
-                v-model="tooltip.enabled"
-                top
-                color="red"
-              >
-                <template v-slot:activator="{ }">
-                  <v-text-field
-                    class="w-100"
-                    block
-                    dense
-                    v-model="spendingPassword"
-                    outlined
-                    hide-details
-                    :placeholder="$t('navigation.typeYourSpendingPassword')"
-                    :label="$t('wallet.spendingPassword')"
-                    :type="showPassword ? 'text' : 'password'"
-                    :rules="[rules.required()]"
-                    required
-                    @keydown.enter.stop="sign"
-                  >
-                    <template v-slot:append>
-                      <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                        {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-                      </v-icon>
-                    </template>
-                  </v-text-field>
-                </template>
-                <span>{{ tooltip.text }}</span>
-              </v-tooltip>
+              <BiometricPasswordField
+                ref="passwordField"
+                :value="spendingPassword"
+                @input="spendingPassword = $event"
+                outlined
+                dense
+                hide-details
+                :placeholder="$t('navigation.typeYourSpendingPassword')"
+                :rules="[rules.required()]"
+                required
+                @enter="sign"
+                @biometric-autofill-success="handleBiometricSuccess"
+                @biometric-autofill-error="handleBiometricError"
+                class="w-100"
+              />
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0">
               <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
@@ -108,6 +94,7 @@ import rules from '@/utils/rules';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 import {
   diffAssetsFromIncomingToOutgoing,
   getPayAndReceiveTokens,
@@ -132,14 +119,10 @@ const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 const isBT = ref(false);
 const risks = ref<any>(undefined);
 const spendingPassword = ref('');
-const showPassword = ref(false);
 const request = ref<any>(null);
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const valid = ref(false);
-const tooltip = ref({
-  enabled: false,
-  text: t('wallet.invalidSpendingPassword'),
-});
+const passwordField = ref<any>(null);
 const txSignLoading = ref(false);
 const loading = ref(true);
 const controller = ref<any>(null);
@@ -296,11 +279,17 @@ const swapDetails = computed(() => {
   };
 });
 
-const enableToolTip = () => {
-  tooltip.value.enabled = true;
+const handleBiometricError = (error: string) => {
+  console.error('Biometric autofill error in SignTx:', error);
+  snackbar.setError(error || t('security.biometricAuthFailed'));
+};
+
+const handleBiometricSuccess = () => {
+  console.log('✅ Biometric autofill successful in SignTx - triggering sign');
+  // Automatically trigger sign after successful biometric autofill
   setTimeout(() => {
-    tooltip.value.enabled = false;
-  }, 3000);
+    sign();
+  }, 300); // Small delay for UX feedback
 };
 
 const decline = async () => {
@@ -429,7 +418,7 @@ const sign = async () => {
       if (passwordVerification.data.isValid) {
         await signAndReturnTx();
       } else {
-        enableToolTip();
+        passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
       }
     }
   } else {

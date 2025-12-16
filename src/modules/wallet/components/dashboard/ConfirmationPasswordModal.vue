@@ -25,30 +25,20 @@
       <div class="modal-actions">
         <div class="actions-content">
           <div class="password-section" v-if="loggedWallet.type === 'Normal'">
-            <v-tooltip v-model="tooltip.enabled" top color="red">
-              <template v-slot:activator="{}">
-                <v-text-field
-                  v-model="password"
-                  dense
-                  outlined
-                  class="password-input"
-                  :label="$t('wallet.spendingPassword')"
-                  :type="showPassword ? 'text' : 'password'"
-                  hide-details
-                  @keyup.enter="verifyPassword"
-                >
-                  <template v-slot:append>
-                    <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                      {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-                    </v-icon>
-                  </template>
-                </v-text-field>
-              </template>
-              <span>{{ tooltip.text }}</span>
-            </v-tooltip>
+            <BiometricPasswordField
+              :value="password"
+              @input="password = $event"
+              dense
+              outlined
+              class="password-input"
+              :label="$t('wallet.spendingPassword')"
+              hide-details
+              @enter="verifyPassword"
+              @biometric-autofill-success="verifyPassword"
+            />
           </div>
           <div v-if="loggedWallet.type === 'Ledger'" class="ledger-section">
-            <p class="ledger-instruction">You will be prompted to sign with your Ledger device.</p>
+            <p class="ledger-instruction">{{ $t('wallet.ledgerSignPrompt') }}</p>
           </div>
           <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
@@ -72,7 +62,7 @@ import { walletStore } from '@/stores/walletStore';
 import { stringToHex } from '@/shared/utils/converter';
 import snackbar from '@/plugins/snackbar';
 import verifyDataSignature from '@cardano-foundation/cardano-verify-datasignature';
-
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 
 const { t } = useTranslation();
 
@@ -93,40 +83,31 @@ const emit = defineEmits<Emits>();
 const { loggedWallet } = toRefs(walletStore);
 
 const loading = ref(false);
-
-const showPassword = ref(false);
-
 const password = ref('');
 const errorMessage = ref('');
+
 const closeModal = () => {
   password.value = '';
+  errorMessage.value = '';
   emit('close');
 };
-const enableToolTip = () => {
-  tooltip.value.enabled = true;
-  setTimeout(() => {
-    tooltip.value.enabled = false;
-  }, 3000);
-};
-const tooltip = ref({
-  enabled: false,
-  text: t('wallet.wrongSpendingPassword'),
-});
+
 // Password verification
 const verifyPassword = async () => {
   try {
+    errorMessage.value = '';
     const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: password.value },
     })) as { data: { isValid: boolean; error?: string } };
     if (!passwordVerification.data.isValid) {
-      enableToolTip();
+      errorMessage.value = t('wallet.wrongSpendingPassword');
       return;
     }
     emit('confirm');
     closeModal();
-  } catch (error) {
-    enableToolTip();
+  } catch (error: any) {
+    errorMessage.value = error?.message || t('wallet.wrongSpendingPassword');
   }
 };
 

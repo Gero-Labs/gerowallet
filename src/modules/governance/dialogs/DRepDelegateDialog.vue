@@ -132,32 +132,23 @@
               <span>Transaction signed! Click submit to broadcast.</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
-            <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet.type === WalletType.Normal && !isSubmit">
-              <template v-slot:activator="{}">
-                <v-text-field
-                  flat
-                  style="max-width: 295px"
-                  block
-                  dense
-                  v-model="spendingPassword"
-                  outlined
-                  :label="$t('wallet.spendingPassword')"
-                  :type="showPassword ? 'text' : 'password'"
-                  :rules="passwordRules"
-                  hide-details
-                  required
-                  :disabled="loading"
-                  @keydown.enter.prevent="signAndSubmitDelegationTx"
-                >
-                  <template v-slot:append>
-                    <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                      {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-                    </v-icon>
-                  </template>
-                </v-text-field>
-              </template>
-              <span>{{ tooltip.text }}</span>
-            </v-tooltip>
+            <BiometricPasswordField
+              ref="passwordField"
+              v-if="loggedWallet.type === WalletType.Normal && !isSubmit"
+              :value="spendingPassword"
+              @input="spendingPassword = $event"
+              outlined
+              dense
+              :label="$t('wallet.spendingPassword')"
+              :rules="passwordRules"
+              hide-details
+              required
+              :disabled="loading"
+              @enter="signAndSubmitDelegationTx"
+              @biometric-autofill-success="handleBiometricSuccess"
+              @biometric-autofill-error="handleBiometricError"
+              style="max-width: 295px"
+            />
             <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
@@ -220,6 +211,7 @@ import { WalletType } from '@/models/types';
 // import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -247,11 +239,7 @@ const { loggedWallet, utxos, account, keys, config } = toRefs(walletStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
-const showPassword = ref(false);
-const tooltip = ref({
-  enabled: false,
-  text: t('wallet.wrongSpendingPassword'),
-});
+const passwordField = ref<any>(null);
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
 const isBT = ref(false);
@@ -327,11 +315,17 @@ const getIconByURI = (uri: string) => {
 // Keystone wallet support needs to be reimplemented with Cardano JS SDK
 // This includes QR code generation, scanning, and signature parsing
 
-const enableToolTip = () => {
-  tooltip.value.enabled = true;
+const handleBiometricSuccess = () => {
+  console.log('✅ Biometric autofill successful in DRepDelegateDialog - triggering sign');
+  // Automatically trigger sign after successful biometric autofill
   setTimeout(() => {
-    tooltip.value.enabled = false;
-  }, 3000);
+    signAndSubmitDelegationTx();
+  }, 300); // Small delay for UX feedback
+};
+
+const handleBiometricError = (error: string) => {
+  console.error('Biometric autofill error in DRepDelegateDialog:', error);
+  snackbar.setError(error || t('security.biometricAuthFailed'));
 };
 
 const signTx = async (): Promise<boolean> => {
@@ -347,7 +341,7 @@ const signTx = async (): Promise<boolean> => {
     })) as { data: { isValid: boolean; error?: string } };
 
     if (!passwordVerification.data.isValid) {
-      enableToolTip();
+      passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       loading.value = false;
       return false;
     }
@@ -491,7 +485,6 @@ watch(
   val => {
     if (val) {
       spendingPassword.value = '';
-      showPassword.value = false;
       txCbor.value = '';
       txWitnesses.value = null;
       isSubmit.value = false;

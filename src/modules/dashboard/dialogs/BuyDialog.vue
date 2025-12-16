@@ -6,6 +6,8 @@
     :subtitle="$t('wallet.buySellSubtitle')"
     :min-height="300"
     :persistent="false"
+    :img="assets.dollarShieldSvg"
+    imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <v-card class="transparent" flat>
       <v-card-text>

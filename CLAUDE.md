@@ -335,21 +335,59 @@ npm run lint            # ESLint check
 - Follow existing module structure (components, dialogs, views)
 
 ### 2. **Chrome Messaging**
-Use the established messaging pattern:
+Use the established messaging pattern with the **correct method** based on context:
+
+**CRITICAL**: Use the correct messaging method based on where the code runs:
+- **Options/Browser Context** (e.g., dialogs, components in `src/modules/`): Use `Messaging.sendToBackgroundFromOptions()`
+- **Popup Context** (e.g., `src/popup/`): Use `Messaging.sendToBackground()`
+
 ```typescript
-// Frontend to background
-const result = await Messaging.sendToBackground({
+// OPTIONS/BROWSER CONTEXT (src/modules/dashboard/dialogs/*, etc.)
+// Use sendToBackgroundFromOptions
+const { Messaging } = await import('@/chrome/messaging');
+const { MessageTypes } = await import('@/models/MessageTypes');
+
+const response = await Messaging.sendToBackgroundFromOptions({
+  method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+  data: { password }
+});
+
+// IMPORTANT: Response structure wraps data in a 'data' property
+// Response format: { data: { success: boolean, error?: string }, target: string, sender: string }
+if (!response.data.success) {
+  throw new Error(response.data.error || 'Operation failed');
+}
+
+// POPUP CONTEXT (src/popup/*)
+// Use sendToBackground
+const response = await Messaging.sendToBackground({
   method: MessageTypes.SIGN_TX,
   data: { tx, password, ... }
 });
 
+// Same response structure: access via response.data.success, response.data.error, etc.
+if (!response.data.success) {
+  throw new Error(response.data.error || 'Operation failed');
+}
+
 // Background handler (background.ts)
-app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
+// Use app.addToOptions for messages from options/browser context
+app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
   try {
-    const result = await walletBg.signTx(request.data);
-    sendResponse({ success: true, data: result });
+    const result = await walletBg.verifySpendingPassword(request.data.password);
+    sendResponse({
+      id: request.id,
+      data: { success: true, result }, // Wrap in 'data' property
+      target: TARGET,
+      sender: SENDER.extension
+    });
   } catch (error) {
-    sendResponse({ success: false, error: error.message });
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: error.message }, // Wrap in 'data' property
+      target: TARGET,
+      sender: SENDER.extension
+    });
   }
   return true; // IMPORTANT: return true for async handlers
 });

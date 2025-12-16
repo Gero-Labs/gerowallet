@@ -7,6 +7,8 @@
     :min-height="0"
     :subtitle="$t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
+    :img="assets.sendSvg"
+    imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <v-card-title style="display: block;" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
@@ -133,38 +135,23 @@
     </v-card-text>
     <v-card-actions class="text-center justify-center" :style="loggedWallet?.type === WalletType.Ledger ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <div class="" v-if="currentStep === 3">
-        <v-tooltip
-          v-model="tooltip.enabled"
-          top
-          color="red"
+        <BiometricPasswordField
+          ref="passwordField"
           v-if="loggedWallet?.type === WalletType.Normal"
-        >
-          <template v-slot:activator="{ }">
-            <v-text-field
-              flat
-              style="width: 295px"
-              block
-              dense
-              v-model="spendingPassword"
-              outlined
-              :label="$t('wallet.spendingPassword')"
-              :type="show1 ? 'text' : 'password'"
-              :rules="[rules.required()]"
-              hide-details
-              class="mb-2"
-              required
-              :disabled="txSubmitLoading"
-              @keydown.enter.prevent="nextStep"
-            >
-              <template v-slot:append>
-                <v-icon @click="show1 = !show1" tabindex="-1">
-                  {{ show1 ? 'mdi-eye' : 'mdi-eye-off' }}
-                </v-icon>
-              </template>
-            </v-text-field>
-          </template>
-          <span>{{ tooltip.text }}</span>
-        </v-tooltip>
+          :value="spendingPassword"
+          @input="spendingPassword = $event"
+          outlined
+          dense
+          hide-details
+          :rules="[rules.required()]"
+          :disabled="txSubmitLoading"
+          required
+          @enter="nextStep"
+          @biometric-autofill-success="handleBiometricSuccess"
+          @biometric-autofill-error="handleBiometricError"
+          style="width: 295px"
+          class="mb-2"
+        />
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
             <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
@@ -200,6 +187,7 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
@@ -220,6 +208,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import ledgerUtils from '@/shared/utils/ledger';
+import assets from '@/utils/assets';
 
 interface Props {
   isOpen: boolean;
@@ -244,6 +233,7 @@ const sendData = ref<any>({
 });
 const txValid = ref<boolean>(false);
 const spendingPassword = ref<string>('');
+const passwordField = ref<any>(null);
 const steps = ref<any[]>([
   {
     name: 'recipientDetails',
@@ -258,10 +248,6 @@ const steps = ref<any[]>([
     label: t('wallet.summary'),
   },
 ]);
-const tooltip = ref<any>({
-  enabled: false,
-  text: t('wallet.wrongSpendingPassword'),
-});
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const txCbor = ref<string>('');
 const txWitnesses = ref<string>('');
@@ -409,11 +395,17 @@ const backScan = () => {
 //   });
 // }
 
-const enableToolTip = () => {
-  tooltip.value.enabled = true;
+const handleBiometricSuccess = () => {
+  console.log('✅ Biometric autofill successful in SendDialog - triggering sign');
+  // Automatically trigger sign after successful biometric autofill
   setTimeout(() => {
-    tooltip.value.enabled = false;
-  }, 3000);
+    nextStep();
+  }, 300); // Small delay for UX feedback
+}
+
+const handleBiometricError = (error: string) => {
+  console.error('Biometric autofill error in SendDialog:', error);
+  snackbar.setError(error || t('security.biometricAuthFailed'));
 }
 
 const signTx = async (): Promise<boolean> => {
@@ -526,7 +518,7 @@ async function signAndSubmitTx() {
     }) as { data: { isValid: boolean; error?: string } };
 
     if (!passwordVerification.data.isValid) {
-      enableToolTip();
+      passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       return;
     }
     const isValid: boolean = await signTx();

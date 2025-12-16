@@ -189,9 +189,8 @@ export default {
    * @param walletId - The wallet ID
    * @param currentPassword - Current password
    * @param newPassword - New password
-   * @param _lockType - Lock type (unused parameter for compatibility)
    */
-  async updateSpendingPassword(walletId: number, currentPassword: string, newPassword: string, _lockType: string) {
+  async updateSpendingPassword(walletId: number, currentPassword: string, newPassword: string) {
     const wallet = geroStore.wallets[walletId];
     if (!wallet) {
       throw new Error('Wallet not found');
