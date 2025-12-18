@@ -574,24 +574,22 @@ async function verifyCurrentMethod() {
     let isValid = false;
 
     if (unlockMethod.value === 'pin') {
-      const { hashPin } = await import('@/shared/utils/security');
+      const { verifyPin } = await import('@/shared/utils/security');
       const pinHashConfig = await configTable.where({ key: 'pinHash' }).first();
       const storedHash = pinHashConfig?.value;
       if (storedHash) {
-        const inputHash = await hashPin(verificationInput.value);
-        isValid = inputHash === storedHash;
+        isValid = await verifyPin(verificationInput.value, storedHash);
       }
       if (!isValid) {
         tooltip.value.text = t('security.incorrectPin');
         enableToolTip();
       }
     } else if (unlockMethod.value === 'pattern') {
-      const { hashPattern } = await import('@/shared/utils/security');
+      const { verifyPattern } = await import('@/shared/utils/security');
       const encryptedPatternHashConfig = await configTable.where({ key: 'encryptedPatternHash' }).first();
       const storedHash = encryptedPatternHashConfig?.value;
       if (storedHash) {
-        const inputHash = await hashPattern(verificationPattern.value);
-        isValid = inputHash === storedHash;
+        isValid = await verifyPattern(verificationPattern.value, storedHash);
       }
       if (!isValid) {
         tooltip.value.text = t('security.incorrectPattern');
@@ -602,8 +600,8 @@ async function verifyCurrentMethod() {
         const passwordVerification = await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.VERIFY_SPENDING_PASSWORD,
           data: { password: verificationInput.value }
-        }) as { data: { isValid: boolean; error?: string } };
-        isValid = passwordVerification.data.isValid;
+        }) as { data: { success: boolean; error?: string } };
+        isValid = passwordVerification.data.success;
         if (!isValid) {
           tooltip.value.text = t('wallet.wrongSpendingPassword');
           enableToolTip();
