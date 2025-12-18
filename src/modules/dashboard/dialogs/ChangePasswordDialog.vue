@@ -126,7 +126,11 @@ const updateSpendingPassword = async (): Promise<void> => {
 
           // Re-encrypt new password with biometric key
           const { encryptSpendingPasswordForBiometric } = await import('@/shared/utils/security');
-          const encryptedPassword = encryptSpendingPasswordForBiometric(newPassword.value, credentialConfig.value);
+          const encryptedPassword = await encryptSpendingPasswordForBiometric(
+            newPassword.value,
+            credentialConfig.value,
+            loggedWallet.value.id
+          );
 
           // Update stored encrypted password
           await configTable.put({

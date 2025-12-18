@@ -181,9 +181,10 @@ async function handleBiometricAutofill() {
     console.log('✅ Biometric authentication successful');
 
     // Decrypt spending password
-    const decryptedPassword = decryptSpendingPasswordForBiometric(
+    const decryptedPassword = await decryptSpendingPasswordForBiometric(
       encryptedPasswordConfig.value,
-      credentialConfig.value
+      credentialConfig.value,
+      wallet.id
     );
 
     console.log('🔓 Password decrypted successfully');

@@ -1,6 +1,10 @@
 import * as OTPAuth from 'otpauth';
 import { encrypt, decrypt } from '@/shared/utils/crypto';
 import cryptoRandomString from 'crypto-random-string';
+import { Buffer } from 'buffer';
+import { chacha20poly1305 } from '@noble/ciphers/chacha';
+import { pbkdf2 } from '@noble/hashes/pbkdf2';
+import { sha512 } from '@noble/hashes/sha2';
 
 export type UnlockMethod = 'password' | 'pin' | 'pattern' | 'biometrics' | null;
 
@@ -368,69 +372,245 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 /**
+ * Get or generate the device-specific biometric master key
+ * This key is unique per device and used for deriving credential encryption keys
+ * @returns 32-byte master key as hex string
+ */
+async function getBiometricMasterKey(): Promise<string> {
+  const STORAGE_KEY = 'biometric_master_key';
+
+  // Try to retrieve existing master key
+  const result = await chrome.storage.local.get(STORAGE_KEY);
+
+  if (result[STORAGE_KEY]) {
+    return result[STORAGE_KEY];
+  }
+
+  // Generate new master key (32 bytes = 256 bits)
+  const masterKeyBytes = new Uint8Array(32);
+  crypto.getRandomValues(masterKeyBytes);
+  const masterKey = Buffer.from(masterKeyBytes).toString('hex');
+
+  // Store for future use
+  await chrome.storage.local.set({ [STORAGE_KEY]: masterKey });
+
+  console.log('🔐 Generated new biometric master key');
+  return masterKey;
+}
+
+/**
  * Store unlock credential encrypted for biometric autofill
+ * Uses PBKDF2 + ChaCha20-Poly1305 for secure encryption with device-specific master key
  * @param credential - PIN (string) or pattern (number[]) or password (string)
  * @param credentialType - Type of credential ('pin', 'pattern', 'password')
- * @returns Encrypted credential as base64 string
+ * @param walletId - Wallet ID for key derivation (binds credential to wallet)
+ * @returns Encrypted credential as hex string (format: salt + nonce + tag + ciphertext)
  */
-export async function encryptCredentialForBiometric(credential: string | number[], credentialType: 'pin' | 'pattern' | 'password'): Promise<string> {
+export async function encryptCredentialForBiometric(
+  credential: string | number[],
+  credentialType: 'pin' | 'pattern' | 'password',
+  walletId: string
+): Promise<string> {
   // Convert credential to string for encryption
   const credentialString = Array.isArray(credential) ? JSON.stringify(credential) : credential;
+  const credentialBytes = Buffer.from(credentialString, 'utf8');
 
-  // Use the encrypt function from crypto.ts (AES-256)
-  const encryptedCredential = encrypt(credentialString, `biometric-${credentialType}`);
+  // Get device-specific master key
+  const masterKey = await getBiometricMasterKey();
+  const masterKeyBytes = Buffer.from(masterKey, 'hex');
 
-  return encryptedCredential;
+  // Generate random salt (32 bytes) and nonce (12 bytes for ChaCha20)
+  const salt = new Uint8Array(32);
+  const nonce = new Uint8Array(12);
+  crypto.getRandomValues(salt);
+  crypto.getRandomValues(nonce);
+
+  // Derive encryption key using PBKDF2-HMAC-SHA512
+  // Input: masterKey + credentialType + walletId (binds to device + wallet)
+  const keyMaterial = Buffer.concat([
+    masterKeyBytes,
+    Buffer.from(credentialType, 'utf8'),
+    Buffer.from(walletId, 'utf8')
+  ]);
+
+  const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
+    c: 10000, // 10,000 iterations (balance between security and performance)
+    dkLen: 32 // ChaCha20 key length
+  });
+
+  // Encrypt using ChaCha20-Poly1305 AEAD
+  const cipher = chacha20poly1305(derivedKey, nonce);
+  const encrypted = cipher.encrypt(credentialBytes);
+
+  // ChaCha20-Poly1305 returns: ciphertext + tag (tag is last 16 bytes)
+  const encryptedBytes = Buffer.from(encrypted);
+  const ciphertext = encryptedBytes.subarray(0, encryptedBytes.length - 16);
+  const tag = encryptedBytes.subarray(encryptedBytes.length - 16);
+
+  // Format: salt(32B) + nonce(12B) + tag(16B) + ciphertext
+  const result = Buffer.concat([salt, nonce, tag, ciphertext]);
+  return result.toString('hex');
 }
 
 /**
  * Decrypt unlock credential for biometric autofill
- * @param encryptedCredential - Encrypted credential as base64 string
+ * Uses PBKDF2 + ChaCha20-Poly1305 for secure decryption with device-specific master key
+ * @param encryptedCredential - Encrypted credential as hex string
  * @param credentialType - Type of credential ('pin', 'pattern', 'password')
+ * @param walletId - Wallet ID for key derivation (must match encryption)
  * @returns Decrypted credential (string for PIN/password, number[] for pattern)
  */
-export function decryptCredentialForBiometric(encryptedCredential: string, credentialType: 'pin' | 'pattern' | 'password'): string | number[] {
-  // Decrypt the credential
-  const decryptedString = decrypt(encryptedCredential, `biometric-${credentialType}`);
+export async function decryptCredentialForBiometric(
+  encryptedCredential: string,
+  credentialType: 'pin' | 'pattern' | 'password',
+  walletId: string
+): Promise<string | number[]> {
+  try {
+    const encryptedBytes = Buffer.from(encryptedCredential, 'hex');
 
-  // Parse pattern back to number array if needed
-  if (credentialType === 'pattern') {
-    return JSON.parse(decryptedString) as number[];
+    // Extract components: salt(32B) + nonce(12B) + tag(16B) + ciphertext
+    const salt = encryptedBytes.subarray(0, 32);
+    const nonce = encryptedBytes.subarray(32, 44);
+    const tag = encryptedBytes.subarray(44, 60);
+    const ciphertext = encryptedBytes.subarray(60);
+
+    // Get device-specific master key
+    const masterKey = await getBiometricMasterKey();
+    const masterKeyBytes = Buffer.from(masterKey, 'hex');
+
+    // Derive decryption key using same inputs as encryption
+    const keyMaterial = Buffer.concat([
+      masterKeyBytes,
+      Buffer.from(credentialType, 'utf8'),
+      Buffer.from(walletId, 'utf8')
+    ]);
+
+    const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
+      c: 10000,
+      dkLen: 32
+    });
+
+    // ChaCha20-Poly1305 expects: ciphertext + tag (tag at the end)
+    const combined = Buffer.concat([ciphertext, tag]);
+
+    // Decrypt using ChaCha20-Poly1305
+    const cipher = chacha20poly1305(derivedKey, nonce);
+    const decrypted = cipher.decrypt(combined);
+
+    const decryptedString = Buffer.from(decrypted).toString('utf8');
+
+    // Parse pattern back to number array if needed
+    if (credentialType === 'pattern') {
+      return JSON.parse(decryptedString) as number[];
+    }
+
+    return decryptedString;
+  } catch (error) {
+    console.error('Biometric credential decryption failed:', error);
+    throw new Error('Failed to decrypt biometric credential');
   }
-
-  return decryptedString;
 }
 
 /**
  * Encrypt spending password for biometric autofill
- * Uses device-specific key derived from WebAuthn credential ID
+ * Uses PBKDF2 + ChaCha20-Poly1305 with device-specific master key and WebAuthn credential ID
  * @param password - Spending password to encrypt
- * @param credentialId - WebAuthn credential ID (base64)
- * @returns Encrypted password as base64 string
+ * @param credentialId - WebAuthn credential ID (base64) for binding to biometric credential
+ * @param walletId - Wallet ID for key derivation (binds password to wallet)
+ * @returns Encrypted password as hex string (format: salt + nonce + tag + ciphertext)
  */
-export function encryptSpendingPasswordForBiometric(password: string, credentialId: string): string {
-  // Use credential ID as part of the encryption key for device binding
-  // This provides defense in depth - encrypted data is tied to the WebAuthn credential
-  const encryptionKey = `biometric-spending-${credentialId}`;
+export async function encryptSpendingPasswordForBiometric(
+  password: string,
+  credentialId: string,
+  walletId: string
+): Promise<string> {
+  const passwordBytes = Buffer.from(password, 'utf8');
 
-  // Encrypt password using AES-256 from crypto.ts
-  const encryptedPassword = encrypt(password, encryptionKey);
+  // Get device-specific master key
+  const masterKey = await getBiometricMasterKey();
+  const masterKeyBytes = Buffer.from(masterKey, 'hex');
 
-  return encryptedPassword;
+  // Generate random salt (32 bytes) and nonce (12 bytes for ChaCha20)
+  const salt = new Uint8Array(32);
+  const nonce = new Uint8Array(12);
+  crypto.getRandomValues(salt);
+  crypto.getRandomValues(nonce);
+
+  // Derive encryption key using PBKDF2-HMAC-SHA512
+  // Input: masterKey + credentialId + walletId (binds to device + biometric + wallet)
+  const keyMaterial = Buffer.concat([
+    masterKeyBytes,
+    Buffer.from(credentialId, 'utf8'),
+    Buffer.from(walletId, 'utf8')
+  ]);
+
+  const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
+    c: 10000, // 10,000 iterations
+    dkLen: 32 // ChaCha20 key length
+  });
+
+  // Encrypt using ChaCha20-Poly1305 AEAD
+  const cipher = chacha20poly1305(derivedKey, nonce);
+  const encrypted = cipher.encrypt(passwordBytes);
+
+  // ChaCha20-Poly1305 returns: ciphertext + tag (tag is last 16 bytes)
+  const encryptedBytes = Buffer.from(encrypted);
+  const ciphertext = encryptedBytes.subarray(0, encryptedBytes.length - 16);
+  const tag = encryptedBytes.subarray(encryptedBytes.length - 16);
+
+  // Format: salt(32B) + nonce(12B) + tag(16B) + ciphertext
+  const result = Buffer.concat([salt, nonce, tag, ciphertext]);
+  return result.toString('hex');
 }
 
 /**
  * Decrypt spending password for biometric autofill
- * @param encryptedPassword - Encrypted password as base64 string
- * @param credentialId - WebAuthn credential ID (base64)
+ * Uses PBKDF2 + ChaCha20-Poly1305 with device-specific master key and WebAuthn credential ID
+ * @param encryptedPassword - Encrypted password as hex string
+ * @param credentialId - WebAuthn credential ID (base64) for binding to biometric credential
+ * @param walletId - Wallet ID for key derivation (must match encryption)
  * @returns Decrypted spending password
  */
-export function decryptSpendingPasswordForBiometric(encryptedPassword: string, credentialId: string): string {
-  // Use same key derivation as encryption
-  const encryptionKey = `biometric-spending-${credentialId}`;
+export async function decryptSpendingPasswordForBiometric(
+  encryptedPassword: string,
+  credentialId: string,
+  walletId: string
+): Promise<string> {
+  try {
+    const encryptedBytes = Buffer.from(encryptedPassword, 'hex');
 
-  // Decrypt password
-  const decryptedPassword = decrypt(encryptedPassword, encryptionKey);
+    // Extract components: salt(32B) + nonce(12B) + tag(16B) + ciphertext
+    const salt = encryptedBytes.subarray(0, 32);
+    const nonce = encryptedBytes.subarray(32, 44);
+    const tag = encryptedBytes.subarray(44, 60);
+    const ciphertext = encryptedBytes.subarray(60);
 
-  return decryptedPassword;
+    // Get device-specific master key
+    const masterKey = await getBiometricMasterKey();
+    const masterKeyBytes = Buffer.from(masterKey, 'hex');
+
+    // Derive decryption key using same inputs as encryption
+    const keyMaterial = Buffer.concat([
+      masterKeyBytes,
+      Buffer.from(credentialId, 'utf8'),
+      Buffer.from(walletId, 'utf8')
+    ]);
+
+    const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
+      c: 10000,
+      dkLen: 32
+    });
+
+    // ChaCha20-Poly1305 expects: ciphertext + tag (tag at the end)
+    const combined = Buffer.concat([ciphertext, tag]);
+
+    // Decrypt using ChaCha20-Poly1305
+    const cipher = chacha20poly1305(derivedKey, nonce);
+    const decrypted = cipher.decrypt(combined);
+
+    return Buffer.from(decrypted).toString('utf8');
+  } catch (error) {
+    console.error('Biometric spending password decryption failed:', error);
+    throw new Error('Failed to decrypt biometric spending password');
+  }
 }

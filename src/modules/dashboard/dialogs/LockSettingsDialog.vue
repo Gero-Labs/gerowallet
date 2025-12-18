@@ -642,7 +642,7 @@ async function handleBiometricsAutofillChange(enabled: boolean) {
 
       // Encrypt password for biometric storage
       const { encryptSpendingPasswordForBiometric } = await import('@/shared/utils/security');
-      const encryptedPassword = encryptSpendingPasswordForBiometric(password, credentialId);
+      const encryptedPassword = await encryptSpendingPasswordForBiometric(password, credentialId, wallet.id);
 
       // Store encrypted password in database
       await configTable.put({
