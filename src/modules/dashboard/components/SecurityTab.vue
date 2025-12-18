@@ -103,13 +103,23 @@
       <!-- Lock Settings (Unlock Method + Auto-Lock) -->
       <v-list-item class="px-2 py-1" @click="handleLockSettingsClick">
         <v-list-item-avatar class="my-0">
-          <v-icon>
-            mdi-shield-lock-outline
-          </v-icon>
+          <!-- New Feature Notification Dot -->
+          <NotificationDot
+            :show="isFeatureNew('settings.security.lockSettings')"
+            color="error"
+            overlap
+            bordered
+          >
+            <v-icon>
+              mdi-shield-lock-outline
+            </v-icon>
+          </NotificationDot>
         </v-list-item-avatar>
         <v-list-item-content class="py-0">
           <v-list-item-title class="text-left">
-            <h3 style="color: white; font-size: 16px;">{{ $t('security.lockSettings') }}</h3>
+            <h3 style="color: white; font-size: 16px;">
+              {{ $t('security.lockSettings') }}
+            </h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • {{ $t('security.biometrics') }}: {{ biometricsText }}
@@ -328,6 +338,8 @@ import WalletStore, { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import rules from '@/utils/rules';
+import NotificationDot from '@/shared/components/NotificationDot.vue';
+import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
 
 const { t } = useTranslation();
 const backupWalletDialog = ref<boolean>(false);

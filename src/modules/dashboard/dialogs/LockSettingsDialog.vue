@@ -147,7 +147,7 @@
             {{ $t('security.biometricsNotSupported') }}
           </v-alert>
 
-          <v-list class="transparent" dense>
+          <v-list dense class="pa-0 transparent" nav>
             <!-- Use Biometrics for Password Autofill (Normal wallets only) -->
             <v-list-item v-if="isNormalWallet">
               <v-list-item-avatar class="my-0">
@@ -159,6 +159,8 @@
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
+                  inset
+                  dense
                   v-model="biometricsForPasswordAutofill"
                   color="primary"
                   :disabled="!isBiometricsSupported"
@@ -183,6 +185,8 @@
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
+                  inset
+                  dense
                   v-model="biometricAutoTrigger"
                   color="primary"
                   :disabled="!isBiometricsSupported || !biometricsForPasswordAutofill"
@@ -209,6 +213,8 @@
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
+                  inset
+                  dense
                   v-model="biometricsForUnlock"
                   color="primary"
                   @change="handleBiometricsUnlockChange"
@@ -233,6 +239,8 @@
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
+                  inset
+                  dense
                   v-model="biometricAutoTriggerUnlock"
                   color="primary"
                   :disabled="!isBiometricsSupported || !biometricsForUnlock"
@@ -297,6 +305,7 @@ import { WalletType } from '@/models/types';
 import type { UnlockMethod } from '@/shared/utils/security';
 import { registerWebAuthnCredential } from '@/shared/utils/security';
 import snackbar from '@/plugins/snackbar';
+import { markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 const { t } = useTranslation();
 
@@ -383,6 +392,8 @@ const autoLockOptions = computed(() => {
 // Watchers
 watch(() => props.value, (newVal) => {
   if (newVal) {
+    // Mark feature as seen when dialog opens
+    markFeatureAsSeen('settings.security.lockSettings');
     loadCurrentSettings();
   } else {
     resetForm();
@@ -396,11 +407,14 @@ watch(() => props.reloadTrigger, () => {
   }
 });
 
-// Methods
+// Check biometrics support immediately on component creation
 function checkBiometricsSupport() {
   // Check if WebAuthn is supported
   isBiometricsSupported.value = !!window.PublicKeyCredential;
 }
+
+// Initialize biometrics support check immediately
+checkBiometricsSupport();
 
 async function loadCurrentSettings() {
   try {

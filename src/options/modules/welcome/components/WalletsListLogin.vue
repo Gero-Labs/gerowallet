@@ -392,6 +392,9 @@ const handleLoggedOut = async (): Promise<void> => {
   preLoginWalletName.value = null;
   preLoginWalletIcon.value = null;
 
+  // Clear selected wallet to remove highlight
+  selectedWallet.value = null;
+
   // Stay on the welcome screen
 };
 </script>

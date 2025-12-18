@@ -1564,7 +1564,7 @@ export default {
   'wallet.hardwareWalletType': 'Hardware Wallet Type',
   'wallet.importExistingWallet': 'Import Existing Wallet',
   'wallet.instructions': 'Instructions',
-  'wallet.invalidSpendingPassword': 'Invalid spending password',
+  'wallet.invalidSpendingPassword': 'Invalid Spending Password',
   'wallet.keystone': 'Keystone',
   'wallet.keystoneDescription': 'A Hong Kong-based firm provides a completely air-gapped, open-source QR code communication hardware wallet featuring a 4-inch touchscreen and a fingerprint scanner.',
   'wallet.keystoneSupport': '3 Pro',

@@ -135,7 +135,8 @@ class ActivityTrackerService {
       const { MessageTypes } = await import('@/models/MessageTypes');
 
       // Send message to background to check auto-lock immediately
-      await Messaging.sendToBackground({
+      // Use sendToBackgroundFromOptions since CHECK_AUTO_LOCK is registered with addToOptions
+      await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.CHECK_AUTO_LOCK,
         data: {}
       });
