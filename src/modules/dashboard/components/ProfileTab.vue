@@ -31,7 +31,7 @@
         <v-col cols="5" class="d-flex justify-space-between" style="align-content: center; flex-flow: wrap">
           <v-row no-gutters>
             <v-col cols="12" class="text-center py-2">
-              <v-avatar size="100" rounded>
+              <v-avatar size="96" rounded>
                 <v-img v-if="loggedWallet" :src="avatar"></v-img>
               </v-avatar>
             </v-col>

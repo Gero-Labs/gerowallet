@@ -17,35 +17,20 @@
         <v-layout>
           <v-row>
             <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !signature" class="pb-0">
-              <v-tooltip
-                v-model="tooltip.enabled"
-                top
-                color="red"
-              >
-                <template v-slot:activator="{ }">
-                  <v-text-field
-                    class="w-100"
-                    block
-                    dense
-                    v-model="spendingPassword"
-                    outlined
-                    hide-details
-                    :placeholder="$t('navigation.typeYourSpendingPassword')"
-                    :label="$t('wallet.spendingPassword')"
-                    :type="showPassword ? 'text' : 'password'"
-                    :rules="[rules.required()]"
-                    required
-                    @keydown.enter.stop="sign"
-                  >
-                    <template v-slot:append>
-                      <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                        {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-                      </v-icon>
-                    </template>
-                  </v-text-field>
-                </template>
-                <span>{{ tooltip.text }}</span>
-              </v-tooltip>
+              <BiometricPasswordField
+                ref="passwordField"
+                :value="spendingPassword"
+                @input="spendingPassword = $event"
+                dense
+                outlined
+                hide-details
+                :placeholder="$t('navigation.typeYourSpendingPassword')"
+                :label="$t('wallet.spendingPassword')"
+                :rules="[rules.required()]"
+                required
+                @enter="sign"
+                @biometric-autofill-success="sign"
+              />
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
@@ -84,6 +69,7 @@ import { DataSignError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';
@@ -96,14 +82,10 @@ const { t } = useTranslation();
 const { loggedWallet, config, keys } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any;
 const spendingPassword = ref('');
-const showPassword = ref(false);
+const passwordField = ref<any>(null);
 const request = ref<any>(null);
 const message = ref('');
 const valid = ref(false);
-const tooltip = ref({
-  enabled: false,
-  text: t('wallet.wrongSpendingPassword')
-});
 const isBT = ref(false);
 const loading = ref(false);
 const controller = ref<any>(null);
@@ -118,13 +100,6 @@ const txAutoSubmit = computed(() => {
 const useSidePanel = computed(() => {
   return config.value?.useSidePanel;
 });
-
-const enableToolTip = () => {
-  tooltip.value.enabled = true;
-  setTimeout(() => {
-    tooltip.value.enabled = false;
-  }, 3000);
-};
 
 const decline = async () => {
   await controller.value.returnData({ data: undefined, error: DataSignError.UserDeclined });
@@ -179,7 +154,7 @@ const sign = async () => {
       }) as { data: { isValid: boolean; error?: string } };
 
       if (!passwordVerification.data.isValid) {
-        enableToolTip();
+        passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       } else {
         await signAndReturnTx();
       }

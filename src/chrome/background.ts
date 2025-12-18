@@ -56,6 +56,11 @@ loadWallets().then(async () => {
   debugLog('Wallet store hydrated, checking for logged wallet...');
 
   if (walletStore.loggedWallet) {
+    // CRITICAL: Check auto-lock BEFORE logging in to catch expired sessions
+    // This prevents the activity tracker from resetting lastActivityTimestamp
+    debugLog('🔒 Checking auto-lock before wallet restore...');
+    await checkAutoLock();
+
     debugLog('Login in wallet: ', walletStore.loggedWallet.name);
     await walletManager.login(walletStore.loggedWallet);
   } else {
@@ -88,7 +93,7 @@ debugLog('📡 Background store messaging handler initialized:', backgroundStore
 //         title: 'Extension Updated',
 //         message: `Gero Dashboard has been updated to version ${currentVersion}!`,
 //         iconUrl: chrome.runtime.getURL('public/logo128.png'),
-//         imageUrl: chrome.runtime.getURL('public/2.6.1.png'),
+//         imageUrl: chrome.runtime.getURL('public/2.6.2.png'),
 //       });
 //     }
 //   });
@@ -140,15 +145,88 @@ function clearProcessedDomains() {
 // Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
 // const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
 
+/**
+ * Check if the wallet should be auto-locked based on inactivity
+ */
+async function checkAutoLock(): Promise<void> {
+  try {
+    const wallet = walletStore.loggedWallet;
+
+    // Skip if no wallet is logged in or already locked
+    if (!wallet || walletStore.isLocked) {
+      return;
+    }
+
+    // Get auto-lock configuration
+    const { getDb } = await import('@/db/wallet-db');
+    const db = await getDb(wallet.id);
+    const configTable = db.table('config');
+
+    const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
+    const autoLockMinutes = autoLockConfig?.value || 0;
+
+    // If auto-lock is disabled (0), don't lock
+    if (autoLockMinutes === 0) {
+      return;
+    }
+
+    // Get unlock method - CRITICAL: Don't lock if no unlock method is configured
+    const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
+    const unlockMethod = unlockMethodConfig?.value;
+
+    // If no unlock method is set, skip auto-lock (user won't be able to unlock!)
+    if (!unlockMethod) {
+      debugLog('🔒 Auto-lock check: No unlock method configured, skipping lock');
+      return;
+    }
+
+    // Get last activity timestamp
+    const lastActivityConfig = await configTable.where({ key: 'lastActivityTimestamp' }).first();
+
+    // If lastActivityTimestamp doesn't exist, it means the wallet was just logged in
+    // and the activity tracker hasn't run yet. Skip the check.
+    if (!lastActivityConfig || !lastActivityConfig.value) {
+      debugLog('🔒 Auto-lock check: lastActivityTimestamp not set, skipping check');
+      return;
+    }
+
+    const lastActivityTimestamp = lastActivityConfig.value;
+
+    // Calculate time since last activity
+    const now = Date.now();
+    const inactiveMinutes = (now - lastActivityTimestamp) / (1000 * 60);
+
+    debugLog(`🔒 Auto-lock check: ${inactiveMinutes.toFixed(2)} minutes inactive (threshold: ${autoLockMinutes} minutes)`);
+
+    // Lock wallet if inactive for longer than configured time
+    if (inactiveMinutes >= autoLockMinutes) {
+      debugLog('🔒 Auto-locking wallet due to inactivity');
+      await walletManager.lock();
+    }
+  } catch (error) {
+    console.error('❌ Error checking auto-lock:', error);
+  }
+}
+
 // Use Chrome alarms API for reliable cleanup in service workers
 chrome.alarms.create('clearProcessedDomains', {
   delayInMinutes: 24 * 60, // 24 hours
   periodInMinutes: 24 * 60 // repeat every 24 hours
 });
 
+// Create auto-lock alarm to check every minute
+chrome.alarms.create('auto-lock-check', {
+  delayInMinutes: 1,
+  periodInMinutes: 1 // Check every minute
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'clearProcessedDomains') {
     clearProcessedDomains();
+  } else if (alarm.name === 'auto-lock-check') {
+    checkAutoLock().catch(error => {
+      console.error('❌ Error in auto-lock check:', error);
+    });
   }
 });
 
@@ -781,13 +859,25 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       });
     }
     const txCbor = request.data.tx
-    const txId = await response.text();
-    console.log('txId', txId)
-    if (txId) {
+    const txIdResponse = await response.text();
+
+    // Validate txId format (must be 64 hex characters)
+    const isValidTxId = /^[a-f0-9]{64}$/i.test(txIdResponse);
+    if (!isValidTxId) {
+      console.error(txIdResponse);
+      sendResponse({
+        id: request.id,
+        error: txIdResponse,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+
+    if (txIdResponse) {
       const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
       const pendingTx = {
-        id: txId, // Required for a database key path
-        tx_hash: txId,
+        id: txIdResponse, // Required for a database key path
+        tx_hash: txIdResponse,
         block_hash: '',
         block_height: 0,
         epoch_no: 0,
@@ -806,7 +896,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
     }
     sendResponse({
       id: request.id,
-      data: txId,
+      data: txIdResponse,
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1307,14 +1397,14 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
       const isValid = walletBg.verifySpendingPassword(request.data.password);
       sendResponse({
         id: request.id,
-        data: { isValid },
+        data: { success: isValid, error: isValid ? undefined : 'Invalid spending password' },
         target: TARGET,
         sender: SENDER.extension,
       });
     } else {
       sendResponse({
         id: request.id,
-        data: { error: 'Wallet instance not available' },
+        data: { success: false, error: 'Wallet instance not available' },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -1323,11 +1413,12 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
     console.error('Error verifying spending password:', error);
     sendResponse({
       id: request.id,
-      data: { error: getErrorMessage(error) },
+      data: { success: false, error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
   }
+  return true; // Required for async Chrome message handlers
 });
 
 app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
@@ -1570,6 +1661,93 @@ app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
       sender: SENDER.extension,
       error: err,
     })
+  }
+});
+
+app.addToOptions(MessageTypes.LOCK, async (request, sendResponse) => {
+  try {
+    await walletManager.lock();
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    console.error('lock error', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.UNLOCK, async (request, sendResponse) => {
+  try {
+    const { unlockCredential, totpCode, password, unlockMethod } = request.data;
+    const success = await walletManager.unlock(unlockCredential, totpCode, password, unlockMethod);
+    sendResponse({
+      id: request.id,
+      data: { success },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    console.error('unlock error', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.VERIFY_PRE_LOGIN_UNLOCK, async (request, sendResponse) => {
+  try {
+    const { walletId, unlockCredential, totpCode, password, unlockMethod } = request.data;
+    const success = await walletManager.verifyPreLoginUnlock(walletId, unlockCredential, totpCode, password, unlockMethod);
+    sendResponse({
+      id: request.id,
+      data: { success },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    console.error('pre-login unlock verification error', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => {
+  try {
+    // Trigger immediate auto-lock check
+    await checkAutoLock();
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    console.error('check auto-lock error', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    });
   }
 });
 

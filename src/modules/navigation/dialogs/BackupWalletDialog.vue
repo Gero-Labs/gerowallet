@@ -108,21 +108,16 @@
                               </v-list-item-subtitle>
                             </v-list-item-content>
                           </v-list-item>
-                          <v-text-field
+                          <BiometricPasswordField
+                            ref="passwordField"
+                            :value="password"
+                            @input="password = $event"
                             outlined
                             dense
-                            v-model="password"
                             :rules="[rules.required()]"
                             :label="$t('wallet.password')"
-                            :type="showPassword ? 'text' : 'password'"
-                            @keydown.enter.stop="validUnlock && decryptMnemonic()"
-                          >
-                            <template v-slot:append>
-                              <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                                {{showPassword ? 'mdi-eye' : 'mdi-eye-off'}}
-                              </v-icon>
-                            </template>
-                          </v-text-field>
+                            @enter="validUnlock && decryptMnemonic()"
+                          />
                           <v-btn
                             color="primary"
                             block
@@ -236,6 +231,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
 import { toRefs, ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
 import { decrypt } from '@/shared/utils/crypto';
@@ -263,7 +259,7 @@ const seedPhraseReplaced = ref<any[]>([]);
 const overlay = ref<boolean>(true);
 const recoverSeedChecked = ref<boolean>(false);
 const password = ref<string>('');
-const showPassword = ref<boolean>(false);
+const passwordField = ref<any>(null);
 
 const seedToStr = () => {
   let str = ''
@@ -359,7 +355,6 @@ const resetDialog = (): void => {
   seedPhraseReplaced.value = []
   persistent.value = false
   password.value = ''
-  showPassword.value = false
   step.value = 1
 }
 
@@ -401,7 +396,7 @@ const decryptMnemonic = async (): Promise<void> => {
       [seedPhraseToConfirm.value, seedPhraseReplaced.value] = randomReplace(seedPhrase.value, 4);
       overlay.value = false
     } catch (e) {
-      snackbar.setError(t('common.wrongPassword'))
+      passwordField.value?.showError(t('common.wrongPassword'));
       console.log(e) //TODO
     }
   }

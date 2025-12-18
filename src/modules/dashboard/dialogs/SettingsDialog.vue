@@ -1,5 +1,6 @@
 <template>
   <BaseDialog
+    icon="mdi-cog"
     :isOpen="isOpen"
     @close="$emit('close')"
     :title="t('settings.settings')"
@@ -64,12 +65,13 @@ import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDapp
 import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
 import walletStoreDefault from '@/stores/walletStore';
 import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
+import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 
 const { t } = useTranslation();
 
 // Props & Emitting
-const props = defineProps<{ isOpen: boolean }>()
-const emit  = defineEmits<{ (e: 'close'): void }>()
+defineProps<{ isOpen: boolean }>()
+defineEmits<{ (e: 'close'): void }>()
 
 // Derive whether we've ever loaded a backup setting
 const hasBackup = computed(() => walletStoreDefault.hasBackup())
@@ -79,6 +81,9 @@ const getBackup = computed(() => walletStoreDefault.getBackup())
 
 // Show a badge if the user *should* back up
 const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
+
+// Check if there are new features in the security section
+const hasNewSecurityFeatures = computed(() => hasNewFeaturesInPath(['settings', 'security']))
 
 // Local reactive state
 const tab     = ref<string | null>(null)
@@ -91,7 +96,7 @@ const tabs = computed(() => [
   { label: t('settings.collateral'), value: 'collateral', disabled: false },
   { label: t('settings.contacts'), value: 'contacts', disabled: false },
   { label: t('settings.dapps'), value: 'connectedDapps', disabled: false },
-  { label: t('settings.security'), value: 'security', disabled: false, badge: shouldBackup.value },
+  { label: t('settings.security'), value: 'security', disabled: false, badge: shouldBackup.value || hasNewSecurityFeatures.value },
   { label: t('settings.advanced'), value: 'advanced', disabled: false },
 ])
 

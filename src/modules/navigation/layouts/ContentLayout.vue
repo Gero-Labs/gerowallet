@@ -147,7 +147,7 @@
                   </v-menu>
 
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
-                    <v-badge bordered color="error" dot v-if="shouldBackup">
+                    <v-badge bordered color="error" dot v-if="shouldBackup || hasNewSettingsFeatures">
                       <v-avatar size="20">
                         <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
                       </v-avatar>
@@ -243,6 +243,7 @@ import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 import networks from '@/utils/networks';
+import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -339,6 +340,9 @@ const shouldBackup = computed(() => {
   // Use reactive config from store for proper sync between empty and populated states
   return config.value && 'backup' in config.value && !config.value.backup;
 });
+
+// Check if there are new features in the settings section
+const hasNewSettingsFeatures = computed(() => hasNewFeaturesInPath(['settings']));
 
 // Check if wallet is empty (no native tokens)
 const isWalletEmpty = computed(() => {
