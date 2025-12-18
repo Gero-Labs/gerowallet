@@ -9,7 +9,13 @@
     <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
       <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
         <v-list-item-group v-model="selectedWallet" color="primary">
-          <v-list-item class="wallet-row" v-for="(item, i) in availableWallets" :key="i" @click="submitLogin(item.id)">
+          <v-list-item
+            class="wallet-row"
+            :class="{ 'wallet-locked': isWalletLocked(item) }"
+            v-for="(item, i) in availableWallets"
+            :key="i"
+            @click="submitLogin(item.id)"
+          >
             <v-list-item-icon style="height: 40px" class="mr-4">
               <v-badge
                 overlap
@@ -31,6 +37,16 @@
             <v-list-item-content>
               <v-list-item-title>
                 {{ item.name }}
+                <v-chip
+                  v-if="isWalletLocked(item)"
+                  x-small
+                  color="transparent"
+                  text-color="primary"
+                  class="mb-1 ml-1"
+                >
+                  <v-icon x-small left>mdi-lock</v-icon>
+                  {{ $t('wallet.loggedIn') }}
+                </v-chip>
               </v-list-item-title>
               <v-list-item-subtitle>
                 {{ item.chain }} - {{item.network}}
@@ -46,26 +62,41 @@
         </v-list-item-group>
       </v-list>
     </v-card-text>
+
+    <!-- Unlock Wallet Dialog -->
+    <UnlockWalletDialog
+      v-model="showUnlockDialog"
+      :pre-login-wallet-id="preLoginWalletId"
+      :pre-login-wallet-name="preLoginWalletName"
+      :pre-login-wallet-icon="preLoginWalletIcon"
+      @unlocked="handleWalletUnlocked"
+      @logged-out="handleLoggedOut"
+    />
   </v-card>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import { Wallet, WalletType } from '@/models/types';
-import { computed, ref, toRefs, getCurrentInstance } from 'vue';
+import { computed, ref, toRefs, getCurrentInstance, watch } from 'vue';
 import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
-
-
-const { t } = useTranslation();
+import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.vue';
 
 const selectedWallet = ref<string | null>(null);
+const showUnlockDialog = ref<boolean>(false);
+const pendingNavigation = ref<string | null>(null);
+const pendingLoginWalletId = ref<string | null>(null);
 
-const { loggedWallet } = toRefs(walletStore);
+// Pre-login unlock props
+const preLoginWalletId = ref<number | null>(null);
+const preLoginWalletName = ref<string | null>(null);
+const preLoginWalletIcon = ref<string | null>(null);
+
+const { loggedWallet, isLocked } = toRefs(walletStore);
 
 const { wallets } = toRefs(geroStore);
 
@@ -84,55 +115,287 @@ const resolveNetworkIcon = (item: Wallet): string => {
   return '';
 };
 
+const isWalletLocked = (wallet: Wallet): boolean => {
+  return loggedWallet.value?.id === wallet.id && isLocked.value;
+};
+
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
+  // Check if wallet is locked
+  if (isLocked.value) {
+    // If clicking on a different wallet while current wallet is locked, logout and login to new wallet
+    if (loggedWallet.value?.id !== walletId) {
+      debugLog('🔄 Switching from locked wallet to different wallet - logging out first');
+      try {
+        // Logout from current wallet
+        await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.LOGOUT,
+          data: {}
+        });
+
+        // Wait for logout to complete using watcher (event-driven, not polling)
+        const logoutSuccess = await new Promise<boolean>((resolve) => {
+          // Check immediately first
+          if (loggedWallet.value === null) {
+            debugLog('✅ Logout already confirmed - loggedWallet is null');
+            resolve(true);
+            return;
+          }
+
+          // Set up watcher for state change
+          const unwatch = watch(
+            () => loggedWallet.value,
+            (newValue) => {
+              if (newValue === null) {
+                debugLog('✅ Logout confirmed - loggedWallet is null');
+                unwatch();
+                resolve(true);
+              }
+            }
+          );
+
+          // Safety timeout (2 seconds)
+          setTimeout(() => {
+            unwatch();
+            console.warn('⚠️ Timeout waiting for logout to complete');
+            resolve(false);
+          }, 2000);
+        });
+
+        if (!logoutSuccess) {
+          console.error('❌ Logout did not complete in time');
+          return;
+        }
+
+        debugLog('🔄 Logout completed, proceeding with login to new wallet');
+        // Now proceed with login to the new wallet (fall through to login logic below)
+      } catch (error) {
+        console.error('❌ Logout failed during wallet switch:', error);
+        return;
+      }
+    } else {
+      // Clicking on the same locked wallet - show unlock dialog
+      debugLog('🔒 Wallet is locked, showing unlock dialog');
+      showUnlockDialog.value = true;
+      return;
+    }
+  }
+
   console.log('submitLogin')
   try {
     const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
+
+    // **PRE-LOGIN UNLOCK CHECK** - If logged out, check if wallet has unlock method
+    if (!loggedWallet.value && wallet) {
+      debugLog('🔍 Checking for unlock method before login');
+      const { getDb } = await import('@/db/wallet-db');
+      const db = await getDb(wallet.id);
+      const configTable = db.table('config');
+      const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
+
+      if (unlockMethodConfig?.value) {
+        debugLog('🔐 Wallet has unlock method configured - showing pre-login unlock dialog');
+        // Store wallet info for pre-login unlock
+        preLoginWalletId.value = wallet.id;
+        preLoginWalletName.value = wallet.name || 'Wallet';
+        preLoginWalletIcon.value = wallet.icon || 'mdi-wallet';
+        pendingLoginWalletId.value = walletId;
+
+        // Show unlock dialog
+        showUnlockDialog.value = true;
+        return; // Don't proceed with login yet
+      }
+    }
 
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
 
-    // OPTIMIZATION: Trust the background response instead of polling for up to 5 seconds
-    // The background script sets the store and returns success/failure
+    // Trust the background response
     if (!response || (response as any).error) {
       console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
       return;
     }
 
-    // Small delay to ensure store messaging has propagated (100ms vs 5000ms max before)
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for login state to propagate using watcher (event-driven, not polling)
+    const loginSuccess = await new Promise<boolean>((resolve) => {
+      // Check immediately first
+      if (loggedWallet.value?.id === walletId) {
+        debugLog('✅ Login already confirmed - loggedWallet.id matches target wallet');
+        resolve(true);
+        return;
+      }
 
-    debugLog('✅ Login complete, wallet logged in:', !!loggedWallet.value);
-
-    const queryParams = vmProxy.$route.query;
-    debugLog('🧭 Starting navigation, current route:', vmProxy.$route.path);
-    debugLog('🧭 Query params:', queryParams);
-
-    if (queryParams['redirect']) {
-      const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
-      debugLog('🧭 Navigating to redirect path:', redirectPath);
-      await vmProxy.$router.push(redirectPath).catch(err => {
-        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-          console.error('Navigation error:', err);
+      // Set up watcher for state change
+      const unwatch = watch(
+        () => loggedWallet.value?.id,
+        (newId) => {
+          if (newId === walletId) {
+            debugLog('✅ Login confirmed - loggedWallet.id matches target wallet');
+            unwatch();
+            resolve(true);
+          }
         }
-      });
-    } else {
-      debugLog('🧭 Navigating to home page: /');
-      await vmProxy.$router.push("/").catch(err => {
-        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-          console.error('Navigation error:', err);
-        }
-      });
+      );
+
+      // Safety timeout (2 seconds)
+      setTimeout(() => {
+        unwatch();
+        console.warn('⚠️ Timeout waiting for login state to propagate');
+        resolve(false);
+      }, 2000);
+    });
+
+    if (!loginSuccess) {
+      console.error('❌ Login state did not propagate in time');
+      return;
     }
 
-    debugLog('🧭 Navigation completed, new route:', vmProxy.$route.path);
+    debugLog('✅ Login state confirmed, proceeding with navigation');
+
+    // Store the intended navigation path
+    const queryParams = vmProxy.$route.query;
+    if (queryParams['redirect']) {
+      pendingNavigation.value = decodeURIComponent(queryParams['redirect'].toString());
+    } else {
+      pendingNavigation.value = '/';
+    }
+
+    // Proceed with navigation
+    await navigateAfterLogin();
   } catch (error) {
     console.error(error);
   }
+};
+
+const navigateAfterLogin = async (): Promise<void> => {
+  const queryParams = vmProxy.$route.query;
+  debugLog('🧭 Starting navigation, current route:', vmProxy.$route.path);
+  debugLog('🧭 Query params:', queryParams);
+
+  const targetPath = pendingNavigation.value || (queryParams['redirect'] ? decodeURIComponent(queryParams['redirect'].toString()) : '/');
+
+  debugLog('🧭 Navigating to:', targetPath);
+  await vmProxy.$router.push(targetPath).catch(err => {
+    if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+      console.error('Navigation error:', err);
+    }
+  });
+
+  debugLog('🧭 Navigation completed, new route:', vmProxy.$route.path);
+
+  // Clear pending navigation
+  pendingNavigation.value = null;
+};
+
+const handleWalletUnlocked = async (): Promise<void> => {
+  debugLog('🔓 Wallet unlocked successfully');
+  showUnlockDialog.value = false;
+
+  // If this was a pre-login unlock, proceed with login
+  if (pendingLoginWalletId.value) {
+    debugLog('✅ Pre-login unlock successful - proceeding with login');
+    const walletId = pendingLoginWalletId.value;
+
+    // Clear pre-login state first
+    pendingLoginWalletId.value = null;
+    preLoginWalletId.value = null;
+    preLoginWalletName.value = null;
+    preLoginWalletIcon.value = null;
+
+    // Proceed with login directly (don't call submitLogin to avoid re-checking unlock method)
+    try {
+      const wallet = (Object.values(wallets.value) as Wallet[])
+        .filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network))
+        .find((wal: Wallet) => wal.id === walletId);
+
+      if (!wallet) {
+        console.error('❌ Wallet not found:', walletId);
+        return;
+      }
+
+      debugLog('🔑 Sending LOGIN message after pre-login unlock');
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
+      });
+
+      if (!response || (response as any).error) {
+        console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+        return;
+      }
+
+      // Wait for login state to propagate
+      const loginSuccess = await new Promise<boolean>((resolve) => {
+        if (loggedWallet.value?.id === walletId) {
+          debugLog('✅ Login already confirmed');
+          resolve(true);
+          return;
+        }
+
+        const unwatch = watch(
+          () => loggedWallet.value?.id,
+          (newId) => {
+            if (newId === walletId) {
+              debugLog('✅ Login confirmed');
+              unwatch();
+              resolve(true);
+            }
+          }
+        );
+
+        setTimeout(() => {
+          unwatch();
+          console.warn('⚠️ Timeout waiting for login state');
+          resolve(false);
+        }, 2000);
+      });
+
+      if (!loginSuccess) {
+        console.error('❌ Login state did not propagate in time');
+        return;
+      }
+
+      debugLog('✅ Login complete, proceeding with navigation');
+
+      // Store navigation path
+      const queryParams = vmProxy.$route.query;
+      if (queryParams['redirect']) {
+        pendingNavigation.value = decodeURIComponent(queryParams['redirect'].toString());
+      } else {
+        pendingNavigation.value = '/';
+      }
+
+      await navigateAfterLogin();
+    } catch (error) {
+      console.error('❌ Login error after pre-login unlock:', error);
+    }
+    return;
+  }
+
+  // Post-login unlock scenario - wallet is already logged in, just locked
+  // Just navigate to the wallet
+  debugLog('✅ Post-login unlock - navigating to wallet');
+  await navigateAfterLogin();
+};
+
+const handleLoggedOut = async (): Promise<void> => {
+  debugLog('👋 User logged out from unlock dialog');
+  showUnlockDialog.value = false;
+  pendingNavigation.value = null;
+
+  // Clear pre-login state if it was a pre-login unlock
+  pendingLoginWalletId.value = null;
+  preLoginWalletId.value = null;
+  preLoginWalletName.value = null;
+  preLoginWalletIcon.value = null;
+
+  // Clear selected wallet to remove highlight
+  selectedWallet.value = null;
+
+  // Stay on the welcome screen
 };
 </script>
 <style scoped>
@@ -196,6 +459,23 @@ const submitLogin = async (walletId: string): Promise<void> => {
   z-index: 1;
 }
 
+/* Logged in wallet styling (teal/cyan) */
+.wallet-locked {
+  border-color: rgba(0, 199, 243, 0.5) !important;
+  background:
+    linear-gradient(135deg, rgba(0, 199, 243, 0.12) 0%, rgba(19, 22, 27, 0.4) 100%),
+    radial-gradient(circle at 20% 50%, rgba(0, 199, 243, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(0, 255, 209, 0.03) 0%, transparent 50%) !important;
+}
+
+.wallet-locked:hover {
+  border-color: rgba(0, 199, 243, 0.7) !important;
+  background:
+    linear-gradient(135deg, rgba(0, 199, 243, 0.18) 0%, rgba(19, 22, 27, 0.5) 100%),
+    radial-gradient(circle at 20% 50%, rgba(0, 199, 243, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(0, 255, 209, 0.05) 0%, transparent 50%) !important;
+}
+
 /* Fallback for browsers without backdrop-filter support */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .wallet-row {
@@ -204,6 +484,14 @@ const submitLogin = async (walletId: string): Promise<void> => {
 
   .wallet-row:hover {
     background-color: rgba(19, 22, 27, 0.95) !important;
+  }
+
+  .wallet-locked {
+    background-color: rgba(255, 152, 0, 0.15) !important;
+  }
+
+  .wallet-locked:hover {
+    background-color: rgba(255, 152, 0, 0.25) !important;
   }
 }
 </style>

@@ -60,23 +60,20 @@
               v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit"
               class="password-section"
             >
-              <v-text-field
-                v-model="spendingPassword"
+              <BiometricPasswordField
+                ref="passwordField"
+                :value="spendingPassword"
+                @input="spendingPassword = $event"
                 outlined
                 dense
                 :label="$t('wallet.spendingPassword')"
-                :type="showPassword ? 'text' : 'password'"
                 hide-details
                 class="password-field"
                 :disabled="txSubmitLoading"
-                @keydown.enter.prevent="handleTopUp"
-              >
-                <template v-slot:append>
-                  <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                    {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-                  </v-icon>
-                </template>
-              </v-text-field>
+                @enter="handleTopUp"
+                @biometric-autofill-success="handleBiometricSuccess"
+                @biometric-autofill-error="handleBiometricError"
+              />
             </div>
 
             <!-- USB/Bluetooth toggle for Ledger wallet on step 2 (hidden after signing) -->
@@ -145,6 +142,7 @@ import { WalletType } from '@/models/types';
 import ledgerUtils from '@/shared/utils/ledger';
 import networks from '@/utils/networks';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 
 
 const { t } = useTranslation();
@@ -166,7 +164,7 @@ const amounts = ref({
 const feeOption = ref('ADA');
 const transactionId = ref('1');
 const spendingPassword = ref('');
-const showPassword = ref(false);
+const passwordField = ref<any>(null);
 const txSubmitLoading = ref(false);
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const txCbor = ref('');
@@ -220,7 +218,6 @@ const closeModal = () => {
     eurAmount: '',
   };
   spendingPassword.value = '';
-  showPassword.value = false;
   txSubmitLoading.value = false;
   tx.value = undefined;
   txCbor.value = '';
@@ -239,6 +236,19 @@ const updateAmounts = (newAmounts: { adaAmount: string; eurAmount: string }) => 
 
 const updateFeeOption = (newFeeOption: string) => {
   feeOption.value = newFeeOption;
+};
+
+const handleBiometricSuccess = () => {
+  console.log('✅ Biometric autofill successful in TopUpModal - triggering top up');
+  // Automatically trigger top up after successful biometric autofill
+  setTimeout(() => {
+    handleTopUp();
+  }, 300); // Small delay for UX feedback
+};
+
+const handleBiometricError = (error: string) => {
+  console.error('Biometric autofill error in TopUpModal:', error);
+  snackbar.setError(error || t('security.biometricAuthFailed'));
 };
 
 // Build transaction
@@ -475,7 +485,7 @@ const handleTopUp = async () => {
       })) as { data: { isValid: boolean; error?: string } };
       console.log('🔏 passwordVerification:', passwordVerification);
       if (!passwordVerification.data.isValid) {
-        snackbar.setError(t('wallet.invalidSpendingPassword'));
+        passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
         return;
       }
 

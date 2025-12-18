@@ -335,21 +335,59 @@ npm run lint            # ESLint check
 - Follow existing module structure (components, dialogs, views)
 
 ### 2. **Chrome Messaging**
-Use the established messaging pattern:
+Use the established messaging pattern with the **correct method** based on context:
+
+**CRITICAL**: Use the correct messaging method based on where the code runs:
+- **Options/Browser Context** (e.g., dialogs, components in `src/modules/`): Use `Messaging.sendToBackgroundFromOptions()`
+- **Popup Context** (e.g., `src/popup/`): Use `Messaging.sendToBackground()`
+
 ```typescript
-// Frontend to background
-const result = await Messaging.sendToBackground({
+// OPTIONS/BROWSER CONTEXT (src/modules/dashboard/dialogs/*, etc.)
+// Use sendToBackgroundFromOptions
+const { Messaging } = await import('@/chrome/messaging');
+const { MessageTypes } = await import('@/models/MessageTypes');
+
+const response = await Messaging.sendToBackgroundFromOptions({
+  method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+  data: { password }
+});
+
+// IMPORTANT: Response structure wraps data in a 'data' property
+// Response format: { data: { success: boolean, error?: string }, target: string, sender: string }
+if (!response.data.success) {
+  throw new Error(response.data.error || 'Operation failed');
+}
+
+// POPUP CONTEXT (src/popup/*)
+// Use sendToBackground
+const response = await Messaging.sendToBackground({
   method: MessageTypes.SIGN_TX,
   data: { tx, password, ... }
 });
 
+// Same response structure: access via response.data.success, response.data.error, etc.
+if (!response.data.success) {
+  throw new Error(response.data.error || 'Operation failed');
+}
+
 // Background handler (background.ts)
-app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
+// Use app.addToOptions for messages from options/browser context
+app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
   try {
-    const result = await walletBg.signTx(request.data);
-    sendResponse({ success: true, data: result });
+    const result = await walletBg.verifySpendingPassword(request.data.password);
+    sendResponse({
+      id: request.id,
+      data: { success: true, result }, // Wrap in 'data' property
+      target: TARGET,
+      sender: SENDER.extension
+    });
   } catch (error) {
-    sendResponse({ success: false, error: error.message });
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: error.message }, // Wrap in 'data' property
+      target: TARGET,
+      sender: SENDER.extension
+    });
   }
   return true; // IMPORTANT: return true for async handlers
 });
@@ -663,6 +701,140 @@ if (isCertificateOrWithdrawalOnly) {
   ```
 - **Why**: Without `attach`, the dropdown menu stays at a fixed position when the parent scrolls, causing misalignment
 - **Apply to**: All `v-select`, `v-autocomplete`, `v-combobox` components throughout the application
+
+### 8. **Feature Notification System**
+
+The wallet implements a hierarchical feature notification system to inform users about new features added in version updates. Notifications appear as badges and dots that disappear after user interaction.
+
+**Architecture:**
+- **Components**:
+  - `src/shared/components/NotificationDot.vue` - Reusable v-badge wrapper for showing indicators
+  - `src/shared/composables/useFeatureNotifications.ts` - Core notification system logic
+- **Storage**: LocalStorage (`gero_feature_notifications`) with version tracking
+- **Hierarchy**: Settings Icon → Tab → List Item/Dialog → Specific Feature
+
+**How it works:**
+1. Features are defined in `FEATURE_DEFINITIONS` array with unique IDs, version numbers, and hierarchical paths
+2. Features marked as "new" (not in seen list) show notification indicators
+3. When user interacts with a feature, it's marked as seen and indicator disappears
+4. Parent-level indicators only disappear when ALL child features are seen
+5. Version changes reset all notifications
+
+**Adding a new feature:**
+
+1. **Define the feature** in `src/shared/composables/useFeatureNotifications.ts`:
+   ```typescript
+   const FEATURE_DEFINITIONS: FeatureDefinition[] = [
+     // Existing features...
+     {
+       id: 'settings.security.biometrics',  // Unique ID (hierarchical dot notation)
+       version: '2.6.2',                     // Version when added
+       path: ['settings', 'security', 'biometrics']  // Hierarchy path
+     },
+     // Add your new feature:
+     {
+       id: 'navigation.governance',
+       version: '2.6.3',
+       path: ['navigation', 'governance']
+     }
+   ];
+   ```
+
+2. **Add notification indicator** to the UI component:
+   ```vue
+   <template>
+     <!-- For list items, buttons, menu items -->
+     <v-list-item @click="handleClick">
+       <v-list-item-title>
+         {{ $t('settings.myFeature') }}
+         <!-- Add NotificationDot component -->
+         <NotificationDot
+           :show="isFeatureNew('settings.security.myFeature')"
+           color="error"
+         />
+       </v-list-item-title>
+     </v-list-item>
+   </template>
+
+   <script setup>
+   import NotificationDot from '@/shared/components/NotificationDot.vue';
+   import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
+
+   function handleClick() {
+     // Mark feature as seen when user interacts
+     markFeatureAsSeen('settings.security.myFeature');
+     // ... rest of click handler
+   }
+   </script>
+   ```
+
+3. **Add parent-level indicators** (if needed):
+   ```vue
+   <!-- For tabs in SettingsDialog -->
+   <script setup>
+   import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
+
+   const hasNewSecurityFeatures = computed(() =>
+     hasNewFeaturesInPath(['settings', 'security'])
+   );
+
+   const tabs = computed(() => [
+     {
+       label: t('settings.security'),
+       value: 'security',
+       badge: shouldBackup.value || hasNewSecurityFeatures.value
+     }
+   ]);
+   </script>
+   ```
+
+4. **Update APP_VERSION** in `useFeatureNotifications.ts` when releasing:
+   ```typescript
+   const APP_VERSION = '2.6.3'; // Increment for new release
+   ```
+
+**NotificationDot Component Props:**
+- `show` (boolean): Whether to show the badge
+- `color` (string): Badge color (default: 'error')
+- `dot` (boolean): Show as dot vs content (default: true)
+- `content` (string|number): Badge content if not dot
+- `overlap` (boolean): Whether badge overlaps content
+- `bordered` (boolean): Show white border
+- `pulse` (boolean): Animate with pulse effect (default: false - static dots preferred)
+
+**API Functions:**
+- `isFeatureNew(featureId)` - Check if a specific feature is new
+- `markFeatureAsSeen(featureId)` - Mark feature as seen when user interacts
+- `hasNewFeaturesInPath(path)` - Check if any features in path are new (for parent indicators)
+- `getNewFeatureCount(path)` - Get count of new features in path
+- `getFeaturesInPath(path)` - Get all features in path
+- `getNewFeaturesInPath(path)` - Get only new features in path
+- `resetAllFeatureNotifications()` - Reset all (for debugging)
+
+**Examples:**
+
+```typescript
+// Check if specific feature is new
+if (isFeatureNew('settings.security.biometrics')) {
+  // Show dot/badge
+}
+
+// Check if any security features are new (parent-level check)
+if (hasNewFeaturesInPath(['settings', 'security'])) {
+  // Show badge on Security tab
+}
+
+// Mark as seen when user opens dialog
+function openBiometricsDialog() {
+  markFeatureAsSeen('settings.security.biometrics');
+  biometricsDialog.value = true;
+}
+```
+
+**Implementation Examples:**
+- Settings Icon Badge: `src/modules/navigation/layouts/ContentLayout.vue:150`
+- Security Tab Badge: `src/modules/dashboard/dialogs/SettingsDialog.vue:99`
+- Lock Settings Item Dot: `src/modules/dashboard/components/SecurityTab.vue`
 
 ## Quick Reference
 

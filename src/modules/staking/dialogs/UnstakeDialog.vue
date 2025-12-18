@@ -56,37 +56,23 @@
               <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
-            <v-tooltip
-              v-model="tooltip.enabled"
-              top
-              color="red"
+            <BiometricPasswordField
+              ref="passwordField"
               v-if="loggedWallet?.type === WalletType.Normal && !isSubmit"
-            >
-              <template v-slot:activator="{ }">
-                <v-text-field
-                  flat
-                  style="width: 295px; max-width: 295px"
-                  block
-                  dense
-                  v-model="spendingPassword"
-                  outlined
-                  :label="$t('wallet.spendingPassword')"
-                  :type="showPassword ? 'text' : 'password'"
-                  :rules="passwordRules"
-                  hide-details
-                  required
-                  :disabled="loading"
-                  @keydown.enter.prevent="signUnStakeTx"
-                >
-                  <template v-slot:append>
-                    <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                      {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-                    </v-icon>
-                  </template>
-                </v-text-field>
-              </template>
-              <span>{{ tooltip.text }}</span>
-            </v-tooltip>
+              :value="spendingPassword"
+              @input="spendingPassword = $event"
+              outlined
+              dense
+              hide-details
+              :label="$t('wallet.spendingPassword')"
+              :rules="passwordRules"
+              :disabled="loading"
+              required
+              @enter="signUnStakeTx"
+              @biometric-autofill-success="handleBiometricSuccess"
+              @biometric-autofill-error="handleBiometricError"
+              style="width: 295px; max-width: 295px"
+            />
             <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch :text-left="$t('staking.usb')" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
@@ -105,6 +91,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
 import filters from '@/shared/utils/filters';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
@@ -142,11 +129,7 @@ const { epochParams } = toRefs(networkStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
-const showPassword = ref(false);
-const tooltip = ref({
-  enabled: false,
-  text: t('wallet.wrongSpendingPassword'),
-});
+const passwordField = ref<any>(null);
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
 const isBT = ref(false);
@@ -184,11 +167,17 @@ const cols = computed(() => {
   return 3;
 });
 
-const enableToolTip = () => {
-  tooltip.value.enabled = true;
+const handleBiometricError = (error: string) => {
+  console.error('Biometric autofill error in UnstakeDialog:', error);
+  snackbar.setError(error || t('security.biometricAuthFailed'));
+};
+
+const handleBiometricSuccess = () => {
+  console.log('✅ Biometric autofill successful in UnstakeDialog - triggering sign');
+  // Automatically trigger sign after successful biometric autofill
   setTimeout(() => {
-    tooltip.value.enabled = false;
-  }, 3000);
+    signUnStakeTx();
+  }, 300); // Small delay for UX feedback
 };
 
 const signTx = async (): Promise<boolean> => {
@@ -204,7 +193,7 @@ const signTx = async (): Promise<boolean> => {
     }) as { data: { isValid: boolean; error?: string } };
 
     if (!passwordVerification.data.isValid) {
-      enableToolTip();
+      passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       loading.value = false;
       return false;
     }

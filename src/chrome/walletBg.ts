@@ -987,10 +987,10 @@ export class WalletBg {
   /**
    * Submit transaction using Cardano JS SDK
    * @param txInput - Either a legacy Transaction object, CBOR hex string, or Cardano.Tx object (Cardano JS SDK)
-   * @param utxos - UTXOs for transaction schema conversion
+   * @param _utxos - UTXOs for transaction schema conversion
    * @returns Promise with transaction ID
    */
-  async submitTx(txInput: string | Cardano.Tx, utxos: any[]): Promise<string> {
+  async submitTx(txInput: string | Cardano.Tx, _utxos: any[]): Promise<string> {
     let txCbor: string;
 
     // Handle different input types and convert to CBOR hex
@@ -1004,13 +1004,18 @@ export class WalletBg {
 
     try {
       // Submit transaction via API
-      const txId = await this.api.submitTx(txCbor);
+      const txIdResponse = await this.api.submitTx(txCbor);
 
+      const isValidTxId = /^[a-f0-9]{64}$/i.test(txIdResponse);
+      if (!isValidTxId) {
+        console.error(txIdResponse);
+        throw new Error(txIdResponse);
+      }
       // Create transaction record using sync service pattern
       const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
       const pendingTx = {
-        id: txId, // Required for a database key path
-        tx_hash: txId,
+        id: txIdResponse, // Required for a database key path
+        tx_hash: txIdResponse,
         block_hash: '',
         block_height: 0,
         epoch_no: 0,
@@ -1026,7 +1031,7 @@ export class WalletBg {
       // Store transaction in a database
       this.setAccountTransactions([pendingTx]).catch(e => console.error('Error storing transaction:', e));
 
-      return txId;
+      return txIdResponse;
     } catch (error) {
       console.error('Transaction submission error:', error);
 
@@ -1040,7 +1045,7 @@ export class WalletBg {
       } else if (error['response']?.status === 425) {
         throw new Error(ERROR.fullMempool);
       } else {
-        throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error['response'].data)));
+        throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error)));
       }
     }
   }

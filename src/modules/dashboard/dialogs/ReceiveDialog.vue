@@ -2,11 +2,13 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    :title="$t('wallet.myWalletAddresses')"
-    subtitle=""
+    :title="$t('wallet.receive')"
+    :subtitle="$t('wallet.myWalletAddresses')"
     :min-height="300"
     :height="600"
     :persistent="false"
+    :img="assets.qrCodeSvg"
+    imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <v-card-title class="py-0 transparent">
       <v-tabs

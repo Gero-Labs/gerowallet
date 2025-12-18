@@ -198,6 +198,7 @@ const router = new VueRouter({
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
+  const isLocked: boolean = WalletStore.state.isLocked;
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
 
@@ -214,9 +215,17 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn) {
-    // already logged in → don't show welcome again
+  if (isWelcome && isLoggedIn && !isLocked) {
+    // already logged in and NOT locked → don't show welcome again
     return next({ path: '/' });
+  }
+  if (needsAuth && isLocked) {
+    // wallet is locked → send to /welcome to unlock
+    let redirectTo = '/welcome';
+    if (to.path !== '/') {
+      redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
+    }
+    return next({ path: redirectTo });
   }
   next();
 });

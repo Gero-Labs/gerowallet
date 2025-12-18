@@ -258,23 +258,23 @@ export enum WalletErrorCode {
   INVALID_PASSWORD = 'INVALID_PASSWORD',
   WALLET_LOCKED = 'WALLET_LOCKED',
   SEED_PHRASE_INVALID = 'SEED_PHRASE_INVALID',
-  
+
   // Transaction errors
   INSUFFICIENT_FUNDS = 'INSUFFICIENT_FUNDS',
   TRANSACTION_FAILED = 'TRANSACTION_FAILED',
   INVALID_ADDRESS = 'INVALID_ADDRESS',
   TRANSACTION_TOO_LARGE = 'TRANSACTION_TOO_LARGE',
-  
+
   // Network errors
   NETWORK_ERROR = 'NETWORK_ERROR',
   NODE_UNAVAILABLE = 'NODE_UNAVAILABLE',
   SYNC_ERROR = 'SYNC_ERROR',
-  
+
   // Hardware wallet errors
   HARDWARE_DISCONNECTED = 'HARDWARE_DISCONNECTED',
   HARDWARE_ERROR = 'HARDWARE_ERROR',
   FIRMWARE_OUTDATED = 'FIRMWARE_OUTDATED',
-  
+
   // General errors
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
   STORAGE_ERROR = 'STORAGE_ERROR',
@@ -289,24 +289,24 @@ export interface WalletState {
   // Core wallet data
   metadata: WalletMetadata | null
   account: WalletAccount | null
-  
+
   // Asset information
   portfolio: TokenPortfolio | null
   staking: StakingInfo | null
-  
+
   // Connected applications
   connectedDapps: ConnectedDapp[]
-  
+
   // Configuration
   settings: WalletSettings
   networkSettings: NetworkSettings
-  
+
   // State management
   isLoading: boolean
   isLocked: boolean
   isSyncing: boolean
   lastSyncAt: string | null
-  
+
   // Error handling
   error: WalletError | null
 }
@@ -328,29 +328,29 @@ export enum WalletActionType {
   DELETE_WALLET = 'DELETE_WALLET',
   LOCK_WALLET = 'LOCK_WALLET',
   UNLOCK_WALLET = 'UNLOCK_WALLET',
-  
+
   // Account operations
   SYNC_ACCOUNT = 'SYNC_ACCOUNT',
   UPDATE_BALANCE = 'UPDATE_BALANCE',
-  
+
   // Transaction operations
   SEND_TRANSACTION = 'SEND_TRANSACTION',
   SIGN_TRANSACTION = 'SIGN_TRANSACTION',
   SUBMIT_TRANSACTION = 'SUBMIT_TRANSACTION',
-  
+
   // Staking operations
   DELEGATE_STAKE = 'DELEGATE_STAKE',
   WITHDRAW_REWARDS = 'WITHDRAW_REWARDS',
-  
+
   // DApp operations
   CONNECT_DAPP = 'CONNECT_DAPP',
   DISCONNECT_DAPP = 'DISCONNECT_DAPP',
   APPROVE_TRANSACTION = 'APPROVE_TRANSACTION',
-  
+
   // Settings
   UPDATE_SETTINGS = 'UPDATE_SETTINGS',
   UPDATE_NETWORK_SETTINGS = 'UPDATE_NETWORK_SETTINGS',
-  
+
   // Error handling
   SET_ERROR = 'SET_ERROR',
   CLEAR_ERROR = 'CLEAR_ERROR',

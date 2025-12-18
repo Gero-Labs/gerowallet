@@ -14,7 +14,7 @@
       <!-- Welcome message -->
       <div class="welcome-section">
         <h1 class="hero-title">
-          {{ isNewUser ? $t('dashboard.welcomeToGeroWallet') : $t('dashboard.emptyWallet') }}
+          {{ isNewUser ? $t('dashboard.welcomeToGeroDashboard') : $t('dashboard.emptyWallet') }}
         </h1>
 
         <p class="hero-subtitle">

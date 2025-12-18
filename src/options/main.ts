@@ -14,6 +14,8 @@ import App from './App.vue';
 import walletStore from '@/stores/geroStore';
 import Notifications from '@voerro/vue-notifications';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { walletStore as walletStoreState } from '@/stores/walletStore';
+import { activityTracker } from '@/services/activityTracker.service';
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
@@ -79,11 +81,40 @@ loadPersistedWallet().then(() => {
       resolve();
     });
   }).then(() => {
-    new Vue({
+    const app = new Vue({
       vuetify,
       i18n,
       router,
       render: h => h(App)
     }).$mount('#app');
+
+    // Initialize activity tracker based on wallet state
+    const checkAndStartActivityTracker = () => {
+      if (walletStoreState.loggedWallet && !walletStoreState.isLocked) {
+        activityTracker.start();
+      } else {
+        activityTracker.stop();
+      }
+    };
+
+    // Start/stop activity tracker based on wallet locked state
+    app.$watch(
+      () => [walletStoreState.loggedWallet, walletStoreState.isLocked],
+      () => {
+        checkAndStartActivityTracker();
+      },
+      { immediate: true }
+    );
+
+    // Redirect to welcome page when wallet is locked
+    app.$watch(
+      () => walletStoreState.isLocked,
+      (isLocked) => {
+        if (isLocked && router.currentRoute.path !== '/welcome') {
+          console.log('🔒 Wallet locked, redirecting to welcome page');
+          router.push('/welcome');
+        }
+      }
+    );
   });
 });

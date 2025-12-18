@@ -10,6 +10,8 @@
     :width="1100"
     :scrollable="true"
     :persistent="false"
+    :img="assets.barChart"
+    imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <v-card-text class="pt-1 dialog-content-container" style="z-index: 4">
       <v-row>
