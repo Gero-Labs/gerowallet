@@ -14,8 +14,26 @@ interface WhitelistedEntry {
   id: number;
 }
 
+/**
+ * Clear only wallet-specific Chrome alarms
+ * Preserves system alarms like 'auto-lock-check' and 'clearProcessedDomains'
+ */
+function clearWalletSpecificAlarms() {
+  const SYSTEM_ALARMS = ['auto-lock-check', 'clearProcessedDomains'];
+
+  chrome.alarms.getAll((alarms) => {
+    alarms.forEach((alarm) => {
+      if (!SYSTEM_ALARMS.includes(alarm.name)) {
+        chrome.alarms.clear(alarm.name);
+        debugLog(`🧹 Cleared wallet-specific alarm: ${alarm.name}`);
+      }
+    });
+  });
+}
+
 export interface WalletStore {
   loggedWallet: any;
+  isLocked: boolean;
   account: any;
   transactions: any[];
   utxos: Cardano.Utxo[];
@@ -34,6 +52,7 @@ export interface WalletStore {
 // Create observable state
 export const walletStore = Vue.observable<WalletStore>({
   loggedWallet: null,
+  isLocked: false,
   account: null,
   transactions: [],
   utxos: [],
@@ -186,6 +205,11 @@ export default {
         console.error('Failed to initialize price service:', error);
       });
     }
+  },
+
+  setLocked(isLocked: boolean) {
+    walletStore.isLocked = isLocked;
+    broadcastFromBackground({ isLocked });
   },
 
   setAccount(account: any) {
@@ -382,6 +406,7 @@ export default {
     // Clear all data at once
     const clearedState: Partial<WalletStore> = {
       loggedWallet: null,
+      isLocked: false,  // Reset locked state on logout
       account: null,
       transactions: [],
       contacts: {},
@@ -403,8 +428,8 @@ export default {
     // Broadcast all changes at once
     broadcastFromBackground(clearedState);
 
-    // Clear Chrome alarms
-    chrome.alarms.clearAll();
+    // Clear wallet-specific alarms only (keep system alarms like auto-lock-check)
+    clearWalletSpecificAlarms();
   },
 
   clearForWalletSwitch() {
@@ -413,9 +438,9 @@ export default {
     // Reconnect price service for the new wallet context
     priceService.disconnect();
 
-    // CRITICAL: Clear all Chrome alarms to prevent memory leaks during wallet switching
-    chrome.alarms.clearAll();
-    debugLog('🧹 Cleared all Chrome alarms during wallet switch');
+    // CRITICAL: Clear wallet-specific alarms only (keep system alarms like auto-lock-check)
+    clearWalletSpecificAlarms();
+    debugLog('🧹 Cleared wallet-specific alarms during wallet switch');
 
     // Clear intervals to prevent memory leaks
     if (walletStore.fiatRatesIntervalId) {

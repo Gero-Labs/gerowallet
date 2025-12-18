@@ -34,7 +34,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs, watch, getCurrentInstance } from 'vue'
+import { ref, computed, toRefs, watch, getCurrentInstance, onMounted } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import Loading, { loadingState } from '@/stores/loading';
@@ -49,6 +49,8 @@ import MusicStore from '@/stores/musicStore';
 import GeroStore from '@/stores/geroStore';
 import BringStore from '@/stores/bringStore';
 import Charli3Store from '@/stores/charli3Store';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
 // Ensure the store modules are initialized (which sets up messaging)
 console.log('📱 Options page initializing loading store:', Loading);
@@ -75,13 +77,27 @@ const vmProxy = getCurrentInstance()!.proxy as any;
 const isLoading = computed(() => {
   return loading.value || isRestoring.value;
 });
+
+// Check auto-lock immediately when page loads/becomes visible
+onMounted(async () => {
+  console.log('🔒 Options page mounted, checking auto-lock status');
+  try {
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.CHECK_AUTO_LOCK,
+      data: {}
+    });
+  } catch (error) {
+    console.error('❌ Failed to trigger auto-lock check on mount:', error);
+  }
+});
+
 watch(() => config.value?.locale, async (newLocale, oldLocale) => {
   if (newLocale && vmProxy.$i18n && newLocale !== oldLocale) {
     // CRITICAL FIX: Load language file before switching (race condition fix)
     const { loadLanguage } = await import('@/plugins/i18n');
     try {
       await loadLanguage(newLocale);
-      
+
       // Update i18n locale ONLY after successful load
       vmProxy.$i18n.locale = newLocale;
       console.log('🌐 Language changed globally to:', newLocale);
@@ -182,5 +198,9 @@ watch(() => config.value?.locale, async (newLocale, oldLocale) => {
   padding: 12px 16px !important;
   font-size: 14px !important;
   overflow-wrap: anywhere;
+}
+
+.v-select.v-text-field input {
+  cursor: pointer!important;
 }
 </style>

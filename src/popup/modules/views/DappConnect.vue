@@ -1,5 +1,5 @@
 <template>
-  <PopupHeader :title="$t('navigation.connectWithGeroWallet')" ref="popupHeader">
+  <PopupHeader :title="$t('navigation.connectWithGeroDashboard')" ref="popupHeader">
     <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
       <v-card-title class="justify-center pt-0" style="color: white; font-size: 14px">
         {{ $t('navigation.confirmUrlBeforeGranting') }}

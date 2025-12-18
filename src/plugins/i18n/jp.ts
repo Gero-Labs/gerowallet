@@ -727,7 +727,7 @@ export default {
   'dashboard.walletProtected': 'Great job! Your wallet is protected. Keep your seed phrase safe.',
   'dashboard.walletSecured': 'Wallet Secured',
   'dashboard.welcomeToDashboard': 'Welcome to Dashboard',
-  'dashboard.welcomeToGeroWallet': 'Welcome to Gero Wallet',
+  'dashboard.welcomeToGeroWallet': 'Welcome to Gero Dashboard',
   'dashboard.withdrawal': 'Withdrawal',
   'dashboard.youPay': 'You Pay',
   'dashboard.youReceive': 'You Receive',

@@ -7,7 +7,7 @@
     overlay-color="#1f242f"
     overlay-opacity="0.7"
   >
-    <v-card class="pa-5" :min-height="minHeight" :max-height="height" :disabled="loading">
+    <v-card class="pa-5 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading" style="background-color: #0c0e12d1!important;">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -16,12 +16,29 @@
       </div>
       <v-card-title class="pa-0 pb-0">
         <v-list-item class="px-0" :two-line="!!subtitle" style="z-index: 1;">
-          <v-list-item-avatar v-if="img" size="54" tile>
-            <v-img :src="img" contain></v-img>
+          <v-list-item-avatar class="ml-5 mr-3 my-4" v-if="img" :size="imgSize" tile>
+            <v-img :src="img" contain :style="imgStyle"></v-img>
           </v-list-item-avatar>
+          <v-list-item-icon class="ml-5 mr-3 my-4" v-if="icon">
+            <v-icon style="font-size: 56px">{{icon}}</v-icon>
+          </v-list-item-icon>
           <v-list-item-content>
             <v-list-item-title style="font-size: 18px; max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
               {{ title }}
+              <v-tooltip v-if="titleInfo" bottom max-width="300" content-class="custom-tooltip">
+                <template v-slot:activator="{ on, attrs }">
+                  <v-icon
+                    small
+                    color="primary"
+                    v-bind="attrs"
+                    v-on="on"
+                    class="ml-1"
+                  >
+                    mdi-information-outline
+                  </v-icon>
+                </template>
+                <span>{{ titleInfo }}</span>
+              </v-tooltip>
             </v-list-item-title>
             <v-list-item-subtitle style="white-space: normal; word-break: break-word">
               {{subtitle}}
@@ -40,13 +57,9 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-
-
-const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {
@@ -56,7 +69,20 @@ const props = defineProps({
   img: {
     type: String,
   },
+  imgStyle: {
+    type: [String, Object],
+  },
+  imgSize: {
+    type: [Number, String],
+    default: 54,
+  },
+  icon: {
+    type: String,
+  },
   title: {
+    type: String,
+  },
+  titleInfo: {
     type: String,
   },
   subtitle: {

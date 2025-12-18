@@ -144,12 +144,26 @@
           </v-list-item-subtitle>
         </v-list-item-content>
 
-        <v-list-item-action style="margin: auto">
-          <v-btn icon @click="submitLogout">
-            <v-avatar tile size="18">
-              <v-img :src="assts.logout" alt="logout"></v-img>
-            </v-avatar>
-          </v-btn>
+        <v-list-item-action style="margin: auto" class="d-flex flex-row">
+          <v-tooltip v-if="hasUnlockMethod" top content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn icon @click="submitLock" v-bind="attrs" v-on="on">
+                <v-icon size="18">mdi-lock</v-icon>
+              </v-btn>
+            </template>
+            <span>{{ $t('security.lock') }}</span>
+          </v-tooltip>
+
+          <v-tooltip top content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn icon @click="submitLogout" v-bind="attrs" v-on="on">
+                <v-avatar tile size="18">
+                  <v-img :src="assts.logout" alt="logout"></v-img>
+                </v-avatar>
+              </v-btn>
+            </template>
+            <span>{{ $t('wallet.logout') }}</span>
+          </v-tooltip>
         </v-list-item-action>
       </v-list-item>
     </template>
@@ -205,6 +219,7 @@ const router = vmProxy.$router
 
 // Reactive state
 const version = ref('')
+const hasUnlockMethod = ref(false)
 
 const { musicPlaylist, context } = toRefs(musicStore);
 const { loggedWallet, transactions } = toRefs(walletStore);
@@ -249,7 +264,7 @@ const items = computed((): NavigationItemUnion[] => {
   const hasActivitiesRewardsItems = isClaimRewardsEnabled || isCashbackEnabled || isReferralEnabled;
 
   const { t } = useTranslation();
-  
+
   return [
     { title: t('navigation.dashboard'), icon: assts.barChart, link: '/', enabled: true },
     { title: t('navigation.blog'), icon: assts.blog, link: '/blog', enabled: true },
@@ -303,6 +318,27 @@ function toggleMiniPlayer() {
   MusicStoreModule.setMediaPlayerShown(!context.value.shown)
 }
 
+async function submitLock() {
+  try {
+    debugLog('🔒 Manually locking wallet from navigation drawer');
+
+    // Send lock message to background
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOCK,
+      data: {},
+    });
+
+    debugLog('🔒 Wallet locked successfully');
+
+    // Navigate to login screen
+    router.replace('/welcome').catch(err => {
+      debugLog('Navigation after lock handled:', err.message || err);
+    });
+  } catch (error) {
+    console.error('❌ Error locking wallet:', error);
+  }
+}
+
 async function submitLogout() {
   try {
     LoadingState.setText('Logging out ...')
@@ -332,10 +368,70 @@ async function submitLogout() {
   }
 }
 
+// Check if wallet has unlock method configured
+async function checkUnlockMethod() {
+  try {
+    if (!loggedWallet.value?.id) {
+      hasUnlockMethod.value = false
+      return
+    }
+
+    const { getDb } = await import('@/db/wallet-db')
+    const db = await getDb(loggedWallet.value.id)
+    const configTable = db.table('config')
+
+    const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first()
+
+    // Has unlock method if config exists and has a value (not null/undefined)
+    hasUnlockMethod.value = !!(unlockMethodConfig?.value)
+
+    debugLog('🔒 Unlock method check:', hasUnlockMethod.value ? 'Enabled' : 'Disabled')
+  } catch (error) {
+    console.error('Error checking unlock method:', error)
+    hasUnlockMethod.value = false
+  }
+}
+
+// Watch for wallet changes to update unlock method state
+watch(() => loggedWallet.value?.id, async (newId) => {
+  if (newId) {
+    await checkUnlockMethod()
+  } else {
+    hasUnlockMethod.value = false
+  }
+}, { immediate: true })
+
+// Re-check unlock method when window regains focus (catches settings changes)
+function handleVisibilityChange() {
+  if (!document.hidden && loggedWallet.value?.id) {
+    checkUnlockMethod()
+  }
+}
+
+// Re-check unlock method when security settings are updated
+function handleSecuritySettingsUpdate() {
+  if (loggedWallet.value?.id) {
+    checkUnlockMethod()
+  }
+}
+
 // Lifecycle
 onMounted(() => {
   // @ts-ignore
   version.value = APP_VERSION
+
+  // Listen for visibility changes to refresh unlock method state
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+
+  // Listen for security settings updates (from SecurityTab/LockSettingsDialog)
+  window.addEventListener('security-settings-updated', handleSecuritySettingsUpdate)
+})
+
+// Cleanup on unmount
+import { onUnmounted } from 'vue'
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)
 })
 </script>
 <style lang="scss" scoped>
