@@ -6,6 +6,11 @@ import { chacha20poly1305 } from '@noble/ciphers/chacha';
 import { pbkdf2 } from '@noble/hashes/pbkdf2';
 import { sha512 } from '@noble/hashes/sha2';
 
+// Constants
+export const APP_NAME = 'Gero Dashboard';
+export const WEBAUTHN_RELYING_PARTY_NAME = APP_NAME;
+export const TOTP_DEFAULT_ISSUER = APP_NAME;
+
 export type UnlockMethod = 'password' | 'pin' | 'pattern' | 'biometrics' | null;
 
 export interface SecurityConfig {
@@ -121,11 +126,11 @@ export function generateTotpSecret(): string {
 /**
  * Create a TOTP instance with a secret
  * @param secret - Base32-encoded secret
- * @param issuer - Issuer name (default: 'Gero Wallet')
+ * @param issuer - Issuer name (default: from TOTP_DEFAULT_ISSUER constant)
  * @param label - Account label (wallet name)
  * @returns OTPAuth.TOTP instance
  */
-export function createTotp(secret: string, issuer: string = 'Gero Wallet', label: string = 'Wallet'): OTPAuth.TOTP {
+export function createTotp(secret: string, issuer: string = TOTP_DEFAULT_ISSUER, label: string = 'Wallet'): OTPAuth.TOTP {
   return new OTPAuth.TOTP({
     issuer,
     label,
@@ -167,11 +172,11 @@ export function verifyTotpCode(code: string, secret: string, window: number = 1)
 /**
  * Generate a QR code-compatible otpauth:// URL
  * @param secret - Base32-encoded secret
- * @param issuer - Issuer name (default: 'Gero Wallet')
+ * @param issuer - Issuer name (default: from TOTP_DEFAULT_ISSUER constant)
  * @param label - Account label (wallet name)
  * @returns otpauth:// URL for QR code generation
  */
-export function generateTotpUrl(secret: string, issuer: string = 'Gero Wallet', label: string = 'Wallet'): string {
+export function generateTotpUrl(secret: string, issuer: string = TOTP_DEFAULT_ISSUER, label: string = 'Wallet'): string {
   const totp = createTotp(secret, issuer, label);
   return totp.toString();
 }
@@ -276,7 +281,7 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
     const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
       challenge,
       rp: {
-        name: 'Gero Wallet',
+        name: WEBAUTHN_RELYING_PARTY_NAME,
         id: window.location.hostname
       },
       user: {

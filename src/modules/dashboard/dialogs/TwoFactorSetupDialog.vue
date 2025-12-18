@@ -206,7 +206,8 @@ import {
   generateTotpUrl,
   verifyTotpCode,
   generateBackupCodes,
-  encryptSecurityData
+  encryptSecurityData,
+  APP_NAME
 } from '@/shared/utils/security';
 import QRCodeStyling from 'qr-code-styling';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -349,7 +350,7 @@ function renderQRCode() {
 
   const totpUrl = generateTotpUrl(
     totpSecret.value,
-    'Gero Dashboard',
+    APP_NAME,
     wallet.name || 'Wallet'
   );
 
@@ -386,7 +387,11 @@ function renderQRCode() {
 }
 
 async function handleVerifyCode() {
-  if (verificationCode.value.length !== 6) {
+  // Sanitize input: remove any non-digit characters
+  // Even though NumericOtpInput filters client-side, backend validation should never trust client
+  const sanitizedCode = verificationCode.value.replace(/\D/g, '');
+
+  if (sanitizedCode.length !== 6) {
     // Show error tooltip
     showInvalidCodeTooltip.value = true;
 
@@ -397,7 +402,7 @@ async function handleVerifyCode() {
     return;
   }
 
-  const isValid = verifyTotpCode(verificationCode.value, totpSecret.value);
+  const isValid = verifyTotpCode(sanitizedCode, totpSecret.value);
 
   if (isValid) {
     step.value = 'backup';
