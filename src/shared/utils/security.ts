@@ -459,7 +459,7 @@ async function deriveWalletBiometricKey(walletId: string): Promise<Buffer> {
     deviceMasterKeyBytes,
     Buffer.from(`wallet:${walletId}`, 'utf8'), // Use walletId as salt with prefix
     {
-      c: 10000, // 10,000 iterations
+      c: 100000, // 100,000 iterations (matches PIN hashing security level)
       dkLen: 32 // 256-bit key
     }
   );
@@ -501,7 +501,7 @@ export async function encryptCredentialForBiometric(
   ]);
 
   const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-    c: 10000, // 10,000 iterations (balance between security and performance)
+    c: 100000, // 100,000 iterations (matches PIN hashing security level)
     dkLen: 32 // ChaCha20 key length
   });
 
@@ -551,7 +551,7 @@ export async function decryptCredentialForBiometric(
     ]);
 
     const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-      c: 10000,
+      c: 100000, // 100,000 iterations (must match encryption)
       dkLen: 32
     });
 
@@ -608,7 +608,7 @@ export async function encryptSpendingPasswordForBiometric(
   ]);
 
   const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-    c: 10000, // 10,000 iterations
+    c: 100000, // 100,000 iterations (matches PIN hashing security level)
     dkLen: 32 // ChaCha20 key length
   });
 
@@ -658,7 +658,7 @@ export async function decryptSpendingPasswordForBiometric(
     ]);
 
     const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-      c: 10000,
+      c: 100000, // 100,000 iterations (must match encryption)
       dkLen: 32
     });
 

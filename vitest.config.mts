@@ -27,6 +27,9 @@ export default defineConfig({
     alias: {
       '@/': `${resolve(__dirname, 'src')}/`,
       'buffer': 'buffer',
+      '@noble/ciphers/chacha': '@noble/ciphers/chacha.js',
+      '@noble/hashes/pbkdf2': '@noble/hashes/pbkdf2.js',
+      '@noble/hashes/sha2': '@noble/hashes/sha2.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
     mainFields: ['module', 'main'],
