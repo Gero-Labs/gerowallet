@@ -3,20 +3,23 @@
     <!-- Address Selection Options -->
     <div class="address-options">
       <v-radio-group v-model="selectedOption" hide-details class="address-radio-group">
-        <v-radio value="existing" color="#00c7f3">
-          <template v-slot:label>
-            <div class="radio-label">
-              <span class="label-title">{{ $t('card.useExistingAddress') }}</span>
-              <span class="label-description">{{ $t('card.useAddressRegisteredWithKaiserex') }}</span>
-            </div>
-          </template>
-        </v-radio>
-
         <v-radio value="new" color="#00c7f3">
           <template v-slot:label>
             <div class="radio-label">
               <span class="label-title">{{ $t('card.enterNewAddress') }}</span>
               <span class="label-description">{{ $t('card.provideNewShippingAddress') }}</span>
+            </div>
+          </template>
+        </v-radio>
+
+        <v-radio value="existing" color="#00c7f3" disabled>
+          <template v-slot:label>
+            <div class="radio-label">
+              <span class="label-title">
+                {{ $t('card.useExistingAddress') }}
+                <span class="disabled-badge">{{ $t('common.comingSoon') }}</span>
+              </span>
+              <span class="label-description">{{ $t('card.useAddressRegisteredWithKaiserex') }}</span>
             </div>
           </template>
         </v-radio>
@@ -98,7 +101,7 @@
 
       <div class="form-row">
         <div class="input-full">
-          <label class="input-label">{{ $t('card.phone') }}</label>
+          <label class="input-label">{{ $t('card.phone') }} ({{ $t('common.optional') }})</label>
           <v-text-field
             v-model="localAddress.phone"
             dense
@@ -152,11 +155,8 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 // Local state
-const selectedOption = ref<'existing' | 'new'>(props.useExisting ? 'existing' : 'new');
+const selectedOption = ref<'existing' | 'new'>('new'); // Default to 'new'
 const localAddress = ref<AddressData>({ ...props.address });
-
-// Phone regex pattern
-const phoneRegex = /^\+?[0-9\s\-()]{7,20}$/;
 
 // Form validation
 const isFormValid = computed(() => {
@@ -168,9 +168,8 @@ const isFormValid = computed(() => {
     localAddress.value.city.trim() !== '' &&
     localAddress.value.stateProvince.trim() !== '' &&
     localAddress.value.zipCode.trim() !== '' &&
-    localAddress.value.countryCode !== '' &&
-    localAddress.value.phone.trim() !== '' &&
-    phoneRegex.test(localAddress.value.phone.trim())
+    localAddress.value.countryCode !== ''
+    // Phone is now optional
   );
 });
 
@@ -250,6 +249,15 @@ const handleContinue = () => {
       border-color: $primary-cyan;
       background: rgba($primary-cyan, 0.05);
     }
+
+    &.v-radio--is-disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+
+      &:hover {
+        border-color: $border-primary;
+      }
+    }
   }
 
   :deep(.v-label) {
@@ -268,6 +276,19 @@ const handleContinue = () => {
   font-weight: $font-weight-semibold;
   font-size: $font-size-base;
   color: $text-primary;
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.disabled-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(#ff9800, 0.15);
+  color: #ff9800;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  border-radius: 4px;
 }
 
 .label-description {

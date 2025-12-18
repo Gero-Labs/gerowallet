@@ -6,26 +6,29 @@
         v-for="option in shippingOptions"
         :key="option.id"
         class="shipping-option"
-        :class="{ selected: localSelectedMethod === option.id }"
-        @click="selectMethod(option.id)"
-        @keydown.enter="selectMethod(option.id)"
-        @keydown.space.prevent="selectMethod(option.id)"
+        :class="{ selected: localSelectedMethod === option.id, disabled: option.disabled }"
+        @click="!option.disabled && selectMethod(option.id)"
+        @keydown.enter="!option.disabled && selectMethod(option.id)"
+        @keydown.space.prevent="!option.disabled && selectMethod(option.id)"
         role="button"
-        tabindex="0"
+        :tabindex="option.disabled ? -1 : 0"
       >
         <div class="option-left">
           <div class="option-icon">
             <v-icon>{{ option.icon }}</v-icon>
           </div>
           <div class="option-content">
-            <h4 class="option-title">{{ option.label }}</h4>
+            <h4 class="option-title">
+              {{ option.label }}
+              <span v-if="option.disabled" class="disabled-badge">{{ $t('common.comingSoon') }}</span>
+            </h4>
             <p class="option-description">{{ option.description }}</p>
           </div>
         </div>
         <div class="option-right">
-          <span class="option-price">{{ option.price }}</span>
+          <span class="option-price" :class="{ muted: option.disabled }">{{ option.price }}</span>
           <div class="selection-indicator">
-            <v-icon v-if="localSelectedMethod === option.id" color="#00c7f3">mdi-check-circle</v-icon>
+            <v-icon v-if="!option.disabled && localSelectedMethod === option.id" color="#00c7f3">mdi-check-circle</v-icon>
             <v-icon v-else color="#373a41">mdi-circle-outline</v-icon>
           </div>
         </div>
@@ -81,31 +84,34 @@ const localSelectedMethod = ref<ShippingMethod>(props.selectedMethod);
 const shippingOptions = computed(() => [
   {
     id: 'regular' as ShippingMethod,
-    label: t('card.regularShipping'),
-    description: t('card.regularShippingTime'),
-    price: '\u20AC3.99',
+    label: t('card.standardShipping'),
+    description: t('card.euOrWorldwide'),
+    price: '\u20AC10.00',
     icon: 'mdi-truck-delivery-outline',
+    disabled: false,
   },
   {
     id: 'express-eu' as ShippingMethod,
     label: t('card.expressShippingEU'),
     description: t('card.expressShippingEUTime'),
-    price: '\u20AC9.99',
+    price: t('card.priceNotAvailable'),
     icon: 'mdi-truck-fast-outline',
+    disabled: true,
   },
   {
     id: 'express-worldwide' as ShippingMethod,
     label: t('card.expressShippingWorldwide'),
     description: t('card.expressShippingWorldwideTime'),
-    price: '\u20AC19.99',
+    price: t('card.priceNotAvailable'),
     icon: 'mdi-airplane',
+    disabled: true,
   },
 ]);
 
 // Get selected option price
 const selectedOptionPrice = computed(() => {
   const option = shippingOptions.value.find(o => o.id === localSelectedMethod.value);
-  return option?.price || '\u20AC3.99';
+  return option?.price || '\u20AC10.00';
 });
 
 // Watch for prop changes
@@ -170,6 +176,17 @@ const handleContinue = () => {
     outline: none;
     border-color: $primary-cyan;
   }
+
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+
+    &:hover {
+      border-color: $border-primary;
+      background: $background-card;
+    }
+  }
 }
 
 .option-left {
@@ -205,6 +222,19 @@ const handleContinue = () => {
   font-size: $font-size-base;
   color: $text-primary;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.disabled-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(#ff9800, 0.15);
+  color: #ff9800;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  border-radius: 4px;
 }
 
 .option-description {
@@ -225,6 +255,12 @@ const handleContinue = () => {
   font-weight: $font-weight-bold;
   font-size: $font-size-lg;
   color: $text-primary;
+
+  &.muted {
+    color: $text-muted;
+    font-weight: $font-weight-normal;
+    font-size: $font-size-sm;
+  }
 }
 
 .selection-indicator {
