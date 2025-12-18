@@ -25,33 +25,71 @@ export interface SecurityConfig {
 }
 
 /**
- * Hash a PIN code using SHA-256
+ * Hash a PIN code for secure storage using PBKDF2 with salt
+ * Protection against rainbow table attacks by using random salt and key derivation
  * @param pin - PIN code (4-6 digits)
- * @returns Hashed PIN
+ * @returns Hashed PIN in format "salt:hash" (both hex-encoded)
  */
 export async function hashPin(pin: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(pin);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  // Generate random 32-byte salt
+  const salt = new Uint8Array(32);
+  crypto.getRandomValues(salt);
+
+  // Derive key using PBKDF2-HMAC-SHA512
+  // 100,000 iterations for strong protection against brute force
+  // Even with only 10,000-1,000,000 PIN combinations, the time cost makes attacks impractical
+  const hash = pbkdf2(sha512, Buffer.from(pin, 'utf8'), salt, {
+    c: 100000, // 100,000 iterations (balance between security and UX)
+    dkLen: 32  // 256-bit output
+  });
+
+  // Return format: salt:hash (hex-encoded)
+  return `${Buffer.from(salt).toString('hex')}:${Buffer.from(hash).toString('hex')}`;
 }
 
 /**
- * Verify a PIN code against a hash
+ * Verify a PIN code against a salted hash
  * @param pin - PIN code to verify
- * @param hashedPin - Previously hashed PIN
+ * @param hashedPin - Previously hashed PIN in format "salt:hash"
  * @returns True if PIN matches
  */
 export async function verifyPin(pin: string, hashedPin: string): Promise<boolean> {
-  const newHash = await hashPin(pin);
-  return newHash === hashedPin;
+  try {
+    // Extract salt and hash from stored value
+    const [saltHex, expectedHashHex] = hashedPin.split(':');
+    if (!saltHex || !expectedHashHex) {
+      console.error('Invalid hashed PIN format');
+      return false;
+    }
+
+    const salt = Buffer.from(saltHex, 'hex');
+    const expectedHash = Buffer.from(expectedHashHex, 'hex');
+
+    // Re-derive hash with same salt and iterations
+    const actualHash = pbkdf2(sha512, Buffer.from(pin, 'utf8'), salt, {
+      c: 100000,
+      dkLen: 32
+    });
+
+    // Constant-time comparison to prevent timing attacks
+    if (actualHash.length !== expectedHash.length) return false;
+
+    let result = 0;
+    for (let i = 0; i < actualHash.length; i++) {
+      result |= actualHash[i] ^ expectedHash[i];
+    }
+
+    return result === 0;
+  } catch (error) {
+    console.error('PIN verification failed:', error);
+    return false;
+  }
 }
 
 /**
- * Hash a pattern (array of numbers representing dot positions)
+ * Hash a pattern (array of numbers representing dot positions) using PBKDF2 with salt
  * @param pattern - Pattern as array of numbers (e.g., [0, 1, 2, 5, 8])
- * @returns Hashed pattern
+ * @returns Hashed pattern in format "salt:hash" (both hex-encoded)
  */
 export async function hashPattern(pattern: number[]): Promise<string> {
   const patternString = pattern.join('-');
@@ -59,14 +97,14 @@ export async function hashPattern(pattern: number[]): Promise<string> {
 }
 
 /**
- * Verify a pattern against a hash
+ * Verify a pattern against a salted hash
  * @param pattern - Pattern to verify
- * @param hashedPattern - Previously hashed pattern
+ * @param hashedPattern - Previously hashed pattern in format "salt:hash"
  * @returns True if pattern matches
  */
 export async function verifyPattern(pattern: number[], hashedPattern: string): Promise<boolean> {
-  const newHash = await hashPattern(pattern);
-  return newHash === hashedPattern;
+  const patternString = pattern.join('-');
+  return await verifyPin(patternString, hashedPattern);
 }
 
 /**
@@ -373,11 +411,11 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 
 /**
  * Get or generate the device-specific biometric master key
- * This key is unique per device and used for deriving credential encryption keys
+ * This is a device-wide master key that is used to derive per-wallet keys
  * @returns 32-byte master key as hex string
  */
-async function getBiometricMasterKey(): Promise<string> {
-  const STORAGE_KEY = 'biometric_master_key';
+async function getDeviceBiometricMasterKey(): Promise<string> {
+  const STORAGE_KEY = 'biometric_device_master_key';
 
   // Try to retrieve existing master key
   const result = await chrome.storage.local.get(STORAGE_KEY);
@@ -394,8 +432,34 @@ async function getBiometricMasterKey(): Promise<string> {
   // Store for future use
   await chrome.storage.local.set({ [STORAGE_KEY]: masterKey });
 
-  console.log('🔐 Generated new biometric master key');
+  console.log('🔐 Generated new device biometric master key');
   return masterKey;
+}
+
+/**
+ * Derive a wallet-specific biometric key from the device master key
+ * This ensures that if one wallet's key is compromised, others remain secure
+ * @param walletId - Wallet ID to derive key for
+ * @returns 32-byte wallet-specific key as Buffer
+ */
+async function deriveWalletBiometricKey(walletId: string): Promise<Buffer> {
+  const deviceMasterKey = await getDeviceBiometricMasterKey();
+  const deviceMasterKeyBytes = Buffer.from(deviceMasterKey, 'hex');
+
+  // Derive wallet-specific key using PBKDF2-HMAC-SHA512
+  // Input: deviceMasterKey + walletId
+  // This binds the key to both the device and the specific wallet
+  const walletKey = pbkdf2(
+    sha512,
+    deviceMasterKeyBytes,
+    Buffer.from(`wallet:${walletId}`, 'utf8'), // Use walletId as salt with prefix
+    {
+      c: 10000, // 10,000 iterations
+      dkLen: 32 // 256-bit key
+    }
+  );
+
+  return Buffer.from(walletKey);
 }
 
 /**
@@ -415,9 +479,8 @@ export async function encryptCredentialForBiometric(
   const credentialString = Array.isArray(credential) ? JSON.stringify(credential) : credential;
   const credentialBytes = Buffer.from(credentialString, 'utf8');
 
-  // Get device-specific master key
-  const masterKey = await getBiometricMasterKey();
-  const masterKeyBytes = Buffer.from(masterKey, 'hex');
+  // Get wallet-specific key derived from device master key
+  const walletKey = await deriveWalletBiometricKey(walletId);
 
   // Generate random salt (32 bytes) and nonce (12 bytes for ChaCha20)
   const salt = new Uint8Array(32);
@@ -426,11 +489,10 @@ export async function encryptCredentialForBiometric(
   crypto.getRandomValues(nonce);
 
   // Derive encryption key using PBKDF2-HMAC-SHA512
-  // Input: masterKey + credentialType + walletId (binds to device + wallet)
+  // Input: walletKey + credentialType (binds to device + wallet + credential type)
   const keyMaterial = Buffer.concat([
-    masterKeyBytes,
-    Buffer.from(credentialType, 'utf8'),
-    Buffer.from(walletId, 'utf8')
+    walletKey,
+    Buffer.from(credentialType, 'utf8')
   ]);
 
   const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
@@ -474,15 +536,13 @@ export async function decryptCredentialForBiometric(
     const tag = encryptedBytes.subarray(44, 60);
     const ciphertext = encryptedBytes.subarray(60);
 
-    // Get device-specific master key
-    const masterKey = await getBiometricMasterKey();
-    const masterKeyBytes = Buffer.from(masterKey, 'hex');
+    // Get wallet-specific key derived from device master key
+    const walletKey = await deriveWalletBiometricKey(walletId);
 
     // Derive decryption key using same inputs as encryption
     const keyMaterial = Buffer.concat([
-      masterKeyBytes,
-      Buffer.from(credentialType, 'utf8'),
-      Buffer.from(walletId, 'utf8')
+      walletKey,
+      Buffer.from(credentialType, 'utf8')
     ]);
 
     const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
@@ -526,9 +586,8 @@ export async function encryptSpendingPasswordForBiometric(
 ): Promise<string> {
   const passwordBytes = Buffer.from(password, 'utf8');
 
-  // Get device-specific master key
-  const masterKey = await getBiometricMasterKey();
-  const masterKeyBytes = Buffer.from(masterKey, 'hex');
+  // Get wallet-specific key derived from device master key
+  const walletKey = await deriveWalletBiometricKey(walletId);
 
   // Generate random salt (32 bytes) and nonce (12 bytes for ChaCha20)
   const salt = new Uint8Array(32);
@@ -537,11 +596,10 @@ export async function encryptSpendingPasswordForBiometric(
   crypto.getRandomValues(nonce);
 
   // Derive encryption key using PBKDF2-HMAC-SHA512
-  // Input: masterKey + credentialId + walletId (binds to device + biometric + wallet)
+  // Input: walletKey + credentialId (binds to device + wallet + biometric credential)
   const keyMaterial = Buffer.concat([
-    masterKeyBytes,
-    Buffer.from(credentialId, 'utf8'),
-    Buffer.from(walletId, 'utf8')
+    walletKey,
+    Buffer.from(credentialId, 'utf8')
   ]);
 
   const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
@@ -585,15 +643,13 @@ export async function decryptSpendingPasswordForBiometric(
     const tag = encryptedBytes.subarray(44, 60);
     const ciphertext = encryptedBytes.subarray(60);
 
-    // Get device-specific master key
-    const masterKey = await getBiometricMasterKey();
-    const masterKeyBytes = Buffer.from(masterKey, 'hex');
+    // Get wallet-specific key derived from device master key
+    const walletKey = await deriveWalletBiometricKey(walletId);
 
     // Derive decryption key using same inputs as encryption
     const keyMaterial = Buffer.concat([
-      masterKeyBytes,
-      Buffer.from(credentialId, 'utf8'),
-      Buffer.from(walletId, 'utf8')
+      walletKey,
+      Buffer.from(credentialId, 'utf8')
     ]);
 
     const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
