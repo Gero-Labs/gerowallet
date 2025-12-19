@@ -62,10 +62,10 @@
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"
+            :read-only="true"
             style="margin-top: -13px"
             :price="getPrice(selectedTokenB)"
             :price-impact="calculateWeightedPriceImpact"
-            @change="tokenBQuantityChange"
             :search="search"
             :show-balance="false"
           />
@@ -182,7 +182,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch, getCurrentInstance } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
@@ -251,7 +251,6 @@ const price_ba = ref<number>(0);
 const price_ab2 = ref<number>(0);
 const price_ba2 = ref<number>(0);
 const total_output_without_slippage = ref<number>(0);
-const total_input_without_slippage = ref<number>(0);
 const estimation = ref({
   net_price_reverse: 0,
   total_output: 0,
@@ -260,7 +259,6 @@ const estimation = ref({
   partner_fee: 0,
 });
 const splits = ref(undefined);
-const lastFunctionCalled = ref<string>('estimate');
 const intervalId = ref<any>(0);
 const loading = ref<boolean>(false);
 const swapOverviewToggle = ref<boolean>(false);
@@ -467,7 +465,7 @@ watch(() => selectedTokenB.value.ticker, async (newVal, oldVal) => {
   isUpdating.value = false; // Reset flag
 })
 
-watch(() => limit.value,  (newVal, oldVal) => {
+watch(() => limit.value,  (newVal) => {
   if (swapType.value === 'limit') {
     selectedTokenB.value.quantity = (Number(newVal) * Number(selectedTokenA.value.quantity)).toString()
   }
@@ -500,21 +498,6 @@ const debouncedEstimateTokenA = debounce((val) => {
   } else {
     estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, val, true);
   }
-  lastFunctionCalled.value = 'estimate';
-}, 300)
-
-
-const tokenBQuantityChange = (val) => {
-  debouncedEstimateTokenB(val);
-}
-
-const debouncedEstimateTokenB = debounce((val) => {
-  if (!val || val === 0 || swapType.value === 'limit') {
-    selectedTokenA.value.quantity = '0'
-  } else {
-    reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, val, true)
-  }
-  lastFunctionCalled.value = 'reverseEstimate';
 }, 300)
 
 
@@ -590,36 +573,6 @@ const estimate = (token_in: string, token_out: string, amount_in, update) => {
   });
 }
 
-const reverseEstimate = async (token_in, token_out, amount_out, update) => {
-  if (!loggedWallet.value) {
-    return
-  }
-  if (!token_in && !token_out) {
-    return
-  }
-  if (!amount_out) {
-    total_input_without_slippage.value = 0
-    return;
-  } else if (isNaN(amount_out)) {
-    return;
-  }
-  const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
-  try {
-    const res = await dexHunterApi.reverseEstimate(amount_out, token_in, token_out, slippage, blacklisted_dexes.value);
-    poolError.value = false
-    price_ab.value = res.data.net_price_reverse;
-    price_ba.value = res.data.net_price;
-    if (update) {
-      total_input_without_slippage.value = res.data.total_input_without_slippage
-      splits.value = res.data.splits
-      estimation.value = res.data
-      selectedTokenA.value.quantity = filters.toCurrency(total_input_without_slippage.value, false, selectedTokenA.value.decimals, '', '', false, 0);
-    }
-  } catch (e) {
-    poolError.value = true
-  }
-}
-
 const averagePrice = (token_in, token_out) => {
   if (!loggedWallet.value) {
     return
@@ -644,22 +597,13 @@ const performPeriodicEstimate = async () => {
     return;
   }
 
-  if (lastFunctionCalled.value === 'estimate') {
-    const quantity = selectedTokenA.value.quantity || '0';
-    const amount = Number(quantity.toString().replaceAll(',', ''))
-    if (amount === 0) {
-      await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
-    } else {
-      await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
-    }
-  } else if (lastFunctionCalled.value === 'reverseEstimate') {
-    const quantity = selectedTokenB.value.quantity || '0';
-    const amount = Number(quantity.toString().replaceAll(',', ''))
-    if (amount === 0) {
-      await reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
-    } else {
-      await reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
-    }
+  // Only estimate based on tokenA quantity (selling amount)
+  const quantity = selectedTokenA.value.quantity || '0';
+  const amount = Number(quantity.toString().replaceAll(',', ''))
+  if (amount === 0) {
+    await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
+  } else {
+    await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
   }
 }
 
