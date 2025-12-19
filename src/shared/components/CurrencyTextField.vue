@@ -12,7 +12,8 @@
         'currency-text-field',
         'transparent',
         { 'text-right': textRight },
-        { 'dense': dense }
+        { 'dense': dense },
+        { 'read-only': readOnly }
       ]"
       :rules="rules"
       :readonly="readOnly"
@@ -26,11 +27,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
-
-
-const { t } = useTranslation();
 
 const props = defineProps({
   value: {
@@ -195,5 +192,9 @@ let formattedValue = computed({
 .v-text-field.v-text-field--solo .v-input__control {
   min-height: 30px;
   padding: 0;
+}
+
+.currency-text-field.read-only input {
+  cursor: default !important;
 }
 </style>

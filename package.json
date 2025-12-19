@@ -130,7 +130,7 @@
     "deepmerge": "^4.3.1",
     "dotenv-cli": "^8.0.0",
     "eslint": "^8.57.0",
-    "eslint-plugin-vue": "^9.27.0",
+    "eslint-plugin-vue": "^8.7.1",
     "esno": "^4.8.0",
     "fs-extra": "^11.3.0",
     "happy-dom": "^20.0.5",
