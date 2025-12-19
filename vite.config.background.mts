@@ -48,7 +48,36 @@ export default defineConfig({
     minify: isDev ? false : 'terser',
     target: 'es2020',
     assetsDir: '.',
-    watch: isDev ? {} : undefined,
+    watch: isDev ? {
+      clearScreen: false,
+      ...(process.platform === 'win32' ? {
+        include: ['src/**'],
+        chokidar: {
+          cwd: process.cwd(),
+          ignored: [
+            '**/*.tmp',
+            '**/*.log',
+            '**/*.log.tmp',
+            '**/DumpStack.log*',
+            '**/node_modules/**',
+            '**/.git/**',
+            (path: string) => {
+              // Ignore any paths outside the project directory
+              const projectDir = process.cwd();
+              return !path.startsWith(projectDir);
+            }
+          ],
+          ignoreInitial: true,
+          ignorePermissionErrors: true,
+          disableGlobbing: false,
+          usePolling: false,
+          awaitWriteFinish: {
+            stabilityThreshold: 100,
+            pollInterval: 100
+          }
+        }
+      } : {})
+    } : undefined,
     outDir: r('extension/background'),
     cssCodeSplit: false,
     emptyOutDir: false,
