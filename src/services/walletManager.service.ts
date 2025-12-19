@@ -687,7 +687,10 @@ export class WalletManager {
 
       // Verify pattern directly (no decryption needed)
       unlockValid = await verifyPattern(unlockCredential as number[], patternHashConfig.value);
-    } else if (unlockMethod === 'biometrics') {
+    }
+
+    // Check if biometric authentication was used (credential is a special string)
+    if (unlockCredential === 'biometric-authenticated') {
       // Biometrics verification handled by WebAuthn in the UI
       // If we reach here, biometric verification already passed
       unlockValid = true;
