@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="$t('security.walletLocked')"
+    :title="$t('security.walletLocked') as string"
     :subtitle="unlockDescription"
     :width="400"
     icon="mdi-lock"
@@ -61,29 +61,9 @@
               />
             </div>
 
-            <!-- Biometrics -->
-            <div v-else-if="unlockMethod === 'biometrics'" class="unlock-method-container text-center unlock-method-content">
-              <v-tooltip
-                v-model="tooltip.enabled"
-                top
-                color="red"
-              >
-                <template v-slot:activator="{ }">
-                  <v-btn
-                    large
-                    color="primary"
-                    @click="handleBiometricAuth"
-                    :loading="biometricLoading"
-                  >
-                    <v-icon left>mdi-fingerprint</v-icon>
-                    {{ $t('security.useBiometrics') }}
-                  </v-btn>
-                </template>
-                <span>{{ tooltip.text }}</span>
-              </v-tooltip>
-            </div>
-
             <!-- Fallback: Spending Password -->
+            <!-- Note: Biometrics is not a standalone unlock method UI -->
+            <!-- It's triggered via the fingerprint button in PIN section or auto-trigger -->
             <div v-else class="unlock-method-container unlock-method-content">
               <v-tooltip
                 v-model="tooltip.enabled"
@@ -189,6 +169,7 @@ const twoFactorEnabled = ref(false);
 const show2FA = ref(false);
 const biometricsEnabled = ref(false);
 const webAuthnCredentialId = ref<string | null>(null);
+const biometricAutoTriggerUnlock = ref(false);
 
 const pinCode = ref('');
 const pinLength = ref(4);
@@ -220,8 +201,6 @@ const canUnlock = computed(() => {
     return pinCode.value.length >= 4;
   } else if (unlockMethod.value === 'pattern') {
     return pattern.value.length >= 4;
-  } else if (unlockMethod.value === 'biometrics') {
-    return true;
   } else {
     // Fallback to password
     return password.value.length > 0;
@@ -233,8 +212,6 @@ const unlockDescription = computed(() => {
     return vmProxy.$t('security.enterPinToUnlock');
   } else if (unlockMethod.value === 'pattern') {
     return vmProxy.$t('security.drawPatternToUnlock');
-  } else if (unlockMethod.value === 'biometrics') {
-    return vmProxy.$t('security.useBiometricsToUnlock');
   } else {
     return vmProxy.$t('security.useSpendingPasswordToUnlock');
   }
@@ -280,17 +257,17 @@ async function loadSecurityConfig() {
     const biometricsUnlockConfig = await configTable.where({ key: 'biometricsForUnlock' }).first();
     const credentialIdConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
     const pinLengthConfig = await configTable.where({ key: 'pinLength' }).first();
+    const autoTriggerUnlockConfig = await configTable.where({ key: 'biometricAutoTriggerUnlock' }).first();
 
     unlockMethod.value = unlockMethodConfig?.value || null;
     twoFactorEnabled.value = twoFactorConfig?.value || false;
     biometricsEnabled.value = biometricsUnlockConfig?.value || false;
     webAuthnCredentialId.value = credentialIdConfig?.value || null;
     pinLength.value = pinLengthConfig?.value || 6;
+    biometricAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
 
-    // If biometrics is enabled and we have a credential ID, use biometrics as unlock method
-    if (biometricsEnabled.value && webAuthnCredentialId.value && !unlockMethod.value) {
-      unlockMethod.value = 'biometrics';
-    }
+    // Note: Biometrics is NOT a standalone unlock method - it's a convenience feature
+    // that works alongside PIN, password, or pattern
   } catch (error) {
     console.error('Error loading security config:', error);
     unlockMethod.value = null;
@@ -334,21 +311,13 @@ async function handleBiometricAuth() {
     if (authenticated) {
       console.log('✅ Biometric authentication successful - unlocking wallet');
 
-      // Set unlock method to 'biometrics' temporarily for this unlock
-      const originalUnlockMethod = unlockMethod.value;
-      unlockMethod.value = 'biometrics';
-
       // Biometric authentication successful - proceed to unlock
       // (No auto-fill, just pure authentication signal like iPhone Face ID)
-      try {
-        if (twoFactorEnabled.value) {
-          show2FA.value = true;
-        } else {
-          await handleUnlock();
-        }
-      } finally {
-        // Restore original unlock method after unlock attempt
-        unlockMethod.value = originalUnlockMethod;
+      // Note: No need to modify unlockMethod - we use unlockCredential to signal biometric auth
+      if (twoFactorEnabled.value) {
+        show2FA.value = true;
+      } else {
+        await handleUnlock(true); // Pass biometricAuthenticated flag
       }
     } else {
       showError(vmProxy.$t('security.biometricFailed'));
@@ -361,23 +330,23 @@ async function handleBiometricAuth() {
   }
 }
 
-async function handleUnlock() {
-  if (!canUnlock.value) return;
+async function handleUnlock(biometricAuthenticated = false) {
+  if (!canUnlock.value && !biometricAuthenticated) return;
 
   unlocking.value = true;
   errorMessage.value = '';
 
   try {
-    let unlockCredential: string | number[] | null = null;
+    let unlockCredential: string | number[] | null;
 
-    if (unlockMethod.value === 'pin') {
+    if (biometricAuthenticated) {
+      // Biometric authentication already happened in handleBiometricAuth()
+      // Signal to backend that biometric auth was successful
+      unlockCredential = 'biometric-authenticated';
+    } else if (unlockMethod.value === 'pin') {
       unlockCredential = pinCode.value;
     } else if (unlockMethod.value === 'pattern') {
       unlockCredential = pattern.value;
-    } else if (unlockMethod.value === 'biometrics') {
-      // For biometrics, authentication already happened in handleBiometricAuth()
-      // We just need to signal that biometric auth was successful
-      unlockCredential = 'biometric-authenticated';
     } else {
       // Fallback to password
       unlockCredential = password.value;
@@ -391,8 +360,8 @@ async function handleUnlock() {
       method: messageType,
       data: {
         walletId: props.preLoginWalletId, // Only used for pre-login unlock
-        unlockCredential,
-        unlockMethod: unlockMethod.value, // Send the unlock method so background knows to use biometrics
+        unlockCredential, // Biometric auth signaled via special value 'biometric-authenticated'
+        unlockMethod: unlockMethod.value,
         totpCode: twoFactorEnabled.value ? totpCode.value : undefined,
         password: password.value || undefined
       }
@@ -488,9 +457,16 @@ watch(() => props.value, async (newVal) => {
     }
     // Pattern and biometrics don't need focus - pattern is already interactive, biometrics auto-triggers
 
-    // Auto-trigger biometric prompt if biometrics is enabled and configured
-    if (biometricsEnabled.value && webAuthnCredentialId.value) {
-      console.log('🔐 Auto-triggering biometric prompt');
+    // Auto-trigger biometric prompt if auto-trigger setting is enabled
+    // (Biometrics is a convenience feature, not a standalone unlock method)
+    const shouldAutoTrigger = (
+      biometricAutoTriggerUnlock.value &&
+      biometricsEnabled.value &&
+      webAuthnCredentialId.value
+    );
+
+    if (shouldAutoTrigger) {
+      console.log('🔐 Auto-triggering biometric prompt (auto-trigger unlock is enabled)');
       // Reduced delay for smoother experience (200ms instead of 500ms)
       setTimeout(() => {
         handleBiometricAuth();
