@@ -179,6 +179,6 @@
     "not dead"
   ],
   "gitHooks": {
-    "pre-commit": "eslint --cache --fix $(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(ts|tsx|vue)$' || true)"
+    "pre-commit": "eslint --cache --fix"
   }
 }
