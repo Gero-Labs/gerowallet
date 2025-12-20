@@ -1822,6 +1822,7 @@ export default {
   'security.passKeyNotSupported': 'PassKey not supported in this browser',
   'security.passKeySettingsUpdated': 'PassKey settings updated successfully',
   'security.passKeySettingsUpdateFailed': 'Failed to update PassKey settings',
+  'security.passKeyCredentialChanged': 'PassKey credential has changed. Please re-register PassKey in settings.',
   'security.usePassKey': 'Use PassKey',
   'security.orUsePassKey': 'Or use PassKey',
   'security.passKeyAuthFailed': 'PassKey authentication failed',

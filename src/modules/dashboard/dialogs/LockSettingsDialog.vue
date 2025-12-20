@@ -362,6 +362,7 @@ import { registerWebAuthnCredential } from '@/shared/utils/security';
 import snackbar from '@/plugins/snackbar';
 import { markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import assets from '@/utils/assets';
+import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
 
@@ -567,13 +568,13 @@ async function saveUnlockMethod(method: UnlockMethod) {
       // Note: webAuthnCredentialId and passKeyEncryptedSpendingPassword are NOT deleted
       // PassKey registration persists - user can re-enable PassKey features after setting a new unlock method
 
-      // Disable PassKey features when unlock method is set to None
+      // Disable PassKey features when the unlock method is set to None
       await configTable.put({ key: 'passKeyForUnlock', value: false });
       await configTable.put({ key: 'passKeyAutoTriggerUnlock', value: false });
       await configTable.put({ key: 'passKeyForPasswordAutofill', value: false });
       await configTable.put({ key: 'passKeyAutoTrigger', value: false });
 
-      // Update reactive state to reflect changes in UI
+      // Update the reactive state to reflect changes in UI
       passKeyForUnlock.value = false;
       passKeyAutoTriggerUnlock.value = false;
       passKeyForPasswordAutofill.value = false;
@@ -646,7 +647,7 @@ async function handlePassKeyUnlockChange(enabled: boolean) {
       passKeyAutoTriggerUnlock.value = false;
     }
 
-    console.log(`✅ PassKey unlock ${enabled ? 'enabled' : 'disabled'}`);
+    debugLog(`✅ PassKey unlock ${enabled ? 'enabled' : 'disabled'}`);
 
     // Show success snackbar
     snackbar.fireSuccess(t('security.passKeySettingsUpdated'));
@@ -685,8 +686,31 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
       const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
       if (existingEncryptedPassword?.value && credentialConfig?.value) {
-        // Encrypted password already exists - just re-enable the setting
-        console.log('🔐 Re-enabling PassKey autofill with existing encrypted password');
+        // Encrypted password exists - verify it's still valid by attempting decryption
+        // This requires WebAuthn authentication, ensuring the user has device access
+        const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
+
+        debugLog('🔐 Verifying existing PassKey encrypted password...');
+
+        // Authenticate with WebAuthn first
+        const authenticated = await authenticateWebAuthn(credentialConfig.value);
+        if (!authenticated) {
+          throw new Error(t('security.passKeyAuthFailed'));
+        }
+
+        // Try to decrypt to verify the encrypted password is still valid
+        try {
+          await decryptSpendingPasswordForPassKey(
+            existingEncryptedPassword.value,
+            credentialConfig.value,
+            wallet.id
+          );
+          debugLog('✅ Existing encrypted password verified successfully');
+        } catch (decryptError) {
+          // Encrypted password is corrupted or invalid - need to re-setup
+          console.error('Existing encrypted password invalid, requiring re-setup:', decryptError);
+          throw new Error(t('security.passKeyCredentialChanged'));
+        }
       } else {
         // No encrypted password exists - prompt for spending password to encrypt and store
         // Password verification happens inside the dialog's confirmPassword() function
@@ -703,16 +727,16 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
 
         if (!credentialConfig || !credentialConfig.value) {
           // No credential exists - register a new one for PassKey autofill
-          console.log('🔐 Registering WebAuthn credential for PassKey password autofill');
+          debugLog('🔐 Registering WebAuthn credential for PassKey password autofill');
           credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
 
           // Store credential ID in database
           await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
-          console.log('✅ WebAuthn credential registered');
+          debugLog('✅ WebAuthn credential registered');
         } else {
           // Use existing credential
           credentialId = credentialConfig.value;
-          console.log('🔐 Using existing WebAuthn credential for PassKey password autofill');
+          debugLog('🔐 Using existing WebAuthn credential for PassKey password autofill');
         }
 
         // Encrypt password for PassKey storage
@@ -725,14 +749,14 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
           value: encryptedPassword
         });
 
-        console.log('✅ Spending password encrypted and stored for PassKey autofill');
+        debugLog('✅ Spending password encrypted and stored for PassKey autofill');
       }
     } else {
       // When disabling, keep the encrypted password for potential re-enabling
       // Only disable auto-trigger
       await configTable.put({ key: 'passKeyAutoTrigger', value: false });
       passKeyAutoTrigger.value = false;
-      console.log('🔒 PassKey autofill disabled (encrypted password retained)');
+      debugLog('🔒 PassKey autofill disabled (encrypted password retained)');
     }
 
     // Save PassKey autofill setting
@@ -779,7 +803,7 @@ async function handlePassKeyAutoTriggerChange() {
     // Show success snackbar
     snackbar.fireSuccess(t('security.passKeySettingsUpdated'));
 
-    console.log('✅ PassKey auto-trigger (password autofill) setting saved:', enabled);
+    debugLog('✅ PassKey auto-trigger (password autofill) setting saved:', enabled);
 
     // Emit update event
     emit('updated');
@@ -811,7 +835,7 @@ async function handlePassKeyRegister() {
     const configTable = db.table('config');
 
     // Register WebAuthn credential
-    console.log('🔐 Registering WebAuthn credential...');
+    debugLog('🔐 Registering WebAuthn credential...');
     const credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
 
     // Store credential ID in database
@@ -820,7 +844,7 @@ async function handlePassKeyRegister() {
     // Update registration status
     isPassKeyRegistered.value = true;
 
-    console.log('✅ WebAuthn credential registered successfully');
+    debugLog('✅ WebAuthn credential registered successfully');
     snackbar.fireSuccess(t('security.passKeyRegisteredSuccess'));
 
     // Emit update event
@@ -850,7 +874,7 @@ async function handlePassKeyDeregister() {
     const configTable = db.table('config');
 
     // Remove WebAuthn credential and all related settings
-    console.log('🗑️ Deregistering PassKey...');
+    debugLog('🗑️ Deregistering PassKey...');
     await configTable.where({ key: 'webAuthnCredentialId' }).delete();
     await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
     await configTable.put({ key: 'passKeyForUnlock', value: false });
@@ -865,7 +889,7 @@ async function handlePassKeyDeregister() {
     passKeyAutoTrigger.value = false;
     passKeyAutoTriggerUnlock.value = false;
 
-    console.log('✅ PassKey deregistered successfully');
+    debugLog('✅ PassKey deregistered successfully');
     snackbar.fireSuccess(t('security.passKeyDeregisteredSuccess'));
 
     // Emit update event
@@ -901,7 +925,7 @@ async function handlePassKeyAutoTriggerUnlockChange() {
     // Show success snackbar
     snackbar.fireSuccess(t('security.passKeySettingsUpdated'));
 
-    console.log('✅ PassKey auto-trigger (unlock) setting saved:', enabled);
+    debugLog('✅ PassKey auto-trigger (unlock) setting saved:', enabled);
 
     // Emit update event
     emit('updated');
@@ -943,7 +967,7 @@ async function confirmPassword() {
     const { Messaging } = await import('@/chrome/messaging');
     const { MessageTypes } = await import('@/models/MessageTypes');
 
-    console.log('🔐 Verifying spending password...');
+    debugLog('🔐 Verifying spending password...');
     const verifyResponse = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: passwordInput.value }

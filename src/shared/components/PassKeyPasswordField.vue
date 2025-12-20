@@ -65,6 +65,7 @@
 import { ref, onMounted, getCurrentInstance, nextTick } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
+import { debugLog } from '@/utils/debug';
 
 // Props
 interface Props {
@@ -111,17 +112,19 @@ const hasAutoTriggered = ref(false);
 // Check passkey availability on mount and auto-trigger
 onMounted(async () => {
   passKeyAvailable.value = await checkPassKeyAvailable();
-  console.log('checkPassKeyAvailable', passKeyAvailable.value)
+  debugLog('checkPassKeyAvailable', passKeyAvailable.value);
   // Auto-trigger passkey authentication if available AND enabled in settings
   if (passKeyAvailable.value && !hasAutoTriggered.value) {
+    // Set flag IMMEDIATELY to prevent race conditions on rapid re-mounts
+    hasAutoTriggered.value = true;
+
     // Check if auto-trigger is enabled
     const autoTriggerEnabled = await checkAutoTriggerEnabled();
 
     if (autoTriggerEnabled) {
       // Small delay to let the dialog render
       setTimeout(() => {
-        console.log('🤖 Auto-triggering passkey authentication - place your finger on Touch ID');
-        hasAutoTriggered.value = true;
+        debugLog('🤖 Auto-triggering passkey authentication');
         handlePassKeyAutofill();
       }, 500);
     }
@@ -186,9 +189,9 @@ function handlePassKeyClick(event: MouseEvent) {
   // Only handle if not from a touch event (touch already handled)
   if (event.detail === 0) return; // Ignore programmatic clicks
 
-  console.log('🖱️ Click detected on fingerprint icon');
+  debugLog('🖱️ Click detected on passkey icon');
   if (!passKeyLoading.value && !props.disabled) {
-    console.log('🚀 Triggering passkey authentication from click');
+    debugLog('🚀 Triggering passkey authentication from click');
     handlePassKeyAutofill();
   }
 }
@@ -222,7 +225,7 @@ async function handlePassKeyAutofill() {
       throw new Error('Encrypted password not found');
     }
 
-    console.log('🔐 Authenticating with passkey...');
+    debugLog('🔐 Authenticating with passkey...');
 
     // Authenticate with WebAuthn
     const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
@@ -232,7 +235,7 @@ async function handlePassKeyAutofill() {
       throw new Error('PassKey authentication failed');
     }
 
-    console.log('✅ PassKey authentication successful');
+    debugLog('✅ PassKey authentication successful');
 
     // Decrypt spending password
     const decryptedPassword = await decryptSpendingPasswordForPassKey(
@@ -241,7 +244,7 @@ async function handlePassKeyAutofill() {
       wallet.id
     );
 
-    console.log('🔓 Password decrypted successfully');
+    debugLog('🔓 Password decrypted successfully');
 
     // Auto-fill password
     emit('input', decryptedPassword);
