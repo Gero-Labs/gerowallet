@@ -42,7 +42,7 @@
         <v-layout>
           <v-row>
             <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal">
-              <BiometricPasswordField
+              <PassKeyPasswordField
                 ref="passwordField"
                 :value="spendingPassword"
                 @input="spendingPassword = $event"
@@ -53,8 +53,8 @@
                 :rules="[rules.required()]"
                 required
                 @enter="sign"
-                @biometric-autofill-success="handleBiometricSuccess"
-                @biometric-autofill-error="handleBiometricError"
+                @passkey-autofill-success="handlePassKeySuccess"
+                @passkey-autofill-error="handlePassKeyError"
                 class="w-100"
               />
             </v-col>
@@ -94,7 +94,7 @@ import rules from '@/utils/rules';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import {
   diffAssetsFromIncomingToOutgoing,
   getPayAndReceiveTokens,
@@ -279,14 +279,14 @@ const swapDetails = computed(() => {
   };
 });
 
-const handleBiometricError = (error: string) => {
-  console.error('Biometric autofill error in SignTx:', error);
-  snackbar.setError(error || t('security.biometricAuthFailed'));
+const handlePassKeyError = (error: string) => {
+  console.error('PassKey autofill error in SignTx:', error);
+  snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
-const handleBiometricSuccess = () => {
-  console.log('✅ Biometric autofill successful in SignTx - triggering sign');
-  // Automatically trigger sign after successful biometric autofill
+const handlePassKeySuccess = () => {
+  console.log('✅ PassKey autofill successful in SignTx - triggering sign');
+  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     sign();
   }, 300); // Small delay for UX feedback

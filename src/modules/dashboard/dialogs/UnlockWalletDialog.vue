@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="$t('security.walletLocked') as string"
+    :title="String($t('security.walletLocked'))"
     :subtitle="unlockDescription"
     :width="400"
     icon="mdi-lock"
@@ -38,17 +38,17 @@
                 @finish="handlePinFinish"
               />
 
-              <!-- Biometric indicator/button (if biometrics is enabled) -->
-              <div v-if="biometricsEnabled && webAuthnCredentialId" class="mt-4 text-center">
+              <!-- PassKey indicator/button (if PassKey is enabled) -->
+              <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
                 <v-btn
                   small
                   text
                   color="primary"
-                  @click="handleBiometricAuth"
-                  :loading="biometricLoading"
+                  @click="handlePassKeyAuth"
+                  :loading="passKeyLoading"
                 >
                   <v-icon small left>mdi-fingerprint</v-icon>
-                  {{ $t('security.useFingerprint') }}
+                  {{ $t('security.usePassKey') }}
                 </v-btn>
               </div>
             </div>
@@ -62,7 +62,7 @@
             </div>
 
             <!-- Fallback: Spending Password -->
-            <!-- Note: Biometrics is not a standalone unlock method UI -->
+            <!-- Note: PassKey is not a standalone unlock method UI -->
             <!-- It's triggered via the fingerprint button in PIN section or auto-trigger -->
             <div v-else class="unlock-method-container unlock-method-content">
               <v-tooltip
@@ -167,9 +167,9 @@ const show = ref(false);
 const unlockMethod = ref<string | null>(null);
 const twoFactorEnabled = ref(false);
 const show2FA = ref(false);
-const biometricsEnabled = ref(false);
+const passKeyEnabled = ref(false);
 const webAuthnCredentialId = ref<string | null>(null);
-const biometricAutoTriggerUnlock = ref(false);
+const passKeyAutoTriggerUnlock = ref(false);
 
 const pinCode = ref('');
 const pinLength = ref(4);
@@ -179,7 +179,7 @@ const password = ref('');
 const totpCode = ref('');
 
 const unlocking = ref(false);
-const biometricLoading = ref(false);
+const passKeyLoading = ref(false);
 const errorMessage = ref('');
 const tooltip = ref<any>({
   enabled: false,
@@ -254,25 +254,25 @@ async function loadSecurityConfig() {
 
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
     const twoFactorConfig = await configTable.where({ key: 'twoFactorEnabled' }).first();
-    const biometricsUnlockConfig = await configTable.where({ key: 'biometricsForUnlock' }).first();
+    const passKeyUnlockConfig = await configTable.where({ key: 'passKeyForUnlock' }).first();
     const credentialIdConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
     const pinLengthConfig = await configTable.where({ key: 'pinLength' }).first();
-    const autoTriggerUnlockConfig = await configTable.where({ key: 'biometricAutoTriggerUnlock' }).first();
+    const autoTriggerUnlockConfig = await configTable.where({ key: 'passKeyAutoTriggerUnlock' }).first();
 
     unlockMethod.value = unlockMethodConfig?.value || null;
     twoFactorEnabled.value = twoFactorConfig?.value || false;
-    biometricsEnabled.value = biometricsUnlockConfig?.value || false;
+    passKeyEnabled.value = passKeyUnlockConfig?.value || false;
     webAuthnCredentialId.value = credentialIdConfig?.value || null;
     pinLength.value = pinLengthConfig?.value || 6;
-    biometricAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
+    passKeyAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
 
-    // Note: Biometrics is NOT a standalone unlock method - it's a convenience feature
+    // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
     // that works alongside PIN, password, or pattern
   } catch (error) {
     console.error('Error loading security config:', error);
     unlockMethod.value = null;
     twoFactorEnabled.value = false;
-    biometricsEnabled.value = false;
+    passKeyEnabled.value = false;
     webAuthnCredentialId.value = null;
     pinLength.value = 6;
   }
@@ -296,42 +296,42 @@ async function handlePatternComplete(patternData: number[]) {
   }
 }
 
-async function handleBiometricAuth() {
-  biometricLoading.value = true;
+async function handlePassKeyAuth() {
+  passKeyLoading.value = true;
 
   try {
     if (!webAuthnCredentialId.value) {
       throw new Error('No WebAuthn credential found');
     }
 
-    // Use WebAuthn for biometric authentication
+    // Use WebAuthn for PassKey authentication
     console.log('🔐 Authenticating with WebAuthn credential');
     const authenticated = await authenticateWebAuthn(webAuthnCredentialId.value);
 
     if (authenticated) {
-      console.log('✅ Biometric authentication successful - unlocking wallet');
+      console.log('✅ PassKey authentication successful - unlocking wallet');
 
-      // Biometric authentication successful - proceed to unlock
+      // PassKey authentication successful - proceed to unlock
       // (No auto-fill, just pure authentication signal like iPhone Face ID)
-      // Note: No need to modify unlockMethod - we use unlockCredential to signal biometric auth
+      // Note: No need to modify unlockMethod - we use unlockCredential to signal PassKey auth
       if (twoFactorEnabled.value) {
         show2FA.value = true;
       } else {
-        await handleUnlock(true); // Pass biometricAuthenticated flag
+        await handleUnlock(true); // Pass passKeyAuthenticated flag
       }
     } else {
-      showError(vmProxy.$t('security.biometricFailed'));
+      showError(vmProxy.$t('security.passKeyFailed'));
     }
   } catch (error: any) {
-    console.error('Biometric authentication error:', error);
-    showError(error.message || vmProxy.$t('security.biometricFailed'));
+    console.error('PassKey authentication error:', error);
+    showError(error.message || vmProxy.$t('security.passKeyFailed'));
   } finally {
-    biometricLoading.value = false;
+    passKeyLoading.value = false;
   }
 }
 
-async function handleUnlock(biometricAuthenticated = false) {
-  if (!canUnlock.value && !biometricAuthenticated) return;
+async function handleUnlock(passKeyAuthenticated = false) {
+  if (!canUnlock.value && !passKeyAuthenticated) return;
 
   unlocking.value = true;
   errorMessage.value = '';
@@ -339,10 +339,10 @@ async function handleUnlock(biometricAuthenticated = false) {
   try {
     let unlockCredential: string | number[] | null;
 
-    if (biometricAuthenticated) {
-      // Biometric authentication already happened in handleBiometricAuth()
-      // Signal to backend that biometric auth was successful
-      unlockCredential = 'biometric-authenticated';
+    if (passKeyAuthenticated) {
+      // PassKey authentication already happened in handlePassKeyAuth()
+      // Signal to backend that PassKey auth was successful
+      unlockCredential = 'passkey-authenticated';
     } else if (unlockMethod.value === 'pin') {
       unlockCredential = pinCode.value;
     } else if (unlockMethod.value === 'pattern') {
@@ -360,7 +360,7 @@ async function handleUnlock(biometricAuthenticated = false) {
       method: messageType,
       data: {
         walletId: props.preLoginWalletId, // Only used for pre-login unlock
-        unlockCredential, // Biometric auth signaled via special value 'biometric-authenticated'
+        unlockCredential, // PassKey auth signaled via special value 'passkey-authenticated'
         unlockMethod: unlockMethod.value,
         totpCode: twoFactorEnabled.value ? totpCode.value : undefined,
         password: password.value || undefined
@@ -455,21 +455,21 @@ watch(() => props.value, async (newVal) => {
       console.log('🎯 Auto-focusing password input');
       passwordInputRef.value.focus();
     }
-    // Pattern and biometrics don't need focus - pattern is already interactive, biometrics auto-triggers
+    // Pattern and PassKey don't need focus - pattern is already interactive, PassKey auto-triggers
 
-    // Auto-trigger biometric prompt if auto-trigger setting is enabled
-    // (Biometrics is a convenience feature, not a standalone unlock method)
+    // Auto-trigger PassKey prompt if auto-trigger setting is enabled
+    // (PassKey is a convenience feature, not a standalone unlock method)
     const shouldAutoTrigger = (
-      biometricAutoTriggerUnlock.value &&
-      biometricsEnabled.value &&
+      passKeyAutoTriggerUnlock.value &&
+      passKeyEnabled.value &&
       webAuthnCredentialId.value
     );
 
     if (shouldAutoTrigger) {
-      console.log('🔐 Auto-triggering biometric prompt (auto-trigger unlock is enabled)');
+      console.log('🔐 Auto-triggering PassKey prompt (auto-trigger unlock is enabled)');
       // Reduced delay for smoother experience (200ms instead of 500ms)
       setTimeout(() => {
-        handleBiometricAuth();
+        handlePassKeyAuth();
       }, 200);
     }
   } else {

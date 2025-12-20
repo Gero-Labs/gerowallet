@@ -132,7 +132,7 @@
               <span>Transaction signed! Click submit to broadcast.</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
-            <BiometricPasswordField
+            <PassKeyPasswordField
               ref="passwordField"
               v-if="loggedWallet.type === WalletType.Normal && !isSubmit"
               :value="spendingPassword"
@@ -145,8 +145,8 @@
               required
               :disabled="loading"
               @enter="signAndSubmitDelegationTx"
-              @biometric-autofill-success="handleBiometricSuccess"
-              @biometric-autofill-error="handleBiometricError"
+              @passkey-autofill-success="handlePassKeySuccess"
+              @passkey-autofill-error="handlePassKeyError"
               style="max-width: 295px"
             />
             <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
@@ -211,7 +211,7 @@ import { WalletType } from '@/models/types';
 // import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -315,17 +315,17 @@ const getIconByURI = (uri: string) => {
 // Keystone wallet support needs to be reimplemented with Cardano JS SDK
 // This includes QR code generation, scanning, and signature parsing
 
-const handleBiometricSuccess = () => {
-  console.log('✅ Biometric autofill successful in DRepDelegateDialog - triggering sign');
-  // Automatically trigger sign after successful biometric autofill
+const handlePassKeySuccess = () => {
+  console.log('✅ PassKey autofill successful in DRepDelegateDialog - triggering sign');
+  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     signAndSubmitDelegationTx();
   }, 300); // Small delay for UX feedback
 };
 
-const handleBiometricError = (error: string) => {
-  console.error('Biometric autofill error in DRepDelegateDialog:', error);
-  snackbar.setError(error || t('security.biometricAuthFailed'));
+const handlePassKeyError = (error: string) => {
+  console.error('PassKey autofill error in DRepDelegateDialog:', error);
+  snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
 const signTx = async (): Promise<boolean> => {

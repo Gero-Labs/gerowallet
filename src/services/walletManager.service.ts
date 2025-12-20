@@ -562,7 +562,7 @@ export class WalletManager {
   /**
    * Lock the current wallet
    * Keeps WalletBg instance intact for CIP-30 functionality
-   * User must unlock with PIN/Pattern/Biometrics + 2FA to access UI
+   * User must unlock with PIN/Pattern/Spending Password + 2FA (not supported for now) to access UI
    */
   async lock(): Promise<void> {
     debugLog('WalletManager: Locking wallet');
@@ -580,12 +580,12 @@ export class WalletManager {
 
   /**
    * Shared verification logic for unlock credentials
-   * Verifies PIN, Pattern, Biometrics, Password, and optional 2FA
+   * Verifies PIN, Pattern, Password, and optional 2FA (PassKey verification handled by WebAuthn in UI)
    * @param walletId - Wallet ID to verify against
-   * @param unlockCredential - PIN, pattern, password, or biometric credential
+   * @param unlockCredential - PIN, pattern, password, or PassKey credential signal
    * @param totpCode - Optional TOTP code if 2FA is enabled
    * @param password - Spending password to decrypt security data
-   * @param providedUnlockMethod - Optional unlock method override (for biometric)
+   * @param providedUnlockMethod - Optional unlock method override (for PassKey)
    * @param useWalletBg - If true, use walletBg for password verification (post-login); if false, use database (pre-login)
    * @returns True if verification successful
    */
@@ -608,7 +608,7 @@ export class WalletManager {
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
     const twoFactorConfig = await configTable.where({ key: 'twoFactorEnabled' }).first();
 
-    // Use provided unlock method (for biometric override) or read from database
+    // Use provided unlock method (for PassKey override) or read from database
     const unlockMethod = providedUnlockMethod || unlockMethodConfig?.value;
 
     if (!unlockMethod) {
@@ -642,8 +642,8 @@ export class WalletManager {
       } else {
         // Pre-login: load wallet from database
         const { getAllWallets } = await import('@/db/gero-db');
-        const wallets = await getAllWallets();
-        const wallet = wallets.find(w => w.id === walletId);
+        const walletsMap = await getAllWallets();
+        const wallet = walletsMap[walletId];
 
         if (!wallet || wallet.type !== WalletType.Normal) {
           throw new Error('Password unlock is only supported for Normal wallets');
@@ -689,10 +689,10 @@ export class WalletManager {
       unlockValid = await verifyPattern(unlockCredential as number[], patternHashConfig.value);
     }
 
-    // Check if biometric authentication was used (credential is a special string)
-    if (unlockCredential === 'biometric-authenticated') {
-      // Biometrics verification handled by WebAuthn in the UI
-      // If we reach here, biometric verification already passed
+    // Check if PassKey authentication was used (credential is a special string)
+    if (unlockCredential === 'passkey-authenticated') {
+      // PassKey verification handled by WebAuthn in the UI
+      // If we reach here, PassKey verification already passed
       unlockValid = true;
     }
 
@@ -723,8 +723,8 @@ export class WalletManager {
   }
 
   /**
-   * Unlock the wallet with PIN/Pattern/Biometrics + optional 2FA
-   * @param unlockCredential - PIN, pattern, or biometric credential
+   * Unlock the wallet with PIN/Pattern/Password + optional 2FA (PassKey handled in UI via WebAuthn)
+   * @param unlockCredential - PIN, pattern, password, or PassKey credential signal
    * @param totpCode - Optional TOTP code if 2FA is enabled
    * @param password - Spending password to decrypt security data
    * @returns True if unlock successful

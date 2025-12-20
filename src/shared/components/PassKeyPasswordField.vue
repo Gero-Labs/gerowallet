@@ -1,6 +1,6 @@
 <template>
-  <div class="biometric-password-field">
-    <!-- Password Input with Biometric Icon -->
+  <div class="passkey-password-field">
+    <!-- Password Input with PassKey Icon -->
     <v-tooltip
       v-model="errorTooltipEnabled"
       top
@@ -29,22 +29,29 @@
               {{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}
             </v-icon>
           </template>
-          <template v-slot:append-outer v-if="biometricsAvailable">
+          <template v-slot:append-outer v-if="passKeyAvailable">
             <v-btn
               small
               icon
-              class="biometric-icon-wrapper"
-              @click="handleBiometricClick"
-              @touchstart="handleBiometricTouch"
+              class="passkey-icon-wrapper"
+              @click="handlePassKeyClick"
+              :disabled="passKeyLoading || disabled"
+              :loading="passKeyLoading"
             >
-              <v-icon
-                :disabled="biometricLoading || disabled"
-                :color="biometricLoading ? 'grey' : 'primary'"
-                class="biometric-icon"
-                tabindex="-1"
-              >
-                {{ biometricLoading ? 'mdi-loading mdi-spin' : 'mdi-fingerprint' }}
-              </v-icon>
+              <v-avatar>
+                <v-img
+                  :src="assets.passKeySvg"
+                  contain
+                  class="passkey-icon"
+                  :style="{
+                    width: '24px',
+                    height: '24px',
+                    filter: 'brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%)',
+                    opacity: passKeyLoading ? '0.5' : 1,
+                  }"
+                  tabindex="-1"
+                />
+              </v-avatar>
             </v-btn>
           </template>
         </v-text-field>
@@ -55,8 +62,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance } from 'vue';
+import { ref, onMounted, getCurrentInstance, nextTick } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import assets from '@/utils/assets';
+import { debugLog } from '@/utils/debug';
 
 // Props
 interface Props {
@@ -83,8 +92,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'input', value: string): void;
   (e: 'enter'): void;
-  (e: 'biometric-autofill-success'): void;
-  (e: 'biometric-autofill-error', error: string): void;
+  (e: 'passkey-autofill-success'): void;
+  (e: 'passkey-autofill-error', error: string): void;
 }>();
 
 // Access Vue instance for $t
@@ -92,38 +101,40 @@ const vmProxy = getCurrentInstance()!.proxy as any;
 
 // Reactive state
 const showPassword = ref(false);
-const biometricsAvailable = ref(false);
-const biometricLoading = ref(false);
+const passKeyAvailable = ref(false);
+const passKeyLoading = ref(false);
 const errorTooltipEnabled = ref(false);
 const errorTooltipText = ref('');
 const errorTooltipColor = ref('red');
 const passwordInput = ref<any>(null);
 const hasAutoTriggered = ref(false);
 
-// Check biometrics availability on mount and auto-trigger
+// Check passkey availability on mount and auto-trigger
 onMounted(async () => {
-  biometricsAvailable.value = await checkBiometricsAvailable();
-  console.log('checkBiometricsAvailable', biometricsAvailable.value)
-  // Auto-trigger biometric authentication if available AND enabled in settings
-  if (biometricsAvailable.value && !hasAutoTriggered.value) {
+  passKeyAvailable.value = await checkPassKeyAvailable();
+  debugLog('checkPassKeyAvailable', passKeyAvailable.value);
+  // Auto-trigger passkey authentication if available AND enabled in settings
+  if (passKeyAvailable.value && !hasAutoTriggered.value) {
+    // Set flag IMMEDIATELY to prevent race conditions on rapid re-mounts
+    hasAutoTriggered.value = true;
+
     // Check if auto-trigger is enabled
     const autoTriggerEnabled = await checkAutoTriggerEnabled();
 
     if (autoTriggerEnabled) {
       // Small delay to let the dialog render
       setTimeout(() => {
-        console.log('🤖 Auto-triggering biometric authentication - place your finger on Touch ID');
-        hasAutoTriggered.value = true;
-        handleBiometricAutofill();
+        debugLog('🤖 Auto-triggering passkey authentication');
+        handlePassKeyAutofill();
       }, 500);
     }
   }
 });
 
 /**
- * Check if biometric autofill is available for this wallet
+ * Check if passkey autofill is available for this wallet
  */
-async function checkBiometricsAvailable(): Promise<boolean> {
+async function checkPassKeyAvailable(): Promise<boolean> {
   try {
     const wallet = walletStore.loggedWallet;
     if (!wallet) return false;
@@ -131,22 +142,22 @@ async function checkBiometricsAvailable(): Promise<boolean> {
     // Check if WebAuthn is supported
     if (!window.PublicKeyCredential) return false;
 
-    // Check if biometric autofill is enabled in DB
+    // Check if passkey autofill is enabled in DB
     const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
-    const biometricsAutofillConfig = await configTable.where({ key: 'biometricsForPasswordAutofill' }).first();
-    const encryptedPasswordConfig = await configTable.where({ key: 'biometricEncryptedSpendingPassword' }).first();
+    const passKeyAutofillConfig = await configTable.where({ key: 'passKeyForPasswordAutofill' }).first();
+    const encryptedPasswordConfig = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
     const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
     return !!(
-      biometricsAutofillConfig?.value &&
+      passKeyAutofillConfig?.value &&
       encryptedPasswordConfig?.value &&
       credentialConfig?.value
     );
   } catch (error) {
-    console.error('Error checking biometrics availability:', error);
+    console.error('Error checking passkey availability:', error);
     return false;
   }
 }
@@ -163,7 +174,7 @@ async function checkAutoTriggerEnabled(): Promise<boolean> {
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
-    const autoTriggerConfig = await configTable.where({ key: 'biometricAutoTrigger' }).first();
+    const autoTriggerConfig = await configTable.where({ key: 'passKeyAutoTrigger' }).first();
     return autoTriggerConfig?.value || false;
   } catch (error) {
     console.error('Error checking auto-trigger setting:', error);
@@ -172,40 +183,24 @@ async function checkAutoTriggerEnabled(): Promise<boolean> {
 }
 
 /**
- * Handle touch events for better mobile experience
- */
-function handleBiometricTouch(event: TouchEvent) {
-  console.log('👆 Touch detected on fingerprint icon');
-  // Prevent default to avoid triggering click event twice
-  event.preventDefault();
-  event.stopPropagation();
-  if (!biometricLoading.value && !props.disabled) {
-    console.log('🚀 Triggering biometric authentication from touch');
-    handleBiometricAutofill();
-  } else {
-    console.log('⏸️ Touch ignored - loading:', biometricLoading.value, 'disabled:', props.disabled);
-  }
-}
-
-/**
  * Handle click events (desktop/mouse)
  */
-function handleBiometricClick(event: MouseEvent) {
+function handlePassKeyClick(event: MouseEvent) {
   // Only handle if not from a touch event (touch already handled)
   if (event.detail === 0) return; // Ignore programmatic clicks
 
-  console.log('🖱️ Click detected on fingerprint icon');
-  if (!biometricLoading.value && !props.disabled) {
-    console.log('🚀 Triggering biometric authentication from click');
-    handleBiometricAutofill();
+  debugLog('🖱️ Click detected on passkey icon');
+  if (!passKeyLoading.value && !props.disabled) {
+    debugLog('🚀 Triggering passkey authentication from click');
+    handlePassKeyAutofill();
   }
 }
 
 /**
- * Handle biometric authentication and password autofill
+ * Handle passkey authentication and password autofill
  */
-async function handleBiometricAutofill() {
-  biometricLoading.value = true;
+async function handlePassKeyAutofill() {
+  passKeyLoading.value = true;
 
   try {
     const wallet = walletStore.loggedWallet;
@@ -221,58 +216,57 @@ async function handleBiometricAutofill() {
     // Get WebAuthn credential ID
     const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
     if (!credentialConfig || !credentialConfig.value) {
-      throw new Error('Biometric credential not found');
+      throw new Error('PassKey credential not found');
     }
 
     // Get encrypted password
-    const encryptedPasswordConfig = await configTable.where({ key: 'biometricEncryptedSpendingPassword' }).first();
+    const encryptedPasswordConfig = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
     if (!encryptedPasswordConfig || !encryptedPasswordConfig.value) {
       throw new Error('Encrypted password not found');
     }
 
-    console.log('🔐 Authenticating with biometrics...');
+    debugLog('🔐 Authenticating with passkey...');
 
     // Authenticate with WebAuthn
-    const { authenticateWebAuthn, decryptSpendingPasswordForBiometric } = await import('@/shared/utils/security');
+    const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
     const authenticated = await authenticateWebAuthn(credentialConfig.value);
 
     if (!authenticated) {
-      throw new Error('Biometric authentication failed');
+      throw new Error('PassKey authentication failed');
     }
 
-    console.log('✅ Biometric authentication successful');
+    debugLog('✅ PassKey authentication successful');
 
     // Decrypt spending password
-    const decryptedPassword = await decryptSpendingPasswordForBiometric(
+    const decryptedPassword = await decryptSpendingPasswordForPassKey(
       encryptedPasswordConfig.value,
       credentialConfig.value,
       wallet.id
     );
 
-    console.log('🔓 Password decrypted successfully');
+    debugLog('🔓 Password decrypted successfully');
 
     // Auto-fill password
     emit('input', decryptedPassword);
 
-    // Show success feedback
+    // Wait for Vue to propagate the password value, then emit success
+    await nextTick();
     showSuccessFeedback();
-
-    // Emit success event - parent can trigger sign action
-    emit('biometric-autofill-success');
+    // emit('passkey-autofill-success');
   } catch (error: any) {
-    console.error('❌ Biometric autofill failed:', error);
+    console.error('❌ PassKey autofill failed:', error);
 
     // Show error tooltip
-    errorTooltipText.value = error.message || vmProxy.$t('security.biometricAuthFailed');
+    errorTooltipText.value = error.message || vmProxy.$t('security.passKeyAuthFailed');
     errorTooltipEnabled.value = true;
     setTimeout(() => {
       errorTooltipEnabled.value = false;
     }, 3000);
 
     // Emit error event
-    emit('biometric-autofill-error', error.message);
+    emit('passkey-autofill-error', error.message);
   } finally {
-    biometricLoading.value = false;
+    passKeyLoading.value = false;
   }
 }
 
@@ -280,7 +274,7 @@ async function handleBiometricAutofill() {
  * Show success feedback
  */
 function showSuccessFeedback() {
-  errorTooltipText.value = vmProxy.$t('security.biometricAuthSuccess');
+  errorTooltipText.value = vmProxy.$t('security.passKeyAuthSuccess');
   errorTooltipColor.value = 'success';
   errorTooltipEnabled.value = true;
   setTimeout(() => {
@@ -318,11 +312,11 @@ defineExpose({
 </script>
 
 <style scoped>
-.biometric-password-field {
+.passkey-password-field {
   width: 100%;
 }
 
-.biometric-icon-wrapper {
+.passkey-icon-wrapper {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -345,18 +339,18 @@ defineExpose({
   touch-action: manipulation;
 }
 
-.biometric-icon-wrapper:hover {
+.passkey-icon-wrapper:hover {
   transform: scale(1.1);
   background-color: rgba(255, 255, 255, 0.05);
 }
 
 /* Active/pressed state for touch feedback */
-.biometric-icon-wrapper:active {
+.passkey-icon-wrapper:active {
   transform: scale(0.95);
   background-color: rgba(255, 255, 255, 0.1);
 }
 
-.biometric-icon {
+.passkey-icon {
   pointer-events: none; /* Let wrapper handle all events */
 }
 
@@ -368,7 +362,7 @@ defineExpose({
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-.biometric-password-field ::v-deep .v-input__append-outer {
+.passkey-password-field ::v-deep .v-input__append-outer {
   margin: 0 0 0 4px !important;
 }
 </style>

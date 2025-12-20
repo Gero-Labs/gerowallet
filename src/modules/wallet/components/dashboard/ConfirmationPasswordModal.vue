@@ -25,7 +25,7 @@
       <div class="modal-actions">
         <div class="actions-content">
           <div class="password-section" v-if="loggedWallet.type === 'Normal'">
-            <BiometricPasswordField
+            <PassKeyPasswordField
               :value="password"
               @input="password = $event"
               dense
@@ -34,7 +34,7 @@
               :label="$t('wallet.spendingPassword')"
               hide-details
               @enter="verifyPassword"
-              @biometric-autofill-success="verifyPassword"
+              @passkey-autofill-success="verifyPassword"
             />
           </div>
           <div v-if="loggedWallet.type === 'Ledger'" class="ledger-section">
@@ -62,7 +62,7 @@ import { walletStore } from '@/stores/walletStore';
 import { stringToHex } from '@/shared/utils/converter';
 import snackbar from '@/plugins/snackbar';
 import verifyDataSignature from '@cardano-foundation/cardano-verify-datasignature';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 
 const { t } = useTranslation();
 

@@ -2,10 +2,10 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    :title="$t('wallet.quickSend')"
+    :title="String($t('wallet.quickSend'))"
     :loading="txSubmitLoading"
     :min-height="0"
-    :subtitle="$t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
+    :subtitle="String($t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }))"
     :persistent="false"
     :img="assets.sendSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
@@ -135,7 +135,7 @@
     </v-card-text>
     <v-card-actions class="text-center justify-center" :style="loggedWallet?.type === WalletType.Ledger ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <div class="" v-if="currentStep === 3">
-        <BiometricPasswordField
+        <PassKeyPasswordField
           ref="passwordField"
           v-if="loggedWallet?.type === WalletType.Normal"
           :value="spendingPassword"
@@ -147,8 +147,8 @@
           :disabled="txSubmitLoading"
           required
           @enter="nextStep"
-          @biometric-autofill-success="handleBiometricSuccess"
-          @biometric-autofill-error="handleBiometricError"
+          @passkey-autofill-success="handlePassKeySuccess"
+          @passkey-autofill-error="handlePassKeyError"
           style="width: 295px"
           class="mb-2"
         />
@@ -187,7 +187,7 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
@@ -395,17 +395,17 @@ const backScan = () => {
 //   });
 // }
 
-const handleBiometricSuccess = () => {
-  console.log('✅ Biometric autofill successful in SendDialog - triggering sign');
-  // Automatically trigger sign after successful biometric autofill
+const handlePassKeySuccess = () => {
+  console.log('✅ PassKey autofill successful in SendDialog - triggering sign');
+  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     nextStep();
   }, 300); // Small delay for UX feedback
 }
 
-const handleBiometricError = (error: string) => {
-  console.error('Biometric autofill error in SendDialog:', error);
-  snackbar.setError(error || t('security.biometricAuthFailed'));
+const handlePassKeyError = (error: string) => {
+  console.error('PassKey autofill error in SendDialog:', error);
+  snackbar.setError(error || t('security.passKeyAuthFailed'));
 }
 
 const signTx = async (): Promise<boolean> => {
@@ -771,7 +771,7 @@ async function setMax(index) {
 async function tryBuildMaxTx(tokens, index) {
   try {
     await buildTx(tokens)
-  } catch (e) {
+  } catch (e: any) {
     const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
     console.log('tryBuildMaxTx error:', errorMessage);
 
@@ -850,7 +850,7 @@ watch(() => ({
         const assetsMap = new Map<Cardano.AssetId, bigint>();
 
         // Add collectibles to assets map
-        collectiblesArray.forEach(collectible => {
+        collectiblesArray.forEach((collectible: any) => {
           console.log('Adding collectible:', collectible.unit, collectible.toSendQuantity);
           assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
         });
@@ -902,7 +902,7 @@ watch(() => ({
 
     await buildTx(val.selectedTokens)
     txValid.value = true
-  } catch(e) {
+  } catch(e: any) {
     console.error('Build tx error:', e)
     const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
     console.log('Error message:', errorMessage);
