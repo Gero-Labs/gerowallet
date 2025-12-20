@@ -17,7 +17,7 @@
         <v-layout>
           <v-row>
             <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !signature" class="pb-0">
-              <BiometricPasswordField
+              <PassKeyPasswordField
                 ref="passwordField"
                 :value="spendingPassword"
                 @input="spendingPassword = $event"
@@ -29,7 +29,7 @@
                 :rules="[rules.required()]"
                 required
                 @enter="sign"
-                @biometric-autofill-success="sign"
+                @passkey-autofill-success="sign"
               />
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
@@ -69,7 +69,7 @@ import { DataSignError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';

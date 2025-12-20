@@ -727,9 +727,9 @@ The wallet implements a hierarchical feature notification system to inform users
    const FEATURE_DEFINITIONS: FeatureDefinition[] = [
      // Existing features...
      {
-       id: 'settings.security.biometrics',  // Unique ID (hierarchical dot notation)
+       id: 'settings.security.passKey',  // Unique ID (hierarchical dot notation)
        version: '2.6.2',                     // Version when added
-       path: ['settings', 'security', 'biometrics']  // Hierarchy path
+       path: ['settings', 'security', 'passKey']  // Hierarchy path
      },
      // Add your new feature:
      {
@@ -815,7 +815,7 @@ The wallet implements a hierarchical feature notification system to inform users
 
 ```typescript
 // Check if specific feature is new
-if (isFeatureNew('settings.security.biometrics')) {
+if (isFeatureNew('settings.security.passKey')) {
   // Show dot/badge
 }
 
@@ -825,9 +825,9 @@ if (hasNewFeaturesInPath(['settings', 'security'])) {
 }
 
 // Mark as seen when user opens dialog
-function openBiometricsDialog() {
-  markFeatureAsSeen('settings.security.biometrics');
-  biometricsDialog.value = true;
+function openPassKeyDialog() {
+  markFeatureAsSeen('settings.security.passKey');
+  passKeyDialog.value = true;
 }
 ```
 

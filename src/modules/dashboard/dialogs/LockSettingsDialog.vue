@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="$t('security.lockSettings')"
+    :title="String($t('security.lockSettings'))"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"
@@ -127,124 +127,179 @@
 
       <v-divider class="my-5 mx-1" />
 
-      <!-- Biometrics Section -->
+      <!-- PassKey Section -->
       <v-card class="transparent" flat>
         <v-card-title class="justify-center pt-0">
-          <v-icon color="primary" class="mr-1" small>mdi-fingerprint</v-icon>
-          <span class="subtitle-1 font-weight-bold">{{ $t('security.biometricsSettings') }}</span>
+          <v-avatar size="18" class="mr-1">
+            <v-img :src="assets.passKeySvg" contain style="filter: brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%);"></v-img>
+          </v-avatar>
+          <span class="subtitle-1 font-weight-bold">{{ $t('security.passKeySettings') }}</span>
+          <v-tooltip bottom content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-icon
+                class="ml-1"
+                x-small
+                v-bind="attrs"
+                v-on="on"
+              >
+                mdi-information-outline
+              </v-icon>
+            </template>
+            <span>{{ $t('security.passKeyInfo') }}</span>
+          </v-tooltip>
         </v-card-title>
         <v-card-subtitle class="text-center">
-          {{ $t('security.configureBiometricsIndependently') }}
+          {{ $t('security.configurePassKeyIndependently') }}
         </v-card-subtitle>
         <v-card-text class="pa-0">
           <!-- Browser Support Notice -->
           <v-alert
-            v-if="!isBiometricsSupported"
+            v-if="!isPassKeySupported"
             type="warning"
             dense
             class="mb-4"
           >
-            {{ $t('security.biometricsNotSupported') }}
+            {{ $t('security.passKeyNotSupported') }}
           </v-alert>
 
+          <!-- PassKey Registration Status -->
           <v-list dense class="pa-0 transparent" nav>
-            <!-- Use Biometrics for Password Autofill (Normal wallets only) -->
-            <v-list-item v-if="isNormalWallet">
+            <v-list-item>
+              <v-list-item-content>
+                <v-list-item-title>
+                  {{ isPassKeyRegistered ? $t('security.passKeyRegistered') : $t('security.passKeyNotRegistered') }}
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  {{ isPassKeyRegistered ? $t('security.passKeyRegisteredDescription') : $t('security.passKeyNotRegisteredDescription') }}
+                </v-list-item-subtitle>
+              </v-list-item-content>
+              <v-list-item-action>
+                <v-btn
+                  small
+                  :color="isPassKeyRegistered ? 'error' : 'primary'"
+                  :loading="loadingPassKeyRegistration"
+                  :disabled="!isPassKeySupported"
+                  @click="isPassKeyRegistered ? handlePassKeyDeregister() : handlePassKeyRegister()"
+                >
+                  {{ isPassKeyRegistered ? $t('security.deregister') : $t('security.register') }}
+                </v-btn>
+              </v-list-item-action>
+            </v-list-item>
+          </v-list>
+
+          <v-divider class="my-3 mx-1" />
+
+          <v-list dense class="pa-0 transparent" nav>
+            <!-- Use PassKey for Password Autofill (Normal wallets only) -->
+            <v-list-item v-if="isNormalWallet" :disabled="isPassKeyAutofillDisabled">
               <v-list-item-avatar class="my-0">
-                <v-icon>mdi-form-textbox-password</v-icon>
+                <v-icon :disabled="isPassKeyAutofillDisabled">mdi-form-textbox-password</v-icon>
               </v-list-item-avatar>
               <v-list-item-content>
-                <v-list-item-title>{{ $t('security.useBiometricsForPasswordAutofill') }}</v-list-item-title>
-                <v-list-item-subtitle>{{ $t('security.useBiometricsForPasswordAutofillDescription') }}</v-list-item-subtitle>
+                <v-list-item-title>{{ $t('security.usePassKeyForPasswordAutofill') }}</v-list-item-title>
+                <v-list-item-subtitle v-if="!selectedUnlockMethod">
+                  {{ $t('security.passKeyRequiresUnlockMethod') }}
+                </v-list-item-subtitle>
+                <v-list-item-subtitle v-else>
+                  {{ $t('security.usePassKeyForPasswordAutofillDescription') }}
+                </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
                   inset
                   dense
-                  v-model="biometricsForPasswordAutofill"
+                  v-model="passKeyForPasswordAutofill"
                   color="primary"
-                  :disabled="!isBiometricsSupported"
-                  @change="handleBiometricsAutofillChange"
+                  :disabled="isPassKeyAutofillDisabled"
+                  @change="handlePassKeyAutofillChange"
                 ></v-switch>
               </v-list-item-action>
             </v-list-item>
 
-            <!-- Auto-Trigger Biometric Authentication (Normal wallets only) -->
-            <v-list-item v-if="isNormalWallet" :disabled="!biometricsForPasswordAutofill">
+            <!-- Auto-Trigger PassKey Authentication (Normal wallets only) -->
+            <v-list-item v-if="isNormalWallet" :disabled="!passKeyForPasswordAutofill">
               <v-list-item-avatar class="my-0">
-                <v-icon :disabled="!biometricsForPasswordAutofill">mdi-fingerprint</v-icon>
+                <v-img :src="assets.autoTriggerSvg" contain :style="{
+                  width: '24px',
+                  height: '24px',
+                  opacity: !passKeyForPasswordAutofill ? '0.5' : 1,
+                }" />
               </v-list-item-avatar>
               <v-list-item-content>
-                <v-list-item-title>{{ $t('security.autoTriggerBiometricsPasswordAutofill') }}</v-list-item-title>
-                <v-list-item-subtitle v-if="!biometricsForPasswordAutofill">
+                <v-list-item-title>{{ $t('security.autoTriggerPassKeyPasswordAutofill') }}</v-list-item-title>
+                <v-list-item-subtitle v-if="!passKeyForPasswordAutofill">
                   {{ $t('security.autoTriggerRequiresAutofill') }}
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-else>
-                  {{ $t('security.autoTriggerBiometricsPasswordAutofillDescription') }}
+                  {{ $t('security.autoTriggerPassKeyPasswordAutofillDescription') }}
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
                   inset
                   dense
-                  v-model="biometricAutoTrigger"
+                  v-model="passKeyAutoTrigger"
                   color="primary"
-                  :disabled="!isBiometricsSupported || !biometricsForPasswordAutofill"
-                  @change="handleBiometricAutoTriggerChange"
+                  :disabled="!isPassKeySupported || !passKeyForPasswordAutofill"
+                  @change="handlePassKeyAutoTriggerChange"
                 ></v-switch>
               </v-list-item-action>
             </v-list-item>
 
             <v-divider class="my-3 mx-1" v-if="isNormalWallet" />
 
-            <!-- Use Biometrics for Unlocking -->
-            <v-list-item :disabled="isBiometricsUnlockDisabled">
+            <!-- Use PassKey for Unlocking -->
+            <v-list-item :disabled="isPassKeyUnlockDisabled">
               <v-list-item-avatar class="my-0">
-                <v-icon :disabled="isBiometricsUnlockDisabled">mdi-lock-open-outline</v-icon>
+                <v-icon :disabled="isPassKeyUnlockDisabled">mdi-lock-open-outline</v-icon>
               </v-list-item-avatar>
               <v-list-item-content>
-                <v-list-item-title>{{ $t('security.useBiometricsForUnlock') }}</v-list-item-title>
+                <v-list-item-title>{{ $t('security.usePassKeyForUnlock') }}</v-list-item-title>
                 <v-list-item-subtitle v-if="!selectedUnlockMethod">
-                  {{ $t('security.biometricsRequiresUnlockMethod') }}
+                  {{ $t('security.passKeyRequiresUnlockMethod') }}
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-else>
-                  {{ $t('security.useBiometricsForUnlockDescription') }}
+                  {{ $t('security.usePassKeyForUnlockDescription') }}
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
                   inset
                   dense
-                  v-model="biometricsForUnlock"
+                  v-model="passKeyForUnlock"
                   color="primary"
-                  @change="handleBiometricsUnlockChange"
-                  :disabled="isBiometricsUnlockDisabled"
+                  @change="handlePassKeyUnlockChange"
+                  :disabled="isPassKeyUnlockDisabled"
                 ></v-switch>
               </v-list-item-action>
             </v-list-item>
 
-            <!-- Auto-Trigger Biometric Authentication for Unlock -->
-            <v-list-item :disabled="!biometricsForUnlock">
+            <!-- Auto-Trigger PassKey Authentication for Unlock -->
+            <v-list-item :disabled="!passKeyForUnlock">
               <v-list-item-avatar class="my-0">
-                <v-icon :disabled="!biometricsForUnlock">mdi-fingerprint</v-icon>
+                <v-img :src="assets.autoTriggerSvg" contain :style="{
+                  width: '24px',
+                  height: '24px',
+                  opacity: !passKeyForUnlock ? '0.5' : 1,
+                }" />
               </v-list-item-avatar>
               <v-list-item-content>
-                <v-list-item-title>{{ $t('security.autoTriggerBiometricsUnlock') }}</v-list-item-title>
-                <v-list-item-subtitle v-if="!biometricsForUnlock">
-                  {{ $t('security.autoTriggerRequiresBiometricUnlock') }}
+                <v-list-item-title>{{ $t('security.autoTriggerPassKeyUnlock') }}</v-list-item-title>
+                <v-list-item-subtitle v-if="!passKeyForUnlock">
+                  {{ $t('security.autoTriggerRequiresPassKeyUnlock') }}
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-else>
-                  {{ $t('security.autoTriggerBiometricsUnlockDescription') }}
+                  {{ $t('security.autoTriggerPassKeyUnlockDescription') }}
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action>
                 <v-switch
                   inset
                   dense
-                  v-model="biometricAutoTriggerUnlock"
+                  v-model="passKeyAutoTriggerUnlock"
                   color="primary"
-                  :disabled="!isBiometricsSupported || !biometricsForUnlock"
-                  @change="handleBiometricAutoTriggerUnlockChange"
+                  :disabled="!isPassKeySupported || !passKeyForUnlock"
+                  @change="handlePassKeyAutoTriggerUnlockChange"
                 ></v-switch>
               </v-list-item-action>
             </v-list-item>
@@ -306,6 +361,8 @@ import type { UnlockMethod } from '@/shared/utils/security';
 import { registerWebAuthnCredential } from '@/shared/utils/security';
 import snackbar from '@/plugins/snackbar';
 import { markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
+import assets from '@/utils/assets';
+import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
 
@@ -343,14 +400,16 @@ const selectedUnlockMethod = ref<UnlockMethod>(null);
 const selectedAutoLockMinutes = ref(0);
 const customMinutes = ref<number | null>(null);
 const showCustomInput = ref(false);
-const biometricsForUnlock = ref(false);
-const biometricsForPasswordAutofill = ref(false);
-const biometricAutoTrigger = ref(false);
-const biometricAutoTriggerUnlock = ref(false);
-const isBiometricsSupported = ref(false);
+const passKeyForUnlock = ref(false);
+const passKeyForPasswordAutofill = ref(false);
+const passKeyAutoTrigger = ref(false);
+const passKeyAutoTriggerUnlock = ref(false);
+const isPassKeySupported = ref(false);
+const isPassKeyRegistered = ref(false);
+const loadingPassKeyRegistration = ref(false);
 const loading = ref(false);
-const loadingBiometricsUnlock = ref(false);
-const loadingBiometricsAutofill = ref(false);
+const loadingPassKeyUnlock = ref(false);
+const loadingPassKeyAutofill = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 
@@ -369,9 +428,14 @@ const isNormalWallet = computed(() => {
   return wallet?.type === WalletType.Normal;
 });
 
-const isBiometricsUnlockDisabled = computed(() => {
-  // Disable if browser doesn't support biometrics, if loading biometrics unlock, or if no unlock method is set
-  return !isBiometricsSupported.value || loadingBiometricsUnlock.value || !selectedUnlockMethod.value;
+const isPassKeyAutofillDisabled = computed(() => {
+  // Disable if browser doesn't support PassKey, if PassKey not registered, if loading, or if no unlock method is set
+  return !isPassKeySupported.value || !isPassKeyRegistered.value || loadingPassKeyAutofill.value || !selectedUnlockMethod.value;
+});
+
+const isPassKeyUnlockDisabled = computed(() => {
+  // Disable if browser doesn't support PassKey, if PassKey not registered, if loading, or if no unlock method is set
+  return !isPassKeySupported.value || !isPassKeyRegistered.value || loadingPassKeyUnlock.value || !selectedUnlockMethod.value;
 });
 
 const dialogSubtitle = computed(() => {
@@ -407,14 +471,14 @@ watch(() => props.reloadTrigger, () => {
   }
 });
 
-// Check biometrics support immediately on component creation
-function checkBiometricsSupport() {
+// Check PassKey support immediately on component creation
+function checkPassKeySupport() {
   // Check if WebAuthn is supported
-  isBiometricsSupported.value = !!window.PublicKeyCredential;
+  isPassKeySupported.value = !!window.PublicKeyCredential;
 }
 
-// Initialize biometrics support check immediately
-checkBiometricsSupport();
+// Initialize the PassKey support check immediately
+checkPassKeySupport();
 
 async function loadCurrentSettings() {
   try {
@@ -442,26 +506,31 @@ async function loadCurrentSettings() {
 
     selectedAutoLockMinutes.value = autoLockMinutes;
 
-    // Load biometric settings
-    const biometricsUnlockConfig = await configTable.where({ key: 'biometricsForUnlock' }).first();
-    const biometricsAutofillConfig = await configTable.where({ key: 'biometricsForPasswordAutofill' }).first();
-    const biometricAutoTriggerConfig = await configTable.where({ key: 'biometricAutoTrigger' }).first();
-    const biometricAutoTriggerUnlockConfig = await configTable.where({ key: 'biometricAutoTriggerUnlock' }).first();
-    biometricsForUnlock.value = biometricsUnlockConfig?.value || false;
-    biometricsForPasswordAutofill.value = biometricsAutofillConfig?.value || false;
-    biometricAutoTrigger.value = biometricAutoTriggerConfig?.value || false;
-    biometricAutoTriggerUnlock.value = biometricAutoTriggerUnlockConfig?.value || false;
+    // Load PassKey settings
+    const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
+    const passKeyUnlockConfig = await configTable.where({ key: 'passKeyForUnlock' }).first();
+    const passKeyAutofillConfig = await configTable.where({ key: 'passKeyForPasswordAutofill' }).first();
+    const passKeyAutoTriggerConfig = await configTable.where({ key: 'passKeyAutoTrigger' }).first();
+    const passKeyAutoTriggerUnlockConfig = await configTable.where({ key: 'passKeyAutoTriggerUnlock' }).first();
 
-    // Check biometrics support
-    checkBiometricsSupport();
+    // Check if PassKey is registered
+    isPassKeyRegistered.value = !!(credentialConfig?.value);
+
+    passKeyForUnlock.value = passKeyUnlockConfig?.value || false;
+    passKeyForPasswordAutofill.value = passKeyAutofillConfig?.value || false;
+    passKeyAutoTrigger.value = passKeyAutoTriggerConfig?.value || false;
+    passKeyAutoTriggerUnlock.value = passKeyAutoTriggerUnlockConfig?.value || false;
+
+    // Check PassKey support
+    checkPassKeySupport();
   } catch (error) {
     console.error('Error loading security settings:', error);
     selectedUnlockMethod.value = null;
     selectedAutoLockMinutes.value = 0;
-    biometricsForUnlock.value = false;
-    biometricsForPasswordAutofill.value = false;
-    biometricAutoTrigger.value = false;
-    biometricAutoTriggerUnlock.value = false;
+    passKeyForUnlock.value = false;
+    passKeyForPasswordAutofill.value = false;
+    passKeyAutoTrigger.value = false;
+    passKeyAutoTriggerUnlock.value = false;
   }
 }
 
@@ -491,20 +560,25 @@ async function saveUnlockMethod(method: UnlockMethod) {
     const configTable = db.table('config');
 
     if (method === null) {
-      // Remove all unlock method data
+      // Remove unlock method data (but keep PassKey registration and encrypted password)
       await configTable.put({ key: 'unlockMethod', value: null });
       await configTable.where({ key: 'pinHash' }).delete();
       await configTable.where({ key: 'encryptedPinHash' }).delete();
       await configTable.where({ key: 'encryptedPatternHash' }).delete();
-      await configTable.where({ key: 'webAuthnCredentialId' }).delete();
+      // Note: webAuthnCredentialId and passKeyEncryptedSpendingPassword are NOT deleted
+      // PassKey registration persists - user can re-enable PassKey features after setting a new unlock method
 
-      // Disable biometric unlock when unlock method is set to None
-      await configTable.put({ key: 'biometricsForUnlock', value: false });
-      await configTable.put({ key: 'biometricAutoTriggerUnlock', value: false });
+      // Disable PassKey features when the unlock method is set to None
+      await configTable.put({ key: 'passKeyForUnlock', value: false });
+      await configTable.put({ key: 'passKeyAutoTriggerUnlock', value: false });
+      await configTable.put({ key: 'passKeyForPasswordAutofill', value: false });
+      await configTable.put({ key: 'passKeyAutoTrigger', value: false });
 
-      // Update reactive state to reflect changes in UI
-      biometricsForUnlock.value = false;
-      biometricAutoTriggerUnlock.value = false;
+      // Update the reactive state to reflect changes in UI
+      passKeyForUnlock.value = false;
+      passKeyAutoTriggerUnlock.value = false;
+      passKeyForPasswordAutofill.value = false;
+      passKeyAutoTrigger.value = false;
     } else {
       // Save unlock method
       await configTable.put({ key: 'unlockMethod', value: method });
@@ -550,8 +624,8 @@ async function handleAutoLockSelect(minutes: number) {
   }
 }
 
-async function handleBiometricsUnlockChange(enabled: boolean) {
-  loadingBiometricsUnlock.value = true;
+async function handlePassKeyUnlockChange(enabled: boolean) {
+  loadingPassKeyUnlock.value = true;
 
   try {
     const wallet = walletStore.loggedWallet;
@@ -563,43 +637,38 @@ async function handleBiometricsUnlockChange(enabled: boolean) {
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
-    if (enabled) {
-      // Register WebAuthn credential (biometric authentication)
-      console.log('🔐 Registering WebAuthn credential for biometric unlock');
-      const credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+    // PassKey must already be registered - just toggle the setting
+    // Save PassKey unlock setting
+    await configTable.put({ key: 'passKeyForUnlock', value: enabled });
 
-      // Store credential ID in database
-      await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
-      console.log('✅ WebAuthn credential registered - biometric unlock enabled');
-    } else {
-      // Remove WebAuthn credential from database
-      console.log('🗑️ Removing WebAuthn credential');
-      await configTable.where({ key: 'webAuthnCredentialId' }).delete();
+    // If disabling, also disable auto-trigger
+    if (!enabled) {
+      await configTable.put({ key: 'passKeyAutoTriggerUnlock', value: false });
+      passKeyAutoTriggerUnlock.value = false;
     }
 
-    // Save biometric unlock setting
-    await configTable.put({ key: 'biometricsForUnlock', value: enabled });
+    debugLog(`✅ PassKey unlock ${enabled ? 'enabled' : 'disabled'}`);
 
     // Show success snackbar
-    snackbar.fireSuccess(t('security.biometricsSettingsUpdated'));
+    snackbar.fireSuccess(t('security.passKeySettingsUpdated'));
 
     // Emit update event
     emit('updated');
   } catch (error: any) {
-    console.error('Error saving biometric unlock setting:', error);
+    console.error('Error saving PassKey unlock setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.biometricsSettingsUpdateFailed'));
+    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
-    biometricsForUnlock.value = !enabled;
+    passKeyForUnlock.value = !enabled;
   } finally {
-    loadingBiometricsUnlock.value = false;
+    loadingPassKeyUnlock.value = false;
   }
 }
 
-async function handleBiometricsAutofillChange(enabled: boolean) {
-  loadingBiometricsAutofill.value = true;
+async function handlePassKeyAutofillChange(enabled: boolean) {
+  loadingPassKeyAutofill.value = true;
 
   try {
     const wallet = walletStore.loggedWallet;
@@ -612,77 +681,110 @@ async function handleBiometricsAutofillChange(enabled: boolean) {
     const configTable = db.table('config');
 
     if (enabled) {
-      // When enabling, prompt for spending password to encrypt and store
-      // Password verification happens inside the dialog's confirmPassword() function
-      const password = await promptForSpendingPassword();
+      // Check if encrypted password already exists (from previous setup)
+      const existingEncryptedPassword = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
+      const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
-      if (!password) {
-        // User cancelled
-        throw new Error('Password prompt cancelled');
-      }
+      if (existingEncryptedPassword?.value && credentialConfig?.value) {
+        // Encrypted password exists - verify it's still valid by attempting decryption
+        // This requires WebAuthn authentication, ensuring the user has device access
+        const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
 
-      // Password is already verified at this point
-      // Get or register WebAuthn credential
-      let credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
-      let credentialId: string;
+        debugLog('🔐 Verifying existing PassKey encrypted password...');
 
-      if (!credentialConfig || !credentialConfig.value) {
-        // No credential exists - register a new one for biometric autofill
-        console.log('🔐 Registering WebAuthn credential for biometric password autofill');
-        credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+        // Authenticate with WebAuthn first
+        const authenticated = await authenticateWebAuthn(credentialConfig.value);
+        if (!authenticated) {
+          throw new Error(t('security.passKeyAuthFailed'));
+        }
 
-        // Store credential ID in database
-        await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
-        console.log('✅ WebAuthn credential registered');
+        // Try to decrypt to verify the encrypted password is still valid
+        try {
+          await decryptSpendingPasswordForPassKey(
+            existingEncryptedPassword.value,
+            credentialConfig.value,
+            wallet.id
+          );
+          debugLog('✅ Existing encrypted password verified successfully');
+        } catch (decryptError) {
+          // Encrypted password is corrupted or invalid - need to re-setup
+          console.error('Existing encrypted password invalid, requiring re-setup:', decryptError);
+          throw new Error(t('security.passKeyCredentialChanged'));
+        }
       } else {
-        // Use existing credential
-        credentialId = credentialConfig.value;
-        console.log('🔐 Using existing WebAuthn credential for biometric password autofill');
+        // No encrypted password exists - prompt for spending password to encrypt and store
+        // Password verification happens inside the dialog's confirmPassword() function
+        const password = await promptForSpendingPassword();
+
+        if (!password) {
+          // User cancelled
+          throw new Error('Password prompt cancelled');
+        }
+
+        // Password is already verified at this point
+        // Get or register WebAuthn credential
+        let credentialId: string;
+
+        if (!credentialConfig || !credentialConfig.value) {
+          // No credential exists - register a new one for PassKey autofill
+          debugLog('🔐 Registering WebAuthn credential for PassKey password autofill');
+          credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+
+          // Store credential ID in database
+          await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
+          debugLog('✅ WebAuthn credential registered');
+        } else {
+          // Use existing credential
+          credentialId = credentialConfig.value;
+          debugLog('🔐 Using existing WebAuthn credential for PassKey password autofill');
+        }
+
+        // Encrypt password for PassKey storage
+        const { encryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
+        const encryptedPassword = await encryptSpendingPasswordForPassKey(password, credentialId, wallet.id);
+
+        // Store encrypted password in database
+        await configTable.put({
+          key: 'passKeyEncryptedSpendingPassword',
+          value: encryptedPassword
+        });
+
+        debugLog('✅ Spending password encrypted and stored for PassKey autofill');
       }
-
-      // Encrypt password for biometric storage
-      const { encryptSpendingPasswordForBiometric } = await import('@/shared/utils/security');
-      const encryptedPassword = await encryptSpendingPasswordForBiometric(password, credentialId, wallet.id);
-
-      // Store encrypted password in database
-      await configTable.put({
-        key: 'biometricEncryptedSpendingPassword',
-        value: encryptedPassword
-      });
-
-      console.log('✅ Spending password encrypted and stored for biometric autofill');
     } else {
-      // When disabling, delete encrypted password from database
-      console.log('🗑️ Removing encrypted spending password');
-      await configTable.where({ key: 'biometricEncryptedSpendingPassword' }).delete();
+      // When disabling, keep the encrypted password for potential re-enabling
+      // Only disable auto-trigger
+      await configTable.put({ key: 'passKeyAutoTrigger', value: false });
+      passKeyAutoTrigger.value = false;
+      debugLog('🔒 PassKey autofill disabled (encrypted password retained)');
     }
 
-    // Save biometric autofill setting
-    await configTable.put({ key: 'biometricsForPasswordAutofill', value: enabled });
+    // Save PassKey autofill setting
+    await configTable.put({ key: 'passKeyForPasswordAutofill', value: enabled });
 
     // Show success snackbar
-    snackbar.fireSuccess(t('security.biometricsSettingsUpdated'));
+    snackbar.fireSuccess(t('security.passKeySettingsUpdated'));
 
     // Emit update event
     emit('updated');
   } catch (error: any) {
-    console.error('Error saving biometric autofill setting:', error);
+    console.error('Error saving PassKey autofill setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.biometricsSettingsUpdateFailed'));
+    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
-    biometricsForPasswordAutofill.value = !enabled;
+    passKeyForPasswordAutofill.value = !enabled;
   } finally {
-    loadingBiometricsAutofill.value = false;
+    loadingPassKeyAutofill.value = false;
   }
 }
 
 /**
- * Handle biometric auto-trigger change for password autofill
+ * Handle PassKey auto-trigger change for password autofill
  */
-async function handleBiometricAutoTriggerChange() {
-  const enabled = biometricAutoTrigger.value;
+async function handlePassKeyAutoTriggerChange() {
+  const enabled = passKeyAutoTrigger.value;
 
   try {
     const wallet = walletStore.loggedWallet;
@@ -696,31 +798,115 @@ async function handleBiometricAutoTriggerChange() {
     const configTable = db.table('config');
 
     // Save auto-trigger setting for password autofill
-    await configTable.put({ key: 'biometricAutoTrigger', value: enabled });
+    await configTable.put({ key: 'passKeyAutoTrigger', value: enabled });
 
     // Show success snackbar
-    snackbar.fireSuccess(t('security.biometricsSettingsUpdated'));
+    snackbar.fireSuccess(t('security.passKeySettingsUpdated'));
 
-    console.log('✅ Biometric auto-trigger (password autofill) setting saved:', enabled);
+    debugLog('✅ PassKey auto-trigger (password autofill) setting saved:', enabled);
 
     // Emit update event
     emit('updated');
   } catch (error: any) {
-    console.error('Error saving biometric auto-trigger setting:', error);
+    console.error('Error saving PassKey auto-trigger setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.biometricsSettingsUpdateFailed'));
+    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
-    biometricAutoTrigger.value = !enabled;
+    passKeyAutoTrigger.value = !enabled;
   }
 }
 
 /**
- * Handle biometric auto-trigger change for wallet unlock
+ * Handle PassKey registration
  */
-async function handleBiometricAutoTriggerUnlockChange() {
-  const enabled = biometricAutoTriggerUnlock.value;
+async function handlePassKeyRegister() {
+  loadingPassKeyRegistration.value = true;
+
+  try {
+    const wallet = walletStore.loggedWallet;
+    if (!wallet) {
+      throw new Error('No wallet logged in');
+    }
+
+    const { getDb } = await import('@/db/wallet-db');
+    const db = await getDb(wallet.id);
+    const configTable = db.table('config');
+
+    // Register WebAuthn credential
+    debugLog('🔐 Registering WebAuthn credential...');
+    const credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+
+    // Store credential ID in database
+    await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
+
+    // Update registration status
+    isPassKeyRegistered.value = true;
+
+    debugLog('✅ WebAuthn credential registered successfully');
+    snackbar.fireSuccess(t('security.passKeyRegisteredSuccess'));
+
+    // Emit update event
+    emit('updated');
+  } catch (error: any) {
+    console.error('Error registering PassKey:', error);
+    snackbar.setError(error.message || t('security.passKeyRegistrationFailed'));
+  } finally {
+    loadingPassKeyRegistration.value = false;
+  }
+}
+
+/**
+ * Handle PassKey deregistration
+ */
+async function handlePassKeyDeregister() {
+  loadingPassKeyRegistration.value = true;
+
+  try {
+    const wallet = walletStore.loggedWallet;
+    if (!wallet) {
+      throw new Error('No wallet logged in');
+    }
+
+    const { getDb } = await import('@/db/wallet-db');
+    const db = await getDb(wallet.id);
+    const configTable = db.table('config');
+
+    // Remove WebAuthn credential and all related settings
+    debugLog('🗑️ Deregistering PassKey...');
+    await configTable.where({ key: 'webAuthnCredentialId' }).delete();
+    await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
+    await configTable.put({ key: 'passKeyForUnlock', value: false });
+    await configTable.put({ key: 'passKeyForPasswordAutofill', value: false });
+    await configTable.put({ key: 'passKeyAutoTrigger', value: false });
+    await configTable.put({ key: 'passKeyAutoTriggerUnlock', value: false });
+
+    // Update UI state
+    isPassKeyRegistered.value = false;
+    passKeyForUnlock.value = false;
+    passKeyForPasswordAutofill.value = false;
+    passKeyAutoTrigger.value = false;
+    passKeyAutoTriggerUnlock.value = false;
+
+    debugLog('✅ PassKey deregistered successfully');
+    snackbar.fireSuccess(t('security.passKeyDeregisteredSuccess'));
+
+    // Emit update event
+    emit('updated');
+  } catch (error: any) {
+    console.error('Error deregistering PassKey:', error);
+    snackbar.setError(error.message || t('security.passKeyDeregistrationFailed'));
+  } finally {
+    loadingPassKeyRegistration.value = false;
+  }
+}
+
+/**
+ * Handle PassKey auto-trigger change for wallet unlock
+ */
+async function handlePassKeyAutoTriggerUnlockChange() {
+  const enabled = passKeyAutoTriggerUnlock.value;
 
   try {
     const wallet = walletStore.loggedWallet;
@@ -734,23 +920,23 @@ async function handleBiometricAutoTriggerUnlockChange() {
     const configTable = db.table('config');
 
     // Save auto-trigger setting for wallet unlock
-    await configTable.put({ key: 'biometricAutoTriggerUnlock', value: enabled });
+    await configTable.put({ key: 'passKeyAutoTriggerUnlock', value: enabled });
 
     // Show success snackbar
-    snackbar.fireSuccess(t('security.biometricsSettingsUpdated'));
+    snackbar.fireSuccess(t('security.passKeySettingsUpdated'));
 
-    console.log('✅ Biometric auto-trigger (unlock) setting saved:', enabled);
+    debugLog('✅ PassKey auto-trigger (unlock) setting saved:', enabled);
 
     // Emit update event
     emit('updated');
   } catch (error: any) {
-    console.error('Error saving biometric auto-trigger unlock setting:', error);
+    console.error('Error saving PassKey auto-trigger unlock setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.biometricsSettingsUpdateFailed'));
+    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
-    biometricAutoTriggerUnlock.value = !enabled;
+    passKeyAutoTriggerUnlock.value = !enabled;
   }
 }
 
@@ -781,7 +967,7 @@ async function confirmPassword() {
     const { Messaging } = await import('@/chrome/messaging');
     const { MessageTypes } = await import('@/models/MessageTypes');
 
-    console.log('🔐 Verifying spending password...');
+    debugLog('🔐 Verifying spending password...');
     const verifyResponse = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: passwordInput.value }

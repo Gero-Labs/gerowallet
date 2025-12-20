@@ -2,6 +2,17 @@ import { Messaging } from './messaging';
 import { bringInitContentScript } from '@bringweb3/chrome-extension-kit';
 import { getAddressBech32, promptLogin } from '@/chrome/webpage';
 
+/**
+ * Escape HTML entities to prevent XSS attacks
+ * @param text - Untrusted text to escape
+ * @returns Safe HTML-escaped string
+ */
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 const getWalletAddress = async (): Promise<string> => {
   try {
     const addresses = await getAddressBech32();
@@ -237,7 +248,7 @@ function appendOverlay(url: string) {
       </div>
       <div style="padding:.5rem 2rem; font-size: 1rem; max-width: 42.5rem;">
         <div class="list-header">
-          Potential threats on <span style="font-weight: 300; color: #ffffff;">${url}</span>
+          Potential threats on <span style="font-weight: 300; color: #ffffff;">${escapeHtml(url)}</span>
         </div>
         <ul style="padding-left:  1.313rem;">
           <li>Fraudulent transactions leading to asset loss</li>

@@ -122,7 +122,7 @@
             </h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • {{ $t('security.biometrics') }}: {{ biometricsText }}
+            {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • PassKey: {{ passKeyText }}
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-icon class="my-0" style="align-self: center">
@@ -261,19 +261,19 @@
             </v-tooltip>
           </div>
 
-          <!-- Biometric Option (if enabled) -->
-          <div v-if="biometricsForUnlock && webAuthnCredentialId" class="text-center mt-4">
+          <!-- PassKey Option (if enabled) -->
+          <div v-if="passKeyForUnlock && webAuthnCredentialId" class="text-center mt-4">
             <v-divider class="mb-4"></v-divider>
-            <div class="caption mb-3">{{ $t('security.orUseBiometrics') }}</div>
+            <div class="caption mb-3">{{ $t('security.orUsePassKey') }}</div>
             <v-btn
               color="primary"
               large
-              @click="handleVerificationBiometricAuth"
-              :loading="biometricVerifying"
+              @click="handleVerificationPassKeyAuth"
+              :loading="passKeyVerifying"
               :disabled="verifying"
             >
               <v-icon left>mdi-fingerprint</v-icon>
-              {{ $t('security.useFingerprint') }}
+              {{ $t('security.usePassKey') }}
             </v-btn>
           </div>
         </v-card-text>
@@ -358,15 +358,15 @@ const { loggedWallet, config } = toRefs(walletStore);
 const unlockMethod = ref<string | null>(null);
 const twoFactorEnabled = ref<boolean>(false);
 const autoLockMinutes = ref<number>(0);
-const biometricsForUnlock = ref<boolean>(false);
-const biometricsForPasswordAutofill = ref<boolean>(false);
+const passKeyForUnlock = ref<boolean>(false);
+const passKeyForPasswordAutofill = ref<boolean>(false);
 
 // Verification overlay state
 const showVerificationOverlay = ref<boolean>(false);
 const verificationInput = ref<string>('');
 const verificationPattern = ref<number[]>([]);
 const verifying = ref<boolean>(false);
-const biometricVerifying = ref<boolean>(false);
+const passKeyVerifying = ref<boolean>(false);
 const showPassword = ref<boolean>(false);
 const pinLength = ref<number>(6);
 const webAuthnCredentialId = ref<string | null>(null);
@@ -415,8 +415,6 @@ const unlockMethodText = computed(() => {
       return t('security.pin');
     case 'pattern':
       return t('security.pattern');
-    case 'biometrics':
-      return t('security.biometrics');
     default:
       return t('security.none');
   }
@@ -443,14 +441,14 @@ const autoLockText = computed(() => {
   return t('security.xHours', { hours });
 });
 
-const biometricsText = computed(() => {
+const passKeyText = computed(() => {
   const features: string[] = [];
 
-  if (biometricsForUnlock.value) {
+  if (passKeyForUnlock.value) {
     features.push(t('security.unlock'));
   }
 
-  if (biometricsForPasswordAutofill.value && loggedWallet.value?.type === WalletType.Normal) {
+  if (passKeyForPasswordAutofill.value && loggedWallet.value?.type === WalletType.Normal) {
     features.push(t('security.passwordAutofill'));
   }
 
@@ -473,15 +471,15 @@ async function loadSecurityConfig() {
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
     const twoFactorConfig = await configTable.where({ key: 'twoFactorEnabled' }).first();
     const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
-    const biometricsUnlockConfig = await configTable.where({ key: 'biometricsForUnlock' }).first();
-    const biometricsAutofillConfig = await configTable.where({ key: 'biometricsForPasswordAutofill' }).first();
+    const passKeyUnlockConfig = await configTable.where({ key: 'passKeyForUnlock' }).first();
+    const passKeyAutofillConfig = await configTable.where({ key: 'passKeyForPasswordAutofill' }).first();
     const webAuthnCredentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
     unlockMethod.value = unlockMethodConfig?.value || null;
     twoFactorEnabled.value = twoFactorConfig?.value || false;
     autoLockMinutes.value = autoLockConfig?.value || 0;
-    biometricsForUnlock.value = biometricsUnlockConfig?.value || false;
-    biometricsForPasswordAutofill.value = biometricsAutofillConfig?.value || false;
+    passKeyForUnlock.value = passKeyUnlockConfig?.value || false;
+    passKeyForPasswordAutofill.value = passKeyAutofillConfig?.value || false;
     webAuthnCredentialId.value = webAuthnCredentialConfig?.value || null;
 
     // Dispatch custom event to notify NavigationDrawer of security settings change
@@ -493,8 +491,8 @@ async function loadSecurityConfig() {
     unlockMethod.value = null;
     twoFactorEnabled.value = false;
     autoLockMinutes.value = 0;
-    biometricsForUnlock.value = false;
-    biometricsForPasswordAutofill.value = false;
+    passKeyForUnlock.value = false;
+    passKeyForPasswordAutofill.value = false;
     webAuthnCredentialId.value = null;
   }
 }
@@ -505,9 +503,6 @@ function handleUnlockMethodSelect(method: string) {
     pinSetupDialog.value = true;
   } else if (method === 'pattern') {
     patternSetupDialog.value = true;
-  } else if (method === 'biometrics') {
-    // TODO: Open biometrics setup dialog when implemented
-    console.log('Biometrics not yet implemented');
   }
 }
 
@@ -639,11 +634,11 @@ const enableToolTip = () => {
   }, 3000);
 }
 
-// Handle biometric verification
-async function handleVerificationBiometricAuth() {
-  biometricVerifying.value = true;
+// Handle PassKey verification
+async function handleVerificationPassKeyAuth() {
+  passKeyVerifying.value = true;
   try {
-    console.log('🔐 Starting biometric authentication for verification overlay');
+    console.log('🔐 Starting PassKey authentication for verification overlay');
 
     if (!webAuthnCredentialId.value) {
       console.error('No WebAuthn credential ID found');
@@ -654,23 +649,23 @@ async function handleVerificationBiometricAuth() {
     const authenticated = await authenticateWebAuthn(webAuthnCredentialId.value);
 
     if (authenticated) {
-      console.log('✅ Biometric verification successful - opening lock settings');
+      console.log('✅ PassKey verification successful - opening lock settings');
       // Verification successful, open lock settings dialog
       showVerificationOverlay.value = false;
       verificationInput.value = '';
       verificationPattern.value = [];
       securitySettingsDialog.value = true;
     } else {
-      console.error('❌ Biometric verification failed');
-      tooltip.value.text = t('security.biometricAuthFailed');
+      console.error('❌ PassKey verification failed');
+      tooltip.value.text = t('security.passKeyAuthFailed');
       enableToolTip();
     }
   } catch (error: any) {
-    console.error('❌ Biometric verification error:', error);
-    tooltip.value.text = error.message || t('security.biometricAuthFailed');
+    console.error('❌ PassKey verification error:', error);
+    tooltip.value.text = error.message || t('security.passKeyAuthFailed');
     enableToolTip();
   } finally {
-    biometricVerifying.value = false;
+    passKeyVerifying.value = false;
   }
 }
 

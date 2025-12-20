@@ -242,17 +242,13 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import charli3Store from '@/stores/charli3Store';
-// import Charli3API from '@/api/charli3-api'  // Commented out - using mock data
 import assts from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
-
-// Reactive state
-const logoLoadingActive = ref(false);
 
 // Computed properties
 const marketData = computed(() => charli3Store.state.marketData);
@@ -354,9 +350,6 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
     debugLog('Using mock market data:', mockData);
 
     charli3Store.setMarketData(mockData as any);
-
-    // Skip logo loading for mock data
-    // loadLogosInBackground()
   } catch (error) {
     console.error('Failed to load market data:', error);
     charli3Store.setError(error instanceof Error ? error.message : 'Failed to load market data');
@@ -365,147 +358,6 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
       charli3Store.setLoading(false);
     }
   }
-};
-
-const processTokenData = async (tokens: any[], category = 'unknown') => {
-  if (!tokens || !Array.isArray(tokens)) return [];
-
-  const processedTokens = [];
-
-  for (const token of tokens) {
-    // Extract readable ticker from description field
-    let ticker = 'Unknown';
-    let name = 'Unknown Token';
-
-    if (token.description) {
-      const parts = token.description.split(' / ');
-      if (parts.length >= 2) {
-        const tokenName = parts[1].trim();
-        if (tokenName.includes('Token')) {
-          ticker = tokenName.replace(' Token', '').toUpperCase();
-        } else if (tokenName.includes('DAO')) {
-          ticker = tokenName.split(' ')[0].toUpperCase();
-        } else {
-          ticker = tokenName.split(' ')[0].toUpperCase();
-        }
-        name = tokenName;
-      } else if (parts.length === 1) {
-        const tokenName = parts[0].trim();
-        if (tokenName && tokenName !== '') {
-          ticker = tokenName.split(' ')[0].toUpperCase();
-          name = tokenName;
-        }
-      }
-    }
-
-    // Handle special cases for known tokens
-    if (token.description && token.description.includes('HOSKY')) {
-      ticker = 'HOSKY';
-      name = 'HOSKY Token';
-    } else if (token.description && token.description.includes('Minswap')) {
-      ticker = 'MIN';
-      name = 'Minswap';
-    } else if (token.description && token.description.includes('Liqwid')) {
-      ticker = 'LQ';
-      name = 'Liqwid DAO Token';
-    } else if (token.description && token.description.includes('SUNDAE')) {
-      ticker = 'SUNDAE';
-      name = 'SUNDAE';
-    }
-
-    // Skip invalid tokens
-    if (
-      !token.description ||
-      token.description === '' ||
-      ticker === 'Unknown' ||
-      ticker === '' ||
-      name === 'Unknown Token'
-    ) {
-      continue;
-    }
-
-    // Validate numeric values
-    const dailyVolume = Number(token.dailyVolume) || 0;
-    const currentTvl = Number(token.currentTvl) || 0;
-    const currentPrice = Number(token.currentPrice) || 0;
-    const dailyPriceChange = Number(token.dailyPriceChange) || 0;
-
-    // Skip tokens with unrealistic values
-    if (currentTvl > 1000000000000 || currentTvl < 0 || currentPrice < 0) {
-      continue;
-    }
-
-    processedTokens.push({
-      ...token,
-      ticker,
-      name,
-      symbol: ticker,
-      logoUrl: null, // Will be loaded separately
-      dailyVolume,
-      dailyPriceChange,
-      currentPrice,
-      currentTvl,
-    });
-  }
-
-  return processedTokens;
-};
-
-const loadLogosInBackground = async () => {
-  if (logoLoadingActive.value) return;
-  logoLoadingActive.value = true;
-
-  try {
-    // Get top 3 tokens from each category that need logos
-    const tokensToProcess = [
-      ...marketData.value.topVolume.slice(0, 3),
-      ...marketData.value.topGainers.slice(0, 3),
-      ...marketData.value.topTvl.slice(0, 3),
-    ].filter(token => token && !token.logoUrl); // Only process valid tokens without logos
-
-    // Remove duplicates based on ticker
-    const uniqueTokens = tokensToProcess.filter(
-      (token, index, arr) => token && token.ticker && arr.findIndex(t => t.ticker === token.ticker) === index
-    );
-
-    // Process tokens one at a time to avoid rate limiting
-    for (let i = 0; i < uniqueTokens.length; i++) {
-      const token = uniqueTokens[i];
-
-      try {
-        const logoUrl = await getTokenLogoFromAPI(token);
-        if (logoUrl && logoUrl.startsWith('data:')) {
-          // Only update if we got a valid data URL
-          charli3Store.updateTokenLogo(token.ticker, logoUrl);
-        }
-      } catch (error) {
-        console.warn(`Failed to load logo for ${token.ticker}:`, error);
-      }
-
-      // Add delay between requests to avoid rate limiting
-      if (i < uniqueTokens.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-  } catch (error) {
-    console.error('Error in loadLogosInBackground:', error);
-  } finally {
-    logoLoadingActive.value = false;
-  }
-};
-
-const getTokenLogoFromAPI = async (token: any) => {
-  const cacheKey = token.ticker || token.symbol;
-
-  if (!cacheKey) return null;
-
-  // Try Charli3 API for logo
-  if (token.currency) {
-    const fullAssetId = token.currency;
-    return Charli3API.getTokenLogo(fullAssetId);
-  }
-
-  return null;
 };
 
 const onImageError = (token: any) => {
@@ -548,7 +400,7 @@ const formatNextRefreshTime = () => {
   if (!nextRefreshTime) return '';
 
   const now = new Date();
-  const diffMs = nextRefreshTime - now;
+  const diffMs = nextRefreshTime.getTime() - now.getTime();
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffMs / 60000);
 
@@ -566,9 +418,6 @@ onMounted(async () => {
   // Load market data if it's stale or missing
   if (charli3Store.isDataStale() || marketData.value.topVolume.length === 0) {
     await loadMarketData();
-  } else {
-    // Load logos for cached data
-    loadLogosInBackground();
   }
 
   // Refresh market data every 5 minutes (background refresh)

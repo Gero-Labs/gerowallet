@@ -56,7 +56,7 @@
               <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
-            <BiometricPasswordField
+            <PassKeyPasswordField
               ref="passwordField"
               v-if="loggedWallet?.type === WalletType.Normal && !isSubmit"
               :value="spendingPassword"
@@ -69,8 +69,8 @@
               :disabled="loading"
               required
               @enter="signUnStakeTx"
-              @biometric-autofill-success="handleBiometricSuccess"
-              @biometric-autofill-error="handleBiometricError"
+              @passkey-autofill-success="handlePassKeySuccess"
+              @passkey-autofill-error="handlePassKeyError"
               style="width: 295px; max-width: 295px"
             />
             <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
@@ -91,7 +91,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import filters from '@/shared/utils/filters';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
@@ -167,14 +167,14 @@ const cols = computed(() => {
   return 3;
 });
 
-const handleBiometricError = (error: string) => {
-  console.error('Biometric autofill error in UnstakeDialog:', error);
-  snackbar.setError(error || t('security.biometricAuthFailed'));
+const handlePassKeyError = (error: string) => {
+  console.error('PassKey autofill error in UnstakeDialog:', error);
+  snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
-const handleBiometricSuccess = () => {
-  console.log('✅ Biometric autofill successful in UnstakeDialog - triggering sign');
-  // Automatically trigger sign after successful biometric autofill
+const handlePassKeySuccess = () => {
+  console.log('✅ PassKey autofill successful in UnstakeDialog - triggering sign');
+  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     signUnStakeTx();
   }, 300); // Small delay for UX feedback
