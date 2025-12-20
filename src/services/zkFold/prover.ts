@@ -61,7 +61,8 @@ export class Prover {
    * @returns {ProofBytes | string} ProofBytes if the proof has finished or 'Pending' otherwise
    */
   public async proofStatus(proofId: string): Promise<ProofBytes | null> {
-    const { data } = await axios.post(`https://wallet-prover.zkfold.io/v0/proof-status`, proofId,
+    const proverUrl = import.meta.env['VITE_ZKFOLD_PROVER_URL'] || 'https://wallet-prover.zkfold.io';
+    const { data } = await axios.post(`${proverUrl}/v0/proof-status`, proofId,
       // to prevent Axios from parsing the result and messing with numbers
       { ...this.headers({ "Content-Type": "application/json" }), ...{ responseType: 'text' } }
     )

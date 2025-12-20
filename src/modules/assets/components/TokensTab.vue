@@ -436,8 +436,8 @@ const totalAllocation = computed(() => {
   return total;
 });
 
-const handleTokenRowClick = (row: any) => {
-  console.log(row);
+const handleTokenRowClick = (_row: any) => {
+  // TODO: Implement token detail view
 };
 
 // Sort the full tokensList first, then paginate

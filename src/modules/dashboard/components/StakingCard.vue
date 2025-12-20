@@ -370,7 +370,6 @@ const poolExtendedInfo = computed(() => {
 });
 
 const rewardsData = computed(() => {
-  console.log(rewards.value);
   if (rewards.value && !hideZero.value) {
     let rewardsCopy = JSON.parse(JSON.stringify(rewards.value));
     if (rewardsCopy.length > 0) {

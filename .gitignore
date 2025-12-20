@@ -1,13 +1,23 @@
+# OS files
 .DS_Store
-node_modules
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Build outputs
 /dist
-
-# local env files
-.env*
-
-extension/dist
+extension/
 *.d.ts
+!components.d.ts
+
+# Environment files (keep only .env.example)
+.env
+.env.*
+!.env.example
+
 # Log files
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -17,15 +27,20 @@ pnpm-debug.log*
 DumpStack.log
 DumpStack.log.tmp
 *.tmp
-*.log
+nul
 
 # Editor directories and files
-.idea
-.vscode
+.idea/
+.vscode/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-extension
+# Test coverage
+coverage/
+
+# Local cache
+.cache/
+.eslintcache

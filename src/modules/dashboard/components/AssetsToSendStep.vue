@@ -451,7 +451,6 @@ watch(
         collectible.toSendQuantity = 1;
       }
     });
-    console.log(newVal);
     emit('input', {
       ...props.value,
       selectedCollectibles: newVal,
@@ -464,7 +463,6 @@ watch(
 
 onMounted(() => {
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-  console.log(props.tokens);
   const foundAsset = props.tokens.find(token => token.ticker === currencyTicker);
   if (foundAsset) {
     foundAsset.verified = true;
