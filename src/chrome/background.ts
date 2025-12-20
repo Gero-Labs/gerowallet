@@ -1358,7 +1358,9 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
         const proof = await prover.prove(empi);
         console.log('✅ Proof generated successfully for wallet:', walletId);
 
-        const backend = new Backend('https://wallet-api.zkfold.io', '123456');
+        const zkFoldUrl = import.meta.env['VITE_ZKFOLD_API_URL'] || 'https://wallet-api.zkfold.io';
+        const zkFoldApiKey = import.meta.env['VITE_ZKFOLD_API_KEY'] || null;
+        const backend = new Backend(zkFoldUrl, zkFoldApiKey);
 
         console.log('🔐 Activating wallet on blockchain...');
         const createWalletResponse = await backend.activateWallet(strippedJwt, paymentKey.toPublic().hash(), proof);
@@ -1391,7 +1393,7 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
 
 app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
   try {
-    console.log('verify spending password', request);
+    // Note: Never log password data
     const walletBg = walletManager.getWallet();
     if (walletBg) {
       const isValid = walletBg.verifySpendingPassword(request.data.password);
@@ -1423,7 +1425,7 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
 
 app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
   try {
-    console.log('sign data', request);
+    // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
       const res = await walletBg.signData(
@@ -1460,7 +1462,7 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   try {
-    console.log('sign tx', request);
+    // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
       // Handle both legacy (tx object) and new (txCbor string) formats

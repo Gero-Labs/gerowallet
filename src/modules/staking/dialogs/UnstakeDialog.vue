@@ -88,26 +88,17 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
+import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import filters from '@/shared/utils/filters';
-import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Cardano } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
-import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import ledgerUtils from '@/shared/utils/ledger';
-import networks from '@/utils/networks';
-
-
-const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {
@@ -123,20 +114,31 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const { toCurrency } = filters;
-const { loggedWallet, utxos, keys, account, config } = toRefs(walletStore);
+const { loggedWallet, account } = toRefs(walletStore);
 const { epochParams } = toRefs(networkStore);
 
-const loading = ref(false);
-const spendingPassword = ref('');
-const passwordField = ref<any>(null);
-const valid = ref(false);
-const passwordRules = ref([rules.required()]);
-const isBT = ref(false);
+// Use the transaction signing composable
+const txRef = computed(() => props.tx);
+const {
+  loading,
+  spendingPassword,
+  isSubmit,
+  isBT,
+  valid,
+  passwordRules,
+  handleSign,
+  resetState,
+  handlePassKeySuccess,
+  handlePassKeyError,
+  setPasswordFieldRef,
+} = useTransactionSigning({
+  tx: txRef,
+  successMessageKey: 'staking.unstakeTxSubmitted',
+  onClose: () => emit('close'),
+});
+
 const form = ref<any>(null);
-const txCbor = ref<string>('');
-const txWitnesses = ref(null);
-const isSubmit = ref(false);
+const passwordField = ref<any>(null);
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
@@ -167,165 +169,13 @@ const cols = computed(() => {
   return 3;
 });
 
-const handlePassKeyError = (error: string) => {
-  console.error('PassKey autofill error in UnstakeDialog:', error);
-  snackbar.setError(error || t('security.passKeyAuthFailed'));
-};
-
-const handlePassKeySuccess = () => {
-  console.log('✅ PassKey autofill successful in UnstakeDialog - triggering sign');
-  // Automatically trigger sign after successful PassKey autofill
-  setTimeout(() => {
-    signUnStakeTx();
-  }, 300); // Small delay for UX feedback
-};
-
-const signTx = async (): Promise<boolean> => {
-  loading.value = true;
-  try {
-    console.log('Signing Cardano JS SDK unstake transaction');
-    console.log('Transaction:', props.tx);
-
-    // First, verify password via a background message
-    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: spendingPassword.value }
-    }) as { data: { isValid: boolean; error?: string } };
-
-    if (!passwordVerification.data.isValid) {
-      passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
-      loading.value = false;
-      return false;
-    }
-
-    // Serialize the Cardano.Tx to CBOR for Chrome messaging
-    txCbor.value = serializeCardanoJsSdkTx(props.tx);
-    console.log('Serialized transaction CBOR:', txCbor.value);
-
-      // Sign the transaction via background message
-      const witnessResult = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SIGN_TX,
-        data: {
-          txCbor: txCbor.value, // Pass serialized CBOR instead of the object
-          partialSign: false,
-          password: spendingPassword.value,
-          accountIndex: 0,
-          utxos: utxos.value,
-          addresses: keys.value, // Address mappings
-          mergeWitnesses: false,
-        }
-      }) as { data: { witnesses?: any; error?: string } };
-
-    console.log('Transaction signed successfully:', witnessResult);
-
-    if (witnessResult.data.error) {
-      throw new Error(witnessResult.data.error);
-    }
-
-    console.log('Signed transaction witness:', witnessResult.data.witnesses);
-    txWitnesses.value = witnessResult.data.witnesses;
-    return true;
-  } catch (e) {
-    console.error('Error signing unstake transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
-    return false;
-  } finally {
-    loading.value = false
-  }
-}
-
-const signLedgerTx = async () => {
-  loading.value = true;
-  try {
-    if (!props.tx) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
-    txCbor.value = serializeCardanoJsSdkTx(props.tx);
-    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
-      props.tx,
-      keys.value,
-      utxos.value,
-      !isBT.value, // isUsb flag (inverted from isBT)
-      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
-    );
-    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-      signatures,
-    })
-    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
-    txWitnesses.value = transactionWitnessSet.toCbor();
-    return true;
-  } catch (e) {
-    console.error('Error signing with Ledger:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
-    return false;
-  } finally {
-    loading.value = false;
-  }
-};
-
-const submitTx = async () => {
-  try {
-    loading.value = true
-    const submitResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor: txCbor.value,
-        witnessHex: txWitnesses.value,
-        utxos: utxos.value
-      }
-    }) as { data: { txId?: string; error?: string } };
-    if (submitResult.data.error) {
-      throw new Error(submitResult.data.error);
-    }
-    snackbar.fireSuccess(t('staking.unstakeTxSubmitted', { txId: submitResult.data.txId }));
-    emit('close');
-  } catch (e) {
-    console.error('Error submitting unstake transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'))
-  } finally {
-    loading.value = false
-    isSubmit.value = false
-  }
-}
-
 const signUnStakeTx = async () => {
-  if (isSubmit.value) {
-    await submitTx();
-  } else {
-    if (loggedWallet.value?.type === WalletType.Normal) {
-      if (form.value?.validate()) {
-        if (!isSubmit.value) {
-          const success = await signTx();
-          if (!success) {
-            return;
-          }
-          if (config.value?.txAutoSubmit) {
-            await submitTx();
-          } else {
-            isSubmit.value = true;
-          }
-        } else {
-          await submitTx();
-        }
-      }
-    } else if (loggedWallet.value?.type === WalletType.Ledger) {
-      const isValid: boolean = await signLedgerTx();
-      if (!isValid) {
-        return;
-      }
-      if (config.value?.txAutoSubmit) {
-        await submitTx();
-      } else {
-        isSubmit.value = true;
-      }
-    }
-  }
+  await handleSign(form.value || undefined);
 };
 
 watch(() => props.isOpen, (val) => {
   if (val) {
-    spendingPassword.value = '';
-    isSubmit.value = false;
+    resetState();
     if (form.value) {
       form.value.resetValidation();
     }
@@ -334,6 +184,12 @@ watch(() => props.isOpen, (val) => {
 
 watch(spendingPassword, () => {
   passwordRules.value = [rules.required()];
+});
+
+watch(passwordField, (newVal) => {
+  if (newVal) {
+    setPasswordFieldRef(newVal);
+  }
 });
 
 </script>

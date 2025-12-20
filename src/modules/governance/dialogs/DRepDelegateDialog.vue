@@ -177,19 +177,6 @@
         </v-row>
       </v-form>
     </v-card-actions>
-    <!-- TODO: Keystone hardware wallet overlay UI - currently disabled -->
-    <!-- This overlay shows QR codes for Keystone device interaction -->
-    <!-- When re-enabling, uncomment the v-overlay section below and restore related functionality -->
-    <!--
-    <v-overlay
-      :absolute="true"
-      opacity="0.99"
-      :value="overlay"
-      class="hardwareOverlay"
-    >
-      ...
-    </v-overlay>
-    -->
   </BaseDialog>
 </template>
 <script setup lang="ts">
@@ -205,10 +192,6 @@ import rules from '@/utils/rules';
 import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
-// TODO: Keystone support needs to be reimplemented with Cardano JS SDK
-// import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-// import { UREncoder } from '@keystonehq/keystone-sdk';
-// import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
@@ -246,14 +229,6 @@ const isBT = ref(false);
 const txCbor = ref<string>('');
 const txWitnesses = ref(null);
 const isSubmit = ref(false);
-// TODO: Keystone hardware wallet state - currently disabled
-// const overlay = ref(false);
-// const type = ref<string | undefined>(undefined);
-// const cbor = ref<string | undefined>(undefined);
-// const keystoneScan = ref(false);
-// const isInit = ref(false);
-// const qrCode = ref<any>(null);
-// const qrCodeRef = ref<HTMLElement | null>(null);
 const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
 
 const { toCurrency, truncate } = filters;
@@ -310,10 +285,6 @@ const getIconByURI = (uri: string) => {
   }
   return 'mdi-link';
 };
-
-// TODO: Keystone QR code functionality - currently disabled
-// Keystone wallet support needs to be reimplemented with Cardano JS SDK
-// This includes QR code generation, scanning, and signature parsing
 
 const handlePassKeySuccess = () => {
   console.log('✅ PassKey autofill successful in DRepDelegateDialog - triggering sign');

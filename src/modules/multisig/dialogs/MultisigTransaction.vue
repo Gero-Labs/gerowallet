@@ -195,7 +195,7 @@ import { ref, computed, watch, onMounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStepMultisig from '@/modules/multisig/components/SendRecipientDetailsStep.vue';
-import AssetsToSendStep from '@/modules/multisig/components/AssetsToSendStep.vue';
+import AssetsToSendStep from '@/modules/dashboard/components/AssetsToSendStep.vue';
 import SummaryStep from '@/modules/multisig/components/SummaryStep.vue';
 import { walletStore } from '@/stores/walletStore';
 import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
