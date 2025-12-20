@@ -121,7 +121,7 @@
           </v-list-item-content>
         </v-list-item>
         <div class="password-field-wrapper">
-          <BiometricPasswordField
+          <PassKeyPasswordField
             :value="password"
             @input="password = $event"
             :label="$t('security.spendingPassword')"
@@ -212,7 +212,7 @@ import {
 import QRCodeStyling from 'qr-code-styling';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 
 // Props
 interface Props {

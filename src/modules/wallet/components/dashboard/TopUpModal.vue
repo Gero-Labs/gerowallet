@@ -60,7 +60,7 @@
               v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit"
               class="password-section"
             >
-              <BiometricPasswordField
+              <PassKeyPasswordField
                 ref="passwordField"
                 :value="spendingPassword"
                 @input="spendingPassword = $event"
@@ -71,8 +71,8 @@
                 class="password-field"
                 :disabled="txSubmitLoading"
                 @enter="handleTopUp"
-                @biometric-autofill-success="handleBiometricSuccess"
-                @biometric-autofill-error="handleBiometricError"
+                @passkey-autofill-success="handlePassKeySuccess"
+                @passkey-autofill-error="handlePassKeyError"
               />
             </div>
 
@@ -142,7 +142,7 @@ import { WalletType } from '@/models/types';
 import ledgerUtils from '@/shared/utils/ledger';
 import networks from '@/utils/networks';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 
 
 const { t } = useTranslation();
@@ -238,17 +238,17 @@ const updateFeeOption = (newFeeOption: string) => {
   feeOption.value = newFeeOption;
 };
 
-const handleBiometricSuccess = () => {
-  console.log('✅ Biometric autofill successful in TopUpModal - triggering top up');
-  // Automatically trigger top up after successful biometric autofill
+const handlePassKeySuccess = () => {
+  console.log('✅ PassKey autofill successful in TopUpModal - triggering top up');
+  // Automatically trigger top up after successful PassKey autofill
   setTimeout(() => {
     handleTopUp();
   }, 300); // Small delay for UX feedback
 };
 
-const handleBiometricError = (error: string) => {
-  console.error('Biometric autofill error in TopUpModal:', error);
-  snackbar.setError(error || t('security.biometricAuthFailed'));
+const handlePassKeyError = (error: string) => {
+  console.error('PassKey autofill error in TopUpModal:', error);
+  snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
 // Build transaction

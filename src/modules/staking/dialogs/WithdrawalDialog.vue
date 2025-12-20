@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" :title="$t('staking.withdrawStakingRewards')" :loading="loading"
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" :title="String($t('staking.withdrawStakingRewards'))" :loading="loading"
               :subtitle="$t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
@@ -68,7 +68,7 @@
               <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
-            <BiometricPasswordField
+            <PassKeyPasswordField
               ref="passwordField"
               v-if="loggedWallet?.type === WalletType.Normal && !isSubmit"
               :value="spendingPassword"
@@ -76,18 +76,18 @@
               outlined
               dense
               hide-details
-              :label="$t('wallet.spendingPassword')"
+              :label="String($t('wallet.spendingPassword'))"
               :rules="passwordRules"
               :disabled="loading"
               required
               @enter="signWithdrawalTx"
-              @biometric-autofill-success="handleBiometricSuccess"
-              @biometric-autofill-error="handleBiometricError"
+              @passkey-autofill-success="handlePassKeySuccess"
+              @passkey-autofill-error="handlePassKeyError"
               style="width: 295px; max-width: 295px"
             />
             <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="$t('staking.usb')" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch :text-left="String($t('staking.usb'))" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
             <v-btn color="primary" elevation="0" @click="signWithdrawalTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
@@ -103,7 +103,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import filters from '@/shared/utils/filters';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
@@ -166,14 +166,14 @@ const cols = computed(() => {
   return 4;
 });
 
-const handleBiometricError = (error: string) => {
-  console.error('Biometric autofill error in WithdrawalDialog:', error);
-  snackbar.setError(error || t('security.biometricAuthFailed'));
+const handlePassKeyError = (error: string) => {
+  console.error('PassKey autofill error in WithdrawalDialog:', error);
+  snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
-const handleBiometricSuccess = () => {
-  console.log('✅ Biometric autofill successful in WithdrawalDialog - triggering sign');
-  // Automatically trigger sign after successful biometric autofill
+const handlePassKeySuccess = () => {
+  console.log('✅ PassKey autofill successful in WithdrawalDialog - triggering sign');
+  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     signWithdrawalTx();
   }, 300); // Small delay for UX feedback

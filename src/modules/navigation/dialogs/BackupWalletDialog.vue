@@ -108,7 +108,7 @@
                               </v-list-item-subtitle>
                             </v-list-item-content>
                           </v-list-item>
-                          <BiometricPasswordField
+                          <PassKeyPasswordField
                             ref="passwordField"
                             :value="password"
                             @input="password = $event"
@@ -231,7 +231,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
 import { toRefs, ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
 import { decrypt } from '@/shared/utils/crypto';

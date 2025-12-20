@@ -11,7 +11,7 @@ export const APP_NAME = 'Gero Dashboard';
 export const WEBAUTHN_RELYING_PARTY_NAME = APP_NAME;
 export const TOTP_DEFAULT_ISSUER = APP_NAME;
 
-export type UnlockMethod = 'password' | 'pin' | 'pattern' | 'biometrics' | null;
+export type UnlockMethod = 'password' | 'pin' | 'pattern' | null;
 
 export interface SecurityConfig {
   unlockMethod: UnlockMethod;
@@ -262,7 +262,7 @@ export function isWebAuthnSupported(): boolean {
 }
 
 /**
- * Register a new WebAuthn credential for biometric authentication
+ * Register a new WebAuthn credential for passkey authentication
  * @param walletId - Wallet ID to use as credential ID
  * @param walletName - Wallet name for display
  * @returns Credential ID (base64-encoded)
@@ -300,7 +300,7 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
         }
       ],
       authenticatorSelection: {
-        authenticatorAttachment: 'platform', // Platform authenticator (built-in biometrics)
+        authenticatorAttachment: 'platform', // Platform authenticator (Chrome passkey)
         userVerification: 'required',
         requireResidentKey: false
       },
@@ -323,13 +323,13 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
   } catch (error) {
     console.error('WebAuthn registration error:', error);
 
-    // User cancelled the biometric prompt
+    // User cancelled the passkey prompt
     if ((error as Error).name === 'NotAllowedError') {
-      throw new Error('Biometric registration was cancelled');
+      throw new Error('PassKey registration was cancelled');
     }
 
     // Other errors
-    throw new Error(`Biometric registration failed: ${(error as Error).message}`);
+    throw new Error(`PassKey registration failed: ${(error as Error).message}`);
   }
 }
 
@@ -382,7 +382,7 @@ export async function authenticateWebAuthn(credentialId: string): Promise<boolea
       return false;
     }
 
-    throw new Error(`Biometric authentication failed: ${(error as Error).message}`);
+    throw new Error(`PassKey authentication failed: ${(error as Error).message}`);
   }
 }
 
@@ -415,12 +415,12 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 /**
- * Get or generate the device-specific biometric master key
+ * Get or generate the device-specific passkey master key
  * This is a device-wide master key that is used to derive per-wallet keys
  * @returns 32-byte master key as hex string
  */
-async function getDeviceBiometricMasterKey(): Promise<string> {
-  const STORAGE_KEY = 'biometric_device_master_key';
+async function getDevicePassKeyMasterKey(): Promise<string> {
+  const STORAGE_KEY = 'passkey_device_master_key';
 
   // Try to retrieve existing master key
   const result = await chrome.storage.local.get(STORAGE_KEY);
@@ -437,18 +437,18 @@ async function getDeviceBiometricMasterKey(): Promise<string> {
   // Store for future use
   await chrome.storage.local.set({ [STORAGE_KEY]: masterKey });
 
-  console.log('🔐 Generated new device biometric master key');
+  console.log('🔐 Generated new device passkey master key');
   return masterKey;
 }
 
 /**
- * Derive a wallet-specific biometric key from the device master key
+ * Derive a wallet-specific passkey key from the device master key
  * This ensures that if one wallet's key is compromised, others remain secure
  * @param walletId - Wallet ID to derive key for
  * @returns 32-byte wallet-specific key as Buffer
  */
-async function deriveWalletBiometricKey(walletId: string): Promise<Buffer> {
-  const deviceMasterKey = await getDeviceBiometricMasterKey();
+async function deriveWalletPassKeyKey(walletId: string): Promise<Buffer> {
+  const deviceMasterKey = await getDevicePassKeyMasterKey();
   const deviceMasterKeyBytes = Buffer.from(deviceMasterKey, 'hex');
 
   // Derive wallet-specific key using PBKDF2-HMAC-SHA512
@@ -468,14 +468,14 @@ async function deriveWalletBiometricKey(walletId: string): Promise<Buffer> {
 }
 
 /**
- * Store unlock credential encrypted for biometric autofill
+ * Store unlock credential encrypted for passkey autofill
  * Uses PBKDF2 + ChaCha20-Poly1305 for secure encryption with device-specific master key
  * @param credential - PIN (string) or pattern (number[]) or password (string)
  * @param credentialType - Type of credential ('pin', 'pattern', 'password')
  * @param walletId - Wallet ID for key derivation (binds credential to wallet)
  * @returns Encrypted credential as hex string (format: salt + nonce + tag + ciphertext)
  */
-export async function encryptCredentialForBiometric(
+export async function encryptCredentialForPassKey(
   credential: string | number[],
   credentialType: 'pin' | 'pattern' | 'password',
   walletId: string
@@ -485,7 +485,7 @@ export async function encryptCredentialForBiometric(
   const credentialBytes = Buffer.from(credentialString, 'utf8');
 
   // Get wallet-specific key derived from device master key
-  const walletKey = await deriveWalletBiometricKey(walletId);
+  const walletKey = await deriveWalletPassKeyKey(walletId);
 
   // Generate random salt (32 bytes) and nonce (12 bytes for ChaCha20)
   const salt = new Uint8Array(32);
@@ -520,14 +520,14 @@ export async function encryptCredentialForBiometric(
 }
 
 /**
- * Decrypt unlock credential for biometric autofill
+ * Decrypt unlock credential for passkey autofill
  * Uses PBKDF2 + ChaCha20-Poly1305 for secure decryption with device-specific master key
  * @param encryptedCredential - Encrypted credential as hex string
  * @param credentialType - Type of credential ('pin', 'pattern', 'password')
  * @param walletId - Wallet ID for key derivation (must match encryption)
  * @returns Decrypted credential (string for PIN/password, number[] for pattern)
  */
-export async function decryptCredentialForBiometric(
+export async function decryptCredentialForPassKey(
   encryptedCredential: string,
   credentialType: 'pin' | 'pattern' | 'password',
   walletId: string
@@ -542,7 +542,7 @@ export async function decryptCredentialForBiometric(
     const ciphertext = encryptedBytes.subarray(60);
 
     // Get wallet-specific key derived from device master key
-    const walletKey = await deriveWalletBiometricKey(walletId);
+    const walletKey = await deriveWalletPassKeyKey(walletId);
 
     // Derive decryption key using same inputs as encryption
     const keyMaterial = Buffer.concat([
@@ -571,20 +571,20 @@ export async function decryptCredentialForBiometric(
 
     return decryptedString;
   } catch (error) {
-    console.error('Biometric credential decryption failed:', error);
-    throw new Error('Failed to decrypt biometric credential');
+    console.error('PassKey credential decryption failed:', error);
+    throw new Error('Failed to decrypt passkey credential');
   }
 }
 
 /**
- * Encrypt spending password for biometric autofill
+ * Encrypt spending password for passkey autofill
  * Uses PBKDF2 + ChaCha20-Poly1305 with device-specific master key and WebAuthn credential ID
  * @param password - Spending password to encrypt
- * @param credentialId - WebAuthn credential ID (base64) for binding to biometric credential
+ * @param credentialId - WebAuthn credential ID (base64) for binding to passkey credential
  * @param walletId - Wallet ID for key derivation (binds password to wallet)
  * @returns Encrypted password as hex string (format: salt + nonce + tag + ciphertext)
  */
-export async function encryptSpendingPasswordForBiometric(
+export async function encryptSpendingPasswordForPassKey(
   password: string,
   credentialId: string,
   walletId: string
@@ -592,7 +592,7 @@ export async function encryptSpendingPasswordForBiometric(
   const passwordBytes = Buffer.from(password, 'utf8');
 
   // Get wallet-specific key derived from device master key
-  const walletKey = await deriveWalletBiometricKey(walletId);
+  const walletKey = await deriveWalletPassKeyKey(walletId);
 
   // Generate random salt (32 bytes) and nonce (12 bytes for ChaCha20)
   const salt = new Uint8Array(32);
@@ -601,7 +601,7 @@ export async function encryptSpendingPasswordForBiometric(
   crypto.getRandomValues(nonce);
 
   // Derive encryption key using PBKDF2-HMAC-SHA512
-  // Input: walletKey + credentialId (binds to device + wallet + biometric credential)
+  // Input: walletKey + credentialId (binds to device + wallet + passkey credential)
   const keyMaterial = Buffer.concat([
     walletKey,
     Buffer.from(credentialId, 'utf8')
@@ -627,14 +627,14 @@ export async function encryptSpendingPasswordForBiometric(
 }
 
 /**
- * Decrypt spending password for biometric autofill
+ * Decrypt spending password for passkey autofill
  * Uses PBKDF2 + ChaCha20-Poly1305 with device-specific master key and WebAuthn credential ID
  * @param encryptedPassword - Encrypted password as hex string
- * @param credentialId - WebAuthn credential ID (base64) for binding to biometric credential
+ * @param credentialId - WebAuthn credential ID (base64) for binding to passkey credential
  * @param walletId - Wallet ID for key derivation (must match encryption)
  * @returns Decrypted spending password
  */
-export async function decryptSpendingPasswordForBiometric(
+export async function decryptSpendingPasswordForPassKey(
   encryptedPassword: string,
   credentialId: string,
   walletId: string
@@ -649,7 +649,7 @@ export async function decryptSpendingPasswordForBiometric(
     const ciphertext = encryptedBytes.subarray(60);
 
     // Get wallet-specific key derived from device master key
-    const walletKey = await deriveWalletBiometricKey(walletId);
+    const walletKey = await deriveWalletPassKeyKey(walletId);
 
     // Derive decryption key using same inputs as encryption
     const keyMaterial = Buffer.concat([
@@ -671,7 +671,7 @@ export async function decryptSpendingPasswordForBiometric(
 
     return Buffer.from(decrypted).toString('utf8');
   } catch (error) {
-    console.error('Biometric spending password decryption failed:', error);
-    throw new Error('Failed to decrypt biometric spending password');
+    console.error('PassKey spending password decryption failed:', error);
+    throw new Error('Failed to decrypt passkey spending password');
   }
 }

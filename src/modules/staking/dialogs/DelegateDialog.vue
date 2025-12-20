@@ -184,7 +184,7 @@
               <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
-            <BiometricPasswordField
+            <PassKeyPasswordField
               ref="passwordField"
               v-if="loggedWallet.type === WalletType.Normal && !isSubmit"
               :value="spendingPassword"
@@ -197,8 +197,8 @@
               :disabled="loading"
               required
               @enter="signDelegationTx"
-              @biometric-autofill-success="handleBiometricSuccess"
-              @biometric-autofill-error="handleBiometricError"
+              @passkey-autofill-success="handlePassKeySuccess"
+              @passkey-autofill-error="handlePassKeyError"
               style="max-width: 295px"
             />
             <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
@@ -318,7 +318,7 @@ import { ref, toRefs, watch, computed } from 'vue';
 // import { nextTick } from 'vue'; // TODO: Needed for Keystone QR code functionality
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import BiometricPasswordField from '@/shared/components/BiometricPasswordField.vue';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import rules from '@/utils/rules';
 import networks from '@/utils/networks';
@@ -482,14 +482,14 @@ const cols = computed(() => {
 //   });
 // };
 
-const handleBiometricError = (error: string) => {
-  console.error('Biometric autofill error in DelegateDialog:', error);
-  snackbar.setError(error || t('security.biometricAuthFailed'));
+const handlePassKeyError = (error: string) => {
+  console.error('PassKey autofill error in DelegateDialog:', error);
+  snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
-const handleBiometricSuccess = () => {
-  console.log('✅ Biometric autofill successful in DelegateDialog - triggering sign');
-  // Automatically trigger sign after successful biometric autofill
+const handlePassKeySuccess = () => {
+  console.log('✅ PassKey autofill successful in DelegateDialog - triggering sign');
+  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     signDelegationTx();
   }, 300); // Small delay for UX feedback

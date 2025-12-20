@@ -18,9 +18,9 @@ const APP_VERSION = '2.6.2';
 
 // Feature definitions - add new features here
 export interface FeatureDefinition {
-  id: string;           // Unique feature ID (e.g., 'settings.security.biometrics' or 'navigation.governance')
+  id: string;           // Unique feature ID (e.g., 'settings.security.passKey' or 'navigation.governance')
   version: string;      // Version when feature was added
-  path: string[];       // Path hierarchy (e.g., ['settings', 'security', 'biometrics'] or ['navigation', 'governance'])
+  path: string[];       // Path hierarchy (e.g., ['settings', 'security', 'passKey'] or ['navigation', 'governance'])
 }
 
 // Define all trackable features

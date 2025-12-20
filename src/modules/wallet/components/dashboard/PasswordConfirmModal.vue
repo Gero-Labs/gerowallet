@@ -40,18 +40,18 @@
             />
           </div>
 
-          <!-- Biometric Autofill Option -->
-          <div v-if="biometricsAvailable" class="biometric-section">
+          <!-- PassKey Autofill Option -->
+          <div v-if="passKeyAvailable" class="passkey-section">
             <v-btn
               text
               block
               color="primary"
-              @click="handleBiometricAutofill"
-              :disabled="biometricLoading"
-              class="biometric-btn"
+              @click="handlePassKeyAutofill"
+              :disabled="passKeyLoading"
+              class="passkey-btn"
             >
               <v-icon left>mdi-fingerprint</v-icon>
-              {{ t('security.useBiometricsForPasswordAutofill') }}
+              {{ t('security.usePassKeyForPasswordAutofill') }}
             </v-btn>
           </div>
 
@@ -98,20 +98,20 @@ const emit = defineEmits<Emits>();
 
 const password = ref('');
 const loading = ref(false);
-const biometricsAvailable = ref(false);
-const biometricLoading = ref(false);
+const passKeyAvailable = ref(false);
+const passKeyLoading = ref(false);
 
-// Check biometrics availability when dialog opens
+// Check PassKey availability when dialog opens
 watch(() => props.open, async (isOpen) => {
   if (isOpen) {
-    biometricsAvailable.value = await checkBiometricsAvailable();
+    passKeyAvailable.value = await checkPassKeyAvailable();
   }
 });
 
 /**
- * Check if biometric autofill is available for this wallet
+ * Check if PassKey autofill is available for this wallet
  */
-async function checkBiometricsAvailable(): Promise<boolean> {
+async function checkPassKeyAvailable(): Promise<boolean> {
   try {
     const wallet = walletStore.loggedWallet;
     if (!wallet) return false;
@@ -119,31 +119,31 @@ async function checkBiometricsAvailable(): Promise<boolean> {
     // Check if WebAuthn is supported
     if (!window.PublicKeyCredential) return false;
 
-    // Check if biometric autofill is enabled in DB
+    // Check if PassKey autofill is enabled in DB
     const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
-    const biometricsAutofillConfig = await configTable.where({ key: 'biometricsForPasswordAutofill' }).first();
-    const encryptedPasswordConfig = await configTable.where({ key: 'biometricEncryptedSpendingPassword' }).first();
+    const passKeyAutofillConfig = await configTable.where({ key: 'passKeyForPasswordAutofill' }).first();
+    const encryptedPasswordConfig = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
     const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
     return !!(
-      biometricsAutofillConfig?.value &&
+      passKeyAutofillConfig?.value &&
       encryptedPasswordConfig?.value &&
       credentialConfig?.value
     );
   } catch (error) {
-    console.error('Error checking biometrics availability:', error);
+    console.error('Error checking PassKey availability:', error);
     return false;
   }
 }
 
 /**
- * Handle biometric authentication and password autofill
+ * Handle PassKey authentication and password autofill
  */
-async function handleBiometricAutofill() {
-  biometricLoading.value = true;
+async function handlePassKeyAutofill() {
+  passKeyLoading.value = true;
 
   try {
     const wallet = walletStore.loggedWallet;
@@ -159,29 +159,29 @@ async function handleBiometricAutofill() {
     // Get WebAuthn credential ID
     const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
     if (!credentialConfig || !credentialConfig.value) {
-      throw new Error('Biometric credential not found');
+      throw new Error('PassKey credential not found');
     }
 
     // Get encrypted password
-    const encryptedPasswordConfig = await configTable.where({ key: 'biometricEncryptedSpendingPassword' }).first();
+    const encryptedPasswordConfig = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
     if (!encryptedPasswordConfig || !encryptedPasswordConfig.value) {
       throw new Error('Encrypted password not found');
     }
 
-    console.log('🔐 Authenticating with biometrics...');
+    console.log('🔐 Authenticating with PassKey...');
 
     // Authenticate with WebAuthn
-    const { authenticateWebAuthn, decryptSpendingPasswordForBiometric } = await import('@/shared/utils/security');
+    const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
     const authenticated = await authenticateWebAuthn(credentialConfig.value);
 
     if (!authenticated) {
-      throw new Error('Biometric authentication failed');
+      throw new Error('PassKey authentication failed');
     }
 
-    console.log('✅ Biometric authentication successful');
+    console.log('✅ PassKey authentication successful');
 
     // Decrypt spending password
-    const decryptedPassword = await decryptSpendingPasswordForBiometric(
+    const decryptedPassword = await decryptSpendingPasswordForPassKey(
       encryptedPasswordConfig.value,
       credentialConfig.value,
       wallet.id
@@ -197,13 +197,13 @@ async function handleBiometricAutofill() {
       confirmAction();
     }, 300);
   } catch (error: any) {
-    console.error('❌ Biometric autofill failed:', error);
+    console.error('❌ PassKey autofill failed:', error);
 
     // Show error with snackbar
     const { default: snackbar } = await import('@/plugins/snackbar');
-    snackbar.setError(error.message || t('security.biometricAuthFailed'));
+    snackbar.setError(error.message || t('security.passKeyAuthFailed'));
   } finally {
-    biometricLoading.value = false;
+    passKeyLoading.value = false;
   }
 }
 
@@ -321,12 +321,12 @@ const confirmAction = async () => {
   gap: $spacing-xs;
 }
 
-.biometric-section {
+.passkey-section {
   width: 100%;
   margin-top: $spacing-xs;
 }
 
-.biometric-btn {
+.passkey-btn {
   text-transform: none !important;
   letter-spacing: normal !important;
 }

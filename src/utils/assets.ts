@@ -131,6 +131,8 @@ import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/svg/card.svg'
 import bringWhite from '@/assets/svg/bring-white.svg'
 import apex from '@/assets/img/apex.jpg'
+import passKeySvg from '@/assets/svg/pass-key.svg'
+import autoTriggerSvg from '@/assets/svg/auto-trigger.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -217,6 +219,8 @@ export default {
   sellAda,
   card,
   bringWhite,
+  passKeySvg,
+  autoTriggerSvg,
   detectCIDVersion(cidStr: string) {
     try {
       const cid = CID.parse(cidStr);

@@ -222,7 +222,7 @@ export interface WalletSettings {
   security: {
     autoLock: boolean
     autoLockTimeout: number // minutes
-    biometricAuth: boolean
+    passKeyAuth: boolean
     requirePasswordForTx: boolean
   }
   privacy: {
