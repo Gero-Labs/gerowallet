@@ -33,7 +33,7 @@
       <v-col cols="12" class="pa-2">
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
-            WitnsessSet Cbor Hex to JSON Converter
+            WitnessSet Cbor Hex to JSON Converter
           </v-card-title>
           <v-card-text>
             <v-row no-gutters>

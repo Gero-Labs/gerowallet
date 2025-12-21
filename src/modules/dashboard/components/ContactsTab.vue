@@ -171,7 +171,6 @@ watch(dialogDelete, (val) => {
 
 // Methods
 const editItem = (item: any) => {
-  console.log(item);
   editedAddress.value = item.address;
   editedItem.value = { ...contacts.value[item.address] };
   dialog.value = true;

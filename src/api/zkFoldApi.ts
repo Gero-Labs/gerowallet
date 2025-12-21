@@ -2,12 +2,12 @@ import axios from 'axios';
 import { Cardano } from '@cardano-sdk/core';
 
 const axiosInstance = axios.create({
-  baseURL: 'https://wallet-api.zkfold.io',
+  baseURL: import.meta.env['VITE_ZKFOLD_API_URL'] || 'https://wallet-api.zkfold.io',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'api-key': '123456'
+    ...(import.meta.env['VITE_ZKFOLD_API_KEY'] ? { 'api-key': import.meta.env['VITE_ZKFOLD_API_KEY'] } : {}),
   },
 });
 

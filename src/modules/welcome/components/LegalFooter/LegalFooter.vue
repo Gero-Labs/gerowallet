@@ -37,9 +37,7 @@ const changeLogDialog = ref(false);
 const version = ref<string>(APP_VERSION);
 
 const handlePrivacyClick = () => {
-  console.log('Privacy policy clicked!');
   privacyPolicyDialog.value = true;
-  console.log('privacyPolicyDialog value:', privacyPolicyDialog.value);
 };
 </script>
 <style lang="css" scoped>

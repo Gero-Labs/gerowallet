@@ -103,10 +103,10 @@
               v-if="!hasMorePosts && !search.trim() && Object.keys(posts).length > 0"
               class="text-caption text--secondary mt-2"
             >
-              No more posts to load
+              {{ $t('blog.noMorePosts') }}
             </div>
             <div v-if="search.trim() && blogPosts.length === 0" class="text-caption text--secondary mt-2">
-              No posts found matching "{{ search }}"
+              {{ $t('blog.noPostsFound', { query: search }) }}
             </div>
           </v-card-actions>
         </v-card>
@@ -118,6 +118,7 @@
 import { onMounted, onUnmounted, ref, watch, computed } from 'vue';
 import { useIntersectionObserver } from '@vueuse/core';
 import wixApi from '@/api/wix.api';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 interface BlogPost {
   id: string;
@@ -148,6 +149,8 @@ interface BlogPost {
     likes: number;
   };
 }
+
+const { t } = useTranslation();
 
 const sentinel = ref<HTMLElement | null>(null);
 const isIntersecting = ref<boolean>(false);
@@ -188,7 +191,7 @@ const loadPosts = async (isInitial = false) => {
     }
 
     if (response.status !== 200) {
-      error.value = 'Failed to load blog posts. Please try again.';
+      error.value = t('blog.loadFailed');
       return;
     }
 
@@ -229,7 +232,7 @@ const loadPosts = async (isInitial = false) => {
 
     posts.value = postsMap;
   } catch (e) {
-    error.value = 'Failed to load blog posts. Please check your connection and try again.';
+    error.value = t('blog.loadFailedConnection');
     hasMorePosts.value = false;
   } finally {
     loadingMore.value = false;
