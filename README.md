@@ -25,7 +25,7 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 ## Prerequisites
 
 1. **Node.js 18+** and npm
-2. **Environment file**: Contact [@edridudi](https://github.com/edridudi) for the latest `.env` variables
+2. **Environment file**: Copy `.env.example` to `.env.development` and configure your API keys
 3. **Gero Backend**: Docker container running on port 8081 (for development)
 
 ### Running Gero Backend Container
@@ -160,8 +160,12 @@ This is a financial application handling real cryptocurrency. Always:
 
 ## License
 
-Proprietary - Gero Labs
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Security
+
+For security audit information and guidelines for handling sensitive data, see [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
 
 ---
 
-**Last Updated**: 2025-01-14
+**Last Updated**: 2025-12-20

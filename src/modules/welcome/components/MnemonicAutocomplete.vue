@@ -48,7 +48,6 @@ const handleTab = (event: KeyboardEvent) => {
 };
 
 const handleShiftTab = (event: KeyboardEvent) => {
-  console.log('shiftTab');
   event.preventDefault();
   if (search.value) {
     mnemonic.value = search.value;

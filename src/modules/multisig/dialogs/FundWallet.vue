@@ -164,7 +164,7 @@ import rules from '@/utils/rules';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
-import AssetsToSendStep from '../components/AssetsToSendStep.vue';
+import AssetsToSendStep from '@/modules/dashboard/components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 // import { QrcodeStream } from "vue-qrcode-reader";
 import QRCodeStyling from 'qr-code-styling';
