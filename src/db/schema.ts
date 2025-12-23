@@ -9,7 +9,7 @@ export const geroDBSchema = {
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 };
 
-export const walletDBVersion: number = 9;
+export const walletDBVersion: number = 10;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -21,6 +21,7 @@ export const walletDBSchema = {
   transactions: 'id',
   connected_dapps: '++id, domain, time',
   portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt', // Portfolio charts data moved from separate DB
+  delegation_requests: 'id, type, status, requesterAddress, funderAddress, createdAt, expiresAt', // DUST fee delegation requests
 };
 
 export const blockChainDBVersion: number = 5;

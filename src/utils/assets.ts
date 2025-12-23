@@ -131,6 +131,7 @@ import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/svg/card.svg'
 import bringWhite from '@/assets/svg/bring-white.svg'
 import apex from '@/assets/img/apex.jpg'
+import midnightBg from '@/assets/Midnight.webp'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -367,7 +368,8 @@ export default {
   frontCardNoMcx2,
   emptyState,
   cardanoBlueLogo,
-  apex
+  apex,
+  midnightBg
 }
 
 export {

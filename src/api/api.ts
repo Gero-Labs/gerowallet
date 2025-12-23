@@ -134,6 +134,10 @@ export class Api {
   }
 
   async getTip() {
+    // Skip API calls for Midnight (mock data only)
+    if (this.chain === 'MIDNIGHT') {
+      return { slot: 0, height: 0, hash: '', epoch: 0 };
+    }
     const { data, status } = await this.axiosInstance.get(
       `/api/blocks/latest?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`
     );
@@ -142,30 +146,50 @@ export class Api {
   }
 
   async getGenesis() {
+    // Skip API calls for Midnight (mock data only)
+    if (this.chain === 'MIDNIGHT') {
+      return { data: {}, status: 200 };
+    }
     return this.axiosInstance.get(
       `/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
     );
   }
 
   async getEpochParameters(epochNo: number): Promise<any> {
+    // Skip API calls for Midnight (mock data only)
+    if (this.chain === 'MIDNIGHT') {
+      return { data: {}, status: 200 };
+    }
     return this.axiosInstance.get(
       `/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`
     );
   }
 
   async fetchTickerStatistics() {
+    // Skip API calls for Midnight (mock data only)
+    if (this.chain === 'MIDNIGHT') {
+      return { lastPrice: 0, change24h: 0, volume24h: 0 };
+    }
     const { data, status } = await this.axiosInstance.get(`/api/price/ticker?chain=${this.chain}`);
     if (status === 200) return data;
     return parseHttpError(data);
   }
 
   async fetchFiatRates() {
+    // Skip API calls for Midnight (mock data only)
+    if (this.chain === 'MIDNIGHT') {
+      return { EUR: 0.92, GBP: 0.79, JPY: 149.5 };
+    }
     const { data, status } = await this.axiosInstance.get(`/api/price/fiatRates`);
     if (status === 200) return data;
     return parseHttpError(data);
   }
 
   async fetchADAStatistics() {
+    // Skip API calls for Midnight (mock data only)
+    if (this.chain === 'MIDNIGHT') {
+      return { lastPrice: 0, change24h: 0, volume24h: 0 };
+    }
     try {
       const { data, status } = await this.axiosInstance.get('/crypto/ticker/ADAUSDT');
       if (status === 200) return data;

@@ -1,7 +1,8 @@
 <template>
-  <v-layout column>
-    <!-- Show comprehensive empty state when wallet has no tokens -->
-    <template v-if="isWalletEmpty">
+  <div>
+    <v-layout column>
+      <!-- Show comprehensive empty state when wallet has no tokens -->
+      <template v-if="isWalletEmpty">
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
           <EmptyStateHero
@@ -20,6 +21,97 @@
 
     <!-- Regular dashboard content when wallet has tokens -->
     <template v-else>
+      <!-- MIDNIGHT DASHBOARD -->
+      <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
+        <!-- Delegation Request Notification Banner -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <DelegationNotificationBanner
+              @view-requests="openDelegationRequestsDialog"
+              @approve-request="handleApproveRequest"
+              @reject-request="handleRejectRequest"
+            />
+          </v-col>
+        </v-row>
+
+        <!-- Portfolio Chart + Carousel Row -->
+        <v-row no-gutters>
+          <!-- Left side: Portfolio Chart -->
+          <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
+            <v-card
+              outlined
+              class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+            >
+              <v-card-text>
+                <PortfolioChart
+                  :chart-data="midnightChartData.nightData"
+                  :chart-data-usd="midnightChartData.usdData"
+                  :chart-data-eur="midnightChartData.eurData"
+                  :portfolio-value-ada="midnightPortfolioValues.night"
+                  :portfolio-value-usd="midnightPortfolioValues.usd"
+                  :portfolio-value-eur="midnightPortfolioValues.eur"
+                  :ada-only-value-ada="midnightPortfolioValues.night"
+                  :ada-only-value-usd="midnightPortfolioValues.usd"
+                  :ada-only-value-eur="midnightPortfolioValues.eur"
+                  :loading="false"
+                  :progressive-loading="false"
+                  :first-loaded-currency="'NIGHT'"
+                  @refresh="() => {}"
+                />
+              </v-card-text>
+            </v-card>
+          </v-col>
+
+          <!-- Right side: Carousel -->
+          <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+            <FeatureCarousel
+              :model-value="currentMidnightCarouselIndex"
+              @update:modelValue="currentMidnightCarouselIndex = $event"
+              :items="midnightCarouselItems"
+              :paused="midnightCarouselPaused"
+              :is-loading="false"
+              :show-progress-bar="true"
+              carousel-class="feature-carousel dashboard-card feature-card-full-height"
+              @item-click="handleMidnightCarouselClick"
+            />
+          </v-col>
+        </v-row>
+
+        <!-- Midnight Balance Cards Row -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <MidnightBalanceCards />
+          </v-col>
+        </v-row>
+
+        <!-- DUST Delegation Actions -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <v-card outlined class="liquid-glass" elevation="0">
+              <v-card-text class="pa-3">
+                <div class="d-flex align-center">
+                  <v-icon color="cyan" class="mr-2">mdi-hand-coin-outline</v-icon>
+                  <div class="flex-grow-1">
+                    <div class="font-weight-medium">DUST Fee Delegation</div>
+                    <div class="text-caption text--secondary">
+                      Request fee delegation or help others pay for DUST registration
+                    </div>
+                  </div>
+                  <v-btn
+                    color="primary"
+                    small
+                    @click="openRequestDelegationDialog"
+                  >
+                    <v-icon small left>mdi-send</v-icon>
+                    Request Delegation
+                  </v-btn>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </template>
+
       <!-- Combined row for Cardano with metrics + chart + carousel -->
       <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
         <!-- Left side: Chart and Market Data stacked -->
@@ -75,8 +167,8 @@
         </v-col>
       </v-row>
 
-      <!-- Separate chart row for non-Cardano wallets -->
-      <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
+      <!-- Separate chart row for non-Cardano wallets (excluding Midnight which has its own section) -->
+      <v-row no-gutters v-if="(loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO) && loggedWallet?.chain !== Blockchain.MIDNIGHT">
         <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
           <v-card
             outlined
@@ -187,7 +279,19 @@
       <!--        </v-col>-->
       <!--      </v-row>-->
     </template>
-  </v-layout>
+    </v-layout>
+
+    <!-- Dialogs -->
+    <RequestDelegationDialog
+      v-model="requestDelegationDialogOpen"
+      @request-sent="handleRequestSent"
+    />
+    <ApproveDelegationDialog
+      v-model="approveDelegationDialogOpen"
+      :request="selectedDelegationRequest"
+      @approved="handleDelegationApproved"
+    />
+  </div>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -204,8 +308,16 @@ import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
+import MidnightBalanceCards from '@/modules/dashboard/components/MidnightBalanceCards.vue';
+import DelegationNotificationBanner from '@/modules/dashboard/components/DelegationNotificationBanner.vue';
+import RequestDelegationDialog from '@/modules/dashboard/dialogs/RequestDelegationDialog.vue';
+import ApproveDelegationDialog from '@/modules/dashboard/dialogs/ApproveDelegationDialog.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
+import delegationStore from '@/stores/delegationStore';
+import { updateDelegationRequestStatus } from '@/stores/delegationStore';
+import { DelegationRequestStatus, DelegationRequest } from '@/models/delegation-types';
+import delegationService from '@/services/delegation.service';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
@@ -217,6 +329,7 @@ import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
 import { getBalance } from '@/chrome/serialization';
+import { getMockMidnightWalletData } from '@/utils/midnight-mock-data';
 // import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Translation composable
@@ -240,8 +353,10 @@ loadExchangeRate();
 // Carousel state
 const currentCarouselIndex = ref(0);
 const currentApexCarouselIndex = ref(0);
+const currentMidnightCarouselIndex = ref(0);
 const carouselPaused = ref(false);
 const apexCarouselPaused = ref(false);
+const midnightCarouselPaused = ref(false);
 const isLoading = ref(false);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
@@ -298,7 +413,32 @@ const apexCarouselItems = ref<CarouselItem[]>([
   // },
 ]);
 
+// Carousel items for Midnight
+const midnightCarouselItems = ref<CarouselItem[]>([
+  {
+    id: 'midnight-privacy',
+    title: 'Midnight Privacy',
+    subtitle: 'Privacy-preserving blockchain for confidential transactions',
+    logoAlt: 'Midnight Logo',
+    backgroundImage: assets.midnightBg,
+    action: 'showMidnightPrivacy',
+  },
+  {
+    id: 'midnight-shield',
+    title: 'Shield NIGHT',
+    subtitle: 'Move tokens to shielded pool for complete privacy',
+    logoAlt: 'Shield Logo',
+    backgroundImage: assets.midnightBg,
+    action: 'showMidnightShield',
+  },
+]);
+
 const isStakingEnabled = computed(() => {
+  // Skip Cardano-specific validation for Midnight wallets
+  if (loggedWallet.value?.chain === Blockchain.MIDNIGHT) {
+    return false;
+  }
+
   if (loggedWallet.value?.baseAddress) {
     return (
       Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
@@ -312,7 +452,15 @@ const isSwapEnabled = computed(() => {
 });
 
 // Empty state computed
-const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === 0);
+const isWalletEmpty = computed(() => {
+  // For Midnight blockchain, never show empty state (we have mock data)
+  if (loggedWallet.value?.chain === Blockchain.MIDNIGHT) {
+    return false;
+  }
+
+  // For other blockchains, check if wallet has tokens
+  return !account.value || account.value?.controlled_amount === 0;
+});
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
   // Access config directly from the reactive store for better reactivity
@@ -498,6 +646,78 @@ const currentPortfolioValues = computed(() => {
   };
 });
 
+// Midnight mock chart data
+const midnightChartData = computed(() => {
+  if (loggedWallet.value?.chain !== Blockchain.MIDNIGHT) {
+    return { nightData: [], usdData: [], eurData: [] };
+  }
+
+  const mockData = getMockMidnightWalletData();
+  const nightPrice = 0.25; // Mock price per NIGHT in USD
+
+  // Generate chart data from mock transactions
+  const transactions = mockData.transactions;
+  const nightData: [number, number][] = [];
+  const usdData: [number, number][] = [];
+  const eurData: [number, number][] = [];
+
+  // Start from 1 year ago with zero balance
+  const now = Date.now();
+  const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
+
+  nightData.push([oneYearAgo, 0]);
+  usdData.push([oneYearAgo, 0]);
+  eurData.push([oneYearAgo, 0]);
+
+  // Sort transactions by timestamp
+  const sortedTxs = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
+
+  // Calculate cumulative balance
+  let cumulativeBalance = 0;
+  sortedTxs.forEach(tx => {
+    if (tx.type === 'receive') {
+      cumulativeBalance += Number(tx.amount) / 1e12;
+    } else if (tx.type === 'send') {
+      cumulativeBalance -= Number(tx.amount) / 1e12;
+    }
+
+    const balanceInNight = cumulativeBalance;
+    const balanceInUsd = balanceInNight * nightPrice;
+    const balanceInEur = balanceInUsd * usdToEurRate.value;
+
+    nightData.push([tx.timestamp, balanceInNight]);
+    usdData.push([tx.timestamp, balanceInUsd]);
+    eurData.push([tx.timestamp, balanceInEur]);
+  });
+
+  // Add current point
+  const currentBalance = Number(mockData.balances.nightShielded + mockData.balances.nightUnshielded) / 1e12;
+  nightData.push([now, currentBalance]);
+  usdData.push([now, currentBalance * nightPrice]);
+  eurData.push([now, currentBalance * nightPrice * usdToEurRate.value]);
+
+  return { nightData, usdData, eurData };
+});
+
+// Midnight portfolio values
+const midnightPortfolioValues = computed(() => {
+  if (loggedWallet.value?.chain !== Blockchain.MIDNIGHT) {
+    return { night: 0, usd: 0, eur: 0 };
+  }
+
+  const mockData = getMockMidnightWalletData();
+  const nightPrice = 0.25; // Mock price per NIGHT in USD
+  const totalNight = Number(mockData.balances.nightShielded + mockData.balances.nightUnshielded) / 1e12;
+  const totalUsd = totalNight * nightPrice;
+  const totalEur = totalUsd * usdToEurRate.value;
+
+  return {
+    night: totalNight,
+    usd: totalUsd,
+    eur: totalEur,
+  };
+});
+
 // Apex carousel methods
 const pauseApexCarousel = () => {
   apexCarouselPaused.value = true;
@@ -561,6 +781,27 @@ const showApexFeatures = () => {
   // Add your Apex features logic here
 };
 
+const handleMidnightCarouselClick = (item: any) => {
+  switch (item.action) {
+    case 'showMidnightPrivacy':
+      showMidnightPrivacy();
+      break;
+    case 'showMidnightShield':
+      showMidnightShield();
+      break;
+  }
+};
+
+const showMidnightPrivacy = () => {
+  // Add your Midnight privacy info logic here
+  console.log('Midnight Privacy clicked');
+};
+
+const showMidnightShield = () => {
+  // Add your Midnight shield logic here
+  console.log('Midnight Shield clicked');
+};
+
 // const handleReceiveKaiserExToken = async () => {
 //   kaiserExLoading.value = true;
 //   kaiserExMessage.value = null;
@@ -608,6 +849,100 @@ const handleStartTutorial = () => {
 const handleBackupWallet = () => {
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
+};
+
+// Delegation request handlers
+const delegationRequestDialogOpen = ref(false);
+const requestDelegationDialogOpen = ref(false);
+const approveDelegationDialogOpen = ref(false);
+const selectedDelegationRequest = ref<DelegationRequest | null>(null);
+
+const openDelegationRequestsDialog = () => {
+  delegationRequestDialogOpen.value = true;
+};
+
+const openRequestDelegationDialog = () => {
+  requestDelegationDialogOpen.value = true;
+};
+
+const handleRequestSent = (requestId: string) => {
+  console.log('✅ Delegation request sent:', requestId);
+  // Show success notification
+  instance?.proxy?.$notifications?.success({
+    text: 'Delegation request sent successfully!',
+    duration: 3000,
+  });
+};
+
+const handleApproveRequest = async (requestId: string) => {
+  console.log('💰 Opening approval dialog for request:', requestId);
+
+  // Find the request in the store
+  const request = delegationStore.incomingRequests.find(r => r.id === requestId);
+
+  if (!request) {
+    console.error('❌ Request not found:', requestId);
+    return;
+  }
+
+  // Set selected request and open dialog
+  selectedDelegationRequest.value = request;
+  approveDelegationDialogOpen.value = true;
+};
+
+const handleRejectRequest = async (requestId: string) => {
+  console.log('❌ Rejecting delegation request:', requestId);
+
+  try {
+    // Find the request in the store
+    const request = delegationStore.incomingRequests.find(r => r.id === requestId);
+
+    if (!request) {
+      console.error('❌ Request not found:', requestId);
+      return;
+    }
+
+    // Update local request status to rejected
+    await updateDelegationRequestStatus(requestId, DelegationRequestStatus.REJECTED);
+
+    // Send rejection response to requester via Ably
+    await delegationService.sendDelegationResponse(
+      requestId,
+      request.requesterAddress,
+      request.funderAddress,
+      false,
+      undefined,
+      'Request declined by funder'
+    );
+
+    console.log('✅ Rejection sent successfully');
+
+    // Show success notification
+    instance?.proxy?.$notifications?.success({
+      text: 'Delegation request declined',
+      duration: 3000,
+    });
+  } catch (error: any) {
+    console.error('❌ Failed to reject delegation request:', error);
+    instance?.proxy?.$notifications?.error({
+      text: error.message || 'Failed to decline request',
+      duration: 5000,
+    });
+  }
+};
+
+const handleDelegationApproved = (requestId: string, txHash: string) => {
+  console.log('✅ Delegation approved successfully:', { requestId, txHash });
+
+  // Show success notification
+  instance?.proxy?.$notifications?.success({
+    text: `DUST delegation approved! TX: ${txHash.slice(0, 12)}...`,
+    duration: 5000,
+  });
+
+  // Close the approval dialog
+  approveDelegationDialogOpen.value = false;
+  selectedDelegationRequest.value = null;
 };
 
 // Portfolio data loading is now handled by usePortfolioData composable

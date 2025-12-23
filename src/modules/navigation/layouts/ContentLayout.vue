@@ -8,12 +8,16 @@
             :class="
               loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
                 ? 'apex-background-dashboard'
+                : loggedWallet?.chain === Blockchain.MIDNIGHT
+                ? 'midnight-background-dashboard'
                 : 'cardano-background-dashboard'
             "
             :style="{
               backgroundImage: `url(${
                 loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
                   ? assets.apexBg
+                  : loggedWallet?.chain === Blockchain.MIDNIGHT
+                  ? assets.midnightBg
                   : assets.cardanoBg
               })`,
             }"
@@ -113,38 +117,12 @@
                     </div>
                   </v-tooltip>
 
-                  <!-- Notifications Menu (preserved from current version) -->
-                  <v-menu
-                    offset-y
-                    :close-on-content-click="false"
-                    nudge-left="75"
-                    nudge-top="-10"
-                    eager
-                    transition="none"
-                  >
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
-                        <v-icon size="20">mdi-bell-outline</v-icon>
-                      </v-btn>
-                    </template>
-                    <v-card outlined class="notifications-card" min-width="200">
-                      <v-card-title class="pa-2 text-h6"> {{ t('navigation.notifications') }} </v-card-title>
-                      <v-card-text class="pa-0">
-                        <v-list class="transparent">
-                          <v-list-item>
-                            <v-list-item-content>
-                              <v-list-item-title class="text-center" style="color: #ccc">
-                                <v-avatar size="30" color="#333" class="mr-2">
-                                  <v-icon small color="#CCC"> mdi-message-text-outline </v-icon>
-                                </v-avatar>
-                                {{ t('navigation.nothingNew') }}
-                              </v-list-item-title>
-                            </v-list-item-content>
-                          </v-list-item>
-                        </v-list>
-                      </v-card-text>
-                    </v-card>
-                  </v-menu>
+                  <!-- Delegation Notifications -->
+                  <NotificationBell
+                    class="ml-4"
+                    @notification-click="handleNotificationClick"
+                    @view-all="delegationNotificationsDialog = true"
+                  />
 
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup">
@@ -213,6 +191,20 @@
       />
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
+
+      <SwapDialog :isOpen="isSwapDialogOpen" @close="closeSwapDialog" />
+
+      <BuyDialog :isOpen="buyDialog" @close="buyDialog = false" />
+
+      <ReceiveDialog :isOpen="receiveDialog" @close="receiveDialog = false" />
+
+      <DelegationNotificationsDialog v-model="delegationNotificationsDialog" />
+
+      <ApproveDelegationDialog
+        v-model="approveDelegationDialog"
+        :request="selectedDelegationRequest"
+        @approved="handleDelegationApproved"
+      />
     </v-app>
   </div>
 </template>
@@ -227,6 +219,12 @@ import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue';
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
+import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
+import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
+import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
+import NotificationBell from '@/modules/navigation/components/NotificationBell.vue';
+import DelegationNotificationsDialog from '@/modules/dashboard/dialogs/DelegationNotificationsDialog.vue';
+import ApproveDelegationDialog from '@/modules/dashboard/dialogs/ApproveDelegationDialog.vue';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import { iconFilters, themes } from '@/config/themes';
@@ -314,6 +312,12 @@ const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
+const swapDialog = ref(false);
+const buyDialog = ref(false);
+const receiveDialog = ref(false);
+const delegationNotificationsDialog = ref(false);
+const approveDelegationDialog = ref(false);
+const selectedDelegationRequest = ref(null);
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
@@ -427,6 +431,28 @@ function handleOpenBackupDialog() {
   backupWalletDialog.value = true;
 }
 
+function handleOpenBuyDialog() {
+  console.log('Received buy dialog event from dashboard');
+  buyDialog.value = true;
+}
+
+function handleOpenReceiveDialog() {
+  console.log('Received receive dialog event from dashboard');
+  receiveDialog.value = true;
+}
+
+function handleNotificationClick(notification) {
+  console.log('Notification clicked:', notification);
+  selectedDelegationRequest.value = notification;
+  approveDelegationDialog.value = true;
+}
+
+function handleDelegationApproved(requestId, txHash) {
+  console.log('Delegation approved:', requestId, txHash);
+  approveDelegationDialog.value = false;
+  selectedDelegationRequest.value = null;
+}
+
 // Theme management - update colors when a chain changes
 const updateThemeColors = () => {
   const currentTheme = isApex.value ? themes.apex : themes.cardano;
@@ -483,6 +509,8 @@ const preloadBackgroundImage = () => {
   const imageUrl =
     currentChain === Blockchain.APEX_PRIME || currentChain === Blockchain.APEX_VECTOR
       ? assets.apexBg
+      : currentChain === Blockchain.MIDNIGHT
+      ? assets.midnightBg
       : assets.cardanoBg;
 
   const img = new Image();
@@ -573,6 +601,46 @@ onBeforeUnmount(() => {
 
   &[style*='url('] {
     opacity: 1;
+  }
+}
+
+/* Midnight background with gradient fade */
+.midnight-background-dashboard {
+  position: absolute;
+  top: -70%;
+  left: 50%;
+  width: 100vw;
+  height: 120vh;
+  z-index: -1; /* Behind dashboard content */
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  transform: translateX(-50%); /* Center horizontally without distortion */
+  pointer-events: none; /* Allow clicks through */
+  filter: brightness(0.7);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+
+  /* Gradient overlay to fade to black at bottom */
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.4) 85%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.4) 85%,
+    rgba(0, 0, 0, 0) 100%
+  );
+
+  &[style*='url('] {
+    opacity: 0.6;
   }
 }
 

@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midnight Blockchain Integration Plan - Gero Wallet</title>
+    <style>
+        @page {
+            margin: 2cm;
+            size: A4;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+        }
+
+        h1 {
+            color: #1a1a1a;
+            border-bottom: 4px solid #6366f1;
+            padding-bottom: 10px;
+            margin-top: 0;
+            font-size: 28px;
+        }
+
+        h2 {
+            color: #4338ca;
+            margin-top: 30px;
+            font-size: 22px;
+            border-left: 4px solid #6366f1;
+            padding-left: 15px;
+        }
+
+        h3 {
+            color: #5b21b6;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        .header h1 {
+            border: none;
+            color: white;
+            margin: 0;
+        }
+
+        .header p {
+            margin: 5px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .tldr {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .tldr strong {
+            color: #92400e;
+            display: block;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .critical-change {
+            background: #fee2e2;
+            border-left: 4px solid #dc2626;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .good-news {
+            background: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .warning {
+            background: #fed7aa;
+            border-left: 4px solid #ea580c;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #dc2626;
+        }
+
+        pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        pre code {
+            background: transparent;
+            color: #f9fafb;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #d1d5db;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #6366f1;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .phase {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .phase h3 {
+            margin-top: 0;
+            color: #6366f1;
+        }
+
+        .risk-high {
+            color: #dc2626;
+            font-weight: bold;
+        }
+
+        .risk-medium {
+            color: #ea580c;
+            font-weight: bold;
+        }
+
+        .risk-low {
+            color: #10b981;
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e5e7eb;
+            text-align: center;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        @media print {
+            body {
+                max-width: 100%;
+                padding: 0;
+            }
+
+            .page-break {
+                page-break-before: always;
+            }
+
+            h2 {
+                page-break-after: avoid;
+            }
+
+            .phase, .critical-change, .good-news, .warning {
+                page-break-inside: avoid;
+            }
+        }
+
+        .architecture-diagram {
+            background: #f9fafb;
+            border: 2px solid #e5e7eb;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.3;
+            white-space: pre;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Midnight Blockchain Integration Plan</h1>
+        <p>Gero Wallet - Technical Architecture & Implementation Roadmap</p>
+        <p>Based on Lace Wallet Codebase Analysis</p>
+        <p>Date: December 11, 2024</p>
+    </div>
+
+    <div class="tldr">
+        <strong>TL;DR - Critical Findings</strong>
+        <ul>
+            <li><strong>Three-Wallet Architecture:</strong> Midnight requires managing 3 separate wallet instances simultaneously (DustWallet, ShieldedWallet, UnshieldedWallet) - fundamentally different from Cardano's single-wallet model</li>
+            <li><strong>Three Keys Per Account:</strong> Each account needs 3 separate derived keys (Zswap, Dust, NightExternal) vs. Cardano's single spending key</li>
+            <li><strong>Explicit DUST Registration:</strong> Users must manually register NIGHT UTXOs to generate DUST - not automatic like staking rewards</li>
+            <li><strong>Massive Fee Overhead:</strong> Additional fee overhead of 300 trillion (3×10¹⁴) - significantly higher than Cardano</li>
+            <li><strong>Timeline:</strong> 15-18 weeks for full implementation with 6 distinct phases</li>
+        </ul>
+    </div>
+
+    <h2>1. Executive Overview</h2>
+
+    <p>Following comprehensive analysis of the Lace Wallet Midnight Preview RC 251202 codebase, we've identified critical architectural differences between Midnight and Cardano that significantly impact our integration approach. Unlike Cardano, Midnight requires a <strong>three-wallet architecture</strong> managing separate instances for DUST generation, shielded transactions, and unshielded operations.</p>
+
+    <h3>Key Architectural Paradigm Shift</h3>
+
+    <table>
+        <tr>
+            <th>Component</th>
+            <th>Cardano Model</th>
+            <th>Midnight Model</th>
+            <th>Impact</th>
+        </tr>
+        <tr>
+            <td>Wallet Instances</td>
+            <td>1 wallet per account</td>
+            <td>3 wallets per account</td>
+            <td class="risk-high">HIGH - Complete refactor</td>
+        </tr>
+        <tr>
+            <td>Keys per Account</td>
+            <td>1 spending key</td>
+            <td>3 separate keys</td>
+            <td class="risk-high">HIGH - Triple key management</td>
+        </tr>
+        <tr>
+            <td>Addresses</td>
+            <td>1 receive address</td>
+            <td>3 address types</td>
+            <td class="risk-medium">MEDIUM - UI complexity</td>
+        </tr>
+        <tr>
+            <td>Balance Components</td>
+            <td>1 ADA balance</td>
+            <td>5 balance components</td>
+            <td class="risk-medium">MEDIUM - Dashboard redesign</td>
+        </tr>
+        <tr>
+            <td>Sync Mechanism</td>
+            <td>REST API polling</td>
+            <td>GraphQL WebSocket subscriptions</td>
+            <td class="risk-medium">MEDIUM - New client required</td>
+        </tr>
+        <tr>
+            <td>Network Endpoints</td>
+            <td>1 blockchain node</td>
+            <td>3 separate services</td>
+            <td class="risk-low">LOW - Config changes</td>
+        </tr>
+    </table>
+
+    <div class="page-break"></div>
+
+    <h2>2. Critical Architecture Changes</h2>
+
+    <div class="critical-change">
+        <h3>🔴 Change #1: Three-Wallet System</h3>
+        <p><strong>Original Assumption:</strong> Single wallet managing NIGHT + DUST tokens</p>
+        <p><strong>Lace Reality:</strong> Three separate wallet instances working in coordination</p>
+
+        <pre><code>interface MidnightWalletSystem {
+  dustWallet: DustWallet;           // DUST generation & unshielded operations
+  shieldedWallet: ShieldedWallet;   // Private NIGHT (zswap/zkProofs)
+  unshieldedWallet: UnshieldedWallet; // Public NIGHT transactions
+  walletFacade: WalletFacade;       // Unified interface to all three
+}</code></pre>
+
+        <p><strong>Impact:</strong> Cannot reuse existing Cardano wallet patterns. Requires complete refactor of wallet initialization, state management, and transaction orchestration.</p>
+    </div>
+
+    <div class="critical-change">
+        <h3>🔴 Change #2: Three Key Derivation Paths</h3>
+        <p><strong>Original Assumption:</strong> Single derivation path <code>m/44'/2400'/account'/role/index</code></p>
+        <p><strong>Lace Reality:</strong> Three separate keys with specific role assignments</p>
+
+        <pre><code>// THREE keys derived from same seed (not one)
+const zswapKey = derive(seed, [44, 2400, account, 3, 0]);      // Role 3 = Zswap
+const dustKey = derive(seed, [44, 2400, account, 2, 0]);       // Role 2 = Dust
+const nightExternalKey = derive(seed, [44, 2400, account, 0, 0]); // Role 0 = NightExternal
+
+// All three encrypted separately with EMIP3
+const encryptedKeys = {
+  zswap: emip3encrypt(zswapKey, password),
+  dust: emip3encrypt(dustKey, password),
+  nightExternal: emip3encrypt(nightExternalKey, password)
+};</code></pre>
+
+        <p><strong>Impact:</strong> Key management complexity triples. Need to store/encrypt three keys instead of one. Wallet recovery must restore all three keys.</p>
+    </div>
+
+    <div class="critical-change">
+        <h3>🔴 Change #3: Explicit DUST Registration</h3>
+        <p><strong>Original Assumption:</strong> DUST generates automatically from NIGHT holdings</p>
+        <p><strong>Lace Reality:</strong> Users must explicitly register each NIGHT UTXO for DUST generation</p>
+
+        <pre><code>// Coins have registration flag (not automatic)
+interface UnshieldedCoin {
+  value: bigint;
+  type: TokenType;
+  registeredForDustGeneration: boolean;  // ⚠️ Requires user action
+  ownerAddress: string;
+}
+
+// Manual registration required
+await wallet.registerNightUtxosForDustGeneration(
+  selectedUtxos,
+  dustAddress
+);</code></pre>
+
+        <p><strong>Impact:</strong> Requires dedicated registration UI with coin selection. Cannot assume all NIGHT generates DUST. UX flow similar to staking pool delegation.</p>
+    </div>
+
+    <div class="critical-change">
+        <h3>🔴 Change #4: Five Balance Components</h3>
+        <p><strong>Original Assumption:</strong> Two balances (NIGHT + DUST)</p>
+        <p><strong>Lace Reality:</strong> Five distinct balance components</p>
+
+        <pre><code>interface MidnightBalances {
+  // NIGHT balances
+  nightShielded: bigint;        // Private NIGHT (zswap)
+  nightUnshielded: bigint;      // Public NIGHT
+  nightRegistered: bigint;      // NIGHT registered for DUST (subset of unshielded)
+
+  // DUST balances
+  dust: bigint;                 // Current DUST balance
+  dustGenerating: bigint;       // DUST being generated (not yet claimed)
+}</code></pre>
+
+        <p><strong>Impact:</strong> Dashboard needs granular balance display. Cannot simply show "NIGHT balance" - must differentiate public/private/registered.</p>
+    </div>
+
+    <div class="critical-change">
+        <h3>🔴 Change #5: Massive Fee Overhead</h3>
+        <p><strong>Original Assumption:</strong> Standard Cardano-like fee calculation</p>
+        <p><strong>Lace Reality:</strong> 300 trillion (3×10¹⁴) additional fee overhead</p>
+
+        <pre><code>costParameters: {
+  additionalFeeOverhead: 300000000000000n,  // 300 TRILLION
+  feeBlocksMargin: 5
+}</code></pre>
+
+        <p><strong>Impact:</strong> Fee estimates will be significantly higher than Cardano. Requires prominent fee warnings in UI to manage user expectations.</p>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>3. Technical Architecture</h2>
+
+    <h3>3.1 Three-Wallet Coordination</h3>
+
+    <div class="architecture-diagram">
+┌─────────────────────────────────────────────────────────────────┐
+│                      MidnightWalletService                      │
+│                    (Orchestration Layer)                        │
+└────────────┬────────────────┬────────────────┬──────────────────┘
+             │                │                │
+             ▼                ▼                ▼
+    ┌────────────────┐ ┌──────────────┐ ┌─────────────────┐
+    │  DustWallet    │ │ShieldedWallet│ │UnshieldedWallet │
+    │                │ │              │ │                 │
+    │ • DUST ops     │ │• Private TX  │ │• Public NIGHT   │
+    │ • Registration │ │• ZK proofs   │ │• Fast transfers │
+    │ • Unshielded   │ │• 10-15s ops  │ │• Simple ops     │
+    └────────────────┘ └──────────────┘ └─────────────────┘
+             │                │                │
+             └────────────────┴────────────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │  WalletFacade    │
+                    │ (Unified API)    │
+                    └──────────────────┘
+    </div>
+
+    <h3>3.2 State Management Architecture</h3>
+
+    <pre><code>// Gero's midnightStore.ts structure
+export interface MidnightStoreState {
+  // Three address types
+  addresses: {
+    dust: string | null;
+    shielded: string | null;
+    unshielded: string | null;
+  };
+
+  // Five balance components
+  balances: {
+    nightShielded: bigint;
+    nightUnshielded: bigint;
+    nightRegistered: bigint;
+    dust: bigint;
+    dustGenerating: bigint;
+  };
+
+  // Coins with registration status
+  coins: {
+    shielded: Map<TokenType, ShieldedCoin[]>;
+    unshielded: Map<TokenType, UnshieldedCoin[]>;
+  };
+
+  // Serialized wallet states (for fast recovery)
+  serializedState: {
+    dust: string | null;
+    shielded: string | null;
+    unshielded: string | null;
+  };
+}</code></pre>
+
+    <h3>3.3 Network Configuration</h3>
+
+    <table>
+        <tr>
+            <th>Service</th>
+            <th>Endpoint Type</th>
+            <th>Purpose</th>
+        </tr>
+        <tr>
+            <td>Indexer</td>
+            <td>HTTPS + WebSocket</td>
+            <td>GraphQL queries & subscriptions for balance/transactions</td>
+        </tr>
+        <tr>
+            <td>RPC Node</td>
+            <td>HTTPS + WebSocket</td>
+            <td>Transaction submission & blockchain state</td>
+        </tr>
+        <tr>
+            <td>Proof Server</td>
+            <td>HTTPS + WebSocket</td>
+            <td>ZK proof generation (10-15 seconds per proof)</td>
+        </tr>
+    </table>
+
+    <p><strong>Preview Testnet Endpoints:</strong></p>
+    <ul>
+        <li>Indexer: <code>https://indexer.preview.midnight.network/api/v3/graphql</code></li>
+        <li>Indexer WS: <code>wss://indexer.preview.midnight.network/api/v3/graphql/ws</code></li>
+        <li>RPC: <code>https://rpc.preview.midnight.network</code></li>
+        <li>RPC WS: <code>wss://rpc.preview.midnight.network/ws</code></li>
+        <li>Proof Server: <code>https://lace-proof-pub.preview.midnight.network</code></li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h2>4. Implementation Roadmap</h2>
+
+    <div class="phase">
+        <h3>Phase 1: Three-Key Foundation (2 weeks)</h3>
+        <p><strong>Deliverables:</strong></p>
+        <ul>
+            <li>Implement <code>deriveThreeKeys()</code> utility with BIP32 derivation for roles 0, 2, 3</li>
+            <li>EMIP3 encryption for all three keys (reuse Gero's existing crypto utilities)</li>
+            <li>IndexedDB schema extension for three encrypted keys per Midnight account</li>
+            <li>Generate three addresses from three wallet instances</li>
+        </ul>
+        <p><strong>Risk:</strong> <span class="risk-low">LOW</span> - Leverages existing Cardano crypto patterns</p>
+    </div>
+
+    <div class="phase">
+        <h3>Phase 2: Three-Wallet Initialization (2 weeks)</h3>
+        <p><strong>Deliverables:</strong></p>
+        <ul>
+            <li>Initialize DustWallet, ShieldedWallet, UnshieldedWallet from SDK factories</li>
+            <li>WalletFacade integration for unified transaction API</li>
+            <li>State serialization/restoration for fast wallet recovery</li>
+            <li>GraphQL client setup with Apollo Client + WebSocket subscriptions</li>
+        </ul>
+        <p><strong>Risk:</strong> <span class="risk-high">HIGH</span> - New architecture pattern for Gero</p>
+    </div>
+
+    <div class="phase">
+        <h3>Phase 3: Five-Balance Dashboard (2 weeks)</h3>
+        <p><strong>Deliverables:</strong></p>
+        <ul>
+            <li>Dashboard UI displaying all 5 balance components with visual differentiation</li>
+            <li>Three-address display component with type selector</li>
+            <li>QR code generation for all three address types (dust/shielded/unshielded)</li>
+            <li>Copy-to-clipboard with address type labels</li>
+        </ul>
+        <p><strong>Risk:</strong> <span class="risk-medium">MEDIUM</span> - Complex UX but proven in Lace</p>
+    </div>
+
+    <div class="phase">
+        <h3>Phase 4: DUST Registration Flow (3 weeks)</h3>
+        <p><strong>Deliverables:</strong></p>
+        <ul>
+            <li>Coin selection UI showing all unshielded NIGHT UTXOs with registration status</li>
+            <li>Registration toggle per UTXO with confirmation dialog</li>
+            <li><code>registerNightUtxosForDustGeneration()</code> SDK integration</li>
+            <li><code>deregisterFromDustGeneration()</code> SDK integration</li>
+            <li>Real-time DUST generation progress display (current/max, time remaining)</li>
+        </ul>
+        <p><strong>Risk:</strong> <span class="risk-medium">MEDIUM</span> - Novel UX pattern for crypto wallets</p>
+    </div>
+
+    <div class="phase">
+        <h3>Phase 5: Transaction System (4 weeks)</h3>
+        <p><strong>Deliverables:</strong></p>
+        <ul>
+            <li>Unshielded NIGHT transfers (simple, fast, public)</li>
+            <li>Shielded NIGHT transfers (requires ZK proofs, 10-15 second operation)</li>
+            <li>DUST transfers (unshielded only)</li>
+            <li>Proof server client with progress UI ("Preparing → Proving → Submitting")</li>
+            <li>Fee calculation with massive overhead (300 trillion) and user warnings</li>
+        </ul>
+        <p><strong>Risk:</strong> <span class="risk-high">HIGH</span> - ZK proof UX critical for user retention</p>
+    </div>
+
+    <div class="phase">
+        <h3>Phase 6: GraphQL Sync & Real-time Updates (2 weeks)</h3>
+        <p><strong>Deliverables:</strong></p>
+        <ul>
+            <li>WebSocket subscription to <code>dustLedgerEvents</code> for DUST balance updates</li>
+            <li>WebSocket subscription to <code>zswapLedgerEvents</code> for shielded NIGHT updates</li>
+            <li>Real-time balance updates across all 5 components</li>
+            <li>Transaction confirmation notifications</li>
+            <li>Reconnection logic for dropped WebSocket connections</li>
+        </ul>
+        <p><strong>Risk:</strong> <span class="risk-medium">MEDIUM</span> - WebSocket stability crucial</p>
+    </div>
+
+    <div class="phase">
+        <h3>Phase 11: Cardano Bridge for DUST Generation (Optional - Post-MVP)</h3>
+        <p><strong>Deliverables:</strong></p>
+        <ul>
+            <li>CIP-30 Cardano wallet connection (Nami, Eternl, Lace)</li>
+            <li>Address mapping UI (Cardano ↔ Midnight DUST address)</li>
+            <li>Plutus validator integration for on-chain mapping</li>
+            <li>Cross-chain DUST generation from Cardano NIGHT holdings</li>
+            <li>Unified balance display (Cardano NIGHT + Midnight DUST)</li>
+        </ul>
+        <p><strong>Risk:</strong> <span class="risk-medium">MEDIUM</span> - Cross-chain complexity</p>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>5. Updated File Structure</h2>
+
+    <pre><code>src/
+  services/
+    midnight/
+      midnightWallet.service.ts      # Three-wallet orchestration
+      dustWallet.service.ts           # DUST-specific operations
+      shieldedWallet.service.ts       # Shielded NIGHT operations
+      unshieldedWallet.service.ts     # Unshielded NIGHT operations
+      proofServer.service.ts          # ZK proof generation client
+      graphqlSync.service.ts          # GraphQL subscription management
+
+  stores/
+    midnightStore.ts                  # Three-wallet state management
+
+  shared/utils/
+    midnightCrypto.ts                 # Three-key derivation
+    midnightSerialization.ts          # State serialization/restoration
+
+  modules/midnight/
+    views/
+      MidnightDashboard.vue           # Shows 5 balance components
+    dialogs/
+      DustRegistrationDialog.vue      # Coin registration UI
+      ThreeAddressesDialog.vue        # Display all three addresses
+      SendMidnightDialog.vue          # Transaction wizard
+    components/
+      CoinRegistrationList.vue        # UTXO registration toggles
+      DustGenerationProgress.vue      # Real-time DUST accrual
+      ProofProgressIndicator.vue      # ZK proof 10-15s progress
+
+  db/
+    midnight-db.ts                    # Serialized wallet states table
+    schema.ts                         # Add Midnight tables to schema</code></pre>
+
+    <h2>6. Dependencies & Technology Stack</h2>
+
+    <h3>6.1 New NPM Dependencies</h3>
+
+    <pre><code>{
+  "@midnight-ntwrk/wallet-sdk-dust-wallet": "^latest",
+  "@midnight-ntwrk/wallet-sdk-shielded": "^latest",
+  "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^latest",
+  "@midnight-ntwrk/wallet-sdk-facade": "^latest",
+  "@midnight-ntwrk/wallet-sdk-hd": "^latest",
+  "@midnight-ntwrk/wallet-sdk-address-format": "^latest",
+  "@midnight-ntwrk/ledger-v6": "^latest",
+  "@cardano-sdk/key-management": "^0.46+",  // For EMIP3 (already in Gero)
+  "@apollo/client": "^3.8+",                 // For GraphQL subscriptions
+  "graphql": "^16.8+",
+  "graphql-ws": "^5.14+"                     // WebSocket subscriptions
+}</code></pre>
+
+    <h3>6.2 Manifest V3 CSP Updates</h3>
+
+    <p>Must whitelist three separate Midnight network domains in <code>manifest.json</code>:</p>
+
+    <pre><code>"content_security_policy": {
+  "extension_pages": "... connect-src 'self' https: wss: \
+    https://indexer.preview.midnight.network/api/v3/graphql \
+    wss://indexer.preview.midnight.network/api/v3/graphql/ws \
+    https://rpc.preview.midnight.network \
+    wss://rpc.preview.midnight.network/ws \
+    https://lace-proof-pub.preview.midnight.network \
+    wss://lace-proof-pub.preview.midnight.network/ws ..."
+}</code></pre>
+
+    <div class="page-break"></div>
+
+    <h2>7. Risk Assessment & Mitigation</h2>
+
+    <h3>High Risk Items</h3>
+
+    <div class="warning">
+        <h4>🔴 Three-Wallet Coordination Complexity</h4>
+        <p><strong>Risk:</strong> Managing three wallet instances simultaneously is unprecedented in Gero. High risk of state desynchronization between wallets.</p>
+        <p><strong>Mitigation:</strong></p>
+        <ul>
+            <li>Implement comprehensive state serialization (following Lace's pattern)</li>
+            <li>Use WalletFacade as single source of truth for transaction orchestration</li>
+            <li>Add extensive logging for wallet state transitions</li>
+            <li>Build debug panel showing all three wallet states simultaneously</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <h4>🔴 ZK Proof Generation UX (10-15 seconds)</h4>
+        <p><strong>Risk:</strong> Users may abandon transactions thinking the app has frozen during proof generation.</p>
+        <p><strong>Mitigation:</strong></p>
+        <ul>
+            <li>Implement multi-stage progress indicator ("Preparing → Proving → Submitting")</li>
+            <li>Show estimated time remaining with countdown timer</li>
+            <li>Allow users to minimize transaction dialog while proof generates</li>
+            <li>Add educational tooltips explaining why privacy requires time</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <h4>🔴 Massive Fee Overhead User Shock</h4>
+        <p><strong>Risk:</strong> 300 trillion additional fee overhead may shock users accustomed to low Cardano fees.</p>
+        <p><strong>Mitigation:</strong></p>
+        <ul>
+            <li>Prominent fee warnings in transaction dialogs</li>
+            <li>Fee breakdown showing base fee vs. overhead</li>
+            <li>Educational content explaining Midnight's cost model</li>
+            <li>Fee simulation before actual transaction submission</li>
+        </ul>
+    </div>
+
+    <h3>Medium Risk Items</h3>
+
+    <div class="warning" style="background: #fed7aa;">
+        <h4>⚠️ GraphQL WebSocket Subscription Stability</h4>
+        <p><strong>Risk:</strong> WebSocket connections can drop, causing missed balance updates.</p>
+        <p><strong>Mitigation:</strong></p>
+        <ul>
+            <li>Implement exponential backoff reconnection logic</li>
+            <li>Offline mode with cached state and sync-on-reconnect</li>
+            <li>Visual indicator for connection status in UI</li>
+            <li>Fallback to HTTP polling if WebSocket fails repeatedly</li>
+        </ul>
+    </div>
+
+    <div class="warning" style="background: #fed7aa;">
+        <h4>⚠️ DUST Registration UX Complexity</h4>
+        <p><strong>Risk:</strong> Users may not understand explicit DUST registration requirement.</p>
+        <p><strong>Mitigation:</strong></p>
+        <ul>
+            <li>Onboarding wizard explaining DUST generation mechanics</li>
+            <li>Clear visual indicators for registered vs. unregistered NIGHT</li>
+            <li>Tooltips and help icons throughout registration flow</li>
+            <li>Suggested UTXO registration based on DUST generation potential</li>
+        </ul>
+    </div>
+
+    <h3>Low Risk Items</h3>
+
+    <div class="good-news">
+        <h4>✅ EMIP3 Encryption Compatibility</h4>
+        <p><strong>Benefit:</strong> Midnight uses same EMIP3 encryption as Cardano - can reuse Gero's existing crypto utilities.</p>
+        <p><strong>Advantage:</strong> No new encryption infrastructure needed. Proven security model.</p>
+    </div>
+
+    <div class="good-news">
+        <h4>✅ Lace's Proven Architecture</h4>
+        <p><strong>Benefit:</strong> Lace has production deployment with Midnight Preview - architectural risks are validated.</p>
+        <p><strong>Advantage:</strong> Can reference Lace's solutions for edge cases and optimization patterns.</p>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>8. Timeline & Resource Estimation</h2>
+
+    <table>
+        <tr>
+            <th>Phase</th>
+            <th>Duration</th>
+            <th>Team Size</th>
+            <th>Dependencies</th>
+        </tr>
+        <tr>
+            <td>Phase 1: Three-Key Foundation</td>
+            <td>2 weeks</td>
+            <td>1 backend engineer</td>
+            <td>None</td>
+        </tr>
+        <tr>
+            <td>Phase 2: Three-Wallet Init</td>
+            <td>2 weeks</td>
+            <td>1 backend engineer</td>
+            <td>Phase 1</td>
+        </tr>
+        <tr>
+            <td>Phase 3: Five-Balance Dashboard</td>
+            <td>2 weeks</td>
+            <td>1 frontend engineer</td>
+            <td>Phase 2 (parallel with Phase 4)</td>
+        </tr>
+        <tr>
+            <td>Phase 4: DUST Registration</td>
+            <td>3 weeks</td>
+            <td>1 fullstack engineer</td>
+            <td>Phase 2</td>
+        </tr>
+        <tr>
+            <td>Phase 5: Transaction System</td>
+            <td>4 weeks</td>
+            <td>2 fullstack engineers</td>
+            <td>Phases 2, 3, 4</td>
+        </tr>
+        <tr>
+            <td>Phase 6: GraphQL Sync</td>
+            <td>2 weeks</td>
+            <td>1 backend engineer</td>
+            <td>Phase 5 (can start earlier)</td>
+        </tr>
+        <tr>
+            <td><strong>Phase 11 (Optional)</strong></td>
+            <td><strong>Cardano Bridge for DUST</strong></td>
+            <td>4-6 weeks</td>
+            <td>2 fullstack engineers</td>
+            <td>Phases 1-10 complete</td>
+        </tr>
+        <tr>
+            <td><strong>Total</strong></td>
+            <td><strong>15-18 weeks</strong></td>
+            <td><strong>2-3 engineers</strong></td>
+            <td></td>
+        </tr>
+    </table>
+
+    <h3>Parallelization Opportunities</h3>
+    <ul>
+        <li>Phase 3 (Dashboard) can run in parallel with Phase 4 (DUST Registration) after Phase 2 completes</li>
+        <li>Phase 6 (GraphQL Sync) can begin development once Phase 2 completes, testing against Phase 5</li>
+        <li>With 2-3 engineers, realistic completion: <strong>15 weeks</strong></li>
+        <li>With 1 engineer (sequential), realistic completion: <strong>18-20 weeks</strong></li>
+    </ul>
+
+    <h2>9. Success Metrics</h2>
+
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Target</th>
+            <th>Measurement Method</th>
+        </tr>
+        <tr>
+            <td>Wallet Initialization Time</td>
+            <td>&lt; 3 seconds</td>
+            <td>Performance logging in background script</td>
+        </tr>
+        <tr>
+            <td>DUST Registration Success Rate</td>
+            <td>&gt; 95%</td>
+            <td>Transaction success/failure tracking</td>
+        </tr>
+        <tr>
+            <td>ZK Proof Generation Time</td>
+            <td>10-15 seconds (SDK limitation)</td>
+            <td>Proof server response time monitoring</td>
+        </tr>
+        <tr>
+            <td>GraphQL Subscription Uptime</td>
+            <td>&gt; 99%</td>
+            <td>WebSocket connection stability tracking</td>
+        </tr>
+        <tr>
+            <td>User Onboarding Completion</td>
+            <td>&gt; 80% complete DUST setup</td>
+            <td>Analytics on registration dialog completion</td>
+        </tr>
+        <tr>
+            <td>Transaction Error Rate</td>
+            <td>&lt; 5%</td>
+            <td>Failed transaction tracking by error type</td>
+        </tr>
+    </table>
+
+    <div class="page-break"></div>
+
+    <h2>10. Key Takeaways for Leadership</h2>
+
+    <div class="good-news">
+        <h3>✅ Good News</h3>
+        <ul>
+            <li><strong>EMIP3 Encryption Reuse:</strong> Midnight uses same encryption as Cardano - can leverage existing Gero crypto utilities</li>
+            <li><strong>Proven Architecture:</strong> Lace's production deployment validates the three-wallet approach - reduces architectural risk</li>
+            <li><strong>State Serialization:</strong> Wallet state serialization enables fast recovery and reduces sync times</li>
+            <li><strong>Clear Roadmap:</strong> 6 well-defined phases with measurable deliverables</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <h3>⚠️ Challenges</h3>
+        <ul>
+            <li><strong>Paradigm Shift:</strong> Three-wallet architecture is fundamentally different from Cardano - cannot simply "add Midnight like Apex Fusion"</li>
+            <li><strong>UX Complexity:</strong> DUST registration is not automatic (unlike staking rewards) - requires user education</li>
+            <li><strong>Fee Overhead:</strong> Massive additional fees (300 trillion overhead) require prominent user warnings to manage expectations</li>
+            <li><strong>ZK Proof Delays:</strong> 10-15 second proof generation is SDK limitation - must design UX around this constraint</li>
+        </ul>
+    </div>
+
+    <div class="tldr" style="background: #dbeafe; border-color: #3b82f6;">
+        <strong>Bottom Line Recommendation</strong>
+        <p>Midnight integration is <strong>technically feasible</strong> within 15-18 weeks with 2-3 engineers, but requires significant architectural changes to Gero's wallet infrastructure. The three-wallet system introduces complexity beyond typical multi-chain support.</p>
+
+        <p><strong>Recommended Approach:</strong></p>
+        <ol>
+            <li>Start with Phase 1-2 (4 weeks) as proof-of-concept to validate three-wallet architecture in Gero's codebase</li>
+            <li>Conduct user research on DUST registration UX during Phase 2-3 (critical for adoption)</li>
+            <li>Make go/no-go decision after Phase 2 based on architectural integration complexity</li>
+            <li>If proceeding, allocate 2 engineers for parallel Phase 4-5 execution to meet 15-week timeline</li>
+        </ol>
+
+        <p><strong>Alternative:</strong> Consider MVP with unshielded NIGHT only (skip shielded wallet) to reduce initial scope by ~30%, then add privacy features in Phase 2.</p>
+    </div>
+
+    <div class="footer">
+        <p>Document prepared for Gero Wallet CTO - Midnight Blockchain Integration Technical Assessment</p>
+        <p>Based on comprehensive analysis of Lace Wallet Midnight Preview RC 251202 codebase</p>
+        <p>Date: December 11, 2024 | Confidential</p>
+    </div>
+
+</body>
+</html>

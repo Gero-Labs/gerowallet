@@ -1,0 +1,2477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midnight Integration - Technical Implementation Guide</title>
+    <style>
+        @page {
+            margin: 2cm;
+            size: A4;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+        }
+
+        h1 {
+            color: #1a1a1a;
+            border-bottom: 4px solid #8b5cf6;
+            padding-bottom: 10px;
+            margin-top: 0;
+            font-size: 28px;
+        }
+
+        h2 {
+            color: #7c3aed;
+            margin-top: 30px;
+            font-size: 22px;
+            border-left: 4px solid #8b5cf6;
+            padding-left: 15px;
+            page-break-after: avoid;
+        }
+
+        h3 {
+            color: #6d28d9;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+
+        h4 {
+            color: #5b21b6;
+            margin-top: 15px;
+            font-size: 16px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        .header h1 {
+            border: none;
+            color: white;
+            margin: 0;
+        }
+
+        .header p {
+            margin: 5px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .dev-note {
+            background: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .dev-note strong {
+            color: #1e40af;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .warning {
+            background: #fed7aa;
+            border-left: 4px solid #ea580c;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .warning strong {
+            color: #9a3412;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .critical {
+            background: #fee2e2;
+            border-left: 4px solid #dc2626;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .critical strong {
+            color: #991b1b;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .success {
+            background: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .success strong {
+            color: #065f46;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #dc2626;
+        }
+
+        pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+            page-break-inside: avoid;
+        }
+
+        pre code {
+            background: transparent;
+            color: #f9fafb;
+            padding: 0;
+        }
+
+        .filename {
+            background: #6366f1;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 6px 6px 0 0;
+            font-family: monospace;
+            font-size: 13px;
+            margin-bottom: -10px;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+            page-break-inside: avoid;
+        }
+
+        th, td {
+            border: 1px solid #d1d5db;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #8b5cf6;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .step {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            page-break-inside: avoid;
+        }
+
+        .step-number {
+            display: inline-block;
+            background: #8b5cf6;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .checklist li:before {
+            content: "☐ ";
+            font-size: 18px;
+            margin-right: 8px;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+
+        .toc {
+            background: #f9fafb;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+
+        .toc h2 {
+            margin-top: 0;
+            border: none;
+            padding: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .toc li {
+            margin: 12px 0;
+        }
+
+        .toc a {
+            color: #7c3aed;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        @media print {
+            body {
+                max-width: 100%;
+                padding: 0;
+            }
+
+            .page-break {
+                page-break-before: always;
+            }
+
+            h2 {
+                page-break-after: avoid;
+            }
+
+            .step, .dev-note, .warning, .critical, pre {
+                page-break-inside: avoid;
+            }
+        }
+
+        .architecture-box {
+            background: #f9fafb;
+            border: 2px solid #e5e7eb;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre;
+            page-break-inside: avoid;
+        }
+
+        .command {
+            background: #1f2937;
+            color: #10b981;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Midnight Integration</h1>
+        <p>Technical Implementation Guide for Developers</p>
+        <p>Gero Wallet - Detailed Architecture & Code Examples</p>
+        <p>Version 1.0 | December 11, 2024</p>
+    </div>
+
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li><strong>Phase 1:</strong> Three-Key Foundation & Cryptography</li>
+            <li><strong>Phase 2:</strong> Three-Wallet Initialization & SDK Integration</li>
+            <li><strong>Phase 3:</strong> State Management & Store Architecture</li>
+            <li><strong>Phase 4:</strong> Database Schema & Persistence</li>
+            <li><strong>Phase 5:</strong> Dashboard UI & Five-Balance Display</li>
+            <li><strong>Phase 6:</strong> DUST Registration Flow</li>
+            <li><strong>Phase 7:</strong> Transaction System & ZK Proofs</li>
+            <li><strong>Phase 8:</strong> GraphQL Sync & Real-time Updates</li>
+            <li><strong>Phase 9:</strong> Network Configuration & Manifest Updates</li>
+            <li><strong>Phase 10:</strong> Testing Strategy & Quality Assurance</li>
+            <li><strong>Appendix A:</strong> Migration Guide from Cardano Patterns</li>
+            <li><strong>Appendix B:</strong> Troubleshooting Guide</li>
+            <li><strong>Appendix C:</strong> Performance Optimization</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Phase 1: Three-Key Foundation & Cryptography</h2>
+
+    <div class="dev-note">
+        <strong>📋 Phase Overview</strong>
+        <p>Implement BIP32 hierarchical deterministic key derivation for Midnight's three-key architecture. Each Midnight account requires three separate keys: Zswap (shielded operations), Dust (DUST management), and NightExternal (unshielded NIGHT).</p>
+        <p><strong>Duration:</strong> 2 weeks | <strong>Developer:</strong> 1 backend engineer</p>
+    </div>
+
+    <h3>1.1 Understanding Midnight's Three-Key Architecture</h3>
+
+    <p>Unlike Cardano's single spending key, Midnight requires three derived keys per account:</p>
+
+    <table>
+        <tr>
+            <th>Key Type</th>
+            <th>Derivation Path</th>
+            <th>Role Constant</th>
+            <th>Purpose</th>
+        </tr>
+        <tr>
+            <td>Zswap Key</td>
+            <td>m/44'/2400'/0'/3/0</td>
+            <td>3</td>
+            <td>Shielded/privacy operations, ZK proofs</td>
+        </tr>
+        <tr>
+            <td>Dust Key</td>
+            <td>m/44'/2400'/0'/2/0</td>
+            <td>2</td>
+            <td>DUST registration & management</td>
+        </tr>
+        <tr>
+            <td>NightExternal Key</td>
+            <td>m/44'/2400'/0'/0/0</td>
+            <td>0</td>
+            <td>Unshielded NIGHT transactions</td>
+        </tr>
+    </table>
+
+    <div class="warning">
+        <strong>⚠️ Critical: All Three Keys Required</strong>
+        <p>Unlike Cardano where you can derive addresses from a single key, Midnight wallets are non-functional without all three keys. The DustWallet, ShieldedWallet, and UnshieldedWallet each require their specific key to initialize.</p>
+    </div>
+
+    <h3>1.2 Implementation: Key Derivation Utility</h3>
+
+    <div class="filename">src/shared/utils/midnightCrypto.ts</div>
+    <pre><code>import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import { Buffer } from 'buffer';
+
+// BIP44 constants
+const HARDENED = 0x80000000;
+const PURPOSE = 44;
+const MIDNIGHT_COIN_TYPE = 2400;
+
+// Midnight-specific role constants (from Lace analysis)
+export enum MidnightRoles {
+  NightExternal = 0,  // Unshielded NIGHT transactions
+  Dust = 2,           // DUST generation and management
+  Zswap = 3           // Shielded operations (zswap circuit)
+}
+
+export interface DerivedMidnightKeys {
+  zswapKey: Uint8Array;
+  dustKey: Uint8Array;
+  nightExternalKey: Uint8Array;
+  // Store derivation metadata for recovery
+  metadata: {
+    accountIndex: number;
+    coinType: number;
+    purpose: number;
+  };
+}
+
+/**
+ * Derives three Midnight keys from a BIP39 seed
+ *
+ * @param seed - BIP39 entropy (typically from mnemonic)
+ * @param accountIndex - Account index (default: 0)
+ * @returns Object containing all three derived keys
+ *
+ * @example
+ * const seed = mnemonicToEntropy(mnemonic);
+ * const keys = deriveThreeKeys(seed, 0);
+ * console.log('Zswap Key:', Buffer.from(keys.zswapKey).toString('hex'));
+ */
+export function deriveThreeKeys(
+  seed: Uint8Array,
+  accountIndex: number = 0
+): DerivedMidnightKeys {
+  console.log('🔑 Deriving Midnight keys for account', accountIndex);
+
+  try {
+    // 1. Create root key from BIP39 entropy
+    // Empty passphrase (second param) matches Lace's implementation
+    const rootKey = Bip32PrivateKey.fromBip39Entropy(
+      Buffer.from(seed),
+      '' // No passphrase (standard for wallet implementations)
+    );
+
+    // 2. Derive purpose level: m/44'
+    const purposeKey = rootKey.derive(PURPOSE + HARDENED);
+    console.log('  ✓ Purpose key derived (m/44\')');
+
+    // 3. Derive coin type level: m/44'/2400'
+    const coinTypeKey = purposeKey.derive(MIDNIGHT_COIN_TYPE + HARDENED);
+    console.log('  ✓ Coin type key derived (m/44\'/2400\')');
+
+    // 4. Derive account level: m/44'/2400'/account'
+    const accountKey = coinTypeKey.derive(accountIndex + HARDENED);
+    console.log(`  ✓ Account key derived (m/44'/2400'/${accountIndex}')`);
+
+    // 5. Derive three role keys
+    // Role 0 (NightExternal): m/44'/2400'/account'/0/0
+    const nightExternalRoleKey = accountKey.derive(MidnightRoles.NightExternal);
+    const nightExternalKey = nightExternalRoleKey.derive(0);
+    console.log('  ✓ NightExternal key derived (role 0)');
+
+    // Role 2 (Dust): m/44'/2400'/account'/2/0
+    const dustRoleKey = accountKey.derive(MidnightRoles.Dust);
+    const dustKey = dustRoleKey.derive(0);
+    console.log('  ✓ Dust key derived (role 2)');
+
+    // Role 3 (Zswap): m/44'/2400'/account'/3/0
+    const zswapRoleKey = accountKey.derive(MidnightRoles.Zswap);
+    const zswapKey = zswapRoleKey.derive(0);
+    console.log('  ✓ Zswap key derived (role 3)');
+
+    // 6. Extract raw key bytes (32 bytes each)
+    const result: DerivedMidnightKeys = {
+      zswapKey: new Uint8Array(zswapKey.rawKey()),
+      dustKey: new Uint8Array(dustKey.rawKey()),
+      nightExternalKey: new Uint8Array(nightExternalKey.rawKey()),
+      metadata: {
+        accountIndex,
+        coinType: MIDNIGHT_COIN_TYPE,
+        purpose: PURPOSE
+      }
+    };
+
+    console.log('🔑 All three Midnight keys derived successfully');
+    return result;
+
+  } catch (error) {
+    console.error('❌ Key derivation failed:', error);
+    throw new Error(`Failed to derive Midnight keys: ${error.message}`);
+  }
+}
+
+/**
+ * Validates that all three keys are present and correctly sized
+ */
+export function validateMidnightKeys(keys: DerivedMidnightKeys): boolean {
+  const KEY_SIZE = 32; // 256 bits
+
+  if (!keys.zswapKey || keys.zswapKey.length !== KEY_SIZE) {
+    console.error('Invalid zswap key size:', keys.zswapKey?.length);
+    return false;
+  }
+
+  if (!keys.dustKey || keys.dustKey.length !== KEY_SIZE) {
+    console.error('Invalid dust key size:', keys.dustKey?.length);
+    return false;
+  }
+
+  if (!keys.nightExternalKey || keys.nightExternalKey.length !== KEY_SIZE) {
+    console.error('Invalid nightExternal key size:', keys.nightExternalKey?.length);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Derives public key from private key (for address generation)
+ * Used later by wallet SDK
+ */
+export function derivePublicKey(privateKey: Uint8Array): Uint8Array {
+  const bip32Key = Bip32PrivateKey.fromBytes(Buffer.from(privateKey));
+  const publicKey = bip32Key.toPublic();
+  return new Uint8Array(publicKey.toBytes());
+}</code></pre>
+
+    <h3>1.3 Implementation: EMIP3 Encryption for Keys</h3>
+
+    <div class="dev-note">
+        <strong>💡 Reusing Existing Cardano Infrastructure</strong>
+        <p>Midnight uses the same EMIP3 encryption standard as Cardano. We can leverage Gero's existing <code>encryptWithPassword</code> and <code>decryptWithPassword</code> utilities from <code>src/shared/utils/crypto.ts</code>.</p>
+    </div>
+
+    <div class="filename">src/shared/utils/midnightCrypto.ts (continued)</div>
+    <pre><code>import { encryptWithPassword, decryptWithPassword } from '@/shared/utils/crypto';
+
+export interface EncryptedMidnightKeys {
+  zswapKey: string;         // Hex-encoded encrypted key
+  dustKey: string;          // Hex-encoded encrypted key
+  nightExternalKey: string; // Hex-encoded encrypted key
+  metadata: {
+    accountIndex: number;
+    coinType: number;
+    purpose: number;
+    encryptedAt: number;    // Unix timestamp
+  };
+}
+
+/**
+ * Encrypts all three Midnight keys with EMIP3
+ *
+ * @param keys - Derived keys from deriveThreeKeys()
+ * @param password - User's spending password
+ * @returns Encrypted keys as hex strings
+ */
+export async function encryptMidnightKeys(
+  keys: DerivedMidnightKeys,
+  password: string
+): Promise<EncryptedMidnightKeys> {
+  console.log('🔐 Encrypting Midnight keys with EMIP3...');
+
+  if (!password || password.length === 0) {
+    throw new Error('Password cannot be empty');
+  }
+
+  if (!validateMidnightKeys(keys)) {
+    throw new Error('Invalid keys provided for encryption');
+  }
+
+  try {
+    // Encrypt each key separately (parallel execution for performance)
+    const [encryptedZswap, encryptedDust, encryptedNightExternal] = await Promise.all([
+      Promise.resolve(encryptWithPassword(password, keys.zswapKey)),
+      Promise.resolve(encryptWithPassword(password, keys.dustKey)),
+      Promise.resolve(encryptWithPassword(password, keys.nightExternalKey))
+    ]);
+
+    console.log('🔐 All three keys encrypted successfully');
+
+    return {
+      zswapKey: encryptedZswap,
+      dustKey: encryptedDust,
+      nightExternalKey: encryptedNightExternal,
+      metadata: {
+        ...keys.metadata,
+        encryptedAt: Date.now()
+      }
+    };
+
+  } catch (error) {
+    console.error('❌ Key encryption failed:', error);
+    throw new Error(`Failed to encrypt Midnight keys: ${error.message}`);
+  }
+}
+
+/**
+ * Decrypts all three Midnight keys with EMIP3
+ *
+ * @param encryptedKeys - Encrypted keys from storage
+ * @param password - User's spending password
+ * @returns Decrypted raw key bytes
+ */
+export async function decryptMidnightKeys(
+  encryptedKeys: EncryptedMidnightKeys,
+  password: string
+): Promise<DerivedMidnightKeys> {
+  console.log('🔓 Decrypting Midnight keys...');
+
+  if (!password || password.length === 0) {
+    throw new Error('Password cannot be empty');
+  }
+
+  try {
+    // Decrypt each key separately (parallel execution)
+    const [zswapKeyBuffer, dustKeyBuffer, nightExternalKeyBuffer] = await Promise.all([
+      Promise.resolve(decryptWithPassword(password, encryptedKeys.zswapKey)),
+      Promise.resolve(decryptWithPassword(password, encryptedKeys.dustKey)),
+      Promise.resolve(decryptWithPassword(password, encryptedKeys.nightExternalKey))
+    ]);
+
+    const decryptedKeys: DerivedMidnightKeys = {
+      zswapKey: new Uint8Array(zswapKeyBuffer),
+      dustKey: new Uint8Array(dustKeyBuffer),
+      nightExternalKey: new Uint8Array(nightExternalKeyBuffer),
+      metadata: encryptedKeys.metadata
+    };
+
+    if (!validateMidnightKeys(decryptedKeys)) {
+      throw new Error('Decrypted keys failed validation - incorrect password?');
+    }
+
+    console.log('🔓 All three keys decrypted successfully');
+    return decryptedKeys;
+
+  } catch (error) {
+    console.error('❌ Key decryption failed:', error);
+    throw new Error('Failed to decrypt Midnight keys - incorrect password?');
+  }
+}</code></pre>
+
+    <h3>1.4 Testing the Key Derivation</h3>
+
+    <div class="filename">src/shared/utils/__tests__/midnightCrypto.test.ts</div>
+    <pre><code>import { describe, it, expect } from 'vitest';
+import { deriveThreeKeys, encryptMidnightKeys, decryptMidnightKeys, validateMidnightKeys } from '../midnightCrypto';
+import * as bip39 from 'bip39';
+
+describe('Midnight Key Derivation', () => {
+  const TEST_MNEMONIC = 'test walk nut penalty hip pave soap entry language right filter choice';
+  const TEST_PASSWORD = 'SecurePassword123!';
+
+  it('should derive three valid keys from seed', () => {
+    const seed = bip39.mnemonicToEntropy(TEST_MNEMONIC);
+    const keys = deriveThreeKeys(new Uint8Array(Buffer.from(seed, 'hex')), 0);
+
+    expect(keys.zswapKey).toHaveLength(32);
+    expect(keys.dustKey).toHaveLength(32);
+    expect(keys.nightExternalKey).toHaveLength(32);
+    expect(validateMidnightKeys(keys)).toBe(true);
+  });
+
+  it('should derive different keys for different accounts', () => {
+    const seed = bip39.mnemonicToEntropy(TEST_MNEMONIC);
+    const seedBytes = new Uint8Array(Buffer.from(seed, 'hex'));
+
+    const account0 = deriveThreeKeys(seedBytes, 0);
+    const account1 = deriveThreeKeys(seedBytes, 1);
+
+    // All keys should be different between accounts
+    expect(Buffer.from(account0.zswapKey).toString('hex'))
+      .not.toBe(Buffer.from(account1.zswapKey).toString('hex'));
+    expect(Buffer.from(account0.dustKey).toString('hex'))
+      .not.toBe(Buffer.from(account1.dustKey).toString('hex'));
+  });
+
+  it('should encrypt and decrypt keys correctly', async () => {
+    const seed = bip39.mnemonicToEntropy(TEST_MNEMONIC);
+    const originalKeys = deriveThreeKeys(new Uint8Array(Buffer.from(seed, 'hex')), 0);
+
+    // Encrypt
+    const encrypted = await encryptMidnightKeys(originalKeys, TEST_PASSWORD);
+    expect(encrypted.zswapKey).toMatch(/^[0-9a-f]+$/); // Hex string
+    expect(encrypted.dustKey).toMatch(/^[0-9a-f]+$/);
+    expect(encrypted.nightExternalKey).toMatch(/^[0-9a-f]+$/);
+
+    // Decrypt
+    const decrypted = await decryptMidnightKeys(encrypted, TEST_PASSWORD);
+    expect(Buffer.from(decrypted.zswapKey).toString('hex'))
+      .toBe(Buffer.from(originalKeys.zswapKey).toString('hex'));
+    expect(Buffer.from(decrypted.dustKey).toString('hex'))
+      .toBe(Buffer.from(originalKeys.dustKey).toString('hex'));
+    expect(Buffer.from(decrypted.nightExternalKey).toString('hex'))
+      .toBe(Buffer.from(originalKeys.nightExternalKey).toString('hex'));
+  });
+
+  it('should fail decryption with wrong password', async () => {
+    const seed = bip39.mnemonicToEntropy(TEST_MNEMONIC);
+    const keys = deriveThreeKeys(new Uint8Array(Buffer.from(seed, 'hex')), 0);
+    const encrypted = await encryptMidnightKeys(keys, TEST_PASSWORD);
+
+    await expect(
+      decryptMidnightKeys(encrypted, 'WrongPassword')
+    ).rejects.toThrow();
+  });
+});</code></pre>
+
+    <div class="step">
+        <p><span class="step-number">1</span> <strong>Checklist: Phase 1 Completion</strong></p>
+        <ul class="checklist">
+            <li>Create <code>src/shared/utils/midnightCrypto.ts</code> with key derivation functions</li>
+            <li>Implement <code>deriveThreeKeys()</code> with proper BIP32 path for roles 0, 2, 3</li>
+            <li>Implement <code>encryptMidnightKeys()</code> and <code>decryptMidnightKeys()</code> using EMIP3</li>
+            <li>Add <code>validateMidnightKeys()</code> helper function</li>
+            <li>Write comprehensive unit tests covering all edge cases</li>
+            <li>Test with known mnemonics and verify key outputs</li>
+            <li>Verify encryption/decryption roundtrip</li>
+            <li>Document all functions with JSDoc comments</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Phase 2: Three-Wallet Initialization & SDK Integration</h2>
+
+    <div class="dev-note">
+        <strong>📋 Phase Overview</strong>
+        <p>Integrate Midnight SDK packages to initialize three separate wallet instances (DustWallet, ShieldedWallet, UnshieldedWallet) and create a unified WalletFacade interface.</p>
+        <p><strong>Duration:</strong> 2 weeks | <strong>Developer:</strong> 1 backend engineer</p>
+        <p><strong>Dependencies:</strong> Phase 1 must be complete</p>
+    </div>
+
+    <h3>2.1 Install Midnight SDK Dependencies</h3>
+
+    <div class="command">$ npm install @midnight-ntwrk/wallet-sdk-dust-wallet @midnight-ntwrk/wallet-sdk-shielded @midnight-ntwrk/wallet-sdk-unshielded-wallet @midnight-ntwrk/wallet-sdk-facade @midnight-ntwrk/wallet-sdk-hd @midnight-ntwrk/wallet-sdk-address-format @midnight-ntwrk/ledger-v6</div>
+
+    <div class="filename">package.json (additions)</div>
+    <pre><code>{
+  "dependencies": {
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^0.1.0",
+    "@midnight-ntwrk/wallet-sdk-shielded": "^0.1.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^0.1.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "^0.1.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "^0.1.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^0.1.0",
+    "@midnight-ntwrk/ledger-v6": "^0.1.0"
+  }
+}</code></pre>
+
+    <h3>2.2 Network Configuration Types</h3>
+
+    <div class="filename">src/utils/networks.ts (additions)</div>
+    <pre><code>import { Blockchain, Network } from '@/types';
+
+export interface MidnightNetworkConfig {
+  networkId: 'preview' | 'preprod' | 'mainnet';
+  indexerHttpUrl: string;
+  indexerWsUrl: string;
+  rpcUrl: string;
+  rpcWsUrl: string;
+  provingServerUrl: string;
+  provingServerWsUrl: string;
+  costParameters: {
+    additionalFeeOverhead: bigint;
+    feeBlocksMargin: number;
+  };
+}
+
+export const MIDNIGHT_NETWORKS: Record<Network, MidnightNetworkConfig> = {
+  [Network.TESTNET]: {
+    networkId: 'preview',
+    indexerHttpUrl: 'https://indexer.preview.midnight.network/api/v3/graphql',
+    indexerWsUrl: 'wss://indexer.preview.midnight.network/api/v3/graphql/ws',
+    rpcUrl: 'https://rpc.preview.midnight.network',
+    rpcWsUrl: 'wss://rpc.preview.midnight.network/ws',
+    provingServerUrl: 'https://lace-proof-pub.preview.midnight.network',
+    provingServerWsUrl: 'wss://lace-proof-pub.preview.midnight.network/ws',
+    costParameters: {
+      additionalFeeOverhead: 300000000000000n, // 3×10^14
+      feeBlocksMargin: 5
+    }
+  },
+  [Network.PREPROD]: {
+    networkId: 'preprod',
+    indexerHttpUrl: 'https://indexer.preprod.midnight.network/api/v3/graphql',
+    indexerWsUrl: 'wss://indexer.preprod.midnight.network/api/v3/graphql/ws',
+    rpcUrl: 'https://rpc.preprod.midnight.network',
+    rpcWsUrl: 'wss://rpc.preprod.midnight.network/ws',
+    provingServerUrl: 'https://lace-proof-pub.preprod.midnight.network',
+    provingServerWsUrl: 'wss://lace-proof-pub.preprod.midnight.network/ws',
+    costParameters: {
+      additionalFeeOverhead: 300000000000000n,
+      feeBlocksMargin: 5
+    }
+  }
+};</code></pre>
+
+    <h3>2.3 Midnight Wallet Service - Core Orchestration Layer</h3>
+
+    <div class="filename">src/services/midnight/midnightWallet.service.ts</div>
+    <pre><code>import { DustWalletFactory, DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
+import { ShieldedWalletFactory, ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
+import { UnshieldedWalletBuilder, UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
+import { DustAddress, ShieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { deriveThreeKeys, decryptMidnightKeys, EncryptedMidnightKeys } from '@/shared/utils/midnightCrypto';
+import { MIDNIGHT_NETWORKS, MidnightNetworkConfig } from '@/utils/networks';
+import { Network } from '@/types';
+
+export interface MidnightAddresses {
+  dust: string;
+  shielded: string;
+  unshielded: string;
+}
+
+export interface SerializedWalletState {
+  dust: string | null;
+  shielded: string | null;
+  unshielded: string | null;
+  unshieldedTxHistory: string | null;
+}
+
+/**
+ * Main service for managing Midnight wallet lifecycle
+ * Orchestrates three separate wallet instances (Dust, Shielded, Unshielded)
+ */
+export class MidnightWalletService {
+  private dustWallet: DustWallet | null = null;
+  private shieldedWallet: ShieldedWallet | null = null;
+  private unshieldedWallet: UnshieldedWallet | null = null;
+  private walletFacade: WalletFacade | null = null;
+
+  private networkConfig: MidnightNetworkConfig;
+  private walletId: string;
+  private accountIndex: number;
+
+  constructor(walletId: string, network: Network = Network.TESTNET, accountIndex: number = 0) {
+    this.walletId = walletId;
+    this.accountIndex = accountIndex;
+    this.networkConfig = MIDNIGHT_NETWORKS[network];
+
+    console.log(`🌙 MidnightWalletService created for wallet ${walletId}, network: ${network}`);
+  }
+
+  /**
+   * Initialize wallets from encrypted keys (wallet login flow)
+   *
+   * @param encryptedKeys - Encrypted keys from database
+   * @param password - User's spending password
+   * @param serializedState - Optional: Previously saved wallet state for fast recovery
+   */
+  async initializeFromEncryptedKeys(
+    encryptedKeys: EncryptedMidnightKeys,
+    password: string,
+    serializedState?: SerializedWalletState
+  ): Promise<MidnightAddresses> {
+    console.log('🔓 Initializing Midnight wallets from encrypted keys...');
+    const startTime = performance.now();
+
+    try {
+      // 1. Decrypt all three keys
+      const decryptedKeys = await decryptMidnightKeys(encryptedKeys, password);
+      console.log('  ✓ Keys decrypted');
+
+      // 2. Initialize three wallets
+      await this.initializeWallets(decryptedKeys, serializedState);
+
+      const elapsed = performance.now() - startTime;
+      console.log(`🌙 Midnight wallets initialized in ${elapsed.toFixed(0)}ms`);
+
+      return this.getAddresses();
+
+    } catch (error) {
+      console.error('❌ Midnight wallet initialization failed:', error);
+      throw new Error(`Failed to initialize Midnight wallets: ${error.message}`);
+    }
+  }
+
+  /**
+   * Initialize wallets from seed (wallet creation flow)
+   *
+   * @param seed - BIP39 entropy
+   * @param password - User's spending password
+   * @returns Encrypted keys (to be stored in database)
+   */
+  async initializeFromSeed(
+    seed: Uint8Array,
+    password: string
+  ): Promise<{ addresses: MidnightAddresses; encryptedKeys: EncryptedMidnightKeys }> {
+    console.log('🌱 Initializing Midnight wallets from seed...');
+    const startTime = performance.now();
+
+    try {
+      // 1. Derive three keys
+      const derivedKeys = deriveThreeKeys(seed, this.accountIndex);
+      console.log('  ✓ Keys derived');
+
+      // 2. Encrypt keys for storage
+      const { encryptMidnightKeys } = await import('@/shared/utils/midnightCrypto');
+      const encryptedKeys = await encryptMidnightKeys(derivedKeys, password);
+      console.log('  ✓ Keys encrypted');
+
+      // 3. Initialize three wallets
+      await this.initializeWallets(derivedKeys);
+
+      const elapsed = performance.now() - startTime;
+      console.log(`🌙 Midnight wallets initialized from seed in ${elapsed.toFixed(0)}ms`);
+
+      return {
+        addresses: this.getAddresses(),
+        encryptedKeys
+      };
+
+    } catch (error) {
+      console.error('❌ Midnight wallet initialization from seed failed:', error);
+      throw new Error(`Failed to initialize Midnight wallets from seed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Internal: Initialize all three wallet instances
+   */
+  private async initializeWallets(
+    keys: { zswapKey: Uint8Array; dustKey: Uint8Array; nightExternalKey: Uint8Array },
+    serializedState?: SerializedWalletState
+  ): Promise<void> {
+    console.log('  Initializing three wallet instances...');
+
+    // Wallet factory configurations
+    const dustWalletConfig = {
+      networkId: this.networkConfig.networkId,
+      indexerClientConnection: {
+        indexerHttpUrl: this.networkConfig.indexerHttpUrl,
+        indexerWsUrl: this.networkConfig.indexerWsUrl
+      },
+      provingServerUrl: new URL(this.networkConfig.provingServerUrl),
+      relayURL: new URL(this.networkConfig.rpcWsUrl),
+      costParameters: this.networkConfig.costParameters
+    };
+
+    try {
+      // 1. Initialize DustWallet
+      if (serializedState?.dust) {
+        console.log('    Restoring DustWallet from serialized state...');
+        this.dustWallet = DustWalletFactory.restore(serializedState.dust);
+      } else {
+        console.log('    Creating new DustWallet...');
+        this.dustWallet = DustWalletFactory.startWithSeed(
+          Buffer.from(keys.dustKey),
+          dustWalletConfig
+        );
+      }
+      console.log('    ✓ DustWallet initialized');
+
+      // 2. Initialize ShieldedWallet
+      if (serializedState?.shielded) {
+        console.log('    Restoring ShieldedWallet from serialized state...');
+        this.shieldedWallet = ShieldedWalletFactory.restore(serializedState.shielded);
+      } else {
+        console.log('    Creating new ShieldedWallet...');
+        this.shieldedWallet = ShieldedWalletFactory.startWithShieldedSeed(
+          Buffer.from(keys.zswapKey)
+        );
+      }
+      console.log('    ✓ ShieldedWallet initialized');
+
+      // 3. Initialize UnshieldedWallet
+      if (serializedState?.unshielded) {
+        console.log('    Restoring UnshieldedWallet from serialized state...');
+        this.unshieldedWallet = UnshieldedWalletBuilder.restore({
+          serializedState: serializedState.unshielded,
+          networkId: this.networkConfig.networkId,
+          indexerUrl: this.networkConfig.indexerHttpUrl
+        });
+      } else {
+        console.log('    Creating new UnshieldedWallet...');
+        const { derivePublicKey } = await import('@/shared/utils/midnightCrypto');
+        const publicKey = derivePublicKey(keys.nightExternalKey);
+
+        this.unshieldedWallet = UnshieldedWalletBuilder.build({
+          publicKey: Buffer.from(publicKey),
+          networkId: this.networkConfig.networkId,
+          indexerUrl: this.networkConfig.indexerHttpUrl
+        });
+      }
+      console.log('    ✓ UnshieldedWallet initialized');
+
+      // 4. Create unified WalletFacade
+      this.walletFacade = new WalletFacade(
+        this.dustWallet,
+        this.shieldedWallet,
+        this.unshieldedWallet
+      );
+      console.log('    ✓ WalletFacade created');
+
+    } catch (error) {
+      console.error('❌ Wallet initialization failed:', error);
+      await this.cleanup();
+      throw error;
+    }
+  }
+
+  /**
+   * Get all three addresses
+   */
+  getAddresses(): MidnightAddresses {
+    if (!this.dustWallet || !this.shieldedWallet || !this.unshieldedWallet) {
+      throw new Error('Wallets not initialized');
+    }
+
+    const dustAddress = DustAddress.codec.encode(
+      this.networkConfig.networkId,
+      this.dustWallet.capabilities.keys.getDustAddress(this.dustWallet.state)
+    );
+
+    const shieldedAddress = ShieldedAddress.codec.encode(
+      this.networkConfig.networkId,
+      this.shieldedWallet.address
+    );
+
+    const unshieldedAddress = this.unshieldedWallet.address;
+
+    return {
+      dust: dustAddress.asString(),
+      shielded: shieldedAddress.asString(),
+      unshielded: unshieldedAddress
+    };
+  }
+
+  /**
+   * Serialize wallet states for persistence
+   */
+  serializeState(): SerializedWalletState {
+    if (!this.dustWallet || !this.shieldedWallet || !this.unshieldedWallet) {
+      throw new Error('Wallets not initialized');
+    }
+
+    return {
+      dust: this.dustWallet.serialize(),
+      shielded: this.shieldedWallet.serialize(),
+      unshielded: this.unshieldedWallet.serialize(),
+      unshieldedTxHistory: null // TODO: Implement tx history serialization
+    };
+  }
+
+  /**
+   * Get wallet facade for transaction operations
+   */
+  getWalletFacade(): WalletFacade {
+    if (!this.walletFacade) {
+      throw new Error('Wallet facade not initialized');
+    }
+    return this.walletFacade;
+  }
+
+  /**
+   * Cleanup wallet instances
+   */
+  async cleanup(): Promise<void> {
+    console.log('🧹 Cleaning up Midnight wallets...');
+
+    this.dustWallet = null;
+    this.shieldedWallet = null;
+    this.unshieldedWallet = null;
+    this.walletFacade = null;
+
+    console.log('✓ Midnight wallets cleaned up');
+  }
+}</code></pre>
+
+    <div class="critical">
+        <strong>🔴 Critical: Don't Clear Keys During Sync</strong>
+        <p>Based on Lace's codebase comments: "Clearing the keys causes problems in sync and send flow"</p>
+        <p><strong>Action:</strong> Keep keys in memory during active wallet sessions. Only clear on explicit logout.</p>
+    </div>
+
+    <div class="step">
+        <p><span class="step-number">2</span> <strong>Checklist: Phase 2 Completion</strong></p>
+        <ul class="checklist">
+            <li>Install all Midnight SDK npm packages</li>
+            <li>Create <code>MidnightNetworkConfig</code> types in <code>src/utils/networks.ts</code></li>
+            <li>Implement <code>MidnightWalletService</code> with three-wallet orchestration</li>
+            <li>Add <code>initializeFromSeed()</code> for wallet creation</li>
+            <li>Add <code>initializeFromEncryptedKeys()</code> for wallet login</li>
+            <li>Implement <code>serializeState()</code> for fast recovery</li>
+            <li>Add <code>getAddresses()</code> returning all three address types</li>
+            <li>Implement <code>cleanup()</code> for memory management</li>
+            <li>Test wallet initialization with test mnemonics</li>
+            <li>Verify all three addresses are generated correctly</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Phase 3: State Management & Store Architecture</h2>
+
+    <div class="dev-note">
+        <strong>📋 Phase Overview</strong>
+        <p>Create Vue Observable store for Midnight wallet state following Gero's existing pattern. Must handle five balance components, three address types, and coin registration status.</p>
+        <p><strong>Duration:</strong> 1.5 weeks | <strong>Developer:</strong> 1 frontend engineer</p>
+        <p><strong>Dependencies:</strong> Phase 2 must be complete</p>
+    </div>
+
+    <h3>3.1 Midnight Store State Interface</h3>
+
+    <div class="filename">src/stores/midnightStore.ts</div>
+    <pre><code>import Vue from 'vue';
+import { getContextType } from '@/utils/storageSync';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import storeMessaging from '@/services/storeMessaging.service';
+
+const STORE_NAME = 'midnightStore';
+const context = getContextType();
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+export enum TokenType {
+  NIGHT = 'NIGHT',
+  DUST = 'DUST'
+}
+
+export interface UnshieldedCoin {
+  id: string;
+  value: bigint;
+  type: TokenType;
+  registeredForDustGeneration: boolean;  // KEY FIELD
+  ownerAddress: string;
+  status: 'available' | 'pending';
+  ctime: number; // Creation timestamp
+}
+
+export interface ShieldedCoin {
+  id: string;
+  value: bigint;
+  type: TokenType;
+  status: 'available' | 'pending';
+  ctime: number;
+}
+
+export interface MidnightAddresses {
+  dust: string | null;
+  shielded: string | null;
+  unshielded: string | null;
+}
+
+export interface MidnightBalances {
+  // NIGHT balances
+  nightShielded: bigint;
+  nightUnshielded: bigint;
+  nightRegistered: bigint;  // Subset of unshielded (registered for DUST)
+
+  // DUST balances
+  dust: bigint;
+  dustGenerating: bigint;  // DUST being generated (not yet claimed)
+}
+
+export interface DustGenerationStats {
+  totalRegistered: bigint;        // Total NIGHT registered
+  dustGenerated: bigint;           // Total DUST generated
+  dustGenerationRate: number;      // DUST per day per NIGHT
+  maxCapReachedAt: number | null;  // Unix timestamp when max cap reached
+}
+
+export interface MidnightTransaction {
+  txId: string;
+  type: 'transfer' | 'registration' | 'deregistration' | 'shield' | 'unshield';
+  status: 'pending' | 'confirmed' | 'failed';
+  timestamp: number;
+  amount: bigint;
+  token: TokenType;
+  from?: string;
+  to?: string;
+  fee?: bigint;
+}
+
+export interface SerializedWalletState {
+  dust: string | null;
+  shielded: string | null;
+  unshielded: string | null;
+  unshieldedTxHistory: string | null;
+}
+
+export interface MidnightStoreState {
+  // Wallet identification
+  walletId: string | null;
+  accountIndex: number;
+  networkId: 'preview' | 'preprod' | 'mainnet';
+
+  // Three addresses
+  addresses: MidnightAddresses;
+
+  // Five balance components
+  balances: MidnightBalances;
+
+  // Coins with registration status
+  coins: {
+    shielded: Map<TokenType, ShieldedCoin[]>;
+    unshielded: Map<TokenType, UnshieldedCoin[]>;
+  };
+
+  // DUST generation metrics
+  dustStats: DustGenerationStats;
+
+  // Transactions
+  transactions: MidnightTransaction[];
+  pendingTxs: Map<string, MidnightTransaction>;
+
+  // ZK Proof operations (10-15 second operations)
+  provingOperations: Map<string, {
+    operationId: string;
+    status: 'preparing' | 'proving' | 'submitting' | 'complete' | 'failed';
+    progress: number; // 0-100
+    startTime: number;
+    estimatedCompletion: number | null;
+  }>;
+
+  // Serialized wallet states (for fast recovery)
+  serializedState: SerializedWalletState;
+
+  // Sync state
+  isSyncing: boolean;
+  lastSyncTime: number | null;
+  syncError: string | null;
+}
+
+// ============================================================================
+// STORE INITIALIZATION
+// ============================================================================
+
+const initialState: MidnightStoreState = {
+  walletId: null,
+  accountIndex: 0,
+  networkId: 'preview',
+
+  addresses: {
+    dust: null,
+    shielded: null,
+    unshielded: null
+  },
+
+  balances: {
+    nightShielded: 0n,
+    nightUnshielded: 0n,
+    nightRegistered: 0n,
+    dust: 0n,
+    dustGenerating: 0n
+  },
+
+  coins: {
+    shielded: new Map(),
+    unshielded: new Map()
+  },
+
+  dustStats: {
+    totalRegistered: 0n,
+    dustGenerated: 0n,
+    dustGenerationRate: 0.5, // Default: 0.5 DUST per day per NIGHT
+    maxCapReachedAt: null
+  },
+
+  transactions: [],
+  pendingTxs: new Map(),
+  provingOperations: new Map(),
+
+  serializedState: {
+    dust: null,
+    shielded: null,
+    unshielded: null,
+    unshieldedTxHistory: null
+  },
+
+  isSyncing: false,
+  lastSyncTime: null,
+  syncError: null
+};
+
+export const midnightStore = Vue.observable<MidnightStoreState>(
+  JSON.parse(JSON.stringify(initialState))
+);
+
+// ============================================================================
+// SERIALIZATION UTILITIES
+// ============================================================================
+
+/**
+ * Custom serializer for BigInt and Map types
+ */
+function serializeStoreUpdates(updates: Partial<MidnightStoreState>): any {
+  return JSON.parse(JSON.stringify(updates, (key, value) => {
+    // Serialize BigInt
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+
+    // Serialize Map
+    if (value instanceof Map) {
+      return {
+        __type: 'Map',
+        value: Array.from(value.entries())
+      };
+    }
+
+    return value;
+  }));
+}
+
+/**
+ * Custom deserializer for BigInt and Map types
+ */
+function deserializeStoreUpdates(serialized: any): any {
+  return JSON.parse(JSON.stringify(serialized), (key, value) => {
+    // Deserialize BigInt (detect numeric strings for balance fields)
+    if (typeof value === 'string' && /^\d+$/.test(value) &&
+        (key.includes('balance') || key.includes('Balance') || key.includes('value'))) {
+      return BigInt(value);
+    }
+
+    // Deserialize Map
+    if (value && value.__type === 'Map') {
+      return new Map(value.value);
+    }
+
+    return value;
+  });
+}
+
+// ============================================================================
+// STORE MUTATIONS
+// ============================================================================
+
+let storageWriteTimeout: NodeJS.Timeout | null = null;
+
+/**
+ * Broadcast updates from background to all browser contexts
+ */
+function broadcastFromBackground(updates: Partial<MidnightStoreState>, immediate = false) {
+  if (context === 'background') {
+    // Update in-memory state
+    Object.assign(midnightStore, updates);
+
+    // Serialize for transmission
+    const serialized = serializeStoreUpdates(updates);
+
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serialized);
+
+    // Persist to storage (debounced to prevent excessive writes)
+    if (immediate) {
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+        storageWriteTimeout = null;
+      }
+      chrome.storage.local.set({ [STORE_NAME]: serializeStoreUpdates(midnightStore) });
+      console.log('💾 MidnightStore persisted immediately');
+    } else {
+      if (storageWriteTimeout) clearTimeout(storageWriteTimeout);
+      storageWriteTimeout = setTimeout(() => {
+        chrome.storage.local.set({ [STORE_NAME]: serializeStoreUpdates(midnightStore) });
+        console.log('💾 MidnightStore persisted (debounced)');
+      }, 300);
+    }
+  }
+}
+
+// ============================================================================
+// STORE ACTIONS
+// ============================================================================
+
+export const midnightActions = {
+  /**
+   * Initialize Midnight wallet state
+   */
+  initializeWallet(
+    walletId: string,
+    accountIndex: number,
+    networkId: 'preview' | 'preprod' | 'mainnet',
+    addresses: MidnightAddresses
+  ) {
+    console.log('🌙 Initializing Midnight wallet state...', { walletId, networkId });
+
+    broadcastFromBackground({
+      walletId,
+      accountIndex,
+      networkId,
+      addresses,
+      isSyncing: false,
+      lastSyncTime: Date.now(),
+      syncError: null
+    }, true); // Immediate write
+  },
+
+  /**
+   * Update balances (all five components)
+   */
+  updateBalances(balances: Partial<MidnightBalances>) {
+    console.log('💰 Updating Midnight balances:', balances);
+    broadcastFromBackground({ balances: { ...midnightStore.balances, ...balances } });
+  },
+
+  /**
+   * Update coins (with registration status)
+   */
+  updateCoins(coins: { shielded?: Map<TokenType, ShieldedCoin[]>; unshielded?: Map<TokenType, UnshieldedCoin[]> }) {
+    console.log('🪙 Updating Midnight coins');
+    broadcastFromBackground({
+      coins: {
+        shielded: coins.shielded || midnightStore.coins.shielded,
+        unshielded: coins.unshielded || midnightStore.coins.unshielded
+      }
+    });
+  },
+
+  /**
+   * Update DUST generation stats
+   */
+  updateDustStats(stats: Partial<DustGenerationStats>) {
+    console.log('📊 Updating DUST stats:', stats);
+    broadcastFromBackground({
+      dustStats: { ...midnightStore.dustStats, ...stats }
+    });
+  },
+
+  /**
+   * Add transaction
+   */
+  addTransaction(tx: MidnightTransaction) {
+    console.log('📝 Adding Midnight transaction:', tx.txId);
+    const transactions = [tx, ...midnightStore.transactions];
+    broadcastFromBackground({ transactions });
+
+    if (tx.status === 'pending') {
+      const pendingTxs = new Map(midnightStore.pendingTxs);
+      pendingTxs.set(tx.txId, tx);
+      broadcastFromBackground({ pendingTxs });
+    }
+  },
+
+  /**
+   * Update transaction status
+   */
+  updateTransactionStatus(txId: string, status: 'confirmed' | 'failed') {
+    console.log(`📝 Updating transaction ${txId} status:`, status);
+
+    const transactions = midnightStore.transactions.map(tx =>
+      tx.txId === txId ? { ...tx, status } : tx
+    );
+
+    const pendingTxs = new Map(midnightStore.pendingTxs);
+    pendingTxs.delete(txId);
+
+    broadcastFromBackground({ transactions, pendingTxs });
+  },
+
+  /**
+   * Track ZK proof operation
+   */
+  startProvingOperation(operationId: string) {
+    console.log('🔐 Starting ZK proof operation:', operationId);
+
+    const provingOperations = new Map(midnightStore.provingOperations);
+    provingOperations.set(operationId, {
+      operationId,
+      status: 'preparing',
+      progress: 0,
+      startTime: Date.now(),
+      estimatedCompletion: Date.now() + 12500 // Estimate 12.5 seconds
+    });
+
+    broadcastFromBackground({ provingOperations }, true);
+  },
+
+  /**
+   * Update ZK proof progress
+   */
+  updateProvingOperation(
+    operationId: string,
+    status: 'preparing' | 'proving' | 'submitting' | 'complete' | 'failed',
+    progress: number
+  ) {
+    const provingOperations = new Map(midnightStore.provingOperations);
+    const operation = provingOperations.get(operationId);
+
+    if (operation) {
+      provingOperations.set(operationId, {
+        ...operation,
+        status,
+        progress
+      });
+
+      broadcastFromBackground({ provingOperations }, true);
+
+      // Auto-remove completed operations after 3 seconds
+      if (status === 'complete' || status === 'failed') {
+        setTimeout(() => {
+          const ops = new Map(midnightStore.provingOperations);
+          ops.delete(operationId);
+          broadcastFromBackground({ provingOperations: ops });
+        }, 3000);
+      }
+    }
+  },
+
+  /**
+   * Update serialized wallet state
+   */
+  updateSerializedState(serializedState: Partial<SerializedWalletState>) {
+    broadcastFromBackground({
+      serializedState: { ...midnightStore.serializedState, ...serializedState }
+    });
+  },
+
+  /**
+   * Set sync status
+   */
+  setSyncStatus(isSyncing: boolean, error: string | null = null) {
+    broadcastFromBackground({
+      isSyncing,
+      syncError: error,
+      lastSyncTime: isSyncing ? midnightStore.lastSyncTime : Date.now()
+    }, true);
+  },
+
+  /**
+   * Reset store (on logout)
+   */
+  reset() {
+    console.log('🧹 Resetting Midnight store');
+    Object.assign(midnightStore, JSON.parse(JSON.stringify(initialState)));
+    broadcastFromBackground(midnightStore, true);
+  }
+};
+
+// ============================================================================
+// BROWSER CONTEXT: Subscribe to background updates
+// ============================================================================
+
+if (context === 'browser') {
+  console.log('🌙 MidnightStore: Setting up browser context subscription');
+
+  storeMessaging.subscribe(STORE_NAME, (updates: any) => {
+    const deserialized = deserializeStoreUpdates(updates);
+    Object.assign(midnightStore, deserialized);
+    console.log('📥 MidnightStore updated from background:', Object.keys(updates));
+  });
+
+  // Hydrate from storage on initialization
+  chrome.storage.local.get([STORE_NAME], (result) => {
+    if (result[STORE_NAME]) {
+      const stored = deserializeStoreUpdates(result[STORE_NAME]);
+      Object.assign(midnightStore, stored);
+      console.log('💾 MidnightStore hydrated from storage');
+    }
+  });
+}
+
+export default midnightStore;</code></pre>
+
+    <div class="success">
+        <strong>✅ Store Pattern Benefits</strong>
+        <ul>
+            <li><strong>Automatic Sync:</strong> Background updates automatically propagate to all browser contexts (popup, options, sidepanel)</li>
+            <li><strong>Type Safety:</strong> BigInt and Map types properly serialized/deserialized</li>
+            <li><strong>Debounced Writes:</strong> 300ms throttle prevents excessive storage operations</li>
+            <li><strong>Immediate Critical Updates:</strong> Connection state changes write immediately (no race conditions)</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <p><span class="step-number">3</span> <strong>Checklist: Phase 3 Completion</strong></p>
+        <ul class="checklist">
+            <li>Create <code>src/stores/midnightStore.ts</code> with complete type definitions</li>
+            <li>Implement Vue Observable pattern matching existing Gero stores</li>
+            <li>Add serialization/deserialization for BigInt and Map types</li>
+            <li>Implement all store actions (initialize, updateBalances, updateCoins, etc.)</li>
+            <li>Add browser context subscription to background updates</li>
+            <li>Implement storage hydration on initialization</li>
+            <li>Add debounced storage writes (300ms)</li>
+            <li>Add immediate writes for critical state changes</li>
+            <li>Test cross-context synchronization (background ↔ options ↔ popup)</li>
+            <li>Verify BigInt values serialize/deserialize correctly</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Phase 4: Database Schema & Persistence</h2>
+
+    <div class="dev-note">
+        <strong>📋 Phase Overview</strong>
+        <p>Extend Gero's database schema to support Midnight wallet data. Must store encrypted keys, serialized wallet states, and transaction history.</p>
+        <p><strong>Duration:</strong> 1 week | <strong>Developer:</strong> 1 backend engineer</p>
+    </div>
+
+    <h3>4.1 Application-Level Database (Wallet List)</h3>
+
+    <div class="filename">src/db/gero-db.ts (modifications)</div>
+    <pre><code>import Dexie from 'dexie';
+
+// Extend existing Wallet interface
+export interface Wallet {
+  id?: number;
+  name: string;
+  icon: string;
+  theme: string;
+  publicKey: string;
+  type: 'normal' | 'ledger' | 'trezor' | 'keystone' | 'google';
+  chain: 'cardano' | 'apexFusion' | 'midnight';  // ADD midnight
+  network: string;
+  createdAt: number;
+
+  // Midnight-specific fields (only for chain === 'midnight')
+  midnightData?: {
+    accountIndex: number;
+    encryptedKeys: {
+      zswapKey: string;
+      dustKey: string;
+      nightExternalKey: string;
+      encryptedAt: number;
+    };
+    addresses: {
+      dust: string;
+      shielded: string;
+      unshielded: string;
+    };
+  };
+}
+
+// No schema changes needed - Dexie handles dynamic fields
+// Just ensure wallets table exists (already defined in Gero)</code></pre>
+
+    <h3>4.2 Wallet-Specific Database (Midnight Data)</h3>
+
+    <div class="filename">src/db/midnight-db.ts (NEW FILE)</div>
+    <pre><code>import Dexie, { Table } from 'dexie';
+
+// ============================================================================
+// MIDNIGHT WALLET DATABASE SCHEMA
+// ============================================================================
+
+export interface MidnightConfig {
+  id?: number;
+  key: string;
+  value: any;
+}
+
+export interface MidnightSync {
+  id?: number;
+  lastSyncTime: number;
+  lastBlockHeight: number;
+  syncStatus: 'syncing' | 'synced' | 'error';
+  error?: string;
+}
+
+export interface MidnightSerializedState {
+  id?: number;
+  stateType: 'dust' | 'shielded' | 'unshielded' | 'txHistory';
+  serializedData: string;
+  updatedAt: number;
+}
+
+export interface MidnightTransaction {
+  id?: number;
+  txId: string;
+  type: 'transfer' | 'registration' | 'deregistration' | 'shield' | 'unshield';
+  status: 'pending' | 'confirmed' | 'failed';
+  timestamp: number;
+  blockHeight?: number;
+  amount: string; // BigInt as string
+  token: 'NIGHT' | 'DUST';
+  from?: string;
+  to?: string;
+  fee?: string; // BigInt as string
+  metadata?: any;
+}
+
+export interface MidnightCoin {
+  id?: number;
+  coinId: string;
+  value: string; // BigInt as string
+  type: 'NIGHT' | 'DUST';
+  coinType: 'shielded' | 'unshielded';
+  registeredForDustGeneration: boolean;
+  ownerAddress: string;
+  status: 'available' | 'pending' | 'spent';
+  ctime: number;
+  spentAt?: number;
+  spentInTx?: string;
+}
+
+export interface MidnightDustStats {
+  id?: number;
+  totalRegistered: string; // BigInt as string
+  dustGenerated: string;
+  dustGenerationRate: number;
+  maxCapReachedAt?: number;
+  updatedAt: number;
+}
+
+// ============================================================================
+// DATABASE CLASS
+// ============================================================================
+
+export class MidnightWalletDatabase extends Dexie {
+  config!: Table<MidnightConfig>;
+  sync!: Table<MidnightSync>;
+  serializedState!: Table<MidnightSerializedState>;
+  transactions!: Table<MidnightTransaction>;
+  coins!: Table<MidnightCoin>;
+  dustStats!: Table<MidnightDustStats>;
+
+  constructor(walletId: string) {
+    super(`midnight-wallet-${walletId}`);
+
+    // Schema version 1
+    this.version(1).stores({
+      config: '++id, key',
+      sync: '++id',
+      serializedState: '++id, stateType, updatedAt',
+      transactions: '++id, txId, timestamp, status, type',
+      coins: '++id, coinId, status, coinType, registeredForDustGeneration',
+      dustStats: '++id, updatedAt'
+    });
+  }
+}
+
+// ============================================================================
+// DATABASE INSTANCE CACHE
+// ============================================================================
+
+const dbCache = new Map<string, MidnightWalletDatabase>();
+
+/**
+ * Get Midnight wallet database instance
+ * Cached to prevent multiple opens
+ */
+export async function getMidnightDb(walletId: string): Promise<MidnightWalletDatabase> {
+  if (dbCache.has(walletId)) {
+    return dbCache.get(walletId)!;
+  }
+
+  const db = new MidnightWalletDatabase(walletId);
+  await db.open();
+  dbCache.set(walletId, db);
+
+  console.log(`💾 Midnight database opened: midnight-wallet-${walletId}`);
+  return db;
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Save serialized wallet state
+ */
+export async function saveSerializedState(
+  walletId: string,
+  stateType: 'dust' | 'shielded' | 'unshielded' | 'txHistory',
+  serializedData: string
+): Promise<void> {
+  const db = await getMidnightDb(walletId);
+
+  await db.serializedState.put({
+    stateType,
+    serializedData,
+    updatedAt: Date.now()
+  });
+
+  console.log(`💾 Saved ${stateType} wallet state for ${walletId}`);
+}
+
+/**
+ * Load serialized wallet state
+ */
+export async function loadSerializedState(
+  walletId: string,
+  stateType: 'dust' | 'shielded' | 'unshielded' | 'txHistory'
+): Promise<string | null> {
+  const db = await getMidnightDb(walletId);
+
+  const record = await db.serializedState
+    .where('stateType')
+    .equals(stateType)
+    .first();
+
+  return record?.serializedData || null;
+}
+
+/**
+ * Save transaction
+ */
+export async function saveTransaction(
+  walletId: string,
+  tx: Omit<MidnightTransaction, 'id'>
+): Promise<void> {
+  const db = await getMidnightDb(walletId);
+  await db.transactions.add(tx);
+  console.log(`💾 Saved transaction ${tx.txId}`);
+}
+
+/**
+ * Get all transactions
+ */
+export async function getTransactions(
+  walletId: string,
+  limit: number = 50
+): Promise<MidnightTransaction[]> {
+  const db = await getMidnightDb(walletId);
+  return db.transactions
+    .orderBy('timestamp')
+    .reverse()
+    .limit(limit)
+    .toArray();
+}
+
+/**
+ * Update coin registration status
+ */
+export async function updateCoinRegistration(
+  walletId: string,
+  coinId: string,
+  registered: boolean
+): Promise<void> {
+  const db = await getMidnightDb(walletId);
+
+  await db.coins
+    .where('coinId')
+    .equals(coinId)
+    .modify({ registeredForDustGeneration: registered });
+
+  console.log(`💾 Updated coin ${coinId} registration: ${registered}`);
+}
+
+/**
+ * Save DUST stats
+ */
+export async function saveDustStats(
+  walletId: string,
+  stats: Omit<MidnightDustStats, 'id'>
+): Promise<void> {
+  const db = await getMidnightDb(walletId);
+
+  // Delete old stats and insert new (only keep latest)
+  await db.dustStats.clear();
+  await db.dustStats.add(stats);
+
+  console.log('💾 Saved DUST generation stats');
+}
+
+/**
+ * Load DUST stats
+ */
+export async function loadDustStats(walletId: string): Promise<MidnightDustStats | null> {
+  const db = await getMidnightDb(walletId);
+  return db.dustStats.orderBy('updatedAt').last() || null;
+}</code></pre>
+
+    <div class="warning">
+        <strong>⚠️ Database Pattern: Always Apply Schema on Open</strong>
+        <p>Critical lesson from Gero's Cardano implementation: Always apply schema when opening databases, not just on creation. This prevents "No [Table] Table" errors.</p>
+        <pre><code>// CORRECT Pattern (already in MidnightWalletDatabase constructor)
+this.version(1).stores({ ... });
+
+// This is called automatically when db.open() is invoked</code></pre>
+    </div>
+
+    <h3>4.3 Integration with Wallet Initialization</h3>
+
+    <div class="filename">src/services/midnight/midnightWallet.service.ts (additions)</div>
+    <pre><code>import { saveSerializedState, loadSerializedState } from '@/db/midnight-db';
+
+// Add to MidnightWalletService class:
+
+/**
+ * Persist current wallet state to database
+ */
+async persistState(): Promise<void> {
+  if (!this.dustWallet || !this.shieldedWallet || !this.unshieldedWallet) {
+    throw new Error('Wallets not initialized');
+  }
+
+  const serialized = this.serializeState();
+
+  // Save all three wallet states in parallel
+  await Promise.all([
+    saveSerializedState(this.walletId, 'dust', serialized.dust!),
+    saveSerializedState(this.walletId, 'shielded', serialized.shielded!),
+    saveSerializedState(this.walletId, 'unshielded', serialized.unshielded!)
+  ]);
+
+  console.log('💾 Midnight wallet states persisted to database');
+}
+
+/**
+ * Load wallet state from database (for fast recovery)
+ */
+async loadPersistedState(): Promise<SerializedWalletState | null> {
+  try {
+    const [dust, shielded, unshielded] = await Promise.all([
+      loadSerializedState(this.walletId, 'dust'),
+      loadSerializedState(this.walletId, 'shielded'),
+      loadSerializedState(this.walletId, 'unshielded')
+    ]);
+
+    if (dust && shielded && unshielded) {
+      console.log('💾 Loaded persisted wallet state from database');
+      return { dust, shielded, unshielded, unshieldedTxHistory: null };
+    }
+
+    return null;
+  } catch (error) {
+    console.warn('Failed to load persisted state:', error);
+    return null;
+  }
+}</code></pre>
+
+    <div class="step">
+        <p><span class="step-number">4</span> <strong>Checklist: Phase 4 Completion</strong></p>
+        <ul class="checklist">
+            <li>Extend <code>Wallet</code> interface in <code>src/db/gero-db.ts</code> with <code>midnightData</code> field</li>
+            <li>Create <code>src/db/midnight-db.ts</code> with complete schema</li>
+            <li>Implement <code>MidnightWalletDatabase</code> class with 6 tables</li>
+            <li>Add database instance caching to prevent multiple opens</li>
+            <li>Implement helper functions (save/load state, transactions, coins, DUST stats)</li>
+            <li>Integrate <code>persistState()</code> into <code>MidnightWalletService</code></li>
+            <li>Integrate <code>loadPersistedState()</code> for fast recovery</li>
+            <li>Test database creation and schema migration</li>
+            <li>Test serialized state persistence and recovery</li>
+            <li>Verify BigInt values stored as strings and deserialized correctly</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Phase 5: Dashboard UI & Five-Balance Display</h2>
+
+    <div class="dev-note">
+        <strong>📋 Phase Overview</strong>
+        <p>Create Midnight dashboard with five-balance display, three-address management, and quick actions. Must clearly differentiate public/private NIGHT and DUST.</p>
+        <p><strong>Duration:</strong> 2 weeks | <strong>Developer:</strong> 1 frontend engineer</p>
+    </div>
+
+    <h3>5.1 Midnight Dashboard Component</h3>
+
+    <div class="filename">src/modules/midnight/views/MidnightDashboard.vue</div>
+    <pre><code>&lt;template&gt;
+  &lt;v-container fluid class="midnight-dashboard pa-4"&gt;
+    &lt;!-- Header with Network Indicator --&gt;
+    &lt;v-row&gt;
+      &lt;v-col cols="12"&gt;
+        &lt;div class="d-flex align-center justify-space-between"&gt;
+          &lt;h1 class="text-h4 font-weight-bold"&gt;Midnight Wallet&lt;/h1&gt;
+          &lt;v-chip :color="networkColor" small outlined&gt;
+            {{ networkName }}
+          &lt;/v-chip&gt;
+        &lt;/div&gt;
+      &lt;/v-col&gt;
+    &lt;/v-row&gt;
+
+    &lt;!-- Total Portfolio Value --&gt;
+    &lt;v-row class="mt-4"&gt;
+      &lt;v-col cols="12"&gt;
+        &lt;v-card class="portfolio-card" elevation="2"&gt;
+          &lt;v-card-text&gt;
+            &lt;div class="text-subtitle-2 grey--text"&gt;Total Portfolio Value&lt;/div&gt;
+            &lt;div class="text-h3 font-weight-bold mt-2"&gt;
+              {{ totalValueUSD }}
+            &lt;/div&gt;
+            &lt;div class="text-subtitle-2 mt-1" :class="priceChangeClass"&gt;
+              {{ priceChange24h }}
+            &lt;/div&gt;
+          &lt;/v-card-text&gt;
+        &lt;/v-card&gt;
+      &lt;/v-col&gt;
+    &lt;/v-row&gt;
+
+    &lt;!-- Five-Balance Components --&gt;
+    &lt;v-row class="mt-4"&gt;
+      &lt;!-- NIGHT Balances --&gt;
+      &lt;v-col cols="12" md="6"&gt;
+        &lt;v-card class="balance-card night-card" elevation="2"&gt;
+          &lt;v-card-text&gt;
+            &lt;div class="d-flex align-center justify-space-between"&gt;
+              &lt;div&gt;
+                &lt;div class="d-flex align-center"&gt;
+                  &lt;v-icon color="amber" large&gt;mdi-moon-waning-crescent&lt;/v-icon&gt;
+                  &lt;span class="text-h6 ml-2 font-weight-bold"&gt;NIGHT&lt;/span&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;v-menu offset-y&gt;
+                &lt;template v-slot:activator="{ on }"&gt;
+                  &lt;v-btn icon small v-on="on"&gt;
+                    &lt;v-icon&gt;mdi-dots-vertical&lt;/v-icon&gt;
+                  &lt;/v-btn&gt;
+                &lt;/template&gt;
+                &lt;v-list&gt;
+                  &lt;v-list-item @click="showReceiveDialog('unshielded')"&gt;
+                    &lt;v-list-item-title&gt;Receive (Public)&lt;/v-list-item-title&gt;
+                  &lt;/v-list-item&gt;
+                  &lt;v-list-item @click="showReceiveDialog('shielded')"&gt;
+                    &lt;v-list-item-title&gt;Receive (Private)&lt;/v-list-item-title&gt;
+                  &lt;/v-list-item&gt;
+                &lt;/v-list&gt;
+              &lt;/v-menu&gt;
+            &lt;/div&gt;
+
+            &lt;v-divider class="my-3"&gt;&lt;/v-divider&gt;
+
+            &lt;!-- Public NIGHT --&gt;
+            &lt;div class="balance-row"&gt;
+              &lt;div class="d-flex align-center"&gt;
+                &lt;v-icon small class="mr-2"&gt;mdi-eye-outline&lt;/v-icon&gt;
+                &lt;span class="text-subtitle-2"&gt;Public&lt;/span&gt;
+              &lt;/div&gt;
+              &lt;div class="text-h6 font-weight-bold"&gt;
+                {{ formatNight(balances.nightUnshielded) }}
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;!-- Private NIGHT --&gt;
+            &lt;div class="balance-row mt-2"&gt;
+              &lt;div class="d-flex align-center"&gt;
+                &lt;v-icon small class="mr-2"&gt;mdi-shield-lock-outline&lt;/v-icon&gt;
+                &lt;span class="text-subtitle-2"&gt;Private&lt;/span&gt;
+              &lt;/div&gt;
+              &lt;div class="text-h6 font-weight-bold"&gt;
+                {{ formatNight(balances.nightShielded) }}
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;!-- Registered NIGHT --&gt;
+            &lt;div class="balance-row mt-2" v-if="balances.nightRegistered &gt; 0n"&gt;
+              &lt;div class="d-flex align-center"&gt;
+                &lt;v-icon small class="mr-2" color="purple"&gt;mdi-arrow-right-bold-circle&lt;/v-icon&gt;
+                &lt;span class="text-subtitle-2"&gt;Registered&lt;/span&gt;
+                &lt;v-tooltip bottom&gt;
+                  &lt;template v-slot:activator="{ on }"&gt;
+                    &lt;v-icon x-small class="ml-1" v-on="on"&gt;mdi-information-outline&lt;/v-icon&gt;
+                  &lt;/template&gt;
+                  &lt;span&gt;NIGHT registered for DUST generation&lt;/span&gt;
+                &lt;/v-tooltip&gt;
+              &lt;/div&gt;
+              &lt;div class="text-subtitle-1 font-weight-medium purple--text"&gt;
+                {{ formatNight(balances.nightRegistered) }}
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/v-card-text&gt;
+        &lt;/v-card&gt;
+      &lt;/v-col&gt;
+
+      &lt;!-- DUST Balances --&gt;
+      &lt;v-col cols="12" md="6"&gt;
+        &lt;v-card class="balance-card dust-card" elevation="2"&gt;
+          &lt;v-card-text&gt;
+            &lt;div class="d-flex align-center justify-space-between"&gt;
+              &lt;div&gt;
+                &lt;div class="d-flex align-center"&gt;
+                  &lt;v-icon color="purple" large&gt;mdi-blur&lt;/v-icon&gt;
+                  &lt;span class="text-h6 ml-2 font-weight-bold"&gt;DUST&lt;/span&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;v-menu offset-y&gt;
+                &lt;template v-slot:activator="{ on }"&gt;
+                  &lt;v-btn icon small v-on="on"&gt;
+                    &lt;v-icon&gt;mdi-dots-vertical&lt;/v-icon&gt;
+                  &lt;/v-btn&gt;
+                &lt;/template&gt;
+                &lt;v-list&gt;
+                  &lt;v-list-item @click="showReceiveDialog('dust')"&gt;
+                    &lt;v-list-item-title&gt;Receive DUST&lt;/v-list-item-title&gt;
+                  &lt;/v-list-item&gt;
+                  &lt;v-list-item @click="showDustRegistrationDialog"&gt;
+                    &lt;v-list-item-title&gt;Manage Registration&lt;/v-list-item-title&gt;
+                  &lt;/v-list-item&gt;
+                &lt;/v-list&gt;
+              &lt;/v-menu&gt;
+            &lt;/div&gt;
+
+            &lt;v-divider class="my-3"&gt;&lt;/v-divider&gt;
+
+            &lt;!-- Current DUST Balance --&gt;
+            &lt;div class="balance-row"&gt;
+              &lt;span class="text-subtitle-2"&gt;Available&lt;/span&gt;
+              &lt;div class="text-h6 font-weight-bold"&gt;
+                {{ formatDust(balances.dust) }}
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;!-- Generating DUST --&gt;
+            &lt;div class="balance-row mt-2" v-if="balances.dustGenerating &gt; 0n"&gt;
+              &lt;div class="d-flex align-center"&gt;
+                &lt;v-icon small class="mr-2" color="purple"&gt;mdi-timer-sand&lt;/v-icon&gt;
+                &lt;span class="text-subtitle-2"&gt;Generating&lt;/span&gt;
+              &lt;/div&gt;
+              &lt;div class="text-subtitle-1 font-weight-medium purple--text"&gt;
+                +{{ formatDust(balances.dustGenerating) }}/day
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;!-- Registration CTA --&gt;
+            &lt;v-btn
+              v-if="balances.nightRegistered === 0n && balances.nightUnshielded &gt; 0n"
+              block
+              outlined
+              color="purple"
+              class="mt-3"
+              @click="showDustRegistrationDialog"
+            &gt;
+              &lt;v-icon left small&gt;mdi-plus-circle-outline&lt;/v-icon&gt;
+              Register NIGHT for DUST
+            &lt;/v-btn&gt;
+
+            &lt;!-- DUST Stats --&gt;
+            &lt;div v-else-if="balances.nightRegistered &gt; 0n" class="mt-3"&gt;
+              &lt;v-progress-linear
+                :value="dustGenerationProgress"
+                color="purple"
+                height="6"
+                rounded
+              &gt;&lt;/v-progress-linear&gt;
+              &lt;div class="text-caption grey--text mt-1"&gt;
+                {{ formatDust(dustStats.dustGenerated) }} / {{ formatDust(dustStats.totalRegistered / 2n) }} max
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/v-card-text&gt;
+        &lt;/v-card&gt;
+      &lt;/v-col&gt;
+    &lt;/v-row&gt;
+
+    &lt;!-- Quick Actions --&gt;
+    &lt;v-row class="mt-4"&gt;
+      &lt;v-col cols="12"&gt;
+        &lt;v-card elevation="2"&gt;
+          &lt;v-card-title class="text-subtitle-1 font-weight-bold"&gt;Quick Actions&lt;/v-card-title&gt;
+          &lt;v-card-text&gt;
+            &lt;v-row&gt;
+              &lt;v-col cols="6" sm="3"&gt;
+                &lt;v-btn block large @click="showSendDialog"&gt;
+                  &lt;v-icon left&gt;mdi-send&lt;/v-icon&gt;
+                  Send
+                &lt;/v-btn&gt;
+              &lt;/v-col&gt;
+              &lt;v-col cols="6" sm="3"&gt;
+                &lt;v-btn block large @click="showReceiveDialog('unshielded')"&gt;
+                  &lt;v-icon left&gt;mdi-qrcode&lt;/v-icon&gt;
+                  Receive
+                &lt;/v-btn&gt;
+              &lt;/v-col&gt;
+              &lt;v-col cols="6" sm="3"&gt;
+                &lt;v-btn block large outlined @click="showDustRegistrationDialog"&gt;
+                  &lt;v-icon left&gt;mdi-cog-outline&lt;/v-icon&gt;
+                  DUST Setup
+                &lt;/v-btn&gt;
+              &lt;/v-col&gt;
+              &lt;v-col cols="6" sm="3"&gt;
+                &lt;v-btn block large outlined @click="shieldNight"&gt;
+                  &lt;v-icon left&gt;mdi-shield-lock&lt;/v-icon&gt;
+                  Shield
+                &lt;/v-btn&gt;
+              &lt;/v-col&gt;
+            &lt;/v-row&gt;
+          &lt;/v-card-text&gt;
+        &lt;/v-card&gt;
+      &lt;/v-col&gt;
+    &lt;/v-row&gt;
+
+    &lt;!-- Recent Activity --&gt;
+    &lt;v-row class="mt-4"&gt;
+      &lt;v-col cols="12"&gt;
+        &lt;v-card elevation="2"&gt;
+          &lt;v-card-title class="text-subtitle-1 font-weight-bold"&gt;
+            Recent Activity
+            &lt;v-spacer&gt;&lt;/v-spacer&gt;
+            &lt;v-btn text small @click="showAllTransactions"&gt;View All&lt;/v-btn&gt;
+          &lt;/v-card-title&gt;
+          &lt;v-card-text&gt;
+            &lt;v-list v-if="recentTransactions.length &gt; 0"&gt;
+              &lt;v-list-item
+                v-for="tx in recentTransactions"
+                :key="tx.txId"
+                @click="showTransactionDetails(tx)"
+              &gt;
+                &lt;v-list-item-avatar&gt;
+                  &lt;v-icon :color="getTransactionColor(tx.type)"&gt;
+                    {{ getTransactionIcon(tx.type) }}
+                  &lt;/v-icon&gt;
+                &lt;/v-list-item-avatar&gt;
+
+                &lt;v-list-item-content&gt;
+                  &lt;v-list-item-title&gt;{{ getTransactionTitle(tx) }}&lt;/v-list-item-title&gt;
+                  &lt;v-list-item-subtitle&gt;{{ formatTimestamp(tx.timestamp) }}&lt;/v-list-item-subtitle&gt;
+                &lt;/v-list-item-content&gt;
+
+                &lt;v-list-item-action&gt;
+                  &lt;div class="text-right"&gt;
+                    &lt;div class="font-weight-bold"&gt;
+                      {{ formatAmount(tx.amount, tx.token) }}
+                    &lt;/div&gt;
+                    &lt;v-chip x-small :color="getStatusColor(tx.status)"&gt;
+                      {{ tx.status }}
+                    &lt;/v-chip&gt;
+                  &lt;/div&gt;
+                &lt;/v-list-item-action&gt;
+              &lt;/v-list-item&gt;
+            &lt;/v-list&gt;
+
+            &lt;div v-else class="text-center py-8 grey--text"&gt;
+              &lt;v-icon large color="grey lighten-1"&gt;mdi-history&lt;/v-icon&gt;
+              &lt;p class="mt-2"&gt;No transactions yet&lt;/p&gt;
+            &lt;/div&gt;
+          &lt;/v-card-text&gt;
+        &lt;/v-card&gt;
+      &lt;/v-col&gt;
+    &lt;/v-row&gt;
+
+    &lt;!-- Dialogs --&gt;
+    &lt;ReceiveDialog
+      v-model="receiveDialog.show"
+      :address-type="receiveDialog.addressType"
+      :address="receiveDialog.address"
+    /&gt;
+
+    &lt;DustRegistrationDialog
+      v-model="dustRegistrationDialog"
+    /&gt;
+
+    &lt;SendMidnightDialog
+      v-model="sendDialog"
+    /&gt;
+  &lt;/v-container&gt;
+&lt;/template&gt;
+
+&lt;script lang="ts"&gt;
+import Vue from 'vue';
+import midnightStore, { MidnightTransaction } from '@/stores/midnightStore';
+import ReceiveDialog from '../dialogs/ReceiveDialog.vue';
+import DustRegistrationDialog from '../dialogs/DustRegistrationDialog.vue';
+import SendMidnightDialog from '../dialogs/SendMidnightDialog.vue';
+
+export default Vue.extend({
+  name: 'MidnightDashboard',
+
+  components: {
+    ReceiveDialog,
+    DustRegistrationDialog,
+    SendMidnightDialog
+  },
+
+  data() {
+    return {
+      receiveDialog: {
+        show: false,
+        addressType: 'unshielded' as 'dust' | 'shielded' | 'unshielded',
+        address: ''
+      },
+      dustRegistrationDialog: false,
+      sendDialog: false
+    };
+  },
+
+  computed: {
+    balances() {
+      return midnightStore.balances;
+    },
+
+    dustStats() {
+      return midnightStore.dustStats;
+    },
+
+    addresses() {
+      return midnightStore.addresses;
+    },
+
+    networkName(): string {
+      const networkMap = {
+        'preview': 'Preview Testnet',
+        'preprod': 'Preprod Testnet',
+        'mainnet': 'Mainnet'
+      };
+      return networkMap[midnightStore.networkId] || midnightStore.networkId;
+    },
+
+    networkColor(): string {
+      return midnightStore.networkId === 'mainnet' ? 'success' : 'warning';
+    },
+
+    totalValueUSD(): string {
+      // TODO: Integrate with price service
+      return '$0.00';
+    },
+
+    priceChange24h(): string {
+      // TODO: Integrate with price service
+      return '+0.00%';
+    },
+
+    priceChangeClass(): string {
+      return 'success--text'; // or 'error--text'
+    },
+
+    recentTransactions(): MidnightTransaction[] {
+      return midnightStore.transactions.slice(0, 5);
+    },
+
+    dustGenerationProgress(): number {
+      if (this.dustStats.totalRegistered === 0n) return 0;
+      const maxDust = this.dustStats.totalRegistered / 2n; // 50% cap
+      return Number((this.dustStats.dustGenerated * 100n) / maxDust);
+    }
+  },
+
+  methods: {
+    formatNight(value: bigint): string {
+      const night = Number(value) / 1e12; // CORRECT: 12 decimals (10^12)
+      return `${night.toLocaleString(undefined, { maximumFractionDigits: 2 })} NIGHT`;
+    },
+
+    formatDust(value: bigint): string {
+      const dust = Number(value) / 1e12; // CORRECT: 12 decimals (10^12)
+      return `${dust.toLocaleString(undefined, { maximumFractionDigits: 2 })} DUST`;
+    },
+
+    formatAmount(amount: bigint, token: string): string {
+      return token === 'NIGHT' ? this.formatNight(BigInt(amount)) : this.formatDust(BigInt(amount));
+    },
+
+    formatTimestamp(timestamp: number): string {
+      const now = Date.now();
+      const diff = now - timestamp;
+
+      if (diff &lt; 60000) return 'Just now';
+      if (diff &lt; 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff &lt; 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+      return `${Math.floor(diff / 86400000)}d ago`;
+    },
+
+    showReceiveDialog(addressType: 'dust' | 'shielded' | 'unshielded') {
+      this.receiveDialog.addressType = addressType;
+      this.receiveDialog.address = this.addresses[addressType] || '';
+      this.receiveDialog.show = true;
+    },
+
+    showDustRegistrationDialog() {
+      this.dustRegistrationDialog = true;
+    },
+
+    showSendDialog() {
+      this.sendDialog = true;
+    },
+
+    shieldNight() {
+      // TODO: Implement shield flow
+      console.log('Shield NIGHT');
+    },
+
+    showAllTransactions() {
+      this.$router.push('/midnight/transactions');
+    },
+
+    showTransactionDetails(tx: MidnightTransaction) {
+      // TODO: Show transaction details dialog
+      console.log('Transaction details:', tx);
+    },
+
+    getTransactionIcon(type: string): string {
+      const icons = {
+        'transfer': 'mdi-swap-horizontal',
+        'registration': 'mdi-checkbox-marked-circle',
+        'deregistration': 'mdi-close-circle',
+        'shield': 'mdi-shield-lock',
+        'unshield': 'mdi-shield-off'
+      };
+      return icons[type] || 'mdi-help-circle';
+    },
+
+    getTransactionColor(type: string): string {
+      const colors = {
+        'transfer': 'primary',
+        'registration': 'success',
+        'deregistration': 'warning',
+        'shield': 'purple',
+        'unshield': 'amber'
+      };
+      return colors[type] || 'grey';
+    },
+
+    getTransactionTitle(tx: MidnightTransaction): string {
+      const titles = {
+        'transfer': `Send ${tx.token}`,
+        'registration': 'Registered for DUST',
+        'deregistration': 'Unregistered from DUST',
+        'shield': 'Shielded NIGHT',
+        'unshield': 'Unshielded NIGHT'
+      };
+      return titles[tx.type] || 'Unknown';
+    },
+
+    getStatusColor(status: string): string {
+      return status === 'confirmed' ? 'success' : status === 'failed' ? 'error' : 'warning';
+    }
+  }
+});
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.midnight-dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.portfolio-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.balance-card {
+  height: 100%;
+}
+
+.night-card {
+  border-left: 4px solid #FCD34D;
+}
+
+.dust-card {
+  border-left: 4px solid #A78BFA;
+}
+
+.balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+&lt;/style&gt;</code></pre>
+
+    <div class="step">
+        <p><span class="step-number">5</span> <strong>Checklist: Phase 5 Completion</strong></p>
+        <ul class="checklist">
+            <li>Create <code>MidnightDashboard.vue</code> with five-balance display</li>
+            <li>Implement NIGHT card showing public/private/registered balances</li>
+            <li>Implement DUST card showing available/generating balances</li>
+            <li>Add portfolio value calculation (integrate with price service)</li>
+            <li>Create quick actions (Send, Receive, DUST Setup, Shield)</li>
+            <li>Add recent transactions list with status indicators</li>
+            <li>Implement balance formatting helpers (formatNight, formatDust)</li>
+            <li>Add visual differentiation (NIGHT = golden, DUST = purple)</li>
+            <li>Create ReceiveDialog component (next phase)</li>
+            <li>Create DustRegistrationDialog component (Phase 6)</li>
+            <li>Create SendMidnightDialog component (Phase 7)</li>
+            <li>Test dashboard with mock data</li>
+            <li>Verify responsive design (mobile, tablet, desktop)</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Phases 6-10: Coming in Next Sections</h2>
+
+    <div class="dev-note">
+        <strong>📋 Remaining Phases</strong>
+        <p>This document continues with detailed implementation guides for:</p>
+        <ul>
+            <li><strong>Phase 6:</strong> DUST Registration Flow (coin selection, registration/deregistration)</li>
+            <li><strong>Phase 7:</strong> Transaction System & ZK Proofs (send, shield, proof progress)</li>
+            <li><strong>Phase 8:</strong> GraphQL Sync & Real-time Updates (WebSocket subscriptions)</li>
+            <li><strong>Phase 9:</strong> Network Configuration & Manifest Updates (CSP whitelisting)</li>
+            <li><strong>Phase 10:</strong> Testing Strategy & Quality Assurance (unit tests, integration tests)</li>
+            <li><strong>Appendix A:</strong> Migration Guide from Cardano Patterns</li>
+            <li><strong>Appendix B:</strong> Troubleshooting Guide</li>
+            <li><strong>Appendix C:</strong> Performance Optimization</li>
+        </ul>
+        <p><em>Document continues on next pages...</em></p>
+    </div>
+
+    <div class="footer" style="margin-top: 100px;">
+        <p>Midnight Integration - Technical Implementation Guide | Gero Wallet Development Team</p>
+        <p>Version 1.0 | December 11, 2024 | Page 1 of 3</p>
+        <p><strong>For internal use only - Confidential</strong></p>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midnight Integration - Technical Implementation Guide (Part 2)</title>
+    <style>
+        @page {
+            margin: 2cm;
+            size: A4;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+        }
+
+        h1 {
+            color: #1a1a1a;
+            border-bottom: 4px solid #8b5cf6;
+            padding-bottom: 10px;
+            margin-top: 0;
+            font-size: 28px;
+        }
+
+        h2 {
+            color: #7c3aed;
+            margin-top: 30px;
+            font-size: 22px;
+            border-left: 4px solid #8b5cf6;
+            padding-left: 15px;
+            page-break-after: avoid;
+        }
+
+        h3 {
+            color: #6d28d9;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+
+        h4 {
+            color: #5b21b6;
+            margin-top: 15px;
+            font-size: 16px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        .header h1 {
+            border: none;
+            color: white;
+            margin: 0;
+        }
+
+        .header p {
+            margin: 5px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .dev-note {
+            background: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .dev-note strong {
+            color: #1e40af;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .warning {
+            background: #fed7aa;
+            border-left: 4px solid #ea580c;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .warning strong {
+            color: #9a3412;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .critical {
+            background: #fee2e2;
+            border-left: 4px solid #dc2626;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .critical strong {
+            color: #991b1b;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .success {
+            background: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .success strong {
+            color: #065f46;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #dc2626;
+        }
+
+        pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+            page-break-inside: avoid;
+        }
+
+        pre code {
+            background: transparent;
+            color: #f9fafb;
+            padding: 0;
+        }
+
+        .filename {
+            background: #6366f1;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 6px 6px 0 0;
+            font-family: monospace;
+            font-size: 13px;
+            margin-bottom: -10px;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+            page-break-inside: avoid;
+        }
+
+        th, td {
+            border: 1px solid #d1d5db;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #8b5cf6;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .step {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            page-break-inside: avoid;
+        }
+
+        .step-number {
+            display: inline-block;
+            background: #8b5cf6;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .checklist li:before {
+            content: "☐ ";
+            font-size: 18px;
+            margin-right: 8px;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+
+        @media print {
+            body {
+                max-width: 100%;
+                padding: 0;
+            }
+
+            .page-break {
+                page-break-before: always;
+            }
+
+            h2 {
+                page-break-after: avoid;
+            }
+
+            .step, .dev-note, .warning, .critical, pre {
+                page-break-inside: avoid;
+            }
+        }
+
+        .command {
+            background: #1f2937;
+            color: #10b981;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Midnight Integration - Part 2</h1>
+        <p>Phases 6-10 & Appendices</p>
+        <p>DUST Registration, Transactions, GraphQL Sync, Testing & Troubleshooting</p>
+        <p>Version 1.0 | December 11, 2024</p>
+    </div>
+
+    <h2>Phase 6: DUST Registration Flow</h2>
+
+    <div class="dev-note">
+        <strong>📋 Phase Overview</strong>
+        <p>Implement UI for registering/deregistering NIGHT UTXOs for DUST generation. Must support coin selection, registration status display, and real-time DUST accrual tracking.</p>
+        <p><strong>Duration:</strong> 3 weeks | <strong>Developer:</strong> 1 fullstack engineer</p>
+        <p><strong>Dependencies:</strong> Phases 2, 3, 4 must be complete</p>
+    </div>
+
+    <div class="dev-note">
+        <strong>⚠️ Fee Delegation Support</strong>
+        <p>Midnight supports <strong>fee delegation</strong> where a funding wallet can pay DUST transaction fees for another wallet's registration. This solves the chicken-and-egg problem of needing DUST to register for DUST.</p>
+        <p><strong>Implementation:</strong> Add <code>fundingSeed</code> parameter to <code>registerForDust()</code> method.</p>
+    </div>
+
+    <h3>6.1 DUST Registration Dialog</h3>
+
+    <div class="filename">src/modules/midnight/dialogs/DustRegistrationDialog.vue</div>
+    <pre><code>&lt;template&gt;
+  &lt;v-dialog v-model="show" max-width="700" persistent&gt;
+    &lt;v-card&gt;
+      &lt;v-card-title class="text-h6"&gt;
+        Manage DUST Generation
+        &lt;v-spacer&gt;&lt;/v-spacer&gt;
+        &lt;v-btn icon @click="close"&gt;
+          &lt;v-icon&gt;mdi-close&lt;/v-icon&gt;
+        &lt;/v-btn&gt;
+      &lt;/v-card-title&gt;
+
+      &lt;v-card-text&gt;
+        &lt;!-- Explainer Section --&gt;
+        &lt;v-alert
+          type="info"
+          outlined
+          dense
+          class="mb-4"
+        &gt;
+          &lt;div class="text-subtitle-2"&gt;
+            &lt;strong&gt;How DUST Generation Works:&lt;/strong&gt;
+          &lt;/div&gt;
+          &lt;ul class="mt-2 text-body-2"&gt;
+            &lt;li&gt;Register NIGHT coins to generate DUST over time&lt;/li&gt;
+            &lt;li&gt;Each NIGHT generates {{ dustGenerationRate }} DUST per day&lt;/li&gt;
+            &lt;li&gt;Maximum DUST = 50% of registered NIGHT&lt;/li&gt;
+            &lt;li&gt;Unregister anytime to stop generation&lt;/li&gt;
+          &lt;/ul&gt;
+        &lt;/v-alert&gt;
+
+        &lt;!-- Summary Stats --&gt;
+        &lt;v-row class="mb-4"&gt;
+          &lt;v-col cols="4"&gt;
+            &lt;div class="text-center pa-3 rounded" style="background: #f3f4f6;"&gt;
+              &lt;div class="text-caption grey--text"&gt;Registered&lt;/div&gt;
+              &lt;div class="text-h6 font-weight-bold"&gt;{{ formatNight(totalRegistered) }}&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/v-col&gt;
+          &lt;v-col cols="4"&gt;
+            &lt;div class="text-center pa-3 rounded" style="background: #f3f4f6;"&gt;
+              &lt;div class="text-caption grey--text"&gt;Generated&lt;/div&gt;
+              &lt;div class="text-h6 font-weight-bold purple--text"&gt;{{ formatDust(totalGenerated) }}&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/v-col&gt;
+          &lt;v-col cols="4"&gt;
+            &lt;div class="text-center pa-3 rounded" style="background: #f3f4f6;"&gt;
+              &lt;div class="text-caption grey--text"&gt;Max Cap&lt;/div&gt;
+              &lt;div class="text-h6 font-weight-bold"&gt;{{ formatDust(maxCap) }}&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/v-col&gt;
+        &lt;/v-row&gt;
+
+        &lt;v-divider class="my-4"&gt;&lt;/v-divider&gt;
+
+        &lt;!-- Coin Selection List --&gt;
+        &lt;div class="text-subtitle-2 font-weight-bold mb-2"&gt;
+          Select NIGHT Coins to Register:
+        &lt;/div&gt;
+
+        &lt;v-alert
+          v-if="unshieldedCoins.length === 0"
+          type="warning"
+          outlined
+          dense
+        &gt;
+          No unshielded NIGHT coins available. Receive NIGHT first to register for DUST generation.
+        &lt;/v-alert&gt;
+
+        &lt;v-list v-else class="coin-list"&gt;
+          &lt;v-list-item
+            v-for="coin in unshieldedCoins"
+            :key="coin.id"
+            class="coin-item"
+            :class="{ 'registered': coin.registeredForDustGeneration }"
+          &gt;
+            &lt;v-list-item-action&gt;
+              &lt;v-checkbox
+                :input-value="coin.registeredForDustGeneration"
+                @change="toggleCoinRegistration(coin)"
+                :disabled="loading || coin.status === 'pending'"
+                color="purple"
+              &gt;&lt;/v-checkbox&gt;
+            &lt;/v-list-item-action&gt;
+
+            &lt;v-list-item-content&gt;
+              &lt;v-list-item-title&gt;
+                &lt;strong&gt;{{ formatNight(coin.value) }}&lt;/strong&gt;
+                &lt;v-chip
+                  v-if="coin.registeredForDustGeneration"
+                  x-small
+                  color="success"
+                  class="ml-2"
+                &gt;
+                  Registered
+                &lt;/v-chip&gt;
+              &lt;/v-list-item-title&gt;
+
+              &lt;v-list-item-subtitle v-if="coin.registeredForDustGeneration"&gt;
+                &lt;v-icon x-small color="purple"&gt;mdi-timer-sand&lt;/v-icon&gt;
+                Generating: {{ formatDust(calculateDustGenerated(coin)) }} / {{ formatDust(calculateMaxDust(coin)) }}
+                &lt;span class="ml-2 grey--text"&gt;
+                  Started {{ formatTimeSince(coin.ctime) }}
+                &lt;/span&gt;
+              &lt;/v-list-item-subtitle&gt;
+
+              &lt;v-list-item-subtitle v-else&gt;
+                Can generate up to {{ formatDust(calculateMaxDust(coin)) }} DUST
+              &lt;/v-list-item-subtitle&gt;
+
+              &lt;!-- Progress Bar for Registered Coins --&gt;
+              &lt;v-progress-linear
+                v-if="coin.registeredForDustGeneration"
+                :value="calculateDustProgress(coin)"
+                color="purple"
+                height="4"
+                class="mt-2"
+                rounded
+              &gt;&lt;/v-progress-linear&gt;
+            &lt;/v-list-item-content&gt;
+
+            &lt;v-list-item-action&gt;
+              &lt;v-menu offset-y&gt;
+                &lt;template v-slot:activator="{ on }"&gt;
+                  &lt;v-btn icon small v-on="on"&gt;
+                    &lt;v-icon&gt;mdi-dots-vertical&lt;/v-icon&gt;
+                  &lt;/v-btn&gt;
+                &lt;/template&gt;
+                &lt;v-list dense&gt;
+                  &lt;v-list-item @click="viewCoinDetails(coin)"&gt;
+                    &lt;v-list-item-title&gt;View Details&lt;/v-list-item-title&gt;
+                  &lt;/v-list-item&gt;
+                  &lt;v-list-item
+                    v-if="coin.registeredForDustGeneration"
+                    @click="claimGeneratedDust(coin)"
+                  &gt;
+                    &lt;v-list-item-title&gt;Claim DUST&lt;/v-list-item-title&gt;
+                  &lt;/v-list-item&gt;
+                &lt;/v-list&gt;
+              &lt;/v-menu&gt;
+            &lt;/v-list-item-action&gt;
+          &lt;/v-list-item&gt;
+        &lt;/v-list&gt;
+
+        &lt;!-- Pending Operations --&gt;
+        &lt;v-alert
+          v-if="pendingOperations.length &gt; 0"
+          type="info"
+          outlined
+          dense
+          class="mt-4"
+        &gt;
+          &lt;div class="text-subtitle-2"&gt;
+            &lt;v-icon small left&gt;mdi-timer-sand&lt;/v-icon&gt;
+            {{ pendingOperations.length }} registration(s) pending...
+          &lt;/div&gt;
+        &lt;/v-alert&gt;
+      &lt;/v-card-text&gt;
+
+      &lt;v-card-actions&gt;
+        &lt;v-spacer&gt;&lt;/v-spacer&gt;
+        &lt;v-btn text @click="close"&gt;Close&lt;/v-btn&gt;
+        &lt;v-btn
+          color="purple"
+          dark
+          @click="saveChanges"
+          :loading="loading"
+          :disabled="!hasChanges"
+        &gt;
+          Save Changes
+        &lt;/v-btn&gt;
+      &lt;/v-card-actions&gt;
+
+      &lt;!-- Loading Overlay --&gt;
+      &lt;v-overlay v-if="loading" absolute&gt;
+        &lt;v-progress-circular indeterminate color="purple"&gt;&lt;/v-progress-circular&gt;
+        &lt;div class="mt-2 text-center"&gt;Processing registration...&lt;/div&gt;
+      &lt;/v-overlay&gt;
+    &lt;/v-card&gt;
+  &lt;/v-dialog&gt;
+&lt;/template&gt;
+
+&lt;script lang="ts"&gt;
+import Vue from 'vue';
+import midnightStore, { UnshieldedCoin } from '@/stores/midnightStore';
+import Messaging from '@/chrome/messaging';
+import { MessageTypes } from '@/types/messages';
+
+export default Vue.extend({
+  name: 'DustRegistrationDialog',
+
+  props: {
+    value: {
+      type: Boolean,
+      default: false
+    }
+  },
+
+  data() {
+    return {
+      loading: false,
+      pendingChanges: new Map&lt;string, boolean&gt;(), // coinId -&gt; registered
+      pendingOperations: [] as string[]
+    };
+  },
+
+  computed: {
+    show: {
+      get(): boolean {
+        return this.value;
+      },
+      set(val: boolean) {
+        this.$emit('input', val);
+      }
+    },
+
+    unshieldedCoins(): UnshieldedCoin[] {
+      const nightCoins = midnightStore.coins.unshielded.get('NIGHT') || [];
+      return nightCoins.filter(coin =&gt; coin.status === 'available');
+    },
+
+    dustGenerationRate(): number {
+      return midnightStore.dustStats.dustGenerationRate;
+    },
+
+    totalRegistered(): bigint {
+      return midnightStore.dustStats.totalRegistered;
+    },
+
+    totalGenerated(): bigint {
+      return midnightStore.dustStats.dustGenerated;
+    },
+
+    maxCap(): bigint {
+      return this.totalRegistered / 2n; // 50% cap
+    },
+
+    hasChanges(): boolean {
+      return this.pendingChanges.size &gt; 0;
+    }
+  },
+
+  methods: {
+    formatNight(value: bigint): string {
+      const night = Number(value) / 1e12; // 12 decimals (10^12)
+      return `${night.toFixed(2)} NIGHT`;
+    },
+
+    formatDust(value: bigint): string {
+      const dust = Number(value) / 1e12; // 12 decimals (10^12)
+      return `${dust.toFixed(2)} DUST`;
+    },
+
+    formatTimeSince(timestamp: number): string {
+      const now = Date.now();
+      const diff = now - timestamp;
+      const days = Math.floor(diff / 86400000);
+      return days &gt; 0 ? `${days}d ago` : 'today';
+    },
+
+    calculateMaxDust(coin: UnshieldedCoin): bigint {
+      return coin.value / 2n; // Max DUST = 50% of NIGHT
+    },
+
+    calculateDustGenerated(coin: UnshieldedCoin): bigint {
+      if (!coin.registeredForDustGeneration) return 0n;
+
+      const elapsed = Date.now() - coin.ctime;
+      const days = elapsed / 86400000; // ms to days
+
+      const generatedPerDay = Number(coin.value) * this.dustGenerationRate / 1e12; // 12 decimals (10^12)
+      const totalGenerated = BigInt(Math.floor(generatedPerDay * days * 1e12)); // 12 decimals (10^12)
+
+      const maxDust = this.calculateMaxDust(coin);
+      return totalGenerated &gt; maxDust ? maxDust : totalGenerated;
+    },
+
+    calculateDustProgress(coin: UnshieldedCoin): number {
+      const generated = this.calculateDustGenerated(coin);
+      const max = this.calculateMaxDust(coin);
+      return Number((generated * 100n) / max);
+    },
+
+    toggleCoinRegistration(coin: UnshieldedCoin) {
+      const newStatus = !coin.registeredForDustGeneration;
+      this.pendingChanges.set(coin.id, newStatus);
+    },
+
+    async saveChanges() {
+      if (!this.hasChanges) return;
+
+      this.loading = true;
+
+      try {
+        const changes = Array.from(this.pendingChanges.entries());
+
+        for (const [coinId, shouldRegister] of changes) {
+          const coin = this.unshieldedCoins.find(c =&gt; c.id === coinId);
+          if (!coin) continue;
+
+          this.pendingOperations.push(coinId);
+
+          if (shouldRegister) {
+            // Register for DUST generation
+            await this.registerCoin(coin);
+          } else {
+            // Deregister from DUST generation
+            await this.deregisterCoin(coin);
+          }
+
+          this.pendingOperations = this.pendingOperations.filter(id =&gt; id !== coinId);
+        }
+
+        this.pendingChanges.clear();
+
+        this.$emit('success', 'DUST registration updated successfully');
+        this.close();
+
+      } catch (error) {
+        console.error('Registration failed:', error);
+        this.$emit('error', error.message || 'Failed to update DUST registration');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async registerCoin(coin: UnshieldedCoin) {
+      const result = await Messaging.sendToBackground({
+        method: MessageTypes.MIDNIGHT_REGISTER_FOR_DUST,
+        data: {
+          coinId: coin.id,
+          dustAddress: midnightStore.addresses.dust
+        }
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Registration failed');
+      }
+
+      console.log(`✓ Registered coin ${coin.id} for DUST generation`);
+    },
+
+    async deregisterCoin(coin: UnshieldedCoin) {
+      const result = await Messaging.sendToBackground({
+        method: MessageTypes.MIDNIGHT_DEREGISTER_FROM_DUST,
+        data: {
+          coinId: coin.id
+        }
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Deregistration failed');
+      }
+
+      console.log(`✓ Deregistered coin ${coin.id} from DUST generation`);
+    },
+
+    async claimGeneratedDust(coin: UnshieldedCoin) {
+      // TODO: Implement DUST claim transaction
+      console.log('Claim DUST from coin:', coin.id);
+    },
+
+    viewCoinDetails(coin: UnshieldedCoin) {
+      // TODO: Show coin details dialog
+      console.log('Coin details:', coin);
+    },
+
+    close() {
+      this.pendingChanges.clear();
+      this.show = false;
+    }
+  }
+});
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.coin-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.coin-item {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.coin-item:last-child {
+  border-bottom: none;
+}
+
+.coin-item.registered {
+  background: #faf5ff;
+}
+&lt;/style&gt;</code></pre>
+
+    <h3>6.2 Background Handler for Registration</h3>
+
+    <div class="filename">src/chrome/background.ts (additions)</div>
+    <pre><code>import { MessageTypes } from '@/types/messages';
+import midnightWalletBg from './midnightWalletBg';
+
+// Add to background message handlers
+app.addToOptions(MessageTypes.MIDNIGHT_REGISTER_FOR_DUST, async (request, sendResponse) => {
+  try {
+    const { coinId, dustAddress } = request.data;
+
+    console.log(`🔐 Registering coin ${coinId} for DUST generation...`);
+
+    const result = await midnightWalletBg.registerForDust(coinId, dustAddress);
+
+    sendResponse({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('❌ DUST registration failed:', error);
+    sendResponse({
+      success: false,
+      error: error.message
+    });
+  }
+  return true; // Async handler
+});
+
+app.addToOptions(MessageTypes.MIDNIGHT_DEREGISTER_FROM_DUST, async (request, sendResponse) => {
+  try {
+    const { coinId } = request.data;
+
+    console.log(`🔓 Deregistering coin ${coinId} from DUST generation...`);
+
+    const result = await midnightWalletBg.deregisterFromDust(coinId);
+
+    sendResponse({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('❌ DUST deregistration failed:', error);
+    sendResponse({
+      success: false,
+      error: error.message
+    });
+  }
+  return true; // Async handler
+});</code></pre>
+
+    <h3>6.3 Midnight Wallet Background Operations</h3>
+
+    <div class="filename">src/chrome/midnightWalletBg.ts (NEW FILE)</div>
+    <pre><code>import { MidnightWalletService } from '@/services/midnight/midnightWallet.service';
+import midnightStore, { midnightActions } from '@/stores/midnightStore';
+import { updateCoinRegistration } from '@/db/midnight-db';
+
+class MidnightWalletBg {
+  private walletService: MidnightWalletService | null = null;
+
+  /**
+   * Initialize Midnight wallet service
+   */
+  async initialize(walletId: string, network: string, accountIndex: number = 0) {
+    this.walletService = new MidnightWalletService(walletId, network, accountIndex);
+    console.log('🌙 MidnightWalletBg initialized');
+  }
+
+  /**
+   * Register NIGHT coin for DUST generation
+   */
+  async registerForDust(coinId: string, dustAddress: string): Promise<{ txId: string }> {
+    if (!this.walletService) {
+      throw new Error('Midnight wallet not initialized');
+    }
+
+    console.log(`🔐 Registering coin ${coinId} for DUST...`);
+
+    try {
+      // 1. Get wallet facade
+      const facade = this.walletService.getWalletFacade();
+
+      // 2. Find the NIGHT UTXO
+      const coins = midnightStore.coins.unshielded.get('NIGHT') || [];
+      const coin = coins.find(c => c.id === coinId);
+
+      if (!coin) {
+        throw new Error(`Coin ${coinId} not found`);
+      }
+
+      // 3. Build registration transaction
+      const utxo = {
+        txId: coin.id.split(':')[0],
+        index: parseInt(coin.id.split(':')[1]),
+        value: coin.value
+      };
+
+      // 4. Call SDK registration method
+      const txId = await facade.registerNightUtxosForDustGeneration(
+        [utxo],
+        dustAddress
+      );
+
+      console.log(`✓ Registration transaction submitted: ${txId}`);
+
+      // 5. Update database
+      await updateCoinRegistration(midnightStore.walletId!, coinId, true);
+
+      // 6. Update store
+      const updatedCoins = coins.map(c =>
+        c.id === coinId
+          ? { ...c, registeredForDustGeneration: true, ctime: Date.now() }
+          : c
+      );
+
+      midnightActions.updateCoins({
+        unshielded: new Map([['NIGHT', updatedCoins]])
+      });
+
+      // 7. Add transaction to history
+      midnightActions.addTransaction({
+        txId,
+        type: 'registration',
+        status: 'pending',
+        timestamp: Date.now(),
+        amount: coin.value,
+        token: 'NIGHT'
+      });
+
+      return { txId };
+
+    } catch (error) {
+      console.error('❌ Registration failed:', error);
+      throw new Error(`Failed to register for DUST: ${error.message}`);
+    }
+  }
+
+  /**
+   * Deregister NIGHT coin from DUST generation
+   */
+  async deregisterFromDust(coinId: string): Promise<{ txId: string }> {
+    if (!this.walletService) {
+      throw new Error('Midnight wallet not initialized');
+    }
+
+    console.log(`🔓 Deregistering coin ${coinId} from DUST...`);
+
+    try {
+      const facade = this.walletService.getWalletFacade();
+
+      const coins = midnightStore.coins.unshielded.get('NIGHT') || [];
+      const coin = coins.find(c => c.id === coinId);
+
+      if (!coin) {
+        throw new Error(`Coin ${coinId} not found`);
+      }
+
+      const utxo = {
+        txId: coin.id.split(':')[0],
+        index: parseInt(coin.id.split(':')[1]),
+        value: coin.value
+      };
+
+      const txId = await facade.deregisterFromDustGeneration([utxo]);
+
+      console.log(`✓ Deregistration transaction submitted: ${txId}`);
+
+      await updateCoinRegistration(midnightStore.walletId!, coinId, false);
+
+      const updatedCoins = coins.map(c =>
+        c.id === coinId
+          ? { ...c, registeredForDustGeneration: false }
+          : c
+      );
+
+      midnightActions.updateCoins({
+        unshielded: new Map([['NIGHT', updatedCoins]])
+      });
+
+      midnightActions.addTransaction({
+        txId,
+        type: 'deregistration',
+        status: 'pending',
+        timestamp: Date.now(),
+        amount: coin.value,
+        token: 'NIGHT'
+      });
+
+      return { txId };
+
+    } catch (error) {
+      console.error('❌ Deregistration failed:', error);
+      throw new Error(`Failed to deregister from DUST: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get wallet service instance
+   */
+  getWalletService(): MidnightWalletService {
+    if (!this.walletService) {
+      throw new Error('Midnight wallet not initialized');
+    }
+    return this.walletService;
+  }
+
+  /**
+   * Cleanup
+   */
+  async cleanup() {
+    if (this.walletService) {
+      await this.walletService.cleanup();
+      this.walletService = null;
+    }
+  }
+}
+
+const midnightWalletBg = new MidnightWalletBg();
+export default midnightWalletBg;</code></pre>
+
+    <div class="step">
+        <p><span class="step-number">6</span> <strong>Checklist: Phase 6 Completion</strong></p>
+        <ul class="checklist">
+            <li>Create <code>DustRegistrationDialog.vue</code> with coin selection UI</li>
+            <li>Implement registration toggle for each UTXO</li>
+            <li>Add DUST generation progress calculation</li>
+            <li>Display current generated / max cap per coin</li>
+            <li>Create background handlers for register/deregister operations</li>
+            <li>Implement <code>midnightWalletBg.ts</code> service</li>
+            <li>Add database persistence for registration status</li>
+            <li>Update store when registration changes</li>
+            <li>Add transaction history tracking</li>
+            <li>Test registration flow end-to-end</li>
+            <li>Test deregistration flow</li>
+            <li>Verify DUST accrual calculations are correct</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Phase 7: Transaction System & ZK Proofs</h2>
+
+    <div class="dev-note">
+        <strong>📋 Phase Overview</strong>
+        <p>Implement transaction building for NIGHT/DUST transfers, shielding operations, and ZK proof generation. Must handle 10-15 second proof delays with clear progress UI.</p>
+        <p><strong>Duration:</strong> 4 weeks | <strong>Developer:</strong> 2 fullstack engineers</p>
+    </div>
+
+    <h3>7.1 ZK Proof Progress Component</h3>
+
+    <div class="filename">src/modules/midnight/components/ProofProgressIndicator.vue</div>
+    <pre><code>&lt;template&gt;
+  &lt;v-dialog v-model="show" persistent max-width="500"&gt;
+    &lt;v-card&gt;
+      &lt;v-card-title class="text-h6"&gt;
+        {{ title }}
+      &lt;/v-card-title&gt;
+
+      &lt;v-card-text&gt;
+        &lt;!-- Current Stage --&gt;
+        &lt;div class="text-center mb-4"&gt;
+          &lt;v-icon
+            :color="stageColor"
+            size="64"
+            class="mb-2"
+          &gt;
+            {{ stageIcon }}
+          &lt;/v-icon&gt;
+          &lt;div class="text-h6"&gt;{{ stageText }}&lt;/div&gt;
+          &lt;div class="text-caption grey--text"&gt;{{ stageDescription }}&lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Progress Bar --&gt;
+        &lt;v-progress-linear
+          :value="progress"
+          :color="stageColor"
+          height="8"
+          rounded
+          striped
+          class="mb-2"
+        &gt;&lt;/v-progress-linear&gt;
+
+        &lt;div class="d-flex justify-space-between text-caption grey--text"&gt;
+          &lt;span&gt;{{ progress.toFixed(0) }}% complete&lt;/span&gt;
+          &lt;span v-if="estimatedTimeRemaining"&gt;~{{ estimatedTimeRemaining }}s remaining&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Stage Timeline --&gt;
+        &lt;v-timeline dense class="mt-6"&gt;
+          &lt;v-timeline-item
+            v-for="(stage, index) in stages"
+            :key="index"
+            :color="getStageStatus(index) === 'complete' ? 'success' : getStageStatus(index) === 'active' ? 'purple' : 'grey'"
+            :icon="getStageStatus(index) === 'complete' ? 'mdi-check' : getStageStatus(index) === 'active' ? 'mdi-loading mdi-spin' : 'mdi-circle-outline'"
+            small
+          &gt;
+            &lt;div class="text-subtitle-2"&gt;{{ stage.name }}&lt;/div&gt;
+            &lt;div class="text-caption grey--text"&gt;{{ stage.description }}&lt;/div&gt;
+          &lt;/v-timeline-item&gt;
+        &lt;/v-timeline&gt;
+
+        &lt;!-- Educational Note --&gt;
+        &lt;v-alert
+          type="info"
+          outlined
+          dense
+          class="mt-4"
+        &gt;
+          &lt;div class="text-caption"&gt;
+            &lt;v-icon small left&gt;mdi-information-outline&lt;/v-icon&gt;
+            &lt;strong&gt;Why does this take time?&lt;/strong&gt;
+          &lt;/div&gt;
+          &lt;div class="text-caption mt-1"&gt;
+            Zero-knowledge proofs ensure your transaction is private while maintaining security.
+            This cryptographic process typically takes 10-15 seconds.
+          &lt;/div&gt;
+        &lt;/v-alert&gt;
+      &lt;/v-card-text&gt;
+
+      &lt;v-card-actions v-if="status === 'failed'"&gt;
+        &lt;v-spacer&gt;&lt;/v-spacer&gt;
+        &lt;v-btn text @click="$emit('retry')"&gt;Retry&lt;/v-btn&gt;
+        &lt;v-btn text @click="$emit('cancel')"&gt;Cancel&lt;/v-btn&gt;
+      &lt;/v-card-actions&gt;
+    &lt;/v-card&gt;
+  &lt;/v-dialog&gt;
+&lt;/template&gt;
+
+&lt;script lang="ts"&gt;
+import Vue from 'vue';
+
+export default Vue.extend({
+  name: 'ProofProgressIndicator',
+
+  props: {
+    value: {
+      type: Boolean,
+      default: false
+    },
+    operationId: {
+      type: String,
+      required: true
+    },
+    title: {
+      type: String,
+      default: 'Generating Zero-Knowledge Proof'
+    }
+  },
+
+  data() {
+    return {
+      stages: [
+        {
+          name: 'Preparing',
+          description: 'Building transaction structure',
+          status: 'preparing'
+        },
+        {
+          name: 'Proving',
+          description: 'Generating cryptographic proof (10-15s)',
+          status: 'proving'
+        },
+        {
+          name: 'Submitting',
+          description: 'Broadcasting to network',
+          status: 'submitting'
+        }
+      ]
+    };
+  },
+
+  computed: {
+    show: {
+      get(): boolean {
+        return this.value;
+      },
+      set(val: boolean) {
+        this.$emit('input', val);
+      }
+    },
+
+    provingOperation() {
+      return midnightStore.provingOperations.get(this.operationId);
+    },
+
+    status(): string {
+      return this.provingOperation?.status || 'preparing';
+    },
+
+    progress(): number {
+      return this.provingOperation?.progress || 0;
+    },
+
+    estimatedTimeRemaining(): number | null {
+      if (!this.provingOperation?.estimatedCompletion) return null;
+      const remaining = Math.max(0, Math.ceil((this.provingOperation.estimatedCompletion - Date.now()) / 1000));
+      return remaining;
+    },
+
+    stageIcon(): string {
+      const icons = {
+        'preparing': 'mdi-cog-outline',
+        'proving': 'mdi-shield-lock-outline',
+        'submitting': 'mdi-send-outline',
+        'complete': 'mdi-check-circle',
+        'failed': 'mdi-alert-circle'
+      };
+      return icons[this.status] || 'mdi-help-circle';
+    },
+
+    stageColor(): string {
+      const colors = {
+        'preparing': 'blue',
+        'proving': 'purple',
+        'submitting': 'indigo',
+        'complete': 'success',
+        'failed': 'error'
+      };
+      return colors[this.status] || 'grey';
+    },
+
+    stageText(): string {
+      const texts = {
+        'preparing': 'Preparing Transaction',
+        'proving': 'Generating Proof',
+        'submitting': 'Submitting to Network',
+        'complete': 'Transaction Submitted',
+        'failed': 'Operation Failed'
+      };
+      return texts[this.status] || 'Processing';
+    },
+
+    stageDescription(): string {
+      const descriptions = {
+        'preparing': 'Building transaction with inputs and outputs...',
+        'proving': 'Creating zero-knowledge proof (this takes 10-15 seconds)...',
+        'submitting': 'Broadcasting transaction to Midnight network...',
+        'complete': 'Your transaction has been successfully submitted!',
+        'failed': 'An error occurred during proof generation'
+      };
+      return descriptions[this.status] || '';
+    }
+  },
+
+  methods: {
+    getStageStatus(index: number): 'complete' | 'active' | 'pending' {
+      const statusOrder = ['preparing', 'proving', 'submitting', 'complete'];
+      const currentIndex = statusOrder.indexOf(this.status);
+
+      if (currentIndex &gt; index) return 'complete';
+      if (currentIndex === index) return 'active';
+      return 'pending';
+    }
+  }
+});
+&lt;/script&gt;</code></pre>
+
+    <h3>7.2 Send Transaction Dialog</h3>
+
+    <div class="filename">src/modules/midnight/dialogs/SendMidnightDialog.vue</div>
+    <pre><code>&lt;template&gt;
+  &lt;v-dialog v-model="show" max-width="600" persistent&gt;
+    &lt;v-card&gt;
+      &lt;v-card-title class="text-h6"&gt;
+        Send {{ selectedToken }}
+        &lt;v-spacer&gt;&lt;/v-spacer&gt;
+        &lt;v-btn icon @click="close"&gt;
+          &lt;v-icon&gt;mdi-close&lt;/v-icon&gt;
+        &lt;/v-btn&gt;
+      &lt;/v-card-title&gt;
+
+      &lt;v-card-text&gt;
+        &lt;!-- Token Selection --&gt;
+        &lt;v-select
+          v-model="selectedToken"
+          :items="['NIGHT', 'DUST']"
+          label="Token"
+          outlined
+          dense
+          class="mb-4"
+        &gt;&lt;/v-select&gt;
+
+        &lt;!-- Transaction Type (for NIGHT only) --&gt;
+        &lt;v-select
+          v-if="selectedToken === 'NIGHT'"
+          v-model="transactionType"
+          :items="transactionTypes"
+          item-text="label"
+          item-value="value"
+          label="Transaction Type"
+          outlined
+          dense
+          class="mb-4"
+        &gt;
+          &lt;template v-slot:item="{ item }"&gt;
+            &lt;div&gt;
+              &lt;div class="font-weight-bold"&gt;{{ item.label }}&lt;/div&gt;
+              &lt;div class="text-caption grey--text"&gt;{{ item.description }}&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/template&gt;
+        &lt;/v-select&gt;
+
+        &lt;!-- Recipient Address --&gt;
+        &lt;v-text-field
+          v-model="recipientAddress"
+          label="Recipient Address"
+          outlined
+          dense
+          :rules="[rules.required, rules.validAddress]"
+          :hint="getAddressHint()"
+          persistent-hint
+          class="mb-4"
+        &gt;
+          &lt;template v-slot:append&gt;
+            &lt;v-btn icon @click="pasteAddress"&gt;
+              &lt;v-icon&gt;mdi-content-paste&lt;/v-icon&gt;
+            &lt;/v-btn&gt;
+          &lt;/template&gt;
+        &lt;/v-text-field&gt;
+
+        &lt;!-- Amount --&gt;
+        &lt;v-text-field
+          v-model="amount"
+          :label="`Amount (${selectedToken})`"
+          outlined
+          dense
+          type="number"
+          :rules="[rules.required, rules.validAmount]"
+          :suffix="selectedToken"
+          class="mb-2"
+        &gt;
+          &lt;template v-slot:append&gt;
+            &lt;v-btn text small @click="setMaxAmount"&gt;MAX&lt;/v-btn&gt;
+          &lt;/template&gt;
+        &lt;/v-text-field&gt;
+
+        &lt;div class="text-caption grey--text mb-4"&gt;
+          Available: {{ formatBalance(availableBalance) }} {{ selectedToken }}
+        &lt;/div&gt;
+
+        &lt;v-divider class="my-4"&gt;&lt;/v-divider&gt;
+
+        &lt;!-- Fee Estimation --&gt;
+        &lt;div class="d-flex justify-space-between mb-2"&gt;
+          &lt;span class="text-subtitle-2"&gt;Estimated Fee:&lt;/span&gt;
+          &lt;span class="font-weight-bold"&gt;{{ formatFee(estimatedFee) }} NIGHT&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Fee Warning --&gt;
+        &lt;v-alert
+          v-if="estimatedFee &gt; 1000000n"
+          type="warning"
+          outlined
+          dense
+          class="mb-4"
+        &gt;
+          &lt;div class="text-caption"&gt;
+            &lt;strong&gt;High Fee Notice:&lt;/strong&gt; Midnight transactions have higher fees due to zero-knowledge proof overhead.
+          &lt;/div&gt;
+        &lt;/v-alert&gt;
+
+        &lt;!-- Privacy Notice (for shielded) --&gt;
+        &lt;v-alert
+          v-if="transactionType === 'shielded'"
+          type="info"
+          outlined
+          dense
+          class="mb-4"
+        &gt;
+          &lt;div class="text-caption"&gt;
+            &lt;v-icon small left&gt;mdi-shield-lock&lt;/v-icon&gt;
+            &lt;strong&gt;Private Transaction:&lt;/strong&gt; This will generate a zero-knowledge proof (10-15 seconds).
+            Transaction details will remain private.
+          &lt;/div&gt;
+        &lt;/v-alert&gt;
+
+        &lt;!-- Total --&gt;
+        &lt;div class="d-flex justify-space-between text-h6 font-weight-bold"&gt;
+          &lt;span&gt;Total:&lt;/span&gt;
+          &lt;span&gt;{{ formatBalance(totalAmount) }} {{ selectedToken }}&lt;/span&gt;
+        &lt;/div&gt;
+      &lt;/v-card-text&gt;
+
+      &lt;v-card-actions&gt;
+        &lt;v-spacer&gt;&lt;/v-spacer&gt;
+        &lt;v-btn text @click="close"&gt;Cancel&lt;/v-btn&gt;
+        &lt;v-btn
+          color="purple"
+          dark
+          @click="send"
+          :loading="loading"
+          :disabled="!isValid"
+        &gt;
+          {{ transactionType === 'shielded' ? 'Send Privately' : 'Send' }}
+        &lt;/v-btn&gt;
+      &lt;/v-card-actions&gt;
+    &lt;/v-card&gt;
+
+    &lt;!-- ZK Proof Progress --&gt;
+    &lt;ProofProgressIndicator
+      v-model="showProofProgress"
+      :operation-id="currentOperationId"
+      @retry="retryTransaction"
+      @cancel="cancelTransaction"
+    /&gt;
+  &lt;/v-dialog&gt;
+&lt;/template&gt;
+
+&lt;script lang="ts"&gt;
+import Vue from 'vue';
+import midnightStore from '@/stores/midnightStore';
+import Messaging from '@/chrome/messaging';
+import { MessageTypes } from '@/types/messages';
+import ProofProgressIndicator from '../components/ProofProgressIndicator.vue';
+
+export default Vue.extend({
+  name: 'SendMidnightDialog',
+
+  components: {
+    ProofProgressIndicator
+  },
+
+  props: {
+    value: {
+      type: Boolean,
+      default: false
+    }
+  },
+
+  data() {
+    return {
+      selectedToken: 'NIGHT',
+      transactionType: 'unshielded',
+      recipientAddress: '',
+      amount: '',
+      loading: false,
+      showProofProgress: false,
+      currentOperationId: '',
+      estimatedFee: 0n,
+
+      transactionTypes: [
+        {
+          value: 'unshielded',
+          label: 'Public (Fast)',
+          description: 'Visible on blockchain, instant confirmation'
+        },
+        {
+          value: 'shielded',
+          label: 'Private (Slow)',
+          description: 'Zero-knowledge proof, 10-15 seconds, fully private'
+        }
+      ],
+
+      rules: {
+        required: (v: string) => !!v || 'Required',
+        validAddress: (v: string) => {
+          if (!v) return true;
+          const prefix = this.selectedToken === 'DUST' ? 'midnightt1dust' :
+                        this.transactionType === 'shielded' ? 'midnightt1shield' :
+                        'midnightt1';
+          return v.startsWith(prefix) || `Invalid ${this.selectedToken} address`;
+        },
+        validAmount: (v: string) => {
+          const num = parseFloat(v);
+          return (num &gt; 0 && num &lt;= Number(this.availableBalance) / 1e12) || 'Invalid amount'; // 12 decimals (10^12)
+        }
+      }
+    };
+  },
+
+  computed: {
+    show: {
+      get(): boolean {
+        return this.value;
+      },
+      set(val: boolean) {
+        this.$emit('input', val);
+      }
+    },
+
+    availableBalance(): bigint {
+      if (this.selectedToken === 'DUST') {
+        return midnightStore.balances.dust;
+      }
+      return this.transactionType === 'shielded'
+        ? midnightStore.balances.nightShielded
+        : midnightStore.balances.nightUnshielded;
+    },
+
+    totalAmount(): bigint {
+      const amountBigInt = BigInt(Math.floor(parseFloat(this.amount || '0') * 1e12)); // 12 decimals (10^12)
+      return amountBigInt + this.estimatedFee;
+    },
+
+    isValid(): boolean {
+      return !!(
+        this.recipientAddress &&
+        this.amount &&
+        parseFloat(this.amount) &gt; 0 &&
+        this.totalAmount &lt;= this.availableBalance
+      );
+    }
+  },
+
+  watch: {
+    amount() {
+      this.estimateFee();
+    },
+    transactionType() {
+      this.estimateFee();
+    }
+  },
+
+  methods: {
+    formatBalance(value: bigint): string {
+      return (Number(value) / 1e12).toFixed(6); // 12 decimals (10^12)
+    },
+
+    formatFee(value: bigint): string {
+      return (Number(value) / 1e12).toFixed(6); // 12 decimals (10^12)
+    },
+
+    getAddressHint(): string {
+      if (this.selectedToken === 'DUST') {
+        return 'DUST address (starts with midnightt1dust...)';
+      }
+      return this.transactionType === 'shielded'
+        ? 'Shielded address (starts with midnightt1shield...)'
+        : 'Unshielded address (starts with midnightt1...)';
+    },
+
+    async pasteAddress() {
+      try {
+        const text = await navigator.clipboard.readText();
+        this.recipientAddress = text;
+      } catch (error) {
+        console.error('Failed to paste:', error);
+      }
+    },
+
+    setMaxAmount() {
+      const maxWithFee = this.availableBalance - this.estimatedFee;
+      this.amount = (Number(maxWithFee) / 1e12).toFixed(6); // 12 decimals (10^12)
+    },
+
+    async estimateFee() {
+      if (!this.amount) {
+        this.estimatedFee = 0n;
+        return;
+      }
+
+      try {
+        const result = await Messaging.sendToBackground({
+          method: MessageTypes.MIDNIGHT_ESTIMATE_FEE,
+          data: {
+            token: this.selectedToken,
+            type: this.transactionType,
+            amount: BigInt(Math.floor(parseFloat(this.amount) * 1e12)).toString() // 12 decimals (10^12)
+          }
+        });
+
+        if (result.success) {
+          this.estimatedFee = BigInt(result.data.fee);
+        }
+      } catch (error) {
+        console.error('Fee estimation failed:', error);
+      }
+    },
+
+    async send() {
+      if (!this.isValid) return;
+
+      this.loading = true;
+
+      try {
+        const amountBigInt = BigInt(Math.floor(parseFloat(this.amount) * 1e12)); // 12 decimals (10^12)
+
+        // Generate operation ID for progress tracking
+        this.currentOperationId = `tx-${Date.now()}`;
+
+        // Start proving operation tracking (for shielded only)
+        if (this.transactionType === 'shielded') {
+          midnightActions.startProvingOperation(this.currentOperationId);
+          this.showProofProgress = true;
+        }
+
+        const result = await Messaging.sendToBackground({
+          method: MessageTypes.MIDNIGHT_SEND_TRANSACTION,
+          data: {
+            operationId: this.currentOperationId,
+            token: this.selectedToken,
+            type: this.transactionType,
+            to: this.recipientAddress,
+            amount: amountBigInt.toString()
+          }
+        });
+
+        if (result.success) {
+          this.$emit('success', `Transaction submitted: ${result.data.txId}`);
+          this.close();
+        } else {
+          throw new Error(result.error);
+        }
+
+      } catch (error) {
+        console.error('Transaction failed:', error);
+        this.$emit('error', error.message || 'Transaction failed');
+        this.showProofProgress = false;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    retryTransaction() {
+      this.showProofProgress = false;
+      this.send();
+    },
+
+    cancelTransaction() {
+      this.showProofProgress = false;
+      this.close();
+    },
+
+    close() {
+      this.recipientAddress = '';
+      this.amount = '';
+      this.estimatedFee = 0n;
+      this.showProofProgress = false;
+      this.show = false;
+    }
+  }
+});
+&lt;/script&gt;</code></pre>
+
+    <h3>7.X Testnet Faucet Integration</h3>
+
+    <p>For testnet builds, integrate faucet request functionality:</p>
+
+    <div class="filename">src/services/midnight/faucet.service.ts</div>
+    <pre><code>// Faucet URL
+const FAUCET_URL = 'https://faucet.preview.midnight.network';
+
+// Request testnet NIGHT
+async function requestFaucet(address: string) {
+  const response = await fetch(FAUCET_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address })
+  });
+  return response.json();
+}</code></pre>
+
+    <div class="step">
+        <p><span class="step-number">7</span> <strong>Checklist: Phase 7 Completion</strong></p>
+        <ul class="checklist">
+            <li>Create <code>ProofProgressIndicator.vue</code> with 3-stage timeline</li>
+            <li>Implement progress tracking in store</li>
+            <li>Create <code>SendMidnightDialog.vue</code> with token/type selection</li>
+            <li>Add fee estimation (with 300 trillion overhead)</li>
+            <li>Implement background handler for MIDNIGHT_SEND_TRANSACTION</li>
+            <li>Add transaction building logic in midnightWalletBg</li>
+            <li>Integrate proof server client for shielded transactions</li>
+            <li>Update proving operation progress during proof generation</li>
+            <li>Handle transaction submission to network</li>
+            <li>Add transaction to history on success</li>
+            <li>Test unshielded NIGHT transfer</li>
+            <li>Test shielded NIGHT transfer with proof progress</li>
+            <li>Test DUST transfer</li>
+            <li>Verify fee calculations include massive overhead</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Remaining Phases Summary</h2>
+
+    <h3>Phase 8: GraphQL Sync & Real-time Updates</h3>
+
+    <div class="dev-note">
+        <strong>📋 Implementation Summary</strong>
+        <p><strong>Duration:</strong> 2 weeks | <strong>Developer:</strong> 1 backend engineer</p>
+        <ul>
+            <li>Install Apollo Client + graphql-ws for WebSocket subscriptions</li>
+            <li>Create GraphQL client service connecting to indexer WebSocket endpoint</li>
+            <li>Subscribe to <code>dustLedgerEvents</code> for DUST balance updates</li>
+            <li>Subscribe to <code>zswapLedgerEvents</code> for shielded NIGHT updates</li>
+            <li>Subscribe to <code>unshieldedTransactions</code> for public NIGHT updates</li>
+            <li>Update store balances on each subscription event</li>
+            <li>Implement reconnection logic with exponential backoff</li>
+            <li>Add connection status indicator in UI</li>
+            <li>Handle offline mode with cached state</li>
+            <li>Sync on reconnect after connection drop</li>
+        </ul>
+    </div>
+
+    <h3>Phase 9: Network Configuration & Manifest Updates</h3>
+
+    <div class="dev-note">
+        <strong>📋 Implementation Summary</strong>
+        <p><strong>Duration:</strong> 3 days | <strong>Developer:</strong> 1 engineer</p>
+        <ul>
+            <li>Update <code>manifest.json</code> CSP to whitelist Midnight endpoints</li>
+            <li>Add indexer HTTP/WS URLs to content_security_policy</li>
+            <li>Add RPC HTTP/WS URLs</li>
+            <li>Add proof server HTTP/WS URLs</li>
+            <li>Test extension loads without CSP violations</li>
+            <li>Verify WebSocket connections work in production build</li>
+            <li>Add localhost endpoints for development</li>
+            <li>Document network switching for testnet/mainnet</li>
+        </ul>
+    </div>
+
+    <h3>Phase 10: Testing Strategy & Quality Assurance</h3>
+
+    <div class="dev-note">
+        <strong>📋 Testing Checklist</strong>
+        <p><strong>Duration:</strong> 2 weeks | <strong>Team:</strong> All engineers + QA</p>
+        <ul>
+            <li><strong>Unit Tests:</strong> Test key derivation, encryption, serialization</li>
+            <li><strong>Integration Tests:</strong> Test wallet initialization, registration flow</li>
+            <li><strong>E2E Tests:</strong> Test complete user journeys (create wallet → receive → register → send)</li>
+            <li><strong>Performance Tests:</strong> Measure wallet login time, proof generation time</li>
+            <li><strong>Security Tests:</strong> Verify key encryption, no key leakage in logs</li>
+            <li><strong>Network Tests:</strong> Test WebSocket reconnection, offline handling</li>
+            <li><strong>Cross-Context Tests:</strong> Verify store sync (background ↔ options ↔ popup)</li>
+            <li><strong>Error Handling:</strong> Test failed transactions, invalid addresses, insufficient balance</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Appendix A: Migration Guide from Cardano Patterns</h2>
+
+    <table>
+        <tr>
+            <th>Cardano Pattern</th>
+            <th>Midnight Equivalent</th>
+            <th>Key Differences</th>
+        </tr>
+        <tr>
+            <td>Single wallet instance</td>
+            <td>Three wallet instances (Dust, Shielded, Unshielded)</td>
+            <td>Must manage three separate states</td>
+        </tr>
+        <tr>
+            <td>One spending key</td>
+            <td>Three keys (Zswap, Dust, NightExternal)</td>
+            <td>Triple key derivation, storage, encryption</td>
+        </tr>
+        <tr>
+            <td>One receive address</td>
+            <td>Three addresses (dust, shielded, unshielded)</td>
+            <td>QR code must specify address type</td>
+        </tr>
+        <tr>
+            <td>ADA balance</td>
+            <td>5 balance components</td>
+            <td>Must track nightShielded, nightUnshielded, nightRegistered, dust, dustGenerating</td>
+        </tr>
+        <tr>
+            <td>Staking rewards (automatic)</td>
+            <td>DUST generation (manual registration)</td>
+            <td>User must explicitly register UTXOs</td>
+        </tr>
+        <tr>
+            <td>REST API polling</td>
+            <td>GraphQL WebSocket subscriptions</td>
+            <td>Real-time updates, reconnection logic required</td>
+        </tr>
+        <tr>
+            <td>Standard transaction fees</td>
+            <td>300 trillion additional overhead</td>
+            <td>Fees 1000x higher, prominent warnings needed</td>
+        </tr>
+        <tr>
+            <td>Instant transactions</td>
+            <td>10-15 second ZK proofs (shielded)</td>
+            <td>Progress UI mandatory for user retention</td>
+        </tr>
+    </table>
+
+    <h2>Appendix B: Troubleshooting Guide</h2>
+
+    <h3>Problem: "Wallets not initialized" Error</h3>
+    <p><strong>Cause:</strong> MidnightWalletService.initializeWallets() failed or wasn't called</p>
+    <p><strong>Solution:</strong></p>
+    <ul>
+        <li>Check that encrypted keys are present in database</li>
+        <li>Verify password is correct (decryption succeeds)</li>
+        <li>Check network configuration is valid</li>
+        <li>Look for SDK errors in console (missing dependencies?)</li>
+    </ul>
+
+    <h3>Problem: DUST Registration Failing</h3>
+    <p><strong>Cause:</strong> UTXO not available or already registered</p>
+    <p><strong>Solution:</strong></p>
+    <ul>
+        <li>Verify coin.status === 'available'</li>
+        <li>Check coin is NIGHT (not DUST)</li>
+        <li>Ensure coin is unshielded (not in shielded wallet)</li>
+        <li>Check dustAddress is valid</li>
+        <li>Review transaction history for pending registrations</li>
+    </ul>
+
+    <h3>Problem: ZK Proof Generation Stuck</h3>
+    <p><strong>Cause:</strong> Proof server unreachable or overloaded</p>
+    <p><strong>Solution:</strong></p>
+    <ul>
+        <li>Check proof server URL is whitelisted in manifest CSP</li>
+        <li>Verify network connectivity (ping proof server)</li>
+        <li>Check proof server status endpoint</li>
+        <li>Increase timeout (may take longer than 15 seconds under load)</li>
+        <li>Implement retry logic with exponential backoff</li>
+    </ul>
+
+    <h3>Problem: Store Not Syncing Across Contexts</h3>
+    <p><strong>Cause:</strong> Port connection not established or closed</p>
+    <p><strong>Solution:</strong></p>
+    <ul>
+        <li>Check storeMessaging.subscribe() is called in browser context</li>
+        <li>Verify backgroundStoreMessaging.broadcastUpdate() is called in background</li>
+        <li>Check port is not disconnected (onDisconnect listener)</li>
+        <li>Ensure serialization handles BigInt/Map types correctly</li>
+        <li>Check chrome.storage writes are completing</li>
+    </ul>
+
+    <h2>Appendix C: Performance Optimization</h2>
+
+    <h3>Wallet Login Performance</h3>
+    <ul>
+        <li><strong>Target:</strong> &lt;3 seconds from login to dashboard</li>
+        <li><strong>Optimize key decryption:</strong> Run in parallel with Promise.all()</li>
+        <li><strong>Load serialized state:</strong> Restore wallets from saved state instead of fresh sync</li>
+        <li><strong>Defer GraphQL connection:</strong> Connect in background, don't block login</li>
+        <li><strong>Cache balance data:</strong> Show cached balances immediately, update in background</li>
+    </ul>
+
+    <h3>ZK Proof Generation</h3>
+    <ul>
+        <li><strong>Target:</strong> 10-15 seconds (SDK limitation, cannot optimize)</li>
+        <li><strong>User experience:</strong> Show detailed progress UI to prevent abandonment</li>
+        <li><strong>Allow minimize:</strong> Let users continue browsing while proof generates</li>
+        <li><strong>Batch operations:</strong> If sending multiple transactions, batch proofs when possible</li>
+    </ul>
+
+    <h3>DUST Calculation Performance</h3>
+    <ul>
+        <li><strong>Cache calculations:</strong> Don't recalculate DUST accrual on every render</li>
+        <li><strong>Update interval:</strong> Recalculate every 60 seconds (DUST generation is slow)</li>
+        <li><strong>Lazy load:</strong> Only calculate for visible coins in registration dialog</li>
+    </ul>
+
+    <div class="success">
+        <strong>✅ Implementation Complete!</strong>
+        <p>You now have a comprehensive guide covering all 10 phases of Midnight integration. Each phase includes:</p>
+        <ul>
+            <li>Detailed code examples</li>
+            <li>Step-by-step checklists</li>
+            <li>Critical warnings and gotchas</li>
+            <li>Testing strategies</li>
+            <li>Performance optimizations</li>
+        </ul>
+        <p><strong>Next Steps:</strong></p>
+        <ol>
+            <li>Review both Part 1 and Part 2 documents with development team</li>
+            <li>Set up development environment with Midnight SDK packages</li>
+            <li>Start with Phase 1 (Three-Key Foundation) as proof-of-concept</li>
+            <li>Conduct sprint planning using phase estimates</li>
+            <li>Assign engineers to specific phases based on expertise</li>
+        </ol>
+    </div>
+
+    <div class="footer" style="margin-top: 100px;">
+        <p>Midnight Integration - Technical Implementation Guide (Part 2) | Gero Wallet Development Team</p>
+        <p>Version 1.0 | December 11, 2024 | Page 2 of 2</p>
+        <p><strong>For internal use only - Confidential</strong></p>
+    </div>
+
+</body>
+</html>

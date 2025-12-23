@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midnight Integration - Critical Addendum</title>
+    <style>
+        @page {
+            margin: 2cm;
+            size: A4;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+        }
+
+        h1 {
+            color: #1a1a1a;
+            border-bottom: 4px solid #dc2626;
+            padding-bottom: 10px;
+            margin-top: 0;
+            font-size: 28px;
+        }
+
+        h2 {
+            color: #dc2626;
+            margin-top: 30px;
+            font-size: 22px;
+            border-left: 4px solid #dc2626;
+            padding-left: 15px;
+        }
+
+        h3 {
+            color: #991b1b;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            color: white;
+            border-radius: 8px;
+        }
+
+        .header h1 {
+            border: none;
+            color: white;
+            margin: 0;
+        }
+
+        .header p {
+            margin: 5px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .critical {
+            background: #fee2e2;
+            border-left: 4px solid #dc2626;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .critical strong {
+            color: #991b1b;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .update {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .update strong {
+            color: #92400e;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .new-feature {
+            background: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .new-feature strong {
+            color: #065f46;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #dc2626;
+        }
+
+        pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        pre code {
+            background: transparent;
+            color: #f9fafb;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #d1d5db;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #dc2626;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .checklist li:before {
+            content: "⚠️ ";
+            font-size: 18px;
+            margin-right: 8px;
+        }
+
+        .filename {
+            background: #dc2626;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 6px 6px 0 0;
+            font-family: monospace;
+            font-size: 13px;
+            margin-bottom: -10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚨 CRITICAL ADDENDUM</h1>
+        <p>Midnight Integration - Important Updates Based on Official Documentation</p>
+        <p><strong>READ THIS BEFORE STARTING IMPLEMENTATION</strong></p>
+        <p>December 11, 2024</p>
+    </div>
+
+    <div class="critical">
+        <strong>🔴 URGENT: Review Before Implementation</strong>
+        <p>Additional Midnight documentation reveals critical corrections to our implementation guides. The following changes are <strong>MANDATORY</strong> and must be incorporated before starting development.</p>
+    </div>
+
+    <h2>Critical Correction #1: Token Decimals</h2>
+
+    <div class="critical">
+        <strong>🔴 WRONG ASSUMPTION - Must Fix</strong>
+        <p><strong>Original Documentation Said:</strong> NIGHT/DUST use 6 decimals (10^6 base units)</p>
+        <p><strong>Official Documentation Shows:</strong> NIGHT/DUST use <strong>12 decimals</strong> (10^12 base units)</p>
+    </div>
+
+    <h3>Impact on Implementation</h3>
+
+    <table>
+        <tr>
+            <th>Component</th>
+            <th>Original (WRONG)</th>
+            <th>Corrected (RIGHT)</th>
+        </tr>
+        <tr>
+            <td>Base Unit Conversion</td>
+            <td>1 NIGHT = 1,000,000 (10^6)</td>
+            <td>1 NIGHT = 1,000,000,000,000 (10^12)</td>
+        </tr>
+        <tr>
+            <td>100 NIGHT in base units</td>
+            <td>100,000,000</td>
+            <td>100,000,000,000,000</td>
+        </tr>
+        <tr>
+            <td>Display formatting</td>
+            <td>value / 1e6</td>
+            <td>value / 1e12</td>
+        </tr>
+        <tr>
+            <td>User input conversion</td>
+            <td>input * 1e6</td>
+            <td>input * 1e12</td>
+        </tr>
+    </table>
+
+    <h3>Required Code Changes</h3>
+
+    <div class="filename">src/modules/midnight/views/MidnightDashboard.vue (CORRECTION)</div>
+    <pre><code>// WRONG (from original guide):
+formatNight(value: bigint): string {
+  const night = Number(value) / 1e6; // ❌ INCORRECT
+  return `${night.toFixed(2)} NIGHT`;
+}
+
+// CORRECT:
+formatNight(value: bigint): string {
+  const night = Number(value) / 1e12; // ✅ CORRECT - 12 decimals
+  return `${night.toFixed(2)} NIGHT`;
+}
+
+formatDust(value: bigint): string {
+  const dust = Number(value) / 1e12; // ✅ CORRECT - 12 decimals
+  return `${dust.toFixed(2)} DUST`;
+}</code></pre>
+
+    <div class="filename">All Amount Input Handlers (CORRECTION)</div>
+    <pre><code>// WRONG:
+const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1e6)); // ❌
+
+// CORRECT:
+const amountBigInt = BigInt(Math.floor(parseFloat(amount) * 1e12)); // ✅</code></pre>
+
+    <h2>Critical Correction #2: DUST Fee Delegation</h2>
+
+    <div class="new-feature">
+        <strong>✅ NEW FEATURE - Not in Original Guide</strong>
+        <p>Midnight supports <strong>DUST fee delegation</strong> - a wallet with DUST can pay transaction fees for another wallet. This solves the chicken-and-egg problem of needing DUST to register for DUST.</p>
+    </div>
+
+    <h3>How DUST Fee Delegation Works</h3>
+
+    <ol>
+        <li><strong>New Wallet Created:</strong> User has 0 DUST, cannot pay fees</li>
+        <li><strong>Funding Wallet (Alice):</strong> Pre-funded dev wallet with DUST</li>
+        <li><strong>Registration with Delegation:</strong> Alice pays DUST fees for new wallet's registration</li>
+        <li><strong>Result:</strong> New wallet is now registered and generating DUST</li>
+    </ol>
+
+    <h3>CLI Example (From Official Docs)</h3>
+
+    <pre><code># Register for DUST with fee delegation
+./midnight-node-toolkit generate-txs register-dust-address \
+    --wallet-seed "NEW_WALLET_SEED" \
+    --funding-seed "..01"  # Alice pays the DUST fees
+
+# Parameters:
+# --wallet-seed: The wallet being registered
+# --funding-seed: The wallet paying DUST transaction fees</code></pre>
+
+    <h3>Implementation Impact</h3>
+
+    <div class="update">
+        <strong>⚠️ NEW MESSAGE TYPE REQUIRED</strong>
+        <p>Must add support for fee delegation parameter in registration transactions:</p>
+    </div>
+
+    <div class="filename">src/chrome/background.ts (NEW HANDLER)</div>
+    <pre><code>app.addToOptions(MessageTypes.MIDNIGHT_REGISTER_FOR_DUST, async (request, sendResponse) => {
+  try {
+    const { coinId, dustAddress, fundingSeed } = request.data; // ← Add fundingSeed
+
+    const result = await midnightWalletBg.registerForDust(
+      coinId,
+      dustAddress,
+      fundingSeed  // ← Pass to SDK for fee delegation
+    );
+
+    sendResponse({ success: true, data: result });
+  } catch (error) {
+    sendResponse({ success: false, error: error.message });
+  }
+  return true;
+});</code></pre>
+
+    <h3>UI Consideration</h3>
+
+    <p>For <strong>testnet/development</strong>:</p>
+    <ul>
+        <li>Provide "Use Faucet" button that automatically delegates fees to Alice wallet</li>
+        <li>Show fee delegation status in UI ("Transaction fees paid by Alice")</li>
+        <li>Educational tooltip explaining fee delegation concept</li>
+    </ul>
+
+    <p>For <strong>mainnet/production</strong>:</p>
+    <ul>
+        <li>User must have DUST first (acquire from exchanges or bridge)</li>
+        <li>OR implement fee delegation service (paid service)</li>
+        <li>OR allow users to delegate fees to another wallet they control</li>
+    </ul>
+
+    <h2>New Feature #3: Cardano Bridge for DUST Generation</h2>
+
+    <div class="new-feature">
+        <strong>✅ MAJOR FEATURE - Cardano Integration</strong>
+        <p>Users can generate DUST from NIGHT holdings on <strong>Cardano blockchain</strong>, not just Midnight. This is a cross-chain feature using Plutus validators.</p>
+    </div>
+
+    <h3>How Cardano → Midnight DUST Works</h3>
+
+    <ol>
+        <li><strong>User has NIGHT on Cardano:</strong> Holding NIGHT tokens on Cardano mainnet</li>
+        <li><strong>Connect CIP-30 Wallet:</strong> Connect Cardano wallet (Nami, Eternl, Lace, etc.)</li>
+        <li><strong>Designate Midnight Address:</strong> Map Cardano wallet → Midnight DUST address (recorded on-chain via Plutus validator)</li>
+        <li><strong>DUST Generation:</strong> NIGHT on Cardano generates DUST on Midnight</li>
+        <li><strong>Cross-Chain Sync:</strong> DUST balance updates automatically</li>
+    </ol>
+
+    <h3>Implementation Implications</h3>
+
+    <table>
+        <tr>
+            <th>Component</th>
+            <th>Requirement</th>
+            <th>Priority</th>
+        </tr>
+        <tr>
+            <td>Cardano Wallet Connection</td>
+            <td>Integrate CIP-30 (window.cardano API)</td>
+            <td>HIGH (for mainnet)</td>
+        </tr>
+        <tr>
+            <td>Address Mapping UI</td>
+            <td>Designate/re-designate/de-designate Cardano ↔ Midnight mapping</td>
+            <td>HIGH</td>
+        </tr>
+        <tr>
+            <td>Cross-Chain Balance Display</td>
+            <td>Show NIGHT on Cardano + DUST on Midnight in unified view</td>
+            <td>MEDIUM</td>
+        </tr>
+        <tr>
+            <td>Plutus Validator Integration</td>
+            <td>Submit mapping transactions to Cardano</td>
+            <td>HIGH</td>
+        </tr>
+        <tr>
+            <td>DUST Prediction Model</td>
+            <td>Calculate DUST generation from Cardano NIGHT (cap & decay)</td>
+            <td>MEDIUM</td>
+        </tr>
+    </table>
+
+    <div class="update">
+        <strong>⚠️ RECOMMENDATION</strong>
+        <p>Add Cardano Bridge feature as <strong>Phase 11</strong> (after base Midnight implementation). This is a complex cross-chain integration that should not block MVP.</p>
+        <p><strong>MVP Strategy:</strong> Focus on DUST generation from Midnight-native NIGHT first, add Cardano bridge in Phase 2.</p>
+    </div>
+
+    <h2>New Feature #4: Midnight Native Tokens (MNTs)</h2>
+
+    <div class="new-feature">
+        <strong>✅ ASSET TYPE - Like Cardano Native Assets</strong>
+        <p>Midnight supports custom ledger-defined tokens (MNTs) similar to Cardano Native Assets. Wallet must detect and display these tokens.</p>
+    </div>
+
+    <h3>MNT Characteristics</h3>
+
+    <ul>
+        <li><strong>Ledger-Defined:</strong> Created via smart contracts (Compact language)</li>
+        <li><strong>Two Types:</strong> Unshielded MNTs (public) and Shielded MNTs (private)</li>
+        <li><strong>Automatic Display:</strong> Wallet must detect MNTs from on-chain metadata</li>
+        <li><strong>Transfer Rules:</strong> Handled by Midnight ledger (no smart contract needed)</li>
+    </ul>
+
+    <h3>Implementation Requirements</h3>
+
+    <div class="filename">src/stores/midnightStore.ts (ADDITION)</div>
+    <pre><code>export interface MidnightStoreState {
+  // ... existing fields ...
+
+  // ADD: Native tokens support
+  nativeTokens: {
+    unshielded: Map<string, MidnightNativeToken[]>; // tokenId → tokens
+    shielded: Map<string, MidnightNativeToken[]>;
+  };
+}
+
+export interface MidnightNativeToken {
+  tokenId: string;
+  policyId: string;
+  assetName: string;
+  amount: bigint;
+  metadata?: {
+    name?: string;
+    symbol?: string;
+    decimals?: number;
+    logo?: string;
+  };
+}</code></pre>
+
+    <h3>GraphQL Query for Token Detection</h3>
+
+    <pre><code>query GetWalletTokens($address: String!) {
+  unshieldedTokens(address: $address) {
+    tokenId
+    policyId
+    assetName
+    amount
+    metadata {
+      name
+      symbol
+      decimals
+      logo
+    }
+  }
+
+  shieldedTokens(address: $address) {
+    tokenId
+    amount
+  }
+}</code></pre>
+
+    <h2>Development & Testing Updates</h2>
+
+    <h3>Local Development Environment</h3>
+
+    <div class="new-feature">
+        <strong>✅ LOCAL NODE + INDEXER</strong>
+        <p>Developers can run Midnight node + indexer locally for testing. This should be added to implementation guide.</p>
+    </div>
+
+    <h4>Local Node Setup</h4>
+
+    <pre><code># Build Midnight node
+cd midnight-node
+cargo build --release
+
+# Run local dev node (Alice pre-funded wallet)
+CFG_PRESET=dev ./target/release/midnight-node \
+  --dev \
+  --name alice \
+  --base-path /tmp/midnight-dev
+
+# Endpoints:
+# - RPC: ws://127.0.0.1:9944
+# - Prometheus: http://127.0.0.1:9615</code></pre>
+
+    <h4>Local Indexer Setup</h4>
+
+    <pre><code># Build indexer
+cargo build -p indexer-standalone --features standalone
+
+# Run indexer (connects to local node)
+RUST_LOG=info \
+APP__INFRA__NODE__URL="ws://127.0.0.1:9944" \
+APP__INFRA__STORAGE__CNN_URL=target/data/indexer.sqlite \
+APP__INFRA__SECRET=303132333435363738393031323334353637383930313233343536373839303132 \
+CONFIG_FILE=indexer-standalone/config.yaml \
+cargo run -p indexer-standalone --features standalone
+
+# GraphQL API: http://localhost:8088</code></pre>
+
+    <h3>Testnet Faucet</h3>
+
+    <div class="update">
+        <strong>⚠️ ADD TO IMPLEMENTATION GUIDE</strong>
+        <p>Faucet URL for Preview testnet: <strong>faucet.preview.midnight.network</strong></p>
+        <p>Wallet should integrate faucet request button for testnet builds.</p>
+    </div>
+
+    <h3>Production Endpoints (Confirmed)</h3>
+
+    <table>
+        <tr>
+            <th>Service</th>
+            <th>Preview Testnet URL</th>
+        </tr>
+        <tr>
+            <td>Faucet</td>
+            <td>https://faucet.preview.midnight.network</td>
+        </tr>
+        <tr>
+            <td>RPC</td>
+            <td>https://rpc.preview.midnight.network</td>
+        </tr>
+        <tr>
+            <td>RPC WebSocket</td>
+            <td>wss://rpc.preview.midnight.network</td>
+        </tr>
+        <tr>
+            <td>Indexer</td>
+            <td>https://indexer.preview.midnight.network</td>
+        </tr>
+        <tr>
+            <td>Indexer GraphQL</td>
+            <td>https://indexer.preview.midnight.network/api/v3/graphql</td>
+        </tr>
+        <tr>
+            <td>Indexer WebSocket</td>
+            <td>wss://indexer.preview.midnight.network/api/v3/graphql/ws</td>
+        </tr>
+        <tr>
+            <td>Ogmios (dApp Deploy)</td>
+            <td>https://ogmios.preview.midnight.network</td>
+        </tr>
+        <tr>
+            <td>Explorer (Temporary)</td>
+            <td>https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.preview.midnight.network</td>
+        </tr>
+    </table>
+
+    <h2>Updated Implementation Checklist</h2>
+
+    <div class="critical">
+        <strong>🔴 MANDATORY FIXES - Do NOT Skip</strong>
+        <ul class="checklist">
+            <li>Change all decimal conversions from 10^6 to 10^12</li>
+            <li>Update formatNight() and formatDust() in all components</li>
+            <li>Update amount input parsing (user input * 1e12)</li>
+            <li>Add fundingSeed parameter to DUST registration</li>
+            <li>Implement fee delegation UI for testnet</li>
+            <li>Add faucet integration button for testnet builds</li>
+            <li>Update network endpoints in config (confirmed URLs)</li>
+            <li>Add MNT detection and display (Phase 2 feature)</li>
+            <li>Add Cardano bridge (Phase 11 - post-MVP)</li>
+            <li>Add local node/indexer setup to developer guide</li>
+        </ul>
+    </div>
+
+    <h2>Revised Phase Roadmap</h2>
+
+    <table>
+        <tr>
+            <th>Phase</th>
+            <th>Original</th>
+            <th>Updated</th>
+        </tr>
+        <tr>
+            <td>Phase 1-5</td>
+            <td>Unchanged</td>
+            <td>✅ Add decimal correction (1e12)</td>
+        </tr>
+        <tr>
+            <td>Phase 6</td>
+            <td>DUST Registration</td>
+            <td>✅ Add fee delegation support</td>
+        </tr>
+        <tr>
+            <td>Phase 7</td>
+            <td>Transactions</td>
+            <td>✅ Add faucet integration (testnet)</td>
+        </tr>
+        <tr>
+            <td>Phase 8</td>
+            <td>GraphQL Sync</td>
+            <td>✅ Add MNT token detection</td>
+        </tr>
+        <tr>
+            <td>Phase 9</td>
+            <td>Network Config</td>
+            <td>✅ Use confirmed endpoint URLs</td>
+        </tr>
+        <tr>
+            <td>Phase 10</td>
+            <td>Testing</td>
+            <td>✅ Add local node/indexer tests</td>
+        </tr>
+        <tr>
+            <td><strong>Phase 11 (NEW)</strong></td>
+            <td>-</td>
+            <td><strong>Cardano Bridge for DUST</strong></td>
+        </tr>
+    </table>
+
+    <h2>Summary of Changes</h2>
+
+    <div class="critical">
+        <strong>🔴 CRITICAL CHANGES (Must Fix Before Starting)</strong>
+        <ol>
+            <li><strong>Token Decimals:</strong> 12 decimals (10^12), not 6 decimals</li>
+            <li><strong>Fee Delegation:</strong> Add support for funding wallet paying DUST fees</li>
+            <li><strong>Network Endpoints:</strong> Use confirmed production URLs</li>
+        </ol>
+    </div>
+
+    <div class="update">
+        <strong>⚠️ NEW FEATURES (Add to Roadmap)</strong>
+        <ol>
+            <li><strong>Midnight Native Tokens (MNTs):</strong> Phase 8 addition</li>
+            <li><strong>Cardano Bridge:</strong> Phase 11 (post-MVP)</li>
+            <li><strong>Faucet Integration:</strong> Phase 7 addition (testnet only)</li>
+            <li><strong>Local Dev Environment:</strong> Developer documentation</li>
+        </ol>
+    </div>
+
+    <div class="new-feature">
+        <strong>✅ VALIDATED INFORMATION</strong>
+        <p>All information in this addendum comes from <strong>official Midnight documentation</strong>:</p>
+        <ul>
+            <li>Wallet Funding Guide (developer docs)</li>
+            <li>Local Indexer Setup Guide (developer docs)</li>
+            <li>Preview Partner Onboarding Guide (official PDF)</li>
+        </ul>
+    </div>
+
+    <h2>Action Items for Team</h2>
+
+    <ol>
+        <li><strong>Product Manager:</strong> Update PRD with Cardano bridge feature (Phase 11)</li>
+        <li><strong>Designer:</strong> Design fee delegation UI and MNT display patterns</li>
+        <li><strong>Backend Engineers:</strong> Fix decimal conversions in all calculation code</li>
+        <li><strong>Frontend Engineers:</strong> Update all UI formatting functions</li>
+        <li><strong>DevOps:</strong> Set up local Midnight node + indexer for testing</li>
+        <li><strong>QA:</strong> Update test cases with correct decimal values</li>
+    </ol>
+
+    <div style="margin-top: 60px; padding: 20px; background: #fee2e2; border-radius: 8px; text-align: center;">
+        <h3 style="color: #991b1b; margin: 0;">⚠️ DO NOT START IMPLEMENTATION WITHOUT THESE FIXES ⚠️</h3>
+        <p style="margin: 10px 0 0 0;">Review this addendum with entire team before beginning Phase 1</p>
+    </div>
+
+    <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e7eb; text-align: center; font-size: 12px; color: #6b7280;">
+        <p>Midnight Integration - Critical Addendum | Gero Wallet Development Team</p>
+        <p>Version 1.0 | December 11, 2024 | <strong style="color: #dc2626;">URGENT - READ BEFORE IMPLEMENTATION</strong></p>
+    </div>
+
+</body>
+</html>

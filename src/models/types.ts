@@ -37,6 +37,7 @@ const purpose = {
 
 const coin_type = {
   cardano: 1815,
+  midnight: 2400,
 };
 
 const CoreAddressTypes = {
@@ -69,6 +70,7 @@ const WalletTypePurpose = {
 const CoinTypes = {
   CARDANO: HARDENED + coin_type.cardano, // HARD_DERIVATION_START + 1815;
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
+  MIDNIGHT: HARDENED + coin_type.midnight, // HARD_DERIVATION_START + 2400;
 };
 
 const BIP44_SCAN_SIZE = 20;
@@ -93,6 +95,7 @@ const Blockchain = {
   CARDANO: 'Cardano',
   APEX_PRIME: 'Apex Fusion Prime',
   APEX_VECTOR: 'Apex Fusion Vector',
+  MIDNIGHT: 'Midnight',
 };
 
 const Network = {

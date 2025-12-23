@@ -13,7 +13,7 @@ import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
 import walletStore from '@/stores/geroStore';
 import Notifications from '@voerro/vue-notifications';
-import featureFlagsStore from '@/stores/featureFlagsStore';
+import { initMockMidnightWalletForDev } from '@/utils/midnight-dev-utils';
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
@@ -48,12 +48,9 @@ async function initializeFeatureFlags(): Promise<void> {
   }
 }
 
-loadPersistedWallet().then(() => {
-  // Initialize feature flags in background (non-blocking)
-  // This prevents delaying app startup if LaunchDarkly is slow/down
-  initializeFeatureFlags().catch((error) => {
-    console.error('Feature flags initialization failed:', error);
-  });
+loadPersistedWallet().then(async () => {
+  // Initialize mock Midnight wallet for development
+  await initMockMidnightWalletForDev();
 
   Vue.config.productionTip = false;
   Vue.use(FlagIcon);

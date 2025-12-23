@@ -110,10 +110,36 @@
               style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
             ></v-img>
           </v-avatar>
-          <span class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
-          <div v-if="priceStore.connectionStatus !== 'connected'" class="ribbon top-right" aria-hidden="true">
-            <span>{{ $t('common.down') }}</span>
-          </div>
+          <span class="button-text">Perpetuals</span>
+        </v-btn>
+      </div>
+
+      <!-- Midnight-specific actions -->
+      <div v-if="isMidnight" class="action-button-wrapper">
+        <v-btn
+          ref="shieldButton"
+          class="expandable-button shield-button"
+          color="#BA68C81A"
+          height="28"
+          @click="currentDialog = dialogs.SHIELD"
+          :style="getButtonGlowStyle('shield')"
+        >
+          <v-icon size="14" color="white">mdi-shield-sync</v-icon>
+          <span class="button-text">Shield</span>
+        </v-btn>
+      </div>
+
+      <div v-if="isMidnight" class="action-button-wrapper">
+        <v-btn
+          ref="registerButton"
+          class="expandable-button register-button"
+          color="#FFB74D1A"
+          height="28"
+          @click="currentDialog = dialogs.REGISTER_DUST"
+          :style="getButtonGlowStyle('register')"
+        >
+          <v-icon size="14" color="white">mdi-star-plus</v-icon>
+          <span class="button-text">Register DUST</span>
         </v-btn>
       </div>
     </div>
@@ -126,6 +152,25 @@
     <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
     <PerpetualsDialog v-if="!isPerpetualsDisabled" :isOpen="currentDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
+
+    <!-- Midnight Coming Soon Snackbar -->
+    <v-snackbar
+      v-model="showMidnightComingSoon"
+      :timeout="2000"
+      color="info"
+    >
+      {{ midnightComingSoonMessage }}
+      <template v-slot:action="{ attrs }">
+        <v-btn
+          color="white"
+          text
+          v-bind="attrs"
+          @click="showMidnightComingSoon = false"
+        >
+          Close
+        </v-btn>
+      </template>
+    </v-snackbar>
   </div>
 </template>
 <script setup lang="ts">
@@ -138,19 +183,22 @@ import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import featureFlagsStore from '@/stores/featureFlagsStore';
-import { priceStore } from '@/stores/priceStore';
+import { Blockchain } from '@/models/types';
 
 const { loggedWallet } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const currentDialog = ref(null);
+const showMidnightComingSoon = ref(false);
+const midnightComingSoonMessage = ref('');
 const dialogs = ref<any>({
   SEND: 'SEND',
   RECEIVE: 'RECEIVE',
   SWAP: 'SWAP',
   BUY: 'BUY',
   PERPETUALS: 'PERPETUALS',
+  SHIELD: 'SHIELD',
+  REGISTER_DUST: 'REGISTER_DUST',
 });
 
 const mousePosition = ref<{x: number, y: number} | null>(null);
@@ -196,9 +244,37 @@ const isPerpetualsDisabled = computed(() => {
   return true;
 })
 
+const isMidnight = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
+})
+
 const closeDialog = () => {
   currentDialog.value = null;
 }
+
+const handleMidnightAction = (action: string, message: string) => {
+  console.log(`🌙 Midnight action:`, action);
+  midnightComingSoonMessage.value = message;
+  showMidnightComingSoon.value = true;
+  currentDialog.value = null;
+}
+
+// Watch for Midnight-specific dialogs and show coming soon message
+const handleDialogOpen = () => {
+  if (currentDialog.value === dialogs.value.SHIELD) {
+    handleMidnightAction('shield', 'Shield/Unshield NIGHT (Phase 7)');
+  } else if (currentDialog.value === dialogs.value.REGISTER_DUST) {
+    handleMidnightAction('register', 'Register NIGHT for DUST (Phase 6)');
+  }
+}
+
+// Watch currentDialog changes
+const watchCurrentDialog = computed(() => currentDialog.value);
+const unwatchDialog = vmProxy.$watch(() => currentDialog.value, () => {
+  if (currentDialog.value === dialogs.value.SHIELD || currentDialog.value === dialogs.value.REGISTER_DUST) {
+    handleDialogOpen();
+  }
+});
 
 const handleMouseMove = (event: MouseEvent) => {
   const container = event.currentTarget as HTMLElement;
@@ -220,7 +296,7 @@ const handleMouseLeave = () => {
 const updateButtonGlows = () => {
   if (!mousePosition.value) return;
 
-  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals'];
+  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals', 'shield', 'register'];
   const newGlows: Record<string, any> = {};
 
   buttons.forEach(buttonType => {
@@ -277,7 +353,9 @@ const getButtonGlowStyle = (buttonType: string) => {
     send: '#00DFF3',
     receive: '#75E0A7',
     swap: '#FDA29B',
-    perpetuals: '#B794F4'
+    perpetuals: '#B794F4',
+    shield: '#BA68C8',
+    register: '#FFB74D'
   };
 
   const color = colors[buttonType];
@@ -428,86 +506,21 @@ const getButtonGlowStyle = (buttonType: string) => {
   color: #B794F4;
 }
 
-/* Right corner ribbon "Off" badge */
-.ribbon {
-  position: absolute;
-  top: -0.375rem;
-  right: -0.75rem;
-  width: 1.75rem;
-  height: 1.75rem;
-  overflow: hidden;
-  z-index: 20;
-  pointer-events: none;
+.shield-button {
+  background: rgba(186, 104, 200, 0.12) !important;
+  border: 0.5px solid rgba(186, 104, 200, 0.4) !important;
 }
 
-.ribbon span {
-  position: absolute;
-  display: block;
-  width: 40px;
-  padding: 2px 0;
-  background-color: #BD1550;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  color: #fff;
-  font-size: 7px;
-  font-weight: 700;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-  text-transform: uppercase;
-  text-align: center;
-  right: -10px;
-  top: 3px;
-  transform: rotate(45deg);
-  letter-spacing: 0.3px;
-  line-height: 1.2;
+.shield-button .button-text {
+  color: #BA68C8;
 }
 
-@media (max-width: 768px) {
-  .ribbon {
-    top: -5px;
-    right: -10px;
-    width: 24px;
-    height: 24px;
-  }
-
-  .ribbon span {
-    width: 35px;
-    font-size: 6.5px;
-    right: -8px;
-    top: 2.5px;
-  }
+.register-button {
+  background: rgba(255, 183, 77, 0.12) !important;
+  border: 0.5px solid rgba(255, 183, 77, 0.4) !important;
 }
 
-@media (max-width: 480px) {
-  .ribbon {
-    top: -4px;
-    right: -8px;
-    width: 20px;
-    height: 20px;
-  }
-
-  .ribbon span {
-    width: 32px;
-    font-size: 6px;
-    right: -6px;
-    top: 2px;
-  }
-}
-
-.ribbon span::before,
-.ribbon span::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  z-index: -1;
-  border-left: 2px solid transparent;
-  border-right: 2px solid transparent;
-  border-top: 2px solid #8B0E3C;
-}
-
-.ribbon span::before {
-  left: 0;
-}
-
-.ribbon span::after {
-  right: 0;
+.register-button .button-text {
+  color: #FFB74D;
 }
 </style>

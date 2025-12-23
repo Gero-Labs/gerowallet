@@ -95,7 +95,20 @@ export async function getDb(id: number): Promise<Dexie | null> {
             portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt',
         });
 
-        // Version 9: Current version (multisig removed from schema)
+        // Version 9: Multisig removed from schema
+        db.version(9).stores({
+            config: 'key, value',
+            sync: '++id, hash, height, slot, time, epoch, epoch_slot',
+            account: '++id, walletId',
+            addresses: 'address',
+            contacts: 'address, name',
+            rewards: 'epoch, amount, pool_id, type',
+            transactions: 'id',
+            connected_dapps: '++id, domain, time',
+            portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt',
+        });
+
+        // Version 10: Current version (added delegation_requests)
         db.version(walletDBVersion).stores(walletDBSchema);
 
         await db.open();
@@ -220,4 +233,154 @@ export async function removePendingTransaction(walletId: number, txId: string) {
 
 // Note: Portfolio data is now stored directly in wallet databases
 // Old portfolio_* databases will be migrated during upgrade
+
+// ===== DUST Delegation Request Functions =====
+
+export async function addDelegationRequest(walletId: number, request: any) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const requestsTable = db.table('delegation_requests');
+
+    if (!requestsTable) throw new Error('No delegation_requests table.');
+
+    // Check if request with same ID already exists
+    const existingRequest = await requestsTable.get(request.id);
+    if (existingRequest) {
+      console.log(`Delegation request ${request.id} already exists, updating.`);
+      await requestsTable.put(request);
+      return existingRequest;
+    }
+
+    // Insert new request
+    await requestsTable.put(request);
+    console.log(`Delegation request ${request.id} added successfully.`);
+    return request;
+  } catch (err) {
+    console.error(`Failed to add delegation request: ${err}`);
+    throw err;
+  }
+}
+
+export async function updateDelegationRequest(walletId: number, requestId: string, updates: any) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const requestsTable = db.table('delegation_requests');
+
+    if (!requestsTable) throw new Error('No delegation_requests table.');
+
+    const request = await requestsTable.get(requestId);
+    if (!request) {
+      throw new Error(`Delegation request ${requestId} not found.`);
+    }
+
+    const updatedRequest = { ...request, ...updates };
+    await requestsTable.put(updatedRequest);
+    console.log(`Delegation request ${requestId} updated successfully.`);
+    return updatedRequest;
+  } catch (err) {
+    console.error(`Failed to update delegation request: ${err}`);
+    throw err;
+  }
+}
+
+export async function getDelegationRequest(walletId: number, requestId: string) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const requestsTable = db.table('delegation_requests');
+
+    if (!requestsTable) throw new Error('No delegation_requests table.');
+
+    return await requestsTable.get(requestId);
+  } catch (err) {
+    console.error(`Failed to get delegation request: ${err}`);
+    throw err;
+  }
+}
+
+export async function getAllDelegationRequests(walletId: number, type?: string, status?: string) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const requestsTable = db.table('delegation_requests');
+
+    if (!requestsTable) throw new Error('No delegation_requests table.');
+
+    let query = requestsTable.toCollection();
+
+    if (type) {
+      query = query.filter(req => req.type === type);
+    }
+
+    if (status) {
+      query = query.filter(req => req.status === status);
+    }
+
+    return await query.toArray();
+  } catch (err) {
+    console.error(`Failed to get delegation requests: ${err}`);
+    throw err;
+  }
+}
+
+export async function getActiveDelegationRequests(walletId: number, type?: string) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const requestsTable = db.table('delegation_requests');
+
+    if (!requestsTable) throw new Error('No delegation_requests table.');
+
+    const now = Date.now();
+    let query = requestsTable
+      .toCollection()
+      .filter(req => req.status === 'pending' && req.expiresAt > now);
+
+    if (type) {
+      query = query.filter(req => req.type === type);
+    }
+
+    return await query.toArray();
+  } catch (err) {
+    console.error(`Failed to get active delegation requests: ${err}`);
+    throw err;
+  }
+}
+
+export async function deleteDelegationRequest(walletId: number, requestId: string) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const requestsTable = db.table('delegation_requests');
+
+    if (!requestsTable) throw new Error('No delegation_requests table.');
+
+    await requestsTable.delete(requestId);
+    console.log(`Delegation request ${requestId} deleted successfully.`);
+  } catch (err) {
+    console.error(`Failed to delete delegation request: ${err}`);
+    throw err;
+  }
+}
+
+export async function expireOldDelegationRequests(walletId: number) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const requestsTable = db.table('delegation_requests');
+
+    if (!requestsTable) throw new Error('No delegation_requests table.');
+
+    const now = Date.now();
+    const expiredRequests = await requestsTable
+      .toCollection()
+      .filter(req => req.status === 'pending' && req.expiresAt <= now)
+      .toArray();
+
+    for (const request of expiredRequests) {
+      await requestsTable.put({ ...request, status: 'expired' });
+    }
+
+    console.log(`Expired ${expiredRequests.length} delegation requests.`);
+    return expiredRequests.length;
+  } catch (err) {
+    console.error(`Failed to expire delegation requests: ${err}`);
+    throw err;
+  }
+}
 

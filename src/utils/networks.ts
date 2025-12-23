@@ -3,6 +3,8 @@ import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
 import apex from '@/assets/img/apex.jpg';
+// TODO: Replace with actual Midnight logo
+import midnightLogo from '@/assets/svg/cardano-blue.svg';
 
 export interface NetworkInfo {
   icon: string;
@@ -195,6 +197,47 @@ export default {
       geroCardSupport: false,
       networkParams: {
         networkMagic: 1
+      }
+    },
+    {
+      icon: midnightLogo,
+      title: 'Midnight Preview',
+      blockchain: Blockchain.MIDNIGHT,
+      network: Network.PREVIEW,
+      supportedHardware: false,
+      networkId: 0,
+      currencySymbol: 'tNIGHT',
+      currencyTicker: 'tNIGHT',
+      currencyName: 'Midnight',
+      currencyDescription: 'Midnight Native Token',
+      currencyImage: midnightLogo,
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.UNDEFINED,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: true,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      networkParams: {
+        networkMagic: 0
       }
     },
   ]  as NetworkInfo[],

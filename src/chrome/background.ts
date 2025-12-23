@@ -33,6 +33,7 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+import delegationService from '@/services/delegation.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
@@ -1604,39 +1605,149 @@ app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   }
 });
 
-app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendResponse) => {
+/**
+ * Execute DUST delegation - fund another wallet's DUST registration
+ * This executes: midnight-node-toolkit generate-txs register-dust-address --wallet-seed {requester} --funding-seed {funder}
+ */
+app.addToOptions(MessageTypes.EXECUTE_DUST_DELEGATION, async (request, sendResponse) => {
   try {
+    console.log('💰 Executing DUST delegation:', {
+      requestId: request.data.requestId,
+      requesterAddress: request.data.requesterAddress,
+      funderAddress: request.data.funderAddress,
+    });
+
+    const { password, requesterAddress, funderAddress } = request.data;
+
+    // Check if we have a real wallet (non-mock)
     const currentWallet = walletManager.getWallet();
+
     if (currentWallet) {
-      const { txId } = request.data;
-      const { removePendingTransaction } = await import('@/db/wallet-db');
-
-      // Remove from database - the TransactionsLoader subscription will auto-update the UI
-      const success = await removePendingTransaction(currentWallet.id, txId);
-
-      sendResponse({
-        id: request.id,
-        data: { success },
-        target: TARGET,
-        sender: SENDER.extension,
-      });
+      // Real wallet: Verify the password is correct
+      try {
+        await currentWallet.verifySpendingPassword(password);
+      } catch (err) {
+        throw new Error('Incorrect password');
+      }
     } else {
-      sendResponse({
-        id: request.id,
-        data: { success: false, error: 'Wallet instance not available' },
-        target: TARGET,
-        sender: SENDER.extension,
-      });
+      // Mock wallet: Just validate password is provided
+      if (!password) {
+        throw new Error('Password is required');
+      }
+      console.log('🧪 MOCK MODE: Skipping password verification for mock wallet');
     }
-  } catch (err) {
-    console.error('Error removing pending transaction:', err);
+
+    // TODO: Implement actual DUST registration with midnight-node-toolkit
+    // This would require:
+    // 1. Get funder's seed phrase (decrypt with password)
+    // 2. Execute CLI command: midnight-node-toolkit generate-txs register-dust-address
+    //    --wallet-seed {requester_seed} --funding-seed {funder_seed}
+    // 3. Submit the generated transaction to the Midnight network
+    // 4. Wait for confirmation and get transaction hash
+
+    // For now, return a mock success response
+    // In production, this would be replaced with actual CLI execution
+    console.log('⚠️ DUST delegation execution not yet implemented - returning mock success');
+    console.log('📝 Would execute: midnight-node-toolkit generate-txs register-dust-address');
+    console.log(`   Requester: ${requesterAddress}`);
+    console.log(`   Funder: ${funderAddress}`);
+
+    // Simulate async operation
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Mock transaction hash (in production, this would be the real tx hash from Midnight)
+    const mockTxHash = `mn_tx_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // Send delegation response to requester (in mock mode, updates their database directly)
+    try {
+      await delegationService.sendDelegationResponse(
+        request.data.requestId,
+        requesterAddress,
+        funderAddress,
+        true, // approved
+        mockTxHash
+      );
+      console.log('✅ Delegation response sent to requester');
+    } catch (responseErr: any) {
+      console.warn('⚠️ Failed to send delegation response (non-critical):', responseErr.message);
+    }
+
     sendResponse({
       id: request.id,
-      data: { success: false, error: getErrorMessage(err) },
+      data: {
+        success: true,
+        txHash: mockTxHash,
+        message: 'DUST delegation executed successfully (mock)'
+      },
       target: TARGET,
       sender: SENDER.extension,
     });
+  } catch (err: any) {
+    console.error('❌ DUST delegation execution failed:', err);
+    sendResponse({
+      id: request.id,
+      data: {
+        success: false,
+        error: err.message || 'Failed to execute DUST delegation'
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err.message || err,
+    });
   }
+  return true; // Keep message channel open for async response
+});
+
+// Handle SEND_DELEGATION_REQUEST
+app.addToOptions(MessageTypes.SEND_DELEGATION_REQUEST, async (request, sendResponse) => {
+  try {
+    console.log('📤 Sending delegation request from background:', request.data);
+
+    const {
+      funderAddress,
+      requesterAddress,
+      requesterName,
+      estimatedFee,
+      message,
+      expiryHours
+    } = request.data;
+
+    // Send delegation request via Ably (background context has initialized delegationService)
+    const requestId = await delegationService.sendDelegationRequest(
+      funderAddress,
+      requesterAddress,
+      requesterName,
+      estimatedFee,
+      message,
+      expiryHours
+    );
+
+    console.log('✅ Delegation request sent successfully from background, ID:', requestId);
+
+    sendResponse({
+      id: request.id,
+      data: {
+        success: true,
+        requestId,
+        message: 'Delegation request sent successfully'
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err: any) {
+    console.error('❌ Failed to send delegation request from background:', err);
+    sendResponse({
+      id: request.id,
+      data: {
+        success: false,
+        error: err.message || 'Failed to send delegation request'
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err.message || err,
+    });
+  }
+  return true; // Keep message channel open for async response
 });
 
 const openUI = async () => {

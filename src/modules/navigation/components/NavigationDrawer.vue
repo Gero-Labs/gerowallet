@@ -237,7 +237,8 @@ const isApex = computed(() => {
 
 const items = computed((): NavigationItemUnion[] => {
   let isStakingEnabled = false;
-  if (loggedWallet.value?.baseAddress) {
+  // Skip Cardano-specific validation for Midnight wallets
+  if (loggedWallet.value?.baseAddress && loggedWallet.value?.chain !== Blockchain.MIDNIGHT) {
     isStakingEnabled = Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !==
       Cardano.AddressType.EnterpriseScript
   }

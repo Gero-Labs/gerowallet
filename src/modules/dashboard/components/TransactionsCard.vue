@@ -278,7 +278,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import { useDebounceFn } from '@vueuse/core';
+import { getMockMidnightWalletData } from '@/utils/midnight-mock-data';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -301,6 +301,10 @@ const { transactions: txs, loggedWallet, keys, contacts } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
+
+// Import Midnight store for Midnight transactions
+import { midnightStore } from '@/stores/midnightStore';
+import { Blockchain } from '@/models/types';
 
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
@@ -365,9 +369,47 @@ const vmProxy = getCurrentInstance()!.proxy as any;
 const state = computed(() => vmProxy.$route.path);
 
 const transactions = computed<any[]>(() => {
+  // For Midnight wallets, use mock data directly for UI design
+  if (loggedWallet.value?.chain === Blockchain.MIDNIGHT) {
+    // Load mock data directly
+    const mockData = getMockMidnightWalletData();
+    const midnightTxs = mockData.transactions;
+
+    // Convert Midnight transaction format to match component expectations
+    return midnightTxs
+      .filter((tx: any) => {
+        if (search.value) {
+          const searchLower = search.value.toLowerCase();
+          return (
+            tx.id.toLowerCase().includes(searchLower) ||
+            tx.type.toLowerCase().includes(searchLower) ||
+            tx.status.toLowerCase().includes(searchLower)
+          );
+        }
+        return true;
+      })
+      .map((tx: any) => ({
+        id: tx.id,
+        tx_timestamp: tx.timestamp,
+        epoch_no: tx.blockHeight ? Math.floor(tx.blockHeight / 432000) : null,
+        status: tx.status === 'confirmed' ? 'Confirmed' : tx.status === 'pending' ? 'Pending' : 'Failed',
+        pending: tx.status === 'pending',
+        ada: Number(tx.amount) / 1e12, // Convert from lovelace equivalent to NIGHT
+        assets: [], // Midnight doesn't have multi-asset support yet
+        body: {},
+        utxo: {},
+        witness: {},
+        auxiliaryData: {},
+        // Store original Midnight transaction data
+        _midnight: tx,
+      }))
+      .sort((a, b) => b.tx_timestamp - a.tx_timestamp);
+  }
+
+  // For Cardano wallets, use existing logic
   const filtered = txs.value.filter((tx: any) => {
-    if (debouncedSearch.value) {
-      const searchLower = debouncedSearch.value.toLowerCase();
+    if (search.value) {
+      const searchLower = search.value.toLowerCase();
 
       // Check transaction ID
       const matchesId = tx.id.toLowerCase().includes(searchLower);
@@ -448,9 +490,25 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
 
 // Get transaction status (reactive)
 const getTransactionStatus = (item: any): string => {
-  // Check if transaction is pending for too long (> 1 hour) - show as "Failed Transaction"
-  if (isPendingTooLong(item)) {
-    return t('transactions.failedTransaction');
+  // For Midnight transactions, use type directly
+  if (item._midnight) {
+    const midnightTx = item._midnight;
+    switch (midnightTx.type) {
+      case 'send':
+        return 'Sent ' + midnightTx.token;
+      case 'receive':
+        return 'Received ' + midnightTx.token;
+      case 'register_dust':
+        return 'Register DUST';
+      case 'deregister_dust':
+        return 'Deregister DUST';
+      case 'shield':
+        return 'Shield ' + midnightTx.token;
+      case 'unshield':
+        return 'Unshield ' + midnightTx.token;
+      default:
+        return midnightTx.type;
+    }
   }
 
   const txId = item.id;

@@ -82,6 +82,9 @@ const welcomeBg = computed(() => {
   if (selectedNetwork.value?.blockchain?.includes('Apex')) {
     return assets.apexBg;
   }
+  if (selectedNetwork.value?.blockchain?.includes('Midnight')) {
+    return assets.midnightBg;
+  }
   return assets.cardanoBg;
 });
 </script>

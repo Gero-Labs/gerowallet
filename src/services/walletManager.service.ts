@@ -7,14 +7,16 @@ import DexHunterStore from '@/stores/dexHunterStore';
 import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import ablyService from '@/services/ably.service';
+import delegationService from '@/services/delegation.service';
+import { initializeDelegationStore } from '@/stores/delegationStore';
 import * as Ably from 'ably';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
-import { Cardano } from '@cardano-sdk/core';
-import zkFoldApi from '@/api/zkFoldApi';
+import { midnightActions } from '@/stores/midnightStore';
+import { isMidnightMockWallet, getMockMidnightWalletData } from '@/utils/midnight-mock-data';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -127,6 +129,90 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
+      // SPECIAL HANDLING: Midnight Mock Wallet
+      if (isMidnightMockWallet(wallet)) {
+        console.log('🌙 Detected Midnight mock wallet - loading mock data');
+        LoadingState.setText('Loading Midnight wallet...');
+
+        // Clear existing data
+        WalletStore.clearForWalletSwitch();
+        TapToolsStore.clear();
+        midnightActions.clear();
+
+        // Set logged wallet metadata (without WalletBg instance)
+        WalletStore.setLoggedWallet({
+          id: wallet.id,
+          name: wallet.name,
+          icon: wallet.icon,
+          type: wallet.type,
+          theme: wallet.theme,
+          order: wallet.order,
+          chain: wallet.chain,
+          network: wallet.network,
+          publicKey: wallet.publicKey,
+          provider: networks.resolveDefaultProvider(wallet.chain, wallet.network),
+          encryptedPrivateKey: wallet.encryptedPrivateKey,
+          passwordLastUpdate: wallet.passwordLastUpdate,
+          userId: wallet.userId,
+          encryptedMnemonic: wallet.encryptedMnemonic,
+          baseAddress: '', // Will be set from mock data
+          stakeAddress: null,
+          token: null,
+        });
+
+        // Load mock Midnight data with unique addresses per wallet
+        const mockData = getMockMidnightWalletData(wallet);
+        midnightActions.initializeMockData(mockData);
+
+        // Update wallet store with Midnight addresses
+        WalletStore.setLoggedWallet({
+          ...walletStore.loggedWallet,
+          baseAddress: mockData.addresses.unshielded,
+        });
+
+        this.currentWalletId = wallet.id;
+        this.walletBg = null; // No WalletBg for Midnight mock wallet
+
+        // Initialize delegation service in MOCK MODE for Midnight mock wallet
+        // This enables delegation testing without Ably connectivity
+        try {
+          console.log('📋 Initializing delegation service in MOCK MODE for Midnight mock wallet');
+
+          const network = 'PREVIEW';
+          const address = mockData.addresses.unshielded; // Use mock unshielded address
+
+          // Close existing Ably connection if any
+          ablyService.close();
+
+          // Initialize delegation store
+          await initializeDelegationStore(wallet.id);
+          console.log('✅ Delegation store initialized');
+
+          // Enable MOCK MODE for delegation service (bypasses Ably)
+          delegationService.setMockMode(true, wallet.id);
+          console.log('✅ Delegation service set to MOCK MODE for local testing');
+          console.log('🧪 Mock delegation flow: Requests go directly to database, no Ably needed');
+        } catch (error: any) {
+          console.warn('⚠️ Failed to initialize delegation service (non-critical):', error.message || error);
+        }
+
+        LoadingState.setText('Midnight wallet ready');
+        LoadingState.setLoading(false);
+
+        console.log('✅ Midnight mock wallet loaded successfully');
+        console.log('📊 Mock data summary:', {
+          balances: {
+            nightShielded: mockData.balances.nightShielded.toString(),
+            nightUnshielded: mockData.balances.nightUnshielded.toString(),
+            dust: mockData.balances.dust.toString(),
+          },
+          transactions: mockData.transactions.length,
+          utxos: mockData.utxos.length,
+        });
+
+        return null; // No WalletBg instance for mock wallet
+      }
+
       // Clean up an existing wallet if different
       if (this.walletBg && this.currentWalletId !== wallet.id) {
         await this.logout();
@@ -324,20 +410,88 @@ export class WalletManager {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      if (ablyService['client']?.connection?.state !== 'connected') {
+      const isConnected = ablyService['client']?.connection?.state === 'connected';
+
+      if (!isConnected) {
         console.warn('⚠️ Ably connection not established after timeout, will retry automatically');
-        return; // Don't subscribe if not connected
       } else {
         console.log(`⏱️ PERF: Ably connection took ${performance.now() - ablyStart}ms`);
         debugLog('✅ Ably connection established');
       }
 
-      // TODO: Private channel subscription - Reserved for future push notifications
-      // Use cases: Multisig signatures, price alerts, governance updates
-      // Commented out for now since sync is handled via REST API
-      /*
+      // Initialize delegation service for Midnight wallets FIRST (before subscriptions)
+      // This allows it to be ready even if Ably connection is still establishing
+      if (chain === Blockchain.MIDNIGHT) {
+        try {
+          console.log('📋 Initializing DUST delegation service for Midnight wallet');
+
+          // Initialize delegation store
+          await initializeDelegationStore(walletBg.id);
+
+          // Initialize delegation service with Ably client (even if not connected yet)
+          // The client will work once connection is established
+          if (ablyService['client']) {
+            delegationService.initialize(ablyService['client']);
+            console.log('✅ Delegation service initialized with Ably client');
+
+            // Only subscribe if connection is established
+            if (isConnected) {
+              await delegationService.subscribe(network, address);
+              console.log('✅ Delegation service subscribed to channel');
+            } else {
+              console.log('⏳ Delegation service will subscribe once Ably connects');
+            }
+          } else {
+            console.warn('⚠️ Ably client not available, delegation service not initialized');
+          }
+        } catch (error: any) {
+          console.warn('⚠️ Failed to initialize delegation service (non-critical):', error.message || error);
+        }
+      }
+
+      // Skip subscriptions if not connected
+      if (!isConnected) {
+        console.log('⏭️ Skipping Ably subscriptions, will retry when connection establishes');
+        return;
+      }
+
+      // Subscribe to private channel (in background)
       try {
         await ablyService.subscribeToPrivateChannel(address, {
+          onSync: async (msg: Ably.InboundMessage) => {
+            // OPTIMIZATION: Check mutex FIRST before any logging to reduce console spam
+            if (this.syncMutex.isLocked()) {
+              return; // Silent skip - mutex is locked, message will be redundant
+            }
+
+            try {
+              const syncObject = JSON.parse(msg.data);
+
+              // Validate SYNC message has newer tip before processing
+              if (syncObject?.block?.height) {
+                const currentTip = NetworkStore.state.tip;
+                if (currentTip && syncObject.block.height <= currentTip.blockNo) {
+                  return; // Silent skip - SYNC contains older or same tip
+                }
+              }
+
+              // Only log when we're actually processing
+              debugLog('SYNC::🔄 Processing SYNC message', msg.id || 'no-id');
+
+              this.syncMutex.runExclusive(async () => {
+                LoadingState.setText('');
+                LoadingState.setSyncing(true);
+
+                if (!ablyService.isTipProcessed(syncObject.block.hash)) {
+                  ablyService.markTipAsProcessed(syncObject.block.hash);
+                }
+                await walletBg.syncService.setSync(syncObject);
+                LoadingState.setSyncing(false);
+              });
+            } catch (e) {
+              console.error('SYNC::❌ Error processing sync message:', e);
+            }
+          },
           onMessage: async (msg: Ably.InboundMessage) => {
             // TODO: Implement notification handlers
             switch (msg.name) {
@@ -440,6 +594,9 @@ export class WalletManager {
     debugLog('WalletManager: Starting logout process');
 
     try {
+      // Clear Midnight store if it was active
+      midnightActions.clear();
+
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
         debugLog('Clearing database cache for wallet:', this.currentWalletId);
@@ -464,6 +621,16 @@ export class WalletManager {
         }
       } catch (ablyError) {
         console.warn('Failed to cleanup Ably service during logout:', ablyError);
+      }
+
+      // Clean up delegation service
+      try {
+        if (delegationService && typeof delegationService.cleanup === 'function') {
+          await delegationService.cleanup();
+          console.log('Delegation service cleaned up successfully');
+        }
+      } catch (delegationError) {
+        console.warn('Failed to cleanup delegation service during logout:', delegationError);
       }
 
       // Clean up store messaging service
