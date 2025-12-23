@@ -37,8 +37,6 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
-import TrezorConnect from '@trezor/connect-webextension';
-import assets from '@/utils/assets';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -88,48 +86,8 @@ debugLog('📡 Background store messaging handler initialized:', backgroundStore
 // const currentVersion: string = chrome.runtime.getManifest().version;
 
 
-// URL of the Trezor Connect
-const connectSrc = 'https://connect.trezor.io/9/';
-
 chrome.runtime.onInstalled.addListener((details: chrome.runtime.InstalledDetails) => {
-  console.log('details', details);
-  // Initialize Trezor Connect with the provided manifest and settings
-  TrezorConnect.init({
-    manifest: {
-      appName: 'Gero Dashboard',
-      appIcon: assets.geroLogo,
-      appUrl: 'chrome-extension://bgpipimickeadkjlklgciifhnalhdjhe',
-      email: 'support@gerowallet.io',
-    },
-    transports: ['BridgeTransport', 'WebUsbTransport'], // Transport protocols to be used
-    connectSrc,
-    _extendWebextensionLifetime: true, // Makes the service worker in @trezor/connect-webextension stay alive longer.
-  });
-  console.log('Trezor Connect initialized', TrezorConnect);
-  // Event listener for messages from other parts of the extension
-  // This code will depend on how you handle the communication between different parts of your webextension.
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message.action === 'getAddress') {
-      TrezorConnect['getAddress']({
-        showOnTrezor: true,
-        path: "m/49'/0'/0'/0/0",
-        coin: 'btc',
-      }).then(res => {
-        sendResponse(res); // Send the response back to the sender
-      });
-
-      // Return true to indicate you want to send a response asynchronously
-      return true;
-    } else if (message.action === 'getFeatures') {
-      TrezorConnect['getFeatures']().then(res => {
-        sendResponse(res); // Send the response back to the sender
-      });
-
-      // Return true to indicate you want to send a response asynchronously
-      return true;
-    }
-    return false;
-  });
+  console.log('Extension installed/updated:', details);
 });
 
 // if (!isBeta) {
@@ -1865,35 +1823,50 @@ app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendRe
   }
 });
 
-app.addToOptions(MessageTypes.CONNECT_TREZOR, async (request, sendResponse) => {
+app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
   try {
-    TrezorConnect.getPublicKey()
-    if (currentWallet) {
-      await currentWallet.syncService.resync();
+    const trezor = (await import('@/shared/utils/trezor')).default;
+
+    if (request.data.method === 'initTrezor') {
+      const path = request.data.path;
+
+      // Use the clean Trezor wrapper (handles initialization, device name, etc.)
+      const coldWalletProps = await trezor.getXpub(path);
+
       sendResponse({
         id: request.id,
-        data: { success: true },
+        data: { success: true, coldWalletProps },
         target: TARGET,
         sender: SENDER.extension,
       });
-    } else {
+    } else if (request.data.method === 'signData') {
+      const { address, payload, accountIndex } = request.data;
+
+      // Get network info from wallet store
+      const walletStore = (await import('@/stores/walletStore')).walletStore;
+      const networks = (await import('@/utils/networks')).default;
+      const network = networks.resolveNetwork(walletStore.loggedWallet.chain, walletStore.loggedWallet.network);
+
+      // Sign data with Trezor
+      const signatureData = await trezor.signData(address, payload, network, accountIndex);
+
       sendResponse({
         id: request.id,
-        data: { success: false },
+        data: { success: true, signatureData },
         target: TARGET,
         sender: SENDER.extension,
-      })
+      });
     }
   } catch (err) {
-    console.log('resync error', err)
+    console.error('[TREZOR Background] Error:', err);
     sendResponse({
       id: request.id,
-      data: { success: false },
+      data: { success: false, error: (err instanceof Error ? err.message : 'Trezor operation failed') },
       target: TARGET,
       sender: SENDER.extension,
-      error: err,
     })
   }
+  return true; // Important: return true for async handlers
 });
 
 const openUI = async () => {

@@ -80,7 +80,6 @@ import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';
-import trezor from '@/shared/utils/trezor';
 import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import networks from '@/utils/networks';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
@@ -216,19 +215,26 @@ const sign = async () => {
     const payload = request.value.data.payload;
     console.log('[TREZOR-SIGN-DATA] payload', payload);
     try {
-      // Create known addresses from wallet keys for Trezor signing
-      const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
-      const knownAddresses = trezor.createKnownAddressesFromKeys(keys.value, network);
+      const response = await Messaging.sendToBackground({
+        method: MessageTypes.TREZOR,
+        data: {
+          method: 'signData',
+          address,
+          payload,
+          accountIndex: 0
+        }
+      }) as { data: { success: boolean; signatureData?: any; error?: string } };
 
-      const response = await trezor.signData(
-        address,
-        payload,
-        network,
-        0,
-        knownAddresses
-      );
+      if (!response.data.success) {
+        throw new Error(response.data.error || t('wallet.trezorSigningFailed'));
+      }
+
       console.log('[TREZOR-SIGN-DATA] response', response);
-      signature.value = { signature: response.signatureHex, key: response.signingPublicKeyHex };
+      signature.value = {
+        signature: response.data.signatureData.signatureHex,
+        key: response.data.signatureData.signingPublicKeyHex
+      };
+
       if (txAutoSubmit.value) {
         await confirm();
       }

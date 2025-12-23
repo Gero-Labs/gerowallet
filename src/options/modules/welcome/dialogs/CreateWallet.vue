@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :title="$t('welcome.createNewWallet')"
+    :title="String($t('welcome.createNewWallet'))"
     :subtitle="props.network.title"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"

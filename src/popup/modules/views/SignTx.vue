@@ -49,7 +49,7 @@
                 outlined
                 dense
                 hide-details
-                :placeholder="$t('navigation.typeYourSpendingPassword')"
+                :placeholder="String($t('navigation.typeYourSpendingPassword'))"
                 :rules="[rules.required()]"
                 required
                 @enter="sign"
@@ -65,7 +65,14 @@
                 </span>
               </v-alert>
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSignLoading" />
+                <ToggleSwitch
+                  :text-left="String($t('wallet.usb'))"
+                  icon-left="mdi-usb"
+                  :text-right="String($t('wallet.bluetooth'))"
+                  icon-right="mdi-bluetooth"
+                  v-model="isBT"
+                  :disabled="txSignLoading"
+                />
               </v-card-subtitle>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="py-0">
