@@ -396,7 +396,7 @@ const walletTypes = [
   {
     name: t('wallet.trezor'),
     description: t('wallet.trezorDescription'),
-    enabled: false,
+    enabled: true,
     icon: assets.trezorLogoSvg,
     support: t('wallet.trezorSupport')
   },
@@ -498,6 +498,13 @@ const walletCreationStep2 = async () => {
       const path = `m/${purpose.hdwallet}'/1815'/${index}'`
       const coldWalletProps = await trezor.initTrezor(path)
       console.log(coldWalletProps)
+      const isConnected = !!coldWalletProps
+      if (isConnected) {
+        newWallet.value.name = coldWalletProps.productName
+        newWallet.value.publicKey = coldWalletProps.hwPublicKey
+        newWallet.value.keys = coldWalletProps.keys
+        step.value = 3
+      }
     } catch (e) {
       console.log(e)
     }

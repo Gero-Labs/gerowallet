@@ -68,6 +68,13 @@
                 <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSignLoading" />
               </v-card-subtitle>
             </v-col>
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="py-0">
+              <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
+                <span style="color: white; font-size: 12px">
+                  {{ $t('wallet.pleaseReviewCarefully', { walletType: loggedWallet.type }) }}
+                </span>
+              </v-alert>
+            </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
@@ -111,6 +118,7 @@ import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
+import trezorUtils from '@/shared/utils/trezor';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
 const { t } = useTranslation();
@@ -356,6 +364,60 @@ const sign = async () => {
         );
 
         // Merge Ledger signatures with existing witnesses
+        let finalWitnessSet: Serialization.TransactionWitnessSet;
+        if (existingWitnesses) {
+          // Convert existing witnesses to Core format
+          const existingCore = existingWitnesses.toCore();
+
+          // Merge signatures (combine both Maps)
+          const mergedSignatures = new Map([
+            ...(existingCore.signatures || new Map()),
+            ...(signatures || new Map()),
+          ]);
+
+          // Create merged witness set - only include properties that are defined
+          const mergedWitnessCore: Cardano.Witness = {
+            signatures: mergedSignatures,
+            ...(existingCore.bootstrap && { bootstrap: existingCore.bootstrap }),
+            ...(existingCore.scripts && { scripts: existingCore.scripts }),
+            ...(existingCore.redeemers && { redeemers: existingCore.redeemers }),
+            ...(existingCore.datums && { datums: existingCore.datums }),
+          };
+
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore(mergedWitnessCore);
+        } else {
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+            signatures,
+          });
+        }
+
+        witnesses.value = finalWitnessSet.toCbor();
+        if (txAutoSubmit.value) {
+          await confirm();
+        }
+      } else if (loggedWallet.value.type === WalletType.Trezor) {
+        const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
+
+        // Extract existing witnesses if this is a partial sign (multisig transaction)
+        let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
+        if (mergeWitnesses || partialSign) {
+          try {
+            const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
+            existingWitnesses = fullTx.witnessSet();
+          } catch (e) {
+            console.warn('[TREZOR-SIGN] Could not extract existing witnesses:', e);
+          }
+        }
+
+        const signatures: Cardano.Signatures = await trezorUtils.txToTrezor(
+          tx,
+          keys.value,
+          utxos.value,
+          networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+          txCbor // Pass original CBOR for multisig transactions to preserve exact byte representation
+        );
+
+        // Merge Trezor signatures with existing witnesses
         let finalWitnessSet: Serialization.TransactionWitnessSet;
         if (existingWitnesses) {
           // Convert existing witnesses to Core format

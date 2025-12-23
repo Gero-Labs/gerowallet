@@ -3,8 +3,9 @@ import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import i18n from '@/plugins/i18n';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { hdPathToArray } from '@/chrome/serialization';
+import { hdPathToArray, toStakeAddress } from '@/chrome/serialization';
 import { NetworkInfo } from '@/utils/networks';
+import { HexBlob } from '@cardano-sdk/util';
 import * as Crypto from '@cardano-sdk/crypto';
 import { TrezorKeyAgent } from '@cardano-sdk/hardware-trezor';
 import {
@@ -15,10 +16,12 @@ import {
   KeyRole,
   KeyPurpose,
   util,
+  cip8,
 } from '@cardano-sdk/key-management';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
+import { bech32 } from 'bech32';
+import { MessageTypes } from '@/models/MessageTypes';
+import { Messaging } from '@/chrome/messaging';
 
 // Trezor Connect manifest configuration
 const TREZOR_MANIFEST = {
@@ -42,33 +45,30 @@ export default {
         data: {},
       })
 
-      // Initialize Trezor transport using TrezorKeyAgent
-      await TrezorKeyAgent.initializeTrezorTransport({
-        manifest: TREZOR_MANIFEST,
-        communicationType: CommunicationType.Web,
-        silentMode: false,
-        lazyLoad: true,
-      });
-
       console.log('[TREZOR] Getting Cardano public key...');
 
       // Extract account index from path (e.g., "m/1852'/1815'/0'" -> 0)
       const pathParts = path.split('/');
       const accountIndex = parseInt(pathParts[3].replace("'", ""));
 
-      // Get extended public key using TrezorKeyAgent
-      const hwPublicKey: Crypto.Bip32PublicKeyHex = await TrezorKeyAgent.getXpub({
+      // Get extended public key using TrezorKeyAgent (exactly like Lace)
+      const hwPublicKeyHex: Crypto.Bip32PublicKeyHex = await TrezorKeyAgent.getXpub({
         accountIndex,
         communicationType: CommunicationType.Web,
         purpose: KeyPurpose.STANDARD,
       });
+      console.log('[TREZOR] Got Cardano public key (hex):', hwPublicKeyHex);
 
-      console.log('[TREZOR] Successfully got public key');
+      // Convert hex public key to Bech32 format (xpub1...) - same pattern as Ledger
+      const bip32PublicKey: Crypto.Bip32PublicKey = Crypto.Bip32PublicKey.fromHex(hwPublicKeyHex);
+      const words = bech32.toWords(bip32PublicKey.bytes());
+      const hwPublicKey = bech32.encode('xpub', words, 1023);
+      console.log('[TREZOR] Converted to Bech32 format:', hwPublicKey);
 
       const keys = [{
-        chainCode: hwPublicKey.slice(64), // The last 64 chars are chain code
+        chainCode: hwPublicKeyHex.slice(64), // The last 64 chars are chain code
         path: path,
-        publicKey: hwPublicKey.slice(0, 64), // The first 64 chars are public key
+        publicKey: hwPublicKeyHex.slice(0, 64), // The first 64 chars are public key
       }];
 
       return {
@@ -87,21 +87,24 @@ export default {
     tx: Cardano.Tx,
     keys: Keys,
     utxos: Cardano.Utxo[],
-    network: NetworkInfo
+    network: NetworkInfo,
+    originalTxCbor?: string
   ): Promise<Cardano.Signatures> {
     try {
       // Ensure Trezor transport is initialized
       if (!this._trezorInitialized) {
         await TrezorKeyAgent.initializeTrezorTransport({
           manifest: TREZOR_MANIFEST,
-          communicationType: CommunicationType.Web,
-          silentMode: false,
-          lazyLoad: false,
+          communicationType: CommunicationType.Web
         });
         this._trezorInitialized = true;
       }
 
-      const deserializedTx: Serialization.Transaction = Serialization.Transaction.fromCore(tx);
+      // Use original CBOR if provided (for multisig) to preserve exact byte representation
+      // This is critical for multisig transactions where another party has already signed the original bytes
+      const deserializedTx: Serialization.Transaction = originalTxCbor
+        ? Serialization.Transaction.fromCbor(Serialization.TxCBOR(originalTxCbor))
+        : Serialization.Transaction.fromCore(tx);
       const txBody: Cardano.TxBody = tx.body;
 
       // Create known addresses and input resolver (same pattern as Ledger)
@@ -130,7 +133,8 @@ export default {
 
     } catch (error: any) {
       console.error('[TREZOR] Transaction signing failed:', error);
-      throw new Error(`Error signing with Trezor: ${error.message || error}`);
+      this.trezorErrorHandling(error);
+      throw error;
     }
   },
 
@@ -155,7 +159,7 @@ export default {
             networkId,
             accountIndex: 0, // Assuming account 0 could be parameterized
             address: key.address as Cardano.PaymentAddress,
-            rewardAccount: Cardano.RewardAddress.fromAddress(Cardano.Address.fromString(keys.stake[0].address)),
+            rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
           });
         } catch (error) {
@@ -178,7 +182,7 @@ export default {
             networkId,
             accountIndex: 0, // Assuming account 0 could be parameterized
             address: key.address as Cardano.PaymentAddress,
-            rewardAccount: Cardano.RewardAddress.fromAddress(Cardano.Address.fromString(keys.stake[0].address)),
+            rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
           });
         } catch (error) {
@@ -247,22 +251,27 @@ export default {
     };
   },
 
-  async signData(_payload: string, network: any, accountIndex: number): Promise<any> {
+  async signData(
+    address: string,
+    payload: string,
+    network: any,
+    accountIndex: number,
+    knownAddresses?: GroupedAddress[]
+  ): Promise<{signatureHex: string; signingPublicKeyHex: string; addressFieldHex: string}> {
     try {
       // Ensure Trezor transport is initialized
       if (!this._trezorInitialized) {
         await TrezorKeyAgent.initializeTrezorTransport({
           manifest: TREZOR_MANIFEST,
-          communicationType: CommunicationType.Web,
-          silentMode: false,
-          lazyLoad: false,
+          communicationType: CommunicationType.Web
         });
         this._trezorInitialized = true;
       }
 
-      // Create TrezorKeyAgent for data signing
+      // Create TrezorKeyAgent for CIP-8/CIP-30 signing
+      const chainId = network.networkId === 1 ? Cardano.ChainIds.Mainnet : Cardano.ChainIds.Preprod;
       const trezorKeyAgent: TrezorKeyAgent = await TrezorKeyAgent.createWithDevice({
-        chainId: network.networkId === 1 ? Cardano.ChainIds.Mainnet : Cardano.ChainIds.Preview,
+        chainId,
         accountIndex,
         trezorConfig: {
           manifest: TREZOR_MANIFEST,
@@ -273,12 +282,49 @@ export default {
         logger: console
       });
 
-      // Sign the data using CIP-8 data signing
-      return await trezorKeyAgent.signCip8Data();
+      // Convert address from hex to bech32 if needed
+      let cardanoAddress: Cardano.Address;
+      let addressBech32: string;
 
+      if (address.startsWith('addr') || address.startsWith('stake')) {
+        // Already in bech32 format
+        cardanoAddress = Cardano.Address.fromString(address);
+        addressBech32 = address;
+      } else {
+        // Hex format - convert to Address object and then to bech32
+        const addressBytes = Buffer.from(address, 'hex');
+        cardanoAddress = Cardano.Address.fromBytes(addressBytes);
+        addressBech32 = cardanoAddress.toBech32();
+      }
+
+      // Determine if signing with a payment address or reward account
+      const isRewardAccount = cardanoAddress.getType() === Cardano.AddressType.RewardKey ||
+                              cardanoAddress.getType() === Cardano.AddressType.RewardScript;
+
+      const signWith = isRewardAccount
+        ? (addressBech32 as Cardano.RewardAccount)
+        : (addressBech32 as Cardano.PaymentAddress);
+
+      // Use SDK's cip30signData function with TrezorKeyAgent
+      // Note: TrezorKeyAgent.signCip8Data() is not implemented in v0.7.30,
+      // so we use cip8.cip30signData() directly (same pattern as walletBg.ts for software wallets)
+      const signature = await cip8.cip30signData(trezorKeyAgent as any, {
+        knownAddresses: knownAddresses || [],
+        signWith,
+        payload: payload as HexBlob
+      });
+
+      // Convert to the expected response format
+      // addressFieldHex must be hex bytes for COSE structure
+      return {
+        signatureHex: signature.signature,
+        signingPublicKeyHex: signature.key,
+        addressFieldHex: Buffer.from(Cardano.Address.fromBech32(addressBech32).toBytes()).toString('hex')
+      };
     } catch (error: any) {
       console.error('[TREZOR] Data signing failed:', error);
-      throw new Error(`Error signing data with Trezor: ${error.message || error}`);
+      this.trezorErrorHandling(error);
+      throw error;
     }
   },
 
@@ -315,6 +361,43 @@ export default {
     } catch (error) {
       console.warn('[TREZOR] Failed to get app version:', error);
       throw new Error(i18n.t('common.failedToGetTrezorVersion') as string);
+    }
+  },
+
+  /**
+   * Handle Trezor-specific errors and show user-friendly messages
+   * Similar pattern to Ledger error handling
+   */
+  trezorErrorHandling(e: any) {
+    // Trezor Connect popup/permission errors
+    if (e?.message?.includes('Popup closed') || e?.message?.includes('popup failure')) {
+      snackbar.setError(i18n.t('wallet.trezorPopupClosed') as string);
+    } else if (e?.message?.includes('Permissions not granted')) {
+      snackbar.setError(i18n.t('wallet.trezorPermissionDenied') as string);
+    } else if (e?.message?.includes('device not found') || e?.message?.includes('Device disconnected')) {
+      snackbar.setError(i18n.t('wallet.trezorNoDevice') as string);
+    }
+    // Trezor device/firmware errors
+    else if (e?.message?.includes('Action cancelled by user')) {
+      snackbar.setError(i18n.t('wallet.trezorTransactionRejected') as string);
+    } else if (e?.message?.includes('Initialize') || e?.message?.includes('acquire session')) {
+      snackbar.setError(i18n.t('wallet.trezorConnectionError') as string);
+    } else if (e?.message?.includes('Cardano not supported')) {
+      snackbar.setError(i18n.t('wallet.trezorCardanoNotSupported') as string);
+    } else if (e?.message?.includes('outdated firmware') || e?.message?.includes('Firmware')) {
+      snackbar.setError(i18n.t('wallet.trezorFirmwareOutdated') as string);
+    }
+    // Network/communication errors
+    else if (e?.message?.includes('NetworkError') || e?.message?.includes('Failed to fetch')) {
+      snackbar.setError(i18n.t('wallet.trezorNetworkError') as string);
+    } else if (e?.message?.includes('timeout') || e?.message?.includes('Timeout')) {
+      snackbar.setError(i18n.t('wallet.trezorTimeout') as string);
+    }
+    // Generic error with details for debugging
+    else {
+      console.error('Error with Trezor:', e);
+      const errorMessage = e instanceof Error ? e.message : i18n.t('wallet.trezorSigningFailed') as string;
+      snackbar.setError(`${errorMessage}. ${i18n.t('common.pleaseTryAgain')}`);
     }
   }
 };

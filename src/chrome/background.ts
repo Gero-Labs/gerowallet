@@ -37,6 +37,8 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
+import TrezorConnect from '@trezor/connect-webextension';
+import assets from '@/utils/assets';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -84,6 +86,51 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 // Initialize background store messaging (the import alone initializes it)
 debugLog('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
 // const currentVersion: string = chrome.runtime.getManifest().version;
+
+
+// URL of the Trezor Connect
+const connectSrc = 'https://connect.trezor.io/9/';
+
+chrome.runtime.onInstalled.addListener((details: chrome.runtime.InstalledDetails) => {
+  console.log('details', details);
+  // Initialize Trezor Connect with the provided manifest and settings
+  TrezorConnect.init({
+    manifest: {
+      appName: 'Gero Dashboard',
+      appIcon: assets.geroLogo,
+      appUrl: 'chrome-extension://bgpipimickeadkjlklgciifhnalhdjhe',
+      email: 'support@gerowallet.io',
+    },
+    transports: ['BridgeTransport', 'WebUsbTransport'], // Transport protocols to be used
+    connectSrc,
+    _extendWebextensionLifetime: true, // Makes the service worker in @trezor/connect-webextension stay alive longer.
+  });
+  console.log('Trezor Connect initialized', TrezorConnect);
+  // Event listener for messages from other parts of the extension
+  // This code will depend on how you handle the communication between different parts of your webextension.
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.action === 'getAddress') {
+      TrezorConnect['getAddress']({
+        showOnTrezor: true,
+        path: "m/49'/0'/0'/0/0",
+        coin: 'btc',
+      }).then(res => {
+        sendResponse(res); // Send the response back to the sender
+      });
+
+      // Return true to indicate you want to send a response asynchronously
+      return true;
+    } else if (message.action === 'getFeatures') {
+      TrezorConnect['getFeatures']().then(res => {
+        sendResponse(res); // Send the response back to the sender
+      });
+
+      // Return true to indicate you want to send a response asynchronously
+      return true;
+    }
+    return false;
+  });
+});
 
 // if (!isBeta) {
 //   chrome.runtime.onInstalled.addListener((details) => {
@@ -1486,7 +1533,6 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
-        request.data.mergeWitnesses || false
       );
       sendResponse({
         id: request.id,
@@ -1816,6 +1862,37 @@ app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendRe
       target: TARGET,
       sender: SENDER.extension,
     });
+  }
+});
+
+app.addToOptions(MessageTypes.CONNECT_TREZOR, async (request, sendResponse) => {
+  try {
+    TrezorConnect.getPublicKey()
+    if (currentWallet) {
+      await currentWallet.syncService.resync();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('resync error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
   }
 });
 

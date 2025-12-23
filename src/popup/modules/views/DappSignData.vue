@@ -37,6 +37,13 @@
                 <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" :value="isBT" @input="isBT = $event" :disabled="loading" />
               </v-card-subtitle>
             </v-col>
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="pt-3 pb-0">
+              <v-alert type="info" outlined dense class="py-1 my-0" style="line-height: 1.2">
+                <span style="color: white; font-size: 12px">
+                  {{ $t('wallet.confirmOnTrezor') }}
+                </span>
+              </v-alert>
+            </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline" :disabled="loading">
                 Decline
@@ -73,6 +80,7 @@ import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';
+import trezor from '@/shared/utils/trezor';
 import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import networks from '@/utils/networks';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
@@ -198,6 +206,35 @@ const sign = async () => {
         console.log(e);
         snackbar.setError(e);
       }
+    } finally {
+      loading.value = false;
+    }
+  } else if (loggedWallet.value.type === WalletType.Trezor) {
+    loading.value = true;
+    const address = request.value.data.address;
+    console.log('[TREZOR-SIGN-DATA] address', address);
+    const payload = request.value.data.payload;
+    console.log('[TREZOR-SIGN-DATA] payload', payload);
+    try {
+      // Create known addresses from wallet keys for Trezor signing
+      const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
+      const knownAddresses = trezor.createKnownAddressesFromKeys(keys.value, network);
+
+      const response = await trezor.signData(
+        address,
+        payload,
+        network,
+        0,
+        knownAddresses
+      );
+      console.log('[TREZOR-SIGN-DATA] response', response);
+      signature.value = { signature: response.signatureHex, key: response.signingPublicKeyHex };
+      if (txAutoSubmit.value) {
+        await confirm();
+      }
+    } catch (e: any) {
+      console.error('[TREZOR-SIGN-DATA] Error:', e);
+      snackbar.setError(e.message || t('wallet.trezorSigningFailed'));
     } finally {
       loading.value = false;
     }

@@ -13,6 +13,7 @@ import orangeSvg from '@/assets/svg/orange.svg'
 import blueSvg from '@/assets/svg/blue.svg'
 import greySvg from '@/assets/svg/grey.svg'
 import ledgerSvg from '@/assets/svg/ledger.svg'
+import trezorSvg from '@/assets/svg/trezor.svg'
 import keystoneSvg from '@/assets/svg/keystone.svg'
 import ledgerLogoSvg from '@/assets/svg/ledger-logo.svg'
 import trezorLogoSvg from '@/assets/svg/trezor-logo.svg'
@@ -151,6 +152,7 @@ export default {
   blueSvg,
   greySvg,
   ledgerSvg,
+  trezorSvg,
   keystoneSvg,
   ledgerLogoSvg,
   trezorLogoSvg,

@@ -82,7 +82,8 @@ async function getManifest() {
       'webNavigation',
       'notifications',
       'identity',
-      'sidePanel'
+      'sidePanel',
+      'scripting'
     ],
     host_permissions: ['*://*/*'],
     web_accessible_resources: [
