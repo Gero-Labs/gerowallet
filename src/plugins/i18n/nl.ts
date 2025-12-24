@@ -1752,4 +1752,11 @@ export default {
   'welcome.welcomeTo': 'Welcome to',
   'welcome.youllUseThisToLogin': 'You\'ll use this to log into your wallet and make transactions.',
   'welcome.yourNew': 'Your New',
+
+  // Validation messages
+  'validation.required': 'This field is required',
+  'validation.streetAddressTooShort': 'Street address must be at least 5 characters',
+  'validation.cityTooShort': 'City name must be at least 2 characters',
+  'validation.invalidZipCode': 'Please enter a valid zip/postal code',
+  'validation.invalidPhoneNumber': 'Please enter a valid phone number',
 }

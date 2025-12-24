@@ -19,6 +19,7 @@
           v-if="!orderSuccess"
           :amount-ada="paymentAmount.ada"
           :amount-eur="paymentAmount.eur"
+          :exchange-rate="orderResponse ? parseFloat(String(orderResponse.exchangeRate)) : undefined"
           @back="handleClose"
           @confirm="handlePaymentConfirm"
         />

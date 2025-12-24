@@ -8,8 +8,11 @@
       </div>
       <div class="amount-display">
         <div class="amount-row">
-          <span class="amount-value ada">{{ amountAda }} ADA</span>
+          <span class="amount-value ada">{{ amountAda.toFixed(2) }} ADA</span>
           <span class="amount-equivalent">(~{{ '\u20AC' }}{{ amountEur.toFixed(2) }})</span>
+        </div>
+        <div v-if="exchangeRate" class="exchange-rate">
+          <span>1 ADA = {{ '\u20AC' }}{{ exchangeRate.toFixed(4) }}</span>
         </div>
       </div>
     </div>
@@ -52,9 +55,9 @@
     <!-- Actions -->
     <div class="step-actions">
       <SecondaryButton :text="$t('card.back')" @click="handleBack" :disabled="isValidating" />
-      <GradientButton 
-        :text="$t('card.confirmPayment')" 
-        @click="handleConfirm" 
+      <GradientButton
+        :text="$t('card.confirmPayment')"
+        @click="handleConfirm"
         :disabled="!spendingPassword || isValidating"
         :loading="isValidating"
       />
@@ -74,6 +77,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 interface Props {
   amountAda: number;
   amountEur: number;
+  exchangeRate?: number;
 }
 
 interface Emits {
@@ -103,7 +107,7 @@ const handleConfirm = async () => {
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value },
     })) as { data: { isValid: boolean; error?: string } };
-    
+
     if (!passwordVerification.data.isValid) {
       snackbar.setError(t('wallet.invalidSpendingPassword'));
       isValidating.value = false;
@@ -117,7 +121,6 @@ const handleConfirm = async () => {
     isValidating.value = false;
   }
 };
-
 </script>
 
 <style lang="scss" scoped>
@@ -186,6 +189,21 @@ const handleConfirm = async () => {
   font-family: $font-family-primary;
   font-size: $font-size-lg;
   color: $text-muted;
+}
+
+.exchange-rate {
+  margin-top: $spacing-sm;
+  font-family: $font-family-primary;
+  font-size: $font-size-sm;
+  color: $text-muted;
+  font-weight: $font-weight-medium;
+  
+  span {
+    padding: 4px 12px;
+    background: rgba($primary-cyan, 0.1);
+    border-radius: $border-radius-sm;
+    display: inline-block;
+  }
 }
 
 .info-alert {

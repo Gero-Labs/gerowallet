@@ -193,15 +193,15 @@
     </v-card>
 
     <!-- Modals -->
-    <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
-    <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
+    <ManageCardModal :open="showManageCardModal" @close="handleManageCardClose" />
+    <TopUpModal :open="showTopUpModal" @close="handleTopUpClose" />
     <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
-    <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="showOrderPhysicalCardModal = false" />
+    <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="handleOrderPhysicalCardClose" />
     <OrderCardFlowModal 
       :open="showOrderCardFlowModal" 
       :has-virtual-card="hasVirtualCard"
       :has-physical-card="hasPhysicalCard"
-      @close="showOrderCardFlowModal = false" 
+      @close="handleOrderCardFlowClose" 
     />
     <PayOrderModal
       v-if="pendingOrderUuid"
@@ -442,6 +442,28 @@ const openPaymentModal = async () => {
   }
 };
 
+const handleManageCardClose = async () => {
+  showManageCardModal.value = false;
+  await cardStoreModule.fetchCardData();
+};
+
+const handleTopUpClose = async () => {
+  showTopUpModal.value = false;
+  await cardStoreModule.fetchCardData();
+};
+
+const handleOrderCardFlowClose = async () => {
+  showOrderCardFlowModal.value = false;
+  await cardStoreModule.fetchCardData();
+  checkPendingOrders();
+};
+
+const handleOrderPhysicalCardClose = async () => {
+  showOrderPhysicalCardModal.value = false;
+  await cardStoreModule.fetchCardData();
+  checkPendingOrders();
+};
+
 const handlePaymentSuccess = async () => {
   await cardStoreModule.fetchCardData();
   showPayOrderModal.value = false;
@@ -450,6 +472,8 @@ const handlePaymentSuccess = async () => {
     const index = hiddenOrderUuids.value.indexOf(pendingOrderUuid.value);
     hiddenOrderUuids.value.splice(index, 1);
   }
+  
+  checkPendingOrders();
 };
 
 // Check order status for pending cards

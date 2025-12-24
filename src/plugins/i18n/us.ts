@@ -1825,4 +1825,11 @@ export default {
   'welcome.checkedTimes': 'Checked {count} time | Checked {count} times',
   'welcome.submittingActivation': 'Submitting activation transaction to Cardano blockchain...',
   'welcome.walletReadyToUse': 'Your wallet is now ready to use!',
+
+  // Validation messages
+  'validation.required': 'This field is required',
+  'validation.streetAddressTooShort': 'Street address must be at least 5 characters',
+  'validation.cityTooShort': 'City name must be at least 2 characters',
+  'validation.invalidZipCode': 'Please enter a valid zip/postal code',
+  'validation.invalidPhoneNumber': 'Please enter a valid phone number',
 }

@@ -72,6 +72,7 @@
           v-if="currentStep === 4"
           :amount-ada="paymentAmount.ada"
           :amount-eur="paymentAmount.eur"
+          :exchange-rate="orderResponse ? parseFloat(String(orderResponse.exchangeRate)) : undefined"
           @back="handleBack"
           @confirm="handlePaymentConfirm"
         />
