@@ -45,6 +45,8 @@
         <CardTypeSelectionStep
           v-if="currentStep === 1"
           :selected-type="selectedCardType"
+          :has-virtual-card="hasVirtualCard"
+          :has-physical-card="hasPhysicalCard"
           @select="handleCardTypeSelect"
         />
 
@@ -124,6 +126,8 @@ const router = useRouter();
 
 interface Props {
   open: boolean;
+  hasVirtualCard?: boolean;
+  hasPhysicalCard?: boolean;
 }
 
 interface Emits {

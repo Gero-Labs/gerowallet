@@ -4,12 +4,12 @@
       <!-- Virtual Card Option -->
       <div
         class="card-option"
-        :class="{ selected: selectedType === 'virtual' }"
-        @click="selectType('virtual')"
-        @keydown.enter="selectType('virtual')"
-        @keydown.space.prevent="selectType('virtual')"
+        :class="{ selected: selectedType === 'virtual', disabled: hasVirtualCard }"
+        @click="!hasVirtualCard && selectType('virtual')"
+        @keydown.enter="!hasVirtualCard && selectType('virtual')"
+        @keydown.space.prevent="!hasVirtualCard && selectType('virtual')"
         role="button"
-        tabindex="0"
+        :tabindex="hasVirtualCard ? -1 : 0"
       >
         <div class="option-icon">
           <v-icon large>mdi-credit-card-outline</v-icon>
@@ -33,7 +33,8 @@
           </div>
         </div>
         <div class="option-price">
-          <span class="price-label">{{ $t('card.free') }}</span>
+          <span v-if="!hasVirtualCard" class="price-label">{{ $t('card.free') }}</span>
+          <span v-else class="price-label already-ordered">{{ $t('card.alreadyOrdered') }}</span>
         </div>
         <div class="selection-indicator">
           <v-icon v-if="selectedType === 'virtual'" color="#00c7f3">mdi-check-circle</v-icon>
@@ -44,12 +45,12 @@
       <!-- Physical + Virtual Card Option -->
       <div
         class="card-option"
-        :class="{ selected: selectedType === 'physical' }"
-        @click="selectType('physical')"
-        @keydown.enter="selectType('physical')"
-        @keydown.space.prevent="selectType('physical')"
+        :class="{ selected: selectedType === 'physical', disabled: hasPhysicalCard }"
+        @click="!hasPhysicalCard && selectType('physical')"
+        @keydown.enter="!hasPhysicalCard && selectType('physical')"
+        @keydown.space.prevent="!hasPhysicalCard && selectType('physical')"
         role="button"
-        tabindex="0"
+        :tabindex="hasPhysicalCard ? -1 : 0"
       >
         <div class="option-icon physical">
           <v-icon large>mdi-credit-card-multiple-outline</v-icon>
@@ -73,7 +74,8 @@
           </div>
         </div>
         <div class="option-price">
-          <span class="price-label shipping">{{ $t('card.shippingFeeApplies') }}</span>
+          <span v-if="!hasPhysicalCard" class="price-label shipping">{{ $t('card.shippingFeeApplies') }}</span>
+          <span v-else class="price-label already-ordered">{{ $t('card.alreadyOrdered') }}</span>
         </div>
         <div class="selection-indicator">
           <v-icon v-if="selectedType === 'physical'" color="#00c7f3">mdi-check-circle</v-icon>
@@ -87,6 +89,8 @@
 <script setup lang="ts">
 interface Props {
   selectedType?: 'virtual' | 'physical' | null;
+  hasVirtualCard?: boolean;
+  hasPhysicalCard?: boolean;
 }
 
 interface Emits {
@@ -95,6 +99,8 @@ interface Emits {
 
 withDefaults(defineProps<Props>(), {
   selectedType: null,
+  hasVirtualCard: false,
+  hasPhysicalCard: false,
 });
 const emit = defineEmits<Emits>();
 
@@ -142,6 +148,17 @@ const selectType = (type: 'virtual' | 'physical') => {
   &:focus {
     outline: none;
     border-color: $primary-cyan;
+  }
+
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+
+    &:hover {
+      border-color: $border-primary;
+      background: $background-card;
+    }
   }
 }
 
@@ -211,6 +228,12 @@ const selectType = (type: 'virtual' | 'physical') => {
     &.shipping {
       color: $text-muted;
       font-weight: $font-weight-normal;
+      font-size: $font-size-sm;
+    }
+
+    &.already-ordered {
+      color: #ff9800;
+      font-weight: $font-weight-semibold;
       font-size: $font-size-sm;
     }
   }

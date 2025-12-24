@@ -197,7 +197,12 @@
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
     <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
     <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="showOrderPhysicalCardModal = false" />
-    <OrderCardFlowModal :open="showOrderCardFlowModal" @close="showOrderCardFlowModal = false" />
+    <OrderCardFlowModal 
+      :open="showOrderCardFlowModal" 
+      :has-virtual-card="hasVirtualCard"
+      :has-physical-card="hasPhysicalCard"
+      @close="showOrderCardFlowModal = false" 
+    />
     <PayOrderModal
       v-if="pendingOrderUuid"
       :open="showPayOrderModal"
@@ -285,11 +290,31 @@ const cards = computed(() => {
   return cardStoreModule.state.cards || [];
 });
 
+const hasVirtualCard = computed(() => {
+  return cards.value.some(card => 
+    card.cardData?.own_type === 'virtual' && 
+    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+  );
+});
+
+const hasPhysicalCard = computed(() => {
+  return cards.value.some(card => 
+    card.cardData?.own_type === 'physical' && 
+    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+  );
+});
+
+const canOrderNewCard = computed(() => {
+  return !hasVirtualCard.value || !hasPhysicalCard.value;
+});
+
 const cardsWithOrderSlot = computed(() => {
   if (cards.value.length === 0) {
     return [emptyCard];
-  } else {
+  } else if (canOrderNewCard.value) {
     return [...cards.value, emptyCard];
+  } else {
+    return cards.value;
   }
 });
 

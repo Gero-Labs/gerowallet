@@ -88,6 +88,7 @@ export default {
   'card.virtualCardOrderInProgress': 'Virtual Card Order in Progress',
   'card.physicalCardPaymentRequired': 'Payment required for shipping and handling.',
   'card.completePaymentToProceed': 'Complete payment to proceed with your order.',
+  'card.alreadyOrdered': 'Already Ordered',
   'card.cardPoweredByKaiser': 'Your Gero Card is powered by Kaiser Exchange International, a fully licensed and regulated cryptocurrency financial services provider',
   'card.cardWillReceiveExactly': 'Card will receive exactly',
   'card.cardholderName': 'CARDHOLDER NAME',
