@@ -169,6 +169,18 @@ const paymentAmount = ref({
   eur: 5.0,
 });
 
+// Order response data
+const orderResponse = ref<{
+  paymentId: number;
+  depositAddress: string;
+  depositAmountEur: string | number;
+  depositAmountAda: string | number;
+  exchangeRate: string | number;
+  depositExpiresAt: string;
+  depositQrCode: string;
+  orderUuid?: string;
+} | null>(null);
+
 // Processing states
 const isProcessing = ref(false);
 const orderingVirtualCard = ref(false);
@@ -233,10 +245,8 @@ const orderVirtualCard = async () => {
     await cardStore.fetchCardData();
     snackbar.fireSuccess(t('card.cardOrderedSuccess'));
     handleClose();
-    // Navigate to card page (will show pending section)
     router.push('/card');
   } catch (error: any) {
-    console.error('Failed to order virtual card:', error);
     let errorReason: string;
     if (typeof error?.response?.data === 'string' && error.response.data) {
       errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
@@ -271,42 +281,56 @@ const handleAddressSubmit = (payload: { useExisting: boolean; address?: typeof s
   currentStep.value = 3;
 };
 
-const handleShippingMethodSelect = (method: 'regular' | 'express-eu' | 'express-worldwide') => {
+const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'express-worldwide') => {
   shippingMethod.value = method;
-  // Update payment amount based on shipping method
-  const fees: Record<string, { ada: number; eur: number }> = {
-    'regular': { ada: 12.5, eur: 3.99 },
-    'express-eu': { ada: 31.2, eur: 9.99 },
-    'express-worldwide': { ada: 62.5, eur: 19.99 },
-  };
-  paymentAmount.value = fees[method] || fees['regular'];
-  currentStep.value = 4;
+  isProcessing.value = true;
+  
+  try {
+    const payload: OrderPhysicalCardPayload = {
+      address: useExistingAddress.value ? '' : shippingAddress.value.streetAddress,
+      region: useExistingAddress.value ? '' : shippingAddress.value.stateProvince,
+      city: useExistingAddress.value ? '' : shippingAddress.value.city,
+      zipCode: useExistingAddress.value ? '' : shippingAddress.value.zipCode,
+      countryCode: useExistingAddress.value ? '' : shippingAddress.value.countryCode,
+      phone: useExistingAddress.value ? '' : shippingAddress.value.phone,
+      deliveryMethod: method,
+    };
+
+    const response = await cardStore.orderPhysicalCard(payload);
+    orderResponse.value = response;
+    
+    // Update payment amount with real values from API (convert to numbers)
+    paymentAmount.value = {
+      ada: parseFloat(String(response.depositAmountAda)) || 0,
+      eur: parseFloat(String(response.depositAmountEur)) || 0,
+    };
+    
+    currentStep.value = 4;
+  } catch (error: any) {
+    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
+  } finally {
+    isProcessing.value = false;
+  }
 };
 
 const handlePaymentConfirm = async (spendingPassword: string) => {
-  // Move to confirmation step
   currentStep.value = 5;
   isProcessing.value = true;
 
   try {
-    // Password is already verified in CardOrderPaymentStep
-    console.log('✅ Password verified, proceeding with transaction');
+    if (!orderResponse.value) {
+      throw new Error(t('errors.invalidOrder'));
+    }
 
-    // Hardcoded Cardano address for payment
-    const cardanoAddress =
-      'addr1qxzdsrps5m46ch53tdnaxmzlpwmv6dyzccpsrr3h2lrss0z9su4t9radfkkl2k0ypxyg9pqeahzwphh8e85c49kypqksj3wjrv';
-    console.log('💰 Cardano address:', cardanoAddress);
+    const cardanoAddress = orderResponse.value.depositAddress;
+    const adaAmount = parseFloat(String(orderResponse.value.depositAmountAda));
 
-    // Parse ADA amount and convert to Lovelace
-    const adaAmount = paymentAmount.value.ada;
-    if (isNaN(adaAmount) || adaAmount <= 0) {
-      throw new Error(t('errors.invalidAmount'));
+    if (!cardanoAddress || isNaN(adaAmount) || adaAmount <= 0) {
+      throw new Error(t('errors.invalidPaymentDetails'));
     }
 
     const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
-    console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${cardanoAddress}`);
 
-    // Create output
     const outputs: Cardano.TxOut[] = [
       {
         address: cardanoAddress as Cardano.PaymentAddress,
@@ -317,7 +341,6 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       },
     ];
 
-    // Build transaction
     const tx = await buildCardanoTransaction({
       outputs,
       utxos: walletStore.utxos,
@@ -326,13 +349,8 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       tip: networkStore.tip,
     });
 
-    console.log('✅ Transaction built successfully');
-
-    // Serialize transaction
     const txCbor = serializeCardanoJsSdkTx(tx);
-    console.log('📦 Serialized transaction CBOR');
 
-    // Sign transaction
     const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
@@ -350,10 +368,8 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(witnessResult.data.error);
     }
 
-    console.log('✅ Transaction signed successfully');
     const txWitnesses = witnessResult.data.witnesses;
 
-    // Submit transaction
     const submitResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
@@ -367,25 +383,12 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(submitResult.data.error);
     }
 
-    console.log('✅ Transaction submitted successfully');
-    console.log('📝 Transaction ID:', submitResult.data.txId);
     snackbar.fireSuccess(t('notifications.transactionSubmitted'));
 
-    //,  payment_tx_id: submitResult.data.txId, TODO: Uncomment when backend is ready
-    const payload: OrderPhysicalCardPayload = {
-      address: useExistingAddress.value ? '' : shippingAddress.value.streetAddress,
-      region: useExistingAddress.value ? '' : shippingAddress.value.stateProvince,
-      city: useExistingAddress.value ? '' : shippingAddress.value.city,
-      zipCode: useExistingAddress.value ? '' : shippingAddress.value.zipCode,
-      countryCode: useExistingAddress.value ? '' : shippingAddress.value.countryCode,
-      phone: useExistingAddress.value ? '' : shippingAddress.value.phone,
-      deliveryMethod: shippingMethod.value,
-    };
-    await cardStore.orderPhysicalCard(payload);
     await cardStore.fetchCardData();
     orderSuccess.value = true;
+    currentStep.value = 5;
   } catch (error: any) {
-    console.error('❌ Failed to process payment:', error);
     snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
     currentStep.value = 4;
   } finally {
@@ -413,6 +416,7 @@ const handleClose = () => {
   };
   shippingMethod.value = 'regular';
   paymentAmount.value = { ada: 12.5, eur: 5.0 };
+  orderResponse.value = null;
   isProcessing.value = false;
   orderSuccess.value = false;
   orderingVirtualCard.value = false;

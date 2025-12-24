@@ -99,7 +99,6 @@ const handleBack = () => {
 const handleConfirm = async () => {
   isValidating.value = true;
   try {
-    // Verify spending password
     const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value },
@@ -111,11 +110,8 @@ const handleConfirm = async () => {
       return;
     }
 
-    console.log('✅ Password verified successfully');
-    // Password is valid, emit to parent for transaction handling
     emit('confirm', spendingPassword.value);
   } catch (error) {
-    console.error('❌ Error verifying password:', error);
     snackbar.setError(t('wallet.invalidSpendingPassword'));
   } finally {
     isValidating.value = false;

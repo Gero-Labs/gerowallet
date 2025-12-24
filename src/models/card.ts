@@ -26,6 +26,8 @@ export interface CardData {
   id: number;
   uuid: string;
   card_uuid: string;
+  order_uuid?: string;
+  own_type?: 'virtual' | 'physical'; // Card type from API
   pan: string;
   currentBalance: string;
   currency: string;
