@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { TxSignError } from '@/chrome/config';
 import rules from '@/utils/rules';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
@@ -482,9 +482,9 @@ const sign = async () => {
       const passwordVerification = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: spendingPassword.value }
-      }) as { data: { isValid: boolean; error?: string } };
+      }) as BackgroundResponse<VerifyPasswordResponse>;
 
-      if (passwordVerification.data.isValid) {
+      if (passwordVerification.data.success) {
         await signAndReturnTx();
       } else {
         passwordField.value?.showError(t('wallet.invalidSpendingPassword'));

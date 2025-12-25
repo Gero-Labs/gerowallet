@@ -363,20 +363,9 @@ import snackbar from '@/plugins/snackbar';
 import { markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+import { BackgroundResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 
 const { t } = useTranslation();
-
-// Response type from background messaging
-interface BackgroundResponse<T = any> {
-  data: T;
-  target: string;
-  sender: string;
-}
-
-interface VerifyPasswordResponse {
-  success: boolean;
-  error?: string;
-}
 
 // Props
 interface Props {

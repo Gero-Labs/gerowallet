@@ -2,7 +2,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 
 // Note: ref, toRefs, Ref (type), ComputedRef (type) are auto-imported globally by unplugin-auto-import
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
@@ -80,9 +80,9 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: spendingPassword.value },
-      })) as { data: { isValid: boolean; error?: string } };
+      })) as BackgroundResponse<VerifyPasswordResponse>;
 
-      if (!passwordVerification.data.isValid) {
+      if (!passwordVerification.data.success) {
         passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
         loading.value = false;
         return false;
