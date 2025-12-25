@@ -335,7 +335,7 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import filters from '@/shared/utils/filters';
 import WalletStore, { walletStore } from '@/stores/walletStore';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import rules from '@/utils/rules';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
@@ -595,7 +595,7 @@ async function verifyCurrentMethod() {
         const passwordVerification = await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.VERIFY_SPENDING_PASSWORD,
           data: { password: verificationInput.value }
-        }) as { data: { success: boolean; error?: string } };
+        }) as BackgroundResponse<VerifyPasswordResponse>;
         isValid = passwordVerification.data.success;
         if (!isValid) {
           tooltip.value.text = t('wallet.wrongSpendingPassword');

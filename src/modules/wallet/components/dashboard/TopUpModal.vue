@@ -134,7 +134,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import snackbar from '@/plugins/snackbar';
@@ -482,9 +482,9 @@ const handleTopUp = async () => {
       const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: spendingPassword.value },
-      })) as { data: { isValid: boolean; error?: string } };
+      })) as BackgroundResponse<VerifyPasswordResponse>;
       console.log('🔏 passwordVerification:', passwordVerification);
-      if (!passwordVerification.data.isValid) {
+      if (!passwordVerification.data.success) {
         passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
         return;
       }

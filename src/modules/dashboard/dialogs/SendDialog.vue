@@ -204,7 +204,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx, BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import ledgerUtils from '@/shared/utils/ledger';
@@ -512,12 +512,13 @@ const signLedgerTx = async () => {
 
 async function signAndSubmitTx() {
   if (loggedWallet.value?.type === WalletType.Normal) {
+    console.log('Signing and submitting transaction...');
     const passwordVerification = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value }
-    }) as { data: { isValid: boolean; error?: string } };
+    }) as BackgroundResponse<VerifyPasswordResponse>;
 
-    if (!passwordVerification.data.isValid) {
+    if (!passwordVerification.data.success) {
       passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       return;
     }
