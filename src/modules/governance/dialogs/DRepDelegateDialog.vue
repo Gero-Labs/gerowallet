@@ -196,7 +196,7 @@ import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
@@ -309,9 +309,9 @@ const signTx = async (): Promise<boolean> => {
     const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value },
-    })) as { data: { isValid: boolean; error?: string } };
+    })) as BackgroundResponse<VerifyPasswordResponse>;
 
-    if (!passwordVerification.data.isValid) {
+    if (!passwordVerification.data.success) {
       passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       loading.value = false;
       return false;
