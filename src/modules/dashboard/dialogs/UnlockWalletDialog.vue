@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="String($t('security.walletLocked'))"
+    :title="$t('security.walletLocked')"
     :subtitle="unlockDescription"
     :width="400"
     icon="mdi-lock"

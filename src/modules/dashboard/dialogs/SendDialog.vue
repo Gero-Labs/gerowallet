@@ -2,10 +2,10 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    :title="String($t('wallet.quickSend'))"
+    :title="$t('wallet.quickSend')"
     :loading="txSubmitLoading"
     :min-height="0"
-    :subtitle="String($t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }))"
+    :subtitle="$t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
     :img="assets.sendSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
@@ -194,7 +194,6 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
 // import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import { toRefs, onMounted, computed, ref, watch, getCurrentInstance } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 // import { QrcodeStream } from "vue-qrcode-reader";
 // import { UREncoder } from '@keystonehq/keystone-sdk';
@@ -283,7 +282,7 @@ const tokens = computed(() => {
         verified: token.verified
       }
     })
-    tokens.sort((a,b) => {
+    tokens.sort((a,_b) => {
       if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
         return -1
       }
@@ -673,7 +672,6 @@ async function setMax(index) {
   // For ADA, use two-phase approach: coarse search (1 ADA) then fine-tune (1 lovelace)
   const totalBalance = BigInt(selectedToken.balance);
   const ADA_STEP = BigInt(1_000_000); // 1 ADA steps for coarse search
-  const LOVELACE_STEP = BigInt(1); // 1 lovelace steps for fine-tuning
   const MAX_BUFFER = BigInt(100_000_000); // Stop after 100 ADA buffer
 
   let buffer = BigInt(0);

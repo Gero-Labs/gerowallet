@@ -81,14 +81,13 @@
     </div>
 
     <div class="modal-actions">
-      <SecondaryButton :text="String($t('card.back'))" @click="$emit('close')" />
-      <GradientButton :text="String($t('card.placeOrder'))" @click="placeOrder" :loading="loading" />
+      <SecondaryButton :text="$t('card.back')" @click="$emit('close')" />
+      <GradientButton :text="$t('card.placeOrder')" @click="placeOrder" :loading="loading" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import cardStore, { OrderPhysicalCardPayload } from '@/stores/modules/card';
 import GradientButton from '../../GradientButton.vue';

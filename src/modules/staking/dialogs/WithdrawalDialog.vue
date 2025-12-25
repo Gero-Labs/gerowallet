@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" :title="String($t('staking.withdrawStakingRewards'))" :loading="loading"
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" :title="$t('staking.withdrawStakingRewards')" :loading="loading"
               :subtitle="$t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
@@ -76,7 +76,7 @@
               outlined
               dense
               hide-details
-              :label="String($t('wallet.spendingPassword'))"
+              :label="$t('wallet.spendingPassword')"
               :rules="passwordRules"
               :disabled="loading"
               required
@@ -87,7 +87,7 @@
             />
             <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="String($t('staking.usb'))" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch :text-left="$t('staking.usb')" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
             <v-btn color="primary" elevation="0" @click="signWithdrawalTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">

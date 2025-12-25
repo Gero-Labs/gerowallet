@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="String($t('security.lockSettings'))"
+    :title="$t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"

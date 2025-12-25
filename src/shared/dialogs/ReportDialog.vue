@@ -3,8 +3,8 @@
     :img="cardanoShieldLogo"
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="reportSite ? String($t('navigation.reportWebsite')) : String($t('navigation.reportTransaction'))"
-    :subtitle="String($t('navigation.improveCardanoShield', { type: reportSite ? String($t('navigation.website')).toLowerCase() : String($t('navigation.transactionId')).toLowerCase() }))"
+    :title="reportSite ? $t('navigation.reportWebsite') : $t('navigation.reportTransaction')"
+    :subtitle="$t('navigation.improveCardanoShield', { type: reportSite ? $t('navigation.website').toLowerCase() : $t('navigation.transactionId').toLowerCase() })"
     :min-height="0"
     :persistent="false"
   >
@@ -169,7 +169,6 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, watch } from 'vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';

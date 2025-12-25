@@ -140,18 +140,18 @@
                   <img
                     v-if="walletType === WalletType.Ledger"
                     :src="assets.connectLedgerSvg"
-                    :alt="String($t('wallet.connectLedger'))"
+                    :alt="$t('wallet.connectLedger')"
                   >
                   <img
                     v-if="walletType === WalletType.Trezor"
                     :src="assets.connectTrezorSvg"
-                    :alt="String($t('wallet.connectTrezor'))"
+                    :alt="$t('wallet.connectTrezor')"
                   >
                   <img
                     v-if="walletType === WalletType.Keystone && !keystoneScan"
                     :src="assets.connectKeystoneSvg"
                     style="width: 230px; height: 126px"
-                    :alt="String($t('wallet.connectKeystone'))">
+                    :alt="$t('wallet.connectKeystone')">
                   <v-alert
                     color="white"
                     dense
@@ -194,9 +194,9 @@
                   </v-alert>
                   <div style="display: flex;" v-if="walletType === WalletType.Ledger">
                     <ToggleSwitch
-                      :text-left="String($t('dashboard.usb'))"
+                      :text-left="$t('dashboard.usb')"
                       icon-left="mdi-usb"
-                      :text-right="String($t('dashboard.bluetooth'))"
+                      :text-right="$t('dashboard.bluetooth')"
                       icon-right="mdi-bluetooth"
                       v-model="isBluetooth"
                     />
@@ -353,7 +353,6 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, getCurrentInstance, computed, nextTick } from 'vue';
 import rules from "@/utils/rules";
 import { Blockchain, coin_type, purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
@@ -367,7 +366,6 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import trezor from '@/shared/utils/trezor';
 import { NetworkInfo } from '@/utils/networks';
 import i18n from '@/plugins/i18n';
 

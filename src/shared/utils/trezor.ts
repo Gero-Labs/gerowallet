@@ -147,9 +147,11 @@ export default {
     try {
       console.log('[TREZOR] Preparing transaction for signing...', { tx, keys, network });
 
-      // Import the transaction transformer from @cardano-sdk/hardware-trezor
-      const { txToTrezor } = await import('@cardano-sdk/hardware-trezor/dist/esm/transformers/tx.js');
-      const { TrezorKeyAgent } = await import('@cardano-sdk/hardware-trezor/dist/esm/TrezorKeyAgent.js');
+      // Dynamically import Trezor transformers and utilities
+      const trezorPkg = await import('@cardano-sdk/hardware-trezor');
+      const txToTrezor = (trezorPkg as any).txToTrezor;
+      const TrezorKeyAgent = (trezorPkg as any).TrezorKeyAgent;
+
       const { TxInId } = await import('@cardano-sdk/key-management');
 
       // Create known addresses from wallet keys

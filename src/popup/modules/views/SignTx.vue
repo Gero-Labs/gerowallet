@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader :title="String($t('navigation.transactionSummary'))" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
+    <PopupHeader :title="$t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
@@ -49,7 +49,7 @@
                 outlined
                 dense
                 hide-details
-                :placeholder="String($t('navigation.typeYourSpendingPassword'))"
+                :placeholder="$t('navigation.typeYourSpendingPassword')"
                 :rules="[rules.required()]"
                 required
                 @enter="sign"
@@ -66,9 +66,9 @@
               </v-alert>
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
-                  :text-left="String($t('wallet.usb'))"
+                  :text-left="$t('wallet.usb')"
                   icon-left="mdi-usb"
-                  :text-right="String($t('wallet.bluetooth'))"
+                  :text-right="$t('wallet.bluetooth')"
                   icon-right="mdi-bluetooth"
                   v-model="isBT"
                   :disabled="txSignLoading"
@@ -100,7 +100,6 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { TxSignError } from '@/chrome/config';
@@ -403,6 +402,7 @@ const sign = async () => {
           await confirm();
         }
       } else if (loggedWallet.value.type === WalletType.Trezor) {
+        Messaging.sendToBackgroundFromOptions()
         const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
 
         // Extract existing witnesses if this is a partial sign (multisig transaction)

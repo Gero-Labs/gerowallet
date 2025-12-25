@@ -1,5 +1,6 @@
-import { ref, toRefs, Ref, ComputedRef } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+
+// Note: ref, toRefs, Ref (type), ComputedRef (type) are auto-imported globally by unplugin-auto-import
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
