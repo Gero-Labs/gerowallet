@@ -54,7 +54,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { METHOD } from '@/chrome/config';
 import { ref, watch, toRefs } from 'vue';
@@ -99,8 +99,8 @@ const verifyPassword = async () => {
     const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: password.value },
-    })) as { data: { isValid: boolean; error?: string } };
-    if (!passwordVerification.data.isValid) {
+    })) as BackgroundResponse<VerifyPasswordResponse>;
+    if (!passwordVerification.data.success) {
       errorMessage.value = t('wallet.wrongSpendingPassword');
       return;
     }

@@ -64,7 +64,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
@@ -151,9 +151,9 @@ const sign = async () => {
       const passwordVerification = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: spendingPassword.value }
-      }) as { data: { isValid: boolean; error?: string } };
+      }) as BackgroundResponse<VerifyPasswordResponse>;
 
-      if (!passwordVerification.data.isValid) {
+      if (!passwordVerification.data.success) {
         passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       } else {
         await signAndReturnTx();
