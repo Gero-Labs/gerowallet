@@ -12,12 +12,19 @@ interface Message {
   isUserGesture?: boolean;
 }
 
+/**
+ * Generic wrapper for responses from background script
+ * @template T - The response data type
+ */
 export interface BackgroundResponse<T = any> {
   data: T;
   target: string;
   sender: string;
 }
 
+/**
+ * Response type for spending password verification
+ */
 export interface VerifyPasswordResponse {
   success: boolean;
   error?: string;

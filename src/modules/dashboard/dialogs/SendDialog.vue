@@ -512,7 +512,6 @@ const signLedgerTx = async () => {
 
 async function signAndSubmitTx() {
   if (loggedWallet.value?.type === WalletType.Normal) {
-    console.log('Signing and submitting transaction...');
     const passwordVerification = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value }
