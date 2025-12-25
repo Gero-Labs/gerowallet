@@ -176,6 +176,7 @@
               <v-list-item-action>
                 <v-btn
                   small
+                  text
                   :color="isPassKeyRegistered ? 'error' : 'primary'"
                   :loading="loadingPassKeyRegistration"
                   :disabled="!isPassKeySupported"

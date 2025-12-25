@@ -38,7 +38,7 @@
               </v-card-subtitle>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="pt-3 pb-0">
-              <v-alert type="info" outlined dense class="py-1 my-0" style="line-height: 1.2">
+              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
                 <span style="color: white; font-size: 12px">
                   {{ $t('wallet.confirmOnTrezor') }}
                 </span>
@@ -167,6 +167,11 @@ const sign = async () => {
       }
     }
   } else if (loggedWallet.value.type === WalletType.Ledger) {
+    if (!request.value?.data) {
+      snackbar.setError(t('wallet.transactionDataMissing'));
+      return;
+    }
+
     loading.value = true;
     const address = request.value.data.address;
     console.log('address', address);
@@ -209,13 +214,18 @@ const sign = async () => {
       loading.value = false;
     }
   } else if (loggedWallet.value.type === WalletType.Trezor) {
+    if (!request.value?.data) {
+      snackbar.setError(t('wallet.transactionDataMissing'));
+      return;
+    }
+
     loading.value = true;
     const address = request.value.data.address;
     console.log('[TREZOR-SIGN-DATA] address', address);
     const payload = request.value.data.payload;
     console.log('[TREZOR-SIGN-DATA] payload', payload);
     try {
-      const response = await Messaging.sendToBackground({
+      const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.TREZOR,
         data: {
           method: 'signData',
@@ -225,8 +235,8 @@ const sign = async () => {
         }
       }) as { data: { success: boolean; signatureData?: any; error?: string } };
 
-      if (!response.data.success) {
-        throw new Error(response.data.error || t('wallet.trezorSigningFailed'));
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.error || t('wallet.trezorSigningFailed'));
       }
 
       console.log('[TREZOR-SIGN-DATA] response', response);

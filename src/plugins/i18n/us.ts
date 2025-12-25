@@ -1659,6 +1659,7 @@ export default {
   'wallet.trezorDescription': 'Trezor comes from SatoshiLabs, based in the Czech Republic.',
   'wallet.trezorNotInitialized': 'Trezor not initialized',
   'wallet.trezorSupport': 'Model T, Safe 3',
+  'wallet.confirmOnTrezor': 'Confirm the action on your Trezor device.',
   'wallet.tryAgain': 'Try Again',
   'wallet.txSubmittedSuccess': 'Tx Submitted Successfully. Tx ID: {txId}',
   'wallet.type': 'Type',

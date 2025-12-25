@@ -255,11 +255,6 @@ const txSubmitLoading = ref<boolean>(false);
 const show1 = ref<boolean>(false);
 const isBT = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
-
-// Debug watcher for Bluetooth toggle
-watch(isBT, (newValue) => {
-  console.log('isBT changed to:', newValue);
-}, { immediate: true });
 const overlay = ref<boolean>(false);
 // const type = ref<string>('');
 // const cbor = ref<string>('');
@@ -300,7 +295,6 @@ const isValid = computed(() => {
     return fn(sendData.value.recipientAddress) !== 'Invalid Payment Address'
   }
   if (currentStep.value === 2) {
-    console.log('step2')
     if (!txValid.value) {
       return false;
     }
@@ -347,7 +341,6 @@ const resetData = () => {
     minAda: 0,
     adaShortage: 0
   };
-  console.log(sendData.value)
 }
 
 const backScan = () => {
@@ -395,8 +388,6 @@ const backScan = () => {
 // }
 
 const handlePassKeySuccess = () => {
-  console.log('✅ PassKey autofill successful in SendDialog - triggering sign');
-  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     nextStep();
   }, 300); // Small delay for UX feedback
@@ -410,13 +401,8 @@ const handlePassKeyError = (error: string) => {
 const signTx = async (): Promise<boolean> => {
   txSubmitLoading.value = true;
   try {
-    console.log('Signing send transaction');
-    console.log('Transaction:', tx.value);
-
     // Serialize the Cardano.Tx to CBOR for Chrome messaging
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    console.log('Serialized transaction CBOR:', txCbor.value);
-
     // Sign the transaction via a background message
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
@@ -430,14 +416,9 @@ const signTx = async (): Promise<boolean> => {
         mergeWitnesses: false,
       }
     }) as { data: { witnesses?: any; error?: string } };
-
-    console.log('Transaction signed successfully:', witnessResult);
-
     if (witnessResult.data.error) {
       throw new Error(witnessResult.data.error);
     }
-
-    console.log('Signed transaction witness:', witnessResult.data.witnesses);
     txWitnesses.value = witnessResult.data.witnesses;
     return true;
   } catch (e) {
@@ -452,7 +433,6 @@ const signTx = async (): Promise<boolean> => {
 const submitTx = async () => {
   try {
     txSubmitLoading.value = true;
-    console.log('Submitting send transaction');
     const submitResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
@@ -480,9 +460,6 @@ const submitTx = async () => {
 const signLedgerTx = async () => {
   txSubmitLoading.value = true;
   try {
-    console.log('Signing transaction with modern Ledger approach');
-    console.log('Using Bluetooth connection:', isBT.value);
-
     if (!tx.value) {
       throw new Error(t('common.noTransactionToSign'));
     }
@@ -497,7 +474,49 @@ const signLedgerTx = async () => {
     const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
       signatures,
     })
-    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
+
+    // Submit the transaction
+    await submitTx();
+  } catch (e) {
+    ledgerUtils.ledgerErrorHandling(e);
+  } finally {
+    txSubmitLoading.value = false;
+  }
+};
+
+const signTrezorTx = async () => {
+  txSubmitLoading.value = true;
+  try {
+    if (!tx.value) {
+      throw new Error(t('common.noTransactionToSign'));
+    }
+
+    // Send transaction to background for Trezor signing
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.TREZOR,
+      data: {
+        method: 'signTx',
+        tx: tx.value,
+        keys: keys.value,
+        utxos: utxos.value,
+      },
+    })
+
+    console.log('[TREZOR Dialog] Response:', response);
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Trezor signing failed');
+    }
+
+    // Get signatures from Trezor response
+    const signatures: Cardano.Signatures = response.data.signatures;
+
+    // Create witness set from signatures
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
     txWitnesses.value = transactionWitnessSet.toCbor();
 
     // Submit the transaction
@@ -548,8 +567,8 @@ async function signAndSubmitTx() {
   } else if (loggedWallet.value?.type === WalletType.Ledger) {
     // Ledger Hardware Wallet Signing
     await signLedgerTx();
-  } else {
-
+  } else if (loggedWallet.value?.type === WalletType.Trezor) {
+    await signTrezorTx();
   }
 }
 

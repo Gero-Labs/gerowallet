@@ -37,6 +37,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
+import trezor from '@/shared/utils/trezor';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -1825,8 +1826,6 @@ app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendRe
 
 app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
   try {
-    const trezor = (await import('@/shared/utils/trezor')).default;
-
     if (request.data.method === 'initTrezor') {
       const path = request.data.path;
 
@@ -1842,10 +1841,12 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
     } else if (request.data.method === 'signData') {
       const { address, payload, accountIndex } = request.data;
 
-      // Get network info from wallet store
-      const walletStore = (await import('@/stores/walletStore')).walletStore;
+      // Get current wallet and network info
+      const currentWallet = walletManager.getWallet();
       const networks = (await import('@/utils/networks')).default;
-      const network = networks.resolveNetwork(walletStore.loggedWallet.chain, walletStore.loggedWallet.network);
+      const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
+
+      console.log('[TREZOR Background] Signing data...', { address, payload, accountIndex, network });
 
       // Sign data with Trezor
       const signatureData = await trezor.signData(address, payload, network, accountIndex);
@@ -1853,6 +1854,23 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       sendResponse({
         id: request.id,
         data: { success: true, signatureData },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else if (request.data.method === 'signTx') {
+      const { tx, keys, utxos } = request.data;
+
+      // Get current wallet and network info
+      const currentWallet = walletManager.getWallet();
+      const network = currentWallet.network
+      console.log('[TREZOR Background] Signing transaction...', { tx, keys, network });
+
+      // Sign transaction with Trezor
+      const signatures = await trezor.signTransaction(tx, keys, utxos, network);
+
+      sendResponse({
+        id: request.id,
+        data: { success: true, signatures },
         target: TARGET,
         sender: SENDER.extension,
       });
