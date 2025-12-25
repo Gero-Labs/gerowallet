@@ -163,7 +163,7 @@
                 class="order-card-btn"
                 large
                 :loading="orderingCard"
-                @click="showOrderCardConfirmationModal = true"
+                @click="showOrderCardFlowModal = true"
               >
                 <v-icon left>mdi-credit-card-plus</v-icon>
                 {{ t('card.orderNewCard') }}
@@ -179,6 +179,7 @@
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
     <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
     <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="showOrderPhysicalCardModal = false" />
+    <OrderCardFlowModal :open="showOrderCardFlowModal" @close="showOrderCardFlowModal = false" />
 
     <!-- Confirmation Modal -->
     <ConfirmationPasswordModal
@@ -214,6 +215,7 @@ import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import PromotionModal from './PromotionModal.vue';
 import OrderPhysicalCardModal from './dashboard/OrderPhysicalCardModal.vue';
+import OrderCardFlowModal from './dashboard/OrderCardFlowModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
@@ -231,6 +233,7 @@ const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
 const showOrderCardConfirmationModal = ref(false);
 const showOrderPhysicalCardModal = ref(false);
+const showOrderCardFlowModal = ref(false);
 const orderingCard = ref(false);
 const emptyCard = {
   cardData: {
