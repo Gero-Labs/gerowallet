@@ -162,6 +162,16 @@ export function buildBaseAddress(networkId: Cardano.NetworkId, paymentKeyHash: H
   );
 }
 
+export function filterOutCollateralFromUTxOs(utxos: Cardano.Utxo[], collateral: Cardano.Utxo) {
+  if (collateral) {
+    return utxos.filter(
+      (utxo) =>
+        !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index)
+    );
+  }
+  return utxos;
+}
+
 export function getUtxos(
   amount: string = undefined,
   paginate: Paginate = undefined,
@@ -169,12 +179,7 @@ export function getUtxos(
   collateral: Cardano.Utxo
 ): Serialization.TransactionUnspentOutput[] {
   // Exclude collateral input from the overall UTXO set
-  if (collateral) {
-    utxos = utxos.filter(
-      (utxo) =>
-        !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index)
-    );
-  }
+  utxos = filterOutCollateralFromUTxOs(utxos, collateral);
 
   // Convert raw UTXOs to the appropriate format
   const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo: Cardano.Utxo) => {

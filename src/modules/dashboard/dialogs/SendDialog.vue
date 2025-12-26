@@ -173,7 +173,7 @@
           @click="nextStep"
           :disabled="!isValid || txSubmitLoading"
           :loading="txSubmitLoading"
-        >{{ currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}
+        >{{ currentStep === 3 ? (txAutoSubmit ? $t('wallet.signAndConfirm') : (!txWitnesses ? $t('wallet.sign') : $t('common.confirm'))) : $t('common.continue') + ' ' }}
           <v-icon style="color: black!important;" small v-if="currentStep !==3" class="ml-1">mdi-arrow-right</v-icon>
         </v-btn>
       </div>
@@ -203,7 +203,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx, BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import ledgerUtils from '@/shared/utils/ledger';
@@ -218,7 +218,7 @@ const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
 
-const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
+const { loggedWallet, utxos, tokens: resolvedAssets, keys, config } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
 const currentStep = ref<number>(1);
@@ -256,11 +256,13 @@ const show1 = ref<boolean>(false);
 const isBT = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
 const overlay = ref<boolean>(false);
-// const type = ref<string>('');
-// const cbor = ref<string>('');
 const keystoneScan = ref<boolean>(false);
 const isInit = ref<boolean>(false);
 const qrCode = ref<QRCodeStyling | null>(null);
+
+const txAutoSubmit = computed(() => {
+  return config.value?.txAutoSubmit;
+});
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
@@ -476,8 +478,10 @@ const signLedgerTx = async () => {
     })
     txWitnesses.value = transactionWitnessSet.toCbor();
 
-    // Submit the transaction
-    await submitTx();
+    // Submit the transaction if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    }
   } catch (e) {
     ledgerUtils.ledgerErrorHandling(e);
   } finally {
@@ -492,16 +496,17 @@ const signTrezorTx = async () => {
       throw new Error(t('common.noTransactionToSign'));
     }
 
-    // Send transaction to background for Trezor signing
+    // Serialize transaction to CBOR hex for Chrome messaging (BigInt/Map not serializable)
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+
+    // Send serialized transaction to background for Trezor signing
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.TREZOR,
       data: {
         method: 'signTx',
-        tx: tx.value,
-        keys: keys.value,
-        utxos: utxos.value,
+        txCbor: txCbor.value
       },
-    })
+    }) as BackgroundResponse<SignTxResponse>;
 
     console.log('[TREZOR Dialog] Response:', response);
 
@@ -519,8 +524,10 @@ const signTrezorTx = async () => {
     console.log('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
     txWitnesses.value = transactionWitnessSet.toCbor();
 
-    // Submit the transaction
-    await submitTx();
+    // Submit the transaction if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    }
   } catch (e) {
     ledgerUtils.ledgerErrorHandling(e);
   } finally {
@@ -543,8 +550,10 @@ async function signAndSubmitTx() {
     if (!isValid) {
       return;
     }
-    // Auto-submit for sending transactions (unlike staking where a user might want to review)
-    await submitTx();
+    // Submit if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    }
   } else if (loggedWallet.value?.type === WalletType.Keystone) {
     if (qrCode.value) {
       qrCode.value = null; // Clear the QRCode instance
@@ -641,7 +650,13 @@ function nextStep() {
       vmProxy.$refs.summary.scanTx(tx.value);
       currentStep.value++;
     } else if (currentStep.value === 3) {
-      signAndSubmitTx();
+      // If txAutoSubmit is false and we have witnesses, just confirm (submit)
+      if (!txAutoSubmit.value && txWitnesses.value) {
+        submitTx();
+      } else {
+        // Otherwise sign (and auto-submit if enabled)
+        signAndSubmitTx();
+      }
     }
   }
 }

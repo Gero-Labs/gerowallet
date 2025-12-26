@@ -87,11 +87,8 @@ const context = getContextType();
 
 // Initialize messaging based on context
 if (context === 'browser') {
-  debugLog(`🔌 Initializing wallet store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletStore>) => {
-    debugLog('📥 Received wallet store update:', updates);
-
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in walletStore) {

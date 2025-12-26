@@ -2,7 +2,6 @@ import { coin_type, Key, Keys, purpose } from '@/models/types';
 import { Cardano } from '@cardano-sdk/core';
 import * as Crypto from '@cardano-sdk/crypto';
 import { hdPathToArray, toStakeAddress } from '@/chrome/serialization';
-import { NetworkInfo } from '@/utils/networks';
 import TrezorConnect from '@trezor/connect-webextension';
 import * as Trezor from '@trezor/connect';
 import {
@@ -133,19 +132,19 @@ export default {
    * @param tx - Transaction to sign
    * @param keys - Known wallet keys for address derivation
    * @param utxos - UTXOs for input resolution
-   * @param network - Network information
+   * @param networkId - Network Id
    * @returns Transaction signatures
    */
   async signTransaction(
     tx: Cardano.Tx,
     keys: Keys,
     utxos: Cardano.Utxo[],
-    network: NetworkInfo
+    networkId: number,
   ): Promise<Cardano.Signatures> {
     await this.init();
 
     try {
-      console.log('[TREZOR] Preparing transaction for signing...', { tx, keys, network });
+      console.log('[TREZOR] Preparing transaction for signing...', { tx, keys, networkId });
 
       // Dynamically import Trezor transformers and utilities
       const trezorPkg = await import('@cardano-sdk/hardware-trezor');
@@ -155,7 +154,7 @@ export default {
       const { TxInId } = await import('@cardano-sdk/key-management');
 
       // Create known addresses from wallet keys
-      const knownAddresses = this.createKnownAddressesFromKeys(keys, network);
+      const knownAddresses = this.createKnownAddressesFromKeys(keys, networkId);
 
       // Build transaction input key path map using TxInId
       const txInKeyPathMap: Record<string, AccountKeyDerivationPath> = {};
@@ -193,7 +192,7 @@ export default {
 
       // Assume account index 0 (most common case)
       const accountIndex = 0;
-      const chainId = network.networkId === 1
+      const chainId = networkId === 1
         ? Cardano.ChainIds.Mainnet
         : Cardano.ChainIds.Preprod;
 
@@ -226,7 +225,7 @@ export default {
       const result = await TrezorConnect.cardanoSignTransaction({
         ...trezorTxData,
         signingMode,
-      });
+      } as Trezor.CardanoSignTransaction);
 
       if (!result.success) {
         const errorMessage = 'error' in result.payload ? result.payload.error : 'Failed to sign transaction';
@@ -257,14 +256,16 @@ export default {
    * Sign arbitrary data (CIP-8 / CIP-30)
    * @param address - Address to sign with
    * @param payload - Data to sign (hex)
-   * @param network - Network information
+   * @param networkId - Network Id
    * @param accountIndex - Account index
+   * @param keys
    */
   async signData(
     address: string,
     payload: string,
-    network: NetworkInfo,
-    accountIndex: number
+    networkId: number,
+    accountIndex: number,
+    keys: Keys,
   ): Promise<{
     signatureHex: string;
     signingPublicKeyHex: string;
@@ -275,22 +276,42 @@ export default {
     try {
       debugLog('[TREZOR] Preparing data signing...', { address, payload, accountIndex });
 
-      // Determine if this is a stake address (starts with 'e0' or 'e1') or payment address
-      // Stake addresses should use stake key path: m/1852'/1815'/0'/2/0
-      // Payment addresses should use payment key path: m/1852'/1815'/0'/0/0
-      const isStakeAddress = address.startsWith('e0') || address.startsWith('e1');
-      const role = isStakeAddress ? 2 : 0;  // 2 = stake key, 0 = payment key
-      const derivationPath = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${accountIndex}'/${role}/0`;
+      // Find the matching key from the wallet's known addresses
+      // Check payment keys first
+      let matchingKey = keys.payment.find(key => {
+        // Address could be payment address or payment key hash
+        return key.address === address || key.address.includes(address);
+      });
 
-      debugLog('[TREZOR] Using derivation path:', derivationPath, 'for address type:', isStakeAddress ? 'stake' : 'payment');
+      // If not found, check change keys
+      if (!matchingKey) {
+        matchingKey = keys.change.find(key => {
+          return key.address === address || key.address.includes(address);
+        });
+      }
 
-      // Decode the hex payload to a UTF-8 string for signing
-      // The payload comes as hex (e.g., "7b22...") and needs to be converted
+      let derivationPath: string;
+
+      if (matchingKey && matchingKey.path) {
+        // Use the actual path from the matching key
+        derivationPath = matchingKey.path;
+        debugLog('[TREZOR] Found matching key with path:', derivationPath);
+      } else {
+        // Not found in payment/change keys - assume it's a stake address
+        // Use stake key path: m/1852'/1815'/accountIndex'/2/0
+        const role = 2; // ChainDerivations.CHIMERIC_ACCOUNT (stake key)
+        const index = 0; // Stake keys use index 0
+        derivationPath = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${accountIndex}'/${role}/${index}`;
+        debugLog('[TREZOR] Using stake key path:', derivationPath);
+      }
+
+      debugLog('[TREZOR] Final derivation path:', derivationPath);
+
       // Sign the message with Trezor using the correct parameter structure
       const result = await TrezorConnect.cardanoSignMessage({
-        path: derivationPath, //TODO use Keys
+        path: derivationPath,
         payload,  // Required: hex-encoded payload
-        networkId: network.networkId,
+        networkId,
         hashPayload: false,  // Don't hash, the payload is already in correct format
       } as Trezor.CardanoSignMessage);
 
@@ -322,9 +343,9 @@ export default {
    * Create GroupedAddress[] from wallet Keys
    * Maps wallet keys to the format expected by Cardano SDK utilities
    */
-  createKnownAddressesFromKeys(keys: Keys, network: NetworkInfo): GroupedAddress[] {
+  createKnownAddressesFromKeys(keys: Keys, nId: number): GroupedAddress[] {
     const knownAddresses: GroupedAddress[] = [];
-    const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
+    const networkId = nId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
 
     // Process payment addresses (External)
     keys.payment.forEach((key: Key) => {
@@ -369,6 +390,34 @@ export default {
         }
       }
     });
+
+    // Process stake/reward addresses
+    if (keys.stake && keys.stake.length > 0) {
+      keys.stake.forEach((key: Key) => {
+        if (key.address && key.path) {
+          try {
+            const pathArray = hdPathToArray(key.path);
+            const derivationIndex = pathArray[pathArray.length - 1];
+
+            // For stake addresses, we add them as reward accounts
+            knownAddresses.push({
+              type: AddressType.External, // Stake addresses use External type
+              index: derivationIndex,
+              networkId,
+              accountIndex: 0,
+              address: key.address as Cardano.PaymentAddress, // The stake address itself
+              rewardAccount: key.address as Cardano.RewardAccount, // Same as address for stake keys
+              stakeKeyDerivationPath: {
+                role: KeyRole.Stake,
+                index: derivationIndex
+              } as AccountKeyDerivationPath
+            });
+          } catch (error) {
+            console.warn(`[TREZOR] Failed to process stake address ${key.address}:`, error);
+          }
+        }
+      });
+    }
 
     debugLog('[TREZOR] Created known addresses:', knownAddresses.length);
     return knownAddresses;

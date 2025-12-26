@@ -679,7 +679,7 @@ async function delegate(row: any) {
     }
     certificates.push(certificate);
 
-    // Use the generic transaction builder
+    // Use the generic transaction builder with wallet context for accurate fee estimation
     txData.value = await buildCardanoTransaction({
       certificates,
       utxos: utxos.value,
@@ -687,6 +687,14 @@ async function delegate(row: any) {
       changeAddress: keys.value.payment[0].address,
       tip: tip.value,
       implicitCoin,
+      walletContext: {
+        keys: keys.value,
+        stakeAddress: account.value?.rewardAddress || '',
+        accountIndex: 0,
+        // Note: These functions are legacy parameters not actually used in signature analysis
+        paymentKeyExternal: () => null,
+        stakeKey: () => null
+      }
     });
     isDelegateDialogOpen.value = true;
   } catch (error: any) {

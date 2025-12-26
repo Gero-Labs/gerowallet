@@ -208,7 +208,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, watch, computed, toRefs } from 'vue';
+import { ref, computed, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
@@ -432,9 +432,8 @@ function removeTokenSelector() {
   emit('remove', props.index);
 }
 
-watch(props.value, val => {
-  selectedToken.value = val;
-});
+// Note: Watch removed - selectedToken is already a computed ref that tracks props.value
+// The previous watch was redundant and caused warnings when props.value was undefined
 
 function handleImageError(event) {
   event.target.onerror = null;

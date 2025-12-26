@@ -4,6 +4,8 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { minAdaRequired as minAdaRequiredSDK, minFee as minFeeSDK } from '@cardano-sdk/tx-construction';
 import { Ed25519SignatureHex, Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import { analyzeTransactionForSignatures } from '@/shared/utils/resolver';
+import type { Keys } from '@/models/types';
 
 /**
  * CBOR Serialization utilities for Cardano JS SDK transactions
@@ -72,9 +74,21 @@ export class BrowserTxConstruction {
    * @param tx - The Cardano JS SDK transaction
    * @param resolvedInputs - Array of input UTXOs
    * @param protocolParams - Protocol parameters with fee coefficients
+   * @param walletContext - Optional wallet context for accurate signature estimation (keys, stakeAddress, accountIndex, paymentKeyExternal, stakeKey)
    * @returns Minimum fee in lovelace as BigInt
    */
-  static minFee(tx: Cardano.Tx, resolvedInputs: Cardano.Utxo[], protocolParams: any): bigint {
+  static minFee(
+    tx: Cardano.Tx,
+    resolvedInputs: Cardano.Utxo[],
+    protocolParams: any,
+    walletContext?: {
+      keys: Keys;
+      stakeAddress: string;
+      accountIndex: number;
+      paymentKeyExternal: (index: number) => any;
+      stakeKey: () => any;
+    }
+  ): bigint {
     console.log('🔧 BrowserTxConstruction.minFee called!', {
       hasWitness: !!tx.witness,
       signaturesSize: tx.witness?.signatures?.size
@@ -88,24 +102,55 @@ export class BrowserTxConstruction {
           hasCertificates: tx.body.certificates !== undefined,
           certificatesLength: tx.body.certificates?.length,
           hasWithdrawals: tx.body.withdrawals !== undefined,
-          withdrawalsLength: tx.body.withdrawals?.length
+          withdrawalsLength: tx.body.withdrawals?.length,
+          hasWalletContext: !!walletContext
         });
 
-        // Estimate number of required signatures
-        // For staking operations: payment key + stake key = 2 signatures
-        // For regular sends: payment key = 1 signature
-        const hasCertificates = tx.body.certificates && tx.body.certificates.length > 0;
-        const hasWithdrawals = tx.body.withdrawals && tx.body.withdrawals.length > 0;
-        const requiresStakeKey = hasCertificates || hasWithdrawals;
+        let estimatedSignatures: number;
 
-        console.log('🔧 Signature estimation:', {
-          hasCertificates,
-          hasWithdrawals,
-          requiresStakeKey,
-          estimatedSignatures: requiresStakeKey ? 2 : 1
-        });
+        // Use accurate signature analysis if wallet context is available
+        if (walletContext) {
+          try {
+            const requiredSigners = analyzeTransactionForSignatures(
+              tx,
+              resolvedInputs,
+              walletContext.keys,
+              walletContext.accountIndex,
+              walletContext.stakeAddress,
+              walletContext.paymentKeyExternal,
+              walletContext.stakeKey
+            );
 
-        const estimatedSignatures = requiresStakeKey ? 2 : 1;
+            estimatedSignatures = requiredSigners.length;
+
+            console.log('🔧 Accurate signature estimation (using analyzeTransactionForSignatures):', {
+              requiredSigners: requiredSigners.map(s => ({
+                type: s.type,
+                path: s.derivationPath.join('/')
+              })),
+              totalSignatures: estimatedSignatures
+            });
+          } catch (error) {
+            console.warn('🔧 Error analyzing signatures, falling back to heuristic:', error);
+            // Fallback to conservative heuristic
+            const hasCertificates = tx.body.certificates && tx.body.certificates.length > 0;
+            const hasWithdrawals = tx.body.withdrawals && tx.body.withdrawals.length > 0;
+            estimatedSignatures = (hasCertificates || hasWithdrawals) ? 2 : 1;
+          }
+        } else {
+          // Fallback to conservative heuristic when wallet context is not available
+          const hasCertificates = tx.body.certificates && tx.body.certificates.length > 0;
+          const hasWithdrawals = tx.body.withdrawals && tx.body.withdrawals.length > 0;
+          const requiresStakeKey = hasCertificates || hasWithdrawals;
+          estimatedSignatures = requiresStakeKey ? 2 : 1;
+
+          console.log('🔧 Simple signature estimation (no wallet context):', {
+            hasCertificates,
+            hasWithdrawals,
+            requiresStakeKey,
+            estimatedSignatures
+          });
+        }
 
         // CRITICAL FIX: Create dummy witnesses with realistic structure
         // This ensures the CBOR serialization includes the actual witness Map structure

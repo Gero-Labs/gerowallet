@@ -23,7 +23,7 @@ import {
   getStakeKey,
   getDrepKey,
   urlScan,
-  getUnusedAddresses,
+  getUnusedAddresses, filterOutCollateralFromUTxOs,
 } from '@/chrome/serialization';
 import { ERROR } from '@/models/types';
 import networks from '@/utils/networks';
@@ -1843,13 +1843,10 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
 
       // Get current wallet and network info
       const currentWallet = walletManager.getWallet();
-      const networks = (await import('@/utils/networks')).default;
       const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
 
-      console.log('[TREZOR Background] Signing data...', { address, payload, accountIndex, network });
-
       // Sign data with Trezor
-      const signatureData = await trezor.signData(address, payload, network, accountIndex);
+      const signatureData = await trezor.signData(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
 
       sendResponse({
         id: request.id,
@@ -1858,15 +1855,21 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         sender: SENDER.extension,
       });
     } else if (request.data.method === 'signTx') {
-      const { tx, keys, utxos } = request.data;
+      const { txCbor } = request.data;
+
+      const tx = deserializeCardanoJsSdkTx(txCbor);
+
+      const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
+      const collateral = WalletStore.state.collateral;
+      const utxos = filterOutCollateralFromUTxOs(utxosFromStorage, collateral);
 
       // Get current wallet and network info
       const currentWallet = walletManager.getWallet();
-      const network = currentWallet.network
-      console.log('[TREZOR Background] Signing transaction...', { tx, keys, network });
+      const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
+      console.log('[TREZOR Background] Signing transaction...', { tx, network });
 
       // Sign transaction with Trezor
-      const signatures = await trezor.signTransaction(tx, keys, utxos, network);
+      const signatures: Cardano.Signatures = await trezor.signTransaction(tx, WalletStore.state.keys, utxos, network.networkId);
 
       sendResponse({
         id: request.id,

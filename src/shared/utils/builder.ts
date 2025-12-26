@@ -102,7 +102,8 @@ export async function buildCardanoTransaction({
   epochParams,
   changeAddress,
   tip,
-  implicitCoin = BigInt(0)
+  implicitCoin = BigInt(0),
+  walletContext
 }: {
   certificates?: Cardano.Certificate[];
   withdrawals?: Cardano.Withdrawal[];
@@ -112,6 +113,13 @@ export async function buildCardanoTransaction({
   changeAddress: string;
   tip: any;
   implicitCoin?: bigint; // For deposits (positive) or deposit returns (negative)
+  walletContext?: {
+    keys: any;
+    stakeAddress: string;
+    accountIndex: number;
+    paymentKeyExternal: (index: number) => any;
+    stakeKey: () => any;
+  };
 }): Promise<Cardano.Tx> {
   // Check if we have epoch parameters
   if (!epochParams) {
@@ -306,9 +314,9 @@ export async function buildCardanoTransaction({
     // Convert selection skeleton inputs to resolved UTXOs for fee calculation
     const resolvedInputs = Array.from(selectionSkeleton.inputs);
 
-    // Use our witness-aware fee calculation
+    // Use our witness-aware fee calculation with wallet context for accurate signature estimation
     console.log('🔧 About to call BrowserTxConstruction.minFee');
-    const fee = BrowserTxConstruction.minFee(tx, resolvedInputs, protocolParams);
+    const fee = BrowserTxConstruction.minFee(tx, resolvedInputs, protocolParams, walletContext);
     console.log('🔧 BrowserTxConstruction.minFee returned:', fee.toString());
 
     return { fee };

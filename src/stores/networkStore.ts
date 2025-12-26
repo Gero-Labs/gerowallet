@@ -35,10 +35,8 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing network store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<NetworkStore>) => {
-    debugLog('📥 Received network store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
