@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader :title="$t('navigation.signData')" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
+    <PopupHeader :title="t('navigation.signData')" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
       <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
         <v-card-title class="pa-0" style="color: white; font-size: 14px">
           The website requested a signature
@@ -24,8 +24,8 @@
                 dense
                 outlined
                 hide-details
-                :placeholder="$t('navigation.typeYourSpendingPassword')"
-                :label="$t('wallet.spendingPassword')"
+                :placeholder="t('navigation.typeYourSpendingPassword')"
+                :label="t('wallet.spendingPassword')"
                 :rules="[rules.required()]"
                 required
                 @enter="sign"
@@ -34,7 +34,7 @@
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" :value="isBT" @input="isBT = $event" :disabled="loading" />
+                <ToggleSwitch :text-left="t('wallet.usb')" icon-left="mdi-usb" :text-right="t('wallet.bluetooth')" icon-right="mdi-bluetooth" :value="isBT" @input="isBT = $event" :disabled="loading" />
               </v-card-subtitle>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="pt-3 pb-0">
@@ -71,7 +71,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, SignDataResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
@@ -174,9 +174,7 @@ const sign = async () => {
 
     loading.value = true;
     const address = request.value.data.address;
-    console.log('address', address);
     const payload = request.value.data.payload;
-    console.log('payload', payload);
     try {
       // Create known addresses from wallet keys for Ledger signing
       const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
@@ -221,9 +219,7 @@ const sign = async () => {
 
     loading.value = true;
     const address = request.value.data.address;
-    console.log('[TREZOR-SIGN-DATA] address', address);
     const payload = request.value.data.payload;
-    console.log('[TREZOR-SIGN-DATA] payload', payload);
     try {
       const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.TREZOR,
@@ -233,7 +229,7 @@ const sign = async () => {
           payload,
           accountIndex: 0
         }
-      }) as { data: { success: boolean; signatureData?: any; error?: string } };
+      }) as BackgroundResponse<SignDataResponse>;
 
       if (!response?.data?.success) {
         throw new Error(response?.data?.error || t('wallet.trezorSigningFailed'));

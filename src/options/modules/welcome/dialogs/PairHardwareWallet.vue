@@ -354,7 +354,7 @@
 import { computed, ref, getCurrentInstance, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from "@/utils/rules";
-import { purpose, Theme, WalletType } from '@/models/types';
+import { coin_type, purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
 import { getKeystonePublicKeyUR,
@@ -491,13 +491,13 @@ const backToStepOne = () => {
 const walletCreationStep2 = async () => {
   if (walletType.value === WalletType.Ledger) {
     persistent.value = true
-    hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
+    hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: walletType.value }) as string)
     hardwareLoading.setLoading(true)
     const index = 0
     try {
       // Based on the Selected Network, set the path
 
-      const path = `m/${purpose.hdwallet}'/1815'/${index}'`
+      const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
       const coldWalletProps = await ledger.initLedger(isBluetooth.value, path)
       console.log(coldWalletProps)
       const isConnected = !!coldWalletProps
@@ -512,10 +512,10 @@ const walletCreationStep2 = async () => {
     }
   } else if (walletType.value === WalletType.Trezor) {
     persistent.value = true;
-    hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
+    hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: walletType.value }) as string)
     hardwareLoading.setLoading(true)
     try {
-      hardwareLoading.setText(i18n.t('wallet.connectingToTrezor') as string);
+      hardwareLoading.setText(t('wallet.connectingToTrezor') as string);
       const response: any = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.TREZOR,
         data: { method: 'initTrezor', chain: props.network.blockchain, network: props.network.network },

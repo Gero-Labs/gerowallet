@@ -17,6 +17,7 @@ import { bech32 } from 'bech32';
 import { NetworkInfo } from '@/utils/networks';
 import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
 import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
+import { debugLog } from '@/utils/debug';
 
 /**
  * Trezor Connect Wrapper
@@ -28,7 +29,7 @@ import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 const TREZOR_MANIFEST = {
   appName: 'Gero Dashboard',
   appIcon: 'https://raw.githubusercontent.com/Gero-Labs/staking-pool/refs/heads/main/logo-64.png',
-  appUrl: 'chrome-extension://bgpipimickeadkjlklgciifhnalhdjhe',
+  appUrl: `chrome-extension://${chrome.runtime.id}`,
   email: 'support@gerowallet.io',
 };
 
@@ -309,13 +310,13 @@ const mapCerts = (certificates: Cardano.Certificate[]): Trezor.CardanoCertificat
   if (!certificates || certificates.length === 0) return undefined;
 
   return certificates.map((cert: Cardano.Certificate, index) => {
-    console.log(`[TREZOR] Processing certificate ${index}: ${cert.__typename}`);
+    debugLog(`[TREZOR] Processing certificate ${index}: ${cert.__typename}`);
     const stakeKeyPathArray = util.accountKeyDerivationPathToBip32Path(0, { role: KeyRole.Stake, index: 0 }, KeyPurpose.STANDARD);
     const stakeKeyPath = bip32PathToString(stakeKeyPathArray);
 
     // Vote delegation (Conway-era)
     if (cert.__typename === Cardano.CertificateType.VoteDelegation) {
-      console.log('[TREZOR] Mapping VoteDelegation certificate');
+      debugLog('[TREZOR] Mapping VoteDelegation certificate');
 
       return {
         type: Trezor.PROTO.CardanoCertificateType.VOTE_DELEGATION,
@@ -326,7 +327,7 @@ const mapCerts = (certificates: Cardano.Certificate[]): Trezor.CardanoCertificat
 
     // Standard stake delegation
     if (cert.__typename === Cardano.CertificateType.StakeDelegation) {
-      console.log('[TREZOR] Mapping StakeDelegation certificate');
+      debugLog('[TREZOR] Mapping StakeDelegation certificate');
       // Convert pool ID from bech32 to hex
       const poolIdHex = Cardano.PoolId.toKeyHash(cert.poolId);
 
@@ -344,7 +345,7 @@ const mapCerts = (certificates: Cardano.Certificate[]): Trezor.CardanoCertificat
 
     // Conway-era registration
     if (cert.__typename === Cardano.CertificateType.Registration) {
-      console.log('[TREZOR] Mapping Registration certificate (Conway)');
+      debugLog('[TREZOR] Mapping Registration certificate (Conway)');
       return {
         type: Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION_CONWAY,
         path: stakeKeyPath,
@@ -847,7 +848,7 @@ export default {
         txInKeyPathMap
       });
 
-      console.log('[TREZOR] Transaction data being sent to device:', {
+      debugLog('[TREZOR] Transaction data being sent to device:', {
         trezorTxData: trezorTxData,
         signingMode: this.matchSigningMode(trezorTxData),
       });

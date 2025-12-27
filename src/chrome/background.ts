@@ -1803,7 +1803,11 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
 
 
       // Sign data with Trezor
-      const signatureData = await trezor.signData(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
+      const signatureData: {
+        signatureHex: string;
+        signingPublicKeyHex: string;
+        addressFieldHex: string;
+      } = await trezor.signData(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
 
       sendResponse({
         id: request.id,

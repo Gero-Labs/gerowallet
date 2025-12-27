@@ -330,7 +330,6 @@ import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
 

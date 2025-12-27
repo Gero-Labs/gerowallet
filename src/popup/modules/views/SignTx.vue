@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader :title="$t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
+    <PopupHeader :title="t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
@@ -49,7 +49,7 @@
                 outlined
                 dense
                 hide-details
-                :placeholder="$t('navigation.typeYourSpendingPassword')"
+                :placeholder="t('navigation.typeYourSpendingPassword')"
                 :rules="[rules.required()]"
                 required
                 @enter="sign"
@@ -58,7 +58,7 @@
                 class="w-100"
               />
             </v-col>
-            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0">
+            <v-col cols="12" v-else-if="loggedWallet.btSupported" class="py-0">
               <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
                 <span style="color: white; font-size: 12px">
                   {{ $t('wallet.pleaseReviewCarefully', { walletType: loggedWallet.type }) }}
@@ -66,21 +66,14 @@
               </v-alert>
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
-                  :text-left="$t('wallet.usb')"
+                  :text-left="t('wallet.usb')"
                   icon-left="mdi-usb"
-                  :text-right="$t('wallet.bluetooth')"
+                  :text-right="t('wallet.bluetooth')"
                   icon-right="mdi-bluetooth"
                   v-model="isBT"
                   :disabled="txSignLoading"
                 />
               </v-card-subtitle>
-            </v-col>
-            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="py-0">
-              <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
-                <span style="color: white; font-size: 12px">
-                  {{ $t('wallet.pleaseReviewCarefully', { walletType: loggedWallet.type }) }}
-                </span>
-              </v-alert>
             </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
@@ -101,7 +94,13 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
+import {
+  BackgroundResponse,
+  Messaging,
+  SignDataResponse,
+  SignTxResponse,
+  VerifyPasswordResponse,
+} from '@/chrome/messaging';
 import { TxSignError } from '@/chrome/config';
 import rules from '@/utils/rules';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
@@ -124,7 +123,6 @@ import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
-import trezorUtils from '@/shared/utils/trezor';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
 const { t } = useTranslation();
@@ -402,57 +400,29 @@ const sign = async () => {
           await confirm();
         }
       } else if (loggedWallet.value.type === WalletType.Trezor) {
-        Messaging.sendToBackgroundFromOptions()
-        const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
+        const response = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.TREZOR,
+          data: {
+            method: 'signTx',
+            txCbor
+          },
+        }) as BackgroundResponse<SignTxResponse>;
 
-        // Extract existing witnesses if this is a partial sign (multisig transaction)
-        let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
-        if (mergeWitnesses || partialSign) {
-          try {
-            const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
-            existingWitnesses = fullTx.witnessSet();
-          } catch (e) {
-            console.warn('[TREZOR-SIGN] Could not extract existing witnesses:', e);
-          }
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Trezor signing failed');
         }
 
-        const signatures: Cardano.Signatures = await trezorUtils.txToTrezor(
-          tx,
-          keys.value,
-          utxos.value,
-          networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
-          txCbor // Pass original CBOR for multisig transactions to preserve exact byte representation
-        );
+        // Get signatures from Trezor response (comes as array from Chrome messaging)
+        // Convert array back to Map (cast via unknown to satisfy TypeScript)
+        const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
+        const signatures: Cardano.Signatures = new Map(signaturesArray);
 
-        // Merge Trezor signatures with existing witnesses
-        let finalWitnessSet: Serialization.TransactionWitnessSet;
-        if (existingWitnesses) {
-          // Convert existing witnesses to Core format
-          const existingCore = existingWitnesses.toCore();
-
-          // Merge signatures (combine both Maps)
-          const mergedSignatures = new Map([
-            ...(existingCore.signatures || new Map()),
-            ...(signatures || new Map()),
-          ]);
-
-          // Create merged witness set - only include properties that are defined
-          const mergedWitnessCore: Cardano.Witness = {
-            signatures: mergedSignatures,
-            ...(existingCore.bootstrap && { bootstrap: existingCore.bootstrap }),
-            ...(existingCore.scripts && { scripts: existingCore.scripts }),
-            ...(existingCore.redeemers && { redeemers: existingCore.redeemers }),
-            ...(existingCore.datums && { datums: existingCore.datums }),
-          };
-
-          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore(mergedWitnessCore);
-        } else {
-          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-            signatures,
-          });
-        }
-
-        witnesses.value = finalWitnessSet.toCbor();
+        // Create witness set from signatures
+        const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+          signatures,
+        })
+        console.log('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
+        witnesses.value = transactionWitnessSet.toCbor();
         if (txAutoSubmit.value) {
           await confirm();
         }
@@ -496,7 +466,6 @@ const sign = async () => {
 };
 
 const confirm = async () => {
-  console.log(witnesses.value);
   await controller.value.returnData({ data: witnesses.value, error: undefined });
   window.close();
 };

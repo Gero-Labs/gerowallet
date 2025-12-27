@@ -1541,6 +1541,7 @@ export default {
   'wallet.connectLedger': 'Connect Ledger',
   'wallet.connectTrezor': 'Connect Trezor',
   'wallet.connectingToTrezor': 'Connecting to Trezor Device ...',
+  'wallet.followHardwareInstructions': 'Please follow the instructions in the Cardano app on<br>your {walletType} device to complete the pairing process.',
   'wallet.contactAdded': 'Contact Added',
   'wallet.contacts': 'Contacts',
   'wallet.continue': 'Continue',

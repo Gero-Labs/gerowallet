@@ -40,6 +40,19 @@ export interface SignTxResponse {
   error?: string;
 }
 
+/**
+ * Response type for Sign Data
+ */
+export interface SignDataResponse {
+  success: boolean;
+  signatureData: {
+    signatureHex: string;
+    signingPublicKeyHex: string;
+    addressFieldHex: string;
+  };
+  error?: string;
+}
+
 class InternalController {
   port: chrome.runtime.Port;
   tabId: Promise<number>;

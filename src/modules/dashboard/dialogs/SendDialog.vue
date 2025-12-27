@@ -133,7 +133,7 @@
         </div>
       </v-overlay>
     </v-card-text>
-    <v-card-actions class="text-center justify-center" :style="loggedWallet?.type === WalletType.Ledger ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+    <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <div class="" v-if="currentStep === 3">
         <PassKeyPasswordField
           ref="passwordField"
