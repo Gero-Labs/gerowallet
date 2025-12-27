@@ -85,27 +85,13 @@ export class BrowserTxConstruction {
       keys: Keys;
       stakeAddress: string;
       accountIndex: number;
-      paymentKeyExternal: (index: number) => any;
-      stakeKey: () => any;
     }
   ): bigint {
-    console.log('🔧 BrowserTxConstruction.minFee called!', {
-      hasWitness: !!tx.witness,
-      signaturesSize: tx.witness?.signatures?.size
-    });
     try {
       // Check if we need to add dummy witnesses for accurate fee calculation
       const hasEmptyWitnesses = !tx.witness.signatures || tx.witness.signatures.size === 0;
 
       if (hasEmptyWitnesses) {
-        console.log('🔧 Transaction structure:', {
-          hasCertificates: tx.body.certificates !== undefined,
-          certificatesLength: tx.body.certificates?.length,
-          hasWithdrawals: tx.body.withdrawals !== undefined,
-          withdrawalsLength: tx.body.withdrawals?.length,
-          hasWalletContext: !!walletContext
-        });
-
         let estimatedSignatures: number;
 
         // Use accurate signature analysis if wallet context is available
@@ -117,19 +103,9 @@ export class BrowserTxConstruction {
               walletContext.keys,
               walletContext.accountIndex,
               walletContext.stakeAddress,
-              walletContext.paymentKeyExternal,
-              walletContext.stakeKey
             );
 
             estimatedSignatures = requiredSigners.length;
-
-            console.log('🔧 Accurate signature estimation (using analyzeTransactionForSignatures):', {
-              requiredSigners: requiredSigners.map(s => ({
-                type: s.type,
-                path: s.derivationPath.join('/')
-              })),
-              totalSignatures: estimatedSignatures
-            });
           } catch (error) {
             console.warn('🔧 Error analyzing signatures, falling back to heuristic:', error);
             // Fallback to conservative heuristic
@@ -143,13 +119,6 @@ export class BrowserTxConstruction {
           const hasWithdrawals = tx.body.withdrawals && tx.body.withdrawals.length > 0;
           const requiresStakeKey = hasCertificates || hasWithdrawals;
           estimatedSignatures = requiresStakeKey ? 2 : 1;
-
-          console.log('🔧 Simple signature estimation (no wallet context):', {
-            hasCertificates,
-            hasWithdrawals,
-            requiresStakeKey,
-            estimatedSignatures
-          });
         }
 
         // CRITICAL FIX: Create dummy witnesses with realistic structure
@@ -187,25 +156,10 @@ export class BrowserTxConstruction {
         const safetyMarginFee = safetyMarginBytes * BigInt(protocolParams.minFeeCoefficient);
         const calculatedFee = baseFee + safetyMarginFee;
 
-        console.log('🔧 Fee calculation (SDK with dummy witnesses + safety margin):', {
-          baseFee: baseFee.toString(),
-          safetyMarginFee: safetyMarginFee.toString(),
-          totalFee: calculatedFee.toString(),
-          feeAda: (Number(calculatedFee) / 1000000).toFixed(6),
-          witnessCount: estimatedSignatures,
-          minFeeCoefficient: protocolParams.minFeeCoefficient
-        });
-
         return calculatedFee;
       } else {
         // Transaction already has witnesses, use it directly
         const calculatedFee = minFeeSDK(tx, resolvedInputs, protocolParams);
-
-        console.log('🔧 Fee calculation (SDK with actual witnesses):', {
-          fee: calculatedFee.toString(),
-          feeAda: (Number(calculatedFee) / 1000000).toFixed(6),
-          witnessCount: tx.witness.signatures.size
-        });
 
         return calculatedFee;
       }

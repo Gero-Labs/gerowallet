@@ -1,17 +1,22 @@
 import { coin_type, Key, Keys, purpose } from '@/models/types';
-import { Cardano } from '@cardano-sdk/core';
-import * as Crypto from '@cardano-sdk/crypto';
-import { hdPathToArray, toStakeAddress } from '@/chrome/serialization';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { hdPathToArray, toStakeAddress, getPublicKey } from '@/chrome/serialization';
 import TrezorConnect from '@trezor/connect-webextension';
 import * as Trezor from '@trezor/connect';
 import {
   AccountKeyDerivationPath,
   AddressType,
+  errors,
   GroupedAddress,
+  KeyPurpose,
   KeyRole,
+  TxInId,
+  util,
 } from '@cardano-sdk/key-management';
-import { debugLog } from '@/utils/debug';
 import { bech32 } from 'bech32';
+import { NetworkInfo } from '@/utils/networks';
+import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
+import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 
 /**
  * Trezor Connect Wrapper
@@ -27,16 +32,652 @@ const TREZOR_MANIFEST = {
   email: 'support@gerowallet.io',
 };
 
+const multiSigWitnessPaths: BIP32Path[] = [
+  util.accountKeyDerivationPathToBip32Path(0, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG)
+];
+
+const stakeCredentialCert = (certificateType: Trezor.PROTO.CardanoCertificateType): boolean =>
+  certificateType === Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION ||
+  certificateType === Trezor.PROTO.CardanoCertificateType.STAKE_DEREGISTRATION ||
+  certificateType === Trezor.PROTO.CardanoCertificateType.STAKE_DELEGATION;
+
+const containsOnlyScriptHashCredentials = (tx: Omit<Trezor.CardanoSignTransaction, 'signingMode'>): boolean => {
+  if (tx['certificates']) {
+    for (const cert of tx['certificates']) {
+      if (!stakeCredentialCert(cert.type) || !cert.scriptHash) return false;
+    }
+  }
+  return !tx['withdrawals']?.some((withdrawal) => !withdrawal.scriptHash);
+};
+
+const isMultiSig = (tx: Omit<Trezor.CardanoSignTransaction, 'signingMode'>): boolean => {
+  const allThirdPartyInputs = !tx['inputs'].some((input) => input.path);
+  const allThirdRequiredSigner = !tx['requiredSigners']?.some((signer) => signer.keyPath);
+  // Trezor doesn't allow change outputs to address controlled by your keys and instead you have to use script address for change out
+  const allThirdPartyOutputs = !tx['outputs'].some((out) => 'addressParameters' in out);
+
+  return (
+    allThirdPartyInputs &&
+    allThirdPartyOutputs &&
+    allThirdRequiredSigner &&
+    !tx['collateralInputs'] &&
+    !tx['collateralReturn'] &&
+    !tx['totalCollateral'] &&
+    !tx['referenceInputs'] &&
+    containsOnlyScriptHashCredentials(tx)
+  );
+};
+
+/**
+ * Map derivation type from TrezorConfig to Trezor PROTO format
+ */
+const mapDerivationType = (derivationType: number): number => {
+  // Map derivation types - typically 0 for ICARUS, 1 for LEDGER, 2 for ICARUS_TREZOR
+  return derivationType;
+};
+
+/**
+ * Transform transport errors to proper error types
+ */
+const transportTypedError = (error: any): Error => {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(error?.message || 'Unknown transport error');
+};
+
+/**
+ * Convert BIP32 path array to string format
+ * Example: [2147485500, 2147485463, 2147483648, 0, 0] -> "m/1852'/1815'/0'/0/0"
+ */
+const bip32PathToString = (path: BIP32Path): string => {
+  return 'm/' + path.map((index) => {
+    // Hardened indices have bit 31 set (>= 0x80000000)
+    const isHardened = index >= 0x80000000;
+    const value = isHardened ? index - 0x80000000 : index;
+    return isHardened ? `${value}'` : `${value}`;
+  }).join('/');
+};
+
+/**
+ * Trezor transaction transformer - converts Cardano SDK transaction to Trezor format
+ * This is adapted from @cardano-sdk/hardware-trezor internal transformers
+ */
+const resolvePaymentKeyPathForTxIn = (txIn: Cardano.TxIn, context: any): string | undefined => {
+  if (!context) return undefined;
+
+  // Use official TxInId utility from key-management package
+  const txInId = TxInId(txIn);
+  const keyPath = context.txInKeyPathMap[txInId];
+  if (!keyPath) return undefined;
+
+  const bip32Path = util.accountKeyDerivationPathToBip32Path(
+    context.accountIndex,
+    keyPath,
+    KeyPurpose.STANDARD
+  );
+
+  return bip32PathToString(bip32Path);
+};
+
+const toTrezorTxIn = (txIn: Cardano.TxIn, context: any): Trezor.CardanoInput => {
+  const path = resolvePaymentKeyPathForTxIn(txIn, context);
+  return {
+    path,
+    prev_hash: txIn.txId,
+    prev_index: txIn.index
+  };
+};
+
+const mapTxIns = (txIns: Cardano.TxIn[], context: any): Trezor.CardanoInput[] =>
+  txIns.map((txIn) => toTrezorTxIn(txIn, context));
+
+/**
+ * Compare asset names canonically for sorting
+ * Shorter asset names come first, then lexicographic order
+ */
+const compareAssetNameCanonically = (a: Trezor.CardanoToken, b: Trezor.CardanoToken): number => {
+  if (a.assetNameBytes.length === b.assetNameBytes.length) {
+    return a.assetNameBytes > b.assetNameBytes ? 1 : -1;
+  } else if (a.assetNameBytes.length > b.assetNameBytes.length) {
+    return 1;
+  }
+  return -1;
+};
+
+/**
+ * Compare policy IDs canonically for sorting
+ * Policy IDs are always the same length, so direct lexicographic comparison
+ */
+const comparePolicyIdCanonically = (a: Trezor.CardanoAssetGroup, b: Trezor.CardanoAssetGroup): number =>
+  a.policyId > b.policyId ? 1 : -1;
+
+/**
+ * Convert TokenMap to Trezor AssetGroups with canonical sorting
+ * Matches official SDK implementation from @cardano-sdk/hardware-trezor/transformers/assets.ts
+ */
+const mapTokenMap = (tokenMap?: Cardano.TokenMap, isMint?: boolean): Trezor.CardanoAssetGroup[] | undefined => {
+  if (!tokenMap || tokenMap.size === 0) return undefined;
+
+  const groupedByPolicy = new Map<string, Trezor.CardanoToken[]>();
+
+  // Group tokens by policy ID
+  for (const [assetId, amount] of tokenMap.entries()) {
+    const policyId = Cardano.AssetId.getPolicyId(assetId);
+    const assetName = Cardano.AssetId.getAssetName(assetId);
+
+    if (!groupedByPolicy.has(policyId)) {
+      groupedByPolicy.set(policyId, []);
+    }
+
+    groupedByPolicy.get(policyId)!.push({
+      assetNameBytes: assetName,
+      ...(isMint ? { mintAmount: amount.toString() } : { amount: amount.toString() }),
+    });
+  }
+
+  // Build asset groups with canonical sorting
+  const assetGroups: Trezor.CardanoAssetGroup[] = [];
+  for (const [policyId, tokens] of groupedByPolicy.entries()) {
+    // Sort tokens within each policy group by asset name
+    tokens.sort(compareAssetNameCanonically);
+
+    assetGroups.push({
+      policyId,
+      tokenAmounts: tokens,
+    });
+  }
+
+  // Sort asset groups by policy ID
+  assetGroups.sort(comparePolicyIdCanonically);
+
+  return assetGroups;
+};
+
+/**
+ * Get script reference from transaction output in CBOR format
+ * Matches official SDK implementation from txOut.ts
+ */
+const getScriptHex = (output: Serialization.TransactionOutput): string | undefined => {
+  const scriptRef = output.scriptRef();
+  if (!scriptRef) return undefined;
+  return scriptRef.toCbor();
+};
+
+/**
+ * Convert inline datum to CBOR format for Trezor
+ * Matches official SDK implementation from txOut.ts
+ */
+const getInlineDatum = (datum: Cardano.PlutusData): string => {
+  return Serialization.PlutusData.fromCore(datum).toCbor();
+};
+
+/**
+ * Convert TxOut to Trezor format with Babbage-era support
+ * Includes inline datum and reference script handling
+ */
+const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: boolean }, context: any): Trezor.CardanoOutput => {
+  const { txOut } = output;
+  const { knownAddresses, outputsFormat, collateralReturnFormat } = context;
+
+  // Find if this is one of our addresses
+  const knownAddress = knownAddresses.find((addr: any) => addr.address === txOut.address);
+
+  const format = output.isCollateral ? collateralReturnFormat : outputsFormat?.[output.index];
+  const isBabbage = format === Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE;
+
+  // Serialize the output to access script reference
+  const serializedOutput = Serialization.TransactionOutput.fromCore(txOut);
+  const scriptHex = getScriptHex(serializedOutput);
+
+  const baseOutput: any = {
+    amount: txOut.value.coins.toString(),
+    tokenBundle: mapTokenMap(txOut.value.assets),
+    format,
+    // Datum hash (always included if present)
+    datumHash: txOut.datumHash?.toString(),
+    // Inline datum (Babbage format only)
+    inlineDatum: isBabbage && txOut.datum ? getInlineDatum(txOut.datum) : undefined,
+    // Reference script (Babbage format only)
+    referenceScript: isBabbage ? scriptHex : undefined,
+  };
+
+  // Check if this is a script address (script addresses should always use address string, not addressParameters)
+  const address = Cardano.Address.fromString(txOut.address);
+  const addressType = address?.getType();
+  const isScriptAddress = addressType === Cardano.AddressType.BasePaymentScriptStakeKey ||
+                          addressType === Cardano.AddressType.BasePaymentScriptStakeScript ||
+                          addressType === Cardano.AddressType.EnterpriseScript ||
+                          addressType === Cardano.AddressType.RewardScript;
+
+  if (knownAddress && !isScriptAddress) {
+    // Change output (our address, not a script) - use address parameters
+    const stakeKeyPathArray = knownAddress.stakeKeyDerivationPath
+      ? util.accountKeyDerivationPathToBip32Path(0, knownAddress.stakeKeyDerivationPath, KeyPurpose.STANDARD)
+      : undefined;
+
+    const paymentKeyPathArray = util.accountKeyDerivationPathToBip32Path(
+      0,
+      { role: knownAddress.type === AddressType.External ? KeyRole.External : KeyRole.Internal, index: knownAddress.index },
+      KeyPurpose.STANDARD
+    );
+
+    baseOutput.addressParameters = {
+      addressType: Trezor.PROTO.CardanoAddressType.BASE,
+      path: bip32PathToString(paymentKeyPathArray),
+      stakingPath: stakeKeyPathArray ? bip32PathToString(stakeKeyPathArray) : undefined,
+    };
+  } else {
+    // External output or script address - use address string
+    baseOutput.address = txOut.address;
+  }
+
+  return baseOutput;
+};
+
+const mapTxOuts = (outputs: Cardano.TxOut[], context: any): Trezor.CardanoOutput[] =>
+  outputs.map((txOut, index) => toTxOut({ index, txOut }, context));
+
+const mapDRep = (dRep: Cardano.DelegateRepresentative | undefined): Trezor.CardanoDRep | undefined => {
+  if (!dRep) return undefined;
+
+  // DelegateRepresentative is a discriminated union of Credential | AlwaysAbstain | AlwaysNoConfidence
+  if ('__typename' in dRep) {
+    switch (dRep.__typename) {
+      case 'AlwaysAbstain':
+        return { type: Trezor.PROTO.CardanoDRepType.ABSTAIN };
+      case 'AlwaysNoConfidence':
+        return { type: Trezor.PROTO.CardanoDRepType.NO_CONFIDENCE };
+    }
+  }
+
+  // If it's a Credential type (has 'type' and 'hash' properties)
+  if ('type' in dRep && 'hash' in dRep) {
+    return {
+      type: dRep.type === Cardano.CredentialType.KeyHash
+        ? Trezor.PROTO.CardanoDRepType.KEY_HASH
+        : Trezor.PROTO.CardanoDRepType.SCRIPT_HASH,
+      keyHash: dRep.type === Cardano.CredentialType.KeyHash ? dRep.hash : undefined,  // Note: Trezor uses snake_case
+      scriptHash: dRep.type === Cardano.CredentialType.ScriptHash ? dRep.hash : undefined,  // Note: Trezor uses snake_case
+    };
+  }
+
+  return undefined;
+};
+
+const mapCerts = (certificates: Cardano.Certificate[]): Trezor.CardanoCertificate[] | undefined => {
+  if (!certificates || certificates.length === 0) return undefined;
+
+  return certificates.map((cert: Cardano.Certificate, index) => {
+    console.log(`[TREZOR] Processing certificate ${index}: ${cert.__typename}`);
+    const stakeKeyPathArray = util.accountKeyDerivationPathToBip32Path(0, { role: KeyRole.Stake, index: 0 }, KeyPurpose.STANDARD);
+    const stakeKeyPath = bip32PathToString(stakeKeyPathArray);
+
+    // Vote delegation (Conway-era)
+    if (cert.__typename === Cardano.CertificateType.VoteDelegation) {
+      console.log('[TREZOR] Mapping VoteDelegation certificate');
+
+      return {
+        type: Trezor.PROTO.CardanoCertificateType.VOTE_DELEGATION,
+        path: stakeKeyPath,
+        dRep: mapDRep(cert.dRep),
+      };
+    }
+
+    // Standard stake delegation
+    if (cert.__typename === Cardano.CertificateType.StakeDelegation) {
+      console.log('[TREZOR] Mapping StakeDelegation certificate');
+      // Convert pool ID from bech32 to hex
+      const poolIdHex = Cardano.PoolId.toKeyHash(cert.poolId);
+
+      return {
+        type: Trezor.PROTO.CardanoCertificateType.STAKE_DELEGATION,
+        path: stakeKeyPath,
+        pool: poolIdHex,
+        dRep: undefined,
+        deposit: undefined,
+        keyHash: undefined,
+        poolParameters: undefined,
+        scriptHash: undefined,
+      };
+    }
+
+    // Conway-era registration
+    if (cert.__typename === Cardano.CertificateType.Registration) {
+      console.log('[TREZOR] Mapping Registration certificate (Conway)');
+      return {
+        type: Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION_CONWAY,
+        path: stakeKeyPath,
+        deposit: cert.deposit?.toString(),
+        dRep: undefined,
+        keyHash: undefined,
+        pool: undefined,
+        poolParameters: undefined,
+        scriptHash: undefined,
+      };
+    }
+
+    // Legacy registration
+    if (cert.__typename === Cardano.CertificateType.StakeRegistration) {
+      return {
+        type: Trezor.PROTO.CardanoCertificateType.STAKE_REGISTRATION,
+        path: stakeKeyPath,
+        dRep: undefined,
+        deposit: undefined,
+        keyHash: undefined,
+        pool: undefined,
+        poolParameters: undefined,
+        scriptHash: undefined,
+      };
+    }
+
+    // Conway-era unregistration
+    if (cert.__typename === Cardano.CertificateType.Unregistration) {
+      return {
+        type: Trezor.PROTO.CardanoCertificateType.STAKE_DEREGISTRATION_CONWAY,
+        path: stakeKeyPath,
+        deposit: cert.deposit?.toString(),
+        dRep: undefined,
+        keyHash: undefined,
+        pool: undefined,
+        poolParameters: undefined,
+        scriptHash: undefined,
+      };
+    }
+
+    // Legacy deregistration
+    if (cert.__typename === Cardano.CertificateType.StakeDeregistration) {
+      return {
+        type: Trezor.PROTO.CardanoCertificateType.STAKE_DEREGISTRATION,
+        path: stakeKeyPath,
+        dRep: undefined,
+        deposit: undefined,
+        keyHash: undefined,
+        pool: undefined,
+        poolParameters: undefined,
+        scriptHash: undefined,
+      };
+    }
+
+    // Combined certificates are not supported by Trezor firmware
+    // These should be decomposed into separate certificates before reaching this point
+    if (cert.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
+      throw new Error(
+        'StakeVoteRegistrationDelegation is not supported by Trezor. ' +
+        'This certificate should have been decomposed into separate certificates. ' +
+        'Please report this error to the developers.'
+      );
+    }
+
+    if (cert.__typename === Cardano.CertificateType.StakeVoteDelegation) {
+      throw new Error(
+        'StakeVoteDelegation is not supported by Trezor. ' +
+        'This certificate should have been decomposed into separate certificates. ' +
+        'Please report this error to the developers.'
+      );
+    }
+
+    if (cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation) {
+      throw new Error(
+        'StakeRegistrationDelegation is not supported by Trezor. ' +
+        'This certificate should have been decomposed into separate certificates. ' +
+        'Please report this error to the developers.'
+      );
+    }
+
+    if (cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation) {
+      throw new Error(
+        'VoteRegistrationDelegation is not supported by Trezor. ' +
+        'This certificate should have been decomposed into separate certificates. ' +
+        'Please report this error to the developers.'
+      );
+    }
+
+    throw new Error(`Unsupported certificate type: ${cert.__typename}`);
+  });
+};
+
+/**
+ * Resolve stake key path for a withdrawal reward address
+ * Matches official SDK implementation from keyPaths.ts
+ */
+const resolveStakeKeyPath = (
+  rewardAddress: Cardano.RewardAddress,
+  knownAddresses: GroupedAddress[]
+): string | null => {
+  // Find matching known address by reward account
+  const knownAddress = knownAddresses.find(
+    ({ rewardAccount }) => rewardAccount === rewardAddress.toAddress().toBech32()
+  );
+
+  // Get the stake key path from the matched address
+  if (!knownAddress) return null;
+
+  const stakeKeyPath = util.stakeKeyPathFromGroupedAddress(knownAddress);
+  if (!stakeKeyPath) return null;
+
+  // Type guard: ensure we have a valid AccountKeyDerivationPath (not a BIP32Path array)
+  if (typeof stakeKeyPath === 'object' && !Array.isArray(stakeKeyPath) && 'role' in stakeKeyPath && 'index' in stakeKeyPath) {
+    // Convert to BIP32 path string
+    const bip32Path: BIP32Path = util.accountKeyDerivationPathToBip32Path(
+      0,
+      stakeKeyPath as AccountKeyDerivationPath,
+      KeyPurpose.STANDARD
+    );
+
+    return bip32PathToString(bip32Path);
+  }
+
+  return null;
+};
+
+/**
+ * Transform Cardano withdrawal to Trezor format
+ * Matches official SDK implementation from withdrawals.ts
+ */
+const toTrezorWithdrawal = (withdrawal: Cardano.Withdrawal, context: any): Trezor.CardanoWithdrawal => {
+  const address = Cardano.Address.fromString(withdrawal.stakeAddress);
+  const rewardAddress = address?.asReward();
+
+  if (!rewardAddress) {
+    throw new Error('Invalid withdrawal stake address');
+  }
+
+  // Use constant-time comparison for credential type (prevents timing attacks)
+  if (areStringsEqualInConstantTime(
+    rewardAddress.getPaymentCredential().type.toString(),
+    Cardano.CredentialType.KeyHash.toString()
+  )) {
+    // Key hash credential - try to resolve path
+    const keyPath = context?.knownAddresses
+      ? resolveStakeKeyPath(rewardAddress, context.knownAddresses)
+      : null;
+
+    return keyPath
+      ? {
+          amount: withdrawal.quantity.toString(),
+          keyHash: undefined,
+          path: keyPath,
+          scriptHash: undefined,
+        }
+      : {
+          amount: withdrawal.quantity.toString(),
+          keyHash: rewardAddress.getPaymentCredential().hash.toString(),
+          path: undefined,
+          scriptHash: undefined,
+        };
+  } else {
+    // Script hash credential
+    return {
+      amount: withdrawal.quantity.toString(),
+      keyHash: undefined,
+      path: undefined,
+      scriptHash: rewardAddress.getPaymentCredential().hash.toString(),
+    };
+  }
+};
+
+/**
+ * Map withdrawals array to Trezor format
+ * Matches official SDK implementation from withdrawals.ts
+ */
+const mapWithdrawals = (withdrawals?: Cardano.Withdrawal[], context?: any): Trezor.CardanoWithdrawal[] | undefined => {
+  return withdrawals
+    ? withdrawals.map((withdrawal) => toTrezorWithdrawal(withdrawal, context))
+    : undefined;
+};
+
+const mapAuxiliaryData = (hash: string): Trezor.CardanoAuxiliaryData => ({
+  hash,
+  cVoteRegistrationParameters: undefined,
+});
+
+/**
+ * Map required signers to Trezor format
+ * Tries to match keyHash against both payment and stake credentials
+ * Returns keyPath if found in known addresses, otherwise returns keyHash
+ */
+const toRequiredSigner = (keyHash: Ed25519KeyHashHex, context: any): Trezor.CardanoRequiredSigner => {
+  if (!context || !context.knownAddresses) {
+    return { keyHash, keyPath: undefined };
+  }
+
+  // Try to match against payment credentials
+  const paymentCredKnownAddress = context.knownAddresses.find((address: GroupedAddress) => {
+    const addr = Cardano.Address.fromBech32(address.address)?.asBase();
+    const paymentCredential = addr?.getPaymentCredential().hash;
+    return !!paymentCredential && areStringsEqualInConstantTime(paymentCredential.toString(), keyHash);
+  });
+
+  // Try to match against stake credentials
+  const stakeCredKnownAddress = context.knownAddresses.find((address: GroupedAddress) => {
+    const stakeCredential = Cardano.RewardAccount.toHash(address.rewardAccount);
+    return !!stakeCredential && areStringsEqualInConstantTime(stakeCredential.toString(), keyHash);
+  });
+
+  // If we found a payment credential match, return payment key path
+  if (paymentCredKnownAddress) {
+    const paymentKeyPath = util.paymentKeyPathFromGroupedAddress(paymentCredKnownAddress);
+    if (paymentKeyPath && typeof paymentKeyPath === 'object' && !Array.isArray(paymentKeyPath) && 'role' in paymentKeyPath && 'index' in paymentKeyPath) {
+      const bip32Path: BIP32Path = util.accountKeyDerivationPathToBip32Path(
+        context.accountIndex,
+        paymentKeyPath as AccountKeyDerivationPath,
+        KeyPurpose.STANDARD
+      );
+      return {
+        keyHash: undefined,
+        keyPath: bip32PathToString(bip32Path),
+      };
+    }
+  }
+
+  // If we found a stake credential match, return stake key path
+  if (stakeCredKnownAddress) {
+    const stakeKeyPath = util.stakeKeyPathFromGroupedAddress(stakeCredKnownAddress);
+    if (stakeKeyPath && typeof stakeKeyPath === 'object' && !Array.isArray(stakeKeyPath) && 'role' in stakeKeyPath && 'index' in stakeKeyPath) {
+      const bip32Path: BIP32Path = util.accountKeyDerivationPathToBip32Path(
+        context.accountIndex,
+        stakeKeyPath as AccountKeyDerivationPath,
+        KeyPurpose.STANDARD
+      );
+      return {
+        keyHash: undefined,
+        keyPath: bip32PathToString(bip32Path),
+      };
+    }
+  }
+
+  // If no match found, return the keyHash
+  return {
+    keyHash,
+    keyPath: undefined,
+  };
+};
+
+const mapRequiredSigners = (requiredSigners?: Ed25519KeyHashHex[], context?: any): Trezor.CardanoRequiredSigner[] | undefined => {
+  if (!requiredSigners || requiredSigners.length === 0) return undefined;
+
+  return requiredSigners.map(keyHash => toRequiredSigner(keyHash, context));
+};
+
+/**
+ * Map additional witness requests (payment paths + stake path)
+ * Matches official SDK implementation
+ */
+const mapAdditionalWitnessRequests = (inputs: Cardano.TxIn[], context: any): string[] | undefined => {
+  if (!context || !context.knownAddresses || context.knownAddresses.length === 0) {
+    return undefined;
+  }
+
+  const paths: string[] = [];
+
+  // Collect payment key paths from all inputs
+  for (const input of inputs) {
+    const path = resolvePaymentKeyPathForTxIn(input, context);
+    if (path) {
+      paths.push(path);
+    }
+  }
+
+  // Add stake key path from first known address (matches official SDK pattern)
+  // Use util.stakeKeyPathFromGroupedAddress to resolve the actual stake key path
+  const stakeKeyDerivationPath = util.stakeKeyPathFromGroupedAddress(context.knownAddresses[0]);
+  if (stakeKeyDerivationPath && typeof stakeKeyDerivationPath === 'object' && !Array.isArray(stakeKeyDerivationPath) && 'role' in stakeKeyDerivationPath && 'index' in stakeKeyDerivationPath) {
+    const stakeKeyPathArray = util.accountKeyDerivationPathToBip32Path(
+      context.accountIndex,
+      stakeKeyDerivationPath as AccountKeyDerivationPath,
+      KeyPurpose.STANDARD
+    );
+    const stakeKeyPath = bip32PathToString(stakeKeyPathArray);
+    paths.push(stakeKeyPath);
+  }
+
+  // Remove duplicates and return
+  return [...new Set(paths)];
+};
+
+/**
+ * Transform Cardano SDK transaction body to Trezor format
+ */
+const txToTrezor = async (
+  body: Cardano.TxBody,
+  context: any
+): Promise<Omit<Trezor.CardanoSignTransaction, 'signingMode' | 'derivationType'>> => {
+  return {
+    inputs: mapTxIns(body.inputs, context),
+    outputs: mapTxOuts(body.outputs, context),
+    fee: body.fee.toString(),
+    ttl: body.validityInterval?.invalidHereafter?.toString(),
+    protocolMagic: context.chainId.networkMagic,
+    networkId: context.chainId.networkId,
+    certificates: mapCerts(body.certificates),
+    withdrawals: mapWithdrawals(body.withdrawals, context),
+    validityIntervalStart: body.validityInterval?.invalidBefore?.toString(),
+    auxiliaryData: body.auxiliaryDataHash ? mapAuxiliaryData(body.auxiliaryDataHash) : undefined,
+    mint: mapTokenMap(body.mint, true),
+    scriptDataHash: body.scriptIntegrityHash?.toString(),
+    collateralInputs: body.collaterals ? mapTxIns(body.collaterals, context) : undefined,
+    requiredSigners: mapRequiredSigners(body.requiredExtraSignatures, context),
+    collateralReturn: body.collateralReturn ? toTxOut({ index: 0, txOut: body.collateralReturn, isCollateral: true }, context) : undefined,
+    totalCollateral: body.totalCollateral?.toString(),
+    referenceInputs: body.referenceInputs ? mapTxIns(body.referenceInputs, context) : undefined,
+    includeNetworkId: !!body.networkId,
+    tagCborSets: context.tagCborSets,
+  };
+};
+
 export default {
-  _initialized: false,
+  initialized: false,
+  trezorConfig: {
+    derivationType: Trezor.PROTO.CardanoDerivationType.ICARUS_TREZOR
+  },
 
   /**
    * Initialize TrezorConnect (lazy initialization)
    * Safe to call multiple times - only initializes once
    */
   async init(): Promise<void> {
-    if (this._initialized) {
-      debugLog('[TREZOR] Already initialized');
+    if (this.initialized) {
       return;
     }
 
@@ -47,8 +688,7 @@ export default {
         connectSrc: 'https://connect.trezor.io/9/',
         _extendWebextensionLifetime: true,
       });
-      this._initialized = true;
-      debugLog('[TREZOR] Initialized successfully');
+      this.initialized = true;
     } catch (error) {
       console.error('[TREZOR] Initialization failed:', error);
       throw error;
@@ -75,21 +715,21 @@ export default {
    */
   async getXpub(path: string): Promise<{
     productName: string;
+    btSupported: boolean;
     hwPublicKey: string;
     keys: Array<{ chainCode: string; path: string; publicKey: string }>;
   }> {
     await this.init();
 
     try {
-      debugLog('[TREZOR] Getting Cardano public key for path:', path);
-
       // Extract account index from path (e.g., "m/1852'/1815'/0'" -> 0)
       const pathParts = path.split('/');
       const accountIndex = parseInt(pathParts[3].replace("'", ""));
 
       // Get device name
-      const deviceInfo: Trezor.Features = await this.getDeviceInfo();
-      const deviceName = deviceInfo['label'] || 'Trezor';
+      const features: Trezor.Features = await this.getDeviceInfo();
+      const deviceName = features['label'] || 'Trezor';
+      const model = features['model'];
 
       // Get public key from Trezor
       const res = await TrezorConnect.cardanoGetPublicKey({
@@ -98,15 +738,12 @@ export default {
       } as Trezor.CardanoGetPublicKey);
 
       if (!res.success) {
-        // Type guard: when success is false, payload contains error
         const errorMessage = 'error' in res.payload ? res.payload.error : 'Failed to get Trezor public key';
         throw new Error(errorMessage);
       }
 
-      // TypeScript now knows res.payload is CardanoPublicKey
       const chainCode = res.payload.node.chain_code;
       const publicKey = res.payload.node.public_key;
-      debugLog('[TREZOR] Got Cardano public key:', res);
       const bip32PublicKeyHex = res.payload.publicKey;
       const bip32PublicKeyBytes = Buffer.from(bip32PublicKeyHex, 'hex');
       const words = bech32.toWords(bip32PublicKeyBytes);
@@ -114,6 +751,7 @@ export default {
 
       return {
         productName: deviceName,
+        btSupported: model.toLowerCase() === 'safe 7',
         hwPublicKey,
         keys: [{
           chainCode,
@@ -128,126 +766,174 @@ export default {
   },
 
   /**
-   * Sign a Cardano transaction
-   * @param tx - Transaction to sign
-   * @param keys - Known wallet keys for address derivation
-   * @param utxos - UTXOs for input resolution
-   * @param networkId - Network Id
-   * @returns Transaction signatures
+   * Gets the mode in which we want to sign the transaction.
+   * This function will always return the first matching type depending on the provided data
+   * Data is further checked on the Trezor side
    */
+  matchSigningMode(tx: Omit<Trezor.CardanoSignTransaction, 'signingMode'>): Trezor.PROTO.CardanoTxSigningMode {
+    if (tx['certificates']) {
+      for (const cert of tx['certificates']) {
+        // Represents pool registration from the perspective of a pool owner.
+        if (
+          cert.type === Trezor.PROTO.CardanoCertificateType.STAKE_POOL_REGISTRATION &&
+          cert.poolParameters?.owners.some((owner) => owner.stakingKeyPath)
+        )
+          return Trezor.PROTO.CardanoTxSigningMode.POOL_REGISTRATION_AS_OWNER;
+      }
+    }
+
+    /** Plutus signing mode has a broader usage e.g. multisig tx that contains referenceInputs is marked as plutus */
+    if (tx['collateralInputs'] || tx['collateralReturn'] || tx['totalCollateral'] || tx['referenceInputs']) {
+      return Trezor.PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION;
+    }
+
+    // Represents a transaction controlled by native scripts.
+    // Like an ordinary transaction, but stake credentials and all similar elements are given as script hashes
+    if (isMultiSig(tx)) {
+      return Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION;
+    }
+
+    // Represents an ordinary user transaction transferring funds.
+    return Trezor.PROTO.CardanoTxSigningMode.ORDINARY_TRANSACTION;
+  },
+
   async signTransaction(
     tx: Cardano.Tx,
     keys: Keys,
     utxos: Cardano.Utxo[],
-    networkId: number,
+    isUsb: boolean,
+    network: NetworkInfo,
+    xPub: string,
+    originalTxCbor?: string,
   ): Promise<Cardano.Signatures> {
     await this.init();
+    // Use original CBOR if provided (for multisig) to preserve exact byte representation
+    // This is critical for multisig transactions where another party has already signed the original bytes
+    const deserializedTx: Serialization.Transaction = originalTxCbor
+      ? Serialization.Transaction.fromCbor(Serialization.TxCBOR(originalTxCbor))
+      : Serialization.Transaction.fromCore(tx);
+    const txBod: Cardano.TxBody = tx.body;
+    const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
+    const inputResolver: Cardano.InputResolver = this.createInputResolver(utxos);
+    const txInKeyPathMap = await util.createTxInKeyPathMap(txBod, knownAddresses, inputResolver);
+    const scripts: Cardano.Script[] = tx.auxiliaryData?.scripts;
 
+    const txBody: Serialization.TransactionBody = deserializedTx.body();
     try {
-      console.log('[TREZOR] Preparing transaction for signing...', { tx, keys, networkId });
+      const body = txBody.toCore();
+      const hash = txBody.hash() as unknown as HexBlob;
 
-      // Dynamically import Trezor transformers and utilities
-      const trezorPkg = await import('@cardano-sdk/hardware-trezor');
-      const txToTrezor = (trezorPkg as any).txToTrezor;
-      const TrezorKeyAgent = (trezorPkg as any).TrezorKeyAgent;
-
-      const { TxInId } = await import('@cardano-sdk/key-management');
-
-      // Create known addresses from wallet keys
-      const knownAddresses = this.createKnownAddressesFromKeys(keys, networkId);
-
-      // Build transaction input key path map using TxInId
-      const txInKeyPathMap: Record<string, AccountKeyDerivationPath> = {};
-      for (const input of tx.body.inputs) {
-        // Find matching UTXO
-        const utxo = utxos.find(([txIn]) =>
-          txIn.txId === input.txId && txIn.index === input.index
+      const outputsFormat = txBody
+        .outputs()
+        .map((out) =>
+          out.isBabbageOutput()
+            ? Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
+            : Trezor.PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY
         );
+      const collateralReturnFormat = txBody.collateralReturn()?.isBabbageOutput()
+        ? Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
+        : Trezor.PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY;
 
-        if (utxo) {
-          const [, txOut] = utxo;
-          // Find matching key for this address
-          const matchingKey = [...keys.payment, ...keys.change].find(
-            key => key.address === txOut.address
-          );
+      const trezorTxData: Omit<Trezor.CardanoSignTransaction, 'signingMode'> = await txToTrezor(body, {
+        accountIndex: 0,
+        chainId: {
+          networkId: network.networkId,
+          networkMagic: network.networkParams.networkMagic
+        },
+        collateralReturnFormat,
+        knownAddresses,
+        outputsFormat,
+        tagCborSets: txBody.hasTaggedSets(),
+        txInKeyPathMap
+      });
 
-          if (matchingKey?.path) {
-            const pathArray = hdPathToArray(matchingKey.path);
-            const derivationIndex = pathArray[pathArray.length - 1];
+      console.log('[TREZOR] Transaction data being sent to device:', {
+        trezorTxData: trezorTxData,
+        signingMode: this.matchSigningMode(trezorTxData),
+      });
 
-            // Determine role based on whether it's a payment or change key
-            const role = keys.payment.includes(matchingKey)
-              ? KeyRole.External
-              : KeyRole.Internal;
+      const signingMode = this.matchSigningMode(trezorTxData);
 
-            // Use TxInId to create proper key
-            const inputKey = TxInId(input);
-            txInKeyPathMap[inputKey] = {
-              role,
-              index: derivationIndex
-            } as AccountKeyDerivationPath;
+      // Map additional witness requests for all transactions (payment paths + stake path)
+      const additionalWitnessRequests = signingMode === Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION
+        ? multiSigWitnessPaths.map(path => bip32PathToString(path))
+        : mapAdditionalWitnessRequests(body.inputs, {
+            accountIndex: 0,
+            knownAddresses,
+            txInKeyPathMap
+          });
+
+      const fullTrezorParams = {
+        ...trezorTxData,
+        additionalWitnessRequests,
+        signingMode,
+        ...(this.trezorConfig.derivationType
+          ? {
+            derivationType: mapDerivationType(this.trezorConfig.derivationType)
           }
+          : {})
+      };
+
+      const result = await TrezorConnect.cardanoSignTransaction(fullTrezorParams);
+
+      // Derive expected public keys from xPub instead of calling Trezor
+      const expectedPublicKeys = util
+        .ownSignatureKeyPaths(body, knownAddresses, txInKeyPathMap, undefined, scripts)
+        .map((derivationPath) => this.derivePublicKeyFromXpub(xPub, derivationPath));
+
+      if (!result.success) {
+        throw new errors.TransportError('Failed to export extended account public key', result.payload);
+      }
+
+      const signedData = result.payload;
+
+      if (!areStringsEqualInConstantTime(signedData.hash, hash)) {
+        throw new errors.HwMappingError(
+          `Trezor computed a different transaction id: ${signedData.hash} than expected: ${hash}`
+        );
+      }
+
+      // Convert witnesses to signatures map
+      const witnessesArray = signedData.witnesses || [];
+      const signatures = new Map<Ed25519PublicKeyHex, Ed25519SignatureHex>();
+
+      for (const witness of witnessesArray) {
+        const publicKey = Ed25519PublicKeyHex(witness.pubKey);
+        const signature = Ed25519SignatureHex(witness.signature);
+
+        if (expectedPublicKeys.includes(publicKey)) {
+          signatures.set(publicKey, signature);
         }
       }
 
-      // Assume account index 0 (most common case)
-      const accountIndex = 0;
-      const chainId = networkId === 1
-        ? Cardano.ChainIds.Mainnet
-        : Cardano.ChainIds.Preprod;
-
-      // Determine output formats
-      const outputsFormat = tx.body.outputs.map(() =>
-        Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
-      );
-
-      const collateralReturnFormat = tx.body.collateralReturn
-        ? Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
-        : undefined;
-
-      // Convert transaction to Trezor format
-      const trezorTxData = await txToTrezor(tx.body, {
-        accountIndex,
-        chainId,
-        knownAddresses,
-        txInKeyPathMap,
-        outputsFormat,
-        collateralReturnFormat,
-        tagCborSets: false, // Use default CBOR encoding
-      });
-
-      // Determine signing mode
-      const signingMode = TrezorKeyAgent.matchSigningMode(trezorTxData);
-
-      console.log('[TREZOR] Signing transaction with mode:', signingMode);
-
-      // Sign with Trezor
-      const result = await TrezorConnect.cardanoSignTransaction({
-        ...trezorTxData,
-        signingMode,
-      } as Trezor.CardanoSignTransaction);
-
-      if (!result.success) {
-        const errorMessage = 'error' in result.payload ? result.payload.error : 'Failed to sign transaction';
-        throw new Error(errorMessage);
-      }
-
-      console.log('[TREZOR] Transaction signed successfully');
-
-      // Convert witnesses to Cardano.Signatures format
-      const signatures = new Map<Crypto.Ed25519PublicKeyHex, Crypto.Ed25519SignatureHex>();
-
-      for (const witness of result.payload.witnesses) {
-        signatures.set(
-          Crypto.Ed25519PublicKeyHex(witness.pubKey),
-          Crypto.Ed25519SignatureHex(witness.signature)
-        );
-      }
-
       return signatures;
-
     } catch (error: any) {
-      console.error('[TREZOR] Transaction signing failed:', error);
+      if (error.innerError?.code === 'Failure_ActionCancelled') {
+        throw new errors.AuthenticationError('Transaction signing aborted', error);
+      }
+      throw transportTypedError(error);
+    }
+  },
+
+  /**
+   * Derive public key from xPub for a given derivation path
+   * This avoids calling Trezor device for each public key
+   */
+  derivePublicKeyFromXpub(xPub: string, derivationPath: AccountKeyDerivationPath): Ed25519PublicKeyHex {
+    try {
+      // Get Bip32PublicKey from xPub string
+      const bip32PubKey = getPublicKey(xPub);
+
+      // Derive the child key using the derivation path
+      const childKey = bip32PubKey.derive([derivationPath.role, derivationPath.index]);
+
+      // Get the raw Ed25519 public key and convert to hex
+      const rawKey = childKey.toRawKey();
+      const publicKeyHex: Ed25519PublicKeyHex = rawKey.hex();
+
+      return publicKeyHex;
+    } catch (error) {
+      console.error('[TREZOR] Failed to derive public key from xPub:', error);
       throw error;
     }
   },
@@ -274,8 +960,6 @@ export default {
     await this.init();
 
     try {
-      debugLog('[TREZOR] Preparing data signing...', { address, payload, accountIndex });
-
       // Find the matching key from the wallet's known addresses
       // Check payment keys first
       let matchingKey = keys.payment.find(key => {
@@ -295,17 +979,13 @@ export default {
       if (matchingKey && matchingKey.path) {
         // Use the actual path from the matching key
         derivationPath = matchingKey.path;
-        debugLog('[TREZOR] Found matching key with path:', derivationPath);
       } else {
         // Not found in payment/change keys - assume it's a stake address
         // Use stake key path: m/1852'/1815'/accountIndex'/2/0
         const role = 2; // ChainDerivations.CHIMERIC_ACCOUNT (stake key)
         const index = 0; // Stake keys use index 0
         derivationPath = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${accountIndex}'/${role}/${index}`;
-        debugLog('[TREZOR] Using stake key path:', derivationPath);
       }
-
-      debugLog('[TREZOR] Final derivation path:', derivationPath);
 
       // Sign the message with Trezor using the correct parameter structure
       const result = await TrezorConnect.cardanoSignMessage({
@@ -319,8 +999,6 @@ export default {
         const errorMessage = 'error' in result.payload ? result.payload.error : 'Failed to sign data';
         throw new Error(errorMessage);
       }
-
-      debugLog('[TREZOR] Data signed successfully, full result:', result);
 
       // Convert response to expected format for CIP-8/CIP-30
       // The website expects COSE-formatted data (CBOR Object Signing and Encryption)
@@ -340,25 +1018,25 @@ export default {
   },
 
   /**
-   * Create GroupedAddress[] from wallet Keys
-   * Maps wallet keys to the format expected by Cardano SDK utilities
+   * Create GroupedAddress[] from a Keys object for Trezor transaction context
+   * Maps wallet keys to the format expected by TrezorTxTransformerContext
    */
-  createKnownAddressesFromKeys(keys: Keys, nId: number): GroupedAddress[] {
+  createKnownAddressesFromKeys(keys: Keys, network: NetworkInfo): GroupedAddress[] {
     const knownAddresses: GroupedAddress[] = [];
-    const networkId = nId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
 
     // Process payment addresses (External)
-    keys.payment.forEach((key: Key) => {
+    keys.payment.forEach((key: Key, _arrayIndex: number) => {
       if (key.address && key.path) {
         try {
+          const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
           const pathArray = hdPathToArray(key.path);
-          const derivationIndex = pathArray[pathArray.length - 1];
+          const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
 
           knownAddresses.push({
-            type: AddressType.External,
+            type: AddressType.External, // Payment addresses are external
             index: derivationIndex,
             networkId,
-            accountIndex: 0,
+            accountIndex: 0, // Assuming account 0 could be parameterized
             address: key.address as Cardano.PaymentAddress,
             rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
@@ -370,17 +1048,17 @@ export default {
     });
 
     // Process change addresses (Internal)
-    keys.change.forEach((key: Key) => {
+    keys.change.forEach((key: Key, _arrayIndex: number) => {
       if (key.address && key.path) {
         try {
+          const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
           const pathArray = hdPathToArray(key.path);
-          const derivationIndex = pathArray[pathArray.length - 1];
-
+          const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
           knownAddresses.push({
-            type: AddressType.Internal,
+            type: AddressType.Internal, // Change addresses are internal
             index: derivationIndex,
             networkId,
-            accountIndex: 0,
+            accountIndex: 0, // Assuming account 0 could be parameterized
             address: key.address as Cardano.PaymentAddress,
             rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
@@ -393,11 +1071,12 @@ export default {
 
     // Process stake/reward addresses
     if (keys.stake && keys.stake.length > 0) {
-      keys.stake.forEach((key: Key) => {
+      keys.stake.forEach((key: Key, _arrayIndex: number) => {
         if (key.address && key.path) {
           try {
+            const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
             const pathArray = hdPathToArray(key.path);
-            const derivationIndex = pathArray[pathArray.length - 1];
+            const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
 
             // For stake addresses, we add them as reward accounts
             knownAddresses.push({
@@ -419,31 +1098,32 @@ export default {
       });
     }
 
-    debugLog('[TREZOR] Created known addresses:', knownAddresses.length);
     return knownAddresses;
   },
 
   /**
-   * Get stake key derivation path for a payment address
+   * Get a stake key derivation path for a payment address
    */
   getStakeKeyDerivationPath(paymentKey: Key, stakeKeys: Key[]): AccountKeyDerivationPath | undefined {
     try {
-      const paymentAddress = Cardano.Address.fromString(paymentKey.address);
+      // Find the associated stake key for this payment address
+      const paymentAddress: Cardano.Address = Cardano.Address.fromString(paymentKey.address);
 
       if (paymentAddress.getType() === Cardano.AddressType.BasePaymentKeyStakeKey ||
-          paymentAddress.getType() === Cardano.AddressType.BasePaymentScriptStakeKey) {
+        paymentAddress.getType() === Cardano.AddressType.BasePaymentScriptStakeKey) {
 
-        // For base addresses, provide stake key derivation path
+        // For base addresses, we need to provide a stake key derivation path
+        // Since asReward() is returning undefined, let's use the first available stake key
         if (stakeKeys && stakeKeys.length > 0 && stakeKeys[0].path) {
           const pathArray = hdPathToArray(stakeKeys[0].path);
           return {
             role: KeyRole.Stake,
-            index: pathArray[pathArray.length - 1]
+            index: pathArray[pathArray.length - 1] // The last element is the index
           } as AccountKeyDerivationPath;
         }
       }
 
-      return undefined; // No stake key for enterprise addresses
+      return undefined; // No stake key derivation path for enterprise addresses
     } catch (error) {
       console.warn('[TREZOR] Failed to get stake key derivation path:', error);
       return undefined;
@@ -452,17 +1132,19 @@ export default {
 
   /**
    * Create InputResolver from UTXO set for transaction input resolution
+   * This allows the Trezor transaction context to resolve transaction inputs
    */
   createInputResolver(utxos: Cardano.Utxo[]): Cardano.InputResolver {
     return {
       resolveInput: async (txIn: Cardano.TxIn): Promise<Cardano.TxOut | null> => {
         try {
-          const utxo = utxos.find(([hydratedTxIn, _txOut]) =>
+          // Find the UTXO that matches the transaction input
+          const utxo: Cardano.Utxo = utxos.find(([hydratedTxIn, _txOut]) =>
             hydratedTxIn.txId === txIn.txId && hydratedTxIn.index === txIn.index
           );
 
           if (utxo) {
-            return utxo[1]; // Return the TxOut
+            return utxo[1]; // Return the TxOut part of the UTXO
           }
 
           console.warn('[TREZOR] Could not resolve input:', txIn);

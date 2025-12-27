@@ -140,18 +140,18 @@
                   <img
                     v-if="walletType === WalletType.Ledger"
                     :src="assets.connectLedgerSvg"
-                    :alt="$t('wallet.connectLedger')"
+                    :alt="t('wallet.connectLedger')"
                   >
                   <img
                     v-if="walletType === WalletType.Trezor"
                     :src="assets.connectTrezorSvg"
-                    :alt="$t('wallet.connectTrezor')"
+                    :alt="t('wallet.connectTrezor')"
                   >
                   <img
                     v-if="walletType === WalletType.Keystone && !keystoneScan"
                     :src="assets.connectKeystoneSvg"
                     style="width: 230px; height: 126px"
-                    :alt="$t('wallet.connectKeystone')">
+                    :alt="t('wallet.connectKeystone')">
                   <v-alert
                     color="white"
                     dense
@@ -174,7 +174,6 @@
                         <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
                         <li>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
                         <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
-                        <li>{{ $t('welcome.openCardanoApp') }}</li>
                       </ul>
                     </div>
                     <div v-else-if="walletType === WalletType.Keystone && !keystoneScan">
@@ -194,9 +193,9 @@
                   </v-alert>
                   <div style="display: flex;" v-if="walletType === WalletType.Ledger">
                     <ToggleSwitch
-                      :text-left="$t('dashboard.usb')"
+                      :text-left="t('dashboard.usb')"
                       icon-left="mdi-usb"
-                      :text-right="$t('dashboard.bluetooth')"
+                      :text-right="t('dashboard.bluetooth')"
                       icon-right="mdi-bluetooth"
                       v-model="isBluetooth"
                     />
@@ -352,9 +351,10 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { computed, ref, getCurrentInstance, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from "@/utils/rules";
-import { Blockchain, coin_type, purpose, Theme, WalletType } from '@/models/types';
+import { purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
 import { getKeystonePublicKeyUR,
@@ -369,6 +369,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { NetworkInfo } from '@/utils/networks';
 import i18n from '@/plugins/i18n';
 
+const { t } = useTranslation();
+
 interface Props {
   dialog: boolean;
   network: NetworkInfo;
@@ -379,8 +381,6 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits(['dialogChange']);
-
-const { t } = useTranslation();
 const vmProxy = getCurrentInstance()!.proxy as any
 const router = vmProxy.$router;
 
@@ -391,6 +391,7 @@ const newWallet = ref({
   publicKey: '',
   termsChecked: false,
   keys: [],
+  btSupported: false,
 });
 const valid2 = ref(false);
 const valid3 = ref(false);
@@ -513,16 +514,11 @@ const walletCreationStep2 = async () => {
     persistent.value = true;
     hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
     hardwareLoading.setLoading(true)
-    const index = 0
     try {
-      let path;
-      if (props.network.blockchain === Blockchain.CARDANO) {
-        path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
-      }
       hardwareLoading.setText(i18n.t('wallet.connectingToTrezor') as string);
-      const response = await Messaging.sendToBackgroundFromOptions({
+      const response: any = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.TREZOR,
-        data: { method: 'initTrezor', path },
+        data: { method: 'initTrezor', chain: props.network.blockchain, network: props.network.network },
       })
 
       console.log('[TREZOR Dialog] Response:', response);
@@ -532,6 +528,7 @@ const walletCreationStep2 = async () => {
         newWallet.value.name = coldWalletProps.productName;
         newWallet.value.publicKey = coldWalletProps.hwPublicKey;
         newWallet.value.keys = coldWalletProps.keys;
+        newWallet.value.btSupported = coldWalletProps.btSupported;
         step.value = 3;
       } else {
         throw new Error(response.data.error || 'Failed to initialize Trezor');
@@ -606,6 +603,7 @@ const resetDialog = () => {
     publicKey: '',
     termsChecked: false,
     keys: [],
+    btSupported: false,
   }
   valid2.value = false
   valid3.value = false

@@ -86,6 +86,7 @@ export class WalletBg {
   network: any;
   publicKey: string;
   provider: Provider;
+  btSupported: boolean;
 
   encryptedPrivateKey: any;
   passwordLastUpdate: Date;
@@ -110,6 +111,7 @@ export class WalletBg {
     this.userId = wallet.userId;
     this.encryptedMnemonic = wallet.encryptedMnemonic;
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
+    this.btSupported = wallet.btSupported;
     this.api = new Api(wallet, this.provider);
     if (wallet.type === WalletType.Google) {
       this.baseAddress = googleBaseAddress
@@ -950,8 +952,6 @@ export class WalletBg {
       addresses,
       accountIndex,
       this.stakeAddress,
-      this.paymentKeyExternal.bind(this),
-      this.stakeKey.bind(this)
     );
 
     console.log('🔧 Required signers analysis:');

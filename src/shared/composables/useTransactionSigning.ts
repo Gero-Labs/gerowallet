@@ -1,8 +1,7 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
-
-// Note: ref, toRefs, Ref (type), ComputedRef (type) are auto-imported globally by unplugin-auto-import
+import { Ref, ComputedRef, toRefs, ref } from 'vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
@@ -152,6 +151,47 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     }
   };
 
+  const signTrezorTx = async (): Promise<boolean> => {
+    loading.value = true;
+    try {
+      const tx = options.tx.value;
+      if (!tx) {
+        throw new Error(t('common.noTransactionToSign'));
+      }
+
+      txCbor.value = serializeCardanoJsSdkTx(tx);
+
+      // Send serialized transaction to background for Trezor signing
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data: {
+          method: 'signTx',
+          txCbor: txCbor.value
+        },
+      }) as BackgroundResponse<SignTxResponse>;
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Trezor signing failed');
+      }
+
+      // Get signatures from Trezor response (comes as array from Chrome messaging)
+      // Convert array back to Map
+      const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
+      const signatures: Cardano.Signatures = new Map(signaturesArray);
+
+      const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+        signatures,
+      });
+
+      txWitnesses.value = transactionWitnessSet.toCbor();
+      return true;
+    } catch (e) {
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   const submitTx = async (): Promise<void> => {
     try {
       loading.value = true;
@@ -198,6 +238,15 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         }
       } else if (loggedWallet.value?.type === WalletType.Ledger) {
         const isValid = await signLedgerTx();
+        if (!isValid) return;
+
+        if (config.value?.txAutoSubmit) {
+          await submitTx();
+        } else {
+          isSubmit.value = true;
+        }
+      } else if (loggedWallet.value?.type === WalletType.Trezor) {
+        const isValid = await signTrezorTx();
         if (!isValid) return;
 
         if (config.value?.txAutoSubmit) {

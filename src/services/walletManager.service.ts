@@ -93,6 +93,7 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
+          btSupported: walletBg.btSupported,
         });
         LoadingState.setText('Restoring wallet...');
         await this.initializeWallet(walletBg);
@@ -167,6 +168,7 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
+          btSupported: walletBg.btSupported,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);

@@ -299,5 +299,5 @@ export default {
   },
   resolveNetworkMagic(chain: string, network: string): number {
     return this.resolveNetwork(chain, network)?.networkParams?.networkMagic || 0;
-  }
+  },
 };

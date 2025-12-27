@@ -2,10 +2,10 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    :title="$t('wallet.quickSend')"
+    :title="t('wallet.quickSend')"
     :loading="txSubmitLoading"
     :min-height="0"
-    :subtitle="$t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
+    :subtitle="t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
     :img="assets.sendSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
@@ -152,9 +152,9 @@
           style="width: 295px"
           class="mb-2"
         />
-        <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
+        <div v-else-if="loggedWallet?.btSupported" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch :text-left="t('dashboard.usb')" icon-left="mdi-usb" :text-right="t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -181,6 +181,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { toRefs, ref, computed, getCurrentInstance, watch, onMounted } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
@@ -315,7 +316,7 @@ const isValid = computed(() => {
     }
   }
   return false;
-})
+});
 
 const resetData = () => {
   show1.value = false
@@ -508,14 +509,14 @@ const signTrezorTx = async () => {
       },
     }) as BackgroundResponse<SignTxResponse>;
 
-    console.log('[TREZOR Dialog] Response:', response);
-
     if (!response.data.success) {
       throw new Error(response.data.error || 'Trezor signing failed');
     }
 
-    // Get signatures from Trezor response
-    const signatures: Cardano.Signatures = response.data.signatures;
+    // Get signatures from Trezor response (comes as array from Chrome messaging)
+    // Convert array back to Map (cast via unknown to satisfy TypeScript)
+    const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
+    const signatures: Cardano.Signatures = new Map(signaturesArray);
 
     // Create witness set from signatures
     const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({

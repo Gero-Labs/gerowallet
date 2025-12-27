@@ -1,4 +1,4 @@
-/**
+import { getCurrentInstance } from 'vue';/**
  * Composable for using translations in Composition API
  * @example
  * ```ts
@@ -11,7 +11,7 @@
 export function useTranslation() {
   // getCurrentInstance is auto-imported globally by unplugin-auto-import
   const instance = getCurrentInstance();
-  
+
   const t = (key: string, params?: Record<string, any>): string => {
     if (!instance?.proxy.$t) {
       console.warn('Translation function not available');

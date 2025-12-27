@@ -597,9 +597,9 @@ export const urlScan = async (url: string) => {
 export function getPublicKey(xpub: string): Bip32PublicKey {
   let words: Decoded;
   try {
-    words = bech32.decode(xpub, 120);
+    words = bech32.decode(xpub, 1023);
   } catch (e) {
-    words = bech32m.decode(xpub, 120);
+    words = bech32m.decode(xpub, 1023);
   }
   const byteArray = Uint8Array.from(bech32.fromWords(words.words));
   return Bip32PublicKey.fromBytes(byteArray);
