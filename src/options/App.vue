@@ -200,6 +200,12 @@ watch(() => config.value?.locale, async (newLocale, oldLocale) => {
   overflow-wrap: anywhere;
 }
 
+.voerro-notifications-container {
+  z-index: 99999 !important;
+  border-radius: .3rem;
+  filter: opacity(90%);
+}
+
 .v-select.v-text-field input {
   cursor: pointer!important;
 }

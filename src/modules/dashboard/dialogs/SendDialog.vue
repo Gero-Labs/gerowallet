@@ -530,7 +530,18 @@ const signTrezorTx = async () => {
       await submitTx();
     }
   } catch (e) {
-    ledgerUtils.ledgerErrorHandling(e);
+    // Trezor-specific error handling
+    if (e instanceof Error) {
+      if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
+        snackbar.setError(t('wallet.trezorTransactionCancelled'));
+      } else if (e.message.toLowerCase().includes('device')) {
+        snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
+      } else {
+        snackbar.setError(e.message);
+      }
+    } else {
+      snackbar.setError(t('errors.unknownError'));
+    }
   } finally {
     txSubmitLoading.value = false;
   }

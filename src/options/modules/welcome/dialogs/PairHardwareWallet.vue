@@ -367,7 +367,6 @@ import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { NetworkInfo } from '@/utils/networks';
-import i18n from '@/plugins/i18n';
 
 const { t } = useTranslation();
 
@@ -505,6 +504,7 @@ const walletCreationStep2 = async () => {
         newWallet.value.name = coldWalletProps.productName
         newWallet.value.publicKey = coldWalletProps.hwPublicKey
         newWallet.value.keys = coldWalletProps.keys
+        newWallet.value.btSupported = coldWalletProps.btSupported
         step.value = 3
       }
     } catch (e) {

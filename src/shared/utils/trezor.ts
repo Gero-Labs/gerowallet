@@ -20,6 +20,23 @@ import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 
 /**
+ * Trezor transaction transformer context
+ * Contains all information needed to transform Cardano SDK transactions to Trezor format
+ */
+interface TrezorTxTransformerContext {
+  accountIndex: number;
+  chainId: {
+    networkId: number;
+    networkMagic: number;
+  };
+  knownAddresses: GroupedAddress[];
+  txInKeyPathMap: Record<string, AccountKeyDerivationPath>;
+  outputsFormat?: Trezor.PROTO.CardanoTxOutputSerializationFormat[];
+  collateralReturnFormat?: Trezor.PROTO.CardanoTxOutputSerializationFormat;
+  tagCborSets?: boolean;
+}
+
+/**
  * Trezor Connect Wrapper
  * Clean wrapper around @trezor/connect-webextension for Cardano operations
  * Works in Chrome extension service worker context
@@ -104,7 +121,7 @@ const bip32PathToString = (path: BIP32Path): string => {
  * Trezor transaction transformer - converts Cardano SDK transaction to Trezor format
  * This is adapted from @cardano-sdk/hardware-trezor internal transformers
  */
-const resolvePaymentKeyPathForTxIn = (txIn: Cardano.TxIn, context: any): string | undefined => {
+const resolvePaymentKeyPathForTxIn = (txIn: Cardano.TxIn, context: TrezorTxTransformerContext): string | undefined => {
   if (!context) return undefined;
 
   // Use official TxInId utility from key-management package
@@ -121,7 +138,7 @@ const resolvePaymentKeyPathForTxIn = (txIn: Cardano.TxIn, context: any): string 
   return bip32PathToString(bip32Path);
 };
 
-const toTrezorTxIn = (txIn: Cardano.TxIn, context: any): Trezor.CardanoInput => {
+const toTrezorTxIn = (txIn: Cardano.TxIn, context: TrezorTxTransformerContext): Trezor.CardanoInput => {
   const path = resolvePaymentKeyPathForTxIn(txIn, context);
   return {
     path,
@@ -130,7 +147,7 @@ const toTrezorTxIn = (txIn: Cardano.TxIn, context: any): Trezor.CardanoInput => 
   };
 };
 
-const mapTxIns = (txIns: Cardano.TxIn[], context: any): Trezor.CardanoInput[] =>
+const mapTxIns = (txIns: Cardano.TxIn[], context: TrezorTxTransformerContext): Trezor.CardanoInput[] =>
   txIns.map((txIn) => toTrezorTxIn(txIn, context));
 
 /**
@@ -217,7 +234,7 @@ const getInlineDatum = (datum: Cardano.PlutusData): string => {
  * Convert TxOut to Trezor format with Babbage-era support
  * Includes inline datum and reference script handling
  */
-const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: boolean }, context: any): Trezor.CardanoOutput => {
+const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: boolean }, context: TrezorTxTransformerContext): Trezor.CardanoOutput => {
   const { txOut } = output;
   const { knownAddresses, outputsFormat, collateralReturnFormat } = context;
 
@@ -277,7 +294,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   return baseOutput;
 };
 
-const mapTxOuts = (outputs: Cardano.TxOut[], context: any): Trezor.CardanoOutput[] =>
+const mapTxOuts = (outputs: Cardano.TxOut[], context: TrezorTxTransformerContext): Trezor.CardanoOutput[] =>
   outputs.map((txOut, index) => toTxOut({ index, txOut }, context));
 
 const mapDRep = (dRep: Cardano.DelegateRepresentative | undefined): Trezor.CardanoDRep | undefined => {
@@ -477,7 +494,7 @@ const resolveStakeKeyPath = (
  * Transform Cardano withdrawal to Trezor format
  * Matches official SDK implementation from withdrawals.ts
  */
-const toTrezorWithdrawal = (withdrawal: Cardano.Withdrawal, context: any): Trezor.CardanoWithdrawal => {
+const toTrezorWithdrawal = (withdrawal: Cardano.Withdrawal, context: TrezorTxTransformerContext): Trezor.CardanoWithdrawal => {
   const address = Cardano.Address.fromString(withdrawal.stakeAddress);
   const rewardAddress = address?.asReward();
 
@@ -523,9 +540,9 @@ const toTrezorWithdrawal = (withdrawal: Cardano.Withdrawal, context: any): Trezo
  * Map withdrawals array to Trezor format
  * Matches official SDK implementation from withdrawals.ts
  */
-const mapWithdrawals = (withdrawals?: Cardano.Withdrawal[], context?: any): Trezor.CardanoWithdrawal[] | undefined => {
+const mapWithdrawals = (withdrawals?: Cardano.Withdrawal[], context?: TrezorTxTransformerContext): Trezor.CardanoWithdrawal[] | undefined => {
   return withdrawals
-    ? withdrawals.map((withdrawal) => toTrezorWithdrawal(withdrawal, context))
+    ? withdrawals.map((withdrawal) => toTrezorWithdrawal(withdrawal, context!))
     : undefined;
 };
 
@@ -539,7 +556,7 @@ const mapAuxiliaryData = (hash: string): Trezor.CardanoAuxiliaryData => ({
  * Tries to match keyHash against both payment and stake credentials
  * Returns keyPath if found in known addresses, otherwise returns keyHash
  */
-const toRequiredSigner = (keyHash: Ed25519KeyHashHex, context: any): Trezor.CardanoRequiredSigner => {
+const toRequiredSigner = (keyHash: Ed25519KeyHashHex, context?: TrezorTxTransformerContext): Trezor.CardanoRequiredSigner => {
   if (!context || !context.knownAddresses) {
     return { keyHash, keyPath: undefined };
   }
@@ -596,7 +613,7 @@ const toRequiredSigner = (keyHash: Ed25519KeyHashHex, context: any): Trezor.Card
   };
 };
 
-const mapRequiredSigners = (requiredSigners?: Ed25519KeyHashHex[], context?: any): Trezor.CardanoRequiredSigner[] | undefined => {
+const mapRequiredSigners = (requiredSigners?: Ed25519KeyHashHex[], context?: TrezorTxTransformerContext): Trezor.CardanoRequiredSigner[] | undefined => {
   if (!requiredSigners || requiredSigners.length === 0) return undefined;
 
   return requiredSigners.map(keyHash => toRequiredSigner(keyHash, context));
@@ -606,7 +623,7 @@ const mapRequiredSigners = (requiredSigners?: Ed25519KeyHashHex[], context?: any
  * Map additional witness requests (payment paths + stake path)
  * Matches official SDK implementation
  */
-const mapAdditionalWitnessRequests = (inputs: Cardano.TxIn[], context: any): string[] | undefined => {
+const mapAdditionalWitnessRequests = (inputs: Cardano.TxIn[], context: TrezorTxTransformerContext): string[] | undefined => {
   if (!context || !context.knownAddresses || context.knownAddresses.length === 0) {
     return undefined;
   }
@@ -643,7 +660,7 @@ const mapAdditionalWitnessRequests = (inputs: Cardano.TxIn[], context: any): str
  */
 const txToTrezor = async (
   body: Cardano.TxBody,
-  context: any
+  context: TrezorTxTransformerContext
 ): Promise<Omit<Trezor.CardanoSignTransaction, 'signingMode' | 'derivationType'>> => {
   return {
     inputs: mapTxIns(body.inputs, context),
@@ -870,6 +887,10 @@ export default {
         ? multiSigWitnessPaths.map(path => bip32PathToString(path))
         : mapAdditionalWitnessRequests(body.inputs, {
             accountIndex: 0,
+            chainId: {
+              networkId: network.networkId,
+              networkMagic: network.networkParams.networkMagic
+            },
             knownAddresses,
             txInKeyPathMap
           });
