@@ -248,6 +248,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   const addressType = address?.getType();
   const isScriptAddress = addressType === Cardano.AddressType.BasePaymentScriptStakeKey ||
                           addressType === Cardano.AddressType.BasePaymentScriptStakeScript ||
+                          addressType === Cardano.AddressType.BasePaymentKeyStakeScript ||
                           addressType === Cardano.AddressType.EnterpriseScript ||
                           addressType === Cardano.AddressType.RewardScript;
 
@@ -401,36 +402,36 @@ const mapCerts = (certificates: Cardano.Certificate[]): Trezor.CardanoCertificat
     }
 
     // Combined certificates are not supported by Trezor firmware
-    // These should be decomposed into separate certificates before reaching this point
+    // These must be decomposed into individual certificates for Trezor compatibility
     if (cert.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
       throw new Error(
-        'StakeVoteRegistrationDelegation is not supported by Trezor. ' +
-        'This certificate should have been decomposed into separate certificates. ' +
-        'Please report this error to the developers.'
+        `[Trezor] Combined certificate type '${cert.__typename}' is not supported by Trezor hardware. ` +
+        'This operation requires separate certificates for registration and delegation. ' +
+        'Please try again or contact support if the issue persists.'
       );
     }
 
     if (cert.__typename === Cardano.CertificateType.StakeVoteDelegation) {
       throw new Error(
-        'StakeVoteDelegation is not supported by Trezor. ' +
-        'This certificate should have been decomposed into separate certificates. ' +
-        'Please report this error to the developers.'
+        `[Trezor] Combined certificate type '${cert.__typename}' is not supported by Trezor hardware. ` +
+        'This operation requires separate certificates for stake and vote delegation. ' +
+        'Please try again or contact support if the issue persists.'
       );
     }
 
     if (cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation) {
       throw new Error(
-        'StakeRegistrationDelegation is not supported by Trezor. ' +
-        'This certificate should have been decomposed into separate certificates. ' +
-        'Please report this error to the developers.'
+        `[Trezor] Combined certificate type '${cert.__typename}' is not supported by Trezor hardware. ` +
+        'This operation requires separate certificates for registration and delegation. ' +
+        'Please try again or contact support if the issue persists.'
       );
     }
 
     if (cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation) {
       throw new Error(
-        'VoteRegistrationDelegation is not supported by Trezor. ' +
-        'This certificate should have been decomposed into separate certificates. ' +
-        'Please report this error to the developers.'
+        `[Trezor] Combined certificate type '${cert.__typename}' is not supported by Trezor hardware. ` +
+        'This operation requires separate certificates for registration and delegation. ' +
+        'Please try again or contact support if the issue persists.'
       );
     }
 
@@ -815,6 +816,15 @@ export default {
       : Serialization.Transaction.fromCore(tx);
     const txBod: Cardano.TxBody = tx.body;
     const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
+
+    // Validate that we have known addresses
+    if (!knownAddresses || knownAddresses.length === 0) {
+      throw new Error(
+        '[Trezor] No known addresses available. Cannot create transaction context. ' +
+        'Please ensure your wallet is properly initialized.'
+      );
+    }
+
     const inputResolver: Cardano.InputResolver = this.createInputResolver(utxos);
     const txInKeyPathMap = await util.createTxInKeyPathMap(txBod, knownAddresses, inputResolver);
     const scripts: Cardano.Script[] = tx.auxiliaryData?.scripts;
@@ -1139,20 +1149,28 @@ export default {
     return {
       resolveInput: async (txIn: Cardano.TxIn): Promise<Cardano.TxOut | null> => {
         try {
+          // Validate that UTXOs array is not empty
+          if (!utxos || utxos.length === 0) {
+            throw new Error('[Trezor] UTXO set is empty. Cannot resolve transaction inputs.');
+          }
+
           // Find the UTXO that matches the transaction input
           const utxo: Cardano.Utxo = utxos.find(([hydratedTxIn, _txOut]) =>
             hydratedTxIn.txId === txIn.txId && hydratedTxIn.index === txIn.index
           );
 
-          if (utxo) {
-            return utxo[1]; // Return the TxOut part of the UTXO
+          if (!utxo) {
+            throw new Error(
+              `[Trezor] Failed to resolve transaction input: ${txIn.txId}#${txIn.index}. ` +
+              'This UTXO was not found in the wallet. Please sync your wallet and try again.'
+            );
           }
 
-          console.warn('[TREZOR] Could not resolve input:', txIn);
-          return null;
+          return utxo[1]; // Return the TxOut part of the UTXO
         } catch (error) {
+          // Re-throw the error to ensure it bubbles up
           console.error('[TREZOR] Error resolving input:', error);
-          return null;
+          throw error;
         }
       }
     };

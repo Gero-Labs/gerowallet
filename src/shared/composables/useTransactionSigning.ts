@@ -175,9 +175,13 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       }
 
       // Get signatures from Trezor response (comes as array from Chrome messaging)
-      // Convert array back to Map
-      const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
-      const signatures: Cardano.Signatures = new Map(signaturesArray);
+      // Validate that signatures is an array before converting to Map
+      if (!Array.isArray(response.data.signatures)) {
+        throw new Error('Invalid signature format from Trezor');
+      }
+      const signatures: Cardano.Signatures = new Map(
+        response.data.signatures as Array<[string, string]>
+      );
 
       const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
         signatures,
@@ -186,7 +190,19 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       txWitnesses.value = transactionWitnessSet.toCbor();
       return true;
     } catch (e) {
-      throw e;
+      console.error('Error signing transaction with Trezor:', e);
+      if (e instanceof Error) {
+        if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
+          snackbar.setError(t('wallet.trezorTransactionCancelled'));
+        } else if (e.message.toLowerCase().includes('device')) {
+          snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
+        } else {
+          snackbar.setError(e.message);
+        }
+      } else {
+        snackbar.setError(t('errors.unknownError'));
+      }
+      return false;
     } finally {
       loading.value = false;
     }
