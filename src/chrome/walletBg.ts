@@ -1,12 +1,6 @@
 import Dexie from 'dexie';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import {
-  Bip32PrivateKey,
-  Ed25519PrivateKey,
-  Ed25519PublicKey,
-  Hash28ByteBase16,
-} from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { APIError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
@@ -39,10 +33,11 @@ import {
   getRewardAddress,
   getStakeKey,
   hdPathToArray,
-  keyHashFromAddress, toStakeAddress,
+  keyHashFromAddress,
+  toStakeAddress,
   toValueCore,
 } from '@/chrome/serialization';
-import { decryptWithPassword } from '@/shared/utils/crypto';
+import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
 import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
 import DexHunterStore from '@/stores/dexHunterStore';
@@ -63,11 +58,16 @@ import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
 import { Buffer } from 'buffer';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { decrypt } from '@/shared/utils/crypto';
-import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
+import {
+  Hash28ByteBase16,
+  Hash32ByteBase16,
+  Bip32PrivateKey,
+  Ed25519PrivateKey,
+  Ed25519PublicKey,
+} from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
-import { cip8 } from '@cardano-sdk/key-management';
-import type { GroupedAddress } from '@cardano-sdk/key-management';
+import type { GroupedAddress } from '@/chrome/serialization';
+import { signDataCip8 } from '@/chrome/serialization';
 
 let blockchainDb: Dexie = null;
 
@@ -86,6 +86,7 @@ export class WalletBg {
   network: any;
   publicKey: string;
   provider: Provider;
+  btSupported: boolean;
 
   encryptedPrivateKey: any;
   passwordLastUpdate: Date;
@@ -110,6 +111,7 @@ export class WalletBg {
     this.userId = wallet.userId;
     this.encryptedMnemonic = wallet.encryptedMnemonic;
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
+    this.btSupported = wallet.btSupported;
     this.api = new Api(wallet, this.provider);
     if (wallet.type === WalletType.Google) {
       this.baseAddress = googleBaseAddress
@@ -251,7 +253,7 @@ export class WalletBg {
           }
         });
       } else {
-        transaction.utxo.outputs.forEach((out, idx) => {
+        transaction.utxo.outputs.forEach((out, _idx) => {
           let outAddress = out.address;
           const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
           try {
@@ -901,7 +903,6 @@ export class WalletBg {
    * @param accountIndex - Account index for derivation
    * @param utxos - UTXOs for reference
    * @param addresses - Address mappings (key-value pairs of addresses)
-   * @param mergeWitnesses - Whether to merge existing witnesses into the transaction
    * @returns Promise with witness set hex string
    */
   async signTx(
@@ -911,7 +912,6 @@ export class WalletBg {
     accountIndex: number,
     utxos: Cardano.Utxo[],
     addresses: Keys,
-    mergeWitnesses: boolean = false,
   ): Promise<{ witnesses: string }> {
     let transaction: Cardano.Tx;
 
@@ -952,8 +952,6 @@ export class WalletBg {
       addresses,
       accountIndex,
       this.stakeAddress,
-      this.paymentKeyExternal.bind(this),
-      this.stakeKey.bind(this)
     );
 
     console.log('🔧 Required signers analysis:');
@@ -1106,13 +1104,9 @@ export class WalletBg {
       }
     };
 
-    // Call SDK's cip30signData function (same as Lace does)
-    // Type assertion: cip30signData only uses derivePublicKey and signBlob from KeyAgent
-    return await cip8.cip30signData(keyAgent as any, {
-      knownAddresses,
-      signWith,
-      payload: HexBlob(payload)
-    });
+    // Call custom CIP-8 signing implementation (avoids blocking cip8 import)
+    // This implementation matches the SDK's cip30signData behavior
+    return await signDataCip8(keyAgent, knownAddresses, signWith, payload);
   }
 
   /**

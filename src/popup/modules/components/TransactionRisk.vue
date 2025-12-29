@@ -2,7 +2,7 @@
   <div id="risk-wrap">
     <div id="risk-title">
       {{ $t('security.transactionRisk') }}
-      <v-tooltip bottom>
+      <v-tooltip bottom content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <v-icon
             class="ml-1"
@@ -19,7 +19,7 @@
     </div>
 
     <div id="risk-indicator">
-      <img id="risk-level" :alt="$t('common.riskLevel')" :src="icon" />
+      <img id="risk-level" :alt="t('common.riskLevel')" :src="icon" style="height: 86px" />
 
       <div id="risk-loader" v-if="loading">
         <span class="custom-loader">
@@ -31,7 +31,7 @@
     <div id="risk-powered">
       <span>{{ $t('security.poweredBy') }}</span>
       <a href="https://cardanoshield.com/" target="_blank">
-        <img :alt="$t('common.cardanoShield')" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
+        <img :alt="t('common.cardanoShield')" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
       </a>
     </div>
   </div>
@@ -41,7 +41,6 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import { DappScore } from '@/models/cardano-shield-types';
 import assets from '@/utils/assets';
-
 
 const { t } = useTranslation();
 
@@ -103,7 +102,7 @@ const label = computed(() => {
 }
 #risk-indicator {
   position: relative;
-  min-height: 113px;
+  min-height: 86px;
   width: 192px;
 }
 #risk-level {
@@ -114,19 +113,19 @@ const label = computed(() => {
   position: absolute;
 }
 #risk-loader {
-  bottom: 20px;
+  bottom: 0;
   left: 76px;
   position: absolute;
 }
 #risk-label {
-  bottom: 10px;
+  bottom: 0;
   width: inherit;
   position: absolute;
   text-align: center;
   font-family: Quicksand,serif;
   line-height: 36px;
   font-weight: 400;
-  font-size: 36px;
+  font-size: 24px;
 }
 #risk-powered {
   height: 36px;

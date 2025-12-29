@@ -187,7 +187,7 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
   return walletId;
 }
 
-export async function  createNewHardwareWallet(wallet: any) {
+export async function createNewHardwareWallet(wallet: any) {
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
   if (order == null) {

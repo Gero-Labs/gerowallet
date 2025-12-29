@@ -2,12 +2,12 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="$t('staking.delegateYourStake')"
+    :title="t('staking.delegateYourStake')"
     :loading="loading"
     :min-height="639"
-    :subtitle="$t('staking.delegateSubtitle', { currency: networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) })"
+    :subtitle="t('staking.delegateSubtitle', { currency: networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) })"
   >
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
+    <v-card-text class="px-0 justify-center text-center" style="z-index: 1" v-if="pool">
       <v-alert border="left" color="primary" type="info" prominent class="text-left">
         <ul>
           <li>{{ $t('staking.youCanOnlyDelegateToOne') }}</li>
@@ -15,7 +15,7 @@
           <li>{{ $t('staking.canCancelDelegation') }}</li>
         </ul>
       </v-alert>
-      <v-list-item three-line>
+      <v-list-item three-line class="px-0">
         <v-list-item-content class="text-left">
           <v-list-item-title class="text-h5 mb-1">
             {{ `[${pool.ticker}] ${pool.name}` }}
@@ -56,13 +56,13 @@
           </v-col>
           <v-col cols="12" md="6" sm="6">
             <v-card-title class="pt-0" style="color: white"
-              >{{ pool.ros?.toLocaleString('en-US', { maximumFractionDigits: 2 }) }}%</v-card-title
-            >
+              >{{ pool.ros?.toLocaleString('en-US', { maximumFractionDigits: 2 }) }}%
+            </v-card-title>
             <v-card-subtitle class="text-left pb-2">{{ $t('staking.ros') }}</v-card-subtitle>
           </v-col>
         </v-row>
       </v-layout>
-      <v-card-title class="pt-0" style="color: white">
+      <v-card-title class="pt-0 px-0" style="color: white">
         <v-progress-linear
           rounded
           :color="filters.getColor(pool.live_saturation)"
@@ -75,14 +75,14 @@
           </template>
         </v-progress-linear>
       </v-card-title>
-      <v-card-subtitle class="text-left pb-0">{{ $t('staking.liveSaturation') }}</v-card-subtitle>
+      <v-card-subtitle class="text-left pb-0 px-0">{{ $t('staking.liveSaturation') }}</v-card-subtitle>
     </v-card-text>
-    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && account" style="display: block">
+    <v-card-actions class="justify-center text-center pt-0 px-0" v-if="pool && account" style="display: block">
       <v-form ref="formRef" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
             <h4>
-              <v-tooltip bottom>
+              <v-tooltip bottom content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.delegationAmt') }}</span>
                 </template>
@@ -104,7 +104,7 @@
           </v-col>
           <v-col :cols="cols">
             <h4>
-              <v-tooltip bottom>
+              <v-tooltip bottom content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.epochYield') }}</span>
                 </template>
@@ -116,7 +116,7 @@
             <h4>
               ~<strong>{{
                 filters.toCurrency(
-                  (account?.controlled_amount * pool.ros) / 100 / 73,
+                  (Number(account?.controlled_amount) * pool.ros) / 100 / 73,
                   false,
                   2,
                   networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
@@ -126,7 +126,7 @@
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>
-              <v-tooltip bottom>
+              <v-tooltip bottom content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.depositFee') }}</span>
                 </template>
@@ -150,7 +150,7 @@
           </v-col>
           <v-col :cols="cols">
             <h4>
-              <v-tooltip bottom>
+              <v-tooltip bottom content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.txFee') }}</span>
                 </template>
@@ -192,7 +192,7 @@
               outlined
               dense
               hide-details
-              :label="$t('staking.spendingPassword')"
+              :label="t('staking.spendingPassword')"
               :rules="passwordRules"
               :disabled="loading"
               required
@@ -201,12 +201,12 @@
               @passkey-autofill-error="handlePassKeyError"
               style="max-width: 295px"
             />
-            <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
+            <div v-else-if="isBTSupported" class="py-0" style="align-content: center">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
-                  :text-left="$t('staking.usb')"
+                  :text-left="t('staking.usb')"
                   icon-left="mdi-usb"
-                  :text-right="$t('staking.bluetooth')"
+                  :text-right="t('staking.bluetooth')"
                   icon-right="mdi-bluetooth"
                   v-model="isBT"
                   :disabled="loading"
@@ -232,9 +232,8 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
-import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import { ref, toRefs, watch, computed } from 'vue';
+import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
@@ -245,7 +244,7 @@ import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
-
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
 
@@ -266,7 +265,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const { loggedWallet, utxos, account } = toRefs(walletStore);
+const { loggedWallet, account } = toRefs(walletStore);
 
 // Use the transaction signing composable
 const txRef = computed(() => props.tx);
@@ -316,26 +315,6 @@ watch(passwordField, (newVal) => {
 const depositFee = computed(() => {
   if (!props.tx?.body) return 0;
 
-  let totalAdaOutput = 0;
-
-  // Calculate input amounts
-  if (props.tx.body.inputs) {
-    for (const input of props.tx.body.inputs) {
-      const utxo = utxos.value?.find(
-        (utxo: Cardano.Utxo) => utxo[0].txId === input.txId && utxo[0].index === input.index
-      );
-      if (utxo) {
-        totalAdaOutput -= Number(utxo[1].value.coins);
-      }
-    }
-  }
-
-  // Calculate output amounts
-  if (props.tx.body.outputs) {
-    for (const output of props.tx.body.outputs) {
-      totalAdaOutput += Number(output.value.coins);
-    }
-  }
   const registrationCert: any = props.tx.body.certificates?.find(
     cert =>
       cert.__typename === Cardano.CertificateType.StakeRegistration ||
@@ -368,6 +347,12 @@ const fallbackImage = (e: Event): void => {
   const target = e.target as HTMLImageElement;
   target.src = '';
 };
+
+const isBTSupported = computed(() => {
+  return (loggedWallet.value?.type === WalletType.Ledger || loggedWallet.value?.type === WalletType.Trezor) &&
+    !isSubmit &&
+    loggedWallet.value?.btSupported;
+});
 </script>
 <style scoped>
 .underline-tooltip {

@@ -13,6 +13,7 @@ import orangeSvg from '@/assets/svg/orange.svg'
 import blueSvg from '@/assets/svg/blue.svg'
 import greySvg from '@/assets/svg/grey.svg'
 import ledgerSvg from '@/assets/svg/ledger.svg'
+import trezorSvg from '@/assets/svg/trezor.svg'
 import keystoneSvg from '@/assets/svg/keystone.svg'
 import ledgerLogoSvg from '@/assets/svg/ledger-logo.svg'
 import trezorLogoSvg from '@/assets/svg/trezor-logo.svg'
@@ -133,6 +134,7 @@ import bringWhite from '@/assets/svg/bring-white.svg'
 import apex from '@/assets/img/apex.jpg'
 import passKeySvg from '@/assets/svg/pass-key.svg'
 import autoTriggerSvg from '@/assets/svg/auto-trigger.svg'
+import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -151,6 +153,7 @@ export default {
   blueSvg,
   greySvg,
   ledgerSvg,
+  trezorSvg,
   keystoneSvg,
   ledgerLogoSvg,
   trezorLogoSvg,
@@ -371,7 +374,8 @@ export default {
   frontCardNoMcx2,
   emptyState,
   cardanoBlueLogo,
-  apex
+  apex,
+  geroDashboardXmas
 }
 
 export {

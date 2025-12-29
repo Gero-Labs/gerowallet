@@ -39,7 +39,6 @@
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.4",
     "@cardano-sdk/core": "^0.46.11",
     "@cardano-sdk/hardware-ledger": "^0.16.21",
-    "@cardano-sdk/hardware-trezor": "^0.7.30",
     "@cardano-sdk/tx-construction": "^0.28.9",
     "@cardano-sdk/web-extension": "^0.39.35",
     "@emurgo/cardano-message-signing-browser": "^1.1.0",
@@ -50,6 +49,8 @@
     "@mdi/font": "^7.4.47",
     "@noble/ciphers": "^2.0.1",
     "@noble/hashes": "^2.0.1",
+    "@trezor/connect": "^9.7.0",
+    "@trezor/connect-webextension": "^9.7.0",
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",
     "ably": "^2.11.0",
@@ -107,6 +108,7 @@
     "@ffflorian/jszip-cli": "^3.8.2",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@types/chrome": "^0.0.268",
+    "@trezor/connect-webextension": "^9.7.0",
     "@types/fs-extra": "^11.0.4",
     "@types/howler": "^2.2.11",
     "@types/lodash": "^4.17.7",
@@ -166,12 +168,6 @@
     "webextension-polyfill": "^0.12.0",
     "webpack-bundle-analyzer": "^4.10.2",
     "yorkie": "^2.0.0"
-  },
-  "overrides": {
-    "@cardano-sdk/hardware-trezor": {
-      "@trezor/connect": "9.6.2",
-      "@trezor/connect-web": "9.6.2"
-    }
   },
   "browserslist": [
     "> 1%",

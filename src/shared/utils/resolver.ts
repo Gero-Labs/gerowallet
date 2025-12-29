@@ -590,8 +590,6 @@ export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
  * @param addresses - Address mappings
  * @param accountIndex - Account index for derivation
  * @param stakeAddress - The stake address for the wallet
- * @param paymentKeyExternal - Function to get payment key
- * @param stakeKey - Function to get stake key
  * @returns Array of signers with their derivation paths
  */
 export function analyzeTransactionForSignatures(
@@ -600,8 +598,6 @@ export function analyzeTransactionForSignatures(
   addresses: Keys,
   accountIndex: number,
   stakeAddress: string,
-  paymentKeyExternal: (index: number) => any,
-  stakeKey: () => any
 ): Array<{ derivationPath: number[], type: string }> {
   const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
 
@@ -647,10 +643,7 @@ export function analyzeTransactionForSignatures(
 
   // Check for certificates (staking operations and governance)
   if (transaction.body.certificates && transaction.body.certificates.length > 0) {
-    console.log('🔧 Analyzing certificates for required signatures:');
     for (const certificate of transaction.body.certificates) {
-      console.log(`🔧   Certificate type: ${certificate.__typename}`);
-
       if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
           certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
           certificate.__typename === Cardano.CertificateType.Registration ||
@@ -661,13 +654,10 @@ export function analyzeTransactionForSignatures(
           certificate.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
         // Need stake key signature for both staking and governance operations (including Conway-era certificates)
-        console.log(`🔧   Adding stake key signer for certificate: ${certificate.__typename}`);
         requiredSigners.push({
           derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
           type: 'stake'
         });
-      } else {
-        console.log(`🔧   Unknown certificate type, no signer added: ${certificate.__typename}`);
       }
     }
   }

@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+// Note: ref, computed are auto-imported globally by unplugin-auto-import
 
 /**
  * Feature Notification System
