@@ -184,6 +184,7 @@ export default {
     network: NetworkInfo,
     originalTxCbor?: string
   ): Promise<Cardano.Signatures> {
+    hardwareLoading.setText(i18n.t('wallet.ledgerPreparingTransaction') as string);
     // Use original CBOR if provided (for multisig) to preserve exact byte representation
     // This is critical for multisig transactions where another party has already signed the original bytes
     const deserializedTx: Serialization.Transaction = originalTxCbor
@@ -202,10 +203,15 @@ export default {
       txInKeyPathMap,
       knownAddresses,
     }
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerConnectingDevice') as string);
     const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
     const ledger: Ada = new Ada(transport);
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerVerifyingApp') as string);
     await this.ensureLedgerVersion(ledger);
 
+    hardwareLoading.setText(i18n.t('wallet.ledgerInitializingSigning') as string);
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
       chainId: ledgerTxTransformerContext.chainId,
       accountIndex: ledgerTxTransformerContext.accountIndex,
@@ -214,10 +220,14 @@ export default {
       bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
       logger: console
     });
-    return await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerPleaseConfirmDevice') as string);
+    const res: Cardano.Signatures = await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
       knownAddresses,
       txInKeyPathMap,
     })
+    hardwareLoading.setLoading(false);
+    return res;
   },
   async ensureLedgerVersion(ledger: Ada) {
     const version: GetVersionResponse = await ledger.getVersion();

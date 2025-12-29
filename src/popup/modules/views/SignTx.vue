@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader :title="t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
+    <PopupHeader :title="t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
@@ -83,7 +83,7 @@
           </v-row>
         </v-layout>
       </v-card-actions>
-      <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
+      <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center; ">
         <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
           <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
           </video>
@@ -95,8 +95,7 @@
             value="0"
             style="color: cyan; width: 100px; text-align: center"
           ></v-progress-linear>
-          <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text">
-          </v-card-title>
+          <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text" style="word-break: break-word;" />
         </v-card>
       </v-overlay>
     </PopupHeader>
@@ -259,7 +258,6 @@ const reconstructedUTxOs = computed(() => {
 })
 
 const swapDetails = computed(() => {
-  console.log(tx.value);
   if (!tx.value || !reconstructedUTxOs.value || reconstructedUTxOs.value.length === 0) {
     return null;
   }
@@ -283,7 +281,6 @@ const swapDetails = computed(() => {
   const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
     return { amount: token.amount, currency: token.name, id: token.id };
   });
-  console.log('receiveTokens: ', receiveTokens);
   const foundAda = receiveTokens.find(token => token.name === 'cardano');
   const totalReceive = foundAda ? foundAda.amount : 0;
   const assetsReceive = receiveTokens.filter(token => token.name !== 'cardano').map(token => {
@@ -362,6 +359,7 @@ const sign = async () => {
           await confirm();
         }
       } else if (loggedWallet.value.type === WalletType.Ledger) {
+        hardwareLoading.setLoading(true);
         const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
 
         // Extract existing witnesses if this is a partial sign (multisig transaction)
@@ -370,7 +368,7 @@ const sign = async () => {
           try {
             let path;
             const index = 0
-            if (loggedWallet.value.props.network.blockchain === Blockchain.CARDANO) {
+            if (loggedWallet.value.chain === Blockchain.CARDANO) {
               path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
             }
             await ledger.initLedger(isBT.value, path)
@@ -451,6 +449,7 @@ const sign = async () => {
         }
       }
     } catch (e: any) {
+      hardwareLoading.setLoading(false);
       if (e instanceof DeviceStatusError) {
         const error: DeviceStatusError = e;
         switch (error.code) {
