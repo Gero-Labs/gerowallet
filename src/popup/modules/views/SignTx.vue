@@ -18,7 +18,7 @@
         </TransactionCard>
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.receive" :risk="risks?.receivingRisk">
           {{ $t('navigation.youreReceiving') }}
-          <v-tooltip bottom>
+          <v-tooltip bottom content-class="custom-tooltip">
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
                 mdi-information-outline
@@ -34,7 +34,7 @@
             <TransactionRisk :risk="risks?.score" :loading="loading" />
           </v-col>
         </v-row>
-        <div style="text-align: right; position: absolute; float: right; right: 8px; bottom: 125px;">
+        <div style="text-align: right; position: absolute; float: right; right: 10px; bottom: 67px;">
           <CopyButton x-small :value="request?.data ? request?.data.tx : ''" :title="'CBOR'"></CopyButton>
         </div>
       </v-card-text>
@@ -59,11 +59,6 @@
               />
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.btSupported" class="py-0">
-              <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
-                <span style="color: white; font-size: 12px">
-                  {{ $t('wallet.pleaseReviewCarefully', { walletType: loggedWallet.type }) }}
-                </span>
-              </v-alert>
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
                   :text-left="t('wallet.usb')"
@@ -88,6 +83,22 @@
           </v-row>
         </v-layout>
       </v-card-actions>
+      <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
+        <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
+          <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
+          </video>
+          <v-progress-linear
+            buffer-value="0"
+            color="primary"
+            reverse
+            stream
+            value="0"
+            style="color: cyan; width: 100px; text-align: center"
+          ></v-progress-linear>
+          <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text">
+          </v-card-title>
+        </v-card>
+      </v-overlay>
     </PopupHeader>
   </v-form>
 </template>
@@ -97,7 +108,6 @@ import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import {
   BackgroundResponse,
   Messaging,
-  SignDataResponse,
   SignTxResponse,
   VerifyPasswordResponse,
 } from '@/chrome/messaging';
@@ -112,7 +122,7 @@ import {
   getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
 import networks from '@/utils/networks';
-import { WalletType } from '@/models/types';
+import { Blockchain, coin_type, purpose, WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -124,6 +134,9 @@ import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+import ledger from '@/shared/utils/ledger';
+import hardwareLoading from '@/plugins/hardwareLoading';
+import assets from '@/utils/assets';
 
 const { t } = useTranslation();
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
@@ -196,13 +209,17 @@ const changeAddress = computed(() => {
 });
 
 const recipient = computed(() => {
-  if (tx.value) {
+  let foundRecipients: string[] = [];
+  if (outputs.value) {
     for (let i = 0; i < outputs.value.length; i++) {
       const outputAddress = outputs.value[i].address;
       if (!addresses.value.has(outputAddress)) {
-        return outputAddress;
+        foundRecipients.push(outputAddress)
       }
     }
+  }
+  if (Array.isArray(foundRecipients) && foundRecipients.length > 0) {
+    return foundRecipients[0];
   }
   return changeAddress.value;
 });
@@ -351,6 +368,12 @@ const sign = async () => {
         let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
         if (mergeWitnesses || partialSign) {
           try {
+            let path;
+            const index = 0
+            if (loggedWallet.value.props.network.blockchain === Blockchain.CARDANO) {
+              path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
+            }
+            await ledger.initLedger(isBT.value, path)
             const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
             existingWitnesses = fullTx.witnessSet();
           } catch (e) {

@@ -354,7 +354,7 @@
 import { computed, ref, getCurrentInstance, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from "@/utils/rules";
-import { coin_type, purpose, Theme, WalletType } from '@/models/types';
+import { Blockchain, coin_type, purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
 import { getKeystonePublicKeyUR,
@@ -492,13 +492,14 @@ const walletCreationStep2 = async () => {
     persistent.value = true
     hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: walletType.value }) as string)
     hardwareLoading.setLoading(true)
-    const index = 0
-    try {
-      // Based on the Selected Network, set the path
 
-      const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
+    try {
+      let path;
+      const index = 0
+      if (props.network.blockchain === Blockchain.CARDANO) {
+        path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
+      }
       const coldWalletProps = await ledger.initLedger(isBluetooth.value, path)
-      console.log(coldWalletProps)
       const isConnected = !!coldWalletProps
       if (isConnected) {
         newWallet.value.name = coldWalletProps.productName

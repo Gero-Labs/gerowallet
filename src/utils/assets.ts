@@ -134,6 +134,7 @@ import bringWhite from '@/assets/svg/bring-white.svg'
 import apex from '@/assets/img/apex.jpg'
 import passKeySvg from '@/assets/svg/pass-key.svg'
 import autoTriggerSvg from '@/assets/svg/auto-trigger.svg'
+import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -373,7 +374,8 @@ export default {
   frontCardNoMcx2,
   emptyState,
   cardanoBlueLogo,
-  apex
+  apex,
+  geroDashboardXmas
 }
 
 export {

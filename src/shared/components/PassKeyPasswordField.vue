@@ -66,6 +66,7 @@ import { ref, onMounted, getCurrentInstance, nextTick } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+import { getDb } from '@/db/wallet-db';
 
 // Props
 interface Props {
@@ -143,7 +144,6 @@ async function checkPassKeyAvailable(): Promise<boolean> {
     if (!window.PublicKeyCredential) return false;
 
     // Check if passkey autofill is enabled in DB
-    const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
@@ -188,10 +188,7 @@ async function checkAutoTriggerEnabled(): Promise<boolean> {
 function handlePassKeyClick(event: MouseEvent) {
   // Only handle if not from a touch event (touch already handled)
   if (event.detail === 0) return; // Ignore programmatic clicks
-
-  debugLog('🖱️ Click detected on passkey icon');
   if (!passKeyLoading.value && !props.disabled) {
-    debugLog('🚀 Triggering passkey authentication from click');
     handlePassKeyAutofill();
   }
 }
