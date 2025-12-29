@@ -31,10 +31,25 @@ function clearWalletSpecificAlarms() {
   });
 }
 
+export interface Account {
+  active: boolean;
+  active_epoch: number;
+  controlled_amount: string;
+  drep_id: string;
+  id: number;
+  pool_id: string;
+  reserves_sum: string;
+  rewards_sum: string;
+  treasury_sum: string;
+  walletId: number;
+  withdrawable_amount: string;
+  withdrawals_sum: string;
+}
+
 export interface WalletStore {
   loggedWallet: any;
   isLocked: boolean;
-  account: any;
+  account: Account;
   transactions: any[];
   utxos: Cardano.Utxo[];
   collateral: Cardano.Utxo | null;
@@ -87,11 +102,8 @@ const context = getContextType();
 
 // Initialize messaging based on context
 if (context === 'browser') {
-  debugLog(`🔌 Initializing wallet store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletStore>) => {
-    debugLog('📥 Received wallet store update:', updates);
-
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in walletStore) {
@@ -224,14 +236,13 @@ export default {
 
   setUtxos(utxos: Cardano.Utxo[]) {
     if (utxos) {
-      console.log('collateral')
       const collateralCandidates: Cardano.Utxo[] = utxos.filter((utxo: Cardano.Utxo) => {
         const assetsSize = utxo[1].value.assets?.size || 0;
         return assetsSize === 0 && Number(utxo[1].value.coins.toString()) >= 5000000 && Number(utxo[1].value.coins.toString()) <= 20000000
       }).sort((a, b) => {
         return Number(a[1].value.coins.toString()) - Number(b[1].value.coins.toString())
       })
-      if (collateralCandidates && collateralCandidates.length > 0) {
+      if (collateralCandidates && collateralCandidates.length > 0 && utxos.length > 1) {
         this.setCollateral(collateralCandidates[0])
       }
     }
@@ -251,7 +262,6 @@ export default {
   },
 
   setTokens(tokens: {}) {
-    debugLog('Setting tokens:', Object.keys(tokens).length, 'tokens');
     walletStore.tokens = tokens;
     broadcastFromBackground({ tokens });
   },

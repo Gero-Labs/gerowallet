@@ -13,7 +13,11 @@
       <v-list-item class="text-center">
         <v-list-item-content class="py-2">
           <v-list-item-title>
-            <img :src="isApex ? assets.geroDashboardApex : assets.geroDashboard" width="100" alt="logo" />
+            <img
+              :src="isApex ? assets.geroDashboardApex : assets.geroDashboardXmas"
+              :width="isApex ? '100' : '84'"
+              alt="logo"
+            />
           </v-list-item-title>
           <v-list-item-subtitle>
             <v-btn color="orange" text plain @click="changeLogRef.setEnabled(true)">

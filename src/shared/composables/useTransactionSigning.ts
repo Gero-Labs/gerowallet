@@ -1,7 +1,7 @@
-import { ref, toRefs, Ref, ComputedRef } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Ref, ComputedRef, toRefs, ref } from 'vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
@@ -151,6 +151,63 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     }
   };
 
+  const signTrezorTx = async (): Promise<boolean> => {
+    loading.value = true;
+    try {
+      const tx = options.tx.value;
+      if (!tx) {
+        throw new Error(t('common.noTransactionToSign'));
+      }
+
+      txCbor.value = serializeCardanoJsSdkTx(tx);
+
+      // Send serialized transaction to background for Trezor signing
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data: {
+          method: 'signTx',
+          txCbor: txCbor.value
+        },
+      }) as BackgroundResponse<SignTxResponse>;
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Trezor signing failed');
+      }
+
+      // Get signatures from Trezor response (comes as array from Chrome messaging)
+      // Validate that signatures is an array before converting to Map
+      if (!Array.isArray(response.data.signatures)) {
+        throw new Error('Invalid signature format from Trezor');
+      }
+      const signatures: Cardano.Signatures = new Map(
+        response.data.signatures as Array<[string, string]>
+      );
+
+      const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+        signatures,
+      });
+
+      txWitnesses.value = transactionWitnessSet.toCbor();
+      return true;
+    } catch (e) {
+      console.error('Error signing transaction with Trezor:', e);
+      if (e instanceof Error) {
+        if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
+          snackbar.setError(t('wallet.trezorTransactionCancelled'));
+        } else if (e.message.toLowerCase().includes('device')) {
+          snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
+        } else {
+          snackbar.setError(e.message);
+        }
+      } else {
+        snackbar.setError(t('errors.unknownError'));
+      }
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   const submitTx = async (): Promise<void> => {
     try {
       loading.value = true;
@@ -197,6 +254,15 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         }
       } else if (loggedWallet.value?.type === WalletType.Ledger) {
         const isValid = await signLedgerTx();
+        if (!isValid) return;
+
+        if (config.value?.txAutoSubmit) {
+          await submitTx();
+        } else {
+          isSubmit.value = true;
+        }
+      } else if (loggedWallet.value?.type === WalletType.Trezor) {
+        const isValid = await signTrezorTx();
         if (!isValid) return;
 
         if (config.value?.txAutoSubmit) {

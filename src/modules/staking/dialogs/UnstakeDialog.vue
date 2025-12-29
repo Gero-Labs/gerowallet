@@ -3,13 +3,14 @@
     :isOpen="isOpen"
     @close="$emit('close')"
     :min-height="300"
-    :title="$t('staking.unstakeFromPool')"
-    :subtitle="$t('staking.unstakeSubtitle')"
+    :title="t('staking.unstakeFromPool')"
+    :subtitle="t('staking.unstakeSubtitle')"
     :loading="loading"
     :persistent="false"
   >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
+        outlined
         border="left"
         color="warning"
         type="warning"
@@ -20,14 +21,10 @@
       </v-alert>
     </v-card-text>
     <v-card-actions class="justify-center text-center pt-0" v-if="account && tx">
-      <v-form ref="form" v-model="valid">
-        <v-row no-gutters>
+      <v-form ref="form" v-model="valid" style="width: 100%">
+        <v-row no-gutters >
           <v-col :cols="cols">
-            <h4>{{ $t('staking.rewardsAmount') }}
-              <v-btn x-small icon>
-                <v-icon small>mdi-information-outline</v-icon>
-              </v-btn>
-            </h4>
+            <h4>{{ $t('staking.rewardsAmount') }}</h4>
             <h4><strong>{{ filters.toCurrency(withdrawals) }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
@@ -64,7 +61,7 @@
               outlined
               dense
               hide-details
-              :label="$t('wallet.spendingPassword')"
+              :label="t('wallet.spendingPassword')"
               :rules="passwordRules"
               :disabled="loading"
               required
@@ -73,12 +70,12 @@
               @passkey-autofill-error="handlePassKeyError"
               style="width: 295px; max-width: 295px"
             />
-            <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
+            <div v-else-if="isBTSupported" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="$t('staking.usb')" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch :text-left="t('staking.usb')" icon-left="mdi-usb" :text-right="t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
-            <v-btn color="#F97066" elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
+            <v-btn color="error" outlined elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
               {{ isSubmit ? $t('staking.submitTransaction') : $t('staking.signAndUnstake') }}
             </v-btn>
           </v-col>
@@ -99,6 +96,9 @@ import { WalletType } from '@/models/types';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import { useTranslation } from '@/shared/composables/useTranslation';
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {
@@ -173,6 +173,12 @@ const signUnStakeTx = async () => {
   await handleSign(form.value || undefined);
 };
 
+const isBTSupported = computed(() => {
+  return (loggedWallet.value?.type === WalletType.Ledger || loggedWallet.value?.type === WalletType.Trezor) &&
+    !isSubmit &&
+    loggedWallet.value?.btSupported;
+});
+
 watch(() => props.isOpen, (val) => {
   if (val) {
     resetState();
@@ -191,7 +197,6 @@ watch(passwordField, (newVal) => {
     setPasswordFieldRef(newVal);
   }
 });
-
 </script>
 <style scoped>
 

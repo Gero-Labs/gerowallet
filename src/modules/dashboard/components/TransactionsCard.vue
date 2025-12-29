@@ -510,10 +510,9 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
 // Add fund transfer status if applicable
 const addFundTransferStatus = (item: any, statuses: string[]): void => {
   // Skip if transaction has certificates (delegation, registration, etc.)
-  // if (item.body?.certificates && item.body.certificates.length > 0) {
-  //   return;
-  // }
-
+  if (item.body?.certificates && item.body.certificates.length > 0) {
+    return;
+  }
   const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
   const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
   const hasReceivedTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity > 0);

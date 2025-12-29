@@ -2,11 +2,11 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="$t('governance.delegateToADRep')"
+    :title="t('governance.delegateToADRep')"
     :loading="loading"
     :min-height="660"
     :width="700"
-    :subtitle="$t('governance.delegatingYourCurrency', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
+    :subtitle="t('governance.delegatingYourCurrency', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
   >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="drep">
@@ -139,7 +139,7 @@
               @input="spendingPassword = $event"
               outlined
               dense
-              :label="$t('wallet.spendingPassword')"
+              :label="t('wallet.spendingPassword')"
               :rules="passwordRules"
               hide-details
               required
@@ -149,12 +149,12 @@
               @passkey-autofill-error="handlePassKeyError"
               style="max-width: 295px"
             />
-            <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
+            <div v-else-if="loggedWallet.btSupported && !isSubmit" class="py-0" style="align-content: center">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
-                  :text-left="$t('governance.usb')"
+                  :text-left="t('governance.usb')"
                   icon-left="mdi-usb"
-                  :text-right="$t('governance.bluetooth')"
+                  :text-right="t('governance.bluetooth')"
                   icon-right="mdi-bluetooth"
                   v-model="isBT"
                   :disabled="loading"
@@ -181,25 +181,21 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 const { t } = useTranslation();
 import { ref, computed, watch } from 'vue';
 import { toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Cardano } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
 import networks from '@/utils/networks';
-import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import { walletStore } from '@/stores/walletStore';
-import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
-import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { MessageTypes } from '@/models/MessageTypes';
-import ledgerUtils from '@/shared/utils/ledger';
 
 const props = defineProps({
   isOpen: {
@@ -218,18 +214,30 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const { loggedWallet, utxos, account, keys, config } = toRefs(walletStore);
+const { loggedWallet, account } = toRefs(walletStore);
 
-const loading = ref(false);
-const spendingPassword = ref('');
-const passwordField = ref<any>(null);
-const valid = ref(false);
-const passwordRules = ref([rules.required()]);
-const isBT = ref(false);
-const txCbor = ref<string>('');
-const txWitnesses = ref(null);
-const isSubmit = ref(false);
+// Use the transaction signing composable
+const txRef = computed(() => props.tx);
+const {
+  loading,
+  spendingPassword,
+  isSubmit,
+  isBT,
+  valid,
+  passwordRules,
+  handleSign,
+  resetState,
+  handlePassKeySuccess: composableHandlePassKeySuccess,
+  handlePassKeyError: composableHandlePassKeyError,
+  setPasswordFieldRef,
+} = useTransactionSigning({
+  tx: txRef,
+  successMessageKey: 'governance.drepDelegationTxSubmitted',
+  onClose: () => emit('close'),
+});
+
 const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const passwordField = ref<any>(null);
 
 const { toCurrency, truncate } = filters;
 
@@ -286,165 +294,18 @@ const getIconByURI = (uri: string) => {
   return 'mdi-link';
 };
 
+// Use composable's passkey handlers
 const handlePassKeySuccess = () => {
-  console.log('✅ PassKey autofill successful in DRepDelegateDialog - triggering sign');
-  // Automatically trigger sign after successful PassKey autofill
-  setTimeout(() => {
-    signAndSubmitDelegationTx();
-  }, 300); // Small delay for UX feedback
+  composableHandlePassKeySuccess();
 };
 
 const handlePassKeyError = (error: string) => {
-  console.error('PassKey autofill error in DRepDelegateDialog:', error);
-  snackbar.setError(error || t('security.passKeyAuthFailed'));
+  composableHandlePassKeyError(error);
 };
 
-const signTx = async (): Promise<boolean> => {
-  loading.value = true;
-  try {
-    console.log('Signing Cardano JS SDK DRep delegation transaction');
-    console.log('Transaction:', props.tx);
-
-    // First, verify password via a background message
-    const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: spendingPassword.value },
-    })) as BackgroundResponse<VerifyPasswordResponse>;
-
-    if (!passwordVerification.data.success) {
-      passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
-      loading.value = false;
-      return false;
-    }
-
-    // Serialize the Cardano.Tx to CBOR for Chrome messaging
-    txCbor.value = serializeCardanoJsSdkTx(props.tx);
-    console.log('Serialized transaction CBOR:', txCbor.value);
-
-    // Sign the transaction via a background message
-    const witnessResult = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: {
-        txCbor: txCbor.value, // Pass serialized CBOR instead of the object
-        partialSign: false,
-        password: spendingPassword.value,
-        accountIndex: 0,
-        utxos: utxos.value,
-        addresses: keys.value, // Address mappings
-        mergeWitnesses: false,
-      },
-    })) as { data: { witnesses?: any; error?: string } };
-
-    console.log('Transaction signed successfully:', witnessResult);
-
-    if (witnessResult.data.error) {
-      throw new Error(witnessResult.data.error);
-    }
-
-    console.log('Signed transaction witness:', witnessResult.data.witnesses);
-    txWitnesses.value = witnessResult.data.witnesses;
-    return true;
-  } catch (e) {
-    console.error('Error signing DRep delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
-    return false;
-  } finally {
-    loading.value = false;
-  }
-};
-
-const signLedgerTx = async () => {
-  loading.value = true;
-  try {
-    if (!props.tx) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
-    txCbor.value = serializeCardanoJsSdkTx(props.tx);
-    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
-      props.tx,
-      keys.value,
-      utxos.value,
-      !isBT.value, // isUsb flag (inverted from isBT)
-      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network)
-    );
-    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-      signatures,
-    });
-    console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
-    txWitnesses.value = transactionWitnessSet.toCbor();
-    return true;
-  } catch (e) {
-    ledgerUtils.ledgerErrorHandling(e);
-    return false;
-  } finally {
-    loading.value = false;
-  }
-};
-
-const submitTx = async () => {
-  try {
-    loading.value = true;
-    console.log('Submitting Cardano JS SDK DRep delegation transaction');
-    const submitResult = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor: txCbor.value,
-        witnessHex: txWitnesses.value,
-        utxos: utxos.value,
-      },
-    })) as { data: { txId?: string; error?: string } };
-
-    if (submitResult.data.error) {
-      throw new Error(submitResult.data.error);
-    }
-
-    snackbar.fireSuccess(t('governance.drepDelegationTxSubmitted', { txId: submitResult.data.txId }));
-    emit('close');
-  } catch (e) {
-    console.error('Error submitting DRep delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
-  } finally {
-    loading.value = false;
-  }
-};
-
+// Simplified signing function that uses the composable
 const signAndSubmitDelegationTx = async () => {
-  if (loggedWallet.value?.type === WalletType.Normal) {
-    if (form.value?.validate()) {
-      if (!isSubmit.value) {
-        // Sign the transaction
-        const success = await signTx();
-        if (!success) {
-          return;
-        }
-        if (config.value?.txAutoSubmit) {
-          await submitTx();
-        } else {
-          isSubmit.value = true;
-        }
-      } else {
-        // Submit the transaction
-        await submitTx();
-      }
-    }
-  } else if (loggedWallet.value?.type === WalletType.Keystone) {
-    // TODO: Keystone hardware wallet support needs reimplementation with Cardano JS SDK
-    snackbar.setError(t('governance.keystoneComingSoon'));
-  } else if (loggedWallet.value?.type === WalletType.Ledger) {
-    if (!isSubmit.value) {
-      const success = await signLedgerTx();
-      if (!success) {
-        return;
-      }
-      if (config.value?.txAutoSubmit) {
-        await submitTx();
-      } else {
-        isSubmit.value = true;
-      }
-    } else {
-      await submitTx();
-    }
-  }
+  await handleSign(form.value || undefined);
 };
 
 const fallbackImage = (e: any) => {
@@ -455,16 +316,19 @@ watch(
   () => props.isOpen,
   val => {
     if (val) {
-      spendingPassword.value = '';
-      txCbor.value = '';
-      txWitnesses.value = null;
-      isSubmit.value = false;
+      resetState();
       if (form.value) {
         form.value.resetValidation();
       }
     }
   }
 );
+
+watch(passwordField, (newVal) => {
+  if (newVal) {
+    setPasswordFieldRef(newVal);
+  }
+});
 
 watch(spendingPassword, () => {
   passwordRules.value = [rules.required()];

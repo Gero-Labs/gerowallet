@@ -1,6 +1,7 @@
-import { ref, computed } from 'vue';
 import { Api } from '@/api/api';
 import { walletStore } from '@/stores/walletStore';
+
+// Note: ref, computed are auto-imported globally by unplugin-auto-import
 
 const usdToEurRate = ref<number>(1);
 const loading = ref(false);

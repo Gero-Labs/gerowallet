@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="String($t('security.walletLocked'))"
+    :title="$t('security.walletLocked')"
     :subtitle="unlockDescription"
     :width="400"
     icon="mdi-lock"
@@ -9,114 +9,170 @@
     :min-height="280"
   >
     <v-card-text class="pt-6 unlock-dialog">
-        <div class="text-center mb-10">
-          <v-avatar size="64" color="black">
-            <v-img :src="resolveIcon(walletIcon)" />
-          </v-avatar>
-          <div class="mt-2 title white--text font-weight-bold">{{ walletName }}</div>
-        </div>
+      <div class="text-center mb-8">
+        <v-avatar size="64" color="black">
+          <v-img :src="resolveIcon(walletIcon)" />
+        </v-avatar>
+        <div class="mt-2 title white--text font-weight-bold">{{ walletName }}</div>
+      </div>
 
-        <!-- Loading overlay during unlock -->
-        <div v-if="unlocking" class="unlock-loading-overlay">
-          <v-progress-circular
-            indeterminate
-            color="primary"
-            size="48"
-          ></v-progress-circular>
-          <div class="mt-4 subtitle-1 white--text">{{ $t('security.unlocking') }}</div>
-        </div>
-
-        <!-- Unlock method content -->
-        <div v-else class="unlock-method-wrapper">
-          <!-- PIN Input -->
-          <div v-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
-              <numeric-otp-input
-                ref="pinInputRef"
-                v-model="pinCode"
-                :length="pinLength"
-                :error="pinError"
-                @finish="handlePinFinish"
-              />
-
-              <!-- PassKey indicator/button (if PassKey is enabled) -->
-              <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
-                <v-btn
-                  small
-                  text
-                  color="primary"
-                  @click="handlePassKeyAuth"
-                  :loading="passKeyLoading"
-                >
-                  <v-icon small left>mdi-fingerprint</v-icon>
-                  {{ $t('security.usePassKey') }}
-                </v-btn>
-              </div>
-            </div>
-
-            <!-- Pattern Input -->
-            <div v-else-if="unlockMethod === 'pattern'" class="unlock-method-container unlock-method-content">
-              <pattern-lock
-                v-model="pattern"
-                @complete="handlePatternComplete"
-              />
-            </div>
-
-            <!-- Fallback: Spending Password -->
-            <!-- Note: PassKey is not a standalone unlock method UI -->
-            <!-- It's triggered via the fingerprint button in PIN section or auto-trigger -->
-            <div v-else class="unlock-method-container unlock-method-content">
-              <v-tooltip
-                v-model="tooltip.enabled"
-                top
-                color="red"
-              >
-                <template v-slot:activator="{ }">
-                  <v-text-field
-                    ref="passwordInputRef"
-                    v-model="password"
-                    :label="$t('security.spendingPassword')"
-                    :type="show ? 'text' : 'password'"
-                    :rules="[rules.required()]"
-                    outlined
-                    dense
-                    hide-details
-                    :append-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
-                    @click:append="show = !show"
-                    @keyup.enter="handleUnlock"
-                  ></v-text-field>
-                </template>
-                <span>{{ tooltip.text }}</span>
-              </v-tooltip>
-            </div>
-
-          <!-- 2FA Input (if enabled) -->
-          <div v-if="twoFactorEnabled && show2FA" class="mt-4">
-            <v-text-field
-              v-model="totpCode"
-              :label="$t('security.authenticatorCode')"
-              outlined
-              dense
-              maxlength="6"
-              @keyup.enter="handleUnlock"
-            ></v-text-field>
-          </div>
-        </div>
-      </v-card-text>
-
-      <!-- Unlock button (only for password method, PIN/Pattern auto-submit on completion) -->
-      <v-card-actions v-if="unlockMethod === 'password' || unlockMethod === null" class="px-6 pb-6">
-        <v-btn
-          block
+      <!-- Loading overlay during unlock -->
+      <div v-if="unlocking" class="unlock-loading-overlay">
+        <v-progress-circular
+          indeterminate
           color="primary"
-          large
-          @click="handleUnlock"
-          :loading="unlocking"
-          :disabled="!canUnlock"
-        >
-          {{ $t('security.unlock') }}
-        </v-btn>
-      </v-card-actions>
+          size="48"
+        ></v-progress-circular>
+        <div class="mt-4 subtitle-1 white--text">{{ $t('security.unlocking') }}</div>
+      </div>
 
+      <!-- Unlock method content -->
+      <div v-else class="unlock-method-wrapper">
+        <!-- PIN Input -->
+        <div v-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
+            <numeric-otp-input
+              ref="pinInputRef"
+              v-model="pinCode"
+              :length="pinLength"
+              :error="pinError"
+              @finish="handlePinFinish"
+            />
+
+            <!-- PassKey indicator/button (if PassKey is enabled) -->
+            <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
+              <v-btn
+                small
+                text
+                color="primary"
+                @click="handlePassKeyAuth"
+                :loading="passKeyLoading"
+              >
+                <v-avatar size="18" class="mr-2">
+                  <v-img
+                    :src="assets.passKeySvg"
+                    contain
+                    class="passkey-icon"
+                    :style="{
+                  width: '18px',
+                  height: '18px',
+                  filter: 'brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%)',
+                  opacity: passKeyLoading ? '0.5' : 1,
+                }"
+                    tabindex="-1"
+                  />
+                </v-avatar>
+                {{ $t('security.usePassKey') }}
+              </v-btn>
+            </div>
+          </div>
+
+          <!-- Pattern Input -->
+          <div v-else-if="unlockMethod === 'pattern'" class="text-center unlock-method-container unlock-method-content">
+            <pattern-lock
+              v-model="pattern"
+              @complete="handlePatternComplete"
+            />
+
+            <!-- PassKey indicator/button (if PassKey is enabled) -->
+            <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
+              <v-btn
+                small
+                text
+                color="primary"
+                @click="handlePassKeyAuth"
+                :loading="passKeyLoading"
+              >
+                <v-avatar size="18" class="mr-2">
+                  <v-img
+                    :src="assets.passKeySvg"
+                    contain
+                    class="passkey-icon"
+                    :style="{
+                  width: '18px',
+                  height: '18px',
+                  filter: 'brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%)',
+                  opacity: passKeyLoading ? '0.5' : 1,
+                }"
+                    tabindex="-1"
+                  />
+                </v-avatar>
+                {{ $t('security.usePassKey') }}
+              </v-btn>
+            </div>
+          </div>
+
+          <div v-else class="unlock-method-content">
+            <v-tooltip
+              v-model="tooltip.enabled"
+              top
+              color="red"
+            >
+              <template v-slot:activator="{ }">
+                <v-text-field
+                  ref="passwordInputRef"
+                  v-model="password"
+                  :label="$t('security.spendingPassword')"
+                  :type="show ? 'text' : 'password'"
+                  :rules="[rules.required()]"
+                  outlined
+                  dense
+                  hide-details
+                  :append-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append="show = !show"
+                  @keydown.enter.stop="handleUnlock"
+                >
+                  <template v-slot:append-outer>
+                    <v-btn
+                      block
+                      outlined
+                      small
+                      color="primary"
+                      class="ml-2 px-1"
+                      style="height: 40px;"
+                      @click="handleUnlock"
+                      :loading="unlocking"
+                      :disabled="!canUnlock"
+                    >
+                      <v-icon>
+                        mdi-arrow-right
+                      </v-icon>
+                    </v-btn>
+                  </template>
+                </v-text-field>
+
+              </template>
+              <span>{{ tooltip.text }}</span>
+            </v-tooltip>
+
+            <!-- PassKey indicator/button (if PassKey is enabled) -->
+            <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
+              <v-btn
+                small
+                text
+                color="primary"
+                @click="handlePassKeyAuth"
+                :loading="passKeyLoading"
+              >
+                <v-avatar size="18" class="mr-2">
+                  <v-img
+                    :src="assets.passKeySvg"
+                    contain
+                    class="passkey-icon"
+                    :style="{
+                  width: '18px',
+                  height: '18px',
+                  filter: 'brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%)',
+                  opacity: passKeyLoading ? '0.5' : 1,
+                }"
+                    tabindex="-1"
+                  />
+                </v-avatar>
+                {{ $t('security.usePassKey') }}
+              </v-btn>
+            </div>
+          </div>
+      </div>
+    </v-card-text>
     <v-card-actions class="px-6 pb-6 pt-0">
       <v-btn
         block
@@ -143,6 +199,7 @@ import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
 import { authenticateWebAuthn } from '@/shared/utils/security';
 import { resolveIcon } from '@/shared/utils/resolver';
 import rules from '@/utils/rules';
+import assets from '@/utils/assets';
 
 // Define props and emits
 const props = defineProps<{
@@ -333,7 +390,6 @@ async function handlePassKeyAuth() {
 async function handleUnlock(passKeyAuthenticated = false) {
   if (!canUnlock.value && !passKeyAuthenticated) return;
 
-  unlocking.value = true;
   errorMessage.value = '';
 
   try {
@@ -368,6 +424,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
     });
     console.log('Unlock response:', response);
     if (response.data.success) {
+      unlocking.value = true;
       emit('input', false);
       emit('unlocked');
     } else {
@@ -510,8 +567,13 @@ watch(() => props.value, async (newVal) => {
 .unlock-method-container {
   min-height: 116px;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   justify-content: center;
-  align-items: end;
+  align-items: center;
+}
+
+/* Remove margin from append-outer slot */
+:deep(.v-input__append-outer) {
+  margin: 0!important;
 }
 </style>

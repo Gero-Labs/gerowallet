@@ -1,4 +1,5 @@
 import { APIError, METHOD, SENDER, TARGET } from './config';
+import { Cardano } from '@cardano-sdk/core';
 
 interface Message {
   method?: string;
@@ -27,6 +28,28 @@ export interface BackgroundResponse<T = any> {
  */
 export interface VerifyPasswordResponse {
   success: boolean;
+  error?: string;
+}
+
+/**
+ * Response type for Sign Tx
+ */
+export interface SignTxResponse {
+  success: boolean;
+  signatures: Cardano.Signatures;
+  error?: string;
+}
+
+/**
+ * Response type for Sign Data
+ */
+export interface SignDataResponse {
+  success: boolean;
+  signatureData: {
+    signatureHex: string;
+    signingPublicKeyHex: string;
+    addressFieldHex: string;
+  };
   error?: string;
 }
 

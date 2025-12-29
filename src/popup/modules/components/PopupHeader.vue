@@ -1,15 +1,11 @@
 <template>
   <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent" :disabled="disabled">
-    <div style="width: 52px; margin-left: auto; margin-right: auto">
-      <img :alt="$t('common.geroLogo')" id="modal-logo-icon" width="52" :src="assets.geroLogo"/>
-      <img :alt="$t('common.geroText')" id="modal-logo-text" width="52" :src="assets.geroText"/>
-    </div>
     <v-card-title class="justify-center py-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
     <v-card-title class="justify-center py-0" style="font-size: 16px;" v-if="showWebsite">
       <span style="color: #ccc">{{ $t('navigation.websiteLabel') }}:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
         <v-avatar size="16">
-          <img :src="favicon" :alt="$t('common.dappWebsiteFavicon')" />
+          <img :src="favicon" :alt="t('common.dappWebsiteFavicon')" />
         </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white"
@@ -41,6 +37,8 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
+
+const { t } = useTranslation();
 
 defineProps({
   title: {

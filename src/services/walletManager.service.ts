@@ -93,6 +93,7 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
+          btSupported: walletBg.btSupported,
         });
         LoadingState.setText('Restoring wallet...');
         await this.initializeWallet(walletBg);
@@ -167,6 +168,7 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
+          btSupported: walletBg.btSupported,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -663,6 +665,11 @@ export class WalletManager {
           unlockValid = false;
         }
       }
+    } else if (unlockCredential === 'passkey-authenticated') {
+      // Check if PassKey authentication was used (credential is a special string)
+      // PassKey verification handled by WebAuthn in the UI
+      // If we reach here, PassKey verification already passed
+      unlockValid = true;
     } else if (unlockMethod === 'pin') {
       // Check for new format (pinHash) or old format (encryptedPinHash)
       const pinHashConfig = await configTable.where({ key: 'pinHash' }).first();
@@ -687,13 +694,6 @@ export class WalletManager {
 
       // Verify pattern directly (no decryption needed)
       unlockValid = await verifyPattern(unlockCredential as number[], patternHashConfig.value);
-    }
-
-    // Check if PassKey authentication was used (credential is a special string)
-    if (unlockCredential === 'passkey-authenticated') {
-      // PassKey verification handled by WebAuthn in the UI
-      // If we reach here, PassKey verification already passed
-      unlockValid = true;
     }
 
     if (!unlockValid) {
