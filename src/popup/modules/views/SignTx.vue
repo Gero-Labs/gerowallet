@@ -121,9 +121,8 @@
           border="left"
           v-if="!keystoneScan"
           class="mt-2 mb-2"
-          style="max-width: 300px;"
         >
-          <b style="font-size: 12px;">{{ $t('wallet.instructions') }}</b>
+          <b style="font-size: 16px;">{{ $t('wallet.instructions') }}</b>
           <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">
             <li>{{ $t('wallet.unlockKeystone') }}</li>
             <li>{{ $t('wallet.selectScanQR') }} <v-icon x-small>mdi-line-scan</v-icon></li>
@@ -132,32 +131,37 @@
           </ul>
         </v-alert>
 
-        <v-card flat class="transparent" v-else style="max-width: 300px;">
-          <v-card-title class="py-1" style="font-size: 14px;">
-            {{ $t('wallet.scanQRCode') }}
-          </v-card-title>
-          <v-card-subtitle class="py-1">
-            <ul class="text-left" style="line-height: 1.2; font-size: 10px;">
-              <li>{{ $t('wallet.adjustDistance') }}</li>
-              <li>{{ $t('wallet.useLowDensity') }}</li>
-            </ul>
-          </v-card-subtitle>
-          <v-card-text class="text-center pa-2">
-            <AnimatedQRScanner
-              purpose="sign"
-              :urTypes="['cardano-signature']"
-              width="100%"
-              height="220px"
-              @scan="onKeystoneScan"
-              @error="onKeystoneError"
-              @progress="onKeystoneProgress"
-            />
-          </v-card-text>
-        </v-card>
+        <v-alert
+          color="white"
+          dense
+          outlined
+          type="info"
+          border="left"
+          v-else
+          class="mt-2 mb-2"
+        >
+          <b style="font-size: 16px;">{{ $t('wallet.scanQRCode') }}</b>
+          <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">
+            <li>{{ $t('wallet.adjustDistance') }}</li>
+            <li>{{ $t('wallet.useLowDensity') }}</li>
+          </ul>
+        </v-alert>
 
         <div v-if="!keystoneScan && keystoneCbor" style="max-width: 300px; margin: 0 auto;">
           <AnimatedQRCode :type="keystoneType" :cbor="keystoneCbor" :size="300" :capacity="100" />
         </div>
+        <div v-else>
+          <AnimatedQRScanner
+            purpose="sign"
+            :urTypes="['cardano-signature']"
+            width="100%"
+            height="260px"
+            @scan="onKeystoneScan"
+            @error="onKeystoneError"
+            @progress="onKeystoneProgress"
+          />
+        </div>
+
         <div class="text-center pt-2">
           <v-btn text small @click="backKeystoneScan" class="mr-2">
             {{ keystoneScan ? $t('common.back') : $t('common.cancel') }}
@@ -239,6 +243,7 @@ const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
 const keystoneType = ref('');
 const keystoneCbor = ref('');
+const keystoneUseHash = ref(false);
 
 const addresses = computed(() => {
   return new Set([...keys.value.payment, ...keys.value.change].map(el => el.address));
@@ -545,9 +550,10 @@ const sign = async () => {
 
           const signRequest = createKeystoneSignRequest(fullTx, walletData, utxos.value, keys.value);
 
-          // Store UR data for QR code
+          // Store UR data for QR code and signing mode
           keystoneType.value = signRequest.ur.type;
           keystoneCbor.value = signRequest.ur.cbor.toString('hex');
+          keystoneUseHash.value = signRequest.useHash;
 
           debugLog('[KEYSTONE-SIGN] Using hash-based signing:', signRequest.useHash);
 
@@ -604,14 +610,46 @@ const onKeystoneScan = async (ur: UR) => {
     const partialSign = request.value?.data?.partialSign;
     const mergeWitnesses = request.value?.data?.mergeWitnesses;
 
+    debugLog('[Keystone] UR received with type:', ur.type);
+
     let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
     if (mergeWitnesses || partialSign) {
       const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
       existingWitnesses = fullTx.witnessSet();
     }
-    const signature = parseSignature(ur);
-    debugLog('[Keystone] Signature received:', signature);
-    const signatures: Cardano.Signatures = Serialization.TransactionWitnessSet.fromCbor(signature.witnessSet).toCore().signatures;
+
+    // For hash-based signing, the SDK's parseSignature returns empty data
+    // We need to extract the witness set directly from the UR CBOR
+    let witnessSetHex: string;
+
+    if (keystoneUseHash.value) {
+      // Hash-based signing: UR CBOR contains the witness set directly
+      debugLog('[Keystone] Processing hash-based signature, extracting witness set from CBOR');
+      if (!ur.cbor || ur.cbor.length === 0) {
+        throw new Error('Empty CBOR data in hash-based signature');
+      }
+      // The CBOR from hash-based signing IS the witness set
+      witnessSetHex = ur.cbor.toString('hex');
+      debugLog('[Keystone] Extracted witness set hex:', witnessSetHex.substring(0, 100) + '...');
+    } else {
+      // Full CBOR signing: use SDK's parseSignature
+      debugLog('[Keystone] Processing full CBOR signature');
+      const signature = parseSignature(ur);
+
+      if (!signature.witnessSet || signature.witnessSet.length === 0) {
+        throw new Error('Keystone returned empty witness set');
+      }
+      witnessSetHex = signature.witnessSet;
+    }
+
+    let signatures: Cardano.Signatures;
+    try {
+      signatures = Serialization.TransactionWitnessSet.fromCbor(witnessSetHex).toCore().signatures;
+    } catch (error) {
+      console.error('[Keystone] Failed to parse witness set CBOR:', error);
+      console.error('[Keystone] WitnessSet hex dump:', witnessSetHex);
+      throw new Error(`Failed to parse Keystone signature: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 
     let finalWitnessSet: Serialization.TransactionWitnessSet;
     if (existingWitnesses) {

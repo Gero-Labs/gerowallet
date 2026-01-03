@@ -65,7 +65,20 @@ export const getKeystonePublicKeyUR = (accPurpose = purpose.hdwallet, accIndex =
 }
 
 export const parseSignature = (ur: UR): CardanoSignature => {
-  return sdk.cardano.parseSignature(ur);
+  console.log('[Keystone parseSignature] UR object details:');
+  console.log('[Keystone parseSignature] - type:', ur.type);
+  console.log('[Keystone parseSignature] - cbor exists:', !!ur.cbor);
+  console.log('[Keystone parseSignature] - cbor length:', ur.cbor?.length);
+  console.log('[Keystone parseSignature] - cbor hex (first 100 chars):', ur.cbor?.toString('hex').substring(0, 100));
+
+  const result = sdk.cardano.parseSignature(ur);
+
+  console.log('[Keystone parseSignature] SDK result:');
+  console.log('[Keystone parseSignature] - requestId:', result.requestId);
+  console.log('[Keystone parseSignature] - witnessSet length:', result.witnessSet?.length);
+  console.log('[Keystone parseSignature] - witnessSet (first 100 chars):', result.witnessSet?.substring(0, 100));
+
+  return result;
 }
 
 /**

@@ -1857,6 +1857,8 @@ export default {
   'security.orUsePassKey': 'Or use PassKey',
   'security.passKeyAuthFailed': 'PassKey authentication failed',
   'security.passKeyAuthSuccess': 'Password autofilled successfully',
+  'security.authenticateWithPassKey': 'Authenticate with PassKey',
+  'security.passkeyAuthInProgress': 'Please complete the authentication on your device',
   'security.passKeyRequiresUnlockMethod': 'Requires selecting unlock method.',
   'security.passKeyPasswordUpdateFailed': 'Failed to update PassKey encrypted password. Please re-enable PassKey autofill in Lock Settings.',
   'security.autoTriggerPassKeyPasswordAutofill': 'Auto-Trigger PassKey for Password Autofill',
