@@ -27,6 +27,7 @@ const Blog = () => import('@/modules/blog/Blog.vue');
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 
 import WalletStore from '@/stores/walletStore';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 const routes = [
   {
@@ -196,6 +197,32 @@ const router = new VueRouter({
   routes,
 });
 
+/**
+ * Check if a route is under maintenance
+ * This matches the underMaintenance logic from NavigationDrawer
+ */
+function isRouteUnderMaintenance(routeName: string | null | undefined): boolean {
+  if (!routeName) return false;
+
+  // Route-specific maintenance checks
+  switch (routeName) {
+    case 'card':
+      // Gero Card is under maintenance if feature flag is disabled
+      return !featureFlagsStore.isGeroCardEnabled();
+
+    case 'multisig':
+      // MultiSig is currently under maintenance (route is commented out)
+      return true;
+
+    // Add other routes that can be under maintenance here
+    // case 'someOtherRoute':
+    //   return !featureFlagsStore.isSomeOtherFeatureEnabled();
+
+    default:
+      return false;
+  }
+}
+
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
   const isLocked: boolean = WalletStore.state.isLocked;
@@ -227,6 +254,13 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
+
+  // Check if the route is under maintenance
+  if (isRouteUnderMaintenance(to.name)) {
+    console.warn(`🚧 Route "${to.name}" is under maintenance. Redirecting to dashboard.`);
+    return next({ path: '/' });
+  }
+
   next();
 });
 

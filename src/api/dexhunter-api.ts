@@ -97,12 +97,11 @@ export default {
     const { data } = await axiosInstance.post(`/api/v2/swap/limit/build`, requestBody);
     return data
   },
-  async swapSign(Signatures: number, txCbor: string): Promise<any> {
-    const requestBody = {
-      Signatures,
-      txCbor,
-    }
-    const { data } = await axiosInstance.post(`/api/v2/swap/sign`, requestBody);
+  async swapSign(signatures: string, txCbor: string): Promise<any> {
+    const { data } = await axiosInstance.post(`/api/v2/swap/sign`, {
+      Signatures: signatures,
+      txCbor
+    });
     return data
   },
   async getAllBlacklistPolicies(): Promise<any> {

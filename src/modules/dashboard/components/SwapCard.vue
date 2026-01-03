@@ -645,7 +645,6 @@ const averagePrice = (token_in, token_out) => {
       price_ab2.value = res.price_ab;
       price_ba2.value = res.price_ba;
       limit.value = structuredClone(price_ba2.value).toString();
-      console.log(limit.value);
     })
     .catch(() => {
       // console.log(e)
