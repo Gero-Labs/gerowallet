@@ -29,14 +29,14 @@
             </div>
           </v-tooltip>
         </TransactionCard>
-        <v-row no-gutters style="flex: none;">
+        <v-row no-gutters style="flex: none; position: relative;">
           <v-col cols="12" class="justify-center text-center">
             <TransactionRisk :risk="risks?.score" :loading="loading" />
           </v-col>
+          <div style="position: absolute; bottom: 0; right: 0;">
+            <CopyButton x-small :value="request?.data ? request?.data.tx : ''" :title="'CBOR'"></CopyButton>
+          </div>
         </v-row>
-        <div style="text-align: right; position: absolute; float: right; right: 10px; bottom: 67px;">
-          <CopyButton x-small :value="request?.data ? request?.data.tx : ''" :title="'CBOR'"></CopyButton>
-        </div>
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
         <v-layout>
@@ -70,6 +70,13 @@
                 />
               </v-card-subtitle>
             </v-col>
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Keystone" class="pt-3 pb-0">
+              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
+                <span style="color: white; font-size: 12px">
+                  {{ $t('wallet.scanQRWithKeystone') }}
+                </span>
+              </v-alert>
+            </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
@@ -97,6 +104,74 @@
           ></v-progress-linear>
           <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text" style="word-break: break-word;" />
         </v-card>
+      </v-overlay>
+
+      <!-- Keystone QR Code Overlay -->
+      <v-overlay
+        :absolute="true"
+        opacity="0.99"
+        :value="keystoneOverlay"
+        class="hardwareOverlay"
+      >
+        <v-alert
+          color="white"
+          dense
+          outlined
+          type="info"
+          border="left"
+          v-if="!keystoneScan"
+          class="mt-2 mb-2"
+          style="max-width: 300px;"
+        >
+          <b style="font-size: 12px;">{{ $t('wallet.instructions') }}</b>
+          <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">
+            <li>{{ $t('wallet.unlockKeystone') }}</li>
+            <li>{{ $t('wallet.selectScanQR') }} <v-icon x-small>mdi-line-scan</v-icon></li>
+            <li>{{ $t('wallet.useKeystoneToScan') }}</li>
+            <li>{{ $t('wallet.approveAndScanNext') }}</li>
+          </ul>
+        </v-alert>
+
+        <v-card flat class="transparent" v-else style="max-width: 300px;">
+          <v-card-title class="py-1" style="font-size: 14px;">
+            {{ $t('wallet.scanQRCode') }}
+          </v-card-title>
+          <v-card-subtitle class="py-1">
+            <ul class="text-left" style="line-height: 1.2; font-size: 10px;">
+              <li>{{ $t('wallet.adjustDistance') }}</li>
+              <li>{{ $t('wallet.useLowDensity') }}</li>
+            </ul>
+          </v-card-subtitle>
+          <v-card-text class="text-center pa-2">
+            <AnimatedQRScanner
+              purpose="sign"
+              :urTypes="['cardano-signature']"
+              width="100%"
+              height="220px"
+              @scan="onKeystoneScan"
+              @error="onKeystoneError"
+              @progress="onKeystoneProgress"
+            />
+          </v-card-text>
+        </v-card>
+
+        <div v-if="!keystoneScan && keystoneCbor" style="max-width: 300px; margin: 0 auto;">
+          <AnimatedQRCode :type="keystoneType" :cbor="keystoneCbor" :size="300" :capacity="100" />
+        </div>
+        <div class="text-center pt-2">
+          <v-btn text small @click="backKeystoneScan" class="mr-2">
+            {{ keystoneScan ? $t('common.back') : $t('common.cancel') }}
+          </v-btn>
+          <v-btn
+            v-if="!keystoneScan"
+            small
+            class="geroButton"
+            style="color: black!important;"
+            @click="keystoneScan = true"
+          >
+            {{ $t('common.next') }}
+          </v-btn>
+        </div>
       </v-overlay>
     </PopupHeader>
   </v-form>
@@ -136,6 +211,11 @@ import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import ledger from '@/shared/utils/ledger';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import assets from '@/utils/assets';
+import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
+import { UR } from '@keystonehq/keystone-sdk';
+import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
+import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
@@ -154,6 +234,11 @@ const witnesses = ref<any>(undefined);
 const form = ref<any>(null);
 const popupHeader = ref<any>(null);
 const tabId = ref<number>();
+// Keystone state
+const keystoneOverlay = ref(false);
+const keystoneScan = ref(false);
+const keystoneType = ref('');
+const keystoneCbor = ref('');
 
 const addresses = computed(() => {
   return new Set([...keys.value.payment, ...keys.value.change].map(el => el.address));
@@ -306,12 +391,12 @@ const swapDetails = computed(() => {
 });
 
 const handlePassKeyError = (error: string) => {
-  console.error('PassKey autofill error in SignTx:', error);
+  debugLog('[PassKey] Autofill error in SignTx:', error);
   snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
 const handlePassKeySuccess = () => {
-  console.log('✅ PassKey autofill successful in SignTx - triggering sign');
+  debugLog('[PassKey] Autofill successful in SignTx - triggering sign');
   // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     sign();
@@ -347,13 +432,13 @@ const sign = async () => {
           }
         }) as { data: { witnesses?: any; error?: string } };
 
-        console.log('Transaction signed successfully:', witnessResult);
+        debugLog('[NORMAL-SIGN] Transaction signed successfully:', witnessResult);
 
         if (witnessResult.data.error) {
           throw new Error(witnessResult.data.error);
         }
 
-        console.log('Signed transaction witness:', witnessResult.data.witnesses);
+        debugLog('[NORMAL-SIGN] Signed transaction witness:', witnessResult.data.witnesses);
         witnesses.value = witnessResult.data.witnesses;
         if (txAutoSubmit.value) {
           await confirm();
@@ -375,7 +460,7 @@ const sign = async () => {
             const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
             existingWitnesses = fullTx.witnessSet();
           } catch (e) {
-            console.warn('[LEDGER-SIGN] Could not extract existing witnesses:', e);
+            debugLog('[LEDGER-SIGN] Could not extract existing witnesses:', e);
           }
         }
 
@@ -442,10 +527,36 @@ const sign = async () => {
         const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
           signatures,
         })
-        console.log('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
+        debugLog('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
         witnesses.value = transactionWitnessSet.toCbor();
         if (txAutoSubmit.value) {
           await confirm();
+        }
+      } else if (loggedWallet.value.type === WalletType.Keystone) {
+        try {
+          // Create transaction object from CBOR
+          const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
+
+          // Create Keystone signing request
+          const walletData = {
+            xfp: loggedWallet.value.xfp,
+            stakeAddress: loggedWallet.value.stakeAddress
+          };
+
+          const signRequest = createKeystoneSignRequest(fullTx, walletData, utxos.value, keys.value);
+
+          // Store UR data for QR code
+          keystoneType.value = signRequest.ur.type;
+          keystoneCbor.value = signRequest.ur.cbor.toString('hex');
+
+          debugLog('[KEYSTONE-SIGN] Using hash-based signing:', signRequest.useHash);
+
+          // Show overlay with animated QR code
+          keystoneOverlay.value = true;
+          keystoneScan.value = false;
+        } catch (e: any) {
+          debugLog('[KEYSTONE-SIGN] Error:', e);
+          snackbar.setError(e.message || t('wallet.keystoneSigningFailed'));
         }
       }
     } catch (e: any) {
@@ -461,7 +572,7 @@ const sign = async () => {
             snackbar.setError(String(t('wallet.ledgerDeviceError', { message: error.message })));
         }
       } else {
-        console.log(e);
+        debugLog('[SIGN] Transaction error:', e);
         snackbar.setError(e);
       }
     } finally {
@@ -484,6 +595,83 @@ const sign = async () => {
     }
   } else {
     await signAndReturnTx();
+  }
+};
+
+const onKeystoneScan = async (ur: UR) => {
+  try {
+    const txCbor = request.value?.data?.tx;
+    const partialSign = request.value?.data?.partialSign;
+    const mergeWitnesses = request.value?.data?.mergeWitnesses;
+
+    let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
+    if (mergeWitnesses || partialSign) {
+      const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
+      existingWitnesses = fullTx.witnessSet();
+    }
+    const signature = parseSignature(ur);
+    debugLog('[Keystone] Signature received:', signature);
+    const signatures: Cardano.Signatures = Serialization.TransactionWitnessSet.fromCbor(signature.witnessSet).toCore().signatures;
+
+    let finalWitnessSet: Serialization.TransactionWitnessSet;
+    if (existingWitnesses) {
+      // Convert existing witnesses to Core format
+      const existingCore = existingWitnesses.toCore();
+
+      // Merge signatures (combine both Maps)
+      const mergedSignatures = new Map([
+        ...(existingCore.signatures || new Map()),
+        ...(signatures || new Map()),
+      ]);
+
+      // Create merged witness set - only include properties that are defined
+      const mergedWitnessCore: Cardano.Witness = {
+        signatures: mergedSignatures,
+        ...(existingCore.bootstrap && { bootstrap: existingCore.bootstrap }),
+        ...(existingCore.scripts && { scripts: existingCore.scripts }),
+        ...(existingCore.redeemers && { redeemers: existingCore.redeemers }),
+        ...(existingCore.datums && { datums: existingCore.datums }),
+      };
+
+      finalWitnessSet = Serialization.TransactionWitnessSet.fromCore(mergedWitnessCore);
+    } else {
+      finalWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+        signatures,
+      });
+    }
+
+    witnesses.value = finalWitnessSet.toCbor();
+
+    // Close overlay
+    keystoneOverlay.value = false;
+    keystoneScan.value = false;
+
+    // Submit if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await confirm();
+    }
+  } catch (error) {
+    debugLog('[Keystone] Error processing signature:', error);
+    snackbar.setError(error instanceof Error ? error.message : t('wallet.keystoneQRScanError'));
+    keystoneOverlay.value = false;
+    keystoneScan.value = false;
+  }
+};
+
+const onKeystoneError = (error: string) => {
+  debugLog('[Keystone] Scanner error:', error);
+  snackbar.setError(error || t('wallet.keystoneScanError'));
+};
+
+const onKeystoneProgress = (_progress: number) => {
+  // Progress updates handled silently
+};
+
+const backKeystoneScan = () => {
+  if (keystoneScan.value) {
+    keystoneScan.value = false;
+  } else {
+    keystoneOverlay.value = false;
   }
 };
 
@@ -522,10 +710,10 @@ const init = async () => {
 
     try {
       risks.value = await scanWithTimeout;
-      console.log('SignTx received Cardano Shield response:', risks.value);
-      console.log('SignTx passing risks.score to TransactionRisk:', risks.value?.score);
+      debugLog('[CardanoShield] Received response:', risks.value);
+      debugLog('[CardanoShield] Risk score:', risks.value?.score);
     } catch (e) {
-      console.warn('Cardano Shield scan failed or timed out:', e);
+      debugLog('[CardanoShield] Scan failed or timed out:', e);
       risks.value = {
         addressRisk: 'unknown',
         score: 'unknown',  // Default score when scan fails

@@ -112,8 +112,13 @@ const hasAutoTriggered = ref(false);
 
 // Check passkey availability on mount and auto-trigger
 onMounted(async () => {
+  debugLog('[PassKeyField] Component mounted in context:', window.location.href);
+  debugLog('[PassKeyField] WebAuthn supported:', !!window.PublicKeyCredential);
+  debugLog('[PassKeyField] Hostname:', window.location.hostname);
+
   passKeyAvailable.value = await checkPassKeyAvailable();
-  debugLog('checkPassKeyAvailable', passKeyAvailable.value);
+  debugLog('[PassKeyField] checkPassKeyAvailable result:', passKeyAvailable.value);
+
   // Auto-trigger passkey authentication if available AND enabled in settings
   if (passKeyAvailable.value && !hasAutoTriggered.value) {
     // Set flag IMMEDIATELY to prevent race conditions on rapid re-mounts
@@ -121,6 +126,7 @@ onMounted(async () => {
 
     // Check if auto-trigger is enabled
     const autoTriggerEnabled = await checkAutoTriggerEnabled();
+    debugLog('[PassKeyField] Auto-trigger enabled:', autoTriggerEnabled);
 
     if (autoTriggerEnabled) {
       // Small delay to let the dialog render
@@ -249,7 +255,7 @@ async function handlePassKeyAutofill() {
     // Wait for Vue to propagate the password value, then emit success
     await nextTick();
     showSuccessFeedback();
-    // emit('passkey-autofill-success');
+    emit('passkey-autofill-success');
   } catch (error: any) {
     console.error('❌ PassKey autofill failed:', error);
 

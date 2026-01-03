@@ -73,7 +73,6 @@ loadPersistedWallet().then(() => {
   return new Promise<void>((resolve) => {
     chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
       if (saved?.loggedWallet?.id && saved?.config?.locale) {
-        console.log('🌐 Setting initial locale from storage:', saved.config.locale);
         i18n.locale = saved.config.locale;
       } else {
         console.log('🌐 Using default locale: us');
@@ -111,7 +110,6 @@ loadPersistedWallet().then(() => {
       () => walletStoreState.isLocked,
       (isLocked) => {
         if (isLocked && router.currentRoute.path !== '/welcome') {
-          console.log('🔒 Wallet locked, redirecting to welcome page');
           router.push('/welcome');
         }
       }

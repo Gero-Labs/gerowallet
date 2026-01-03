@@ -32,7 +32,11 @@
       "Bash(python3:*)",
       "Bash(curl -s -H \"Accept: application/json\" \"https://dev.gerowallet.io/api/wallet/value/trended?address=addr1qyx2ymk0sa79uyap0vdvz3ayxglz5nx0ktc9792gljeaha664arus97u6mw2q8rtpjrvcr9qn3vfa25gp6zedwjhacjscv3w4f&timeframe=7d&quote=USD\")",
       "WebSearch",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:dev.keyst.one)",
+      "Bash(cd /Users/dudiedri/IdeaProjects/A.D. Labs/gerowallet && npm run typecheck:*)",
+      "Bash(npm run build)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

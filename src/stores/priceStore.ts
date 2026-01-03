@@ -48,7 +48,6 @@ if (context === 'browser') {
   debugLog('🔌 Initializing price store messaging in browser context');
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<PriceStore>) => {
     Object.assign(priceStore, updates);
-    debugLog('📥 Received price store update:', updates);
   });
 }
 

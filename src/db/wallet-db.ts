@@ -126,7 +126,6 @@ export async function setWalletConfiguration(id: number, key: string, value: any
       value: value
     });
   } else {
-    console.log('Updating configuration', configuration)
     configuration.value = value;
     await configTable.put(configuration);
   }

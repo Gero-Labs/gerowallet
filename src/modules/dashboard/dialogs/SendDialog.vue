@@ -93,29 +93,19 @@
             </ul>
           </v-card-subtitle>
           <v-card-text class="text-center">
-            <div class="qr-scanner" v-show="isInit">
-<!--              <QrcodeStream @decode="onDecode" @init="onInit">-->
-<!--                <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
-<!--                </div>-->
-<!--              </QrcodeStream>-->
-            </div>
-            <div style="flex-flow: column; display: flex;align-items: center;" class="pt-10" v-if="!isInit">
-              <v-progress-circular size="150" indeterminate></v-progress-circular>
-              <span class="pt-4">Loading ... </span>
-            </div>
+            <AnimatedQRScanner
+              purpose="sign"
+              :urTypes="['cardano-signature']"
+              width="100%"
+              height="334px"
+              @scan="onKeystoneScan"
+              @error="onKeystoneError"
+              @progress="onKeystoneProgress"
+            />
           </v-card-text>
         </v-card>
 
-        <!--      <AnimatedQRCode :type="type" :cbor="cbor" />-->
-        <div id="qr-code" ref="qrCode" class="text-center" v-show="!keystoneScan"> </div>
+        <AnimatedQRCode v-if="!keystoneScan && keystoneCbor" :type="keystoneType" :cbor="keystoneCbor" />
         <div class="text-center pt-2">
           <v-btn
             text
@@ -194,12 +184,11 @@ import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
-// import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import QRCodeStyling from 'qr-code-styling';
-// import { QrcodeStream } from "vue-qrcode-reader";
-// import { UREncoder } from '@keystonehq/keystone-sdk';
+import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
 import { isPaymentAddress } from '@/chrome/serialization';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
@@ -209,6 +198,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import ledgerUtils from '@/shared/utils/ledger';
 import assets from '@/utils/assets';
+import { UR } from '@keystonehq/keystone-sdk';
 
 interface Props {
   isOpen: boolean;
@@ -259,7 +249,8 @@ const isCalculatingMax = ref<boolean>(false);
 const overlay = ref<boolean>(false);
 const keystoneScan = ref<boolean>(false);
 const isInit = ref<boolean>(false);
-const qrCode = ref<QRCodeStyling | null>(null);
+const keystoneType = ref<string>('');
+const keystoneCbor = ref<string>('');
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
@@ -355,40 +346,40 @@ const backScan = () => {
   }
 }
 
-// const onDecode = async (result) => {
-//   console.log(result)
-//   const signature = parseSignature(result);
-//
-//   try {
-//     const submitResult = await Messaging.sendToBackgroundFromOptions({
-//       method: MessageTypes.SUBMIT_TX,
-//       data: {
-//         txCbor: txCbor.value,
-//         witnessHex: signature.witnessSet,
-//         utxos: utxos.value
-//       }
-//     }) as { data: { txId?: string; error?: string } };
-//
-//     if (submitResult.data.error) {
-//       throw new Error(submitResult.data.error);
-//     }
-//
-//     snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
-//     emit('close');
-//   } catch (error) {
-//     console.error('Error submitting transaction:', error);
-//     snackbar.setError(error instanceof Error ? error.message : 'Unknown error');
-//   }
-// }
-//
-// const onInit = (promise) => {
-//   promise.then(() => {
-//     isInit.value = true
-//     console.log("Camera initialized successfully");
-//   }).catch((error) => {
-//     console.error("Camera initialization failed:", error);
-//   });
-// }
+const onKeystoneScan = async (ur: UR) => {
+  try {
+    // Parse the signature from Keystone
+    const signature = parseSignature(ur);
+
+    // Get witness set from signature (already a hex string)
+    txWitnesses.value = signature.witnessSet;
+
+    // Close overlay
+    overlay.value = false;
+    keystoneScan.value = false;
+
+    // Submit if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    } else {
+      isSubmit.value = true;
+    }
+  } catch (error) {
+    console.error('[Keystone] Error processing QR code:', error);
+    snackbar.setError(error instanceof Error ? error.message : t('wallet.keystoneQRScanError'));
+    overlay.value = false;
+    keystoneScan.value = false;
+  }
+}
+
+const onKeystoneError = (error: string) => {
+  console.error('[Keystone] Scanner error:', error);
+  snackbar.setError(error || t('wallet.keystoneScanError'));
+}
+
+const onKeystoneProgress = (progress: number) => {
+  // Progress updates handled silently
+}
 
 const handlePassKeySuccess = () => {
   setTimeout(() => {
@@ -567,24 +558,27 @@ async function signAndSubmitTx() {
       await submitTx();
     }
   } else if (loggedWallet.value?.type === WalletType.Keystone) {
-    if (qrCode.value) {
-      qrCode.value = null; // Clear the QRCode instance
-      if (vmProxy.$refs.qrCode)
-        vmProxy.$refs.qrCode.innerHTML = '';
+    // Keystone Hardware Wallet Signing
+    if (!tx.value) {
+      throw new Error(t('common.noTransactionToSign'));
     }
 
-    // TODO: Update Keystone flow to work with Cardano JS SDK transactions
-    // const ur = createKeystoneSignRequest(tx.value, loggedWallet.value, utxos.value, keys.value);
-    // type.value = ur.type;
-    // cbor.value = Buffer.from(ur.cbor).toString('hex');
-    // qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
-    // console.log('');
-    // overlay.value = true;
-    // qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
-    // Vue.nextTick(() => {
-    //   qrCode.value.append(vmProxy.$refs.qrCode);
-    // });
-    // console.log('qrCode');
+    // Serialize transaction to CBOR
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+
+    // Convert Cardano.Tx to Serialization.Transaction for Keystone
+    const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
+
+    // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
+    const ur = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
+
+    // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
+    keystoneType.value = ur.type;
+    keystoneCbor.value = ur.cbor.toString('hex');
+
+    // Show overlay with animated QR code
+    overlay.value = true;
+    keystoneScan.value = false;
   } else if (loggedWallet.value?.type === WalletType.Ledger) {
     // Ledger Hardware Wallet Signing
     await signLedgerTx();
@@ -868,11 +862,6 @@ watch(() => ({
   try {
     // selectedCollectibles is an object, not an array
     const collectiblesArray = val.selectedCollectibles ? Object.values(val.selectedCollectibles) : [];
-
-    console.log('build tx', {
-      tokens: val.selectedTokens.length,
-      collectibles: collectiblesArray.length
-    })
     if (!val.recipientAddress) {
       return;
     }
