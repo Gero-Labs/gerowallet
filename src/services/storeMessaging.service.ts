@@ -45,7 +45,14 @@ class StoreMessagingService {
    */
   private async initialize() {
     const context = getContextType();
-    
+
+    // Skip initialization for PassKey authentication popup (minimal context)
+    // PassKey popup doesn't need store sync - it just authenticates and closes
+    if (typeof window !== 'undefined' && window.location.hash.includes('/passkey-auth')) {
+      debugLog(`⏭️ Skipping StoreMessaging initialization for PassKey auth popup`);
+      return;
+    }
+
     // Only browser contexts need to connect to background
     if (context === 'browser') {
       debugLog(`🔌 StoreMessaging service initializing in browser context`);

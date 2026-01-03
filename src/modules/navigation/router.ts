@@ -25,6 +25,7 @@ const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
+const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -181,6 +182,15 @@ const routes = [
     component: Card,
     meta: {
       layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/passkey-auth',
+    name: 'passkey-auth',
+    component: PassKeyAuth,
+    meta: {
+      layout: BlankLayout,
       requiresAuth: true,
     },
   },

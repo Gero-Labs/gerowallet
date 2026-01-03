@@ -151,7 +151,6 @@ export class WalletManager {
         } else {
           walletBg = new WalletBg(wallet);
         }
-        console.log('walletBg', walletBg)
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -217,10 +216,8 @@ export class WalletManager {
     const promises = [];
     console.log('walletBg', walletBg)
     if (walletBg.type === WalletType.Google) {
-      // const googleStart = performance.now();
       // promises.push(
       //   zkFoldApi.walletAddress(walletBg.userId).then(res => {
-      //     console.log(`⏱️ PERF: zkFoldApi.walletAddress took ${performance.now() - googleStart}ms`);
       //     if (res['status'] !== 200) {
       //       throw new Error('Failed to get address');
       //     }

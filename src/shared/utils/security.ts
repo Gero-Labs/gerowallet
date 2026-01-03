@@ -365,6 +365,11 @@ export async function authenticateWebAuthn(credentialId: string): Promise<boolea
   }
 
   try {
+    console.log('[WebAuthn] Starting authentication...');
+    console.log('[WebAuthn] Credential ID:', credentialId);
+    console.log('[WebAuthn] rpId:', window.location.hostname);
+    console.log('[WebAuthn] Context:', window.location.href);
+
     // Generate a random challenge
     const challenge = new Uint8Array(32);
     crypto.getRandomValues(challenge);
@@ -384,22 +389,30 @@ export async function authenticateWebAuthn(credentialId: string): Promise<boolea
       rpId: window.location.hostname
     };
 
+    console.log('[WebAuthn] Calling navigator.credentials.get()...');
+
     // Get the credential (authenticate)
     const assertion = await navigator.credentials.get({
       publicKey: publicKeyCredentialRequestOptions
     }) as PublicKeyCredential;
+
+    console.log('[WebAuthn] Assertion received:', assertion);
 
     if (!assertion) {
       throw new Error('Authentication failed');
     }
 
     // If we got this far, authentication was successful
+    console.log('[WebAuthn] Authentication successful!');
     return true;
   } catch (error) {
-    console.error('WebAuthn authentication error:', error);
+    console.error('[WebAuthn] Authentication error:', error);
+    console.error('[WebAuthn] Error name:', (error as Error).name);
+    console.error('[WebAuthn] Error message:', (error as Error).message);
 
     // User cancelled or authentication failed
     if ((error as Error).name === 'NotAllowedError') {
+      console.log('[WebAuthn] User cancelled or not allowed');
       return false;
     }
 
