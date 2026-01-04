@@ -509,11 +509,8 @@ export class WalletManager {
    * User must unlock with PIN/Pattern/Spending Password + 2FA (not supported for now) to access UI
    */
   async lock(): Promise<void> {
-    debugLog('WalletManager: Locking wallet');
-
     try {
       // Set locked state
-
       WalletStore.setLocked(true);
       // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again
       debugLog('WalletManager: Wallet locked successfully');

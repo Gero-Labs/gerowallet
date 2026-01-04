@@ -224,8 +224,8 @@ async function startScanning() {
 }
 
 function onScanProgress(progressValue) {
-  console.log('[AnimatedQRScanner] Scan progress:', Math.round(progressValue * 100) + '%');
-  progress.value = progressValue * 100;
+  console.log('[AnimatedQRScanner] Scan progress:', Math.round(progressValue) + '%');
+  progress.value = progressValue;
   emit('progress', progressValue);
 }
 

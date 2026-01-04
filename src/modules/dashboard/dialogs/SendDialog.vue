@@ -378,6 +378,7 @@ const onKeystoneError = (error: string) => {
 }
 
 const onKeystoneProgress = (progress: number) => {
+  console.log('[Keystone] Scanner progress:', progress);
   // Progress updates handled silently
 }
 
@@ -590,6 +591,38 @@ async function signAndSubmitTx() {
 async function buildTx(sendTokens) {
   if (!sendData.value.recipientAddress || !isPaymentAddress(sendData.value.recipientAddress)) {
     return
+  }
+
+  // Proactive network data sync: If tip or epochParams are missing, trigger a fast REST sync
+  // This prevents race condition when user tries to send immediately after login
+  if (!tip.value || !epochParams.value) {
+    console.log('⏳ Network data not available, triggering sync...');
+    txValid.value = false;
+
+    try {
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SYNC_VIA_REST,
+        data: {}
+      }) as BackgroundResponse<{ success: boolean; error?: string }>;
+
+      if (response.data.success) {
+        console.log('✅ Network data synced successfully');
+        // Wait a moment for the store to be updated via messaging
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Check again if data is now available
+        if (!tip.value || !epochParams.value) {
+          console.warn('⚠️ Network data still not available after sync, will retry on next change');
+          return;
+        }
+      } else {
+        console.error('❌ Failed to sync network data:', response.data.error);
+        return;
+      }
+    } catch (error) {
+      console.error('❌ Error triggering sync:', error);
+      return;
+    }
   }
 
   const recipientAddress = sendData.value.recipientAddress;
