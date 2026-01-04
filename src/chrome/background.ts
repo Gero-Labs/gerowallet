@@ -1713,6 +1713,37 @@ app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => 
   }
 });
 
+app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {
+  try {
+    const currentWallet = walletManager.getWallet();
+    if (currentWallet) {
+      await currentWallet.syncService.syncViaRest();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'No wallet loaded' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (err) {
+    console.error('SYNC_VIA_REST error:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   try {
     const currentWallet = walletManager.getWallet();
