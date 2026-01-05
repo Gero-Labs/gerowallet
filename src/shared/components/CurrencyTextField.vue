@@ -80,6 +80,8 @@ const emit = defineEmits<{
 const valid = ref<boolean>(false)
 
 const cleanValue = (value: string): string => {
+  // Remove all non-numeric characters except decimal point
+  // This handles different locale separators (commas, spaces, etc.)
   return String(value).replace(/[^0-9.]/g, '').substring(0, 16);
 }
 
@@ -87,7 +89,8 @@ const handleInput = (value: string): void => {
   formattedValue.value = value
   const cleanedValue = cleanValue(value);
   rawValue.value = cleanedValue.length > 0 ? cleanedValue : '0';
-  emit('change', value.replaceAll(',', ''))
+  // Remove all possible locale-specific separators (commas, spaces, etc.)
+  emit('change', value.replace(/[,\s]/g, ''))
 }
 
 const formatNumber = (value: string) => {
