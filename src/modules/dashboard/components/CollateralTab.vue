@@ -100,13 +100,18 @@ const setCollateral = async () => {
       }
     };
 
-    // Build the transaction using the modern SDK
+    // Build the transaction using the modern SDK with wallet context for accurate fee calculation
     const txData = await buildCardanoTransaction({
       outputs: [collateralOutput],
       utxos: utxos.value,
       epochParams: epochParams.value,
       changeAddress: keys.value.payment[0].address,
-      tip: tip.value
+      tip: tip.value,
+      walletContext: {
+        keys: keys.value,
+        stakeAddress: loggedWallet.value.stakeAddress,
+        accountIndex: 0
+      }
     });
 
     // Convert to CBOR for signing

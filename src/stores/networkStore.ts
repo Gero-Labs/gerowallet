@@ -143,10 +143,7 @@ export default {
   },
 
   setPrice(price: {}) {
-    const context = getContextType();
-    debugLog(`🔍 NetworkStore setPrice called from ${context} context`);
     networkStore.price = price;
-
     // Broadcast from background context
     broadcastFromBackground({ price });
   },

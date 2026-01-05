@@ -1,5 +1,5 @@
 <template>
-  <div class="text-center">
+  <div class="text-center" style="justify-self: center;">
     <div
       :style="{
         width: `${qrCodeSize}px`,

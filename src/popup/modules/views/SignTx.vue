@@ -119,6 +119,7 @@
           outlined
           type="info"
           border="left"
+          prominent
           v-if="!keystoneScan"
           class="mt-2 mb-2"
         >
@@ -139,6 +140,7 @@
           border="left"
           v-else
           class="mt-2 mb-2"
+          prominent
         >
           <b style="font-size: 16px;">{{ $t('wallet.scanQRCode') }}</b>
           <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">

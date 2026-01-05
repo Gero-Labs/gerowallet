@@ -3,8 +3,10 @@
     :isOpen="isOpen"
     @close="handleClose"
     :title="t('wallet.keystoneSign')"
+    :subtitle="keystoneScan ? t('wallet.scanQRCode') : t('wallet.instructions')"
     :min-height="0"
     :persistent="true"
+    :img="assets.keystoneSvg"
   >
     <v-card-text class="px-3 pb-0 justify-center text-center">
       <!-- Instructions Alert -->
@@ -18,7 +20,6 @@
         v-if="!keystoneScan"
         class="mt-4 mb-4"
       >
-        <b>{{ $t('wallet.instructions') }}</b>
         <ul class="text-left" style="line-height: 1.5">
           <li>{{ $t('wallet.unlockKeystone') }}</li>
           <li>{{ $t('wallet.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
@@ -27,35 +28,38 @@
         </ul>
       </v-alert>
 
-      <!-- QR Scanner -->
-      <v-card flat class="transparent" v-else>
-        <v-card-title class="justify-center">
-          {{ $t('wallet.scanQRCode') }}
-        </v-card-title>
-        <v-card-subtitle>
-          <ul class="text-left" style="line-height: 1.5">
-            <li>{{ $t('wallet.adjustDistance') }}</li>
-            <li>{{ $t('wallet.useLowDensity') }}</li>
-          </ul>
-        </v-card-subtitle>
-        <v-card-text class="text-center">
-          <AnimatedQRScanner
-            purpose="sign"
-            :urTypes="['cardano-signature']"
-            width="100%"
-            height="334px"
-            @scan="handleScan"
-            @error="handleError"
-            @progress="handleProgress"
-          />
-        </v-card-text>
-      </v-card>
+      <v-alert
+        color="white"
+        dense
+        outlined
+        type="info"
+        prominent
+        border="left"
+        v-else
+        class="mt-4 mb-4"
+      >
+        <ul class="text-left" style="line-height: 1.5">
+          <li>{{ $t('wallet.adjustDistance') }}</li>
+          <li>{{ $t('wallet.useLowDensity') }}</li>
+        </ul>
+      </v-alert>
 
       <!-- Animated QR Code -->
       <AnimatedQRCode
         v-if="!keystoneScan && keystoneCbor"
         :type="keystoneType"
         :cbor="keystoneCbor"
+      />
+      <AnimatedQRScanner
+        v-else
+        purpose="sign"
+        :urTypes="['cardano-signature']"
+        width="100%"
+        height="350px"
+        @scan="handleScan"
+        @error="handleError"
+        @progress="handleProgress"
+        style="height: 374px"
       />
 
       <!-- Actions -->
@@ -86,6 +90,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from './BaseDialog.vue';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import assets from '@/utils/assets';
 
 interface Props {
   isOpen: boolean;

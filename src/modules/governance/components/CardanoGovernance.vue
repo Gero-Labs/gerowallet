@@ -547,7 +547,7 @@ const delegate = async () => {
       };
     }
 
-    // Use the generic transaction builder
+    // Use the generic transaction builder with wallet context for accurate fee calculation
     txData.value = await buildCardanoTransaction({
       certificates,
       utxos: utxos.value,
@@ -555,6 +555,11 @@ const delegate = async () => {
       changeAddress: keys.value.payment[0].address,
       tip: tip.value,
       implicitCoin,
+      walletContext: {
+        keys: keys.value,
+        stakeAddress: loggedWallet.value.stakeAddress,
+        accountIndex: 0
+      }
     });
 
     console.log('Vote delegation transaction built successfully');
@@ -609,7 +614,7 @@ const drepDelegate = async (row: any) => {
     }
     certificates.push(certificate);
 
-    // Use the generic transaction builder
+    // Use the generic transaction builder with wallet context for accurate fee calculation
     txData.value = await buildCardanoTransaction({
       certificates,
       utxos: utxos.value,
@@ -617,6 +622,11 @@ const drepDelegate = async (row: any) => {
       changeAddress: keys.value.payment[0].address,
       tip: tip.value,
       implicitCoin,
+      walletContext: {
+        keys: keys.value,
+        stakeAddress: loggedWallet.value.stakeAddress,
+        accountIndex: 0
+      }
     });
 
     isDelegateDialogOpen.value = true;
