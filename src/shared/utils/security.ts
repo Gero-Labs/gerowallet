@@ -359,10 +359,16 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
  * @param credentialId - Base64-encoded credential ID
  * @returns True if authentication successful
  */
-export async function authenticateWebAuthn(credentialId: string): Promise<boolean> {
+export async function authenticateWebAuthn(credentialId: string, timeoutMs: number = 60000): Promise<boolean> {
   if (!isWebAuthnSupported()) {
     throw new Error('WebAuthn is not supported in this browser');
   }
+
+  // Create AbortController for timeout management
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, timeoutMs);
 
   try {
     console.log('[WebAuthn] Starting authentication...');
@@ -384,16 +390,17 @@ export async function authenticateWebAuthn(credentialId: string): Promise<boolea
           transports: ['internal']
         }
       ],
-      timeout: 60000,
+      timeout: timeoutMs,
       userVerification: 'required',
       rpId: window.location.hostname
     };
 
     console.log('[WebAuthn] Calling navigator.credentials.get()...');
 
-    // Get the credential (authenticate)
+    // Get the credential (authenticate) with AbortSignal
     const assertion = await navigator.credentials.get({
-      publicKey: publicKeyCredentialRequestOptions
+      publicKey: publicKeyCredentialRequestOptions,
+      signal: abortController.signal
     }) as PublicKeyCredential;
 
     console.log('[WebAuthn] Assertion received:', assertion);
@@ -411,12 +418,15 @@ export async function authenticateWebAuthn(credentialId: string): Promise<boolea
     console.error('[WebAuthn] Error message:', (error as Error).message);
 
     // User cancelled or authentication failed
-    if ((error as Error).name === 'NotAllowedError') {
-      console.log('[WebAuthn] User cancelled or not allowed');
+    if ((error as Error).name === 'NotAllowedError' || (error as Error).name === 'AbortError') {
+      console.log('[WebAuthn] User cancelled or timeout reached');
       return false;
     }
 
     throw new Error(`PassKey authentication failed: ${(error as Error).message}`);
+  } finally {
+    // Clear timeout to prevent memory leaks
+    clearTimeout(timeoutId);
   }
 }
 

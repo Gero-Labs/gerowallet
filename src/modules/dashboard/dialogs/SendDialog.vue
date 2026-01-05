@@ -351,6 +351,11 @@ const onKeystoneScan = async (ur: UR) => {
     // Parse the signature from Keystone
     const signature = parseSignature(ur);
 
+    // Validate signature structure
+    if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
+      throw new Error(t('wallet.invalidKeystoneSignature'));
+    }
+
     // Get witness set from signature (already a hex string)
     txWitnesses.value = signature.witnessSet;
 
