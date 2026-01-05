@@ -666,7 +666,12 @@ async function buildTx(sendTokens) {
       utxos: utxos.value,
       epochParams: epochParams.value,
       changeAddress: loggedWallet.value.baseAddress,
-      tip: tip.value
+      tip: tip.value,
+      walletContext: {
+        keys: keys.value,
+        stakeAddress: loggedWallet.value.stakeAddress,
+        accountIndex: 0
+      }
     });
 
     // Don't reset minAda here - it's set by the watch based on selected NFTs

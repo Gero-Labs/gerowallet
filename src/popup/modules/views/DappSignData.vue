@@ -86,7 +86,7 @@
           border="left"
           v-if="!keystoneScan"
           class="mt-2 mb-2"
-          style="max-width: 300px;"
+          prominent
         >
           <b style="font-size: 12px;">{{ $t('wallet.instructions') }}</b>
           <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">
@@ -96,32 +96,35 @@
             <li>{{ $t('wallet.approveAndScanNext') }}</li>
           </ul>
         </v-alert>
-
-        <v-card flat class="transparent" v-else style="max-width: 300px;">
-          <v-card-title class="py-1" style="font-size: 14px;">
-            {{ $t('wallet.scanQRCode') }}
-          </v-card-title>
-          <v-card-subtitle class="py-1">
-            <ul class="text-left" style="line-height: 1.2; font-size: 10px;">
-              <li>{{ $t('wallet.adjustDistance') }}</li>
-              <li>{{ $t('wallet.useLowDensity') }}</li>
-            </ul>
-          </v-card-subtitle>
-          <v-card-text class="text-center pa-2">
-            <AnimatedQRScanner
-              purpose="sign"
-              :urTypes="['cardano-sign-data-signature']"
-              width="100%"
-              height="220px"
-              @scan="onKeystoneScan"
-              @error="onKeystoneError"
-              @progress="onKeystoneProgress"
-            />
-          </v-card-text>
-        </v-card>
-
-        <div v-if="!keystoneScan && keystoneCbor" style="max-width: 300px; margin: 0 auto;">
-          <AnimatedQRCode :type="keystoneType" :cbor="keystoneCbor" :size="300" :capacity="100" />
+        <v-alert
+          color="white"
+          dense
+          outlined
+          type="info"
+          border="left"
+          v-else
+          class="mt-2 mb-2"
+          prominent
+        >
+          <b style="font-size: 12px;">{{ $t('wallet.scanQRCode') }}</b>
+          <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">
+            <li>{{ $t('wallet.adjustDistance') }}</li>
+            <li>{{ $t('wallet.useLowDensity') }}</li>
+          </ul>
+        </v-alert>
+        <div v-if="!keystoneScan && keystoneCbor" style="max-width: 286px; margin: 0 auto;">
+          <AnimatedQRCode :type="keystoneType" :cbor="keystoneCbor" :size="286" :capacity="100" />
+        </div>
+        <div v-else>
+          <AnimatedQRScanner
+            purpose="sign"
+            :urTypes="['cardano-sign-data-signature']"
+            width="100%"
+            height="220px"
+            @scan="onKeystoneScan"
+            @error="onKeystoneError"
+            @progress="onKeystoneProgress"
+          />
         </div>
         <div class="text-center pt-2">
           <v-btn text small @click="backKeystoneScan" class="mr-2">

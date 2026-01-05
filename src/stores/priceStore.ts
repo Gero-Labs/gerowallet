@@ -105,8 +105,6 @@ class PriceService {
         isConnected: true,
         connectionStatus: 'connected'
       });
-      // Use debugLog to reduce console noise for frequent price updates
-      debugLog('🦑 Price updated:', `$${ticker.lastPrice}`);
     });
 
     // If Kraken is already connected, set status immediately
