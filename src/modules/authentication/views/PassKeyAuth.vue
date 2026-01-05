@@ -85,8 +85,9 @@ onMounted(async () => {
       wallet.id
     );
 
-    // Send result to parent window
+    // Send result to parent window (with secure origin restriction)
     if (window.opener) {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
       window.opener.postMessage(
         {
           type: 'PASSKEY_AUTH_RESULT',
@@ -95,7 +96,7 @@ onMounted(async () => {
             password: decryptedPassword
           }
         },
-        '*'
+        extensionOrigin
       );
     } else {
       console.error('[PassKeyAuth] window.opener is null! Cannot send result to parent.');
@@ -118,6 +119,7 @@ onMounted(async () => {
     if (isUserCancellation) {
       // Send cancellation result (with special flag)
       if (window.opener) {
+        const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
         window.opener.postMessage(
           {
             type: 'PASSKEY_AUTH_RESULT',
@@ -127,7 +129,7 @@ onMounted(async () => {
               error: 'User cancelled'
             }
           },
-          '*'
+          extensionOrigin
         );
       }
       // Close immediately for cancellation
@@ -139,6 +141,7 @@ onMounted(async () => {
 
       // Send error to parent window
       if (window.opener) {
+        const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
         window.opener.postMessage(
           {
             type: 'PASSKEY_AUTH_RESULT',
@@ -147,7 +150,7 @@ onMounted(async () => {
               error: err.message || 'Authentication failed'
             }
           },
-          '*'
+          extensionOrigin
         );
       }
 
