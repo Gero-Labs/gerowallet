@@ -196,9 +196,14 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       if (!Array.isArray(response.data.signatures)) {
         throw new Error('Invalid signature format from Trezor');
       }
-      const signatures: Cardano.Signatures = new Map(
-        response.data.signatures as Array<[string, string]>
-      );
+      // Validate array contains valid tuples
+      if (!response.data.signatures.every(
+        item => Array.isArray(item) && item.length === 2 &&
+                typeof item[0] === 'string' && typeof item[1] === 'string'
+      )) {
+        throw new Error('Invalid signature tuple format from Trezor');
+      }
+      const signatures: Cardano.Signatures = new Map(response.data.signatures);
 
       const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
         signatures,
@@ -245,8 +250,6 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       keystoneType.value = signRequest.ur.type;
       keystoneCbor.value = signRequest.ur.cbor.toString('hex');
 
-      console.log('[KEYSTONE-SIGN] Using hash-based signing:', signRequest.useHash);
-
       // Show overlay with animated QR code
       overlay.value = true;
       keystoneScan.value = false;
@@ -290,7 +293,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   const onKeystoneProgress = (progress: number) => {
-    console.log('[Keystone] Scan progress:', Math.round(progress * 100) + '%');
+    // Progress tracking
   };
 
   const backScan = () => {
@@ -371,7 +374,6 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   const handlePassKeySuccess = () => {
-    console.log('✅ PassKey autofill successful - triggering sign');
     setTimeout(() => {
       handleSign();
     }, 300);

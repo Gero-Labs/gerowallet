@@ -98,6 +98,12 @@ export default {
     return data
   },
   async swapSign(signatures: string, txCbor: string): Promise<any> {
+    if (!signatures || typeof signatures !== 'string') {
+      throw new Error('Invalid signatures parameter');
+    }
+    if (!txCbor || typeof txCbor !== 'string') {
+      throw new Error('Invalid txCbor parameter');
+    }
     const { data } = await axiosInstance.post(`/api/v2/swap/sign`, {
       Signatures: signatures,
       txCbor
