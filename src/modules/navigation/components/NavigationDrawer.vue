@@ -14,8 +14,7 @@
         <v-list-item-content class="py-2">
           <v-list-item-title>
             <img
-              :src="isApex ? assets.geroDashboardApex : assets.geroDashboardXmas"
-              :width="isApex ? '100' : '84'"
+              :src="isApex ? assets.geroDashboardApex : assets.geroDashboard"
               alt="logo"
             />
           </v-list-item-title>

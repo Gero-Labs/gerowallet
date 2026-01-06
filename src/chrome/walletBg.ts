@@ -113,14 +113,7 @@ export class WalletBg {
     this.encryptedMnemonic = wallet.encryptedMnemonic;
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
-    if (wallet.xfp) {
-      // Validate xfp format (should be 8 hex characters for Keystone wallets)
-      if (!/^[0-9a-fA-F]{8}$/.test(wallet.xfp)) {
-        console.error('[WalletBg] Invalid xfp format:', wallet.xfp);
-        throw new Error('Invalid xfp format. Expected 8 hexadecimal characters.');
-      }
-      this.xfp = wallet.xfp;
-    }
+    this.xfp = wallet.xfp; // xfp is validated during wallet creation
     this.api = new Api(wallet, this.provider);
     if (wallet.type === WalletType.Google) {
       this.baseAddress = googleBaseAddress
