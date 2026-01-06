@@ -237,6 +237,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         throw new Error(t('common.noTransactionToSign'));
       }
 
+      // Validate that xfp exists for Keystone wallet
+      if (!loggedWallet.value.xfp) {
+        throw new Error('Keystone wallet requires xfp (extended fingerprint). Please re-add your Keystone wallet.');
+      }
+
       // Serialize transaction to CBOR
       txCbor.value = serializeCardanoJsSdkTx(tx);
 

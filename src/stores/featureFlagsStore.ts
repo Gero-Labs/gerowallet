@@ -84,7 +84,10 @@ export const featureFlagsStore = {
    * Reset flags (disable all until reloaded from LaunchDarkly)
    */
   reset(): void {
-    Vue.set(featureFlagsState, 'flags', { swapEnabled: false });
+    Vue.set(featureFlagsState, 'flags', {
+      swapEnabled: false,
+      isGeroCardEnabled: false
+    });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
   },

@@ -1582,6 +1582,7 @@ export default {
   'wallet.keystoneSupport': '3 Pro',
   'wallet.keystoneSign': 'Sign with Keystone',
   'wallet.keystoneQRScannedSuccess': 'Keystone QR code successfully scanned',
+  'wallet.invalidKeystoneSignature': 'Invalid signature received from Keystone device',
   'wallet.keystoneQRScanError': 'Failed to scan Keystone QR code. Please try again.',
   'wallet.keystoneScanError': 'Failed to scan QR code from Keystone device. Please try again.',
   'wallet.scanQRWithKeystone': 'Use your Keystone device to scan the QR code.',
