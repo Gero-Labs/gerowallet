@@ -95,6 +95,7 @@ const codeReader = ref(null);
 const scanControls = ref(null);
 const mounted = ref(false);
 const permissionChecker = ref(null);
+const canplayListener = ref(null);
 
 // Methods
 function initializeScanner() {
@@ -184,11 +185,11 @@ async function startScanning() {
   const videoElement = video.value;
 
   // Set up canplay listener
-  const canplayListener = () => {
+  canplayListener.value = () => {
     canPlay.value = true;
     emit('videoLoaded', true);
   };
-  videoElement.addEventListener('canplay', canplayListener);
+  videoElement.addEventListener('canplay', canplayListener.value);
 
   // Set up animated QR scan handlers
   const { handleScanSuccess, handleScanFailure } = getAnimatedScan({
@@ -208,7 +209,6 @@ async function startScanning() {
 
         if (result) {
           const qrText = result.getText();
-          console.log('[AnimatedQRScanner] QR code detected:', qrText.substring(0, 50) + '...');
           handleScanSuccess(qrText);
         }
         if (error && error.name !== 'NotFoundException') {
@@ -224,14 +224,13 @@ async function startScanning() {
 }
 
 function onScanProgress(progressValue) {
-  console.log('[AnimatedQRScanner] Scan progress:', Math.round(progressValue) + '%');
+  if (isDone.value) return; // Guard against late updates
   progress.value = progressValue;
   emit('progress', progressValue);
 }
 
 function onScanComplete(ur) {
   if (isDone.value) return;
-  console.log('[AnimatedQRScanner] Scan complete! UR type:', ur.type);
   isDone.value = true;
   const urWithBuffer = {
     type: ur.type,
@@ -275,8 +274,9 @@ function cleanup() {
     scanControls.value = null;
   }
 
-  if (video.value) {
-    video.value.removeEventListener('canplay', () => {});
+  if (video.value && canplayListener.value) {
+    video.value.removeEventListener('canplay', canplayListener.value);
+    canplayListener.value = null;
   }
 }
 
