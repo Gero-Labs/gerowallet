@@ -77,6 +77,13 @@
                 </span>
               </v-alert>
             </v-col>
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="pt-3 pb-0">
+              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
+                <span style="color: white; font-size: 12px">
+                  {{ $t('wallet.signTxWithTrezor') }}
+                </span>
+              </v-alert>
+            </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
@@ -217,7 +224,7 @@ import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import ledger from '@/shared/utils/ledger';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import assets from '@/utils/assets';
-import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
@@ -513,6 +520,17 @@ const sign = async () => {
           await confirm();
         }
       } else if (loggedWallet.value.type === WalletType.Trezor) {
+        // Extract existing witnesses if this is a partial sign (swap/multisig transaction)
+        let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
+        if (mergeWitnesses || partialSign) {
+          try {
+            const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
+            existingWitnesses = fullTx.witnessSet();
+          } catch (e) {
+            debugLog('[TREZOR-SIGN] Could not extract existing witnesses:', e);
+          }
+        }
+
         const response = await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.TREZOR,
           data: {
@@ -530,12 +548,36 @@ const sign = async () => {
         const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
         const signatures: Cardano.Signatures = new Map(signaturesArray);
 
-        // Create witness set from signatures
-        const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-          signatures,
-        })
-        debugLog('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
-        witnesses.value = transactionWitnessSet.toCbor();
+        // Merge Trezor signatures with existing witnesses if any
+        let finalWitnessSet: Serialization.TransactionWitnessSet;
+        if (existingWitnesses) {
+          // Convert existing witnesses to Core format
+          const existingCore = existingWitnesses.toCore();
+
+          // Merge signatures (combine both Maps)
+          const mergedSignatures = new Map([
+            ...(existingCore.signatures || new Map()),
+            ...(signatures || new Map()),
+          ]);
+
+          // Create merged witness set - only include properties that are defined
+          const mergedWitnessCore: Cardano.Witness = {
+            signatures: mergedSignatures,
+            ...(existingCore.bootstrap && { bootstrap: existingCore.bootstrap }),
+            ...(existingCore.scripts && { scripts: existingCore.scripts }),
+            ...(existingCore.redeemers && { redeemers: existingCore.redeemers }),
+            ...(existingCore.datums && { datums: existingCore.datums }),
+          };
+
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore(mergedWitnessCore);
+        } else {
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+            signatures,
+          });
+        }
+
+        debugLog('[TREZOR-SIGN] Signing successful:', finalWitnessSet.toCbor());
+        witnesses.value = finalWitnessSet.toCbor();
         if (txAutoSubmit.value) {
           await confirm();
         }
@@ -550,14 +592,12 @@ const sign = async () => {
             stakeAddress: loggedWallet.value.stakeAddress
           };
 
-          const signRequest = createKeystoneSignRequest(fullTx, walletData, utxos.value, keys.value);
+          const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(fullTx, walletData, utxos.value, keys.value);
 
           // Store UR data for QR code and signing mode
-          keystoneType.value = signRequest.ur.type;
-          keystoneCbor.value = signRequest.ur.cbor.toString('hex');
-          keystoneUseHash.value = signRequest.useHash;
-
-          debugLog('[KEYSTONE-SIGN] Using hash-based signing:', signRequest.useHash);
+          keystoneType.value = signRequestResponse.ur.type;
+          keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
+          keystoneUseHash.value = signRequestResponse.useHash;
 
           // Show overlay with animated QR code
           keystoneOverlay.value = true;

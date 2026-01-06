@@ -73,7 +73,7 @@ import welcomeImage from '@/shared/assets/welcome/welcome.png'
 import improvedUxSS from '@/shared/assets/welcome/improved_ux.png'
 import geroCardSS from '@/shared/assets/welcome/gero_card.png'
 import perpetualsSS from '@/shared/assets/welcome/perpetuals.png'
-import multisigSS from '@/shared/assets/welcome/multisig.png'
+import passKeySS from '@/shared/assets/welcome/passKey.png'
 import cashbackNewSS from '@/shared/assets/welcome/cashback_new.png'
 import riskLow from '@/assets/img/cardano-shield/risk-low.svg'
 import riskMedium from '@/assets/img/cardano-shield/risk-medium.svg'
@@ -135,6 +135,7 @@ import apex from '@/assets/img/apex.jpg'
 import passKeySvg from '@/assets/svg/pass-key.svg'
 import autoTriggerSvg from '@/assets/svg/auto-trigger.svg'
 import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
+import mediumSvg from '@/assets/svg/medium.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -212,7 +213,7 @@ export default {
   improvedUxSS,
   geroCardSS,
   perpetualsSS,
-  multisigSS,
+  passKeySS,
   cashbackNewSS,
   giftSvg,
   pendingSvg,
@@ -375,7 +376,8 @@ export default {
   emptyState,
   cardanoBlueLogo,
   apex,
-  geroDashboardXmas
+  geroDashboardXmas,
+  mediumSvg
 }
 
 export {

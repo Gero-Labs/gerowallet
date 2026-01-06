@@ -32,11 +32,8 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing loading store messaging in browser context`);
-
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<LoadingState>) => {
-    debugLog('📥 Received loading store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -52,11 +49,6 @@ if (context === 'browser') {
     if (result[STORE_NAME]) {
       // Hydrate from storage immediately - this ensures we have the latest persisted state
       Object.assign(loadingState, result[STORE_NAME]);
-      debugLog('💾 Hydrated loading store from storage:', {
-        connected: result[STORE_NAME].connected,
-        connecting: result[STORE_NAME].connecting,
-        full: result[STORE_NAME]
-      });
     }
   });
 }
@@ -83,7 +75,6 @@ function broadcastFromBackground(updates: Partial<LoadingState>, immediate = fal
         storageWriteTimeout = null;
       }
       chrome.storage.local.set({ [STORE_NAME]: loadingState });
-      debugLog('💾 LoadingState persisted immediately:', updates);
     } else {
       // Debounced storage write for other updates to reduce I/O
       if (storageWriteTimeout) {

@@ -106,15 +106,6 @@
                     >{{ $t('cashback.cashback') }}</v-chip
                   >
                   <v-chip
-                    v-if="getContactName(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#FF9800"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ getContactName(item) }}</v-chip
-                  >
-                  <v-chip
                     v-if="isInternalTransfer(item)"
                     outlined
                     class="px-1"
@@ -123,6 +114,16 @@
                     style="margin-left: 1px; margin-bottom: 1px"
                     >{{ $t('common.internal') }}</v-chip
                   >
+                  <v-chip
+                    v-if="getContactName(item)?.length > 0"
+                    v-for="(contact, index) in getContactName(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#FF9800"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    :key="index"
+                  ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contact }}</v-chip>
                   <v-chip
                     v-if="isStrike(item)"
                     outlined
@@ -403,8 +404,8 @@ const transactions = computed<any[]>(() => {
         });
 
       // Check contact name
-      const contactName = getContactName(tx);
-      const matchesContact = contactName && contactName.toLowerCase().includes(searchLower);
+      const contactName: string[] = getContactName(tx);
+      const matchesContact = contactName && contactName.find(name => name.toLowerCase() == searchLower);
 
       return matchesId || matchesAsset || matchesChip || matchesContact;
     }
@@ -754,7 +755,8 @@ const isWithdrawal = item => {
   );
 };
 
-const getContactName = item => {
+const getContactName = (item): string[] => {
+  const contactsResult = new Set<string>();
   // Check if contacts are available (contacts is an object, not an array)
   if (!contacts.value || !item.utxo) {
     return null;
@@ -776,18 +778,18 @@ const getContactName = item => {
   // Check inputs for contact addresses
   for (const input of item.utxo.inputs || []) {
     if (contactMap.has(input.address)) {
-      return contactMap.get(input.address);
+      contactsResult.add(contactMap.get(input.address))
     }
   }
 
   // Check outputs for contact addresses
   for (const output of item.body?.outputs || []) {
     if (contactMap.has(output.address)) {
-      return contactMap.get(output.address);
+      contactsResult.add(contactMap.get(output.address))
     }
   }
 
-  return null;
+  return Array.from(contactsResult);
 };
 
 const isInternalTransfer = item => {
@@ -1485,10 +1487,7 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 1px;
   background: linear-gradient(135deg, #935aaf 5%, #6fc7ff 95%);
-  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
-  -webkit-mask-clip: content-box, padding-box;
-  -webkit-mask-composite: xor;
-  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
   mask-clip: content-box, padding-box;
   mask-composite: exclude;
 }
@@ -1545,10 +1544,7 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 1px;
   background: linear-gradient(90deg, #e85ce8, #6fb3ff);
-  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
-  -webkit-mask-clip: content-box, padding-box;
-  -webkit-mask-composite: xor;
-  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
   mask-clip: content-box, padding-box;
   mask-composite: exclude;
 }
@@ -1605,10 +1601,7 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 1px;
   background: linear-gradient(90deg, #0059ff, #00fff6);
-  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
-  -webkit-mask-clip: content-box, padding-box;
-  -webkit-mask-composite: xor;
-  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
   mask-clip: content-box, padding-box;
   mask-composite: exclude;
 }

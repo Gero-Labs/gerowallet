@@ -15,6 +15,7 @@
           <v-list-item-title>
             <img
               :src="isApex ? assets.geroDashboardApex : assets.geroDashboard"
+              width="100"
               alt="logo"
             />
           </v-list-item-title>
@@ -418,8 +419,6 @@ async function checkUnlockMethod() {
 
     // Has unlock method if config exists and has a value (not null/undefined)
     hasUnlockMethod.value = !!(unlockMethodConfig?.value)
-
-    debugLog('🔒 Unlock method check:', hasUnlockMethod.value ? 'Enabled' : 'Disabled')
   } catch (error) {
     console.error('Error checking unlock method:', error)
     hasUnlockMethod.value = false
