@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="activeTab === 0 ? $t('navigation.whatsNew') : $t('navigation.aboutUs')"
-    :subtitle="activeTab === 0 ? $t('navigation.whatsNewSubtitle') : $t('navigation.aboutGeroDashboard')"
+    :title="activeTab === 0 ? t('navigation.whatsNew') : t('navigation.aboutUs')"
+    :subtitle="activeTab === 0 ? t('navigation.whatsNewSubtitle') : t('navigation.aboutGeroDashboard')"
     :loading="loading"
     :min-height="0"
     scrollable
@@ -68,23 +68,23 @@
             <!-- About Description -->
             <v-card flat class="transparent mb-6" style="background-image: linear-gradient(90deg, rgba(153, 153, 153, 0.05) 0%, rgba(163.62, 238.55, 255, 0.05) 100%); border-radius: 16px;">
               <v-card-text>
-                <p class="text-body-1 mb-0">{{ $t('navigation.aboutDescription') }}</p>
+                <p class="text-body-1 white--text mb-0">{{ $t('navigation.aboutDescription') }}</p>
               </v-card-text>
             </v-card>
 
             <!-- Our Mission -->
             <div class="mb-6">
-              <h3 class="text-h6 mb-3">{{ $t('navigation.ourMissionTitle') }}</h3>
+              <h3 class="text-h6 white--text mb-3">{{ $t('navigation.ourMissionTitle') }}</h3>
               <p class="text-body-2 text--secondary">{{ $t('navigation.ourMissionDescription') }}</p>
             </div>
 
             <!-- Contact Information -->
             <div class="mb-6">
-              <h3 class="text-h6 mb-3">{{ $t('navigation.contactInformation') }}</h3>
+              <h3 class="text-h6 white--text mb-3">{{ $t('navigation.contactInformation') }}</h3>
               <v-list class="transparent">
                 <v-list-item>
                   <v-list-item-icon>
-                    <v-icon color="primary" large>mdi-email</v-icon>
+                    <v-icon large>mdi-email</v-icon>
                   </v-list-item-icon>
                   <v-list-item-content>
                     <v-list-item-subtitle>{{ $t('navigation.supportEmail') }}</v-list-item-subtitle>
@@ -98,7 +98,7 @@
 
             <!-- Social Media -->
             <div class="mb-6">
-              <h3 class="text-h6 mb-3">{{ $t('navigation.followUs') }}</h3>
+              <h3 class="text-h6 white--text mb-3">{{ $t('navigation.followUs') }}</h3>
               <v-row dense>
                 <v-col cols="6" sm="2">
                   <v-btn
@@ -120,7 +120,9 @@
                     target="_blank"
                     class="text-capitalize"
                   >
-                    <v-icon left small>mdi-twitter</v-icon>
+                    <v-avatar tile size="14" class="mr-2">
+                      <v-img :src="assets.xSvg" width="14" height="14" alt="discord" contain></v-img>
+                    </v-avatar>
                     Twitter
                   </v-btn>
                 </v-col>
@@ -181,7 +183,7 @@
 
             <!-- Legal -->
             <div class="mb-6">
-              <h3 class="text-h6 mb-3">{{ $t('navigation.legal') }}</h3>
+              <h3 class="text-h6 white--text mb-3">{{ $t('navigation.legal') }}</h3>
               <v-list class="transparent">
                 <v-list-item href="https://www.gerowallet.io/terms" target="_blank">
                   <v-list-item-icon>
@@ -215,7 +217,7 @@
                 {{ $t('navigation.version') }}: {{ currentVersion }}
               </p>
               <p class="text-caption text--secondary">
-                {{ $t('navigation.poweredByAdLabs') }}
+                {{ (new Date().getFullYear())+' © '+$t('welcome.adLabs') }}
               </p>
             </div>
           </v-card-text>
@@ -231,6 +233,7 @@ import time from '@/plugins/time';
 import cryptoApi from '@/api/crypto-api';
 import packageJson from '@/../package.json';
 import assets from '@/utils/assets';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 defineProps({
   isOpen: {
@@ -243,8 +246,8 @@ defineProps({
   }
 });
 
-const emit = defineEmits(['close']);
-
+defineEmits(['close']);
+const { t } = useTranslation()
 const loading = ref(false);
 const activeTab = ref(0);
 const releases = ref<any[]>([]);

@@ -55,11 +55,9 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing charli3 store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<Charli3Store>) => {
-    debugLog('📥 Received charli3 store update:', updates);
-    
+
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in charli3Store) {
@@ -102,10 +100,10 @@ function broadcastFromBackground(updates: Partial<Charli3Store>) {
         return value;
       }
     }));
-    
+
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
-    
+
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
       const current = result[STORE_NAME] || {
@@ -119,8 +117,8 @@ function broadcastFromBackground(updates: Partial<Charli3Store>) {
         loading: false,
         error: null
       };
-      chrome.storage.local.set({ 
-        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...serializedUpdates }
       });
     });
   }
@@ -131,8 +129,8 @@ export default {
     charli3Store.marketData = marketData;
     charli3Store.lastRefreshTime = new Date();
     charli3Store.error = null;
-    broadcastFromBackground({ 
-      marketData, 
+    broadcastFromBackground({
+      marketData,
       lastRefreshTime: charli3Store.lastRefreshTime,
       error: null
     });
@@ -154,7 +152,7 @@ export default {
       url: logoUrl,
       timestamp: Date.now()
     };
-    
+
     charli3Store.logoCache[tokenKey] = logoEntry;
     broadcastFromBackground({ logoCache: charli3Store.logoCache });
   },
@@ -238,8 +236,8 @@ export default {
   isDataStale(): boolean {
     if (!charli3Store.lastRefreshTime) return true;
     // Handle both Date objects and ISO strings from storage
-    const lastRefresh = charli3Store.lastRefreshTime instanceof Date 
-      ? charli3Store.lastRefreshTime 
+    const lastRefresh = charli3Store.lastRefreshTime instanceof Date
+      ? charli3Store.lastRefreshTime
       : new Date(charli3Store.lastRefreshTime);
     const fiveMinutes = 5 * 60 * 1000;
     return Date.now() - lastRefresh.getTime() > fiveMinutes;
@@ -248,23 +246,23 @@ export default {
   getNextRefreshTime(): Date | null {
     if (!charli3Store.lastRefreshTime) return null;
     // Handle both Date objects and ISO strings from storage
-    const lastRefresh = charli3Store.lastRefreshTime instanceof Date 
-      ? charli3Store.lastRefreshTime 
+    const lastRefresh = charli3Store.lastRefreshTime instanceof Date
+      ? charli3Store.lastRefreshTime
       : new Date(charli3Store.lastRefreshTime);
     return new Date(lastRefresh.getTime() + 5 * 60 * 1000);
   },
 
   state: charli3Store,
-  
+
   // Utility method to get current state snapshot
   getSnapshot(): any {
-    return { 
+    return {
       ...charli3Store,
       // Convert Date to string for serialization
       lastRefreshTime: charli3Store.lastRefreshTime?.toISOString() || null
     };
   },
-  
+
   // Utility method to reset state
   reset() {
     const resetState: Charli3Store = {
@@ -278,33 +276,33 @@ export default {
       loading: false,
       error: null
     };
-    
+
     Object.assign(charli3Store, resetState);
     broadcastFromBackground(resetState);
   },
-  
+
   // Utility method to check if market data exists
   hasMarketData(): boolean {
-    return charli3Store.marketData.topVolume.length > 0 || 
-           charli3Store.marketData.topGainers.length > 0 || 
+    return charli3Store.marketData.topVolume.length > 0 ||
+           charli3Store.marketData.topGainers.length > 0 ||
            charli3Store.marketData.topTvl.length > 0;
   },
-  
+
   // Utility method to get top volume tokens
   getTopVolumeTokens(): MarketToken[] {
     return charli3Store.marketData.topVolume;
   },
-  
+
   // Utility method to get top gainers
   getTopGainers(): MarketToken[] {
     return charli3Store.marketData.topGainers;
   },
-  
+
   // Utility method to get top TVL tokens
   getTopTvlTokens(): MarketToken[] {
     return charli3Store.marketData.topTvl;
   },
-  
+
   // Utility method to check cache size
   getCacheSize(): number {
     return Object.keys(charli3Store.logoCache).length;

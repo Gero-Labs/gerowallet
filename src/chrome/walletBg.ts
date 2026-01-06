@@ -87,6 +87,7 @@ export class WalletBg {
   publicKey: string;
   provider: Provider;
   btSupported: boolean;
+  xfp?: string;
 
   encryptedPrivateKey: any;
   passwordLastUpdate: Date;
@@ -112,6 +113,7 @@ export class WalletBg {
     this.encryptedMnemonic = wallet.encryptedMnemonic;
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
+    this.xfp = wallet.xfp; // xfp is validated during wallet creation
     this.api = new Api(wallet, this.provider);
     if (wallet.type === WalletType.Google) {
       this.baseAddress = googleBaseAddress

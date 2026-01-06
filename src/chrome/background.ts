@@ -1713,6 +1713,37 @@ app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => 
   }
 });
 
+app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {
+  try {
+    const currentWallet = walletManager.getWallet();
+    if (currentWallet) {
+      await currentWallet.syncService.syncViaRest();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'No wallet loaded' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (err) {
+    console.error('SYNC_VIA_REST error:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   try {
     const currentWallet = walletManager.getWallet();
@@ -1820,21 +1851,36 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
 
       const tx = deserializeCardanoJsSdkTx(txCbor);
 
+      // For partial transactions, strip existing witnesses before signing with Trezor
+      // This prevents Trezor from seeing/including witnesses from the partial transaction
+      const txWithoutWitnesses: Cardano.Tx = {
+        ...tx,
+        witness: {
+          signatures: new Map(),
+          // Preserve other witness fields that Trezor needs (scripts, datums, redeemers)
+          ...(tx.witness?.scripts && { scripts: tx.witness.scripts }),
+          ...(tx.witness?.datums && { datums: tx.witness.datums }),
+          ...(tx.witness?.redeemers && { redeemers: tx.witness.redeemers }),
+        }
+      };
+
       const utxos: Cardano.Utxo[] = WalletStore.state.utxos;
 
       // Get current wallet and network info
       const currentWallet = walletManager.getWallet();
       const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
-      console.log('[TREZOR Background] Signing transaction...', { tx, network });
+      console.log('[TREZOR Background] Signing transaction...', { tx: txWithoutWitnesses, network });
 
       // Sign transaction with Trezor SDK (includes witness filtering)
+      // Pass original CBOR to preserve exact transaction hash computation
       const signatures: Cardano.Signatures = await trezor.signTransaction(
-        tx,
+        txWithoutWitnesses,
         WalletStore.state.keys,
         utxos,
         false,
         network,
-        WalletStore.state.loggedWallet.publicKey
+        WalletStore.state.loggedWallet.publicKey,
+        txCbor  // Pass original CBOR for correct hash computation
       );
 
       // Convert Map to array for Chrome messaging (Maps don't serialize properly)

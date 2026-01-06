@@ -53,13 +53,8 @@ class KrakenWebSocketService {
       try {
         //@ts-ignore
         const wsUrl = (import.meta.env.VITE_KRAKEN_WS_URL || 'wss://ws.kraken.com').replace(/['"]/g, '');
-        debugLog('🦑 🔧 WebSocket URL:', wsUrl);
-        debugLog('🦑 🔌 Creating WebSocket connection...');
         this.ws = new WebSocket(wsUrl);
-        debugLog('🦑 📡 WebSocket instance created, setting up event handlers...');
-
         this.ws.onopen = () => {
-          debugLog('🦑 ✅ Successfully connected to Kraken WebSocket');
           this.isConnected = true;
           this.reconnectAttempts = 0;
           this.startPing();

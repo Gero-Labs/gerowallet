@@ -20,10 +20,8 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing bring store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<BringStore>) => {
-    debugLog('📥 Received bring store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -60,15 +58,15 @@ function broadcastFromBackground(updates: Partial<BringStore>) {
         return value;
       }
     }));
-    
+
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
-    
+
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
       const current = result[STORE_NAME] || { bringCache: undefined };
-      chrome.storage.local.set({ 
-        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...serializedUpdates }
       });
     });
   }
@@ -88,32 +86,32 @@ export default {
     broadcastFromBackground({ bringCache });
   },
   state: bringStore,
-  
+
   // Utility method to get current state snapshot
   getSnapshot(): BringStore {
     return { ...bringStore };
   },
-  
+
   // Utility method to reset state
   reset() {
     const resetState: BringStore = {
       bringCache: undefined
     };
-    
+
     Object.assign(bringStore, resetState);
     broadcastFromBackground(resetState);
   },
-  
+
   // Utility method to check if cache exists
   hasCache(): boolean {
     return bringStore.bringCache !== undefined;
   },
-  
+
   // Utility method to get cache data
   getCache(): any {
     return bringStore.bringCache;
   },
-  
+
   // Utility method to clear cache
   clearCache() {
     bringStore.bringCache = undefined;

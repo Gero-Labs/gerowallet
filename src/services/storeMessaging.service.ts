@@ -1,6 +1,6 @@
 /**
  * Store Messaging Service
- * 
+ *
  * Handles real-time store synchronization between background and browser contexts
  * using Chrome runtime port connections instead of chrome.storage
  */
@@ -45,7 +45,14 @@ class StoreMessagingService {
    */
   private async initialize() {
     const context = getContextType();
-    
+
+    // Skip initialization for PassKey authentication popup (minimal context)
+    // PassKey popup doesn't need store sync - it just authenticates and closes
+    if (typeof window !== 'undefined' && window.location.hash.includes('/passkey-auth')) {
+      debugLog(`⏭️ Skipping StoreMessaging initialization for PassKey auth popup`);
+      return;
+    }
+
     // Only browser contexts need to connect to background
     if (context === 'browser') {
       debugLog(`🔌 StoreMessaging service initializing in browser context`);
@@ -68,22 +75,20 @@ class StoreMessagingService {
 
     return new Promise((resolve) => {
       try {
-        debugLog('📡 Establishing store messaging connection from', getContextType(), 'context...');
-        
+
         // Create port with a specific name for store updates
         this.port = chrome.runtime.connect({ name: 'store-sync' });
-        debugLog('📡 Port created:', this.port);
-        
+
         // Handle incoming messages
         this.port.onMessage.addListener((message: Message) => {
           this.handleMessage(message);
         });
-        
+
         // Handle disconnection
         this.port.onDisconnect.addListener(() => {
           debugLog('📡 Store messaging disconnected');
           this.port = null;
-          
+
           // Attempt to reconnect with exponential backoff
           this.scheduleReconnect();
         });
@@ -91,9 +96,7 @@ class StoreMessagingService {
         // Reset reconnect attempts on successful connection
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
-        
-        debugLog('✅ Store messaging connected');
-        
+
         // Re-subscribe to stores after successful connection
         if (this.subscribedStores.size > 0) {
           // Re-subscribe in next tick to avoid blocking
@@ -109,7 +112,7 @@ class StoreMessagingService {
           }, 100);
           this.reconnectTimeouts.add(resubscribeTimeoutId);
         }
-        
+
         resolve();
       } catch (error) {
         console.error('❌ Failed to connect store messaging:', error);
@@ -130,9 +133,9 @@ class StoreMessagingService {
 
     this.reconnectAttempts++;
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000); // Max 30 seconds
-    
+
     debugLog(`📡 Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
-    
+
     const timeoutId = setTimeout(() => {
       this.reconnectTimeouts.delete(timeoutId);
       this.connect().catch(error => {
@@ -179,7 +182,7 @@ class StoreMessagingService {
       this.subscribers.set(storeName, new Set());
     }
     this.subscribers.get(storeName)!.add(callback);
-    
+
     // Track subscribed stores for reconnection
     this.subscribedStores.add(storeName);
 
@@ -204,15 +207,6 @@ class StoreMessagingService {
         }
       }
     };
-  }
-
-  /**
-   * Send store update (background context)
-   * NOTE: This method is deprecated - use backgroundStoreMessaging directly from background context
-   */
-  public broadcastUpdate(storeName: string, updates: Record<string, any>) {
-    // This should not be used - stores should import backgroundStoreMessaging directly
-    console.warn('broadcastUpdate called on storeMessaging service - this is deprecated');
   }
 
   /**
@@ -246,11 +240,11 @@ class StoreMessagingService {
    */
   public destroy(): void {
     debugLog('🧹 Destroying store messaging service');
-    
+
     // Clear all reconnect timeouts
     this.reconnectTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
     this.reconnectTimeouts.clear();
-    
+
     // Disconnect port if connected
     if (this.port) {
       try {
@@ -260,11 +254,11 @@ class StoreMessagingService {
       }
       this.port = null;
     }
-    
+
     // Clear all subscribers
     this.subscribers.clear();
     this.subscribedStores.clear();
-    
+
     // Reset connection state
     this.reconnectAttempts = 0;
   }

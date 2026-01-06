@@ -200,20 +200,17 @@
                       v-model="isBluetooth"
                     />
                   </div>
-                  <div id="qr-code" ref="qrCode" v-else-if="walletType === WalletType.Keystone && !keystoneScan" />
-                  <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px">
-                    <!--                    <QrcodeStream @decode="onDecode" @init="onInit">-->
-                    <!--                      <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
-                    <!--                      </div>-->
-                    <!--                    </QrcodeStream>-->
+                  <div id="qr-code" ref="qrCodeRef" v-else-if="walletType === WalletType.Keystone && !keystoneScan" />
+                  <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px; width: 100%">
+                    <AnimatedQRScanner
+                      purpose="sync"
+                      :urTypes="['crypto-multi-accounts']"
+                      width="100%"
+                      height="334px"
+                      @scan="onKeystoneScan"
+                      @error="onKeystoneError"
+                      @progress="onKeystoneProgress"
+                    />
                   </div>
                 </v-card-text>
                 <v-card-actions class="px-0 align-self-end" style="width: 100%">
@@ -357,9 +354,8 @@ import rules from "@/utils/rules";
 import { Blockchain, coin_type, purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
-import { getKeystonePublicKeyUR,
-  // parseMultiAccounts
-} from '@/shared/utils/keystone';
+import { getKeystonePublicKeyUR } from '@/shared/utils/keystone';
+import { CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -367,6 +363,10 @@ import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { NetworkInfo } from '@/utils/networks';
+import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import { Bip32PublicKey } from '@cardano-sdk/crypto';
+import snackbar from '@/plugins/snackbar';
+import { bech32 } from 'bech32';
 
 const { t } = useTranslation();
 
@@ -391,6 +391,7 @@ const newWallet = ref({
   termsChecked: false,
   keys: [],
   btSupported: false,
+  xfp: undefined as string | undefined,
 });
 const valid2 = ref(false);
 const valid3 = ref(false);
@@ -421,7 +422,7 @@ const walletTypes = [
   {
     name: t('wallet.keystone'),
     description: t('wallet.keystoneDescription'),
-    enabled: false,
+    enabled: true,
     icon: assets.keystoneLogoSvg,
     support: t('wallet.keystoneSupport')
   },
@@ -446,25 +447,55 @@ const dialogLocal = computed({
   },
 });
 
-// const onDecode = (result) => {
-//   const multiAccounts = parseMultiAccounts(result);
-//   newWallet.value.name = multiAccounts.device
-//   newWallet.value.publicKey = Bip32PublicKey.from_hex(multiAccounts.keys[0].publicKey + multiAccounts.keys[0].chainCode).to_bech32();
-//   newWallet.value.xfp = multiAccounts.masterFingerprint
-//   newWallet.value.keys = multiAccounts.keys
-//   snackbar.fireSuccess("Keystone QR code successfully scanned.")
-//   step.value++;
-//   keystoneScan.value = false
-// };
+const onKeystoneScan = (ur: { type: string; cbor: string }) => {
+  try {
+    console.log('[Keystone] QR code scanned:', ur);
+    // Convert hex CBOR string to Buffer
+    const cborBuffer = Buffer.from(ur.cbor, 'hex');
+    // Parse CBOR directly using CryptoMultiAccounts
+    const cryptoMultiAccounts = CryptoMultiAccounts.fromCBOR(cborBuffer);
+    console.log('[Keystone] Parsed CryptoMultiAccounts:', cryptoMultiAccounts);
 
-// const onInit = (promise) => {
-//   promise.then(() => {
-//     console.log("Camera initialized successfully");
-//   })
-//     .catch((error) => {
-//       console.error("Camera initialization failed:", error);
-//     });
-// };
+    // Extract data using getter methods
+    const device = cryptoMultiAccounts.getDevice();
+    console.log('[Keystone] Device:', device);
+    const version = cryptoMultiAccounts.getVersion();
+    console.log('[Keystone] Version:', version);
+    const keys = cryptoMultiAccounts.getKeys();
+    const masterFingerprint = cryptoMultiAccounts.getMasterFingerprint();
+
+    newWallet.value.name = device;
+    newWallet.value.xfp = masterFingerprint.toString('hex');
+    const firstKey = keys[0];
+    const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(
+      firstKey.getKey().toString('hex') + firstKey.getChainCode().toString('hex')
+    );
+    const words = bech32.toWords(bip32PublicKey.bytes());
+    newWallet.value.publicKey = bech32.encode('xpub', words, 1023);
+    newWallet.value.btSupported = false;
+    // Convert CryptoHDKey objects to plain objects for storage
+    newWallet.value.keys = keys.map(key => ({
+      publicKey: key.getKey().toString('hex'),
+      chainCode: key.getChainCode().toString('hex'),
+      path: key.getOrigin().getPath()
+    }));
+    snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
+    keystoneScan.value = false;
+    step.value = 3;
+  } catch (error) {
+    console.error('[Keystone] Error processing QR code:', error);
+    snackbar.setError(t('wallet.keystoneQRScanError') as string);
+  }
+};
+
+const onKeystoneError = (error: string) => {
+  console.error('[Keystone] Scanner error:', error);
+  snackbar.setError(t('wallet.keystoneQRScanError') as string);
+};
+
+const onKeystoneProgress = (progress: number) => {
+  console.log('[Keystone] Scan progress:', Math.round(progress * 100) + '%');
+};
 
 const nextStep = () => {
   if (walletType.value === WalletType.Keystone) {
@@ -605,6 +636,7 @@ const resetDialog = () => {
     termsChecked: false,
     keys: [],
     btSupported: false,
+    xfp: '',
   }
   valid2.value = false
   valid3.value = false

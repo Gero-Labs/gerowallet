@@ -188,6 +188,13 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
 }
 
 export async function createNewHardwareWallet(wallet: any) {
+  // Validate xfp format before creating wallet (for Keystone wallets)
+  if (wallet.xfp) {
+    if (!/^[0-9a-fA-F]{8}$/.test(wallet.xfp)) {
+      throw new Error('Invalid xfp format. Expected 8 hexadecimal characters.');
+    }
+  }
+
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
   if (order == null) {

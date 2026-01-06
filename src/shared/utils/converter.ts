@@ -51,6 +51,20 @@ export const createSignDataBuilder = (addressBytes: Uint8Array, payload: string)
   );
 };
 
+/**
+ * Creates a COSE Sign1 builder and extracts the Sig_structure bytes for signing
+ * @param addressBytes - Address bytes for the signer
+ * @param payload - Hex-encoded payload to sign
+ * @returns Object with builder (for later reuse) and sigStrucBytes (to send for signing)
+ */
+export const createBuilderWithSigStructure = (addressBytes: Uint8Array, payload: string): { builder: COSESign1Builder; sigStrucBytes: string } => {
+  const builder = createSignDataBuilder(addressBytes, payload);
+  const sigStruc = builder.make_data_to_sign();
+  const sigStrucBytes = toHexString(sigStruc.to_bytes());
+  safeFreeCSLObject(sigStruc);
+  return { builder, sigStrucBytes };
+};
+
 export const createCoseKey = (addressBytes: Uint8Array, publicKey: Ed25519PublicKeyHex) => {
   const coseKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
   coseKey.set_key_id(addressBytes);
@@ -60,13 +74,32 @@ export const createCoseKey = (addressBytes: Uint8Array, publicKey: Ed25519Public
   return coseKey;
 };
 
+/**
+ * Creates a COSE_Key and returns it as hex string (frees the key after extraction)
+ * @param addressBytes - Address bytes for the key
+ * @param publicKey - Public key hex string
+ * @returns COSE_Key as hex string
+ */
+export const createCoseKeyHex = (addressBytes: Uint8Array, publicKey: Ed25519PublicKeyHex): string => {
+  const coseKey = createCoseKey(addressBytes, publicKey);
+  const keyHex = toHexString(coseKey.to_bytes());
+  safeFreeCSLObject(coseKey);
+  return keyHex;
+};
+
 export function buildSignatureAndCoseKey(addressBytes: Uint8Array<ArrayBufferLike>, payload: string, accountKey: Ed25519PrivateKey) {
   const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
-  const toSign = builder.make_data_to_sign().to_bytes();
+  const dataToSign = builder.make_data_to_sign();
+  const toSign = dataToSign.to_bytes();
+  safeFreeCSLObject(dataToSign);
+
   const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
+  const keyHex = util.bytesToHex(coseKey.to_bytes());
+  safeFreeCSLObject(coseKey);
+
   return {
     signature: buildAndSignData(builder, toSign, accountKey),
-    key: util.bytesToHex(coseKey.to_bytes())
+    key: keyHex
   };
 }
 

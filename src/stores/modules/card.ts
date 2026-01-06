@@ -121,6 +121,23 @@ async function initCardStore() {
       // Merge stored state (tokens are loaded from cookies separately)
       Object.assign(cardStore, storedData);
     }
+
+    // Watch for wallet lock state changes via store messaging system
+    // This runs in browser context, listening for background context wallet state changes
+    if (typeof chrome !== 'undefined') {
+      const { storeMessaging } = await import('@/services/storeMessaging.service');
+
+      storeMessaging.subscribe('walletStore', async (updates) => {
+        if ('isLocked' in updates && updates['isLocked'] && cardStore.accessToken) {
+          console.log('🔒 Wallet locked - logging out from card');
+          try {
+            await cardStoreInstance.logout();
+          } catch (error) {
+            console.error('Failed to logout from card during wallet lock:', error);
+          }
+        }
+      });
+    }
   } catch (error) {
     console.error('Failed to initialize card store:', error);
   }
