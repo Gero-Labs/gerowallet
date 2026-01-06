@@ -97,6 +97,17 @@
         </v-row>
       </v-form>
     </v-card-actions>
+
+    <!-- Keystone Sign Dialog -->
+    <KeystoneSignDialog
+      :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
+      :keystoneType="keystoneType"
+      :keystoneCbor="keystoneCbor"
+      @close="overlay = false"
+      @scan="onKeystoneScan"
+      @error="onKeystoneError"
+      @progress="onKeystoneProgress"
+    />
   </BaseDialog>
 </template>
 <script setup lang="ts">
@@ -104,6 +115,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import { ref, computed, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
@@ -147,6 +159,13 @@ const {
   handlePassKeySuccess,
   handlePassKeyError,
   setPasswordFieldRef,
+  // Keystone state and methods
+  overlay,
+  keystoneType,
+  keystoneCbor,
+  onKeystoneScan,
+  onKeystoneError,
+  onKeystoneProgress,
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'staking.withdrawalSubmitted',

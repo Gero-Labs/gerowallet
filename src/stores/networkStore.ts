@@ -125,9 +125,6 @@ export default {
   },
 
   setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
-    const context = getContextType();
-    debugLog(`🔍 NetworkStore setTip called from ${context} context`);
-
     // RACE CONDITION FIX: Only update tip if it's newer than the current one
     // Prevents old Ably messages from overwriting fresh data
     if (networkStore.tip) {
@@ -146,10 +143,7 @@ export default {
   },
 
   setPrice(price: {}) {
-    const context = getContextType();
-    debugLog(`🔍 NetworkStore setPrice called from ${context} context`);
     networkStore.price = price;
-
     // Broadcast from background context
     broadcastFromBackground({ price });
   },

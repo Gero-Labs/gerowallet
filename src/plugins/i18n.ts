@@ -4,21 +4,21 @@ import { walletStore } from '@/stores/walletStore';
 
 // Vuetify locales - import all available
 import {
-  en as vuetifyEn,
-  ru as vuetifyRu,
+  cs as vuetifyCz,
   de as vuetifyDe,
+  el as vuetifyGr,
+  en as vuetifyEn,
   es as vuetifyEs,
   fr as vuetifyFr,
+  he as vuetifyHe,
   it as vuetifyIt,
   ja as vuetifyJa,
   nl as vuetifyNl,
   pt as vuetifyPt,
+  ru as vuetifyRu,
+  th as vuetifyTh,
   tr as vuetifyTr,
   zhHans as vuetifyCn,
-  th as vuetifyTh,
-  cs as vuetifyCz,
-  el as vuetifyGr,
-  he as vuetifyHe,
 } from 'vuetify/src/locale';
 
 // Only load US English by default (other languages lazy-loaded on demand)
@@ -129,7 +129,6 @@ const getSavedLocale = (): string => {
     // Use centralized store pattern (walletStore) instead of localStorage
     const locale = walletStore.config?.locale;
     if (locale) {
-      console.log('🌐 Found locale in walletStore:', locale);
       return locale;
     }
 
@@ -138,15 +137,11 @@ const getSavedLocale = (): string => {
     const savedConfig = localStorage.getItem('walletStore');
     if (savedConfig) {
       const config = JSON.parse(savedConfig);
-      const fallbackLocale = config?.config?.locale || 'us';
-      console.log('🌐 Found locale in localStorage:', fallbackLocale);
-      return fallbackLocale;
+      return config?.config?.locale || 'us';
     }
   } catch (e) {
     console.warn('Failed to load saved locale:', e);
   }
-
-  console.log('🌐 Using default locale: us');
   return 'us';
 };
 
@@ -164,13 +159,11 @@ const i18n: VueI18n = new VueI18n({
   await new Promise(resolve => setTimeout(resolve, 100));
 
   const savedLocale = getSavedLocale();
-  console.log('🌐 Initializing i18n with saved locale:', savedLocale);
 
   if (savedLocale !== 'us') {
     try {
       await loadLanguage(savedLocale);
       i18n.locale = savedLocale;
-      console.log('✅ Language loaded successfully:', savedLocale);
     } catch (error) {
       console.error('❌ Failed to load saved language:', savedLocale, error);
     }

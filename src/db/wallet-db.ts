@@ -126,7 +126,6 @@ export async function setWalletConfiguration(id: number, key: string, value: any
       value: value
     });
   } else {
-    console.log('Updating configuration', configuration)
     configuration.value = value;
     await configTable.put(configuration);
   }
@@ -157,14 +156,12 @@ export async function addConnectedDapp(walletId: number, domain: string) {
     const existingDapp = await dappsTable.get({ domain: domain });
 
     if (existingDapp) {
-      console.log(`Domain ${domain} already exists, ignoring.`);
       return existingDapp;
     }
 
     // Insert new domain
     const domainObject = { domain, time: new Date().getTime() };
     domainObject['id'] = await dappsTable.put(domainObject);
-    console.log(`Domain ${domain} added successfully.`);
 
     return domainObject;
   } catch (err) {
@@ -209,7 +206,6 @@ export async function removePendingTransaction(walletId: number, txId: string) {
 
     // Remove the transaction
     await txTable.delete(txId);
-    console.log(`Pending transaction ${txId} removed successfully`);
 
     return true;
   } catch (err) {

@@ -90,10 +90,8 @@ new Vue({
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing music store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<MusicStore>) => {
-    debugLog('📥 Received music store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {

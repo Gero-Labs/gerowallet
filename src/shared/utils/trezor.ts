@@ -620,39 +620,39 @@ const mapRequiredSigners = (requiredSigners?: Ed25519KeyHashHex[], context?: Tre
 };
 
 /**
- * Map additional witness requests (payment paths + stake path)
- * Matches official SDK implementation
+ * Map additional witness requests (stake key path when needed)
+ * Additional witnesses are signatures that Trezor cannot automatically derive from transaction inputs
+ *
+ * NOTE: Payment key paths should NOT be included here because they are already in the inputs!
+ * Including them here causes invalid signatures.
+ *
+ * Stake key signature is only required for transactions with certificates or withdrawals
  */
-const mapAdditionalWitnessRequests = (inputs: Cardano.TxIn[], context: TrezorTxTransformerContext): string[] | undefined => {
+const mapAdditionalWitnessRequests = (body: Cardano.TxBody, context: TrezorTxTransformerContext): string[] | undefined => {
   if (!context || !context.knownAddresses || context.knownAddresses.length === 0) {
     return undefined;
   }
 
-  const paths: string[] = [];
+  // Only add stake key path if transaction has certificates or withdrawals
+  // These are the only cases where stake key signature is required as an ADDITIONAL witness
+  const hasCertificates = body.certificates && body.certificates.length > 0;
+  const hasWithdrawals = body.withdrawals && body.withdrawals.size > 0;
 
-  // Collect payment key paths from all inputs
-  for (const input of inputs) {
-    const path = resolvePaymentKeyPathForTxIn(input, context);
-    if (path) {
-      paths.push(path);
-    }
-  }
-
-  // Add stake key path from first known address (matches official SDK pattern)
-  // Use util.stakeKeyPathFromGroupedAddress to resolve the actual stake key path
-  const stakeKeyDerivationPath = util.stakeKeyPathFromGroupedAddress(context.knownAddresses[0]);
-  if (stakeKeyDerivationPath && typeof stakeKeyDerivationPath === 'object' && !Array.isArray(stakeKeyDerivationPath) && 'role' in stakeKeyDerivationPath && 'index' in stakeKeyDerivationPath) {
-    const stakeKeyPathArray = util.accountKeyDerivationPathToBip32Path(
+  if (hasCertificates || hasWithdrawals) {
+    // util.stakeKeyPathFromGroupedAddress sometimes returns a BIP32Path array instead of AccountKeyDerivationPath,
+    // so we manually construct the stake key path for reliability
+    const stakeKeyPath = util.accountKeyDerivationPathToBip32Path(
       context.accountIndex,
-      stakeKeyDerivationPath as AccountKeyDerivationPath,
+      { role: KeyRole.Stake, index: 0 } as AccountKeyDerivationPath,
       KeyPurpose.STANDARD
     );
-    const stakeKeyPath = bip32PathToString(stakeKeyPathArray);
-    paths.push(stakeKeyPath);
+    const stakeKeyPathString = bip32PathToString(stakeKeyPath);
+    return [stakeKeyPathString];
   }
 
-  // Remove duplicates and return
-  return [...new Set(paths)];
+  // For transactions without certificates/withdrawals, no additional witnesses needed
+  // Payment key signatures are handled via input paths automatically
+  return undefined;
 };
 
 /**
@@ -703,7 +703,7 @@ export default {
     try {
       await TrezorConnect.init({
         manifest: TREZOR_MANIFEST,
-        transports: ['BridgeTransport', 'WebUsbTransport'],
+        transports: ['WebUsbTransport', 'BridgeTransport', 'BluetoothTransport', 'NativeBluetoothTransport'],
         connectSrc: 'https://connect.trezor.io/9/',
         _extendWebextensionLifetime: true,
       });
@@ -875,17 +875,12 @@ export default {
         txInKeyPathMap
       });
 
-      debugLog('[TREZOR] Transaction data being sent to device:', {
-        trezorTxData: trezorTxData,
-        signingMode: this.matchSigningMode(trezorTxData),
-      });
-
       const signingMode = this.matchSigningMode(trezorTxData);
 
-      // Map additional witness requests for all transactions (payment paths + stake path)
+      // Map additional witness requests for all transactions (payment paths + stake path when needed)
       const additionalWitnessRequests = signingMode === Trezor.PROTO.CardanoTxSigningMode.MULTISIG_TRANSACTION
         ? multiSigWitnessPaths.map(path => bip32PathToString(path))
-        : mapAdditionalWitnessRequests(body.inputs, {
+        : mapAdditionalWitnessRequests(body, {
             accountIndex: 0,
             chainId: {
               networkId: network.networkId,
@@ -933,7 +928,13 @@ export default {
         const publicKey = Ed25519PublicKeyHex(witness.pubKey);
         const signature = Ed25519SignatureHex(witness.signature);
 
-        if (expectedPublicKeys.includes(publicKey)) {
+        // For Plutus transactions, trust ALL signatures from Trezor
+        // Trezor analyzes the transaction structure and signs with the correct keys
+        // This includes script inputs, collateral, and other Plutus-specific signing requirements
+        if (signingMode === Trezor.PROTO.CardanoTxSigningMode.PLUTUS_TRANSACTION) {
+          signatures.set(publicKey, signature);
+        } else if (expectedPublicKeys.includes(publicKey)) {
+          // For non-Plutus transactions, only include expected signatures (security measure)
           signatures.set(publicKey, signature);
         }
       }
@@ -1181,10 +1182,13 @@ export default {
           );
 
           if (!utxo) {
-            throw new Error(
-              `[Trezor] Failed to resolve transaction input: ${txIn.txId}#${txIn.index}. ` +
-              'This UTXO was not found in the wallet. Please sync your wallet and try again.'
+            // For partial transactions (Plutus, multisig), some inputs may not belong to this wallet
+            // (e.g., script inputs, other signers' inputs). Return null to skip them.
+            console.debug(
+              `[Trezor] Input not found in wallet UTXOs: ${txIn.txId}#${txIn.index}. ` +
+              'This is expected for partial transactions with script inputs or multi-party transactions.'
             );
+            return null;
           }
 
           return utxo[1]; // Return the TxOut part of the UTXO

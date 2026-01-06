@@ -40,7 +40,7 @@
       </div>
     </div>
 
-    <div class="footer-left">&#169; 2025 {{ $t('welcome.adLabs') }}</div>
+    <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
   </div>
 </template>
 <script setup lang="ts">

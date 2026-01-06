@@ -177,7 +177,7 @@ const loadingSwap = computed(() => {
 
 // Check if swap is enabled by LaunchDarkly feature flag
 const isSwapEnabledByFeatureFlag = computed(() => {
-  return featureFlagsStore.state.flags.swapEnabled;
+  return featureFlagsStore.isSwapEnabled();
 });
 
 // Check if swap is supported by network

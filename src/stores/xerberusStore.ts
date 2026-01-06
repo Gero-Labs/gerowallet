@@ -21,11 +21,9 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing xerberus store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<XerberusStore>) => {
-    debugLog('📥 Received xerberus store update:', updates);
-    
+
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in xerberusStore) {
@@ -38,7 +36,6 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(xerberusStore, result[STORE_NAME]);
-      debugLog('💾 Hydrated xerberus store from storage:', result[STORE_NAME]);
     }
   });
 }
@@ -50,12 +47,12 @@ function broadcastFromBackground(updates: Partial<XerberusStore>) {
   if (context === 'background') {
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
-    
+
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
       const current = result[STORE_NAME] || { risks: {} };
-      chrome.storage.local.set({ 
-        [STORE_NAME]: { ...current, ...updates } 
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...updates }
       });
     });
   }
@@ -69,7 +66,7 @@ async function broadcastRiskPatch(fingerprint: string, patch: { risk: string }) 
     // Get current state
     const result = await chrome.storage.local.get(STORE_NAME);
     const saved: XerberusStore = result[STORE_NAME] || { risks: {} };
-    
+
     // Create updated risks object
     const updatedRisks = {
       ...saved.risks,
@@ -78,15 +75,15 @@ async function broadcastRiskPatch(fingerprint: string, patch: { risk: string }) 
         risk: patch.risk
       }
     };
-    
+
     // Update local state
     xerberusStore.risks = updatedRisks;
-    
+
     // Broadcast the update
-    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, { 
-      risks: updatedRisks 
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, {
+      risks: updatedRisks
     });
-    
+
     // Persist to storage
     await chrome.storage.local.set({
       [STORE_NAME]: {
@@ -100,11 +97,11 @@ async function broadcastRiskPatch(fingerprint: string, patch: { risk: string }) 
 export default {
   setRisks(risks: any) {
     xerberusStore.risks = risks;
-    
+
     // Broadcast from background context
     broadcastFromBackground({ risks });
   },
-  
+
   async updateRisks(fingerprints: string[]) {
     const promises = fingerprints
       .filter(Boolean)
@@ -127,36 +124,36 @@ export default {
       }
     }
   },
-  
+
   // Expose the observable state
   state: xerberusStore,
-  
+
   // Utility method to get current state snapshot
   getSnapshot(): XerberusStore {
     return { ...xerberusStore };
   },
-  
+
   // Utility method to reset state
   reset() {
     const resetState: XerberusStore = {
       risks: {}
     };
-    
+
     Object.assign(xerberusStore, resetState);
     broadcastFromBackground(resetState);
   },
-  
+
   // Utility method to get risk for a specific token
   getRisk(fingerprint: string): string | undefined {
     return xerberusStore.risks[fingerprint]?.risk;
   },
-  
+
   // Utility method to check if token has high risk
   isHighRisk(fingerprint: string): boolean {
     const risk = this.getRisk(fingerprint);
     return risk === 'HIGH' || risk === 'CRITICAL';
   },
-  
+
   // Utility method to get all risky tokens
   getRiskyTokens(): { fingerprint: string; risk: string }[] {
     return Object.entries(xerberusStore.risks)

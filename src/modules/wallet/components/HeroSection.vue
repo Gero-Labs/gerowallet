@@ -86,14 +86,14 @@
                   <img src="@/modules/wallet/icons/currency-euro.svg" :alt="t('card.topUp')" class="btn-icon" />
                   {{ t('card.topUp') }}
                 </v-btn>
-                <v-btn
-                  class="action-btn order-physical-btn"
-                  variant="outlined"
-                  @click="showOrderPhysicalCardModal = true"
-                >
-                  <v-icon left>mdi-credit-card-outline</v-icon>
-                  {{ t('card.orderPhysicalCard') }}
-                </v-btn>
+<!--                <v-btn-->
+<!--                  class="action-btn order-physical-btn"-->
+<!--                  variant="outlined"-->
+<!--                  @click="showOrderPhysicalCardModal = true"-->
+<!--                >-->
+<!--                  <v-icon left>mdi-credit-card-outline</v-icon>-->
+<!--                  {{ t('card.orderPhysicalCard') }}-->
+<!--                </v-btn>-->
                 <v-btn
                   class="action-btn eye-btn"
                   variant="outlined"
