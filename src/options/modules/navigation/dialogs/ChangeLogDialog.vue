@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="activeTab === 0 ? $t('navigation.whatsNew') : $t('navigation.aboutUs')"
-    :subtitle="activeTab === 0 ? $t('navigation.whatsNewSubtitle') : $t('navigation.aboutGeroDashboard')"
+    :title="activeTab === 0 ? t('navigation.whatsNew') : t('navigation.aboutUs')"
+    :subtitle="activeTab === 0 ? t('navigation.whatsNewSubtitle') : t('navigation.aboutGeroDashboard')"
     :loading="loading"
     :min-height="0"
     scrollable
@@ -233,6 +233,7 @@ import time from '@/plugins/time';
 import cryptoApi from '@/api/crypto-api';
 import packageJson from '@/../package.json';
 import assets from '@/utils/assets';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 defineProps({
   isOpen: {
@@ -245,8 +246,8 @@ defineProps({
   }
 });
 
-const emit = defineEmits(['close']);
-
+defineEmits(['close']);
+const { t } = useTranslation()
 const loading = ref(false);
 const activeTab = ref(0);
 const releases = ref<any[]>([]);
