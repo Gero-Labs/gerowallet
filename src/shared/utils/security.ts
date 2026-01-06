@@ -13,8 +13,8 @@ export const WEBAUTHN_RELYING_PARTY_NAME = APP_NAME;
 export const TOTP_DEFAULT_ISSUER = APP_NAME;
 
 // Cryptographic constants
-/** Number of PBKDF2 iterations for key derivation (balance between security and UX) */
-export const PBKDF2_ITERATIONS = 100000;
+/** Number of PBKDF2 iterations for key derivation (OWASP 2023 recommendation for PBKDF2-HMAC-SHA512) */
+export const PBKDF2_ITERATIONS = 310000;
 /** Salt size in bytes (256-bit) */
 export const SALT_SIZE = 32;
 /** Nonce size in bytes for ChaCha20 (96-bit) */

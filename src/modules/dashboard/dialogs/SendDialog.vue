@@ -56,72 +56,17 @@
           <SummaryStep ref="summary" :sendData="sendData" :tx-data="tx" @next="signAndSubmitTx" @prev="prevStep"></SummaryStep>
         </v-stepper-content>
       </CustomStepper>
-      <v-overlay
-        :absolute="true"
-        opacity="0.99"
-        :value="overlay"
-        class="hardwareOverlay"
-      >
-        <v-alert
-          color="white"
-          dense
-          outlined
-          type="info"
-          prominent
-          border="left"
-          v-if="!keystoneScan"
-          class="mt-10 mb-0"
-        >
-          <b>{{ $t('wallet.instructions') }}</b>
-          <div v-if="loggedWallet?.type === WalletType.Keystone">
-            <ul class="text-left" style="line-height: 1.5">
-              <li>{{ $t('wallet.unlockKeystone') }}</li>
-              <li>{{ $t('wallet.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
-              <li>{{ $t('wallet.useKeystoneToScan') }}</li>
-              <li>{{ $t('wallet.approveAndScanNext') }}</li>
-            </ul>
-          </div>
-        </v-alert>
-        <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
-          <v-card-title>
-            {{ $t('wallet.scanQRCode') }}
-          </v-card-title>
-          <v-card-subtitle>
-            <ul class="text-left" style="line-height: 1.5">
-              <li>{{ $t('wallet.adjustDistance') }}</li>
-              <li>{{ $t('wallet.useLowDensity') }}</li>
-            </ul>
-          </v-card-subtitle>
-          <v-card-text class="text-center">
-            <AnimatedQRScanner
-              purpose="sign"
-              :urTypes="['cardano-signature']"
-              width="100%"
-              height="334px"
-              @scan="onKeystoneScan"
-              @error="onKeystoneError"
-              @progress="onKeystoneProgress"
-            />
-          </v-card-text>
-        </v-card>
 
-        <AnimatedQRCode v-if="!keystoneScan && keystoneCbor" :type="keystoneType" :cbor="keystoneCbor" />
-        <div class="text-center pt-2">
-          <v-btn
-            text
-            @click="backScan"
-            class="mr-2"
-          >{{ keystoneScan ? 'Back' : 'Cancel' }}
-          </v-btn>
-          <v-btn
-            v-if="!keystoneScan"
-            class="geroButton"
-            style="color: black!important;"
-            @click="keystoneScan = true"
-          >NEXT
-          </v-btn>
-        </div>
-      </v-overlay>
+      <!-- Keystone Sign Dialog -->
+      <KeystoneSignDialog
+        :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
+        :keystoneType="keystoneType"
+        :keystoneCbor="keystoneCbor"
+        @close="overlay = false"
+        @scan="onKeystoneScan"
+        @error="onKeystoneError"
+        @progress="onKeystoneProgress"
+      />
     </v-card-text>
     <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <div class="" v-if="currentStep === 3">
@@ -174,6 +119,7 @@
 import { toRefs, ref, computed, getCurrentInstance, watch, onMounted } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
@@ -184,11 +130,9 @@ import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
-import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { isPaymentAddress } from '@/chrome/serialization';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
-import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
@@ -251,6 +195,7 @@ const keystoneScan = ref<boolean>(false);
 const isInit = ref<boolean>(false);
 const keystoneType = ref<string>('');
 const keystoneCbor = ref<string>('');
+const keystoneUseHash = ref(false);
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
@@ -335,15 +280,6 @@ const resetData = () => {
     minAda: 0,
     adaShortage: 0
   };
-}
-
-const backScan = () => {
-  if (keystoneScan.value) {
-    keystoneScan.value = false
-    isInit.value = false
-  } else {
-    overlay.value = false
-  }
 }
 
 const onKeystoneScan = async (ur: UR) => {
@@ -576,11 +512,12 @@ async function signAndSubmitTx() {
     const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
 
     // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
-    const ur = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
+    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
 
     // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
-    keystoneType.value = ur.type;
-    keystoneCbor.value = ur.cbor.toString('hex');
+    keystoneType.value = signRequestResponse.ur.type;
+    keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
+    keystoneUseHash.value = signRequestResponse.useHash;
 
     // Show overlay with animated QR code
     overlay.value = true;

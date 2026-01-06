@@ -6,7 +6,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import ledgerUtils from '@/shared/utils/ledger';
-import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
@@ -249,11 +249,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
 
       // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
-      const signRequest = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
+      const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
 
       // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
-      keystoneType.value = signRequest.ur.type;
-      keystoneCbor.value = signRequest.ur.cbor.toString('hex');
+      keystoneType.value = signRequestResponse.ur.type;
+      keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
 
       // Show overlay with animated QR code
       overlay.value = true;
