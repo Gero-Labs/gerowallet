@@ -465,13 +465,13 @@ const onKeystoneScan = (ur: { type: string; cbor: string }) => {
     const masterFingerprint = cryptoMultiAccounts.getMasterFingerprint();
 
     newWallet.value.name = device;
+    newWallet.value.xfp = masterFingerprint.toString('hex');
     const firstKey = keys[0];
     const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(
       firstKey.getKey().toString('hex') + firstKey.getChainCode().toString('hex')
     );
     const words = bech32.toWords(bip32PublicKey.bytes());
     newWallet.value.publicKey = bech32.encode('xpub', words, 1023);
-    newWallet.value.xfp = masterFingerprint.toString('hex');
     newWallet.value.btSupported = false;
     // Convert CryptoHDKey objects to plain objects for storage
     newWallet.value.keys = keys.map(key => ({
