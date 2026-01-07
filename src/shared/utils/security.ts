@@ -13,8 +13,8 @@ export const WEBAUTHN_RELYING_PARTY_NAME = APP_NAME;
 export const TOTP_DEFAULT_ISSUER = APP_NAME;
 
 // Cryptographic constants
-/** Number of PBKDF2 iterations for key derivation (balance between security and UX) */
-export const PBKDF2_ITERATIONS = 100000;
+/** Number of PBKDF2 iterations for key derivation (OWASP 2023 recommendation for PBKDF2-HMAC-SHA512) */
+export const PBKDF2_ITERATIONS = 310000;
 /** Salt size in bytes (256-bit) */
 export const SALT_SIZE = 32;
 /** Nonce size in bytes for ChaCha20 (96-bit) */
@@ -359,12 +359,23 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
  * @param credentialId - Base64-encoded credential ID
  * @returns True if authentication successful
  */
-export async function authenticateWebAuthn(credentialId: string): Promise<boolean> {
+export async function authenticateWebAuthn(credentialId: string, timeoutMs: number = 60000): Promise<boolean> {
   if (!isWebAuthnSupported()) {
     throw new Error('WebAuthn is not supported in this browser');
   }
 
+  // Create AbortController for timeout management
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, timeoutMs);
+
   try {
+    console.log('[WebAuthn] Starting authentication...');
+    console.log('[WebAuthn] Credential ID:', credentialId);
+    console.log('[WebAuthn] rpId:', window.location.hostname);
+    console.log('[WebAuthn] Context:', window.location.href);
+
     // Generate a random challenge
     const challenge = new Uint8Array(32);
     crypto.getRandomValues(challenge);
@@ -379,31 +390,43 @@ export async function authenticateWebAuthn(credentialId: string): Promise<boolea
           transports: ['internal']
         }
       ],
-      timeout: 60000,
+      timeout: timeoutMs,
       userVerification: 'required',
       rpId: window.location.hostname
     };
 
-    // Get the credential (authenticate)
+    console.log('[WebAuthn] Calling navigator.credentials.get()...');
+
+    // Get the credential (authenticate) with AbortSignal
     const assertion = await navigator.credentials.get({
-      publicKey: publicKeyCredentialRequestOptions
+      publicKey: publicKeyCredentialRequestOptions,
+      signal: abortController.signal
     }) as PublicKeyCredential;
+
+    console.log('[WebAuthn] Assertion received:', assertion);
 
     if (!assertion) {
       throw new Error('Authentication failed');
     }
 
     // If we got this far, authentication was successful
+    console.log('[WebAuthn] Authentication successful!');
     return true;
   } catch (error) {
-    console.error('WebAuthn authentication error:', error);
+    console.error('[WebAuthn] Authentication error:', error);
+    console.error('[WebAuthn] Error name:', (error as Error).name);
+    console.error('[WebAuthn] Error message:', (error as Error).message);
 
     // User cancelled or authentication failed
-    if ((error as Error).name === 'NotAllowedError') {
+    if ((error as Error).name === 'NotAllowedError' || (error as Error).name === 'AbortError') {
+      console.log('[WebAuthn] User cancelled or timeout reached');
       return false;
     }
 
     throw new Error(`PassKey authentication failed: ${(error as Error).message}`);
+  } finally {
+    // Clear timeout to prevent memory leaks
+    clearTimeout(timeoutId);
   }
 }
 

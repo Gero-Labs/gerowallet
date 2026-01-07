@@ -37,35 +37,10 @@
 import { ref, computed, toRefs, watch, getCurrentInstance, onMounted } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
-import Loading, { loadingState } from '@/stores/loading';
-import DexHunterStore from '@/stores/dexHunterStore';
-import CoinGeckoStore from '@/stores/coinGeckoStore';
-import WalletStore, { walletStore } from '@/stores/walletStore';
-import XerberusStore from '@/stores/xerberusStore';
-import TapToolsStore from '@/stores/tapToolsStore';
-import RealFiStore from '@/stores/realFiStore';
-import NetworkStore from '@/stores/networkStore';
-import MusicStore from '@/stores/musicStore';
-import GeroStore from '@/stores/geroStore';
-import BringStore from '@/stores/bringStore';
-import Charli3Store from '@/stores/charli3Store';
+import { loadingState } from '@/stores/loading';
+import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-
-// Ensure the store modules are initialized (which sets up messaging)
-console.log('📱 Options page initializing loading store:', Loading);
-console.log('📱 Options page initializing wallet store:', WalletStore);
-console.log('📱 Options page initializing dexHunter store:', DexHunterStore);
-console.log('📱 Options page initializing coinGecko store:', CoinGeckoStore);
-console.log('📱 Options page initializing xerberus store:', XerberusStore);
-console.log('📱 Options page initializing tapTools store:', TapToolsStore);
-console.log('📱 Options page initializing realFi store:', RealFiStore);
-console.log('📱 Options page initializing network store:', NetworkStore);
-console.log('📱 Options page initializing music store:', MusicStore);
-console.log('📱 Options page initializing gero store:', GeroStore);
-console.log('📱 Options page initializing bring store:', BringStore);
-console.log('📱 Options page initializing charli3 store:', Charli3Store);
-
 
 const { loading, isRestoring, text } = toRefs(loadingState);
 const { config } = toRefs(walletStore);
@@ -80,7 +55,6 @@ const isLoading = computed(() => {
 
 // Check auto-lock immediately when page loads/becomes visible
 onMounted(async () => {
-  console.log('🔒 Options page mounted, checking auto-lock status');
   try {
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.CHECK_AUTO_LOCK,
@@ -100,7 +74,6 @@ watch(() => config.value?.locale, async (newLocale, oldLocale) => {
 
       // Update i18n locale ONLY after successful load
       vmProxy.$i18n.locale = newLocale;
-      console.log('🌐 Language changed globally to:', newLocale);
     } catch (error) {
       console.error(`Failed to load language ${newLocale}:`, error);
       // Don't update i18n if load failed

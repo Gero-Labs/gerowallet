@@ -280,13 +280,18 @@ const buildTx = async () => {
       },
     ];
 
-    // Build transaction
+    // Build transaction with wallet context for accurate fee calculation
     tx.value = await buildCardanoTransaction({
       outputs,
       utxos: walletStore.utxos,
       epochParams: networkStore.epochParams,
       changeAddress: walletStore.loggedWallet.baseAddress,
       tip: networkStore.tip,
+      walletContext: {
+        keys: walletStore.keys,
+        stakeAddress: walletStore.loggedWallet.stakeAddress,
+        accountIndex: 0
+      }
     });
 
     console.log('✅ Transaction built successfully');

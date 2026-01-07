@@ -25,7 +25,7 @@ interface Props {
   isOpen: boolean;
 }
 const props = defineProps<Props>();
-const emit = defineEmits(['close']);
+defineEmits(['close']);
 
 const { t } = useTranslation();
 </script>

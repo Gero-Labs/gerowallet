@@ -25,7 +25,6 @@ function clearWalletSpecificAlarms() {
     alarms.forEach((alarm) => {
       if (!SYSTEM_ALARMS.includes(alarm.name)) {
         chrome.alarms.clear(alarm.name);
-        debugLog(`🧹 Cleared wallet-specific alarm: ${alarm.name}`);
       }
     });
   });
@@ -190,12 +189,6 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
       try {
         // Use the current local store state as the base to avoid race conditions
         const finalState = { ...(walletStore) };
-
-        // Log if keys are being stored
-        if ('keys' in finalState) {
-          debugLog('💾 Storing keys to chrome.storage:', finalState.keys ? 'keys present' : 'keys null');
-        }
-
         chrome.storage.local.set({
           [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
         });

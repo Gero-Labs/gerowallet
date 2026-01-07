@@ -6,6 +6,7 @@ export class SnackbarPlugin {
   timeout: number = 7000;
 
   setError(text: string) {
+    console.error('Error: ', text)
     //@ts-ignore
     window.notify({
       text,

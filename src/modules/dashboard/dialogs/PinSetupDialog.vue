@@ -1,8 +1,8 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="$t('security.pin')"
-    :subtitle="$t('security.4To6DigitCode')"
+    :title="t('security.pin')"
+    :subtitle="t('security.4To6DigitCode')"
     :width="500"
     :min-height="340"
     persistent
@@ -23,17 +23,17 @@
                 dense
                 color="primary"
               >
-                <v-btn :value="4" small>
+                <v-btn :value="4" small @click="refocusInput">
                   <v-icon>
                     mdi-numeric-4
                   </v-icon>
                 </v-btn>
-                <v-btn :value="5" small>
+                <v-btn :value="5" small @click="refocusInput">
                   <v-icon>
                     mdi-numeric-5
                   </v-icon>
                 </v-btn>
-                <v-btn :value="6" small>
+                <v-btn :value="6" small @click="refocusInput">
                   <v-icon>
                     mdi-numeric-6
                   </v-icon>
@@ -127,6 +127,14 @@ watch(() => props.value, async (newVal) => {
     }
   }
 });
+
+// Refocus input when PIN length button is clicked (handles clicking same button twice)
+async function refocusInput() {
+  await nextTick();
+  if (step.value === 'new' && newPinInputRef.value) {
+    newPinInputRef.value.focus();
+  }
+}
 
 async function handleNewPinFinish(pin: string) {
   newPin.value = pin;

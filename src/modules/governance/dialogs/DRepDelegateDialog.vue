@@ -119,18 +119,6 @@
             </h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: center">
-            <!-- Show success state when transaction is signed -->
-            <v-alert
-              v-if="isSubmit"
-              type="success"
-              dense
-              border="left"
-              colored-border
-              class="mb-0"
-              style="width: 100%;"
-            >
-              <span>Transaction signed! Click submit to broadcast.</span>
-            </v-alert>
             <!-- Password input (hidden after signing) -->
             <PassKeyPasswordField
               ref="passwordField"
@@ -177,6 +165,17 @@
         </v-row>
       </v-form>
     </v-card-actions>
+
+    <!-- Keystone Sign Dialog -->
+    <KeystoneSignDialog
+      :isOpen="overlay && loggedWallet.type === WalletType.Keystone"
+      :keystoneType="keystoneType"
+      :keystoneCbor="keystoneCbor"
+      @close="overlay = false"
+      @scan="onKeystoneScan"
+      @error="onKeystoneError"
+      @progress="onKeystoneProgress"
+    />
   </BaseDialog>
 </template>
 <script setup lang="ts">
@@ -186,6 +185,7 @@ const { t } = useTranslation();
 import { ref, computed, watch } from 'vue';
 import { toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { Cardano } from '@cardano-sdk/core';
@@ -230,6 +230,13 @@ const {
   handlePassKeySuccess: composableHandlePassKeySuccess,
   handlePassKeyError: composableHandlePassKeyError,
   setPasswordFieldRef,
+  // Keystone state and methods
+  overlay,
+  keystoneType,
+  keystoneCbor,
+  onKeystoneScan,
+  onKeystoneError,
+  onKeystoneProgress,
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'governance.drepDelegationTxSubmitted',

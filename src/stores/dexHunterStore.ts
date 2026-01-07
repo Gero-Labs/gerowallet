@@ -27,10 +27,8 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing dexHunter store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<DexHunterStore>) => {
-    debugLog('📥 Received dexHunter store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -44,7 +42,6 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(dexHunterStore, result[STORE_NAME]);
-      debugLog('💾 Hydrated dexHunter store from storage:', result[STORE_NAME]);
     }
   });
 }
@@ -244,7 +241,6 @@ export default {
   async registerAddress(address: string): Promise<void> {
     // Check if already registered
     if (this.isAddressRegistered(address)) {
-      debugLog(`📝 Address already registered with DexHunter: ${address}`);
       return;
     }
 

@@ -1,9 +1,9 @@
 <template>
-  <v-card class="transactions-card" outlined>
+  <v-card class="transactions-card pa-2" outlined>
     <v-card-title class="d-flex justify-space-between align-center">
       <span>{{ t('card.transactions') }}</span>
       <div class="d-flex align-center gap-2">
-        <ExportPeriodMenu :disabled="loading" />
+        <ExportPeriodMenu :disabled="loading || formattedTransactions.length === 0" />
       </div>
     </v-card-title>
     <v-card-text>

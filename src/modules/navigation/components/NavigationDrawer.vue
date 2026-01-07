@@ -14,8 +14,8 @@
         <v-list-item-content class="py-2">
           <v-list-item-title>
             <img
-              :src="isApex ? assets.geroDashboardApex : assets.geroDashboardXmas"
-              :width="isApex ? '100' : '84'"
+              :src="isApex ? assets.geroDashboardApex : assets.geroDashboard"
+              width="100"
               alt="logo"
             />
           </v-list-item-title>
@@ -40,14 +40,14 @@
           v-else-if="item.link"
           :to="item.link"
           v-show="item.enabled || item.soon"
-          :disabled="item.soon"
+          :disabled="item.soon || item.loading || item.underMaintenance"
           :active-class="themeDark ? (isApex ? 'activePageDark apex' : 'activePageDark') : (isApex ? 'activePage apex' : 'activePage')"
           link
           class="menuItem"
           style="height: 40px"
           :key="index"
         >
-          <v-list-item-avatar tile size="18" :style="item.soon ? { filter: 'opacity(0.5)' } : {}">
+          <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
             <v-img
               width="18"
               height="18"
@@ -81,7 +81,18 @@
               <span>{{ $t('navigation.miniPlayer') }}</span>
             </v-tooltip>
           </v-list-item-action>
-
+          <v-list-item-action v-else-if="item.loading">
+            <v-progress-circular size="16" width="2" indeterminate></v-progress-circular>
+          </v-list-item-action>
+          <v-list-item-action v-else-if="item.underMaintenance" class="ma-0">
+            <v-chip
+              outlined
+              class="px-1"
+              x-small
+              color="#FFD700"
+              style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
+            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> Maintenance</v-chip>
+          </v-list-item-action>
           <v-list-item-action v-else-if="item.new">
             <v-chip
               v-if="item.new"
@@ -202,6 +213,8 @@ interface NavigationItem {
   enabled?: boolean;
   soon?: boolean;
   new?: boolean;
+  underMaintenance?: boolean;
+  loading?: boolean;
 }
 
 type NavigationLinkItem = NavigationItem & { link: string };
@@ -277,7 +290,15 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: t('navigation.multisig'), icon: assts.multisigTree, link: '/multisig', enabled: false }, // Disabled - under maintenance
-    { title: t('navigation.geroCard'), icon: assts.card, link: '/card', enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
+    {
+      title: t('navigation.geroCard'),
+      icon: assts.card,
+      link: '/card',
+      enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      new: true,
+      underMaintenance: !isGeroCardEnabledByFeatureFlag.value,
+      loading: loadingFFs.value
+    },
     { header: t('navigation.activitiesRewards'), enabled: hasActivitiesRewardsItems },
     { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
@@ -296,6 +317,16 @@ const items = computed((): NavigationItemUnion[] => {
     // { title: 'Whitepaper', icon: 'mdi-file-certificate-outline', href: 'https://docs.adabox.io/whitepapers/forge-whitepaper' }
   ].filter(i => i)
 })
+
+// Loading state for swap feature flag
+const loadingFFs = computed(() => {
+  return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
+});
+
+// Check if swap is enabled by LaunchDarkly feature flag
+const isGeroCardEnabledByFeatureFlag = computed(() => {
+  return featureFlagsStore.isGeroCardEnabled();
+});
 
 // Drawer getter/setter
 const drawer = computed({
@@ -388,8 +419,6 @@ async function checkUnlockMethod() {
 
     // Has unlock method if config exists and has a value (not null/undefined)
     hasUnlockMethod.value = !!(unlockMethodConfig?.value)
-
-    debugLog('🔒 Unlock method check:', hasUnlockMethod.value ? 'Enabled' : 'Disabled')
   } catch (error) {
     console.error('Error checking unlock method:', error)
     hasUnlockMethod.value = false
@@ -433,6 +462,7 @@ onMounted(() => {
 
 // Cleanup on unmount
 import { onUnmounted } from 'vue'
+import featureFlagsStore from '@/stores/featureFlagsStore';
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)

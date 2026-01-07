@@ -29,11 +29,9 @@ const context = getContextType();
 
 // Initialize messaging based on context
 if (context === 'browser') {
-  debugLog(`🔌 Initializing zkFold store messaging in browser context`);
 
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<ZkFoldStore>) => {
-    debugLog('📥 Received zkFold store update:', updates);
     Object.assign(zkFoldStore, updates);
   });
 

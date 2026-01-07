@@ -94,6 +94,7 @@ export class WalletManager {
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
           btSupported: walletBg.btSupported,
+          xfp: walletBg.xfp,
         });
         LoadingState.setText('Restoring wallet...');
         await this.initializeWallet(walletBg);
@@ -169,6 +170,7 @@ export class WalletManager {
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
           btSupported: walletBg.btSupported,
+          xfp: walletBg.xfp,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -210,17 +212,12 @@ export class WalletManager {
    * @param walletBg - WalletBg instance to initialize
    */
   private async initializeWallet(walletBg: WalletBg): Promise<void> {
-    const perfStart = performance.now();
-    console.log('⏱️ PERF: initializeWallet START');
-
     LoadingState.setText('Setting up wallet address...');
     const promises = [];
     console.log('walletBg', walletBg)
     if (walletBg.type === WalletType.Google) {
-      // const googleStart = performance.now();
       // promises.push(
       //   zkFoldApi.walletAddress(walletBg.userId).then(res => {
-      //     console.log(`⏱️ PERF: zkFoldApi.walletAddress took ${performance.now() - googleStart}ms`);
       //     if (res['status'] !== 200) {
       //       throw new Error('Failed to get address');
       //     }
@@ -230,44 +227,29 @@ export class WalletManager {
     }
 
     LoadingState.setText('Loading blockchain data...');
-    const genesisStart = performance.now();
     walletBg.loadGenesis();
-    console.log(`⏱️ PERF: loadGenesis took ${performance.now() - genesisStart}ms`);
 
     const promises2: any[] = [];
-    const assetsStart = performance.now();
     promises2.push(
-      walletBg.loadAssets().then(() => console.log(`⏱️ PERF: loadAssets took ${performance.now() - assetsStart}ms`)),
-      walletBg.loadEpochParams().then(() => console.log(`⏱️ PERF: loadEpochParams took ${performance.now() - assetsStart}ms`))
+      walletBg.loadAssets(),
+      walletBg.loadEpochParams()
     );
     if (networks.resolveStakingSupport(walletBg.chain, walletBg.network)) {
-      const rewardsStart = performance.now();
       promises2.push(
-        walletBg.loadRewards().then(() => console.log(`⏱️ PERF: loadRewards took ${performance.now() - rewardsStart}ms`))
+        walletBg.loadRewards()
       );
     }
-
-    // OPTIMIZATION: Defer non-critical data to load in background after wallet initialization
-    // This reduces blocking time during login by ~366ms (349ms BringCache + 17ms DexHunter)
-    const blockchainDataStart = performance.now();
     await Promise.all(promises2);
-    console.log(`⏱️ PERF: Promise.all(blockchain data) took ${performance.now() - blockchainDataStart}ms`);
 
     LoadingState.setText('Loading wallet data...');
-    const startSyncStart = performance.now();
-    const loadConfigStart = performance.now();
-    const loadAccountStart = performance.now();
-    const loadContactsStart = performance.now();
-    const loadDappsStart = performance.now();
-    const loadTxStart = performance.now();
 
     promises.push(
-      walletBg.startSync().then(() => console.log(`⏱️ PERF: startSync took ${performance.now() - startSyncStart}ms`)),
-      walletBg.loadConfig().then(() => console.log(`⏱️ PERF: loadConfig took ${performance.now() - loadConfigStart}ms`)),
-      walletBg.loadAccount().then(() => console.log(`⏱️ PERF: loadAccount took ${performance.now() - loadAccountStart}ms`)),
-      walletBg.loadContacts().then(() => console.log(`⏱️ PERF: loadContacts took ${performance.now() - loadContactsStart}ms`)),
-      walletBg.loadConnectedDapps().then(() => console.log(`⏱️ PERF: loadConnectedDapps took ${performance.now() - loadDappsStart}ms`)),
-      walletBg.loadTransactions().then(() => console.log(`⏱️ PERF: loadTransactions took ${performance.now() - loadTxStart}ms`))
+      walletBg.startSync(),
+      walletBg.loadConfig(),
+      walletBg.loadAccount(),
+      walletBg.loadContacts(),
+      walletBg.loadConnectedDapps(),
+      walletBg.loadTransactions()
     );
 
     const chain: string = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
@@ -279,56 +261,21 @@ export class WalletManager {
       address = walletBg.stakeAddress;
     }
 
-    debugLog('🔍 Wallet initialization debug:', {
-      chain,
-      network,
-      address,
-      baseAddress: walletBg.baseAddress,
-      stakeAddress: walletBg.stakeAddress,
-      isEnterpriseAddress: walletBg.isEnterpriseAddress(),
-    });
-
-    debugLog('🔐 Setting up Ably service for wallet switch:', {
-      walletId: walletBg.id,
-      chain,
-      network,
-      address,
-      baseAddress: walletBg.baseAddress,
-      stakeAddress: walletBg.stakeAddress,
-    });
-    debugLog('🔐 Ably service current state before setup:', {
-      connectionState: ablyService['client']?.connection?.state,
-      hasAuthParams: !!ablyService['authParams'],
-      currentAuthParams: ablyService['authParams'],
-      hasApi: !!ablyService['api'],
-      apiChain: ablyService['api']?.chain,
-      apiNetwork: ablyService['api']?.network,
-    });
-
     // Force close existing connection if any to ensure fresh authentication
     ablyService.close();
-    debugLog('🔐 Closed existing Ably connection, setting new auth params...');
 
     ablyService.setAuthParams(chain, network, address);
     ablyService.setApi(walletBg.api);
-    debugLog('📡 New API instance details:', {
-      chain: walletBg.api.chain,
-      network: walletBg.api.network,
-      provider: walletBg.api.provider,
-    });
-    debugLog('📡 Connecting to Ably service...');
 
     // OPTIMIZATION: Connect to Ably completely in background - don't block login at all
     // Ably will handle reconnection and message buffering automatically
     (async () => {
-      const ablyStart = performance.now();
       ablyService.connect();
 
       // Wait for connection to be established (non-blocking, happens in background)
       const maxWaitTime = 10000; // 10-second max
       const startTime = Date.now();
       while (ablyService['client']?.connection?.state !== 'connected' && Date.now() - startTime < maxWaitTime) {
-        debugLog('⏳ Waiting for Ably connection... Current state:', ablyService['client']?.connection?.state);
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
@@ -336,7 +283,6 @@ export class WalletManager {
         console.warn('⚠️ Ably connection not established after timeout, will retry automatically');
         return; // Don't subscribe if not connected
       } else {
-        console.log(`⏱️ PERF: Ably connection took ${performance.now() - ablyStart}ms`);
         debugLog('✅ Ably connection established');
       }
 
@@ -412,10 +358,7 @@ export class WalletManager {
 
     // Wait for all initialization promises to complete
     LoadingState.setText('Initializing wallet...');
-    const promiseAllStart = performance.now();
     await Promise.all(promises);
-    console.log(`⏱️ PERF: Final Promise.all(promises) took ${performance.now() - promiseAllStart}ms`);
-    console.log(`⏱️ PERF: TOTAL initializeWallet took ${performance.now() - perfStart}ms`);
 
     LoadingState.setText('Wallet initialization complete');
 
@@ -445,7 +388,6 @@ export class WalletManager {
    * Logout current wallet and cleanup all resources
    */
   async logout(): Promise<void> {
-    debugLog('WalletManager: Starting logout process');
 
     try {
       // Clear database cache for the current wallet to prevent data leakage
@@ -567,8 +509,6 @@ export class WalletManager {
    * User must unlock with PIN/Pattern/Spending Password + 2FA (not supported for now) to access UI
    */
   async lock(): Promise<void> {
-    debugLog('WalletManager: Locking wallet');
-
     try {
       // Set locked state
       WalletStore.setLocked(true);

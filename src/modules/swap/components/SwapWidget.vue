@@ -42,7 +42,7 @@
             v-model="selectedTokenA"
             :available="availableTokens"
             :index="0"
-            :title="$t('swap.selling')"
+            :title="t('swap.selling')"
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
@@ -58,7 +58,7 @@
             v-model="selectedTokenB"
             :available="availableTokens"
             :index="0"
-            :title="$t('swap.buying')"
+            :title="t('swap.buying')"
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"
@@ -202,13 +202,14 @@ import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { debugLog } from '@/utils/debug';
 
 const emit = defineEmits(['onSwap']);
 
 const { t } = useTranslation();
 
 const isSwapEnabled = computed(() => {
-  return featureFlagsStore.state.flags.swapEnabled;
+  return featureFlagsStore.isSwapEnabled();
 });
 
 const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
@@ -319,7 +320,6 @@ const nativeTokenComputed = computed(() => {
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
   const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
   const token: any = assetsArray.find((token: any) => token.metadata?.ticker === currencyTicker);
-  console.log('token', token)
   if (token) {
     return token
   } else {
@@ -483,9 +483,7 @@ const limitChange = (change: string) => {
 }
 
 const setLimitByPercentage = (percentage: number) => {
-  console.log('setLimitByPercentage', percentage)
   limit.value = (price_ba2.value * (1 + percentage / 100)).toString();
-  console.log('setLimitByPercentage', limit.value)
 }
 
 const tokenAQuantityChange = (val) => {
@@ -584,16 +582,15 @@ const averagePrice = (token_in, token_out) => {
     price_ab2.value = res.price_ab;
     price_ba2.value = res.price_ba;
     limit.value = structuredClone(price_ba2.value).toString()
-    console.log(limit.value)
   }).catch(() => {
-    // console.log(e)
+    // Silently handle error - average price is optional
   });
 }
 
 const performPeriodicEstimate = async () => {
   // Add defensive checks for undefined tokens
   if (!selectedTokenA.value || !selectedTokenB.value) {
-    console.warn('Tokens not properly initialized');
+    debugLog('[Swap] Tokens not properly initialized');
     return;
   }
 
@@ -629,7 +626,7 @@ const prepareSwap = async () => {
       method: METHOD.signTx,
       data: { tx: txCbor, partialSign, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
-    console.log('signaturesRes', signaturesRes)
+    debugLog('signaturesRes', signaturesRes)
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
     } else {
@@ -637,13 +634,12 @@ const prepareSwap = async () => {
       await submit(signRes.cbor)
     }
   } catch (error: any) {
-    console.log(error)
+    debugLog('[Swap] Error:', error);
     if (error['response']) {
       snackbar.setError(`Swap Failed. Error Code: ${error['response'].status} - ${JSON.stringify(error['response'].data)}`)
     } else {
       snackbar.setError(error)
     }
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -669,7 +665,7 @@ const submit = async (cborHex: string) => {
   clearInputs();
 
   emit('onSwap')
-  console.log(txId)
+  debugLog('[Swap] Transaction submitted:', txId);
 }
 
 const clearInputs = () => {

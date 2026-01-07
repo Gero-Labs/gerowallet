@@ -44,7 +44,6 @@ class BackgroundStoreMessaging {
 
     // Listen for incoming connections
     chrome.runtime.onConnect.addListener((port) => {
-      debugLog('🔌 Port connection received:', port.name);
       if (port.name === 'store-sync') {
         this.handleNewConnection(port);
       }
@@ -57,8 +56,6 @@ class BackgroundStoreMessaging {
    * Handle a new port connection
    */
   private handleNewConnection(port: chrome.runtime.Port) {
-    debugLog('📡 New store sync connection established');
-
     // Add to connected ports
     this.connectedPorts.add(port);
 
@@ -98,8 +95,6 @@ class BackgroundStoreMessaging {
       this.storeSubscriptions.set(storeName, new Set());
     }
     this.storeSubscriptions.get(storeName)!.add(port);
-
-    debugLog(`📊 Port subscribed to store: ${storeName}`);
   }
 
   /**

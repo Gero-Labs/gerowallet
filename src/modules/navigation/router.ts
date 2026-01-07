@@ -25,8 +25,10 @@ const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
+const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
 
 import WalletStore from '@/stores/walletStore';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 const routes = [
   {
@@ -184,6 +186,15 @@ const routes = [
     },
   },
   {
+    path: '/passkey-auth',
+    name: 'passkey-auth',
+    component: PassKeyAuth,
+    meta: {
+      layout: BlankLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '*',
     name: 'other',
     redirect: '/',
@@ -195,6 +206,32 @@ const router = new VueRouter({
   // base: process.env['BASE_URL'],
   routes,
 });
+
+/**
+ * Check if a route is under maintenance
+ * This matches the underMaintenance logic from NavigationDrawer
+ */
+function isRouteUnderMaintenance(routeName: string | null | undefined): boolean {
+  if (!routeName) return false;
+
+  // Route-specific maintenance checks
+  switch (routeName) {
+    case 'card':
+      // Gero Card is under maintenance if feature flag is disabled
+      return !featureFlagsStore.isGeroCardEnabled();
+
+    case 'multisig':
+      // MultiSig is currently under maintenance (route is commented out)
+      return true;
+
+    // Add other routes that can be under maintenance here
+    // case 'someOtherRoute':
+    //   return !featureFlagsStore.isSomeOtherFeatureEnabled();
+
+    default:
+      return false;
+  }
+}
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
@@ -227,6 +264,13 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
+
+  // Check if the route is under maintenance
+  if (isRouteUnderMaintenance(to.name)) {
+    console.warn(`🚧 Route "${to.name}" is under maintenance. Redirecting to dashboard.`);
+    return next({ path: '/' });
+  }
+
   next();
 });
 
