@@ -577,6 +577,8 @@ export default {
         return 'pending';
       case 'approved':
         return 'approved';
+      case 'verified':
+        return 'approved';
       case 'rejected':
         return 'auth';
       default:
