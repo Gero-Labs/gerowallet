@@ -1,6 +1,6 @@
 <template>
   <div class="block">
-    <ApplicationStatusSection />
+    <ApplicationStatusSection :kycStatus="kycStatus" />
     <div class="soon">
       <div class="soon-content">
         <div class="dashboard-layout">
@@ -40,13 +40,13 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
+import { useWalletStatus } from '@/composables/useWalletStatus';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
-// import AccountOverviewHeader from '@/modules/wallet/components/dashboard/AccountOverviewHeader.vue';
-// import BalanceCardsSection from '@/modules/wallet/components/dashboard/BalanceCardsSection.vue';
 import ChartSection from '@/modules/wallet/components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '@/modules/wallet/components/dashboard/RecentTransactionsSection.vue';
 import RecentActivitiesSection from '@/modules/wallet/components/dashboard/RecentActivitiesSection.vue';
+
+const { kycStatus } = useWalletStatus();
 </script>
 
 <style lang="scss" scoped>

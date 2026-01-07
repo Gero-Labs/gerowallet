@@ -11,10 +11,26 @@
             <img src="@/modules/wallet/icons/waiting.svg" alt="waiting" />
           </div>
           <div class="heading-and-supporting-text">
-            <h3 class="heading">{{ t('card.reviewingApplication') }}</h3>
-            <p class="supporting-text">
-              {{ t('card.reviewingApplicationDesc') }}
-            </p>
+            <!-- For 'verified' status -->
+            <template v-if="kycStatus === 'verified'">
+              <h3 class="heading">{{ t('card.verification') }}</h3>
+              <p class="supporting-text">
+                {{ t('card.verificationDesc') }}
+              </p>
+              <p class="supporting-text support-contact">
+                {{ t('card.pleaseContact') }} 
+                <a href="mailto:support@kaiserex.com" class="support-link">support@kaiserex.com</a> 
+                {{ t('card.ifYouHaveQuestions') }}
+              </p>
+            </template>
+            
+            <!-- For 'verification_started' status -->
+            <template v-else>
+              <h3 class="heading">{{ t('card.reviewingApplication') }}</h3>
+              <p class="supporting-text">
+                {{ t('card.reviewingApplicationDesc') }}
+              </p>
+            </template>
           </div>
         </div>
         <!-- <SecondaryButton text="Contact Support" @click="handleContactSupport" /> -->
@@ -25,14 +41,16 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import SecondaryButton from './SecondaryButton.vue';
 
+interface Props {
+  kycStatus?: string;
+}
+
+withDefaults(defineProps<Props>(), {
+  kycStatus: 'verification_started'
+});
 
 const { t } = useTranslation();
-
-const handleContactSupport = () => {
-  console.log('Contact support clicked');
-};
 </script>
 
 <style lang="scss" scoped>
@@ -221,6 +239,19 @@ const handleContactSupport = () => {
   color: $text-secondary;
   margin: 0;
   line-height: 1.56;
+}
+
+.support-contact {
+  margin-top: $spacing-md;
+}
+
+.support-link {
+  color: $primary-cyan;
+  text-decoration: none;
+  
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 @media (max-width: $breakpoint-lg) {
