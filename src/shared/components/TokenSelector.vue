@@ -380,6 +380,8 @@ const selectedToken: any = computed({
 });
 
 const balance = computed(() => {
+  if (!selectedToken.value) return '0';
+  
   if (selectedToken.value.decimals) {
     return filters.toCurrency(
       selectedToken.value.balance,
@@ -391,7 +393,7 @@ const balance = computed(() => {
       selectedToken.value.decimals
     );
   }
-  return selectedToken.value.balance + '';
+  return String(selectedToken.value.balance || 0);
 });
 
 const errors = computed(() => {

@@ -397,7 +397,7 @@ const getTokenBalance = token => {
   const tokenData = tokens.value[token.unit];
   if (tokenData && tokenData.quantity) {
     const decimals = tokenData.decimals || 6;
-    const balance = Number(tokenData.quantity) / Math.pow(10, decimals);
+    const balance = filters.convertFromSmallestUnit(tokenData.quantity, decimals);
     return balance.toFixed(2);
   }
   return '0.00';
@@ -503,7 +503,7 @@ const filteredTokenListB = computed(() => {
 // Format balance for display
 const formatBalance = token => {
   if (!token.owned || !token.quantity) return '0';
-  const balance = Number(token.quantity) / Math.pow(10, token.decimals);
+  const balance = filters.convertFromSmallestUnit(token.quantity, token.decimals);
   return balance > 0.01 ? balance.toFixed(2) : balance.toFixed(6);
 };
 
