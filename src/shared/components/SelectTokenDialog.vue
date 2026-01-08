@@ -5,7 +5,7 @@
     :min-height="300"
     :height="600"
     :width="480"
-    :title="$t('common.selectToken')"
+    :title="t('common.selectToken')"
     subtitle=""
     :persistent="false"
   >
@@ -86,6 +86,9 @@ import { dexHunterStore } from '@/stores/dexHunterStore';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useTranslation } from '@/shared/composables/useTranslation';
+
+const { t } = useTranslation();
 
 interface Props {
   value?: any;
@@ -195,30 +198,30 @@ const handleImageError = (event: Event, item: any) => {
 // Format token balance: convert from smallest unit and apply currency conversion
 const formatTokenBalance = (token: any): string => {
   if (!token || !token.balance) return '0';
-  
+
   const decimals = token.decimals || 6;
   // Convert from smallest unit (Lovelace) to main unit (ADA)
   const balanceInMainUnit = filters.convertFromSmallestUnit(token.balance, decimals);
-  
+
   // Apply fiat conversion if needed
   const fiatValue = convertFiat(balanceInMainUnit);
-  
+
   // Format with consistent locale
-  return fiatValue.toLocaleString('en-US', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 6 
+  return fiatValue.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6
   });
 };
 
 // Format token price with consistent locale
 const formatTokenPrice = (price: number): string => {
   if (!price || price === 0) return 'N/A';
-  
+
   const fiatPrice = convertFiat(price);
   // Always use en-US locale for consistent formatting
-  return '~' + getCurrencySymbol() + fiatPrice.toLocaleString('en-US', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 4 
+  return '~' + getCurrencySymbol() + fiatPrice.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4
   });
 };
 </script>

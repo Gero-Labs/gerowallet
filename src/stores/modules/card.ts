@@ -308,7 +308,8 @@ const cardStoreInstance = {
    */
   async logout(): Promise<void> {
     try {
-      const api = getCardApi();
+      // Check if user was logged in before attempting backend logout
+      const wasLoggedIn = cardStore.accessToken !== null;
 
       // Clear tokens and user data from memory
       cardStore.accessToken = null;
@@ -321,11 +322,14 @@ const cardStoreInstance = {
       cardStore.exchangeRate = null;
       cardStore.walletStatus.isKaiserexAuthenticated = false;
 
-      // Call backend logout endpoint and clear cookies
-      try {
-        await api.axiosInstance.get('/api/kaiserex/logout');
-      } catch (backendError) {
-        console.warn('Backend logout failed, continuing with local cleanup:', backendError);
+      // Only call backend logout endpoint if user was logged in
+      if (wasLoggedIn) {
+        try {
+          const api = getCardApi();
+          await api.axiosInstance.get('/api/kaiserex/logout');
+        } catch (backendError) {
+          console.warn('Backend logout failed, continuing with local cleanup:', backendError);
+        }
       }
 
       // Always clear cookies regardless of backend response

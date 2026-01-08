@@ -376,7 +376,7 @@ const availableTokens = computed(() => {
     //
     //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
-    });
+    }).filter((token: any) => token.name !== nativeToken.ticker);
   return [nativeToken, ...availableTokens];
 });
 
@@ -689,7 +689,7 @@ const setMaxTokenA = () => {
 
   const decimals = selectedTokenA.value.decimals || 0;
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-  
+
   // Clean and parse balance (handles formatted strings)
   const balanceInSmallestUnit = Number(filters.cleanNumericValue(selectedTokenA.value.balance || 0));
 
