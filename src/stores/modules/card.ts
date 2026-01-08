@@ -783,7 +783,7 @@ export default {
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/user-verifications`);
-      cardStore.walletStatus.kycStatus = response.data.status.name;
+      cardStore.walletStatus.kycStatus = response.data.status.name; 
     } catch (error) {
       cardStore.walletStatus.kycStatus = 'registered';
       throw error;
@@ -914,7 +914,7 @@ export default {
   async orderCard(): Promise<any> {
     try {
       const api = getCardApi();
-      const response = await api.axiosInstance.post('/api/kaiserex/cards/order/virtual');
+      const response = await api.axiosInstance.post('/api/kaiserex/cards/order');
       return response.data;
     } catch (error) {
       throw error;
