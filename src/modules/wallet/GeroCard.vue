@@ -36,7 +36,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import cardStore from '@/stores/modules/card';

@@ -304,8 +304,8 @@ const isInsufficientBalance = computed(() => {
   const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
   const decimals = selectedTokenA.value.decimals || 0;
   const balance = selectedTokenA.value.balance || 0;
-  const b = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '')
-  const balanceA = Number(b)
+  // Convert balance from smallest unit to main unit
+  const balanceA = filters.convertFromSmallestUnit(balance, decimals);
   return Number(quantityA) > balanceA
 })
 
@@ -376,7 +376,7 @@ const availableTokens = computed(() => {
     //
     //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
-    });
+    }).filter((token: any) => token.name !== nativeToken.ticker);
   return [nativeToken, ...availableTokens];
 });
 
@@ -687,20 +687,22 @@ const excludedChange = async (val) => {
 const setMaxTokenA = () => {
   if (!selectedTokenA.value) return;
 
-  const balance = selectedTokenA.value.balance || 0;
   const decimals = selectedTokenA.value.decimals || 0;
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+
+  // Clean and parse balance (handles formatted strings)
+  const balanceInSmallestUnit = Number(filters.cleanNumericValue(selectedTokenA.value.balance || 0));
 
   // For ADA (native currency), reserve 3 ADA for tx fees, deposits, and DEX fees
   if (selectedTokenA.value.ticker === nativeTicker) {
     const reservedAmount = 3_000_000; // 3 ADA in lovelace
-    const maxBalanceLovelace = Math.max(0, Number(balance) - reservedAmount);
-    const maxBalance = filters.toCurrency(maxBalanceLovelace, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    const maxBalanceLovelace = Math.max(0, balanceInSmallestUnit - reservedAmount);
+    const maxBalance = filters.convertFromSmallestUnit(maxBalanceLovelace, decimals).toString();
     selectedTokenA.value.quantity = maxBalance;
     tokenAQuantityChange(maxBalance);
   } else {
     // For non-ADA tokens, use full balance (fees are paid in ADA)
-    const maxBalance = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    const maxBalance = filters.convertFromSmallestUnit(balanceInSmallestUnit, decimals).toString();
     selectedTokenA.value.quantity = maxBalance;
     tokenAQuantityChange(maxBalance);
   }

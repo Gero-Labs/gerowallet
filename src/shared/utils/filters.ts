@@ -1,22 +1,47 @@
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
+// Always use en-US locale for consistent number formatting regardless of user's system locale
 const formatMax6Decimals = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 0,  // No unnecessary trailing zeroes
-  maximumFractionDigits: 6, // Set a high limit to handle precision, but the minimum is prioritized
-  useGrouping: true          // Enables comma separators for thousands
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 6,
+  useGrouping: true
 })
 
 const formatMax4Decimals = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 0,  // No unnecessary trailing zeroes
-  maximumFractionDigits: 4, // Set a high limit to handle precision, but the minimum is prioritized
-  useGrouping: true          // Enables comma separators for thousands
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 4,
+  useGrouping: true
 })
 
 const formatMax2Decimals = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 0,  // No unnecessary trailing zeroes
-  maximumFractionDigits: 2, // Set a high limit to handle precision, but the minimum is prioritized
-  useGrouping: true          // Enables comma separators for thousands
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+  useGrouping: true
 })
+
+/**
+ * Cleans a numeric value by removing any locale-specific formatting (commas, spaces, etc.)
+ * This ensures consistent parsing regardless of the user's locale
+ * @param value - The value to clean (string or number)
+ * @returns Cleaned string representation of the number
+ */
+const cleanNumericValue = (value: number | string): string => {
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return value.replace(/[,\s]/g, '');
+  return '0';
+}
+
+/**
+ * Converts a balance from smallest unit (e.g., Lovelace) to main unit (e.g., ADA)
+ * Handles both raw numbers and formatted strings
+ * @param balance - Balance in smallest unit (Lovelace, etc.)
+ * @param decimals - Number of decimal places (default: 6 for Cardano)
+ * @returns Numeric value in main unit
+ */
+const convertFromSmallestUnit = (balance: number | string, decimals: number = 6): number => {
+  const cleanValue = cleanNumericValue(balance);
+  return Number(cleanValue) / Math.pow(10, decimals);
+}
 
 const filters = {
   truncate(value: string): any {
@@ -83,7 +108,9 @@ const filters = {
     if (decimals == undefined) {
       decimals = 6
     }
-    let res: number = Number(value) / Math.pow(10, decimals);
+    
+    // Convert from smallest unit to main unit (e.g., Lovelace to ADA)
+    let res: number = convertFromSmallestUnit(value, decimals);
     if (human) {
       const lookup = [
         {value: 1, symbol: ""},
@@ -182,7 +209,11 @@ const filters = {
     // Find & remove "?"
     hostname = hostname.split('?')[0];
     return hostname;
-  }
+  },
+  
+  // Export utility functions for external use
+  cleanNumericValue,
+  convertFromSmallestUnit
 };
 
 export default filters;
