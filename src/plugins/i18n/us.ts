@@ -1889,6 +1889,17 @@ export default {
   'security.passKeyRegistrationFailed': 'Failed to register PassKey',
   'security.passKeyDeregistrationFailed': 'Failed to deregister PassKey',
 
+  // Security - PassKey PRF Extension
+  'security.passKeyPrfNotSupported': 'PassKey registration succeeded but PRF extension is not supported. PassKey autofill requires Chrome, Edge, or Firefox with a compatible authenticator.',
+  'security.passKeyPrfUnavailable': 'PRF extension not supported in this browser. PassKey autofill requires Chrome, Edge, or Firefox.',
+  'security.passKeyLegacyDetected': 'Your existing PassKey does not support the new secure PRF encryption method. Please delete and re-register your PassKey to continue using autofill.',
+  'security.passKeyPrfRequired': 'PassKey autofill requires a browser with WebAuthn PRF support (Chrome, Edge, or Firefox)',
+  'security.passKeyUpgradeRequired': 'PassKey Upgrade Required',
+  'security.passKeyUpgradeRequiredMessage': 'Your PassKey uses an older encryption method. To continue using PassKey autofill, you must delete and re-register your PassKey with the new secure PRF method.',
+  'security.deleteAndReRegister': 'Delete & Re-register',
+  'security.passKeyPrfEnabled': 'PRF Secure Encryption Enabled',
+  'security.passKeyPrfDisabled': 'PRF Not Available',
+
   // Security - 2FA Setup
   'security.setup2FA': 'Setup 2FA',
   'security.disable2FA': 'Disable 2FA',

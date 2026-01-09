@@ -676,21 +676,16 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
       const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
       if (existingEncryptedPassword?.value && credentialConfig?.value) {
-        // Encrypted password exists - verify it's still valid by attempting decryption
+        // Encrypted password exists - verify it's still valid by attempting PRF decryption
         // This requires WebAuthn authentication, ensuring the user has device access
-        const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
+        const { decryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
 
-        debugLog('🔐 Verifying existing PassKey encrypted password...');
-
-        // Authenticate with WebAuthn first
-        const authenticated = await authenticateWebAuthn(credentialConfig.value);
-        if (!authenticated) {
-          throw new Error(t('security.passKeyAuthFailed'));
-        }
+        debugLog('🔐 Verifying existing PassKey encrypted password with PRF...');
 
         // Try to decrypt to verify the encrypted password is still valid
+        // PRF decryption includes authentication automatically
         try {
-          await decryptSpendingPasswordForPassKey(
+          await decryptSpendingPasswordWithPrf(
             existingEncryptedPassword.value,
             credentialConfig.value,
             wallet.id
@@ -714,32 +709,52 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
         // Password is already verified at this point
         // Get or register WebAuthn credential
         let credentialId: string;
+        let prfEnabled = false;
 
         if (!credentialConfig || !credentialConfig.value) {
-          // No credential exists - register a new one for PassKey autofill
-          debugLog('🔐 Registering WebAuthn credential for PassKey password autofill');
-          credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+          // No credential exists - register a new one for PassKey autofill with PRF
+          debugLog('🔐 Registering WebAuthn credential with PRF for PassKey password autofill');
+          const { credentialId: newCredentialId, prfEnabled: isPrfEnabled } = await registerWebAuthnCredential(
+            wallet.id,
+            wallet.name || 'Wallet'
+          );
+          credentialId = newCredentialId;
+          prfEnabled = isPrfEnabled;
+
+          // Check if PRF is enabled
+          if (!prfEnabled) {
+            throw new Error(t('security.passKeyPrfNotSupported'));
+          }
 
           // Store credential ID in database
           await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
-          debugLog('✅ WebAuthn credential registered');
+          debugLog('✅ WebAuthn credential registered with PRF enabled');
         } else {
           // Use existing credential
           credentialId = credentialConfig.value;
-          debugLog('🔐 Using existing WebAuthn credential for PassKey password autofill');
+          debugLog('🔐 Using existing WebAuthn credential for PRF encryption');
         }
 
-        // Encrypt password for PassKey storage
-        const { encryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
-        const encryptedPassword = await encryptSpendingPasswordForPassKey(password, credentialId, wallet.id);
+        // Encrypt password for PassKey storage using PRF
+        // This will authenticate the user and verify PRF support in one step
+        const { encryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
+        try {
+          const encryptedPassword = await encryptSpendingPasswordWithPrf(password, credentialId, wallet.id);
 
-        // Store encrypted password in database
-        await configTable.put({
-          key: 'passKeyEncryptedSpendingPassword',
-          value: encryptedPassword
-        });
+          // Store encrypted password in database
+          await configTable.put({
+            key: 'passKeyEncryptedSpendingPassword',
+            value: encryptedPassword
+          });
 
-        debugLog('✅ Spending password encrypted and stored for PassKey autofill');
+          debugLog('✅ Spending password encrypted and stored for PassKey autofill');
+        } catch (prfError: any) {
+          // If PRF fails, show user-friendly error
+          if (prfError.message?.includes('PRF evaluation failed')) {
+            throw new Error(t('security.passKeyLegacyDetected'));
+          }
+          throw prfError;
+        }
       }
     } else {
       // When disabling, keep the encrypted password for potential re-enabling
@@ -824,9 +839,14 @@ async function handlePassKeyRegister() {
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
-    // Register WebAuthn credential
-    debugLog('🔐 Registering WebAuthn credential...');
-    const credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+    // Register WebAuthn credential with PRF
+    debugLog('🔐 Registering WebAuthn credential with PRF support...');
+    const { credentialId, prfEnabled } = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+
+    // Check if PRF is enabled
+    if (!prfEnabled) {
+      throw new Error(t('security.passKeyPrfNotSupported'));
+    }
 
     // Store credential ID in database
     await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });

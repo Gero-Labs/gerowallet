@@ -301,16 +301,11 @@ async function handlePassKeyAutofill() {
       showSuccessFeedback();
       // emit('passkey-autofill-success');
     } else {
-      // Normal context - authenticate directly
-      const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
-      const authenticated = await authenticateWebAuthn(credentialConfig.value);
+      // Normal context - decrypt directly using PRF (authentication happens during PRF evaluation)
+      const { decryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
 
-      if (!authenticated) {
-        throw new Error('PassKey authentication failed');
-      }
-
-      // Decrypt spending password
-      const decryptedPassword = await decryptSpendingPasswordForPassKey(
+      // Decrypt spending password using PRF (includes authentication)
+      const decryptedPassword = await decryptSpendingPasswordWithPrf(
         encryptedPasswordConfig.value,
         credentialConfig.value,
         wallet.id

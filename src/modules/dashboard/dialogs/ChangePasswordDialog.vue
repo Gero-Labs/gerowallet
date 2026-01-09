@@ -73,7 +73,7 @@ import geroStore from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
 import { getDb } from '@/db/wallet-db';
-import { encryptSpendingPasswordForPassKey } from '@/shared/utils/security';
+import { encryptSpendingPasswordWithPrf } from '@/shared/utils/webauthn-prf';
 
 interface Props {
   isOpen: boolean;
@@ -123,10 +123,8 @@ const updateSpendingPassword = async (): Promise<void> => {
         const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
         if (passKeyAutofillConfig?.value && credentialConfig?.value) {
-          console.log('🔐 PassKey autofill enabled - updating encrypted password...');
-
-          // Re-encrypt new password with PassKey
-          const encryptedPassword = await encryptSpendingPasswordForPassKey(
+          // Re-encrypt new password with PassKey PRF
+          const encryptedPassword = await encryptSpendingPasswordWithPrf(
             newPassword.value,
             credentialConfig.value,
             loggedWallet.value.id
@@ -137,8 +135,6 @@ const updateSpendingPassword = async (): Promise<void> => {
             key: 'passKeyEncryptedSpendingPassword',
             value: encryptedPassword
           });
-
-          console.log('✅ PassKey encrypted password updated successfully');
         }
       } catch (passKeyError) {
         // Log but don't fail the password change if PassKey update fails

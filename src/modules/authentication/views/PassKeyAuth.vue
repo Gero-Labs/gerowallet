@@ -43,7 +43,7 @@ import { ref, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { getDb } from '@/db/wallet-db';
-import { authenticateWebAuthn, decryptSpendingPasswordForPassKey } from '@/shared/utils/security';
+import { decryptSpendingPasswordWithPrf } from '@/shared/utils/webauthn-prf';
 
 const loading = ref(true);
 const error = ref('');
@@ -71,15 +71,8 @@ onMounted(async () => {
       throw new Error('Encrypted password not found');
     }
 
-    // Authenticate with WebAuthn
-    const authenticated = await authenticateWebAuthn(credentialConfig.value);
-
-    if (!authenticated) {
-      throw new Error('PassKey authentication failed');
-    }
-
-    // Decrypt spending password
-    const decryptedPassword = await decryptSpendingPasswordForPassKey(
+    // Decrypt spending password using PRF (includes authentication)
+    const decryptedPassword = await decryptSpendingPasswordWithPrf(
       encryptedPasswordConfig.value,
       credentialConfig.value,
       wallet.id
