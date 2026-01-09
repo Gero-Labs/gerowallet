@@ -24,16 +24,47 @@ export interface CardanoAddress {
 // Card Types
 export interface CardData {
   id: number;
-  uuid: string;
+  user_id: number;
+  program_uuid: string;
+  currency: string;
+  account_to_charge: string;
+  processing_type: string;
+  cardholder_phone: string;
+  payment_card_type: string;
+  own_type: string;
+  card_holder_name: string;
+  order_uuid: string;
   card_uuid: string;
+  status: string;
+  card_status: 'TEMPORARY_BLOCKED' | 'ACTIVE';
+  balance: string
   pan: string;
   currentBalance: string;
-  currency: string;
-  status: string;
-  type: string;
-  createdAt: string;
-  card_status: 'TEMPORARY_BLOCKED' | 'ACTIVE';
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Pagination Types (Laravel-style)
+export interface PaginationLink {
+  url: string | null;
+  label: string;
+  active: boolean;
+}
+
+export interface PaginatedCardsResponse {
+  current_page: number;
+  data: CardData[];
+  first_page_url: string;
+  from: number;
+  last_page: number;
+  last_page_url: string;
+  links: PaginationLink[];
+  next_page_url: string | null;
+  path: string;
+  per_page: number;
+  prev_page_url: string | null;
+  to: number;
+  total: number;
 }
 
 export interface CardNumber {
@@ -121,11 +152,10 @@ export interface CardErrorState {
 }
 
 export interface CardDetails {
-  details: {
-    pan: string;
-    expiryDate: string;
-    cvc2: string;
-  };
+  pan: string;
+  expiryDate: string;
+  cvc2: string;
+  cardHolderName: string;
 }
 
 export interface CardPin {

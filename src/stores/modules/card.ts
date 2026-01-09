@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo } from '@/models/card';
+import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo, PaginatedCardsResponse } from '@/models/card';
 import type { KaiserExTokenData } from '@/services/kaiserEx.service';
 import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
@@ -684,8 +684,7 @@ export default {
     cardStore.errors.cardData = null;
 
     try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.get('/api/kaiserex/cards');
+      const response = await getCardApi().axiosInstance.get<PaginatedCardsResponse>('/api/kaiserex/cards');
       const cardsData = response.data.data || [];
 
       // Populate cards array with all user's cards
@@ -710,7 +709,15 @@ export default {
           this.upsertCard(newCard);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Check if it's an axios error with a 500 status code
+      if (error?.response?.status >= 500) {
+        // Set wallet status to error state for 5xx server errors
+        cardStore.walletStatus.currentState = 'error';
+        cardStore.walletStatus.error = 'Server error. Please try again later.';
+        console.error('Server error (5xx) when fetching card data:', error);
+      }
+
       cardStore.errors.cardData =
         error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card data';
       throw error;
@@ -787,7 +794,7 @@ export default {
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/user-verifications`);
-      cardStore.walletStatus.kycStatus = response.data.status.name; 
+      cardStore.walletStatus.kycStatus = response.data.status.name;
     } catch (error) {
       cardStore.walletStatus.kycStatus = 'registered';
       throw error;

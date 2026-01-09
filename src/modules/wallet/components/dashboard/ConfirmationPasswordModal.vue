@@ -31,7 +31,7 @@
               dense
               outlined
               class="password-input"
-              :label="$t('wallet.spendingPassword')"
+              :label="t('wallet.spendingPassword')"
               hide-details
               @enter="verifyPassword"
               @passkey-autofill-success="verifyPassword"

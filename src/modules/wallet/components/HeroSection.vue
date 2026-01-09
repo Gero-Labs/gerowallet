@@ -30,12 +30,12 @@
                   <div class="card-bottom" style="max-width: 310px">
                     <div class="card-holder">
                       <p class="label">{{ t('card.cardholderName') }}</p>
-                      <p class="value">{{ t('card.geroWallet') }}</p>
+                      <p class="value">{{ card.cardData.card_holder_name || t('card.geroWallet') }}</p>
                     </div>
                     <div class="card-cvv">
                       <p class="label">{{ t('card.cvv') }}</p>
                       <p class="value">
-                        {{ showCardDetails && card.cardDetails?.details?.cvc2 ? card.cardDetails.details.cvc2 : '***' }}
+                        {{ showCardDetails && card.cardDetails?.cvc2 ? card.cardDetails.cvc2 : '***' }}
                       </p>
                     </div>
                     <div class="card-expiry">
@@ -217,6 +217,7 @@ import OrderPhysicalCardModal from './dashboard/OrderPhysicalCardModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
+import { CardInfo } from '@/models/card';
 
 const { t } = useTranslation();
 
@@ -232,15 +233,43 @@ const showManageCardConfirmationModal = ref(false);
 const showOrderCardConfirmationModal = ref(false);
 const showOrderPhysicalCardModal = ref(false);
 const orderingCard = ref(false);
-const emptyCard = {
+const emptyCard: CardInfo = {
   cardData: {
     id: null,
+    user_id: null,
+    program_uuid: null,
+    currency: null,
+    account_to_charge: null,
+    processing_type: null,
+    cardholder_phone: null,
+    payment_card_type: null,
+    own_type: null,
+    card_holder_name: null,
+    order_uuid: null,
     card_uuid: null,
+    status: null,
+    card_status: null,
+    balance: null,
+    pan: null,
+    currentBalance: null,
+    created_at: null,
+    updated_at: null,
   },
-  cardDetails: null,
+  cardDetails: {
+    pan: null,
+    cvc2: null,
+    expiryDate: null,
+    cardHolderName: null,
+  },
   cardPin: null,
   cardNumber: null,
-  cardBalance: null,
+  cardBalance: {
+    currentBalance:{
+      amount:0,
+      currencyCode:"EUR"
+    },
+    state: null
+  },
   cardHistory: null,
   totalDeposits: 0,
   activities: [],
@@ -415,8 +444,8 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-const getFormattedCardNumber = (card: any) => {
-  const pan = card.cardDetails?.details?.pan;
+const getFormattedCardNumber = (card: CardInfo) => {
+  const pan = card.cardDetails?.pan;
 
   if (!pan || !showCardDetails.value) return '**** **** **** ****';
 
@@ -424,14 +453,14 @@ const getFormattedCardNumber = (card: any) => {
   return pan.match(/.{1,4}/g)?.join(' ') || pan;
 };
 
-const formatExpiryDate = (card: any) => {
+const formatExpiryDate = (card: CardInfo) => {
   // Only show expiry when card details are visible
   if (!showCardDetails.value) {
-    return 'MM/YY';
+    return '**/**';
   }
 
   // Try to get expiry from card details first (format: "YYYY-MM")
-  const apiExpiry = card.cardDetails?.details?.expiryDate;
+  const apiExpiry = card.cardDetails?.expiryDate;
 
   if (apiExpiry) {
     // Parse "2028-10" to "10/28"
@@ -441,15 +470,15 @@ const formatExpiryDate = (card: any) => {
   }
 
   // Fallback to creation date + 4 years
-  if (card.cardData?.createdAt) {
-    const date = new Date(card.cardData.createdAt);
+  if (card.cardData?.created_at) {
+    const date = new Date(card.cardData.created_at);
     date.setFullYear(date.getFullYear() + 4);
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = String(date.getFullYear()).slice(-2);
     return `${month}/${year}`;
   }
 
-  return 'MM/YY';
+  return '**/**';
 };
 
 const formatADA = (eurAmount: number) => {
