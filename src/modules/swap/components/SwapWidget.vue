@@ -1,20 +1,13 @@
 <template>
-  <v-card flat outlined class="mx-auto liquid-glass d-flex flex-column px-2" style="height: 100%;">
+  <v-card flat outlined class="mx-auto liquid-glass d-flex flex-column px-2" style="height: 100%">
     <!-- Overlay when swap is disabled by feature flag -->
-    <v-overlay
-      v-if="!isSwapEnabled"
-      absolute
-      :value="true"
-      opacity="0.9"
-      color="#000000"
-      z-index="999"
-    >
+    <v-overlay v-if="!isSwapEnabled" absolute :value="true" opacity="0.9" color="#000000" z-index="999">
       <div class="overlay-content text-center">
         <v-icon size="64" color="warning">mdi-alert-circle-outline</v-icon>
         <h2 class="mt-4 white--text" style="line-height: 1.5">{{ $t('common.underMaintenance') }}</h2>
       </div>
     </v-overlay>
-    <v-card-text class="pa-0 flex-grow-1 d-flex flex-column" style="overflow: hidden;">
+    <v-card-text class="pa-0 flex-grow-1 d-flex flex-column" style="overflow: hidden">
       <div class="swap-content-wrapper">
         <v-card-title class="pb-0 pt-3 px-0">
           <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
@@ -37,7 +30,7 @@
             </v-btn>
           </v-btn-toggle>
         </v-card-title>
-        <v-card-text class="pb-0 px-0 pt-4" style="text-align: -webkit-center;">
+        <v-card-text class="pb-0 px-0 pt-4" style="text-align: -webkit-center">
           <TokenSelector
             v-model="selectedTokenA"
             :available="availableTokens"
@@ -51,7 +44,12 @@
             class="mt-n3"
             background-color="#101828"
           />
-          <v-btn icon class="mt-1 mb-0 z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto;">
+          <v-btn
+            icon
+            class="mt-1 mb-0 z-index-5 geroButton"
+            @click="switchPair"
+            style="height: 32px; width: 32px; margin: 8px auto"
+          >
             <v-icon color="#1a1a1a">mdi-swap-vertical</v-icon>
           </v-btn>
           <TokenSelector
@@ -69,8 +67,16 @@
             :search="search"
             :show-balance="false"
           />
-          <div class="text-left mt-2" v-if="swapType === 'swap'" style="display: flex;">
-            <v-btn text plain x-small class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle" style="letter-spacing: normal">
+          <div class="text-left mt-2" v-if="swapType === 'swap'" style="display: flex">
+            <v-btn
+              text
+              plain
+              x-small
+              class="px-0 no-opacity"
+              :ripple="false"
+              @click="pairPriceToggle = !pairPriceToggle"
+              style="letter-spacing: normal"
+            >
               <v-avatar
                 color="primary"
                 :style="{ animationDuration: '1.5s' }"
@@ -80,27 +86,45 @@
               <span style="font-size: 11px">{{ pairPrice }}</span>
             </v-btn>
             <v-spacer></v-spacer>
-            <v-btn text plain x-small color="primary" class="px-0 no-opacity" :ripple="false" @click="swapOverviewToggle = true" style="letter-spacing: normal">
+            <v-btn
+              text
+              plain
+              x-small
+              color="primary"
+              class="px-0 no-opacity"
+              :ripple="false"
+              @click="swapOverviewToggle = true"
+              style="letter-spacing: normal"
+            >
               <span style="font-size: 11px">Details</span>
               <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
             </v-btn>
           </div>
-          <v-card style="border-radius: 8px;" flat class="transparent no-custom-styling" v-else>
+          <v-card style="border-radius: 8px" flat class="transparent no-custom-styling" v-else>
             <v-card-text class="px-2 py-1">
-              <div class="text-left" style="font-size: 11px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
+              <div
+                class="text-left"
+                style="font-size: 11px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between"
+              >
                 <div>
-                  <span class="pr-1" style="font-weight: 600;">Limit Price</span>
+                  <span class="pr-1" style="font-weight: 600">Limit Price</span>
                   <span
-                    v-if="marketPriceDeltaPercentage.toFixed(2) !== '-0.00' && marketPriceDeltaPercentage.toFixed(2) !== '0.00'"
+                    v-if="
+                      marketPriceDeltaPercentage.toFixed(2) !== '-0.00' &&
+                      marketPriceDeltaPercentage.toFixed(2) !== '0.00'
+                    "
                     :style="{
-                      color: marketPriceDeltaPercentage > 0 ? '#75E0A7' : '#FDA29B'
+                      color: marketPriceDeltaPercentage > 0 ? '#75E0A7' : '#FDA29B',
                     }"
-                  >{{ `${marketPriceDeltaPercentage > 0 ? '+' : ''}${marketPriceDeltaPercentage.toFixed(2)}% ${marketPriceDeltaPercentage > 0 ? 'above' : 'below'} market` }}</span>
+                    >{{
+                      `${marketPriceDeltaPercentage > 0 ? '+' : ''}${marketPriceDeltaPercentage.toFixed(2)}% ${
+                        marketPriceDeltaPercentage > 0 ? 'above' : 'below'
+                      } market`
+                    }}</span
+                  >
                 </div>
                 <div v-if="selectedTokenA.name === loggedWallet.chain">
-                  <v-btn x-small text plain color="#FDA29B" class="px-1" @click="setLimitByPercentage(-5)">
-                    -5%
-                  </v-btn>
+                  <v-btn x-small text plain color="#FDA29B" class="px-1" @click="setLimitByPercentage(-5)"> -5% </v-btn>
                   <v-btn x-small text plain color="#FDA29B" class="px-1" @click="setLimitByPercentage(-10)">
                     -10%
                   </v-btn>
@@ -112,9 +136,7 @@
                   </v-btn>
                 </div>
                 <div v-else>
-                  <v-btn x-small text plain color="#75E0A7" class="px-1" @click="setLimitByPercentage(5)">
-                    +5%
-                  </v-btn>
+                  <v-btn x-small text plain color="#75E0A7" class="px-1" @click="setLimitByPercentage(5)"> +5% </v-btn>
                   <v-btn x-small text plain color="#75E0A7" class="px-1" @click="setLimitByPercentage(10)">
                     +10%
                   </v-btn>
@@ -126,22 +148,35 @@
                   </v-btn>
                 </div>
               </div>
-              <div class="text-left" style="font-size: 12px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
-                <CurrencyTextField v-model="limit" :dense="true" style="max-width: 144px" :font-size="18" @change="limitChange" :decimals="7" />
-                <div style="align-content: center; padding-top: 8px;">{{ `${price_ba2?.toFixed(7)} ${selectedTokenB.ticker === 'ADA' ? selectedTokenA.ticker : selectedTokenB.ticker}` }}</div>
-              </div>
-              <div class="text-left mt-1 pt-2" style="font-size: 12px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
-                <v-btn-toggle active-class="geroButton" v-model="limitType" mandatory>
-                  <v-btn text value="one" x-small>
-                    ONE
-                  </v-btn>
-                  <v-btn text value="split" x-small>
-                    SPLIT
-                  </v-btn>
-                </v-btn-toggle>
-                <div v-if="limitType === 'one'">
-                  Single Order
+              <div
+                class="text-left"
+                style="font-size: 12px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between"
+              >
+                <CurrencyTextField
+                  v-model="limit"
+                  :dense="true"
+                  style="max-width: 144px"
+                  :font-size="18"
+                  @change="limitChange"
+                  :decimals="7"
+                />
+                <div style="align-content: center; padding-top: 8px">
+                  {{
+                    `${price_ba2?.toFixed(7)} ${
+                      selectedTokenB.ticker === 'ADA' ? selectedTokenA.ticker : selectedTokenB.ticker
+                    }`
+                  }}
                 </div>
+              </div>
+              <div
+                class="text-left mt-1 pt-2"
+                style="font-size: 12px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between"
+              >
+                <v-btn-toggle active-class="geroButton" v-model="limitType" mandatory>
+                  <v-btn text value="one" x-small> ONE </v-btn>
+                  <v-btn text value="split" x-small> SPLIT </v-btn>
+                </v-btn-toggle>
+                <div v-if="limitType === 'one'">Single Order</div>
                 <div class="pt-2 px-2" style="display: flex; width: 100%" v-else>
                   <v-slider
                     v-model="limitSplit"
@@ -149,12 +184,11 @@
                     min="1"
                     max="40"
                     hide-details
-                    style="height: 20px; align-items: center;"
+                    style="height: 20px; align-items: center"
                   ></v-slider>
-                  <div style="display: flex; text-align: end;">
+                  <div style="display: flex; text-align: end">
                     <span style="width: 45px">{{ `${limitSplit} / 40` }}</span>
                   </div>
-
                 </div>
               </div>
             </v-card-text>
@@ -163,19 +197,31 @@
             <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
           </div>
         </v-card-text>
-        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 8px" class="mx-0 mt-1 mb-0" />
+        <SwapOverviewOverlay
+          ref="swap"
+          @excludedChange="excludedChange"
+          v-model="swapOverviewToggle"
+          :token-a="selectedTokenA"
+          :token-b="selectedTokenB"
+          :slippage="slippageRef"
+          :estimation="estimation"
+          style="border-radius: 8px"
+          class="mx-0 mt-1 mb-0"
+        />
       </div>
     </v-card-text>
-    <v-card-actions class="px-3 pt-2 pb-3" style="justify-content: center;">
+    <v-card-actions class="px-3 pt-2 pb-3" style="justify-content: center">
       <v-btn
         max-width="420"
-        style="color: black!important; width: 100%; border-radius: 10px;"
+        style="color: black !important; width: 100%; border-radius: 10px"
         class="geroButton"
         :disabled="isSwapDisabled || loading || poolError"
         @click="prepareSwap"
         :loading="loading"
       >
-        <span style="font-size: 13px; font-weight: 600;">{{ poolError ? $t('swap.poolNotFound') : swapButtonText }}</span>
+        <span style="font-size: 13px; font-weight: 600">{{
+          poolError ? $t('swap.poolNotFound') : swapButtonText
+        }}</span>
       </v-btn>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
@@ -227,25 +273,25 @@ let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
   img: cardanoSvg,
-  fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
+  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
   unit: '',
-  verified: true
+  verified: true,
 });
 
 let selectedTokenB = ref({
   name: 'GERO',
   ticker: 'GERO',
-  img: "https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp",
-  fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
+  img: 'https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp',
+  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
   unit: '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f',
-  verified: true
-})
+  verified: true,
+});
 
 const price_ab = ref<number>(0);
 const price_ba = ref<number>(0);
@@ -275,53 +321,66 @@ const swapButtonText = computed(() => {
   if (isInsufficientBalance.value) {
     return t('swap.insufficientBalance');
   } else if (swapType.value === 'limit') {
-    if (limitType.value === 'one' || limitType.value === 'split' && limitSplit.value === 1) {
+    if (limitType.value === 'one' || (limitType.value === 'split' && limitSplit.value === 1)) {
       return t('swap.placeOrder');
     } else if (limitType.value === 'split') {
       return t('swap.placeOrders', { count: limitSplit.value });
     }
   }
-  return t('swap.swap')
-})
+  return t('swap.swap');
+});
 
 const isSwapDisabled = computed(() => {
   if (!selectedTokenA.value || !selectedTokenB.value) return true;
 
   if (swapType.value === 'swap') {
-    const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
-    const quantityB = (selectedTokenB.value.quantity || '0').toString().replaceAll(',', '')
-    return quantityA === '0' || quantityB === '0' || isNaN(Number(quantityA)) || isNaN(Number(quantityB)) || isInsufficientBalance.value
+    const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',', '');
+    const quantityB = (selectedTokenB.value.quantity || '0').toString().replaceAll(',', '');
+    return (
+      quantityA === '0' ||
+      quantityB === '0' ||
+      isNaN(Number(quantityA)) ||
+      isNaN(Number(quantityB)) ||
+      isInsufficientBalance.value
+    );
   } else if (swapType.value === 'limit') {
-    const quantity = (selectedTokenA.value.quantity || '0').toString().replaceAll(',', '')
-    return isInsufficientBalance.value || Number(quantity) === 0 || Number(limit.value).toFixed(7) === price_ba2.value.toFixed(7)
+    const quantity = (selectedTokenA.value.quantity || '0').toString().replaceAll(',', '');
+    return (
+      isInsufficientBalance.value ||
+      Number(quantity) === 0 ||
+      Number(limit.value).toFixed(7) === price_ba2.value.toFixed(7)
+    );
   }
   return true;
-})
+});
 
 const isInsufficientBalance = computed(() => {
   if (!selectedTokenA.value) return false;
 
-  const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
+  const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',', '');
   const decimals = selectedTokenA.value.decimals || 0;
   const balance = selectedTokenA.value.balance || 0;
   // Convert balance from smallest unit to main unit
   const balanceA = filters.convertFromSmallestUnit(balance, decimals);
-  return Number(quantityA) > balanceA
-})
+  return Number(quantityA) > balanceA;
+});
 
 const marketPriceDeltaPercentage = computed(() => {
   if (limit.value === '0') {
-    return 0
+    return 0;
   }
-  return ((Number(limit.value) - price_ba2.value)/price_ba2.value * 100);
-})
+  return ((Number(limit.value) - price_ba2.value) / price_ba2.value) * 100;
+});
 
 const nativeTokenComputed = computed(() => {
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
   const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
   const token: any = assetsArray.find((token: any) => token.metadata?.ticker === currencyTicker);
   if (token) {
-    return token
+    return {
+      ...token,
+      decimals: token.metadata?.decimals || token.decimals || 6,
+    };
   } else {
     return {
       name: 'Cardano',
@@ -332,9 +391,9 @@ const nativeTokenComputed = computed(() => {
       decimals: 6,
       unit: '',
       verified: true,
-    }
+    };
   }
-})
+});
 
 const availableTokens = computed(() => {
   if (!dexHunterTokens.value) {
@@ -344,7 +403,7 @@ const availableTokens = computed(() => {
   const nativeToken = {
     ticker: nativeTokenComputed.value.metadata?.ticker,
     balance: nativeTokenComputed.value.quantity,
-    ...nativeTokenComputed.value
+    ...nativeTokenComputed.value,
   }; // avoid modifying the original state
   const availableTokens = Object.values(dexHunterTokens.value)
     .map((token: any) => {
@@ -352,42 +411,44 @@ const availableTokens = computed(() => {
       const res = {
         ...token,
         balance: found ? found.quantity : 0,
+        decimals: token.metadata?.decimals || token.decimals || 6,
       };
       if (found && selectedTokenB.value.unit === found.unit) {
-        selectedTokenB.value.balance = res.balance
+        selectedTokenB.value.balance = res.balance;
       }
       if (selectedTokenA.value?.ticker === nativeToken?.ticker) {
-        selectedTokenA.value.balance = nativeToken.balance
+        selectedTokenA.value.balance = nativeToken.balance;
       }
-      return res
+      return res;
     })
     .sort((a, b) => {
-    //   const isPinnedA = pinnedTokens.includes(a['unit']);
-    //   const isPinnedB = pinnedTokens.includes(b['unit']);
-    //
-    //   // Prioritize pinned tokens
-    //   if (isPinnedA && !isPinnedB) return -1;
-    //   if (!isPinnedA && isPinnedB) return 1;
-    //
-    //   // If both are pinned, sort by name
-    //   if (isPinnedA && isPinnedB) {
-    //     return a['name'].localeCompare(b['name']);
-    //   }
-    //
-    //   // If none are pinned, sort by balance in descending order
+      //   const isPinnedA = pinnedTokens.includes(a['unit']);
+      //   const isPinnedB = pinnedTokens.includes(b['unit']);
+      //
+      //   // Prioritize pinned tokens
+      //   if (isPinnedA && !isPinnedB) return -1;
+      //   if (!isPinnedA && isPinnedB) return 1;
+      //
+      //   // If both are pinned, sort by name
+      //   if (isPinnedA && isPinnedB) {
+      //     return a['name'].localeCompare(b['name']);
+      //   }
+      //
+      //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
-    }).filter((token: any) => token.name !== nativeToken.ticker);
+    })
+    .filter((token: any) => token.name !== nativeToken.ticker);
   return [nativeToken, ...availableTokens];
 });
 
 const calculateWeightedPriceImpact = computed(() => {
   if (swapType.value === 'limit') {
-    return 0
+    return 0;
   }
   let totalAmount = 0;
   let totalWeightedImpact = 0;
   if (!splits.value) {
-    return 0
+    return 0;
   }
   splits.value.forEach(({ price_impact, amount_in }) => {
     totalAmount += amount_in;
@@ -399,15 +460,15 @@ const calculateWeightedPriceImpact = computed(() => {
   }
 
   return Number(totalWeightedImpact / totalAmount);
-})
+});
 
 const slippageDisplay = computed(() => {
   return slippageRef.value === 'auto' ? 'AUTO' : `${slippageRef.value}%`;
-})
+});
 
 const pairPrice = computed(() => {
   if (poolError.value) {
-    return t('swap.poolNotFound')
+    return t('swap.poolNotFound');
   }
   const tokenA = selectedTokenA.value?.ticker;
   const tokenB = selectedTokenB.value?.ticker === 'ADA' ? tokenA : selectedTokenB.value?.ticker;
@@ -418,88 +479,102 @@ const pairPrice = computed(() => {
   }
 });
 
-watch( () => selectedTokenA.value?.ticker, async (newVal, oldVal) => {
-  if (isUpdating.value) return; // Prevent recursive updates
-  isUpdating.value = true; // Set flag to prevent mutual watcher trigger
+watch(
+  () => selectedTokenA.value?.ticker,
+  async (newVal, oldVal) => {
+    if (isUpdating.value) return; // Prevent recursive updates
+    isUpdating.value = true; // Set flag to prevent mutual watcher trigger
 
-  if (newVal === 'ADA') {
-    // If selectedTokenA is changed to ADA, set selectedTokenB to last non-ADA tokenB if exists
-    if (lastNonADATokenB.value) {
-      selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value?.ticker);
+    if (newVal === 'ADA') {
+      // If selectedTokenA is changed to ADA, set selectedTokenB to last non-ADA tokenB if exists
+      if (lastNonADATokenB.value) {
+        selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value?.ticker);
+      } else {
+        selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === oldVal);
+      }
     } else {
-      selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === oldVal);
+      // Store the last non-ADA token for selectedTokenA
+      lastNonADATokenA.value = { ...selectedTokenA.value };
+      // Set selectedTokenB to ADA
+      selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
     }
-  } else {
-    // Store the last non-ADA token for selectedTokenA
-    lastNonADATokenA.value = { ...selectedTokenA.value };
-    // Set selectedTokenB to ADA
-    selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
+    await averagePrice(
+      !selectedTokenA.value.unit ? selectedTokenA.value?.ticker : selectedTokenA.value.unit,
+      !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit
+    );
+    // Estimate prices after updating tokens
+    await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
+    isUpdating.value = false; // Reset flag
   }
-  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value?.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
-  // Estimate prices after updating tokens
-  await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
-  isUpdating.value = false; // Reset flag
-})
+);
 
-watch(() => selectedTokenB.value.ticker, async (newVal, oldVal) => {
-  if (isUpdating.value) return; // Prevent recursive updates
-  isUpdating.value = true; // Set flag to prevent mutual watcher trigger
-  if (newVal === 'ADA') {
-    // If selectedTokenB is changed to ADA, set selectedTokenA to last non-ADA tokenA if exists
-    if (lastNonADATokenA.value) {
-      selectedTokenA.value = availableTokens.value.find(token => token.ticker === lastNonADATokenA.value.ticker);
+watch(
+  () => selectedTokenB.value.ticker,
+  async (newVal, oldVal) => {
+    if (isUpdating.value) return; // Prevent recursive updates
+    isUpdating.value = true; // Set flag to prevent mutual watcher trigger
+    if (newVal === 'ADA') {
+      // If selectedTokenB is changed to ADA, set selectedTokenA to last non-ADA tokenA if exists
+      if (lastNonADATokenA.value) {
+        selectedTokenA.value = availableTokens.value.find(token => token.ticker === lastNonADATokenA.value.ticker);
+      } else {
+        selectedTokenA.value = availableTokens.value.find(token => token.ticker === oldVal);
+      }
     } else {
-      selectedTokenA.value = availableTokens.value.find(token => token.ticker === oldVal);
+      // Store the last non-ADA token for selectedTokenB
+      lastNonADATokenB.value = { ...selectedTokenB.value };
+      // If selectedTokenB is not ADA, keep selectedTokenA as ADA
+      if (selectedTokenA.value.ticker !== 'ADA') {
+        selectedTokenA.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
+      }
     }
-  } else {
-    // Store the last non-ADA token for selectedTokenB
-    lastNonADATokenB.value = { ...selectedTokenB.value };
-    // If selectedTokenB is not ADA, keep selectedTokenA as ADA
-    if (selectedTokenA.value.ticker !== 'ADA') {
-      selectedTokenA.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
-    }
+    await averagePrice(
+      !selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit,
+      !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit
+    );
+    // Estimate prices after updating tokens
+    await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
+    isUpdating.value = false; // Reset flag
   }
-  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
-  // Estimate prices after updating tokens
-  await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
-  isUpdating.value = false; // Reset flag
-})
+);
 
-watch(() => limit.value,  (newVal) => {
-  if (swapType.value === 'limit') {
-    selectedTokenB.value.quantity = (Number(newVal) * Number(selectedTokenA.value.quantity)).toString()
+watch(
+  () => limit.value,
+  newVal => {
+    if (swapType.value === 'limit') {
+      selectedTokenB.value.quantity = (Number(newVal) * Number(selectedTokenA.value.quantity)).toString();
+    }
   }
-})
+);
 
 const limitChange = (change: string) => {
-  const marketDelta = (Number(change) - price_ba2.value)/price_ba2.value * 100
+  const marketDelta = ((Number(change) - price_ba2.value) / price_ba2.value) * 100;
   if (marketDelta < -100000) {
-    setLimitByPercentage(-100000)
+    setLimitByPercentage(-100000);
   } else if (marketDelta > 100000) {
-    setLimitByPercentage(100000)
+    setLimitByPercentage(100000);
   } else {
     limit.value = change;
   }
-}
+};
 
 const setLimitByPercentage = (percentage: number) => {
   limit.value = (price_ba2.value * (1 + percentage / 100)).toString();
-}
+};
 
-const tokenAQuantityChange = (val) => {
+const tokenAQuantityChange = val => {
   debouncedEstimateTokenA(val);
-}
+};
 
-const debouncedEstimateTokenA = debounce((val) => {
+const debouncedEstimateTokenA = debounce(val => {
   if (!val || val === 0 || swapType.value === 'limit') {
-    selectedTokenB.value.quantity = '0'
+    selectedTokenB.value.quantity = '0';
   } else {
     estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, val, true);
   }
-}, 300)
+}, 300);
 
-
-const getPrice = (token) => {
+const getPrice = token => {
   if (!token || !token.quantity) return '';
   const multiplier = token.ticker === 'ADA' ? 1 : price_ba.value;
   const quantity = (token.quantity || '0').toString().replaceAll(',', '');
@@ -507,11 +582,11 @@ const getPrice = (token) => {
   const lastPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
 
   return (Number(quantity) * multiplier * lastPrice).toLocaleString('en-US');
-}
+};
 
-const setSlippage = (val) => {
+const setSlippage = val => {
   slippageRef.value = val;
-}
+};
 
 const switchPair = () => {
   // Set the flag to prevent watchers from triggering
@@ -537,55 +612,69 @@ const switchPair = () => {
   setTimeout(() => {
     isUpdating.value = false;
   }, 100);
-}
+};
 
 const estimate = (token_in: string, token_out: string, amount_in, update) => {
   if (!loggedWallet.value) {
-    return
+    return;
   }
   if (!token_in && !token_out) {
-    return
+    return;
   }
   if (!amount_in) {
-    total_output_without_slippage.value = 0
+    total_output_without_slippage.value = 0;
     return;
   } else if (isNaN(amount_in)) {
     return;
   }
   const slippage = slippageRef.value === 'unlimited' ? '-1' : Number(slippageRef.value).toString();
-  dexHunterApi.estimate(amount_in, token_in, token_out, Number(slippage), blacklisted_dexes.value).then(res => {
-    poolError.value = false;
-    const data = res.data;
-    price_ab.value = data.net_price_reverse;
-    price_ba.value = data.net_price;
-    if (update) {
-      total_output_without_slippage.value = data.total_output_without_slippage
-      splits.value = data.splits
-      estimation.value = data
-      if (swapType.value !== 'limit') {
-        selectedTokenB.value.quantity = filters.toCurrency(total_output_without_slippage.value, false, selectedTokenB.value.decimals, '', '', false, 0);
+  dexHunterApi
+    .estimate(amount_in, token_in, token_out, Number(slippage), blacklisted_dexes.value)
+    .then(res => {
+      poolError.value = false;
+      const data = res.data;
+      price_ab.value = data.net_price_reverse;
+      price_ba.value = data.net_price;
+      if (update) {
+        total_output_without_slippage.value = data.total_output_without_slippage;
+        splits.value = data.splits;
+        estimation.value = data;
+        if (swapType.value !== 'limit') {
+          selectedTokenB.value.quantity = filters.toCurrency(
+            total_output_without_slippage.value,
+            false,
+            selectedTokenB.value.decimals,
+            '',
+            '',
+            false,
+            0
+          );
+        }
       }
-    }
-  }).catch((_e) => {
-    poolError.value = true
-  });
-}
+    })
+    .catch(_e => {
+      poolError.value = true;
+    });
+};
 
 const averagePrice = (token_in, token_out) => {
   if (!loggedWallet.value) {
-    return
+    return;
   }
   if (!token_in && !token_out) {
-    return
+    return;
   }
-  dexHunterApi.getAveragePrice(token_in, token_out).then(res => {
-    price_ab2.value = res.price_ab;
-    price_ba2.value = res.price_ba;
-    limit.value = structuredClone(price_ba2.value).toString()
-  }).catch(() => {
-    // Silently handle error - average price is optional
-  });
-}
+  dexHunterApi
+    .getAveragePrice(token_in, token_out)
+    .then(res => {
+      price_ab2.value = res.price_ab;
+      price_ba2.value = res.price_ba;
+      limit.value = structuredClone(price_ba2.value).toString();
+    })
+    .catch(() => {
+      // Silently handle error - average price is optional
+    });
+};
 
 const performPeriodicEstimate = async () => {
   // Add defensive checks for undefined tokens
@@ -596,77 +685,94 @@ const performPeriodicEstimate = async () => {
 
   // Only estimate based on tokenA quantity (selling amount)
   const quantity = selectedTokenA.value.quantity || '0';
-  const amount = Number(quantity.toString().replaceAll(',', ''))
+  const amount = Number(quantity.toString().replaceAll(',', ''));
   if (amount === 0) {
     await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
   } else {
     await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
   }
-}
+};
 
 const prepareSwap = async () => {
-  loading.value = true
-  let swapRes
-  const amount = Number(selectedTokenA.value['quantity'].replaceAll(',', ''))
+  loading.value = true;
+  let swapRes;
+  const amount = Number(selectedTokenA.value['quantity'].replaceAll(',', ''));
   try {
     // Register address with DexHunter before swapping (if not already registered)
     await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
 
     if (swapType.value === 'swap') {
       const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
-      swapRes = await dexHunterApi.swap(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], slippage)
+      swapRes = await dexHunterApi.swap(
+        amount,
+        loggedWallet.value?.baseAddress,
+        selectedTokenA.value['unit'],
+        selectedTokenB.value['unit'],
+        slippage
+      );
     } else if (swapType.value === 'limit') {
-      const toSplit = limitType.value === 'split'
-      const multiples = toSplit ? limitSplit.value : 1
-      swapRes = await dexHunterApi.swapLimitBuild(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], 'GeroLabs', multiples, toSplit, Number(limit.value))
+      const toSplit = limitType.value === 'split';
+      const multiples = toSplit ? limitSplit.value : 1;
+      swapRes = await dexHunterApi.swapLimitBuild(
+        amount,
+        loggedWallet.value?.baseAddress,
+        selectedTokenA.value['unit'],
+        selectedTokenB.value['unit'],
+        'GeroLabs',
+        multiples,
+        toSplit,
+        Number(limit.value)
+      );
     }
-    const txCbor = swapRes.cbor
-    const partialSign = true
+    const txCbor = swapRes.cbor;
+    const partialSign = true;
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
       data: { tx: txCbor, partialSign, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
-    debugLog('signaturesRes', signaturesRes)
+    debugLog('signaturesRes', signaturesRes);
     if (signaturesRes.error) {
-      snackbar.setError(signaturesRes.error.info)
+      snackbar.setError(signaturesRes.error.info);
     } else {
-      const signRes: any = await dexHunterApi.swapSign(signaturesRes.data, txCbor)
-      await submit(signRes.cbor)
+      const signRes: any = await dexHunterApi.swapSign(signaturesRes.data, txCbor);
+      await submit(signRes.cbor);
     }
   } catch (error: any) {
     debugLog('[Swap] Error:', error);
     if (error['response']) {
-      snackbar.setError(`Swap Failed. Error Code: ${error['response'].status} - ${JSON.stringify(error['response'].data)}`)
+      snackbar.setError(
+        `Swap Failed. Error Code: ${error['response'].status} - ${JSON.stringify(error['response'].data)}`
+      );
     } else {
-      snackbar.setError(error)
+      snackbar.setError(error);
     }
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const submit = async (cborHex: string) => {
-  const submitResult = await Messaging.sendToBackgroundFromOptions({
+  const submitResult = (await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SUBMIT_TX,
     data: {
       txCbor: cborHex,
       witnessHex: null,
-      utxos: utxos.value
-    }
-  }) as { data: { txId?: string; error?: string } };
+      utxos: utxos.value,
+    },
+  })) as { data: { txId?: string; error?: string } };
 
   if (submitResult.data.error) {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`)
+  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`);
 
   // Clear the input fields after successful submission
   clearInputs();
 
-  emit('onSwap')
+  emit('onSwap');
   debugLog('[Swap] Transaction submitted:', txId);
-}
+};
 
 const clearInputs = () => {
   // Reset quantities to '0'
@@ -677,19 +783,18 @@ const clearInputs = () => {
   if (swapType.value === 'limit') {
     limit.value = price_ba2.value.toString();
   }
-}
+};
 
-const excludedChange = async (val) => {
-  blacklisted_dexes.value = val
-  await performPeriodicEstimate()
-}
+const excludedChange = async val => {
+  blacklisted_dexes.value = val;
+  await performPeriodicEstimate();
+};
 
 const setMaxTokenA = () => {
   if (!selectedTokenA.value) return;
 
   const decimals = selectedTokenA.value.decimals || 0;
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-
   // Clean and parse balance (handles formatted strings)
   const balanceInSmallestUnit = Number(filters.cleanNumericValue(selectedTokenA.value.balance || 0));
 
@@ -706,16 +811,19 @@ const setMaxTokenA = () => {
     selectedTokenA.value.quantity = maxBalance;
     tokenAQuantityChange(maxBalance);
   }
-}
+};
 
 onMounted(async () => {
-  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
+  await averagePrice(
+    !selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit,
+    !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit
+  );
   intervalId.value = setInterval(performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
-})
+});
 
 onBeforeUnmount(() => {
   clearInterval(intervalId.value);
-})
+});
 </script>
 <style scoped>
 /* Compact swap widget styles */
@@ -747,7 +855,7 @@ onBeforeUnmount(() => {
   box-shadow: none !important;
   min-height: auto !important;
   background: #101828 !important;
-  border: 1px solid #1F242F !important;
+  border: 1px solid #1f242f !important;
 }
 
 .compact-swap-widget >>> .card-container.v-card {
@@ -842,7 +950,7 @@ onBeforeUnmount(() => {
 }
 
 /* Make number inputs more compact */
-.compact-swap-widget >>> input[type="number"] {
+.compact-swap-widget >>> input[type='number'] {
   padding: 4px 8px !important;
 }
 
@@ -866,5 +974,4 @@ onBeforeUnmount(() => {
   margin: 12px auto 0 auto !important;
   display: block !important;
 }
-
 </style>

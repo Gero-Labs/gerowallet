@@ -348,7 +348,7 @@ const tokenValue = computed(() => {
     .replace(/\s/g, '');
   const quantity = parseFloat(quantityStr);
   if (!quantity || quantity <= 0 || isNaN(quantity)) return 0;
-
+  
   return quantity * tokenPricePerUnit.value;
 });
 
