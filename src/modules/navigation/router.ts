@@ -266,7 +266,8 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   }
 
   // Check if the route is under maintenance
-  if (isRouteUnderMaintenance(to.name)) {
+  // Only check maintenance if feature flags are initialized to avoid false redirects on page refresh
+  if (featureFlagsStore.state.isInitialized && isRouteUnderMaintenance(to.name)) {
     console.warn(`🚧 Route "${to.name}" is under maintenance. Redirecting to dashboard.`);
     return next({ path: '/' });
   }

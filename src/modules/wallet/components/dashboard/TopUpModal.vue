@@ -173,7 +173,6 @@ const {
   resetState,
   handlePassKeySuccess: composableHandlePassKeySuccess,
   handlePassKeyError: composableHandlePassKeyError,
-  setPasswordFieldRef,
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'notifications.transactionSubmitted',

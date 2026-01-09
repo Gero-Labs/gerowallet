@@ -1140,6 +1140,7 @@ export default {
   'navigation.wrongPassword': 'Wrong Password',
   'navigation.youreGiving': 'You\'re giving',
   'navigation.youreReceiving': 'You\'re receiving',
+  'notifications.transactionSubmitted': 'Transaction Submitted Successfully. Tx ID: {txId}',
   'perpetuals.24hPriceAction': '24h Price Action',
   'perpetuals.accumulatedBorrowFee': 'Accumulated Borrow Fee:',
   'perpetuals.allPositionsAndOrders': 'All your positions and orders will appear here',
