@@ -36,21 +36,29 @@
 
             <v-divider class="mx-1" />
 
-            <!-- Spending Password (Normal wallets only) -->
-            <v-list-item two-line v-if="isNormalWallet" @click="handleUnlockMethodSelect('password')" class="mb-0">
+            <!-- Password Unlock -->
+            <v-list-item two-line @click="handleUnlockMethodSelect('password')" class="mb-0">
               <v-list-item-avatar class="my-0">
                 <v-icon>mdi-form-textbox-password</v-icon>
               </v-list-item-avatar>
               <v-list-item-content>
-                <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
-                <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
+                <!-- Normal wallets: Use spending password for unlock -->
+                <template v-if="isNormalWallet">
+                  <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
+                </template>
+                <!-- PRF wallets: Separate password for UI locking only -->
+                <template v-else>
+                  <v-list-item-title>{{ $t('security.lockPassword') }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ $t('security.useLockPasswordToUnlock') }}</v-list-item-subtitle>
+                </template>
               </v-list-item-content>
               <v-list-item-icon v-if="selectedUnlockMethod === 'password'" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
               </v-list-item-icon>
             </v-list-item>
 
-            <v-divider v-if="isNormalWallet" class="mx-1" />
+            <v-divider class="mx-1" />
 
             <!-- PIN Code -->
             <v-list-item two-line @click="handleUnlockMethodSelect('pin')" class="mb-0">
@@ -170,10 +178,17 @@
                   {{ isPassKeyRegistered ? $t('security.passKeyRegistered') : $t('security.passKeyNotRegistered') }}
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ isPassKeyRegistered ? $t('security.passKeyRegisteredDescription') : $t('security.passKeyNotRegisteredDescription') }}
+                  <!-- PRF wallets: PassKey is core encryption, cannot be deregistered -->
+                  <template v-if="isPrfWallet && isPassKeyRegistered">
+                    {{ $t('security.passKeyPrfWalletDescription') }}
+                  </template>
+                  <!-- Normal wallets: Regular descriptions -->
+                  <template v-else>
+                    {{ isPassKeyRegistered ? $t('security.passKeyRegisteredDescription') : $t('security.passKeyNotRegisteredDescription') }}
+                  </template>
                 </v-list-item-subtitle>
               </v-list-item-content>
-              <v-list-item-action>
+              <v-list-item-action v-if="!isPrfWallet">
                 <v-btn
                   small
                   text
@@ -185,14 +200,30 @@
                   {{ isPassKeyRegistered ? $t('security.deregister') : $t('security.register') }}
                 </v-btn>
               </v-list-item-action>
+              <!-- PRF wallets: Show lock icon instead of button -->
+              <v-list-item-action v-else-if="isPrfWallet && isPassKeyRegistered">
+                <v-tooltip bottom content-class="custom-tooltip">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-icon
+                      color="primary"
+                      v-bind="attrs"
+                      v-on="on"
+                    >
+                      mdi-lock
+                    </v-icon>
+                  </template>
+                  <span>{{ $t('security.passKeyRequiredForPrfWallet') }}</span>
+                </v-tooltip>
+              </v-list-item-action>
             </v-list-item>
           </v-list>
 
-          <v-divider class="my-3 mx-1" />
+          <!-- Divider before password autofill section (Normal non-PRF wallets only) -->
+          <v-divider class="my-3 mx-1" v-if="isNormalWallet && !isPrfWallet" />
 
           <v-list dense class="pa-0 transparent" nav>
-            <!-- Use PassKey for Password Autofill (Normal wallets only) -->
-            <v-list-item v-if="isNormalWallet" :disabled="isPassKeyAutofillDisabled">
+            <!-- Use PassKey for Password Autofill (Normal non-PRF wallets only) -->
+            <v-list-item v-if="isNormalWallet && !isPrfWallet" :disabled="isPassKeyAutofillDisabled">
               <v-list-item-avatar class="my-0">
                 <v-icon :disabled="isPassKeyAutofillDisabled">mdi-form-textbox-password</v-icon>
               </v-list-item-avatar>
@@ -217,8 +248,8 @@
               </v-list-item-action>
             </v-list-item>
 
-            <!-- Auto-Trigger PassKey Authentication (Normal wallets only) -->
-            <v-list-item v-if="isNormalWallet" :disabled="!passKeyForPasswordAutofill">
+            <!-- Auto-Trigger PassKey Authentication (Normal non-PRF wallets only) -->
+            <v-list-item v-if="isNormalWallet && !isPrfWallet" :disabled="!passKeyForPasswordAutofill">
               <v-list-item-avatar class="my-0">
                 <v-img :src="assets.autoTriggerSvg" contain :style="{
                   width: '24px',
@@ -247,7 +278,8 @@
               </v-list-item-action>
             </v-list-item>
 
-            <v-divider class="my-3 mx-1" v-if="isNormalWallet" />
+            <!-- Divider after password autofill section (Normal non-PRF wallets only) -->
+            <v-divider class="my-3 mx-1" v-if="isNormalWallet && !isPrfWallet" />
 
             <!-- Use PassKey for Unlocking -->
             <v-list-item :disabled="isPassKeyUnlockDisabled">
@@ -418,6 +450,11 @@ const isNormalWallet = computed(() => {
   return wallet?.type === WalletType.Normal;
 });
 
+const isPrfWallet = computed(() => {
+  const wallet = walletStore.loggedWallet;
+  return wallet?.encryptionMethod === 'prf';
+});
+
 const isPassKeyAutofillDisabled = computed(() => {
   // Disable if browser doesn't support PassKey, if PassKey not registered, if loading, or if no unlock method is set
   return !isPassKeySupported.value || !isPassKeyRegistered.value || loadingPassKeyAutofill.value || !selectedUnlockMethod.value;
@@ -504,7 +541,12 @@ async function loadCurrentSettings() {
     const passKeyAutoTriggerUnlockConfig = await configTable.where({ key: 'passKeyAutoTriggerUnlock' }).first();
 
     // Check if PassKey is registered
-    isPassKeyRegistered.value = !!(credentialConfig?.value);
+    // For PRF wallets, credential is in wallet record; for normal wallets, it's in config table
+    const isPrfWallet = walletStore.loggedWallet?.encryptionMethod === 'prf' ||
+                        !!walletStore.loggedWallet?.webAuthnCredentialId;
+    isPassKeyRegistered.value = isPrfWallet
+      ? !!walletStore.loggedWallet?.webAuthnCredentialId
+      : !!(credentialConfig?.value);
 
     passKeyForUnlock.value = passKeyUnlockConfig?.value || false;
     passKeyForPasswordAutofill.value = passKeyAutofillConfig?.value || false;
@@ -527,9 +569,18 @@ async function loadCurrentSettings() {
 async function handleUnlockMethodSelect(method: UnlockMethod) {
   errorMessage.value = '';
 
-  if (method === null || method === 'password') {
-    // These methods don't require setup, save immediately
+  if (method === null) {
+    // None - save immediately
     await saveUnlockMethod(method);
+  } else if (method === 'password') {
+    // Password unlock:
+    // - Normal wallets: Use existing spending password (save immediately)
+    // - PRF wallets: Need to set up lock password (require setup)
+    if (isPrfWallet.value) {
+      emit('setup-unlock-method', method); // PRF wallets need lock password setup
+    } else {
+      await saveUnlockMethod(method); // Normal wallets use spending password
+    }
   } else {
     // PIN and Pattern require setup
     emit('setup-unlock-method', method);

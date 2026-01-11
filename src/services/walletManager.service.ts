@@ -95,6 +95,11 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          // PRF encryption fields
+          encryptionMethod: walletBg.encryptionMethod,
+          prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
+          prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
+          webAuthnCredentialId: walletBg.webAuthnCredentialId,
         });
         LoadingState.setText('Restoring wallet...');
         await this.initializeWallet(walletBg);
@@ -141,6 +146,15 @@ export class WalletManager {
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
         debugLog('Creating new WalletBg instance for wallet:', wallet.id);
 
+        // Debug: Check what fields the wallet object has from database
+        console.log('🔍 [WalletManager] Wallet from database - all keys:', Object.keys(wallet));
+        console.log('🔍 [WalletManager] Wallet PRF fields:', {
+          encryptionMethod: wallet.encryptionMethod,
+          hasPrfEncryptedPrivateKey: !!wallet.prfEncryptedPrivateKey,
+          hasPrfEncryptedMnemonic: !!wallet.prfEncryptedMnemonic,
+          hasWebAuthnCredentialId: !!wallet.webAuthnCredentialId,
+        });
+
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
         TapToolsStore.clear();
@@ -151,6 +165,15 @@ export class WalletManager {
         } else {
           walletBg = new WalletBg(wallet);
         }
+
+        // Debug: Check WalletBg instance has PRF fields
+        console.log('🔍 [WalletManager] WalletBg PRF fields after construction:', {
+          encryptionMethod: walletBg.encryptionMethod,
+          hasPrfEncryptedPrivateKey: !!walletBg.prfEncryptedPrivateKey,
+          hasPrfEncryptedMnemonic: !!walletBg.prfEncryptedMnemonic,
+          hasWebAuthnCredentialId: !!walletBg.webAuthnCredentialId,
+        });
+
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -171,6 +194,11 @@ export class WalletManager {
           token: walletBg.token,
           btSupported: walletBg.btSupported,
           xfp: walletBg.xfp,
+          // PRF encryption fields
+          encryptionMethod: walletBg.encryptionMethod,
+          prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
+          prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
+          webAuthnCredentialId: walletBg.webAuthnCredentialId,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -580,7 +608,8 @@ export class WalletManager {
           throw new Error('Encrypted private key not found or password not provided');
         }
 
-        unlockValid = this.walletBg.verifySpendingPassword(unlockCredential as string);
+        // IMPORTANT: verifySpendingPassword is now async (supports PRF)
+        unlockValid = await this.walletBg.verifySpendingPassword(unlockCredential as string);
       } else {
         // Pre-login: load wallet from database
         const { getAllWallets } = await import('@/db/gero-db');
@@ -591,18 +620,44 @@ export class WalletManager {
           throw new Error('Password unlock is only supported for Normal wallets');
         }
 
-        const encryptedPrivateKey = wallet.encryptedPrivateKey;
-        if (!encryptedPrivateKey || !unlockCredential) {
-          throw new Error('Encrypted private key not found or password not provided');
-        }
+        // Check wallet encryption method
+        if (wallet.encryptionMethod === 'prf') {
+          // PRF WALLET - Pre-login unlock
 
-        // Verify password by attempting to decrypt
-        try {
-          const { decryptWithPassword } = await import('@/shared/utils/crypto');
-          decryptWithPassword(unlockCredential as string, encryptedPrivateKey);
-          unlockValid = true;
-        } catch (error) {
-          unlockValid = false;
+          // For PRF wallets with optional password, verify the password hash
+          if (wallet.prfSpendingPassword) {
+            // PRF wallet with password unlock enabled
+            if (!unlockCredential) {
+              throw new Error('Password required for PRF wallet with password unlock');
+            }
+
+            // Verify password hash (PBKDF2-HMAC-SHA512)
+            const { verifySpendingPassword } = await import('@/shared/utils/webauthn-prf');
+            unlockValid = await verifySpendingPassword(
+              unlockCredential as string,
+              wallet.prfSpendingPassword
+            );
+          } else {
+            // PRF wallet without password (pure PRF mode)
+            // No password verification needed - PassKey auth already happened in UI
+            unlockValid = true;
+          }
+        } else {
+          // PASSWORD WALLET - Pre-login unlock (existing logic)
+          const encryptedPrivateKey = wallet.encryptedPrivateKey;
+          if (!encryptedPrivateKey || !unlockCredential) {
+            throw new Error('Encrypted private key not found or password not provided');
+          }
+
+          // Verify password by attempting to decrypt
+          try {
+            const { decrypt, decryptWithPassword } = await import('@/shared/utils/crypto');
+            const decrypted = decrypt(encryptedPrivateKey, unlockCredential as string);
+            decryptWithPassword(unlockCredential as string, JSON.parse(decrypted));
+            unlockValid = true;
+          } catch (error) {
+            unlockValid = false;
+          }
         }
       }
     } else if (unlockCredential === 'passkey-authenticated') {

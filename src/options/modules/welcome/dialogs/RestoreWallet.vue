@@ -82,7 +82,15 @@
                 style="max-width: 534px; min-height: 591px"
                 :disabled="creatingWalletLoader"
               >
-                <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
+                <v-card-text class="px-0 d-flex row no-gutters">
+                  <!-- PRF Mode Indicator (if PRF supported - Pure PRF mode only) -->
+                  <template v-if="prfSupported">
+                    <v-alert color="primary" icon="mdi-shield-key" prominent dense outlined border="left" class="mb-4" style="width: 100%;">
+                      <div class="font-weight-bold text-left">{{ $t('welcome.prfEncryption') }}</div>
+                      <div class="text-caption text-left">{{ $t('welcome.prfEncryptionDesc') }}</div>
+                    </v-alert>
+                  </template>
+
                   <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpWalletName') }}</h2>
                   <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">
                     {{ $t('welcome.chooseNameToIdentify') }}
@@ -97,7 +105,7 @@
                     :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                   ></v-text-field>
                   <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.walletIcon') }}</h2>
-                  <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
+                  <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2">
                     <v-radio value="green">
                       <template v-slot:label>
                         <v-avatar size="32">
@@ -141,13 +149,14 @@
                       </template>
                     </v-radio>
                   </v-radio-group>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">
-                    Set up your spending password
-                  </h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">
-                    You'll use this to log into your wallet and make transactions.
-                  </h3>
-                  <v-text-field
+
+                  <!-- Spending Password Section (Password mode only - hidden for PRF) -->
+                  <template v-if="!isPrfMode">
+                    <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpSpendingPassword') }}</h2>
+                    <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.youllUseThisToLogin') }}</h3>
+
+                    <!-- Password Fields (Password mode only) -->
+                    <v-text-field
                     style="width: 100%"
                     block
                     dense
@@ -155,7 +164,7 @@
                     filled
                     :label="$t('wallet.spendingPassword')"
                     :type="show1 ? 'text' : 'password'"
-                    :rules="[
+                    :rules="passwordRequired ? [
                       rules.required(),
                       rules.spaceNotAllowed,
                       rules.minCharacters(10),
@@ -163,7 +172,7 @@
                       rules.containCapital,
                       rules.containLowerCase,
                       rules.containSpecialCharacter,
-                    ]"
+                    ] : []"
                   >
                     <template v-slot:append>
                       <v-icon @click="show1 = !show1" tabindex="-1">
@@ -178,10 +187,10 @@
                     filled
                     :label="$t('welcome.confirmPassword')"
                     :type="show2 ? 'text' : 'password'"
-                    :rules="[
+                    :rules="passwordRequired ? [
                       rules.required(),
                       newWallet.password === newWallet.confirmPassword || $t('welcome.passwordsMustMatch'),
-                    ]"
+                    ] : []"
                   >
                     <template v-slot:append>
                       <v-icon @click="show2 = !show2" tabindex="-1">
@@ -189,12 +198,14 @@
                       </v-icon>
                     </template>
                   </v-text-field>
+                  </template>
+
                   <v-checkbox
                     style="width: 100%"
                     class="mt-0 text-left"
                     hide-details
                     v-model="newWallet.recoverPasswordChecked"
-                    :label="$t('welcome.understandPasswordRecovery')"
+                    :label="isPrfMode ? $t('welcome.understandPrfRecovery') : $t('welcome.understandPasswordRecovery')"
                     :rules="[newWallet.recoverPasswordChecked]"
                   ></v-checkbox>
                   <v-checkbox
@@ -265,7 +276,7 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
-import { ref, computed, onUnmounted, getCurrentInstance } from 'vue';
+import { ref, computed, onUnmounted, onMounted, getCurrentInstance } from 'vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
 import { Theme, NetworkScheme } from '@/models/types';
@@ -301,6 +312,8 @@ const form2 = ref<any>(null);
 const step = ref<number>(1);
 const show1 = ref<boolean>(false);
 const show2 = ref<boolean>(false);
+const prfSupported = ref<boolean>(false);
+const webAuthnCredentialId = ref<string | null>(null);
 const newWallet = ref({
   name: '',
   icon: '',
@@ -309,6 +322,8 @@ const newWallet = ref({
   termsChecked: false,
   recoverPasswordChecked: false,
   recoverSeedChecked: false,
+  encryptionMethod: 'password' as 'password' | 'prf',
+  backupMnemonic: true, // Default: backup mnemonic (PRF mode only)
 });
 const valid2 = ref<boolean>(false);
 const creatingWalletLoader = ref<boolean>(false);
@@ -359,6 +374,31 @@ const valid = computed({
     return false;
   },
   set(_value: boolean) {},
+});
+
+const isPrfMode = computed(() => {
+  return prfSupported.value && newWallet.value.encryptionMethod === 'prf';
+});
+
+const passwordRequired = computed(() => {
+  // Password only required for password mode (never for PRF mode - pure PRF only)
+  return !isPrfMode.value;
+});
+
+// Lifecycle hooks
+onMounted(async () => {
+  try {
+    const { isPrfSupported } = await import('@/shared/utils/webauthn-prf');
+    prfSupported.value = await isPrfSupported();
+
+    // Default to PRF if supported
+    if (prfSupported.value) {
+      newWallet.value.encryptionMethod = 'prf';
+    }
+  } catch (error) {
+    console.error('Error checking PRF support:', error);
+    prfSupported.value = false;
+  }
 });
 
 // Methods
@@ -415,19 +455,91 @@ const walletCreationStep2 = async () => {
       }
 
       // Wallet doesn't exist - create new one
-      const wallet = await GeroStore.createNewWallet(
-        newWallet.value.name,
-        newWallet.value.icon,
-        Theme.GERO,
-        seedToStr.value,
-        newWallet.value.password,
-        props.network.blockchain,
-        props.network.network
-      );
+      let wallet;
+
+      if (isPrfMode.value) {
+        // ========================================================================
+        // PRF WALLET RESTORATION (PURE PRF MODE - NO PASSWORD)
+        // ========================================================================
+        console.log('🔐 PRF Mode Detected (Restore - Pure PRF):', {
+          isPrfMode: isPrfMode.value,
+          prfSupported: prfSupported.value,
+          encryptionMethod: newWallet.value.encryptionMethod,
+          backupMnemonic: newWallet.value.backupMnemonic
+        });
+
+        // Step 1: Register WebAuthn credential with PRF
+        const { registerWebAuthnCredential } = await import('@/shared/utils/security');
+
+        try {
+          const { credentialId, prfEnabled } = await registerWebAuthnCredential(
+            'temp-wallet-id', // Temporary ID, actual wallet ID will be allocated in createNewWallet
+            newWallet.value.name
+          );
+
+          console.log('🔑 WebAuthn Registration Result (Restore):', {
+            credentialId,
+            prfEnabled
+          });
+
+          if (!prfEnabled) {
+            throw new Error(vmProxy.$t('security.passKeyPrfNotSupported'));
+          }
+
+          webAuthnCredentialId.value = credentialId;
+
+          // Step 2: Create wallet with PRF options and provided mnemonic (Pure PRF mode - no password unlock)
+          const prfOptions = {
+            usePrf: true,
+            credentialId,
+            passwordUnlockEnabled: false, // Pure PRF mode - no password
+            backupMnemonic: newWallet.value.backupMnemonic,
+          };
+
+          console.log('📦 Calling GeroStore.createNewWallet with PRF options (Restore):', prfOptions);
+
+          wallet = await GeroStore.createNewWallet(
+            newWallet.value.name,
+            newWallet.value.icon,
+            Theme.GERO,
+            seedToStr.value, // Use provided mnemonic for restoration
+            newWallet.value.password || 'temp-password', // Temp password for PRF wallets without password
+            props.network.blockchain,
+            props.network.network,
+            prfOptions
+          );
+
+          console.log('✅ Wallet restored:', wallet);
+        } catch (error: any) {
+          // User cancelled or PRF not supported
+          if (error.message?.includes('cancelled') || error.message?.includes('NotAllowedError')) {
+            console.log('User cancelled WebAuthn registration');
+            creatingWalletLoader.value = false;
+            return; // Don't show error, user cancelled
+          }
+          throw error;
+        }
+      } else {
+        // ========================================================================
+        // PASSWORD WALLET RESTORATION (EXISTING)
+        // ========================================================================
+
+        wallet = await GeroStore.createNewWallet(
+          newWallet.value.name,
+          newWallet.value.icon,
+          Theme.GERO,
+          seedToStr.value, // Use provided mnemonic for restoration
+          newWallet.value.password,
+          props.network.blockchain,
+          props.network.network
+        );
+      }
 
       await performLogin(wallet);
-    } catch (error) {
-      console.error('Error creating wallet:', error);
+    } catch (error: any) {
+      console.error('Error restoring wallet:', error);
+      // Show user-friendly error message
+      vmProxy.$snackbar?.setError(error.message || vmProxy.$t('errors.unknownError'));
       creatingWalletLoader.value = false;
     }
   }

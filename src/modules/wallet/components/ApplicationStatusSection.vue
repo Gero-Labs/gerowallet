@@ -30,7 +30,7 @@
           </div>
         </div>
 
-        <img src="@/assets/front_card_no_mcx2.png" alt="Gero Card" class="card-image" />
+        <img :src="assets.frontCardNoMcx2" alt="Gero Card" class="card-image" />
       </div>
 
       <!-- Right: Status Information -->
@@ -88,6 +88,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import assets from '@/utils/assets';
 
 interface Props {
   kycStatus?: string;

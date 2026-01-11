@@ -579,7 +579,7 @@ const formatADA = (eurAmount: number) => {
   aspect-ratio: 345 / 222;
   max-width: 90%;
   margin: 0 auto;
-  background-image: url('@/modules/wallet/icons/card.svg');
+  background-image: url('@/assets/front_card_no_mcx2.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

@@ -636,6 +636,165 @@ if (isCertificateOrWithdrawalOnly) {
 
 **Solution**: Virtual module plugin in `vite.config.background.mts` that intercepts pbkdf2 imports with `enforce: 'pre'` and provides proper ESM exports.
 
+### 10. **PRF (PassKey) Wallet Patterns**
+**Implementation**: WebAuthn PRF extension for hardware-backed biometric wallet encryption (Phases 1-7 complete)
+
+**Documentation**: See `PRF_IMPLEMENTATION_COMPLETE.md` and `PRF_PHASE_7_UX_ENHANCEMENTS.md` for comprehensive details
+
+#### PRF Wallet Credential Storage Pattern
+
+**Critical Rule**: PRF wallets store WebAuthn credential ID in wallet record; normal wallets use config table.
+
+```typescript
+// ALWAYS use this pattern for credential detection
+const isPrfWallet = wallet?.encryptionMethod === 'prf';
+const credentialId = isPrfWallet
+  ? wallet.webAuthnCredentialId  // From wallet record
+  : await configTable.where({ key: 'webAuthnCredentialId' }).first()?.value;  // From config table
+```
+
+**Applies To**:
+- Lock settings dialog (registration status detection)
+- Unlock wallet dialog (PassKey button visibility)
+- Security tab (credential detection)
+- Any component checking PassKey registration
+
+**Why**: PRF wallets use credential ID for core encryption (stored in wallet record). Normal wallets use PassKey for autofill convenience only (stored in config).
+
+#### WebAuthn in Chrome Extensions (Side Panel Pattern)
+
+**Problem**: WebAuthn requires user activation (popup windows), doesn't work in side panels.
+
+**Solution**: Hybrid approach with small popup for authentication only
+
+```typescript
+// 1. Detect side panel context
+const isSidePanel = window.location.href.includes('tabId=');
+
+if (isSidePanel) {
+  // 2. Open PassKeyAuth popup - CRITICAL: Query params BEFORE hash
+  const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
+  const popup = window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+
+  // 3. Listen for result via postMessage
+  const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (event.origin !== extensionOrigin) return;
+
+    if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+      const { success, privateKeyBytes, error } = event.data.payload;
+      // Handle result
+    }
+  });
+} else {
+  // Already in popup - direct WebAuthn call
+  const privateKeyBytes = await decryptPrivateKeyWithPrf(...);
+}
+```
+
+**Key Points**:
+- Side panel: Persistent UI, better UX
+- Small popup: Only for WebAuthn (auto-closes)
+- Query params: Must come BEFORE hash (`?mode=privateKey#/route`)
+- Communication: `postMessage` API bridges contexts
+- Origin validation: Always check `event.origin`
+
+**Files Implementing This Pattern**:
+- `src/popup/modules/views/DappSignData.vue` - Side panel detection
+- `src/modules/authentication/views/PassKeyAuth.vue` - Popup authentication handler
+- `src/chrome/config.ts` - `passKeyAuth: 'passkey-auth'` popup type
+
+#### Wallet Lock vs Transaction Security (PRF Wallets)
+
+**Critical Distinction**: PRF wallets have TWO separate security layers
+
+| Layer | Purpose | PRF Wallets | Normal Wallets |
+|-------|---------|-------------|----------------|
+| **Core Encryption** | Protect private keys | PassKey (hardware-backed) | Spending password (software) |
+| **Auto-Lock** | Lock UI after idle | PIN/Pattern/Lock Password | PIN/Pattern/Spending Password |
+| **Transaction Signing** | Authorize operations | PassKey (always required) | Spending password |
+| **Password Autofill** | Convenience feature | N/A (hidden in UI) | Optional PassKey autofill |
+
+**Implementation**:
+
+```vue
+<!-- Lock Settings: Different labels for PRF wallets -->
+<template>
+  <!-- Normal wallets: "Spending Password" -->
+  <v-list-item-title v-if="isNormalWallet">
+    {{ $t('security.spendingPassword') }}
+  </v-list-item-title>
+
+  <!-- PRF wallets: "Lock Password" (separate from PassKey) -->
+  <v-list-item-title v-else>
+    {{ $t('security.lockPassword') }}
+  </v-list-item-title>
+</template>
+```
+
+**Hidden Sections for PRF Wallets**:
+- "Use PassKey for Password Autofill" - Hidden (no spending password exists)
+- "Auto-Trigger PassKey Authentication" - Hidden (no spending password exists)
+
+**Lock Password Setup**:
+- Component: `src/modules/dashboard/dialogs/LockPasswordSetupDialog.vue`
+- Purpose: Set password for UI auto-lock (separate from PassKey encryption)
+- Storage: Hash with PBKDF2, store as `lockPasswordHash` in config table
+- Pattern: Reuses PIN setup pattern (two-step verification)
+
+#### PRF Wallet Safety Checks
+
+**Prevent PassKey Deregistration**:
+```vue
+<!-- Normal wallets: Show Register/Deregister button -->
+<v-btn v-if="!isPrfWallet" @click="handlePassKeyDeregister()">
+  {{ isPassKeyRegistered ? $t('security.deregister') : $t('security.register') }}
+</v-btn>
+
+<!-- PRF wallets: Show lock icon with warning tooltip -->
+<v-tooltip v-else-if="isPrfWallet && isPassKeyRegistered" bottom>
+  <template v-slot:activator="{ on }">
+    <v-icon color="primary" v-on="on">mdi-lock</v-icon>
+  </template>
+  <span>{{ $t('security.passKeyRequiredForPrfWallet') }}</span>
+</v-tooltip>
+```
+
+**Why**: Deregistering PassKey from PRF wallet causes permanent lockout (private keys encrypted with hardware-bound secret).
+
+**Always Backup Mnemonic**:
+```typescript
+// CreateWallet.vue - PRF wallets
+const prfOptions = {
+  usePrf: true,
+  credentialId,
+  passwordUnlockEnabled: false,
+  backupMnemonic: true, // ALWAYS true for PRF wallets
+};
+```
+
+**Why**: Mnemonic provides recovery path if device lost or PassKey unavailable.
+
+#### PRF Wallet Types
+
+**Pure PRF Mode** (Default if browser supports):
+- No spending password
+- PassKey required for all operations
+- Mnemonic backup always enabled
+- UI lock: PIN/Pattern/Lock Password
+
+**PRF + Password Mode** (Optional):
+- PassKey for transaction signing
+- Password for spending operations
+- Dual authentication
+- Not recommended (use Pure PRF instead)
+
+**Detection**:
+```typescript
+const isPrfWallet = wallet?.encryptionMethod === 'prf';
+const hasSpendingPassword = !!wallet?.prfSpendingPasswordHash;
+```
+
 ## Best Practices
 
 ### 1. **Code Organization**

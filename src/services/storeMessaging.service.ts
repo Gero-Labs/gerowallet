@@ -55,7 +55,6 @@ class StoreMessagingService {
 
     // Only browser contexts need to connect to background
     if (context === 'browser') {
-      debugLog(`🔌 StoreMessaging service initializing in browser context`);
       // Don't block on connection - let it happen in background
       this.connect().catch(error => {
         console.error('Failed to connect store messaging:', error);

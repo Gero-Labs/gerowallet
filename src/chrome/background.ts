@@ -662,6 +662,7 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
 
 app.add(METHOD.signData, (request, sendResponse) => {
   let responsePromise: Promise<any>;
+
   if (WalletStore.state.config.useSidePanel) {
     const url =
       `index.html#/${POPUP.dappSignData}` +
@@ -1357,7 +1358,8 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
     // Note: Never log password data
     const walletBg = walletManager.getWallet();
     if (walletBg) {
-      const isValid = walletBg.verifySpendingPassword(request.data.password);
+      // Await verifySpendingPassword (now async to support PRF wallets)
+      const isValid = await walletBg.verifySpendingPassword(request.data.password);
       sendResponse({
         id: request.id,
         data: { success: isValid, error: isValid ? undefined : 'Invalid spending password' },
@@ -1442,7 +1444,6 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
 
       const witnessResult = await walletBg.signTx(
         transaction,
-        request.data.partialSign || false,
         request.data.password,
         request.data.accountIndex || 0,
         request.data.utxos,

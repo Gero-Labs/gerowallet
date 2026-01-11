@@ -1,6 +1,6 @@
 <template>
   <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent" :disabled="disabled">
-    <v-card-title class="justify-center py-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
+    <v-card-title class="justify-center text-center py-0" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">{{ title }}</v-card-title>
     <v-card-title class="justify-center py-0" style="font-size: 16px;" v-if="showWebsite">
       <span style="color: #ccc">{{ $t('navigation.websiteLabel') }}:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
@@ -8,8 +8,7 @@
           <img :src="favicon" :alt="t('common.dappWebsiteFavicon')" />
         </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
-        <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white"
-                             width="3"></v-progress-circular>
+        <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white" width="3" />
         <v-avatar v-else tile size="16" class="ml-1 text-center">
           <v-img contain :src="websiteRiskIcon" :alt="$t('common.websiteRiskIcon')" />
         </v-avatar>

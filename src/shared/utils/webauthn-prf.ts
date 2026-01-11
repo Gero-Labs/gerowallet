@@ -56,7 +56,8 @@ export async function isPrfSupported(): Promise<boolean> {
   if (typeof PublicKeyCredential.getClientCapabilities === 'function') {
     try {
       const caps = await PublicKeyCredential.getClientCapabilities();
-      const supported = caps['prf'] === true;
+      // Note: Property name is 'extension:prf', not 'prf'
+      const supported = caps['extension:prf'] === true;
 
       if (supported) {
         debugLog('[PRF] ✅ PRF extension supported by browser');
@@ -388,5 +389,371 @@ export async function decryptSpendingPasswordWithPrf(
   } catch (error) {
     console.error('[PRF] Decryption failed:', error);
     throw new Error('Failed to decrypt passkey password - credential may have been re-registered');
+  }
+}
+
+/**
+ * Encrypt private key bytes using PRF-derived key
+ *
+ * Similar to password encryption but designed for larger binary data (96 bytes for BIP32 keys).
+ * Uses same HKDF derivation but with different info parameter for domain separation.
+ *
+ * @param privateKeyBytes - Private key bytes (typically 96 bytes: 64-byte key + 32-byte chain code)
+ * @param credentialId - Base64-encoded credential ID
+ * @param walletId - Wallet ID for key derivation
+ * @param providedPrfOutput - Optional pre-evaluated PRF output (avoids re-authentication)
+ * @returns Promise<string> - Hex-encoded encrypted private key
+ * @throws Error if PRF evaluation fails or user cancels
+ */
+export async function encryptPrivateKeyWithPrf(
+  privateKeyBytes: Uint8Array,
+  credentialId: string,
+  walletId: string,
+  providedPrfOutput?: ArrayBuffer
+): Promise<string> {
+  debugLog('[PRF] Encrypting private key for wallet:', walletId);
+
+  // Step 1: Evaluate PRF (requires user authentication) - OR use provided PRF output
+  const prfOutput = providedPrfOutput || await evaluatePrfForWallet(credentialId, walletId);
+
+  // Step 2: Derive non-extractable encryption key (different info for domain separation)
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    prfOutput,
+    'HKDF',
+    false, // Non-extractable
+    ['deriveKey']
+  );
+
+  const encryptionKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      salt: new Uint8Array(),
+      hash: 'SHA-512',
+      info: new TextEncoder().encode(`gero-wallet-privatekey-encryption-v1:${walletId}`)
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false, // Non-extractable
+    ['encrypt', 'decrypt']
+  );
+
+  // Step 3: Generate random IV for AES-GCM
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Step 4: Encrypt private key with AES-GCM
+  const encrypted = await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv,
+      additionalData: new TextEncoder().encode(credentialId)
+    },
+    encryptionKey,
+    privateKeyBytes
+  );
+
+  // Format: iv (12B) + ciphertext
+  const result = new Uint8Array(iv.length + encrypted.byteLength);
+  result.set(iv);
+  result.set(new Uint8Array(encrypted), iv.length);
+
+  debugLog('[PRF] ✅ Private key encrypted successfully');
+  return Buffer.from(result).toString('hex');
+}
+
+/**
+ * Decrypt private key bytes using PRF-derived key
+ *
+ * @param encryptedPrivateKey - Hex-encoded encrypted private key
+ * @param credentialId - Base64-encoded credential ID (must match encryption)
+ * @param walletId - Wallet ID for key derivation (must match encryption)
+ * @returns Promise<Uint8Array> - Decrypted private key bytes
+ * @throws Error if PRF evaluation fails, user cancels, or decryption fails
+ */
+export async function decryptPrivateKeyWithPrf(
+  encryptedPrivateKey: string,
+  credentialId: string,
+  walletId: string
+): Promise<Uint8Array> {
+  debugLog('[PRF] Decrypting private key for wallet:', walletId);
+
+  // Step 1: Parse encrypted data
+  const encryptedBytes = Buffer.from(encryptedPrivateKey, 'hex');
+
+  // Extract IV and ciphertext
+  const iv = encryptedBytes.subarray(0, 12);
+  const ciphertext = encryptedBytes.subarray(12);
+
+  // Step 2: Evaluate PRF (requires user authentication)
+  const prfOutput = await evaluatePrfForWallet(credentialId, walletId);
+
+  // Step 3: Derive non-extractable encryption key (same derivation as encryption)
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    prfOutput,
+    'HKDF',
+    false,
+    ['deriveKey']
+  );
+
+  const encryptionKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      salt: new Uint8Array(),
+      hash: 'SHA-512',
+      info: new TextEncoder().encode(`gero-wallet-privatekey-encryption-v1:${walletId}`)
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  try {
+    // Step 4: Decrypt private key with AES-GCM
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv,
+        additionalData: new TextEncoder().encode(credentialId)
+      },
+      encryptionKey,
+      ciphertext
+    );
+
+    debugLog('[PRF] ✅ Private key decrypted successfully');
+    return new Uint8Array(decrypted);
+  } catch (error) {
+    console.error('[PRF] Private key decryption failed:', error);
+    throw new Error('Failed to decrypt private key - credential may have been re-registered');
+  }
+}
+
+/**
+ * Encrypt mnemonic phrase using PRF-derived key
+ *
+ * @param mnemonic - BIP39 mnemonic phrase (24 words)
+ * @param credentialId - Base64-encoded credential ID
+ * @param walletId - Wallet ID for key derivation
+ * @param providedPrfOutput - Optional pre-evaluated PRF output (avoids re-authentication)
+ * @returns Promise<string> - Hex-encoded encrypted mnemonic
+ * @throws Error if PRF evaluation fails or user cancels
+ */
+export async function encryptMnemonicWithPrf(
+  mnemonic: string,
+  credentialId: string,
+  walletId: string,
+  providedPrfOutput?: ArrayBuffer
+): Promise<string> {
+  debugLog('[PRF] Encrypting mnemonic for wallet:', walletId);
+
+  // Step 1: Evaluate PRF (requires user authentication) - OR use provided PRF output
+  const prfOutput = providedPrfOutput || await evaluatePrfForWallet(credentialId, walletId);
+
+  // Step 2: Derive non-extractable encryption key (different info for domain separation)
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    prfOutput,
+    'HKDF',
+    false,
+    ['deriveKey']
+  );
+
+  const encryptionKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      salt: new Uint8Array(),
+      hash: 'SHA-512',
+      info: new TextEncoder().encode(`gero-wallet-mnemonic-encryption-v1:${walletId}`)
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  // Step 3: Generate random IV for AES-GCM
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Step 4: Encrypt mnemonic with AES-GCM
+  const encrypted = await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv,
+      additionalData: new TextEncoder().encode(credentialId)
+    },
+    encryptionKey,
+    new TextEncoder().encode(mnemonic)
+  );
+
+  // Format: iv (12B) + ciphertext
+  const result = new Uint8Array(iv.length + encrypted.byteLength);
+  result.set(iv);
+  result.set(new Uint8Array(encrypted), iv.length);
+
+  debugLog('[PRF] ✅ Mnemonic encrypted successfully');
+  return Buffer.from(result).toString('hex');
+}
+
+/**
+ * Decrypt mnemonic phrase using PRF-derived key
+ *
+ * @param encryptedMnemonic - Hex-encoded encrypted mnemonic
+ * @param credentialId - Base64-encoded credential ID (must match encryption)
+ * @param walletId - Wallet ID for key derivation (must match encryption)
+ * @returns Promise<string> - Decrypted BIP39 mnemonic phrase
+ * @throws Error if PRF evaluation fails, user cancels, or decryption fails
+ */
+export async function decryptMnemonicWithPrf(
+  encryptedMnemonic: string,
+  credentialId: string,
+  walletId: string
+): Promise<string> {
+  debugLog('[PRF] Decrypting mnemonic for wallet:', walletId);
+
+  // Step 1: Parse encrypted data
+  const encryptedBytes = Buffer.from(encryptedMnemonic, 'hex');
+
+  // Extract IV and ciphertext
+  const iv = encryptedBytes.subarray(0, 12);
+  const ciphertext = encryptedBytes.subarray(12);
+
+  // Step 2: Evaluate PRF (requires user authentication)
+  const prfOutput = await evaluatePrfForWallet(credentialId, walletId);
+
+  // Step 3: Derive non-extractable encryption key (same derivation as encryption)
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    prfOutput,
+    'HKDF',
+    false,
+    ['deriveKey']
+  );
+
+  const encryptionKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      salt: new Uint8Array(),
+      hash: 'SHA-512',
+      info: new TextEncoder().encode(`gero-wallet-mnemonic-encryption-v1:${walletId}`)
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  try {
+    // Step 4: Decrypt mnemonic with AES-GCM
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv,
+        additionalData: new TextEncoder().encode(credentialId)
+      },
+      encryptionKey,
+      ciphertext
+    );
+
+    debugLog('[PRF] ✅ Mnemonic decrypted successfully');
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    console.error('[PRF] Mnemonic decryption failed:', error);
+    throw new Error('Failed to decrypt mnemonic - credential may have been re-registered');
+  }
+}
+
+/**
+ * Hash spending password using PBKDF2-HMAC-SHA512
+ *
+ * Used for PRF wallets when "Password Unlock" method is enabled in LockSettings.
+ * The hash is stored in the wallet's prfSpendingPassword field and verified
+ * before allowing sensitive operations.
+ *
+ * Security Parameters:
+ * - PBKDF2-HMAC-SHA512
+ * - 310,000 iterations (OWASP 2023 recommendation)
+ * - 32-byte random salt
+ * - 32-byte derived key
+ *
+ * Format: salt (32B) + hash (32B) = 64 bytes total (128 hex chars)
+ *
+ * @param password - Spending password to hash
+ * @returns string - Hex-encoded salt + hash (128 hex characters)
+ */
+export async function hashSpendingPassword(password: string): Promise<string> {
+  debugLog('[PRF] Hashing spending password');
+
+  // Import PBKDF2 from @noble/hashes
+  const { pbkdf2 } = await import('@noble/hashes/pbkdf2');
+  const { sha512 } = await import('@noble/hashes/sha2');
+
+  // Generate random 32-byte salt
+  const salt = crypto.getRandomValues(new Uint8Array(32));
+
+  // Convert password to bytes
+  const passwordBytes = new TextEncoder().encode(password);
+
+  // Derive key using PBKDF2-HMAC-SHA512
+  // 310,000 iterations (OWASP 2023 recommendation for PBKDF2-HMAC-SHA512)
+  const hash = pbkdf2(sha512, passwordBytes, salt, {
+    c: 310000,  // iterations
+    dkLen: 32   // derived key length
+  });
+
+  // Combine salt + hash
+  const combined = new Uint8Array(salt.length + hash.length);
+  combined.set(salt);
+  combined.set(hash, salt.length);
+
+  debugLog('[PRF] ✅ Spending password hashed successfully');
+  return Buffer.from(combined).toString('hex');
+}
+
+/**
+ * Verify spending password against stored hash
+ *
+ * Uses constant-time comparison to prevent timing attacks.
+ *
+ * @param password - Password to verify
+ * @param hashedPassword - Hex-encoded salt + hash from hashSpendingPassword()
+ * @returns boolean - true if password matches, false otherwise
+ */
+export async function verifySpendingPassword(
+  password: string,
+  hashedPassword: string
+): Promise<boolean> {
+  debugLog('[PRF] Verifying spending password');
+
+  try {
+    // Import PBKDF2 from @noble/hashes
+    const { pbkdf2 } = await import('@noble/hashes/pbkdf2');
+    const { sha512 } = await import('@noble/hashes/sha2');
+
+    // Parse stored hash
+    const combined = Buffer.from(hashedPassword, 'hex');
+    const salt = combined.subarray(0, 32);
+    const storedHash = combined.subarray(32);
+
+    // Convert password to bytes
+    const passwordBytes = new TextEncoder().encode(password);
+
+    // Derive key using same parameters
+    const computedHash = pbkdf2(sha512, passwordBytes, salt, {
+      c: 310000,
+      dkLen: 32
+    });
+
+    // Constant-time comparison to prevent timing attacks
+    let isMatch = storedHash.length === computedHash.length;
+    for (let i = 0; i < storedHash.length; i++) {
+      isMatch = isMatch && (storedHash[i] === computedHash[i]);
+    }
+
+    debugLog('[PRF] ✅ Spending password verification:', isMatch ? 'MATCH' : 'NO MATCH');
+    return isMatch;
+  } catch (error) {
+    console.error('[PRF] Spending password verification failed:', error);
+    return false;
   }
 }

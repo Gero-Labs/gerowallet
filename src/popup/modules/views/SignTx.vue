@@ -41,7 +41,7 @@
       <v-card-actions class="justify-center pa-0 pt-2">
         <v-layout>
           <v-row>
-            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal">
+            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !isPrfWallet">
               <PassKeyPasswordField
                 ref="passwordField"
                 :value="spendingPassword"
@@ -57,6 +57,13 @@
                 @passkey-autofill-error="handlePassKeyError"
                 class="w-100"
               />
+            </v-col>
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Normal && isPrfWallet" class="pt-3 pb-0">
+              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
+                <span style="color: white; font-size: 12px">
+                  {{ $t('wallet.prfWalletSignInfo') }}
+                </span>
+              </v-alert>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.btSupported" class="py-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
@@ -264,6 +271,12 @@ const txAutoSubmit = computed(() => {
 
 const useSidePanel = computed(() => {
   return config.value?.useSidePanel;
+});
+
+// Check if wallet uses PRF encryption (PassKey)
+const isPrfWallet = computed(() => {
+  return loggedWallet.value?.encryptionMethod === 'prf' ||
+         (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
 });
 
 const txFee = computed<bigint | undefined>(() => {
@@ -628,17 +641,23 @@ const sign = async () => {
     }
   };
   if (loggedWallet.value.type === WalletType.Normal) {
-    if (form.value.validate()) {
+    // PRF wallets: Skip password verification, go directly to signing (will trigger PassKey in background)
+    if (isPrfWallet.value) {
+      await signAndReturnTx();
+    } else {
+      // Normal password-based wallets: Verify password first
+      if (form.value.validate()) {
 
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as BackgroundResponse<VerifyPasswordResponse>;
+        const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+          data: { password: spendingPassword.value }
+        }) as BackgroundResponse<VerifyPasswordResponse>;
 
-      if (passwordVerification.data.success) {
-        await signAndReturnTx();
-      } else {
-        passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
+        if (passwordVerification.data.success) {
+          await signAndReturnTx();
+        } else {
+          passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
+        }
       }
     }
   } else {

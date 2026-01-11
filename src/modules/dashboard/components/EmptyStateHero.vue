@@ -63,8 +63,8 @@
                   @click="$emit('backup-wallet')"
                   class="backup-btn"
                 >
-                  <v-icon left small>mdi-content-save</v-icon>
-                  {{ $t('dashboard.exportSeedPhrase') }}
+                  <v-icon left small>mdi-key</v-icon>
+                  {{ $t('dashboard.backupSeed') }}
                 </v-btn>
                 <p class="mt-1 mb-0 text-caption backup-help-text">
                   {{ $t('dashboard.quickAndSecure') }}

@@ -1324,7 +1324,6 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-const { t } = useTranslation();
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
@@ -1351,6 +1350,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
 import filters from '@/shared/utils/filters';
 
+const { t } = useTranslation();
+
 interface CandlestickDataPoint {
   time: Time;
   open: number;
@@ -1363,7 +1364,7 @@ const props = defineProps<{
   isOpen: boolean;
 }>();
 
-const emit = defineEmits(["close"]);
+defineEmits(["close"]);
 
 const { loggedWallet, tokens, utxos } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
@@ -1953,16 +1954,13 @@ const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
       const krakenData = data.result[pairKey];
 
       // Convert Kraken format to chart format
-      const chartData: CandlestickDataPoint[] = krakenData.map((candle: any[]) => ({
+      return krakenData.map((candle: any[]) => ({
         time: candle[0] as Time,
         open: parseFloat(candle[1]),
         high: parseFloat(candle[2]),
         low: parseFloat(candle[3]),
         close: parseFloat(candle[4])
       })).sort((a: any, b: any) => a.time - b.time);
-
-      debugLog(`[StrikeFinance] Fetched ${chartData.length} candles from Kraken for ADA/USD`);
-      return chartData;
 
     } catch (error) {
       console.error('[StrikeFinance] Failed to fetch ADA data from Kraken:', error);
@@ -1993,8 +1991,6 @@ const onChartReady = (chartInstance: IChartApi) => {
           const containerWidth = chartContainer.clientWidth;
           const containerHeight = 160;
 
-          debugLog("PerpetualsDialog: Initial chart resize to", containerWidth, "x", containerHeight);
-
           chart.value.applyOptions({
             width: containerWidth,
             height: containerHeight,
@@ -2023,11 +2019,6 @@ const startChartUpdates = () => {
     clearInterval(chartUpdateInterval);
   }
 
-  // Chart component handles its own updates for all tickers
-  debugLog(
-    `Chart updates for ${tickerSymbol.value} handled by TradingViewChart component`
-  );
-
   // Start real-time borrow fee updates
   startBorrowFeeUpdates();
 };
@@ -2044,7 +2035,6 @@ const startBorrowFeeUpdates = () => {
   // Update accumulated borrow fees every minute to reflect real-time changes
   borrowFeeUpdateInterval = setInterval(() => {
     borrowFeeUpdateTrigger.value += 1; // Trigger reactivity for computed values
-    debugLog("Updated real-time accumulated borrow fees");
   }, 60000); // Every 60 seconds
 
   // Update countdown every second for a real-time display
@@ -2075,15 +2065,7 @@ const perpetualPositions = computed(() => positions.value);
 
 // Reactive positions that update when ADA price changes
 const positions = computed(() => {
-  debugLog('🔍 [PerpetualsDialog] Positions computed - rawPositions.value:', {
-    length: rawPositions.value.length,
-    hasData: rawPositions.value.length > 0,
-    allPositions: rawPositions.value,
-    allStatuses: rawPositions.value.map(p => ({ id: p.id, status: p.status }))
-  });
-
   if (!rawPositions.value.length) {
-    debugLog('🔍 [PerpetualsDialog] No rawPositions available, returning empty array');
     return [];
   }
 
@@ -2334,8 +2316,6 @@ watch(
   () => props.isOpen,
   async (newVal) => {
     if (newVal) {
-      debugLog("PerpetualsDialog: Dialog opened, optimizing load sequence");
-
       // Start positions loading immediately for the main tab
       const positionsPromise = loadPositions(false);
 
@@ -2345,7 +2325,6 @@ watch(
         (async () => {
           try {
             chartData.value = await generateChartData();
-            debugLog("PerpetualsDialog: Initialized chart data with", chartData.value.length, "points");
           } catch (error) {
             console.error("Failed to initialize chart data:", error);
           }
@@ -2355,7 +2334,6 @@ watch(
           if (!priceService.isConnected()) {
             try {
               await priceService.initialize();
-              debugLog("PerpetualsDialog: Price service initialized");
             } catch (error) {
               console.warn("PerpetualsDialog: Failed to initialize price service:", error);
             }
@@ -2370,7 +2348,6 @@ watch(
       setTimeout(async () => {
         await nextTick();
         shouldFetchChartData.value = true;
-        debugLog("PerpetualsDialog: Enabled chart data fetching");
         startChartUpdates();
       }, 10);
 
@@ -2383,15 +2360,11 @@ watch(
             if (chartContainer) {
               const containerWidth = chartContainer.clientWidth;
               const containerHeight = 160; // Fixed height as specified
-
-              debugLog("PerpetualsDialog: Resizing chart to", containerWidth, "x", containerHeight);
-
               chart.value.applyOptions({
                 width: containerWidth,
                 height: containerHeight,
               });
               chart.value.timeScale().fitContent();
-              debugLog("PerpetualsDialog: Chart resized successfully");
             }
           } catch (error) {
             console.warn("PerpetualsDialog: Failed to resize chart:", error);
@@ -2404,10 +2377,7 @@ watch(
 
       // Let background tasks complete without blocking the UI
       backgroundTasks.catch(() => {}); // Silent catch for background tasks
-
-      debugLog("PerpetualsDialog: Fast load sequence completed");
     } else {
-      debugLog("PerpetualsDialog: Dialog closed, stopping updates");
       shouldFetchChartData.value = false;
       stopChartUpdates();
 
@@ -3077,7 +3047,6 @@ onMounted(async () => {
   setTimeout(async () => {
     await nextTick();
     shouldFetchChartData.value = true;
-    debugLog("PerpetualsDialog: Enabled chart data fetching");
     startChartUpdates();
   }, 100);
 });

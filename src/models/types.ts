@@ -17,6 +17,12 @@ export interface Wallet {
   network: string;
   icon?: string;
   type?: WalletTypeValue;
+  // PRF Encryption Support (Version 14+)
+  encryptionMethod?: 'password' | 'prf'; // Encryption method for wallet keys
+  prfEncryptedPrivateKey?: string; // Private key encrypted with PRF (hex)
+  prfEncryptedMnemonic?: string; // Mnemonic encrypted with PRF (hex)
+  webAuthnCredentialId?: string; // WebAuthn credential ID (base64)
+  prfSpendingPassword?: string; // Optional spending password hash (PBKDF2-HMAC-SHA512)
 }
 
 export type NetworkScheme = {
