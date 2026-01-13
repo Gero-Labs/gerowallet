@@ -150,7 +150,7 @@ const currentStep = ref(1);
 const selectedCardType = ref<'virtual' | 'physical' | null>(null);
 
 // Shipping address
-const useExistingAddress = ref(true);
+const useExistingAddress = ref(false);
 const shippingAddress = ref({
   streetAddress: '',
   city: '',
@@ -165,9 +165,15 @@ const shippingMethod = ref<'regular' | 'express-eu' | 'express-worldwide'>('regu
 
 // Payment
 const paymentAmount = ref({
-  ada: 12.5,
-  eur: 5.0,
+  ada: 0,
+  eur: 0,
 });
+const paymentAddress = ref('');
+const orderUuid = ref('');
+const paymentId = ref(0);
+const exchangeRate = ref('');
+const depositExpiresAt = ref('');
+const depositQrCode = ref('');
 
 // Processing states
 const isProcessing = ref(false);
@@ -271,16 +277,88 @@ const handleAddressSubmit = (payload: { useExisting: boolean; address?: typeof s
   currentStep.value = 3;
 };
 
-const handleShippingMethodSelect = (method: 'regular' | 'express-eu' | 'express-worldwide') => {
+const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'express-worldwide') => {
   shippingMethod.value = method;
-  // Update payment amount based on shipping method
-  const fees: Record<string, { ada: number; eur: number }> = {
-    'regular': { ada: 12.5, eur: 3.99 },
-    'express-eu': { ada: 31.2, eur: 9.99 },
-    'express-worldwide': { ada: 62.5, eur: 19.99 },
-  };
-  paymentAmount.value = fees[method] || fees['regular'];
-  currentStep.value = 4;
+  
+  try {
+    isProcessing.value = true;
+    
+    // Create order on backend to get payment details
+    const payload: OrderPhysicalCardPayload = {
+      address: shippingAddress.value.streetAddress,
+      region: shippingAddress.value.stateProvince,
+      city: shippingAddress.value.city,
+      zipCode: shippingAddress.value.zipCode,
+      countryCode: shippingAddress.value.countryCode,
+      phone: shippingAddress.value.phone,
+      deliveryMethod: method,
+    };
+    
+    console.log('📦 Creating order on backend...');
+    const orderResponse = await cardStore.orderPhysicalCard(payload);
+    console.log('✅ Order created, full response:', JSON.stringify(orderResponse, null, 2));
+    
+    // Extract payment details from response
+    if (!orderResponse) {
+      console.error('❌ No response from order API');
+      throw new Error(t('card.failedToGetPaymentDetails'));
+    }
+    
+    // Store order details
+    orderUuid.value = orderResponse.orderUuid || '';
+    paymentId.value = orderResponse.paymentId || 0;
+    
+    // Get payment address (depositAddress)
+    paymentAddress.value = orderResponse.depositAddress || '';
+    
+    // Get payment amount (depositAmountAda, depositAmountEur)
+    const amountAda = parseFloat(orderResponse.depositAmountAda || '0');
+    const amountEur = parseFloat(orderResponse.depositAmountEur || '0');
+    
+    paymentAmount.value = {
+      ada: amountAda,
+      eur: amountEur,
+    };
+    
+    // Store additional payment info
+    exchangeRate.value = orderResponse.exchangeRate || '';
+    depositExpiresAt.value = orderResponse.depositExpiresAt || '';
+    depositQrCode.value = orderResponse.depositQrCode || '';
+    
+    console.log('💰 Payment details extracted:', {
+      orderUuid: orderUuid.value,
+      paymentId: paymentId.value,
+      address: paymentAddress.value,
+      amount: paymentAmount.value,
+      exchangeRate: exchangeRate.value,
+      expiresAt: depositExpiresAt.value,
+    });
+    
+    // Validate payment details
+    console.log('🔍 Validation check:', {
+      hasAddress: !!paymentAddress.value,
+      addressValue: paymentAddress.value,
+      adaAmount: paymentAmount.value.ada,
+      isAmountValid: paymentAmount.value.ada > 0,
+    });
+    
+    if (!paymentAddress.value || paymentAmount.value.ada <= 0) {
+      console.error('❌ Validation failed:', {
+        address: paymentAddress.value,
+        ada: paymentAmount.value.ada,
+      });
+      throw new Error(t('card.failedToGetPaymentDetails'));
+    }
+    
+    console.log('✅ Validation passed, proceeding to payment step');
+    
+    currentStep.value = 4;
+  } catch (error: any) {
+    console.error('❌ Failed to create order:', error);
+    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
+  } finally {
+    isProcessing.value = false;
+  }
 };
 
 const handlePaymentConfirm = async (spendingPassword: string) => {
@@ -291,25 +369,26 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
   try {
     // Password is already verified in CardOrderPaymentStep
     console.log('✅ Password verified, proceeding with transaction');
+    console.log('💰 Payment address:', paymentAddress.value);
+    console.log('💰 Payment amount:', paymentAmount.value);
 
-    // Hardcoded Cardano address for payment
-    const cardanoAddress =
-      'addr1qxzdsrps5m46ch53tdnaxmzlpwmv6dyzccpsrr3h2lrss0z9su4t9radfkkl2k0ypxyg9pqeahzwphh8e85c49kypqksj3wjrv';
-    console.log('💰 Cardano address:', cardanoAddress);
+    // Validate payment details
+    if (!paymentAddress.value) {
+      throw new Error(t('card.missingPaymentAddress'));
+    }
 
-    // Parse ADA amount and convert to Lovelace
     const adaAmount = paymentAmount.value.ada;
     if (isNaN(adaAmount) || adaAmount <= 0) {
       throw new Error(t('errors.invalidAmount'));
     }
 
     const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
-    console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${cardanoAddress}`);
+    console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${paymentAddress.value}`);
 
     // Create output
     const outputs: Cardano.TxOut[] = [
       {
-        address: cardanoAddress as Cardano.PaymentAddress,
+        address: paymentAddress.value as Cardano.PaymentAddress,
         value: {
           coins: lovelaceAmount,
           assets: new Map(),
@@ -371,17 +450,9 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
     console.log('📝 Transaction ID:', submitResult.data.txId);
     snackbar.fireSuccess(t('notifications.transactionSubmitted'));
 
-    //,  payment_tx_id: submitResult.data.txId, TODO: Uncomment when backend is ready
-    const payload: OrderPhysicalCardPayload = {
-      address: useExistingAddress.value ? '' : shippingAddress.value.streetAddress,
-      region: useExistingAddress.value ? '' : shippingAddress.value.stateProvince,
-      city: useExistingAddress.value ? '' : shippingAddress.value.city,
-      zipCode: useExistingAddress.value ? '' : shippingAddress.value.zipCode,
-      countryCode: useExistingAddress.value ? '' : shippingAddress.value.countryCode,
-      phone: useExistingAddress.value ? '' : shippingAddress.value.phone,
-      deliveryMethod: shippingMethod.value,
-    };
-    await cardStore.orderPhysicalCard(payload);
+    // Backend will automatically detect the transaction
+    console.log('ℹ️ Backend will track the transaction to deposit address:', paymentAddress.value);
+
     await cardStore.fetchCardData();
     orderSuccess.value = true;
   } catch (error: any) {
@@ -402,7 +473,7 @@ const handleClose = () => {
   // Reset state
   currentStep.value = 1;
   selectedCardType.value = null;
-  useExistingAddress.value = true;
+  useExistingAddress.value = false;
   shippingAddress.value = {
     streetAddress: '',
     city: '',
@@ -412,7 +483,13 @@ const handleClose = () => {
     phone: '',
   };
   shippingMethod.value = 'regular';
-  paymentAmount.value = { ada: 12.5, eur: 5.0 };
+  paymentAmount.value = { ada: 0, eur: 0 };
+  paymentAddress.value = '';
+  orderUuid.value = '';
+  paymentId.value = 0;
+  exchangeRate.value = '';
+  depositExpiresAt.value = '';
+  depositQrCode.value = '';
   isProcessing.value = false;
   orderSuccess.value = false;
   orderingVirtualCard.value = false;
