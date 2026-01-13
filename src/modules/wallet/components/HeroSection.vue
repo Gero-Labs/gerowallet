@@ -30,12 +30,12 @@
                   <div class="card-bottom" style="max-width: 310px">
                     <div class="card-holder">
                       <p class="label">{{ t('card.cardholderName') }}</p>
-                      <p class="value">{{ t('card.geroWallet') }}</p>
+                      <p class="value">{{ card.cardData.card_holder_name || t('card.geroWallet') }}</p>
                     </div>
                     <div class="card-cvv">
                       <p class="label">{{ t('card.cvv') }}</p>
                       <p class="value">
-                        {{ showCardDetails && card.cardDetails?.details?.cvc2 ? card.cardDetails.details.cvc2 : '***' }}
+                        {{ showCardDetails && card.cardDetails?.cvc2 ? card.cardDetails.cvc2 : '***' }}
                       </p>
                     </div>
                     <div class="card-expiry">
@@ -86,14 +86,14 @@
                   <img src="@/modules/wallet/icons/currency-euro.svg" :alt="t('card.topUp')" class="btn-icon" />
                   {{ t('card.topUp') }}
                 </v-btn>
-                <v-btn
-                  class="action-btn order-physical-btn"
-                  variant="outlined"
-                  @click="showOrderPhysicalCardModal = true"
-                >
-                  <v-icon left>mdi-credit-card-outline</v-icon>
-                  {{ t('card.orderPhysicalCard') }}
-                </v-btn>
+<!--                <v-btn-->
+<!--                  class="action-btn order-physical-btn"-->
+<!--                  variant="outlined"-->
+<!--                  @click="showOrderPhysicalCardModal = true"-->
+<!--                >-->
+<!--                  <v-icon left>mdi-credit-card-outline</v-icon>-->
+<!--                  {{ t('card.orderPhysicalCard') }}-->
+<!--                </v-btn>-->
                 <v-btn
                   class="action-btn eye-btn"
                   variant="outlined"
@@ -197,11 +197,11 @@
     <TopUpModal :open="showTopUpModal" @close="handleTopUpClose" />
     <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
     <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="handleOrderPhysicalCardClose" />
-    <OrderCardFlowModal 
-      :open="showOrderCardFlowModal" 
+    <OrderCardFlowModal
+      :open="showOrderCardFlowModal"
       :has-virtual-card="hasVirtualCard"
       :has-physical-card="hasPhysicalCard"
-      @close="handleOrderCardFlowClose" 
+      @close="handleOrderCardFlowClose"
     />
     <PayOrderModal
       v-if="pendingOrderUuid"
@@ -250,6 +250,7 @@ import PayOrderModal from './dashboard/PayOrderModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
+import { CardInfo } from '@/models/card';
 
 const { t } = useTranslation();
 
@@ -270,17 +271,45 @@ const orderingCard = ref(false);
 const loadingOrderDetails = ref(false);
 const pendingOrderUuid = ref<string | null>(null);
 const hiddenOrderUuids = ref<string[]>([]);
-const emptyCard = {
+const emptyCard: CardInfo = {
   cardData: {
     id: null,
+    user_id: null,
+    program_uuid: null,
+    currency: null,
+    account_to_charge: null,
+    processing_type: null,
+    cardholder_phone: null,
+    payment_card_type: null,
+    own_type: null,
+    card_holder_name: null,
+    order_uuid: null,
     card_uuid: null,
     order_uuid: null,
     own_type: null,
+    status: null,
+    card_status: null,
+    balance: null,
+    pan: null,
+    currentBalance: null,
+    created_at: null,
+    updated_at: null,
   },
-  cardDetails: null,
+  cardDetails: {
+    pan: null,
+    cvc2: null,
+    expiryDate: null,
+    cardHolderName: null,
+  },
   cardPin: null,
   cardNumber: null,
-  cardBalance: null,
+  cardBalance: {
+    currentBalance:{
+      amount:0,
+      currencyCode:"EUR"
+    },
+    state: null
+  },
   cardHistory: null,
   totalDeposits: 0,
   activities: [],
@@ -291,15 +320,15 @@ const cards = computed(() => {
 });
 
 const hasVirtualCard = computed(() => {
-  return cards.value.some(card => 
-    card.cardData?.own_type === 'virtual' && 
+  return cards.value.some(card =>
+    card.cardData?.own_type === 'virtual' &&
     (card.cardData?.card_uuid || card.cardData?.order_uuid)
   );
 });
 
 const hasPhysicalCard = computed(() => {
-  return cards.value.some(card => 
-    card.cardData?.own_type === 'physical' && 
+  return cards.value.some(card =>
+    card.cardData?.own_type === 'physical' &&
     (card.cardData?.card_uuid || card.cardData?.order_uuid)
   );
 });
@@ -427,12 +456,12 @@ const openPaymentModal = async () => {
     try {
       loadingOrderDetails.value = true;
       await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
-      
+
       pendingOrderUuid.value = currentCard.cardData.order_uuid;
       showPayOrderModal.value = true;
     } catch (error) {
       snackbar.setError(t('card.failedToLoadOrderDetails'));
-      
+
       if (currentCard.cardData.order_uuid && !hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
         hiddenOrderUuids.value.push(currentCard.cardData.order_uuid);
       }
@@ -467,21 +496,21 @@ const handleOrderPhysicalCardClose = async () => {
 const handlePaymentSuccess = async () => {
   await cardStoreModule.fetchCardData();
   showPayOrderModal.value = false;
-  
+
   if (pendingOrderUuid.value && hiddenOrderUuids.value.includes(pendingOrderUuid.value)) {
     const index = hiddenOrderUuids.value.indexOf(pendingOrderUuid.value);
     hiddenOrderUuids.value.splice(index, 1);
   }
-  
+
   checkPendingOrders();
 };
 
 // Check order status for pending cards
 const checkPendingOrders = async () => {
   const pendingCards = cards.value.filter(
-    card => 
-      card.cardData?.id && 
-      card.cardData?.order_uuid && 
+    card =>
+      card.cardData?.id &&
+      card.cardData?.order_uuid &&
       !card.cardData?.card_uuid &&
       !hiddenOrderUuids.value.includes(card.cardData.order_uuid)
   );
@@ -490,10 +519,10 @@ const checkPendingOrders = async () => {
     try {
       loadingOrderDetails.value = true;
       const orderDetails = await cardStoreModule.getOrderDetails(card.cardData.order_uuid);
-      
+
       if (orderDetails.card_uuid) {
         await cardStoreModule.fetchCardData();
-        
+
         if (card.cardData.order_uuid && hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
           const index = hiddenOrderUuids.value.indexOf(card.cardData.order_uuid);
           hiddenOrderUuids.value.splice(index, 1);
@@ -516,7 +545,7 @@ const hasCheckedPendingOrders = ref(false);
 
 const startOrderChecking = () => {
   if (orderCheckInterval) return; // Already checking
-  
+
   // Check every 30 seconds if there are pending orders
   orderCheckInterval = setInterval(() => {
     if (cards.value.some(card => card.cardData?.order_uuid && !card.cardData?.card_uuid)) {
@@ -538,17 +567,17 @@ watch(
       const existingOrderUuids = newCards
         .filter(c => c.cardData?.order_uuid)
         .map(c => c.cardData.order_uuid);
-      
-      hiddenOrderUuids.value = hiddenOrderUuids.value.filter(uuid => 
+
+      hiddenOrderUuids.value = hiddenOrderUuids.value.filter(uuid =>
         existingOrderUuids.includes(uuid)
       );
     }
-    
+
     if (newCards.length > 0 && !hasCheckedPendingOrders.value) {
       const hasPendingOrders = newCards.some(
         card => card.cardData?.order_uuid && !card.cardData?.card_uuid
       );
-      
+
       if (hasPendingOrders) {
         hasCheckedPendingOrders.value = true;
         checkPendingOrders();
@@ -632,8 +661,8 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-const getFormattedCardNumber = (card: any) => {
-  const pan = card.cardDetails?.details?.pan;
+const getFormattedCardNumber = (card: CardInfo) => {
+  const pan = card.cardDetails?.pan;
 
   if (!pan || !showCardDetails.value) return '**** **** **** ****';
 
@@ -641,14 +670,14 @@ const getFormattedCardNumber = (card: any) => {
   return pan.match(/.{1,4}/g)?.join(' ') || pan;
 };
 
-const formatExpiryDate = (card: any) => {
+const formatExpiryDate = (card: CardInfo) => {
   // Only show expiry when card details are visible
   if (!showCardDetails.value) {
-    return 'MM/YY';
+    return '**/**';
   }
 
   // Try to get expiry from card details first (format: "YYYY-MM")
-  const apiExpiry = card.cardDetails?.details?.expiryDate;
+  const apiExpiry = card.cardDetails?.expiryDate;
 
   if (apiExpiry) {
     // Parse "2028-10" to "10/28"
@@ -658,15 +687,15 @@ const formatExpiryDate = (card: any) => {
   }
 
   // Fallback to creation date + 4 years
-  if (card.cardData?.createdAt) {
-    const date = new Date(card.cardData.createdAt);
+  if (card.cardData?.created_at) {
+    const date = new Date(card.cardData.created_at);
     date.setFullYear(date.getFullYear() + 4);
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = String(date.getFullYear()).slice(-2);
     return `${month}/${year}`;
   }
 
-  return 'MM/YY';
+  return '**/**';
 };
 
 const formatADA = (eurAmount: number) => {

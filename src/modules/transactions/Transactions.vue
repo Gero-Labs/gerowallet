@@ -28,7 +28,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance, watch } from 'vue';
+import { getCurrentInstance, onMounted, ref, watch } from 'vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import TransactionDetails from '@/shared/components/TransactionDetails.vue';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
@@ -48,10 +48,9 @@ const handleOnTransactionsRowClick = (row: any) => {
 // Auto-select latest transaction (by tx_timestamp) when transactions are loaded
 watch(() => walletStore.transactions, (transactions) => {
   if (transactions && transactions.length > 0 && !transactionInfo.value) {
-    const latestTransaction = transactions.reduce((latest, current) => {
+    transactionInfo.value = transactions.reduce((latest, current) => {
       return current.tx_timestamp > latest.tx_timestamp ? current : latest;
     });
-    transactionInfo.value = latestTransaction;
   }
 }, { immediate: true });
 

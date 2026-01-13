@@ -248,12 +248,30 @@
                   outlined
                   dense
                   hide-details
-                  @keyup.enter="handleVerificationPasswordSubmit"
+                  :disabled="verifying"
+                  @keydown.enter.stop="handleVerificationPasswordSubmit"
                 >
                   <template v-slot:append>
                     <v-icon @click="showPassword = !showPassword" tabindex="-1">
                       {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
                     </v-icon>
+                  </template>
+                  <template v-slot:append-outer>
+                    <v-btn
+                      block
+                      outlined
+                      small
+                      color="primary"
+                      class="ml-2 px-1"
+                      style="height: 40px;"
+                      @click="handleVerificationPasswordSubmit"
+                      :loading="verifying"
+                      :disabled="verifying"
+                    >
+                      <v-icon>
+                        mdi-arrow-right
+                      </v-icon>
+                    </v-btn>
                   </template>
                 </v-text-field>
               </template>
@@ -263,38 +281,44 @@
 
           <!-- PassKey Option (if enabled) -->
           <div v-if="passKeyForUnlock && webAuthnCredentialId" class="text-center mt-4">
-            <v-divider class="mb-4"></v-divider>
-            <div class="caption mb-3">{{ $t('security.orUsePassKey') }}</div>
             <v-btn
+              small
+              text
               color="primary"
-              large
               @click="handleVerificationPassKeyAuth"
               :loading="passKeyVerifying"
               :disabled="verifying"
             >
-              <v-icon left>mdi-fingerprint</v-icon>
+              <v-avatar size="18" class="mr-2">
+                <v-img
+                  :src="assets.passKeySvg"
+                  contain
+                  class="passkey-icon"
+                  :style="{
+                    width: '18px',
+                    height: '18px',
+                    filter: 'brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%)',
+                    opacity: passKeyVerifying ? '0.5' : 1,
+                  }"
+                  tabindex="-1"
+                />
+              </v-avatar>
               {{ $t('security.usePassKey') }}
             </v-btn>
           </div>
         </v-card-text>
 
-        <v-card-actions class="px-4 pb-4">
+        <v-card-actions class="px-4 pb-4 pt-0">
           <v-btn
+            block
             text
+            plain
+            small
             @click="cancelVerification"
             :disabled="verifying"
             color="error"
           >
             {{ $t('common.cancel') }}
-          </v-btn>
-          <v-spacer />
-          <v-btn
-            v-if="unlockMethod === 'password'"
-            color="primary"
-            @click="handleVerificationPasswordSubmit"
-            :loading="verifying"
-          >
-            {{ $t('security.verify') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -335,7 +359,7 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import filters from '@/shared/utils/filters';
 import WalletStore, { walletStore } from '@/stores/walletStore';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import rules from '@/utils/rules';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
@@ -595,7 +619,7 @@ async function verifyCurrentMethod() {
         const passwordVerification = await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.VERIFY_SPENDING_PASSWORD,
           data: { password: verificationInput.value }
-        }) as { data: { success: boolean; error?: string } };
+        }) as BackgroundResponse<VerifyPasswordResponse>;
         isValid = passwordVerification.data.success;
         if (!isValid) {
           tooltip.value.text = t('wallet.wrongSpendingPassword');
@@ -775,5 +799,10 @@ watch(showVerificationOverlay, async (newValue) => {
 .verification-card ::v-deep .v-otp-input .v-input__slot {
   width: 56px !important;
   max-width: 56px !important;
+}
+
+/* Remove margin from append-outer slot */
+:deep(.v-input__append-outer) {
+  margin: 0!important;
 }
 </style>

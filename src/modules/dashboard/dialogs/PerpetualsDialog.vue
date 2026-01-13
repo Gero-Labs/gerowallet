@@ -1349,6 +1349,7 @@ import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
 import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
+import filters from '@/shared/utils/filters';
 
 interface CandlestickDataPoint {
   time: Time;
@@ -2321,7 +2322,7 @@ const availableAdaBalance = computed(() => {
   ) as any;
 
   if (adaToken?.quantity) {
-    const balance = Number(adaToken.quantity) / 1000000; // Convert from lovelace to ADA
+    const balance = filters.convertFromSmallestUnit(adaToken.quantity, 6);
     return balance.toFixed(2);
   }
 

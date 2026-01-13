@@ -1,6 +1,5 @@
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
-import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import {
   APIError,
@@ -25,7 +24,7 @@ import {
   urlScan,
   getUnusedAddresses,
 } from '@/chrome/serialization';
-import { ERROR } from '@/models/types';
+import { Blockchain, coin_type, ERROR, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -36,7 +35,7 @@ import { walletManager } from '@/services/walletManager.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
-import { debugLog } from '@/utils/debug';
+import trezor from '@/shared/utils/trezor';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -46,31 +45,22 @@ if (import.meta.hot) {
 }
 
 loadConfig().then(() => {
-  debugLog('Gero Config loaded')
+  // Config loaded
 })
 loadWallets().then(async () => {
-  debugLog('Wallets loaded')
-
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
-  debugLog('Wallet store hydrated, checking for logged wallet...');
 
   if (walletStore.loggedWallet) {
     // CRITICAL: Check auto-lock BEFORE logging in to catch expired sessions
     // This prevents the activity tracker from resetting lastActivityTimestamp
-    debugLog('🔒 Checking auto-lock before wallet restore...');
     await checkAutoLock();
 
-    debugLog('Login in wallet: ', walletStore.loggedWallet.name);
     await walletManager.login(walletStore.loggedWallet);
   } else {
-    debugLog('No logged wallet found after hydration');
     Loading.setLoading(false)
   }
 });
-
-//@ts-ignore
-const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
 (async () => {
   await bringInitBackground({
@@ -82,31 +72,32 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 })();
 
 // Initialize background store messaging (the import alone initializes it)
-debugLog('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
-// const currentVersion: string = chrome.runtime.getManifest().version;
+//@ts-ignore
+const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
+const currentVersion: string = chrome.runtime.getManifest().version;
 
-// if (!isBeta) {
-//   chrome.runtime.onInstalled.addListener((details) => {
-//     if (details.reason === 'update') {
-//       chrome.notifications.create('updateNotification', {
-//         type: 'image',
-//         title: 'Extension Updated',
-//         message: `Gero Dashboard has been updated to version ${currentVersion}!`,
-//         iconUrl: chrome.runtime.getURL('public/logo128.png'),
-//         imageUrl: chrome.runtime.getURL('public/2.6.2.png'),
-//       });
-//     }
-//   });
-//   chrome.notifications.onClicked.addListener(function(notificationId) {
-//     if (notificationId === 'updateNotification') {
-//       // Perform your action here, for example, open a URL in a new tab
-//       chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
-//
-//       // Optionally, clear the notification if needed
-//       chrome.notifications.clear(notificationId);
-//     }
-//   });
-// }
+if (!isBeta) {
+  chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'update') {
+      chrome.notifications.create('updateNotification', {
+        type: 'image',
+        title: 'Extension Updated',
+        message: `Gero Dashboard has been updated to version ${currentVersion}!`,
+        iconUrl: chrome.runtime.getURL('public/logo128.png'),
+        imageUrl: chrome.runtime.getURL('public/v2.6.2.png'),
+      });
+    }
+  });
+  chrome.notifications.onClicked.addListener(function(notificationId) {
+    if (notificationId === 'updateNotification') {
+      // Perform your action here, for example, open a URL in a new tab
+      chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
+
+      // Optionally, clear the notification if needed
+      chrome.notifications.clear(notificationId);
+    }
+  });
+}
 
 export async function openSidebar(tabId: number, path: string) {
   if (typeof tabId !== 'number') {
@@ -136,8 +127,6 @@ function clearProcessedDomains() {
   chrome.storage.local.remove(['processedDomains', 'lastCleared'], () => {
     if (chrome.runtime.lastError) {
       console.error('Error removing processedDomains from storage:', chrome.runtime.lastError);
-    } else {
-      debugLog('Processed domains have been cleared.');
     }
   });
 }
@@ -176,7 +165,6 @@ async function checkAutoLock(): Promise<void> {
 
     // If no unlock method is set, skip auto-lock (user won't be able to unlock!)
     if (!unlockMethod) {
-      debugLog('🔒 Auto-lock check: No unlock method configured, skipping lock');
       return;
     }
 
@@ -186,7 +174,6 @@ async function checkAutoLock(): Promise<void> {
     // If lastActivityTimestamp doesn't exist, it means the wallet was just logged in
     // and the activity tracker hasn't run yet. Skip the check.
     if (!lastActivityConfig || !lastActivityConfig.value) {
-      debugLog('🔒 Auto-lock check: lastActivityTimestamp not set, skipping check');
       return;
     }
 
@@ -196,11 +183,8 @@ async function checkAutoLock(): Promise<void> {
     const now = Date.now();
     const inactiveMinutes = (now - lastActivityTimestamp) / (1000 * 60);
 
-    debugLog(`🔒 Auto-lock check: ${inactiveMinutes.toFixed(2)} minutes inactive (threshold: ${autoLockMinutes} minutes)`);
-
     // Lock wallet if inactive for longer than configured time
     if (inactiveMinutes >= autoLockMinutes) {
-      debugLog('🔒 Auto-locking wallet due to inactivity');
       await walletManager.lock();
     }
   } catch (error) {
@@ -230,8 +214,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-debugLog('Background Loaded');
-
 let lastFullscreenTabId = -1;
 
 const app = Messaging.createBackgroundController();
@@ -249,7 +231,6 @@ async function handleBlacklisted(request: any, tabId: number) {
   try {
     const response = await urlScan(request.origin);
     urlStatus = await response.json();
-    console.log('urlScan', urlStatus);
     if (urlStatus === 'blacklist'
       // || urlStatus === 'suspicious'
     ) {
@@ -297,14 +278,13 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       } else if (res === 'skip') {
         // nothing
       } else {
-        console.log(res['error'])
+        console.error(res['error'])
       }
     }
   }
 });
 
 app.add(METHOD.getBalance, async (request, sendResponse) => {
-  console.log('getBalance', request)
   try {
     const collateral = WalletStore.state.collateral;
     const utxosFromStorage = WalletStore.state.utxos;
@@ -326,7 +306,6 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
 });
 
 app.add(METHOD.enable, (request, sendResponse) => {
-  console.log('enable', request)
   const { id, origin, send } = request;
   const tabId = send.tab?.id;
   const reply = (opts: { data?: any; error?: any }) => {
@@ -445,7 +424,6 @@ app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
 
 app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
   const whitelisted = await isWhitelisted(request.origin);
-  console.log(request.origin)
   if (whitelisted) {
     sendResponse({
       data: whitelisted,
@@ -453,7 +431,6 @@ app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } else {
-    console.log('refuse')
     sendResponse({
       error: APIError.Refused,
       target: TARGET,
@@ -495,7 +472,6 @@ async function isWhitelisted(origin: string): Promise<boolean> {
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
-  console.log('getNetworkId', request)
   const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
@@ -515,7 +491,6 @@ app.add(METHOD.getNetworkId, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
-  console.log('getRewardAddresses', request)
   const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
@@ -536,7 +511,6 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
-  console.log('getUtxos::Request', request)
   try {
     const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
     const collateral = WalletStore.state.collateral;
@@ -548,7 +522,6 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
     } else {
       res = null
     }
-    console.log('getUtxos::Response', res)
     sendResponse({
       id: request.id,
       data: res,
@@ -566,15 +539,9 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
-  debugLog('[CIP-30] getCollateral::Request', request);
   const storedUtxos = WalletStore.state.utxos;
-  debugLog('[CIP-30] Stored UTXOs for collateral:', {
-    count: storedUtxos?.length || 0,
-    hasUtxos: !!storedUtxos && storedUtxos.length > 0
-  });
   try {
     const utxos: string[] = getCollateral(request.data.params, storedUtxos)
-    debugLog('[CIP-30] getCollateral::Response', { count: utxos?.length || 0 });
     sendResponse({
       id: request.id,
       data: utxos,
@@ -582,7 +549,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } catch (e) {
-    debugLog('[CIP-30] getCollateral::Error', e);
+    console.error('[CIP-30] getCollateral error:', e);
     sendResponse({
       id: request.id,
       error: e,
@@ -594,7 +561,6 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
-  debugLog('getUsedAddresses::Request', request)
   try {
     const loggedWallet = WalletStore.state.loggedWallet
     if (!loggedWallet) {
@@ -606,7 +572,6 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
       })
     }
     const addresses = getUsedAddresses(WalletStore.state.keys, request?.data?.paginate);
-    console.log('getUsedAddresses::Response', addresses)
     sendResponse({
       id: request.id,
       data: addresses,
@@ -624,7 +589,6 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
-  console.log('getUnusedAddresses', request)
   try {
     const loggedWallet = WalletStore.state.loggedWallet
     if (!loggedWallet) {
@@ -636,7 +600,6 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
       })
     }
     const addressesRes = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, WalletStore.state.keys);
-    console.log(addressesRes)
     sendResponse({
       id: request.id,
       data: addressesRes,
@@ -698,7 +661,6 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
 });
 
 app.add(METHOD.signData, (request, sendResponse) => {
-  console.log('signData', request)
   let responsePromise: Promise<any>;
   if (WalletStore.state.config.useSidePanel) {
     const url =
@@ -716,7 +678,6 @@ app.add(METHOD.signData, (request, sendResponse) => {
   }
   responsePromise
     .then((response: any) => {
-      console.log('sidePanel signData', response)
       if (response.data) {
         sendResponse({
           id: request.id,
@@ -1486,7 +1447,6 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
-        request.data.mergeWitnesses || false
       );
       sendResponse({
         id: request.id,
@@ -1753,6 +1713,37 @@ app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => 
   }
 });
 
+app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {
+  try {
+    const currentWallet = walletManager.getWallet();
+    if (currentWallet) {
+      await currentWallet.syncService.syncViaRest();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'No wallet loaded' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (err) {
+    console.error('SYNC_VIA_REST error:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   try {
     const currentWallet = walletManager.getWallet();
@@ -1817,6 +1808,102 @@ app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendRe
       sender: SENDER.extension,
     });
   }
+});
+
+app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
+  try {
+    if (request.data.method === 'initTrezor') {
+      const network = networks.resolveNetwork(request.data.chain, request.data.network);
+
+      let path;
+      if (network.blockchain === Blockchain.CARDANO) {
+        path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`
+      }
+      // Use the clean Trezor wrapper (handles initialization, device name, etc.)
+      const coldWalletProps = await trezor.getXpub(path);
+      sendResponse({
+        id: request.id,
+        data: { success: true, coldWalletProps },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else if (request.data.method === 'signData') {
+      const { address, payload, accountIndex } = request.data;
+      const currentWallet = walletManager.getWallet();
+      const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
+
+
+      // Sign data with Trezor
+      const signatureData: {
+        signatureHex: string;
+        signingPublicKeyHex: string;
+        addressFieldHex: string;
+      } = await trezor.signData(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
+
+      sendResponse({
+        id: request.id,
+        data: { success: true, signatureData },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else if (request.data.method === 'signTx') {
+      const { txCbor } = request.data;
+
+      const tx = deserializeCardanoJsSdkTx(txCbor);
+
+      // For partial transactions, strip existing witnesses before signing with Trezor
+      // This prevents Trezor from seeing/including witnesses from the partial transaction
+      const txWithoutWitnesses: Cardano.Tx = {
+        ...tx,
+        witness: {
+          signatures: new Map(),
+          // Preserve other witness fields that Trezor needs (scripts, datums, redeemers)
+          ...(tx.witness?.scripts && { scripts: tx.witness.scripts }),
+          ...(tx.witness?.datums && { datums: tx.witness.datums }),
+          ...(tx.witness?.redeemers && { redeemers: tx.witness.redeemers }),
+        }
+      };
+
+      const utxos: Cardano.Utxo[] = WalletStore.state.utxos;
+
+      // Get current wallet and network info
+      const currentWallet = walletManager.getWallet();
+      const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
+      console.log('[TREZOR Background] Signing transaction...', { tx: txWithoutWitnesses, network });
+
+      // Sign transaction with Trezor SDK (includes witness filtering)
+      // Pass original CBOR to preserve exact transaction hash computation
+      const signatures: Cardano.Signatures = await trezor.signTransaction(
+        txWithoutWitnesses,
+        WalletStore.state.keys,
+        utxos,
+        false,
+        network,
+        WalletStore.state.loggedWallet.publicKey,
+        txCbor  // Pass original CBOR for correct hash computation
+      );
+
+      // Convert Map to array for Chrome messaging (Maps don't serialize properly)
+      const signaturesArray = Array.from(signatures.entries());
+      console.log('[TREZOR Background] Signatures array:', signaturesArray);
+
+      sendResponse({
+        id: request.id,
+        data: { success: true, signatures: signaturesArray },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (err) {
+    console.error('[TREZOR Background] Error:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: (err instanceof Error ? err.message : 'Trezor operation failed') },
+      target: TARGET,
+      sender: SENDER.extension,
+    })
+  }
+  return true; // Important: return true for async handlers
 });
 
 const openUI = async () => {

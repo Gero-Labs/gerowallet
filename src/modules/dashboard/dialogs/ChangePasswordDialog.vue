@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
-    :title="$t('settings.spendingPasswordSettings')"
-    :subtitle="$t('settings.modifySpendingPassword')"
+    :title="t('settings.spendingPasswordSettings')"
+    :subtitle="t('settings.modifySpendingPassword')"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
@@ -18,7 +18,7 @@
           ref="passwordField"
           :value="currentPassword"
           @input="currentPassword = $event"
-          :label="$t('dashboard.currentPassword')"
+          :label="t('dashboard.currentPassword')"
           dense
           outlined
           :rules="[rules.required()]"
@@ -69,9 +69,11 @@ import { getCurrentInstance, nextTick, ref, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import rules from '@/utils/rules';
-import geroStoreDefault from '@/stores/geroStore';
+import geroStore from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
+import { getDb } from '@/db/wallet-db';
+import { encryptSpendingPasswordForPassKey } from '@/shared/utils/security';
 
 interface Props {
   isOpen: boolean;
@@ -109,11 +111,10 @@ const handlePassKeyError = (error: string) => {
 const updateSpendingPassword = async (): Promise<void> => {
   if (vmProxy.$refs.form.validate()) {
     try {
-      await geroStoreDefault.updateSpendingPassword(loggedWallet.value.id, currentPassword.value, newPassword.value)
+      await geroStore.updateSpendingPassword(loggedWallet.value.id, currentPassword.value, newPassword.value)
 
       // Check if PassKey autofill is enabled and auto-update encrypted password
       try {
-        const { getDb } = await import('@/db/wallet-db');
         const db = await getDb(loggedWallet.value.id);
         const configTable = db.table('config');
 
@@ -125,7 +126,6 @@ const updateSpendingPassword = async (): Promise<void> => {
           console.log('🔐 PassKey autofill enabled - updating encrypted password...');
 
           // Re-encrypt new password with PassKey
-          const { encryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
           const encryptedPassword = await encryptSpendingPasswordForPassKey(
             newPassword.value,
             credentialConfig.value,

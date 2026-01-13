@@ -162,6 +162,16 @@ export function buildBaseAddress(networkId: Cardano.NetworkId, paymentKeyHash: H
   );
 }
 
+export function filterOutCollateralFromUTxOs(utxos: Cardano.Utxo[], collateral: Cardano.Utxo) {
+  if (collateral) {
+    return utxos.filter(
+      (utxo) =>
+        !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index)
+    );
+  }
+  return utxos;
+}
+
 export function getUtxos(
   amount: string = undefined,
   paginate: Paginate = undefined,
@@ -169,12 +179,7 @@ export function getUtxos(
   collateral: Cardano.Utxo
 ): Serialization.TransactionUnspentOutput[] {
   // Exclude collateral input from the overall UTXO set
-  if (collateral) {
-    utxos = utxos.filter(
-      (utxo) =>
-        !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index)
-    );
-  }
+  utxos = filterOutCollateralFromUTxOs(utxos, collateral);
 
   // Convert raw UTXOs to the appropriate format
   const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo: Cardano.Utxo) => {
@@ -592,9 +597,9 @@ export const urlScan = async (url: string) => {
 export function getPublicKey(xpub: string): Bip32PublicKey {
   let words: Decoded;
   try {
-    words = bech32.decode(xpub, 120);
+    words = bech32.decode(xpub, 1023);
   } catch (e) {
-    words = bech32m.decode(xpub, 120);
+    words = bech32m.decode(xpub, 1023);
   }
   const byteArray = Uint8Array.from(bech32.fromWords(words.words));
   return Bip32PublicKey.fromBytes(byteArray);
@@ -881,4 +886,93 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
     const txId = tx.tx_hash || tx.hash || 'unknown_' + Date.now();
     return { ...tx, id: txId };
   });
+}
+
+/**
+ * GroupedAddress interface for CIP-8 signing
+ * Replaces import from @cardano-sdk/key-management to avoid blocking imports
+ */
+export interface GroupedAddress {
+  type: number; // ChainDerivations role (0 = External, 1 = Internal, 2 = Stake)
+  index: number;
+  networkId: Cardano.NetworkId;
+  accountIndex: number;
+  address: Cardano.PaymentAddress;
+  rewardAccount: Cardano.RewardAccount;
+}
+
+/**
+ * KeyAgent interface for CIP-8 signing
+ */
+export interface KeyAgent {
+  derivePublicKey: (derivationPath: { role: number; index: number }) => Promise<string>;
+  signBlob: (derivationPath: { role: number; index: number }, blob: string) => Promise<{
+    publicKey: string;
+    signature: string;
+  }>;
+}
+
+/**
+ * Custom CIP-8 data signing implementation
+ * Implements CIP-30 signData specification without using @cardano-sdk/key-management
+ * This avoids the problematic cip8 import that blocks Chrome event listeners
+ *
+ * @param keyAgent - Object with derivePublicKey and signBlob methods
+ * @param knownAddresses - List of known addresses for the wallet
+ * @param signWith - Address to sign with (payment or reward address)
+ * @param payload - Hex payload to sign
+ * @returns DataSignature with signature and key
+ */
+export async function signDataCip8(
+  keyAgent: KeyAgent,
+  knownAddresses: GroupedAddress[],
+  signWith: Cardano.PaymentAddress | Cardano.RewardAccount,
+  payload: string
+): Promise<{ signature: string; key: string }> {
+  // Find the address in knownAddresses that matches signWith
+  let matchingAddress = knownAddresses.find(addr => addr.address === signWith);
+
+  // If not found in payment/change addresses, check if it's a stake address
+  if (!matchingAddress) {
+    // Check if signWith is a reward account (stake address)
+    const signWithStr = signWith.toString();
+    const isRewardAccount = signWithStr.startsWith('stake') ||
+                           knownAddresses.some(addr => addr.rewardAccount === signWith);
+
+    if (isRewardAccount) {
+      // Use stake key (role 2, index 0)
+      const firstAddress = knownAddresses[0];
+      if (!firstAddress) {
+        throw new Error(DataSignError.AddressNotPK.info);
+      }
+
+      matchingAddress = {
+        type: ChainDerivations.CHIMERIC_ACCOUNT, // Stake key role
+        index: 0,
+        networkId: firstAddress.networkId,
+        accountIndex: firstAddress.accountIndex,
+        address: firstAddress.address,
+        rewardAccount: signWith as Cardano.RewardAccount
+      };
+    }
+  }
+
+  if (!matchingAddress) {
+    throw new Error(`${DataSignError.AddressNotPK.info}: ${signWith}`);
+  }
+
+  // Get the derivation path for this address
+  const derivationPath = {
+    role: matchingAddress.type,
+    index: matchingAddress.index
+  };
+
+  // Sign the payload with the appropriate key
+  const signResult = await keyAgent.signBlob(derivationPath, payload);
+
+  // Return in CIP-30 DataSignature format
+  return {
+    signature: signResult.signature,
+    key: signResult.publicKey
+  };
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="text-center">
+  <div class="text-center" style="justify-self: center;">
     <div
       :style="{
         width: `${qrCodeSize}px`,
@@ -8,7 +8,8 @@
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        position: 'relative'
+        position: 'relative',
+        borderRadius: '12px'
       }"
     >
       <canvas ref="qrCodeCanvas" :width="qrCodeSize" :height="qrCodeSize"></canvas>
@@ -17,13 +18,9 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { UR, UREncoder } from '@keystonehq/keystone-sdk';
 import QRCode from 'qrcode';
-
-
-const { t } = useTranslation();
 
 const props = defineProps({
   cbor: {
@@ -36,11 +33,11 @@ const props = defineProps({
   },
   interval: {
     type: Number,
-    default: 250
+    default: 100
   },
   capacity: {
     type: Number,
-    default: 200
+    default: 400
   },
   size: {
     type: Number,
@@ -58,20 +55,37 @@ const qrCodeSize = computed(() => {
 });
 
 const generateAnimatedQRCode = () => {
-  console.log(props.type);
-  urEncoder.value = new UREncoder(new UR(Buffer.from(props.cbor, 'hex'), props.type), props.capacity);
+  console.log('[AnimatedQRCode] Generating QR with config:', {
+    type: props.type,
+    cborLength: props.cbor.length,
+    capacity: props.capacity,
+    interval: props.interval
+  });
 
-  currentQRCode.value = urEncoder.value.nextPart().toUpperCase();
-  drawQRCode();
-  console.log(props.capacity)
+  try {
+    // Create UR from raw cbor hex (not from reactive Vue object!)
+    // This ensures we're working with a clean UR object, not wrapped by Vue's Observer
+    const cborBuffer = Buffer.from(props.cbor, 'hex');
+    console.log('[AnimatedQRCode] Creating fresh UR from cbor hex, buffer length:', cborBuffer.length);
+
+    const ur = new UR(cborBuffer, props.type);
+    console.log('[AnimatedQRCode] Fresh UR created:', ur);
+
+    urEncoder.value = new UREncoder(ur, props.capacity);
+    console.log('[AnimatedQRCode] UREncoder created, total parts:', urEncoder.value.fragmentsLength);
+
+    currentQRCode.value = urEncoder.value.nextPart().toUpperCase();
+    console.log('[AnimatedQRCode] First QR part:', currentQRCode.value.substring(0, 50) + '...');
+    drawQRCode();
+  } catch (error) {
+    console.error('[AnimatedQRCode] Error generating QR:', error);
+  }
 
   if (!intervalId.value) {
     intervalId.value = setInterval(() => {
-      const newQRCode = urEncoder.value!.nextPart().toUpperCase();
-      if (newQRCode !== currentQRCode.value) {
-        currentQRCode.value = newQRCode;
-        drawQRCode();
-      }
+      // Always update - UREncoder cycles through all parts
+      currentQRCode.value = urEncoder.value!.nextPart().toUpperCase();
+      drawQRCode();
     }, props.interval);
   }
 };

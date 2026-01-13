@@ -1,5 +1,6 @@
-import { computed, ref } from 'vue';
 import { PortfolioCacheService, PortfolioDataPoint } from '@/db/portfolio-cache';
+
+// Note: computed, ref are auto-imported globally by unplugin-auto-import
 
 interface UsePortfolioDataOptions {
   cacheTimeMs?: number; // Cache time in milliseconds, default 1 minute for testing

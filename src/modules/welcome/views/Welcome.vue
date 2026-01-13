@@ -47,7 +47,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, toRefs } from 'vue';
-import networks from '@/utils/networks';
+import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
 import { WalletType } from '@/models/types';
@@ -58,14 +58,14 @@ import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCr
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 
 const createOrImportSeedPhrase = ref<boolean>(false);
-const selectedNetwork = ref<any>(null);
+const selectedNetwork = ref<NetworkInfo>(null);
 
 const { wallets } = toRefs(geroStore);
 
 const disableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = false;
 };
-const onNetworkChanged = (network: any) => {
+const onNetworkChanged = (network: NetworkInfo) => {
   selectedNetwork.value = network;
 };
 const enableCreateOrImportSeedPhrase = (): void => {

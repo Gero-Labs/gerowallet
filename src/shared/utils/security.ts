@@ -1,5 +1,5 @@
 import * as OTPAuth from 'otpauth';
-import { encrypt, decrypt } from '@/shared/utils/crypto';
+import { decrypt, encrypt } from '@/shared/utils/crypto';
 import cryptoRandomString from 'crypto-random-string';
 import { Buffer } from 'buffer';
 import { chacha20poly1305 } from '@noble/ciphers/chacha';
@@ -13,8 +13,8 @@ export const WEBAUTHN_RELYING_PARTY_NAME = APP_NAME;
 export const TOTP_DEFAULT_ISSUER = APP_NAME;
 
 // Cryptographic constants
-/** Number of PBKDF2 iterations for key derivation (balance between security and UX) */
-export const PBKDF2_ITERATIONS = 100000;
+/** Number of PBKDF2 iterations for key derivation (OWASP 2023 recommendation for PBKDF2-HMAC-SHA512) */
+export const PBKDF2_ITERATIONS = 310000;
 /** Salt size in bytes (256-bit) */
 export const SALT_SIZE = 32;
 /** Nonce size in bytes for ChaCha20 (96-bit) */
@@ -33,10 +33,6 @@ export const TOTP_PERIOD = 30;
 export const BACKUP_CODES_COUNT = 8;
 /** Length of each backup code */
 export const BACKUP_CODE_LENGTH = 8;
-/** WebAuthn timeout in milliseconds */
-export const WEBAUTHN_TIMEOUT = 60000;
-/** WebAuthn challenge size in bytes */
-export const WEBAUTHN_CHALLENGE_SIZE = 32;
 
 export type UnlockMethod = 'password' | 'pin' | 'pattern' | null;
 
@@ -344,8 +340,7 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
     }
 
     // Return the credential ID as base64
-    const credentialId = arrayBufferToBase64(credential.rawId);
-    return credentialId;
+    return arrayBufferToBase64(credential.rawId);
   } catch (error) {
     console.error('WebAuthn registration error:', error);
 
@@ -364,12 +359,23 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
  * @param credentialId - Base64-encoded credential ID
  * @returns True if authentication successful
  */
-export async function authenticateWebAuthn(credentialId: string): Promise<boolean> {
+export async function authenticateWebAuthn(credentialId: string, timeoutMs: number = 60000): Promise<boolean> {
   if (!isWebAuthnSupported()) {
     throw new Error('WebAuthn is not supported in this browser');
   }
 
+  // Create AbortController for timeout management
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, timeoutMs);
+
   try {
+    console.log('[WebAuthn] Starting authentication...');
+    console.log('[WebAuthn] Credential ID:', credentialId);
+    console.log('[WebAuthn] rpId:', window.location.hostname);
+    console.log('[WebAuthn] Context:', window.location.href);
+
     // Generate a random challenge
     const challenge = new Uint8Array(32);
     crypto.getRandomValues(challenge);
@@ -384,31 +390,43 @@ export async function authenticateWebAuthn(credentialId: string): Promise<boolea
           transports: ['internal']
         }
       ],
-      timeout: 60000,
+      timeout: timeoutMs,
       userVerification: 'required',
       rpId: window.location.hostname
     };
 
-    // Get the credential (authenticate)
+    console.log('[WebAuthn] Calling navigator.credentials.get()...');
+
+    // Get the credential (authenticate) with AbortSignal
     const assertion = await navigator.credentials.get({
-      publicKey: publicKeyCredentialRequestOptions
+      publicKey: publicKeyCredentialRequestOptions,
+      signal: abortController.signal
     }) as PublicKeyCredential;
+
+    console.log('[WebAuthn] Assertion received:', assertion);
 
     if (!assertion) {
       throw new Error('Authentication failed');
     }
 
     // If we got this far, authentication was successful
+    console.log('[WebAuthn] Authentication successful!');
     return true;
   } catch (error) {
-    console.error('WebAuthn authentication error:', error);
+    console.error('[WebAuthn] Authentication error:', error);
+    console.error('[WebAuthn] Error name:', (error as Error).name);
+    console.error('[WebAuthn] Error message:', (error as Error).message);
 
     // User cancelled or authentication failed
-    if ((error as Error).name === 'NotAllowedError') {
+    if ((error as Error).name === 'NotAllowedError' || (error as Error).name === 'AbortError') {
+      console.log('[WebAuthn] User cancelled or timeout reached');
       return false;
     }
 
     throw new Error(`PassKey authentication failed: ${(error as Error).message}`);
+  } finally {
+    // Clear timeout to prevent memory leaks
+    clearTimeout(timeoutId);
   }
 }
 
@@ -491,115 +509,6 @@ async function deriveWalletPassKeyKey(walletId: string): Promise<Buffer> {
   );
 
   return Buffer.from(walletKey);
-}
-
-/**
- * Store unlock credential encrypted for passkey autofill
- * Uses PBKDF2 + ChaCha20-Poly1305 for secure encryption with device-specific master key
- * @param credential - PIN (string) or pattern (number[]) or password (string)
- * @param credentialType - Type of credential ('pin', 'pattern', 'password')
- * @param walletId - Wallet ID for key derivation (binds credential to wallet)
- * @returns Encrypted credential as hex string (format: salt + nonce + tag + ciphertext)
- */
-export async function encryptCredentialForPassKey(
-  credential: string | number[],
-  credentialType: 'pin' | 'pattern' | 'password',
-  walletId: string
-): Promise<string> {
-  // Convert credential to string for encryption
-  const credentialString = Array.isArray(credential) ? JSON.stringify(credential) : credential;
-  const credentialBytes = Buffer.from(credentialString, 'utf8');
-
-  // Get wallet-specific key derived from device master key
-  const walletKey = await deriveWalletPassKeyKey(walletId);
-
-  // Generate random salt and nonce for ChaCha20
-  const salt = new Uint8Array(SALT_SIZE);
-  const nonce = new Uint8Array(NONCE_SIZE);
-  crypto.getRandomValues(salt);
-  crypto.getRandomValues(nonce);
-
-  // Derive encryption key using PBKDF2-HMAC-SHA512
-  // Input: walletKey + credentialType (binds to device + wallet + credential type)
-  const keyMaterial = Buffer.concat([
-    walletKey,
-    Buffer.from(credentialType, 'utf8')
-  ]);
-
-  const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-    c: PBKDF2_ITERATIONS,
-    dkLen: KEY_SIZE
-  });
-
-  // Encrypt using ChaCha20-Poly1305 AEAD
-  const cipher = chacha20poly1305(derivedKey, nonce);
-  const encrypted = cipher.encrypt(credentialBytes);
-
-  // ChaCha20-Poly1305 returns: ciphertext + tag (tag is last TAG_SIZE bytes)
-  const encryptedBytes = Buffer.from(encrypted);
-  const ciphertext = encryptedBytes.subarray(0, encryptedBytes.length - TAG_SIZE);
-  const tag = encryptedBytes.subarray(encryptedBytes.length - TAG_SIZE);
-
-  // Format: salt(32B) + nonce(12B) + tag(16B) + ciphertext
-  const result = Buffer.concat([salt, nonce, tag, ciphertext]);
-  return result.toString('hex');
-}
-
-/**
- * Decrypt unlock credential for passkey autofill
- * Uses PBKDF2 + ChaCha20-Poly1305 for secure decryption with device-specific master key
- * @param encryptedCredential - Encrypted credential as hex string
- * @param credentialType - Type of credential ('pin', 'pattern', 'password')
- * @param walletId - Wallet ID for key derivation (must match encryption)
- * @returns Decrypted credential (string for PIN/password, number[] for pattern)
- */
-export async function decryptCredentialForPassKey(
-  encryptedCredential: string,
-  credentialType: 'pin' | 'pattern' | 'password',
-  walletId: string
-): Promise<string | number[]> {
-  try {
-    const encryptedBytes = Buffer.from(encryptedCredential, 'hex');
-
-    // Extract components: salt + nonce + tag + ciphertext
-    const salt = encryptedBytes.subarray(0, SALT_SIZE);
-    const nonce = encryptedBytes.subarray(SALT_SIZE, SALT_SIZE + NONCE_SIZE);
-    const tag = encryptedBytes.subarray(SALT_SIZE + NONCE_SIZE, SALT_SIZE + NONCE_SIZE + TAG_SIZE);
-    const ciphertext = encryptedBytes.subarray(SALT_SIZE + NONCE_SIZE + TAG_SIZE);
-
-    // Get wallet-specific key derived from device master key
-    const walletKey = await deriveWalletPassKeyKey(walletId);
-
-    // Derive decryption key using same inputs as encryption
-    const keyMaterial = Buffer.concat([
-      walletKey,
-      Buffer.from(credentialType, 'utf8')
-    ]);
-
-    const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-      c: PBKDF2_ITERATIONS,
-      dkLen: KEY_SIZE
-    });
-
-    // ChaCha20-Poly1305 expects: ciphertext + tag (tag at the end)
-    const combined = Buffer.concat([ciphertext, tag]);
-
-    // Decrypt using ChaCha20-Poly1305
-    const cipher = chacha20poly1305(derivedKey, nonce);
-    const decrypted = cipher.decrypt(combined);
-
-    const decryptedString = Buffer.from(decrypted).toString('utf8');
-
-    // Parse pattern back to number array if needed
-    if (credentialType === 'pattern') {
-      return JSON.parse(decryptedString) as number[];
-    }
-
-    return decryptedString;
-  } catch (error) {
-    console.error('PassKey credential decryption failed:', error);
-    throw new Error('Failed to decrypt passkey credential');
-  }
 }
 
 /**

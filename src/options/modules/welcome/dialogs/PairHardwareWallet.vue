@@ -137,9 +137,21 @@
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
-                  <img v-if="walletType === WalletType.Ledger" :src="assets.connectLedgerSvg" :alt="$t('wallet.connectLedger')">
-                  <img v-if="walletType === WalletType.Trezor" :src="assets.connectTrezorSvg" :alt="$t('wallet.connectTrezor')">
-                  <img v-if="walletType === WalletType.Keystone && !keystoneScan" :src="assets.connectKeystoneSvg" style="width: 230px; height: 126px" :alt="$t('wallet.connectKeystone')">
+                  <img
+                    v-if="walletType === WalletType.Ledger"
+                    :src="assets.connectLedgerSvg"
+                    :alt="t('wallet.connectLedger')"
+                  >
+                  <img
+                    v-if="walletType === WalletType.Trezor"
+                    :src="assets.connectTrezorSvg"
+                    :alt="t('wallet.connectTrezor')"
+                  >
+                  <img
+                    v-if="walletType === WalletType.Keystone && !keystoneScan"
+                    :src="assets.connectKeystoneSvg"
+                    style="width: 230px; height: 126px"
+                    :alt="t('wallet.connectKeystone')">
                   <v-alert
                     color="white"
                     dense
@@ -162,7 +174,6 @@
                         <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
                         <li>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
                         <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
-                        <li>{{ $t('welcome.openCardanoApp') }}</li>
                       </ul>
                     </div>
                     <div v-else-if="walletType === WalletType.Keystone && !keystoneScan">
@@ -181,22 +192,25 @@
                     </div>
                   </v-alert>
                   <div style="display: flex;" v-if="walletType === WalletType.Ledger">
-                    <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBluetooth" />
+                    <ToggleSwitch
+                      :text-left="t('dashboard.usb')"
+                      icon-left="mdi-usb"
+                      :text-right="t('dashboard.bluetooth')"
+                      icon-right="mdi-bluetooth"
+                      v-model="isBluetooth"
+                    />
                   </div>
-                  <div id="qr-code" ref="qrCode" v-else-if="walletType === WalletType.Keystone && !keystoneScan"> </div>
-                  <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px">
-                    <!--                    <QrcodeStream @decode="onDecode" @init="onInit">-->
-                    <!--                      <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
-                    <!--                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
-                    <!--                      </div>-->
-                    <!--                    </QrcodeStream>-->
+                  <div id="qr-code" ref="qrCodeRef" v-else-if="walletType === WalletType.Keystone && !keystoneScan" />
+                  <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px; width: 100%">
+                    <AnimatedQRScanner
+                      purpose="sync"
+                      :urTypes="['crypto-multi-accounts']"
+                      width="100%"
+                      height="334px"
+                      @scan="onKeystoneScan"
+                      @error="onKeystoneError"
+                      @progress="onKeystoneProgress"
+                    />
                   </div>
                 </v-card-text>
                 <v-card-actions class="px-0 align-self-end" style="width: 100%">
@@ -334,26 +348,31 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { computed, ref, getCurrentInstance, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, getCurrentInstance, computed, nextTick } from 'vue';
 import rules from "@/utils/rules";
-import { purpose, Theme, WalletType } from '@/models/types';
+import { Blockchain, coin_type, purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
-import { getKeystonePublicKeyUR,
-  // parseMultiAccounts
-} from '@/shared/utils/keystone';
+import { getKeystonePublicKeyUR } from '@/shared/utils/keystone';
+import { CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import trezor from '@/shared/utils/trezor';
+import { NetworkInfo } from '@/utils/networks';
+import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import { Bip32PublicKey } from '@cardano-sdk/crypto';
+import snackbar from '@/plugins/snackbar';
+import { bech32 } from 'bech32';
+
+const { t } = useTranslation();
 
 interface Props {
   dialog: boolean;
-  network: any;
+  network: NetworkInfo;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -361,8 +380,6 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits(['dialogChange']);
-
-const { t } = useTranslation();
 const vmProxy = getCurrentInstance()!.proxy as any
 const router = vmProxy.$router;
 
@@ -373,6 +390,8 @@ const newWallet = ref({
   publicKey: '',
   termsChecked: false,
   keys: [],
+  btSupported: false,
+  xfp: undefined as string | undefined,
 });
 const valid2 = ref(false);
 const valid3 = ref(false);
@@ -396,14 +415,14 @@ const walletTypes = [
   {
     name: t('wallet.trezor'),
     description: t('wallet.trezorDescription'),
-    enabled: false,
+    enabled: true,
     icon: assets.trezorLogoSvg,
     support: t('wallet.trezorSupport')
   },
   {
     name: t('wallet.keystone'),
     description: t('wallet.keystoneDescription'),
-    enabled: false,
+    enabled: true,
     icon: assets.keystoneLogoSvg,
     support: t('wallet.keystoneSupport')
   },
@@ -413,7 +432,7 @@ const valid = computed({
   get() {
     return walletType.value !== undefined
   },
-  set(val) {}
+  set(_val) {}
 });
 
 const dialogLocal = computed({
@@ -428,25 +447,55 @@ const dialogLocal = computed({
   },
 });
 
-// const onDecode = (result) => {
-//   const multiAccounts = parseMultiAccounts(result);
-//   newWallet.value.name = multiAccounts.device
-//   newWallet.value.publicKey = Bip32PublicKey.from_hex(multiAccounts.keys[0].publicKey + multiAccounts.keys[0].chainCode).to_bech32();
-//   newWallet.value.xfp = multiAccounts.masterFingerprint
-//   newWallet.value.keys = multiAccounts.keys
-//   snackbar.fireSuccess("Keystone QR code successfully scanned.")
-//   step.value++;
-//   keystoneScan.value = false
-// };
+const onKeystoneScan = (ur: { type: string; cbor: string }) => {
+  try {
+    console.log('[Keystone] QR code scanned:', ur);
+    // Convert hex CBOR string to Buffer
+    const cborBuffer = Buffer.from(ur.cbor, 'hex');
+    // Parse CBOR directly using CryptoMultiAccounts
+    const cryptoMultiAccounts = CryptoMultiAccounts.fromCBOR(cborBuffer);
+    console.log('[Keystone] Parsed CryptoMultiAccounts:', cryptoMultiAccounts);
 
-// const onInit = (promise) => {
-//   promise.then(() => {
-//     console.log("Camera initialized successfully");
-//   })
-//     .catch((error) => {
-//       console.error("Camera initialization failed:", error);
-//     });
-// };
+    // Extract data using getter methods
+    const device = cryptoMultiAccounts.getDevice();
+    console.log('[Keystone] Device:', device);
+    const version = cryptoMultiAccounts.getVersion();
+    console.log('[Keystone] Version:', version);
+    const keys = cryptoMultiAccounts.getKeys();
+    const masterFingerprint = cryptoMultiAccounts.getMasterFingerprint();
+
+    newWallet.value.name = device;
+    newWallet.value.xfp = masterFingerprint.toString('hex');
+    const firstKey = keys[0];
+    const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(
+      firstKey.getKey().toString('hex') + firstKey.getChainCode().toString('hex')
+    );
+    const words = bech32.toWords(bip32PublicKey.bytes());
+    newWallet.value.publicKey = bech32.encode('xpub', words, 1023);
+    newWallet.value.btSupported = false;
+    // Convert CryptoHDKey objects to plain objects for storage
+    newWallet.value.keys = keys.map(key => ({
+      publicKey: key.getKey().toString('hex'),
+      chainCode: key.getChainCode().toString('hex'),
+      path: key.getOrigin().getPath()
+    }));
+    snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
+    keystoneScan.value = false;
+    step.value = 3;
+  } catch (error) {
+    console.error('[Keystone] Error processing QR code:', error);
+    snackbar.setError(t('wallet.keystoneQRScanError') as string);
+  }
+};
+
+const onKeystoneError = (error: string) => {
+  console.error('[Keystone] Scanner error:', error);
+  snackbar.setError(t('wallet.keystoneQRScanError') as string);
+};
+
+const onKeystoneProgress = (progress: number) => {
+  console.log('[Keystone] Scan progress:', Math.round(progress * 100) + '%');
+};
 
 const nextStep = () => {
   if (walletType.value === WalletType.Keystone) {
@@ -472,18 +521,22 @@ const backToStepOne = () => {
 const walletCreationStep2 = async () => {
   if (walletType.value === WalletType.Ledger) {
     persistent.value = true
-    hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
+    hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: walletType.value }) as string)
     hardwareLoading.setLoading(true)
-    const index = 0
+
     try {
-      const path = `m/${purpose.hdwallet}'/1815'/${index}'`
+      let path;
+      const index = 0
+      if (props.network.blockchain === Blockchain.CARDANO) {
+        path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
+      }
       const coldWalletProps = await ledger.initLedger(isBluetooth.value, path)
-      console.log(coldWalletProps)
       const isConnected = !!coldWalletProps
       if (isConnected) {
         newWallet.value.name = coldWalletProps.productName
         newWallet.value.publicKey = coldWalletProps.hwPublicKey
         newWallet.value.keys = coldWalletProps.keys
+        newWallet.value.btSupported = coldWalletProps.btSupported
         step.value = 3
       }
     } catch (e) {
@@ -491,13 +544,27 @@ const walletCreationStep2 = async () => {
     }
   } else if (walletType.value === WalletType.Trezor) {
     persistent.value = true;
-    hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
+    hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: walletType.value }) as string)
     hardwareLoading.setLoading(true)
-    const index = 0
     try {
-      const path = `m/${purpose.hdwallet}'/1815'/${index}'`
-      const coldWalletProps = await trezor.initTrezor(path)
-      console.log(coldWalletProps)
+      hardwareLoading.setText(t('wallet.connectingToTrezor') as string);
+      const response: any = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data: { method: 'initTrezor', chain: props.network.blockchain, network: props.network.network },
+      })
+
+      console.log('[TREZOR Dialog] Response:', response);
+
+      if (response.data.success && response.data.coldWalletProps) {
+        const coldWalletProps = response.data.coldWalletProps;
+        newWallet.value.name = coldWalletProps.productName;
+        newWallet.value.publicKey = coldWalletProps.hwPublicKey;
+        newWallet.value.keys = coldWalletProps.keys;
+        newWallet.value.btSupported = coldWalletProps.btSupported;
+        step.value = 3;
+      } else {
+        throw new Error(response.data.error || 'Failed to initialize Trezor');
+      }
     } catch (e) {
       console.log(e)
     }
@@ -525,7 +592,7 @@ const walletCreationStep3 = async () => {
         network: props.network.network
       })
       dialogLocal.value = false
-      const response = await Messaging.sendToBackgroundFromOptions({
+      const response: any = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,
         data: { wallet },
       });
@@ -568,6 +635,8 @@ const resetDialog = () => {
     publicKey: '',
     termsChecked: false,
     keys: [],
+    btSupported: false,
+    xfp: '',
   }
   valid2.value = false
   valid3.value = false

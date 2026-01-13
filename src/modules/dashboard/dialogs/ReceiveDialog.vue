@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    :title="$t('wallet.receive')"
-    :subtitle="$t('wallet.myWalletAddresses')"
+    :title="t('wallet.receive')"
+    :subtitle="t('wallet.myWalletAddresses')"
     :min-height="300"
     :height="600"
     :persistent="false"
@@ -228,7 +228,6 @@ const usedAddresses = computed(() => {
       }
     }));
   }
-  console.log('results', results)
   return results
 });
 

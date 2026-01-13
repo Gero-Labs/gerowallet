@@ -1,4 +1,3 @@
-import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { Cardano } from '@cardano-sdk/core';
 import {
   InputSelector,
@@ -16,29 +15,6 @@ import {
 } from '@cardano-sdk/tx-construction';
 import type { BuildTx } from '@cardano-sdk/tx-construction';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-
-export function getAssetsFromMultiAsset(multiAsset) {
-  if (!multiAsset) return [];
-  const result = [];
-  const hashes = multiAsset.keys();
-  for (let i = 0; i < hashes.len(); i++) {
-    const policyId = hashes.get(i);
-    const assetsForPolicy = multiAsset.get(policyId);
-    if (assetsForPolicy == null) continue;
-    const policies = assetsForPolicy.keys();
-    for (let j = 0; j < policies.len(); j++) {
-      const assetName = policies.get(j);
-      const amount = assetsForPolicy.get(assetName);
-      if (amount == null) continue;
-      const parsedQuantity = amount.to_str();
-      const parsedName = Buffer.from(assetName.name()).toString('hex');
-      const parsedPolicyId = Buffer.from(policyId.to_bytes()).toString('hex');
-      const parsedAssetId = `${parsedPolicyId}${parsedName}`;
-      result.push(new AssetWithQuantity(parsedName, parsedQuantity, parsedAssetId, parsedPolicyId));
-    }
-  }
-  return result;
-}
 
 export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, outputAssets: Cardano.Value) {
   if (!inputAssets || !outputAssets) {
@@ -102,7 +78,8 @@ export async function buildCardanoTransaction({
   epochParams,
   changeAddress,
   tip,
-  implicitCoin = BigInt(0)
+  implicitCoin = BigInt(0),
+  walletContext
 }: {
   certificates?: Cardano.Certificate[];
   withdrawals?: Cardano.Withdrawal[];
@@ -112,6 +89,11 @@ export async function buildCardanoTransaction({
   changeAddress: string;
   tip: any;
   implicitCoin?: bigint; // For deposits (positive) or deposit returns (negative)
+  walletContext?: {
+    keys: any;
+    stakeAddress: string;
+    accountIndex: number;
+  };
 }): Promise<Cardano.Tx> {
   // Check if we have epoch parameters
   if (!epochParams) {
@@ -133,19 +115,6 @@ export async function buildCardanoTransaction({
       const implicitCost = implicitCoin + selectionSkeleton.fee;
       // Add withdrawals to the available balance (withdrawals are incoming funds)
       const changeAmount = totalInput + totalWithdrawals - totalOutput - implicitCost;
-
-      console.log('🔧 Change address resolver called:', {
-        totalInput: totalInput.toString(),
-        totalOutput: totalOutput.toString(),
-        totalWithdrawals: totalWithdrawals.toString(),
-        implicitCoin: implicitCoin.toString(),
-        skeletonFee: selectionSkeleton.fee.toString(),
-        implicitCost: implicitCost.toString(),
-        calculatedChange: changeAmount.toString(),
-        hasExplicitOutputs: selectionSkeleton.outputs.size > 0,
-        hasCertificates: certificates.length > 0,
-        hasWithdrawals: withdrawals.length > 0
-      });
 
       // Calculate change assets by aggregating all input assets and subtracting output assets
       const changeAssets = new Map<Cardano.AssetId, bigint>();
@@ -191,7 +160,6 @@ export async function buildCardanoTransaction({
       // 2. AND there are no remaining assets
       // 3. AND this is NOT a certificate/withdrawal-only transaction
       if (changeAmount <= BigInt(0) && changeAssets.size === 0 && !isCertificateOrWithdrawalOnly) {
-        console.log('🔧 No change output needed (negative change and no assets)');
         return []; // No change needed
       }
 
@@ -204,7 +172,6 @@ export async function buildCardanoTransaction({
         // For certificate/withdrawal transactions, ensure minimum change
         // This will be refined during input selection iterations
         finalChangeAmount = BigInt(1000000); // 1 ADA minimum
-        console.log('🔧 Using minimum change for certificate/withdrawal transaction');
       } else {
         finalChangeAmount = BigInt(1000000); // 1 ADA minimum
       }
@@ -217,12 +184,6 @@ export async function buildCardanoTransaction({
           assets: changeAssets
         }
       };
-
-      console.log('🔧 Creating change output:', {
-        changeAmount: finalChangeAmount.toString(),
-        changeAmountAda: (Number(finalChangeAmount) / 1000000).toFixed(6),
-        assetsCount: changeAssets.size
-      });
 
       return [changeOutput];
     }
@@ -276,12 +237,6 @@ export async function buildCardanoTransaction({
 
   // Create custom computeMinimumCost that uses our witness-aware fee calculation
   const computeMinimumCost: EstimateTxCosts = async (selectionSkeleton: SelectionSkeleton) => {
-    console.log('🔧 computeMinimumCost called with skeleton:', {
-      inputsCount: selectionSkeleton.inputs.size,
-      outputsCount: selectionSkeleton.outputs.size,
-      skeletonFee: selectionSkeleton.fee.toString()
-    });
-
     // CRITICAL: Resolve change outputs before building transaction for fee calculation
     // The change output significantly affects transaction size and thus fee
     const changeOutputs = await changeAddressResolver.resolve(selectionSkeleton);
@@ -295,21 +250,11 @@ export async function buildCardanoTransaction({
     // Build the transaction to get the actual structure (including change output)
     const tx = await buildTx(skeletonWithChange);
 
-    console.log('🔧 Built transaction for fee calculation:', {
-      hasCertificates: tx.body.certificates && tx.body.certificates.length > 0,
-      hasWithdrawals: tx.body.withdrawals && tx.body.withdrawals.length > 0,
-      inputsCount: tx.body.inputs.length,
-      outputsCount: tx.body.outputs.length,
-      changeOutputsCount: changeOutputs.length
-    });
-
     // Convert selection skeleton inputs to resolved UTXOs for fee calculation
     const resolvedInputs = Array.from(selectionSkeleton.inputs);
 
-    // Use our witness-aware fee calculation
-    console.log('🔧 About to call BrowserTxConstruction.minFee');
-    const fee = BrowserTxConstruction.minFee(tx, resolvedInputs, protocolParams);
-    console.log('🔧 BrowserTxConstruction.minFee returned:', fee.toString());
+    // Use our witness-aware fee calculation with wallet context for accurate signature estimation
+    const fee = BrowserTxConstruction.minFee(tx, resolvedInputs, protocolParams, walletContext);
 
     return { fee };
   };

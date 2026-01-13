@@ -1,4 +1,5 @@
 import { APIError, METHOD, SENDER, TARGET } from './config';
+import { Cardano } from '@cardano-sdk/core';
 
 interface Message {
   method?: string;
@@ -12,6 +13,46 @@ interface Message {
   isUserGesture?: boolean;
 }
 
+/**
+ * Generic wrapper for responses from background script
+ * @template T - The response data type
+ */
+export interface BackgroundResponse<T = any> {
+  data: T;
+  target: string;
+  sender: string;
+}
+
+/**
+ * Response type for spending password verification
+ */
+export interface VerifyPasswordResponse {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Response type for Sign Tx
+ */
+export interface SignTxResponse {
+  success: boolean;
+  signatures: Cardano.Signatures;
+  error?: string;
+}
+
+/**
+ * Response type for Sign Data
+ */
+export interface SignDataResponse {
+  success: boolean;
+  signatureData: {
+    signatureHex: string;
+    signingPublicKeyHex: string;
+    addressFieldHex: string;
+  };
+  error?: string;
+}
+
 class InternalController {
   port: chrome.runtime.Port;
   tabId: Promise<number>;
@@ -22,7 +63,7 @@ class InternalController {
         this.port = chrome.runtime.connect({
           name: 'internal-background-popup-communication',
         });
-        
+
         // Handle port disconnection
         this.port.onDisconnect.addListener(() => {
           if (chrome.runtime.lastError) {
@@ -32,7 +73,7 @@ class InternalController {
       } catch (error) {
         console.warn('Error creating runtime port:', error);
       }
-      
+
       this.tabId = new Promise((resolve, reject) => {
         try {
           chrome.tabs.getCurrent((tab) => {
@@ -108,14 +149,14 @@ class InternalSidePanelController {
         this.port = chrome.runtime.connect({
           name: 'internal-background-sidepanel-communication',
         });
-        
+
         // Handle port disconnection
         this.port.onDisconnect.addListener(() => {
           if (chrome.runtime.lastError) {
             console.warn('SidePanel port disconnected with error:', chrome.runtime.lastError.message);
           }
         });
-        
+
         if (!Number.isInteger(this.tabId)) {
           console.error("SidePanelController: invalid or missing tabId in URL!");
         }

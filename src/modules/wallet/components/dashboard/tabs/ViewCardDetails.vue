@@ -12,7 +12,8 @@
           <div class="card-number-input">
             <span class="card-number-text">{{ cardData?.pan || $t('common.loadingEllipsis') }}</span>
           </div>
-        </div> -->        <div class="input-full small-input">
+        </div> -->
+        <div class="input-full small-input">
           <label class="input-label">{{ $t('card.expiry') }}</label>
           <div class="cvv-input">
             <span class="cvv-text">{{ cardDetailsFull?.details.expiryDate || $t('common.loadingEllipsis') }}</span>
@@ -23,7 +24,7 @@
         <div class="input-full">
           <label class="input-label">{{ $t('card.cardNumber') }}</label>
           <div class="card-number-input">
-            <img src="@/modules/wallet/icons/mastercard.svg" :alt="$t('card.mastercard')" class="card-icon" />
+            <img src="@/modules/wallet/icons/mastercard.svg" :alt="t('card.mastercard')" class="card-icon" />
             <span class="card-number-text">{{ cardDetailsFull?.details.pan || $t('common.loadingEllipsis') }}</span>
           </div>
         </div>
@@ -46,11 +47,9 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted } from 'vue';
 import cardStoreModule from '@/stores/modules/card';
 
-
 const { t } = useTranslation();
 
 const showCvv = ref(false);
-const showPin = ref(false);
 const loading = ref(true);
 
 // Get selected card data from store

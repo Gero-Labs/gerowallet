@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="String($t('security.lockSettings'))"
+    :title="$t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"
@@ -176,6 +176,7 @@
               <v-list-item-action>
                 <v-btn
                   small
+                  text
                   :color="isPassKeyRegistered ? 'error' : 'primary'"
                   :loading="loadingPassKeyRegistration"
                   :disabled="!isPassKeySupported"
@@ -363,20 +364,9 @@ import snackbar from '@/plugins/snackbar';
 import { markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+import { BackgroundResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 
 const { t } = useTranslation();
-
-// Response type from background messaging
-interface BackgroundResponse<T = any> {
-  data: T;
-  target: string;
-  sender: string;
-}
-
-interface VerifyPasswordResponse {
-  success: boolean;
-  error?: string;
-}
 
 // Props
 interface Props {

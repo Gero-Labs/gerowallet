@@ -1,0 +1,202 @@
+import { ref, toRefs } from 'vue';
+import { Cardano } from '@cardano-sdk/core';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import stakingStore from '@/stores/stakingStore';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
+import snackbar from '@/plugins/snackbar';
+import networks from '@/utils/networks';
+import { WalletType } from '@/models/types';
+
+/**
+ * Composable for handling Cardano staking delegation transactions
+ * Shared logic between Staking.vue and NoTokensCard.vue
+ */
+export function useDelegation() {
+  const { t } = useTranslation();
+
+  const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
+  const { epochParams, tip } = toRefs(networkStore);
+
+  const selectedPool = ref<any>(null);
+  const txData = ref<Cardano.Tx | null>(null);
+  const isDelegateDialogOpen = ref(false);
+
+  /**
+   * Delegate to the Gero pool (official wallet pool)
+   */
+  const delegateToGero = async () => {
+    if (!loggedWallet.value) return;
+
+    try {
+      const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+      await stakingStore.loadPoolById(loggedWallet.value, poolId);
+
+      if (!stakingStore.state.currentPool) {
+        snackbar.setError(t('errors.unknownError'));
+        return;
+      }
+
+      // Delegate to the loaded Gero pool
+      await delegate(stakingStore.state.currentPool);
+    } catch (error: any) {
+      console.error('Error delegating to Gero pool:', error);
+      snackbar.setError(t('errors.unknownError'));
+    }
+  };
+
+  /**
+   * Build and prepare delegation transaction for any pool
+   * @param pool - The stake pool to delegate to
+   */
+  const delegate = async (pool: any) => {
+    selectedPool.value = pool;
+
+    try {
+      // Check if we have epoch parameters
+      if (!epochParams.value) {
+        throw new Error(t('errors.networkError'));
+      }
+
+      const certificates: Cardano.Certificate[] = [];
+
+      // Create stake credential from the key hash
+      const stakeCredential: Cardano.Credential = {
+        type: Cardano.CredentialType.KeyHash,
+        hash: keys.value.stake[0].cred,
+      };
+
+      const poolIdBech32 = Cardano.PoolId(selectedPool.value.pool_id_bech32);
+
+      // Use proper deposit from epoch parameters - ensure BigInt conversion
+      const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+
+      let implicitCoin = BigInt(0);
+
+      // Check if this is a Trezor wallet - Trezor doesn't support combined Conway certificates
+      // We need to use separate certificates for registration, delegation, and vote delegation
+      const isTrezorWallet = loggedWallet.value?.type === WalletType.Trezor;
+
+      if (!account.value?.active) {
+        // Need to register a stake key first, then delegate
+        if (isTrezorWallet) {
+          // Trezor: Use separate certificates
+          // 1. Registration
+          certificates.push({
+            __typename: Cardano.CertificateType.Registration,
+            stakeCredential,
+            deposit: stakeKeyDepositLovelace,
+          });
+          // 2. Pool delegation
+          certificates.push({
+            __typename: Cardano.CertificateType.StakeDelegation,
+            stakeCredential,
+            poolId: poolIdBech32,
+          });
+          // 3. Vote delegation (abstain by default)
+          certificates.push({
+            __typename: Cardano.CertificateType.VoteDelegation,
+            stakeCredential,
+            dRep: {
+              __typename: 'AlwaysAbstain',
+            } as Cardano.AlwaysAbstain,
+          });
+        } else {
+          // Other wallets: Use combined Conway certificate
+          certificates.push({
+            __typename: Cardano.CertificateType.StakeVoteRegistrationDelegation,
+            stakeCredential,
+            poolId: poolIdBech32,
+            dRep: {
+              __typename: 'AlwaysAbstain',
+            } as Cardano.AlwaysAbstain,
+            deposit: stakeKeyDepositLovelace,
+          });
+        }
+        implicitCoin = stakeKeyDepositLovelace; // Deposit required
+      } else if (!account.value?.drep_id) {
+        // Delegate to pool and abstain by default
+        if (isTrezorWallet) {
+          // Trezor: Use separate certificates
+          // 1. Pool delegation
+          certificates.push({
+            __typename: Cardano.CertificateType.StakeDelegation,
+            stakeCredential,
+            poolId: poolIdBech32,
+          });
+          // 2. Vote delegation (abstain by default)
+          certificates.push({
+            __typename: Cardano.CertificateType.VoteDelegation,
+            stakeCredential,
+            dRep: {
+              __typename: 'AlwaysAbstain',
+            } as Cardano.AlwaysAbstain,
+          });
+        } else {
+          // Other wallets: Use combined Conway certificate
+          certificates.push({
+            __typename: Cardano.CertificateType.StakeVoteDelegation,
+            stakeCredential,
+            poolId: poolIdBech32,
+            dRep: {
+              __typename: 'AlwaysAbstain',
+            } as Cardano.AlwaysAbstain,
+          });
+        }
+      } else {
+        // Just delegate to pool, no registration needed (works for all wallets)
+        certificates.push({
+          __typename: Cardano.CertificateType.StakeDelegation,
+          stakeCredential,
+          poolId: poolIdBech32,
+        });
+      }
+
+      // Build the delegation transaction with wallet context for accurate fee estimation
+      txData.value = await buildCardanoTransaction({
+        certificates,
+        utxos: utxos.value,
+        epochParams: epochParams.value,
+        changeAddress: keys.value.payment[0].address,
+        tip: tip.value,
+        implicitCoin,
+        walletContext: {
+          keys: keys.value,
+          stakeAddress: loggedWallet.value?.stakeAddress || '',
+          accountIndex: 0,
+        }
+      });
+
+      isDelegateDialogOpen.value = true;
+    } catch (error: any) {
+      console.error('Error building delegation transaction:', error);
+      if (error.message?.includes('UTxO Balance Insufficient')) {
+        snackbar.setError(t('errors.insufficientBalance'));
+      } else {
+        snackbar.setError(t('errors.buildTransactionFailed') + ': ' + (error.message || t('errors.unknownError')));
+      }
+    }
+  };
+
+  /**
+   * Close the delegation dialog and reset state
+   */
+  const closeDelegateDialog = () => {
+    isDelegateDialogOpen.value = false;
+    txData.value = null;
+    selectedPool.value = null;
+  };
+
+  return {
+    // State
+    selectedPool,
+    txData,
+    isDelegateDialogOpen,
+
+    // Methods
+    delegateToGero,
+    delegate,
+    closeDelegateDialog,
+  };
+}

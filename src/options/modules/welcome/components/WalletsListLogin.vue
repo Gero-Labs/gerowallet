@@ -55,6 +55,9 @@
             <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
               <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
             </v-list-item-avatar>
+            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Trezor">
+              <v-img :src="assets.trezorSvg" contain width="18"></v-img>
+            </v-list-item-avatar>
             <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
               <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
             </v-list-item-avatar>

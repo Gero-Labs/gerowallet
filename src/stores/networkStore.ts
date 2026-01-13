@@ -35,10 +35,8 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing network store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<NetworkStore>) => {
-    debugLog('📥 Received network store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -127,9 +125,6 @@ export default {
   },
 
   setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
-    const context = getContextType();
-    debugLog(`🔍 NetworkStore setTip called from ${context} context`);
-
     // RACE CONDITION FIX: Only update tip if it's newer than the current one
     // Prevents old Ably messages from overwriting fresh data
     if (networkStore.tip) {
@@ -148,10 +143,7 @@ export default {
   },
 
   setPrice(price: {}) {
-    const context = getContextType();
-    debugLog(`🔍 NetworkStore setPrice called from ${context} context`);
     networkStore.price = price;
-
     // Broadcast from background context
     broadcastFromBackground({ price });
   },

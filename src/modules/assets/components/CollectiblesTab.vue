@@ -27,7 +27,7 @@
               <!-- Overlay badges -->
               <div class="card-badges">
                 <v-chip small outlined class="quantity-chip">
-                  {{ Number(collection.quantity || 1).toLocaleString() }} {{ $t('assets.items') }}
+                  {{ Number(collection.quantity || 1).toLocaleString('en-US') }} {{ $t('assets.items') }}
                 </v-chip>
                 <v-chip v-if="collection.isScam" small color="error">
                   <v-icon left x-small>mdi-alert-decagram</v-icon>

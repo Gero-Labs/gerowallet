@@ -66,6 +66,7 @@ import { ref, onMounted, getCurrentInstance, nextTick } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+import { getDb } from '@/db/wallet-db';
 
 // Props
 interface Props {
@@ -111,8 +112,13 @@ const hasAutoTriggered = ref(false);
 
 // Check passkey availability on mount and auto-trigger
 onMounted(async () => {
+  debugLog('[PassKeyField] Component mounted in context:', window.location.href);
+  debugLog('[PassKeyField] WebAuthn supported:', !!window.PublicKeyCredential);
+  debugLog('[PassKeyField] Hostname:', window.location.hostname);
+
   passKeyAvailable.value = await checkPassKeyAvailable();
-  debugLog('checkPassKeyAvailable', passKeyAvailable.value);
+  debugLog('[PassKeyField] checkPassKeyAvailable result:', passKeyAvailable.value);
+
   // Auto-trigger passkey authentication if available AND enabled in settings
   if (passKeyAvailable.value && !hasAutoTriggered.value) {
     // Set flag IMMEDIATELY to prevent race conditions on rapid re-mounts
@@ -120,6 +126,7 @@ onMounted(async () => {
 
     // Check if auto-trigger is enabled
     const autoTriggerEnabled = await checkAutoTriggerEnabled();
+    debugLog('[PassKeyField] Auto-trigger enabled:', autoTriggerEnabled);
 
     if (autoTriggerEnabled) {
       // Small delay to let the dialog render
@@ -143,7 +150,6 @@ async function checkPassKeyAvailable(): Promise<boolean> {
     if (!window.PublicKeyCredential) return false;
 
     // Check if passkey autofill is enabled in DB
-    const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
@@ -188,12 +194,28 @@ async function checkAutoTriggerEnabled(): Promise<boolean> {
 function handlePassKeyClick(event: MouseEvent) {
   // Only handle if not from a touch event (touch already handled)
   if (event.detail === 0) return; // Ignore programmatic clicks
-
-  debugLog('🖱️ Click detected on passkey icon');
   if (!passKeyLoading.value && !props.disabled) {
-    debugLog('🚀 Triggering passkey authentication from click');
     handlePassKeyAutofill();
   }
+}
+
+/**
+ * Check if we're in a sidepanel context
+ */
+function isSidepanelContext(): boolean {
+  // Check both regular search params and hash-based params (for hash router)
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('tabId')) return true;
+
+  // Parse hash for query params (e.g., #/sign-tx?tabId=123)
+  const hash = window.location.hash;
+  const queryStart = hash.indexOf('?');
+  if (queryStart !== -1) {
+    const hashParams = new URLSearchParams(hash.substring(queryStart));
+    return hashParams.has('tabId');
+  }
+
+  return false;
 }
 
 /**
@@ -201,6 +223,8 @@ function handlePassKeyClick(event: MouseEvent) {
  */
 async function handlePassKeyAutofill() {
   passKeyLoading.value = true;
+
+  const isSidepanel = isSidepanelContext();
 
   try {
     const wallet = walletStore.loggedWallet;
@@ -227,44 +251,105 @@ async function handlePassKeyAutofill() {
 
     debugLog('🔐 Authenticating with passkey...');
 
-    // Authenticate with WebAuthn
-    const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
-    const authenticated = await authenticateWebAuthn(credentialConfig.value);
+    // Check if we're in sidepanel - WebAuthn doesn't work in sidepanel context
+    if (isSidepanel) {
+      // Open popup window for authentication
+      const popupUrl = chrome.runtime.getURL('index.html#/passkey-auth');
+      const authWindow = window.open(
+        popupUrl,
+        'passkey-auth',
+        'width=500,height=600,popup=yes'
+      );
 
-    if (!authenticated) {
-      throw new Error('PassKey authentication failed');
+      if (!authWindow) {
+        throw new Error('Failed to open authentication window. Please allow popups for this extension.');
+      }
+
+      // Wait for authentication result via message
+      const result = await new Promise<{ success: boolean; password?: string; error?: string }>((resolve) => {
+        const messageHandler = (event: MessageEvent) => {
+          if (event.data?.type === 'PASSKEY_AUTH_RESULT') {
+            window.removeEventListener('message', messageHandler);
+            authWindow.close();
+            resolve(event.data.payload);
+          }
+        };
+        window.addEventListener('message', messageHandler);
+
+        // Timeout after 60 seconds
+        setTimeout(() => {
+          window.removeEventListener('message', messageHandler);
+          authWindow.close();
+          resolve({ success: false, error: 'Authentication timeout' });
+        }, 60000);
+      });
+
+      // In sidepanel mode, treat all popup errors as potential user cancellations
+      // If there's a real error, the popup shows it for 3 seconds before closing
+      // This prevents showing duplicate error messages in the parent window
+      if (!result.success || !result.password) {
+        debugLog('ℹ️ PassKey authentication did not complete (user may have cancelled)');
+        // Don't throw error - just return silently
+        return;
+      }
+
+      // Auto-fill password
+      emit('input', result.password);
+
+      // Wait for Vue to propagate the password value, then emit success
+      await nextTick();
+      showSuccessFeedback();
+      // emit('passkey-autofill-success');
+    } else {
+      // Normal context - authenticate directly
+      const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
+      const authenticated = await authenticateWebAuthn(credentialConfig.value);
+
+      if (!authenticated) {
+        throw new Error('PassKey authentication failed');
+      }
+
+      // Decrypt spending password
+      const decryptedPassword = await decryptSpendingPasswordForPassKey(
+        encryptedPasswordConfig.value,
+        credentialConfig.value,
+        wallet.id
+      );
+
+      // Auto-fill password
+      emit('input', decryptedPassword);
+
+      // Wait for Vue to propagate the password value, then emit success
+      await nextTick();
+      showSuccessFeedback();
+      // emit('passkey-autofill-success');
     }
-
-    debugLog('✅ PassKey authentication successful');
-
-    // Decrypt spending password
-    const decryptedPassword = await decryptSpendingPasswordForPassKey(
-      encryptedPasswordConfig.value,
-      credentialConfig.value,
-      wallet.id
-    );
-
-    debugLog('🔓 Password decrypted successfully');
-
-    // Auto-fill password
-    emit('input', decryptedPassword);
-
-    // Wait for Vue to propagate the password value, then emit success
-    await nextTick();
-    showSuccessFeedback();
-    // emit('passkey-autofill-success');
   } catch (error: any) {
     console.error('❌ PassKey autofill failed:', error);
 
-    // Show error tooltip
-    errorTooltipText.value = error.message || vmProxy.$t('security.passKeyAuthFailed');
-    errorTooltipEnabled.value = true;
-    setTimeout(() => {
-      errorTooltipEnabled.value = false;
-    }, 3000);
+    // Check if this is a user cancellation (not an actual error)
+    const isUserCancellation =
+      error.name === 'NotAllowedError' ||
+      error.name === 'AbortError' ||
+      error.message?.toLowerCase().includes('cancel') ||
+      error.message?.toLowerCase().includes('abort') ||
+      error.message?.toLowerCase().includes('user');
 
-    // Emit error event
-    emit('passkey-autofill-error', error.message);
+    if (isUserCancellation) {
+      // User cancelled - this is normal, don't show error
+      debugLog('ℹ️ PassKey authentication cancelled by user');
+      // Just reset the loading state, no error message
+    } else {
+      // Actual error - show error tooltip
+      errorTooltipText.value = error.message || vmProxy.$t('security.passKeyAuthFailed');
+      errorTooltipEnabled.value = true;
+      setTimeout(() => {
+        errorTooltipEnabled.value = false;
+      }, 3000);
+
+      // Emit error event
+      emit('passkey-autofill-error', error.message);
+    }
   } finally {
     passKeyLoading.value = false;
   }

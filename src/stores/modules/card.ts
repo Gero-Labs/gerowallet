@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo } from '@/models/card';
+import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo, PaginatedCardsResponse } from '@/models/card';
 import type { KaiserExTokenData } from '@/services/kaiserEx.service';
 import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
@@ -120,6 +120,23 @@ async function initCardStore() {
 
       // Merge stored state (tokens are loaded from cookies separately)
       Object.assign(cardStore, storedData);
+    }
+
+    // Watch for wallet lock state changes via store messaging system
+    // This runs in browser context, listening for background context wallet state changes
+    if (typeof chrome !== 'undefined') {
+      const { storeMessaging } = await import('@/services/storeMessaging.service');
+
+      storeMessaging.subscribe('walletStore', async (updates) => {
+        if ('isLocked' in updates && updates['isLocked'] && cardStore.accessToken) {
+          console.log('🔒 Wallet locked - logging out from card');
+          try {
+            await cardStoreInstance.logout();
+          } catch (error) {
+            console.error('Failed to logout from card during wallet lock:', error);
+          }
+        }
+      });
     }
   } catch (error) {
     console.error('Failed to initialize card store:', error);
@@ -291,7 +308,8 @@ const cardStoreInstance = {
    */
   async logout(): Promise<void> {
     try {
-      const api = getCardApi();
+      // Check if user was logged in before attempting backend logout
+      const wasLoggedIn = cardStore.accessToken !== null;
 
       // Clear tokens and user data from memory
       cardStore.accessToken = null;
@@ -304,11 +322,14 @@ const cardStoreInstance = {
       cardStore.exchangeRate = null;
       cardStore.walletStatus.isKaiserexAuthenticated = false;
 
-      // Call backend logout endpoint and clear cookies
-      try {
-        await api.axiosInstance.get('/api/kaiserex/logout');
-      } catch (backendError) {
-        console.warn('Backend logout failed, continuing with local cleanup:', backendError);
+      // Only call backend logout endpoint if user was logged in
+      if (wasLoggedIn) {
+        try {
+          const api = getCardApi();
+          await api.axiosInstance.get('/api/kaiserex/logout');
+        } catch (backendError) {
+          console.warn('Backend logout failed, continuing with local cleanup:', backendError);
+        }
       }
 
       // Always clear cookies regardless of backend response
@@ -560,6 +581,8 @@ export default {
         return 'pending';
       case 'approved':
         return 'approved';
+      case 'verified':
+        return 'pending';
       case 'rejected':
         return 'auth';
       default:
@@ -661,8 +684,7 @@ export default {
     cardStore.errors.cardData = null;
 
     try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.get('/api/kaiserex/cards');
+      const response = await getCardApi().axiosInstance.get<PaginatedCardsResponse>('/api/kaiserex/cards');
       const cardsData = response.data.data || [];
 
       // Populate cards array with all user's cards
@@ -687,7 +709,15 @@ export default {
           this.upsertCard(newCard);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Check if it's an axios error with a 500 status code
+      if (error?.response?.status >= 500) {
+        // Set wallet status to error state for 5xx server errors
+        cardStore.walletStatus.currentState = 'error';
+        cardStore.walletStatus.error = 'Server error. Please try again later.';
+        console.error('Server error (5xx) when fetching card data:', error);
+      }
+
       cardStore.errors.cardData =
         error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card data';
       throw error;
