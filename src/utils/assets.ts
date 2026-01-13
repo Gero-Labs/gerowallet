@@ -13,6 +13,7 @@ import orangeSvg from '@/assets/svg/orange.svg'
 import blueSvg from '@/assets/svg/blue.svg'
 import greySvg from '@/assets/svg/grey.svg'
 import ledgerSvg from '@/assets/svg/ledger.svg'
+import trezorSvg from '@/assets/svg/trezor.svg'
 import keystoneSvg from '@/assets/svg/keystone.svg'
 import ledgerLogoSvg from '@/assets/svg/ledger-logo.svg'
 import trezorLogoSvg from '@/assets/svg/trezor-logo.svg'
@@ -72,7 +73,7 @@ import welcomeImage from '@/shared/assets/welcome/welcome.png'
 import improvedUxSS from '@/shared/assets/welcome/improved_ux.png'
 import geroCardSS from '@/shared/assets/welcome/gero_card.png'
 import perpetualsSS from '@/shared/assets/welcome/perpetuals.png'
-import multisigSS from '@/shared/assets/welcome/multisig.png'
+import passKeySS from '@/shared/assets/welcome/passKey.png'
 import cashbackNewSS from '@/shared/assets/welcome/cashback_new.png'
 import riskLow from '@/assets/img/cardano-shield/risk-low.svg'
 import riskMedium from '@/assets/img/cardano-shield/risk-medium.svg'
@@ -133,6 +134,8 @@ import bringWhite from '@/assets/svg/bring-white.svg'
 import apex from '@/assets/img/apex.jpg'
 import passKeySvg from '@/assets/svg/pass-key.svg'
 import autoTriggerSvg from '@/assets/svg/auto-trigger.svg'
+import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
+import mediumSvg from '@/assets/svg/medium.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -151,6 +154,7 @@ export default {
   blueSvg,
   greySvg,
   ledgerSvg,
+  trezorSvg,
   keystoneSvg,
   ledgerLogoSvg,
   trezorLogoSvg,
@@ -209,7 +213,7 @@ export default {
   improvedUxSS,
   geroCardSS,
   perpetualsSS,
-  multisigSS,
+  passKeySS,
   cashbackNewSS,
   giftSvg,
   pendingSvg,
@@ -371,7 +375,9 @@ export default {
   frontCardNoMcx2,
   emptyState,
   cardanoBlueLogo,
-  apex
+  apex,
+  geroDashboardXmas,
+  mediumSvg
 }
 
 export {

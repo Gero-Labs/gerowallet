@@ -42,7 +42,7 @@
             v-model="selectedTokenA"
             :available="availableTokens"
             :index="0"
-            :title="$t('swap.selling')"
+            :title="t('swap.selling')"
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
@@ -58,7 +58,7 @@
             v-model="selectedTokenB"
             :available="availableTokens"
             :index="0"
-            :title="$t('swap.buying')"
+            :title="t('swap.buying')"
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"
@@ -202,13 +202,14 @@ import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { debugLog } from '@/utils/debug';
 
 const emit = defineEmits(['onSwap']);
 
 const { t } = useTranslation();
 
 const isSwapEnabled = computed(() => {
-  return featureFlagsStore.state.flags.swapEnabled;
+  return featureFlagsStore.isSwapEnabled();
 });
 
 const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
@@ -303,8 +304,8 @@ const isInsufficientBalance = computed(() => {
   const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
   const decimals = selectedTokenA.value.decimals || 0;
   const balance = selectedTokenA.value.balance || 0;
-  const b = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '')
-  const balanceA = Number(b)
+  // Convert balance from smallest unit to main unit
+  const balanceA = filters.convertFromSmallestUnit(balance, decimals);
   return Number(quantityA) > balanceA
 })
 
@@ -319,7 +320,6 @@ const nativeTokenComputed = computed(() => {
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
   const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
   const token: any = assetsArray.find((token: any) => token.metadata?.ticker === currencyTicker);
-  console.log('token', token)
   if (token) {
     return token
   } else {
@@ -376,7 +376,7 @@ const availableTokens = computed(() => {
     //
     //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
-    });
+    }).filter((token: any) => token.name !== nativeToken.ticker);
   return [nativeToken, ...availableTokens];
 });
 
@@ -483,9 +483,7 @@ const limitChange = (change: string) => {
 }
 
 const setLimitByPercentage = (percentage: number) => {
-  console.log('setLimitByPercentage', percentage)
   limit.value = (price_ba2.value * (1 + percentage / 100)).toString();
-  console.log('setLimitByPercentage', limit.value)
 }
 
 const tokenAQuantityChange = (val) => {
@@ -584,16 +582,15 @@ const averagePrice = (token_in, token_out) => {
     price_ab2.value = res.price_ab;
     price_ba2.value = res.price_ba;
     limit.value = structuredClone(price_ba2.value).toString()
-    console.log(limit.value)
   }).catch(() => {
-    // console.log(e)
+    // Silently handle error - average price is optional
   });
 }
 
 const performPeriodicEstimate = async () => {
   // Add defensive checks for undefined tokens
   if (!selectedTokenA.value || !selectedTokenB.value) {
-    console.warn('Tokens not properly initialized');
+    debugLog('[Swap] Tokens not properly initialized');
     return;
   }
 
@@ -629,7 +626,7 @@ const prepareSwap = async () => {
       method: METHOD.signTx,
       data: { tx: txCbor, partialSign, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
-    console.log('signaturesRes', signaturesRes)
+    debugLog('signaturesRes', signaturesRes)
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
     } else {
@@ -637,13 +634,12 @@ const prepareSwap = async () => {
       await submit(signRes.cbor)
     }
   } catch (error: any) {
-    console.log(error)
+    debugLog('[Swap] Error:', error);
     if (error['response']) {
       snackbar.setError(`Swap Failed. Error Code: ${error['response'].status} - ${JSON.stringify(error['response'].data)}`)
     } else {
       snackbar.setError(error)
     }
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -669,7 +665,7 @@ const submit = async (cborHex: string) => {
   clearInputs();
 
   emit('onSwap')
-  console.log(txId)
+  debugLog('[Swap] Transaction submitted:', txId);
 }
 
 const clearInputs = () => {
@@ -691,20 +687,22 @@ const excludedChange = async (val) => {
 const setMaxTokenA = () => {
   if (!selectedTokenA.value) return;
 
-  const balance = selectedTokenA.value.balance || 0;
   const decimals = selectedTokenA.value.decimals || 0;
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+
+  // Clean and parse balance (handles formatted strings)
+  const balanceInSmallestUnit = Number(filters.cleanNumericValue(selectedTokenA.value.balance || 0));
 
   // For ADA (native currency), reserve 3 ADA for tx fees, deposits, and DEX fees
   if (selectedTokenA.value.ticker === nativeTicker) {
     const reservedAmount = 3_000_000; // 3 ADA in lovelace
-    const maxBalanceLovelace = Math.max(0, Number(balance) - reservedAmount);
-    const maxBalance = filters.toCurrency(maxBalanceLovelace, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    const maxBalanceLovelace = Math.max(0, balanceInSmallestUnit - reservedAmount);
+    const maxBalance = filters.convertFromSmallestUnit(maxBalanceLovelace, decimals).toString();
     selectedTokenA.value.quantity = maxBalance;
     tokenAQuantityChange(maxBalance);
   } else {
     // For non-ADA tokens, use full balance (fees are paid in ADA)
-    const maxBalance = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    const maxBalance = filters.convertFromSmallestUnit(balanceInSmallestUnit, decimals).toString();
     selectedTokenA.value.quantity = maxBalance;
     tokenAQuantityChange(maxBalance);
   }

@@ -106,11 +106,22 @@ function cip68Label(asset_name: any): number | null {
   return check === crc8(Buffer.from(numHex, 'hex')).toString(16).padStart(2, '0') ? num : null;
 }
 
-function resolveCip68(onchain_metadata_extra: any, label: number, metadata) {
+function resolveCip68(onchain_metadata_extra: any, label: number, metadata, tokenInfo?: any) {
   const plutusData: Serialization.PlutusData = jsonToPlutusData(JSON.parse(onchain_metadata_extra)[label]);
   const metadataJson: Asset.NftMetadata | any = fromPlutusData(plutusData.toCore());
+
+  if (!metadataJson) {
+    console.warn('⚠️ CIP68: Failed to parse PlutusData for token:', {
+      unit: tokenInfo?.unit,
+      policy_id: tokenInfo?.policy_id,
+      asset_name: tokenInfo?.asset_name,
+      label,
+      onchain_metadata_extra
+    });
+  }
+
   metadata = metadataJson;
-  if (metadataJson.otherProperties) {
+  if (metadataJson && metadataJson.otherProperties) {
     metadata = {
       ...metadataJson,
       ...Object.fromEntries(metadataJson.otherProperties.entries())
@@ -133,7 +144,7 @@ const getConditionalValidators = (strict: boolean) => ({
     return false;
   },
   isValidDatumShape: (plutusData: Cardano.PlutusData | undefined): plutusData is Cardano.ConstrPlutusData => {
-    const minNumberOfFields = strict ? 3 : 2;
+    const minNumberOfFields = strict ? 3 : 1;  // Allow 1 field (metadata only) for lenient parsing
     const isValid =
       Cardano.util.isConstrPlutusData(plutusData) &&
       plutusData.constructor === 0n &&
@@ -268,9 +279,23 @@ export const fromPlutusData = (
   }
 
   const [nftMetadata, version] = plutusData.fields.items;
-  if (!Cardano.util.isPlutusMap(nftMetadata) || !Cardano.util.isPlutusBigInt(version)) {
-    debugLog('Invalid PlutusData: expecting a map at [0] and integer at [1]');
+
+  // Validate that first field is a map (metadata)
+  if (!Cardano.util.isPlutusMap(nftMetadata)) {
+    debugLog('Invalid PlutusData: expecting a map at [0]');
     return null;
+  }
+
+  // Version field is optional - some tokens don't include it (malformed but we can be lenient)
+  let versionString = '1'; // Default version
+  if (version !== undefined) {
+    if (Cardano.util.isPlutusBigInt(version)) {
+      versionString = version.toString();
+    } else {
+      debugLog('Invalid PlutusData: version at [1] should be integer, defaulting to "1"');
+    }
+  } else {
+    debugLog('CIP68: Version field missing, defaulting to "1"');
   }
 
   const nftMetadataRecord = tryConvertPlutusMapToUtf8Record(nftMetadata);
@@ -318,7 +343,7 @@ export const fromPlutusData = (
     logo: asString(logo),
     legal: asString(legal),
     otherProperties: undefinedIfEmpty(mapOtherProperties(additionalProperties)),
-    version: version.toString()
+    version: versionString
   };
 };
 
@@ -370,12 +395,13 @@ export function resolveAsset(token: any): any {
     const label: number = cip68Label(asset_name)
     if (label && asset) {
       if (asset.onchain_metadata_extra && asset.onchain_metadata_extra[label]) {
-        const cip68Data = resolveCip68(asset.onchain_metadata_extra, label, metadata);
+        const tokenInfo = { unit, policy_id, asset_name };
+        const cip68Data = resolveCip68(asset.onchain_metadata_extra, label, metadata, tokenInfo);
         if (label === 222) {
           onchain_metadata = cip68Data
           asset.onchain_metadata = cip68Data
-          name = cip68Data.name
-          img = cip68Data.image
+          name = cip68Data?.name
+          img = cip68Data?.image
         } else {
           asset.metadata = cip68Data
         }
@@ -590,8 +616,6 @@ export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
  * @param addresses - Address mappings
  * @param accountIndex - Account index for derivation
  * @param stakeAddress - The stake address for the wallet
- * @param paymentKeyExternal - Function to get payment key
- * @param stakeKey - Function to get stake key
  * @returns Array of signers with their derivation paths
  */
 export function analyzeTransactionForSignatures(
@@ -600,8 +624,6 @@ export function analyzeTransactionForSignatures(
   addresses: Keys,
   accountIndex: number,
   stakeAddress: string,
-  paymentKeyExternal: (index: number) => any,
-  stakeKey: () => any
 ): Array<{ derivationPath: number[], type: string }> {
   const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
 
@@ -647,10 +669,7 @@ export function analyzeTransactionForSignatures(
 
   // Check for certificates (staking operations and governance)
   if (transaction.body.certificates && transaction.body.certificates.length > 0) {
-    console.log('🔧 Analyzing certificates for required signatures:');
     for (const certificate of transaction.body.certificates) {
-      console.log(`🔧   Certificate type: ${certificate.__typename}`);
-
       if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
           certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
           certificate.__typename === Cardano.CertificateType.Registration ||
@@ -661,13 +680,10 @@ export function analyzeTransactionForSignatures(
           certificate.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
         // Need stake key signature for both staking and governance operations (including Conway-era certificates)
-        console.log(`🔧   Adding stake key signer for certificate: ${certificate.__typename}`);
         requiredSigners.push({
           derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
           type: 'stake'
         });
-      } else {
-        console.log(`🔧   Unknown certificate type, no signer added: ${certificate.__typename}`);
       }
     }
   }

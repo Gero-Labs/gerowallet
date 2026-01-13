@@ -24,7 +24,6 @@
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
-                <v-card-title class="staking-support-title"> {{ $t('staking.considerSupportingUsShort') }} </v-card-title>
                 <v-card-subtitle>
                   <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
@@ -462,28 +461,26 @@
   </v-layout>
 </template>
 <script setup lang="ts">
+import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount, getCurrentInstance } from 'vue';
+import { useDelegation } from '@/shared/composables/useDelegation';
 import debounce from 'lodash/debounce';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import { Cardano } from '@cardano-sdk/core';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import stakingStore from '@/stores/stakingStore';
 import filters from '@/shared/utils/filters';
 import { setWalletConfiguration } from '@/db/wallet-db';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
-import snackbar from '@/plugins/snackbar';
-
 
 const { t } = useTranslation();
 
-const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
-const { epochParams, tip } = toRefs(networkStore);
+const { config, loggedWallet, account } = toRefs(walletStore);
+
+// Use the shared delegation composable
+const { selectedPool, txData, isDelegateDialogOpen, delegateToGero, delegate, closeDelegateDialog } = useDelegation();
 
 const {
   pools: paginatedPools,
@@ -540,9 +537,7 @@ const reloadWithFilters = () => {
   page.value = 1; // Reset to first page
   loadPaginatedPools(1);
 };
-const selectedPool = ref<any>(null);
-const txData = ref<any>(null);
-const isDelegateDialogOpen = ref<boolean>(false);
+
 const sortBy = ref<string>('ros');
 const sortDesc = ref<boolean>(true);
 
@@ -623,87 +618,6 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
     loadPaginatedPools(1);
   }
 });
-
-const delegateToGero = async () => {
-  if (loggedWallet.value) {
-    const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
-    await stakingStore.loadPoolById(loggedWallet.value, poolId);
-
-    if (stakingStore.state.currentPool) {
-      delegate(stakingStore.state.currentPool);
-    }
-  }
-};
-
-async function delegate(row: any) {
-  selectedPool.value = row;
-
-  try {
-    // Check if we have epoch parameters
-    if (!epochParams.value) {
-      throw new Error(t('common.epochParametersNotAvailable'));
-    }
-
-    const certificates: Cardano.Certificate[] = [];
-
-    // Create stake credential from the key hash
-    const stakeCredential: Cardano.Credential = {
-      type: Cardano.CredentialType.KeyHash,
-      hash: keys.value.stake[0].cred,
-    };
-
-    const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
-
-    // Use proper deposit from epoch parameters - ensure BigInt conversion
-    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
-
-    let certificate;
-    let implicitCoin = BigInt(0);
-
-    if (!account.value?.active) {
-      // Need to register a stake key first, then delegate
-      certificate = {
-        __typename: Cardano.CertificateType.StakeRegistrationDelegation,
-        stakeCredential,
-        poolId,
-        deposit: stakeKeyDepositLovelace,
-      };
-      implicitCoin = stakeKeyDepositLovelace; // Deposit required
-    } else {
-      // Just delegate, no registration needed
-      certificate = {
-        __typename: Cardano.CertificateType.StakeDelegation,
-        stakeCredential,
-        poolId,
-      };
-    }
-    certificates.push(certificate);
-
-    // Use the generic transaction builder
-    txData.value = await buildCardanoTransaction({
-      certificates,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-      implicitCoin,
-    });
-    isDelegateDialogOpen.value = true;
-  } catch (error: any) {
-    console.error('Error building delegation transaction:', error);
-    if (error.message?.includes('UTxO Balance Insufficient')) {
-      snackbar.setError(t('staking.insufficientAdaForStaking'));
-    } else {
-      snackbar.setError(t('staking.failedToBuildDelegation'));
-    }
-  }
-}
-
-const closeDelegateDialog = () => {
-  isDelegateDialogOpen.value = false;
-  txData.value = null;
-  selectedPool.value = null;
-};
 
 const poolExtendedInfo = (pool: any) => {
   if (pool && pool.pool_extended_info) {

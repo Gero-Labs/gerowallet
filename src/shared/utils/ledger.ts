@@ -23,6 +23,7 @@ import { Bip32PublicKey } from '@cardano-sdk/crypto';
 import { bech32 } from 'bech32';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
+import { DeviceModel } from '@ledgerhq/devices';
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -38,7 +39,17 @@ export default {
   _transportClose: null,
   _ledger: null,
   usbDevice: undefined,
-  async initLedger(isBluetooth: boolean, path: string) {
+  async initLedger(isBluetooth: boolean, path: string): Promise<{
+    productName: string;
+    version: GetVersionResponse;
+    hwPublicKey: string;
+    keys: {
+      chainCode: string;
+      path: string;
+      publicKey: string;
+    }[],
+    btSupported: boolean;
+  }> {
     const pathArray = hdPathToArray(path);
     try {
       let transport: Transport;
@@ -49,10 +60,13 @@ export default {
       }
       const ledger: Ada = new Ada(transport);
       if (!ledger) {
-        return false;
+        return undefined;
       }
       hardwareLoading.setText('Retrieving Hardware Wallet Name ...');
-      const productName: string = ledger.transport.deviceModel.productName;
+      const deviceModel: DeviceModel = ledger.transport.deviceModel;
+      const btSupported: boolean = !!deviceModel.bluetoothSpec
+      console.log('[LEDGER] Device Model:', deviceModel);
+      const productName: string = deviceModel.productName;
       hardwareLoading.setText('Retrieving Cardano App Version ...');
       const version: GetVersionResponse = await this.retrieveCardanoAppVersion(ledger);
       hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Keys on Your Ledger Device.');
@@ -67,7 +81,7 @@ export default {
         path: path,
         publicKey: ledgerKeys[0].publicKeyHex,
       }];
-      return { productName, version, hwPublicKey, keys };
+      return { productName, version, hwPublicKey, keys, btSupported };
     } catch (error: any) {
       console.log('[LEDGER] Error initializing Ledger:', error);
       snackbar.setError(error.message);
@@ -170,6 +184,7 @@ export default {
     network: NetworkInfo,
     originalTxCbor?: string
   ): Promise<Cardano.Signatures> {
+    hardwareLoading.setText(i18n.t('wallet.ledgerPreparingTransaction') as string);
     // Use original CBOR if provided (for multisig) to preserve exact byte representation
     // This is critical for multisig transactions where another party has already signed the original bytes
     const deserializedTx: Serialization.Transaction = originalTxCbor
@@ -188,10 +203,15 @@ export default {
       txInKeyPathMap,
       knownAddresses,
     }
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerConnectingDevice') as string);
     const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
     const ledger: Ada = new Ada(transport);
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerVerifyingApp') as string);
     await this.ensureLedgerVersion(ledger);
 
+    hardwareLoading.setText(i18n.t('wallet.ledgerInitializingSigning') as string);
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
       chainId: ledgerTxTransformerContext.chainId,
       accountIndex: ledgerTxTransformerContext.accountIndex,
@@ -200,10 +220,14 @@ export default {
       bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
       logger: console
     });
-    return await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerPleaseConfirmDevice') as string);
+    const res: Cardano.Signatures = await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
       knownAddresses,
       txInKeyPathMap,
     })
+    hardwareLoading.setLoading(false);
+    return res;
   },
   async ensureLedgerVersion(ledger: Ada) {
     const version: GetVersionResponse = await ledger.getVersion();

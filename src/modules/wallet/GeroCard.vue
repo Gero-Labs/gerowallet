@@ -1,8 +1,8 @@
 <template>
   <div class="gero-wallet">
-    <!-- Logout Button (shown for all states except auth and loading) -->
+    <!-- Logout Button (shown for all states except auth, loading, and pending) -->
     <v-btn
-      v-if="!showAuthPage && !showLoadingState && !showErrorState"
+      v-if="!showAuthPage && !showLoadingState && !showErrorState && currentState !== 'pending'"
       icon
       class="logout-btn ma-3"
       @click="handleLogout"
@@ -55,7 +55,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import cardStore from '@/stores/modules/card';

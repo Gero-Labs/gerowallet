@@ -114,6 +114,7 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import GeroStore from '@/stores/geroStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
+import cardStore from '@/stores/modules/card';
 
 // Define emits
 const emit = defineEmits(['loading']);
@@ -203,13 +204,24 @@ async function submitLogout() {
   });
 }
 
+/**
+ * Handle logout action
+ */
+async function handleCardLogout(): Promise<void> {
+  try {
+    await cardStore.logout();
+  } catch (error) {
+    console.error('Logout failed:', error);
+  }
+}
+
 const deleteWalletConfirm = async () => {
   deleteWalletLoading.value = true;
   const walletId = loggedWallet.value.id;
   const name = loggedWallet.value.name;
 
   // Remove wallet from geroStore (this will also delete from database)
-  await GeroStore.removeWallet(walletId);
+  await handleCardLogout().then(() => GeroStore.removeWallet(walletId));
 
   // Then logout
   await submitLogout();

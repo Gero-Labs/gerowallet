@@ -1,9 +1,9 @@
-import { computed } from 'vue';
 import cardStoreModule from '@/stores/modules/card';
 
 /**
  * SIMPLE composable for wallet status management
  * Uses only ONE card store - no complexity!
+ * Note: 'computed' is auto-imported globally by unplugin-auto-import
  */
 export function useWalletStatus() {
   // ============================================================================

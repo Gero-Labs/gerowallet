@@ -2,10 +2,10 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    :title="String($t('wallet.quickSend'))"
+    :title="t('wallet.quickSend')"
     :loading="txSubmitLoading"
     :min-height="0"
-    :subtitle="String($t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }))"
+    :subtitle="t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
     :img="assets.sendSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
@@ -56,84 +56,19 @@
           <SummaryStep ref="summary" :sendData="sendData" :tx-data="tx" @next="signAndSubmitTx" @prev="prevStep"></SummaryStep>
         </v-stepper-content>
       </CustomStepper>
-      <v-overlay
-        :absolute="true"
-        opacity="0.99"
-        :value="overlay"
-        class="hardwareOverlay"
-      >
-        <v-alert
-          color="white"
-          dense
-          outlined
-          type="info"
-          prominent
-          border="left"
-          v-if="!keystoneScan"
-          class="mt-10 mb-0"
-        >
-          <b>{{ $t('wallet.instructions') }}</b>
-          <div v-if="loggedWallet?.type === WalletType.Keystone">
-            <ul class="text-left" style="line-height: 1.5">
-              <li>{{ $t('wallet.unlockKeystone') }}</li>
-              <li>{{ $t('wallet.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
-              <li>{{ $t('wallet.useKeystoneToScan') }}</li>
-              <li>{{ $t('wallet.approveAndScanNext') }}</li>
-            </ul>
-          </div>
-        </v-alert>
-        <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
-          <v-card-title>
-            {{ $t('wallet.scanQRCode') }}
-          </v-card-title>
-          <v-card-subtitle>
-            <ul class="text-left" style="line-height: 1.5">
-              <li>{{ $t('wallet.adjustDistance') }}</li>
-              <li>{{ $t('wallet.useLowDensity') }}</li>
-            </ul>
-          </v-card-subtitle>
-          <v-card-text class="text-center">
-            <div class="qr-scanner" v-show="isInit">
-<!--              <QrcodeStream @decode="onDecode" @init="onInit">-->
-<!--                <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
-<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
-<!--                </div>-->
-<!--              </QrcodeStream>-->
-            </div>
-            <div style="flex-flow: column; display: flex;align-items: center;" class="pt-10" v-if="!isInit">
-              <v-progress-circular size="150" indeterminate></v-progress-circular>
-              <span class="pt-4">Loading ... </span>
-            </div>
-          </v-card-text>
-        </v-card>
 
-        <!--      <AnimatedQRCode :type="type" :cbor="cbor" />-->
-        <div id="qr-code" ref="qrCode" class="text-center" v-show="!keystoneScan"> </div>
-        <div class="text-center pt-2">
-          <v-btn
-            text
-            @click="backScan"
-            class="mr-2"
-          >{{ keystoneScan ? 'Back' : 'Cancel' }}
-          </v-btn>
-          <v-btn
-            v-if="!keystoneScan"
-            class="geroButton"
-            style="color: black!important;"
-            @click="keystoneScan = true"
-          >NEXT
-          </v-btn>
-        </div>
-      </v-overlay>
+      <!-- Keystone Sign Dialog -->
+      <KeystoneSignDialog
+        :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
+        :keystoneType="keystoneType"
+        :keystoneCbor="keystoneCbor"
+        @close="overlay = false"
+        @scan="onKeystoneScan"
+        @error="onKeystoneError"
+        @progress="onKeystoneProgress"
+      />
     </v-card-text>
-    <v-card-actions class="text-center justify-center" :style="loggedWallet?.type === WalletType.Ledger ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+    <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <div class="" v-if="currentStep === 3">
         <PassKeyPasswordField
           ref="passwordField"
@@ -152,9 +87,9 @@
           style="width: 295px"
           class="mb-2"
         />
-        <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
+        <div v-else-if="loggedWallet?.btSupported" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch :text-left="t('dashboard.usb')" icon-left="mdi-usb" :text-right="t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -173,7 +108,7 @@
           @click="nextStep"
           :disabled="!isValid || txSubmitLoading"
           :loading="txSubmitLoading"
-        >{{ currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}
+        >{{ currentStep === 3 ? (txAutoSubmit ? $t('wallet.signAndConfirm') : (!txWitnesses ? $t('wallet.sign') : $t('common.confirm'))) : $t('common.continue') + ' ' }}
           <v-icon style="color: black!important;" small v-if="currentStep !==3" class="ml-1">mdi-arrow-right</v-icon>
         </v-btn>
       </div>
@@ -181,8 +116,10 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { toRefs, ref, computed, getCurrentInstance, watch, onMounted } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
@@ -193,22 +130,19 @@ import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
-// import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import { toRefs, onMounted, computed, ref, watch, getCurrentInstance } from 'vue';
-import QRCodeStyling from 'qr-code-styling';
-// import { QrcodeStream } from "vue-qrcode-reader";
-// import { UREncoder } from '@keystonehq/keystone-sdk';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { isPaymentAddress } from '@/chrome/serialization';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx, BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import ledgerUtils from '@/shared/utils/ledger';
 import assets from '@/utils/assets';
+import { UR } from '@keystonehq/keystone-sdk';
 
 interface Props {
   isOpen: boolean;
@@ -219,7 +153,7 @@ const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
 
-const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
+const { loggedWallet, utxos, tokens: resolvedAssets, keys, config } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
 const currentStep = ref<number>(1);
@@ -256,17 +190,16 @@ const txSubmitLoading = ref<boolean>(false);
 const show1 = ref<boolean>(false);
 const isBT = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
-
-// Debug watcher for Bluetooth toggle
-watch(isBT, (newValue) => {
-  console.log('isBT changed to:', newValue);
-}, { immediate: true });
 const overlay = ref<boolean>(false);
-// const type = ref<string>('');
-// const cbor = ref<string>('');
 const keystoneScan = ref<boolean>(false);
 const isInit = ref<boolean>(false);
-const qrCode = ref<QRCodeStyling | null>(null);
+const keystoneType = ref<string>('');
+const keystoneCbor = ref<string>('');
+const keystoneUseHash = ref(false);
+
+const txAutoSubmit = computed(() => {
+  return config.value?.txAutoSubmit;
+});
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
@@ -283,7 +216,7 @@ const tokens = computed(() => {
         verified: token.verified
       }
     })
-    tokens.sort((a,b) => {
+    tokens.sort((a,_b) => {
       if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
         return -1
       }
@@ -301,7 +234,6 @@ const isValid = computed(() => {
     return fn(sendData.value.recipientAddress) !== 'Invalid Payment Address'
   }
   if (currentStep.value === 2) {
-    console.log('step2')
     if (!txValid.value) {
       return false;
     }
@@ -320,7 +252,7 @@ const isValid = computed(() => {
     }
   }
   return false;
-})
+});
 
 const resetData = () => {
   show1.value = false
@@ -348,56 +280,50 @@ const resetData = () => {
     minAda: 0,
     adaShortage: 0
   };
-  console.log(sendData.value)
 }
 
-const backScan = () => {
-  if (keystoneScan.value) {
-    keystoneScan.value = false
-    isInit.value = false
-  } else {
-    overlay.value = false
+const onKeystoneScan = async (ur: UR) => {
+  try {
+    // Parse the signature from Keystone
+    const signature = parseSignature(ur);
+
+    // Validate signature structure
+    if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
+      throw new Error(t('wallet.invalidKeystoneSignature'));
+    }
+
+    // Get witness set from signature (already a hex string)
+    txWitnesses.value = signature.witnessSet;
+
+    // Close overlay
+    overlay.value = false;
+    keystoneScan.value = false;
+
+    // Submit if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    } else {
+      isSubmit.value = true;
+    }
+  } catch (error) {
+    console.error('[Keystone] Error processing QR code:', error);
+    snackbar.setError(error instanceof Error ? error.message : t('wallet.keystoneQRScanError'));
+    overlay.value = false;
+    keystoneScan.value = false;
   }
 }
 
-// const onDecode = async (result) => {
-//   console.log(result)
-//   const signature = parseSignature(result);
-//
-//   try {
-//     const submitResult = await Messaging.sendToBackgroundFromOptions({
-//       method: MessageTypes.SUBMIT_TX,
-//       data: {
-//         txCbor: txCbor.value,
-//         witnessHex: signature.witnessSet,
-//         utxos: utxos.value
-//       }
-//     }) as { data: { txId?: string; error?: string } };
-//
-//     if (submitResult.data.error) {
-//       throw new Error(submitResult.data.error);
-//     }
-//
-//     snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
-//     emit('close');
-//   } catch (error) {
-//     console.error('Error submitting transaction:', error);
-//     snackbar.setError(error instanceof Error ? error.message : 'Unknown error');
-//   }
-// }
-//
-// const onInit = (promise) => {
-//   promise.then(() => {
-//     isInit.value = true
-//     console.log("Camera initialized successfully");
-//   }).catch((error) => {
-//     console.error("Camera initialization failed:", error);
-//   });
-// }
+const onKeystoneError = (error: string) => {
+  console.error('[Keystone] Scanner error:', error);
+  snackbar.setError(error || t('wallet.keystoneScanError'));
+}
+
+const onKeystoneProgress = (progress: number) => {
+  console.log('[Keystone] Scanner progress:', progress);
+  // Progress updates handled silently
+}
 
 const handlePassKeySuccess = () => {
-  console.log('✅ PassKey autofill successful in SendDialog - triggering sign');
-  // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
     nextStep();
   }, 300); // Small delay for UX feedback
@@ -411,13 +337,8 @@ const handlePassKeyError = (error: string) => {
 const signTx = async (): Promise<boolean> => {
   txSubmitLoading.value = true;
   try {
-    console.log('Signing send transaction');
-    console.log('Transaction:', tx.value);
-
     // Serialize the Cardano.Tx to CBOR for Chrome messaging
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    console.log('Serialized transaction CBOR:', txCbor.value);
-
     // Sign the transaction via a background message
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
@@ -431,14 +352,9 @@ const signTx = async (): Promise<boolean> => {
         mergeWitnesses: false,
       }
     }) as { data: { witnesses?: any; error?: string } };
-
-    console.log('Transaction signed successfully:', witnessResult);
-
     if (witnessResult.data.error) {
       throw new Error(witnessResult.data.error);
     }
-
-    console.log('Signed transaction witness:', witnessResult.data.witnesses);
     txWitnesses.value = witnessResult.data.witnesses;
     return true;
   } catch (e) {
@@ -453,7 +369,6 @@ const signTx = async (): Promise<boolean> => {
 const submitTx = async () => {
   try {
     txSubmitLoading.value = true;
-    console.log('Submitting send transaction');
     const submitResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
@@ -481,9 +396,6 @@ const submitTx = async () => {
 const signLedgerTx = async () => {
   txSubmitLoading.value = true;
   try {
-    console.log('Signing transaction with modern Ledger approach');
-    console.log('Using Bluetooth connection:', isBT.value);
-
     if (!tx.value) {
       throw new Error(t('common.noTransactionToSign'));
     }
@@ -498,13 +410,71 @@ const signLedgerTx = async () => {
     const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
       signatures,
     })
-    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
     txWitnesses.value = transactionWitnessSet.toCbor();
 
-    // Submit the transaction
-    await submitTx();
+    // Submit the transaction if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    }
   } catch (e) {
     ledgerUtils.ledgerErrorHandling(e);
+  } finally {
+    txSubmitLoading.value = false;
+  }
+};
+
+const signTrezorTx = async () => {
+  txSubmitLoading.value = true;
+  try {
+    if (!tx.value) {
+      throw new Error(t('common.noTransactionToSign'));
+    }
+
+    // Serialize transaction to CBOR hex for Chrome messaging (BigInt/Map not serializable)
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+
+    // Send serialized transaction to background for Trezor signing
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.TREZOR,
+      data: {
+        method: 'signTx',
+        txCbor: txCbor.value
+      },
+    }) as BackgroundResponse<SignTxResponse>;
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Trezor signing failed');
+    }
+
+    // Get signatures from Trezor response (comes as array from Chrome messaging)
+    // Convert array back to Map (cast via unknown to satisfy TypeScript)
+    const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
+    const signatures: Cardano.Signatures = new Map(signaturesArray);
+
+    // Create witness set from signatures
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
+
+    // Submit the transaction if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    }
+  } catch (e) {
+    // Trezor-specific error handling
+    if (e instanceof Error) {
+      if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
+        snackbar.setError(t('wallet.trezorTransactionCancelled'));
+      } else if (e.message.toLowerCase().includes('device')) {
+        snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
+      } else {
+        snackbar.setError(e.message);
+      }
+    } else {
+      snackbar.setError(t('errors.unknownError'));
+    }
   } finally {
     txSubmitLoading.value = false;
   }
@@ -515,9 +485,9 @@ async function signAndSubmitTx() {
     const passwordVerification = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value }
-    }) as { data: { isValid: boolean; error?: string } };
+    }) as BackgroundResponse<VerifyPasswordResponse>;
 
-    if (!passwordVerification.data.isValid) {
+    if (!passwordVerification.data.success) {
       passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
       return;
     }
@@ -525,38 +495,76 @@ async function signAndSubmitTx() {
     if (!isValid) {
       return;
     }
-    // Auto-submit for sending transactions (unlike staking where a user might want to review)
-    await submitTx();
+    // Submit if txAutoSubmit is enabled
+    if (txAutoSubmit.value) {
+      await submitTx();
+    }
   } else if (loggedWallet.value?.type === WalletType.Keystone) {
-    if (qrCode.value) {
-      qrCode.value = null; // Clear the QRCode instance
-      if (vmProxy.$refs.qrCode)
-        vmProxy.$refs.qrCode.innerHTML = '';
+    // Keystone Hardware Wallet Signing
+    if (!tx.value) {
+      throw new Error(t('common.noTransactionToSign'));
     }
 
-    // TODO: Update Keystone flow to work with Cardano JS SDK transactions
-    // const ur = createKeystoneSignRequest(tx.value, loggedWallet.value, utxos.value, keys.value);
-    // type.value = ur.type;
-    // cbor.value = Buffer.from(ur.cbor).toString('hex');
-    // qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
-    // console.log('');
-    // overlay.value = true;
-    // qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
-    // Vue.nextTick(() => {
-    //   qrCode.value.append(vmProxy.$refs.qrCode);
-    // });
-    // console.log('qrCode');
+    // Serialize transaction to CBOR
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+
+    // Convert Cardano.Tx to Serialization.Transaction for Keystone
+    const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
+
+    // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
+    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
+
+    // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
+    keystoneType.value = signRequestResponse.ur.type;
+    keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
+    keystoneUseHash.value = signRequestResponse.useHash;
+
+    // Show overlay with animated QR code
+    overlay.value = true;
+    keystoneScan.value = false;
   } else if (loggedWallet.value?.type === WalletType.Ledger) {
     // Ledger Hardware Wallet Signing
     await signLedgerTx();
-  } else {
-
+  } else if (loggedWallet.value?.type === WalletType.Trezor) {
+    await signTrezorTx();
   }
 }
 
 async function buildTx(sendTokens) {
   if (!sendData.value.recipientAddress || !isPaymentAddress(sendData.value.recipientAddress)) {
     return
+  }
+
+  // Proactive network data sync: If tip or epochParams are missing, trigger a fast REST sync
+  // This prevents race condition when user tries to send immediately after login
+  if (!tip.value || !epochParams.value) {
+    console.log('⏳ Network data not available, triggering sync...');
+    txValid.value = false;
+
+    try {
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SYNC_VIA_REST,
+        data: {}
+      }) as BackgroundResponse<{ success: boolean; error?: string }>;
+
+      if (response.data.success) {
+        console.log('✅ Network data synced successfully');
+        // Wait a moment for the store to be updated via messaging
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Check again if data is now available
+        if (!tip.value || !epochParams.value) {
+          console.warn('⚠️ Network data still not available after sync, will retry on next change');
+          return;
+        }
+      } else {
+        console.error('❌ Failed to sync network data:', response.data.error);
+        return;
+      }
+    } catch (error) {
+      console.error('❌ Error triggering sync:', error);
+      return;
+    }
   }
 
   const recipientAddress = sendData.value.recipientAddress;
@@ -600,7 +608,12 @@ async function buildTx(sendTokens) {
       utxos: utxos.value,
       epochParams: epochParams.value,
       changeAddress: loggedWallet.value.baseAddress,
-      tip: tip.value
+      tip: tip.value,
+      walletContext: {
+        keys: keys.value,
+        stakeAddress: loggedWallet.value.stakeAddress,
+        accountIndex: 0
+      }
     });
 
     // Don't reset minAda here - it's set by the watch based on selected NFTs
@@ -623,7 +636,13 @@ function nextStep() {
       vmProxy.$refs.summary.scanTx(tx.value);
       currentStep.value++;
     } else if (currentStep.value === 3) {
-      signAndSubmitTx();
+      // If txAutoSubmit is false and we have witnesses, just confirm (submit)
+      if (!txAutoSubmit.value && txWitnesses.value) {
+        submitTx();
+      } else {
+        // Otherwise sign (and auto-submit if enabled)
+        signAndSubmitTx();
+      }
     }
   }
 }
@@ -673,7 +692,6 @@ async function setMax(index) {
   // For ADA, use two-phase approach: coarse search (1 ADA) then fine-tune (1 lovelace)
   const totalBalance = BigInt(selectedToken.balance);
   const ADA_STEP = BigInt(1_000_000); // 1 ADA steps for coarse search
-  const LOVELACE_STEP = BigInt(1); // 1 lovelace steps for fine-tuning
   const MAX_BUFFER = BigInt(100_000_000); // Stop after 100 ADA buffer
 
   let buffer = BigInt(0);
@@ -824,11 +842,6 @@ watch(() => ({
   try {
     // selectedCollectibles is an object, not an array
     const collectiblesArray = val.selectedCollectibles ? Object.values(val.selectedCollectibles) : [];
-
-    console.log('build tx', {
-      tokens: val.selectedTokens.length,
-      collectibles: collectiblesArray.length
-    })
     if (!val.recipientAddress) {
       return;
     }

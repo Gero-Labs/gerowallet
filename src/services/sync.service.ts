@@ -103,9 +103,6 @@ export class SyncService {
    */
   async syncViaRest(tip?: Tip) {
     try {
-      const syncStart = performance.now();
-      console.log('⏱️ PERF: syncViaRest START');
-
       if (!tip) {
         tip = await this.api.getTip();
       }
@@ -118,7 +115,6 @@ export class SyncService {
         } finally {
           LoadingState.setRestoring(false);
         }
-        console.log(`⏱️ PERF: syncViaRest (restore) took ${performance.now() - syncStart}ms`);
         return;
       }
 
@@ -136,8 +132,6 @@ export class SyncService {
           epoch: tip.epoch,
           epoch_slot: tip.epoch_slot || 0,
         });
-
-        console.log(`⏱️ PERF: syncViaRest (skipped, tip set) took ${performance.now() - syncStart}ms`);
         return;
       }
 
@@ -164,8 +158,6 @@ export class SyncService {
       const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === this.walletBg.chain);
       const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
 
-      // Call REST sync API directly
-      const restStart = performance.now();
       const syncResponse = await blockchainApi.syncRest({
         chain: chainEnum,
         network: networkEnum,
@@ -178,12 +170,9 @@ export class SyncService {
         withdrawable_amount,
         epoch,
       });
-      console.log(`⏱️ PERF: REST sync API call took ${performance.now() - restStart}ms`);
-
       // Process the sync response
       if (syncResponse && syncResponse.success) {
         await this.setSync(syncResponse);
-        console.log(`⏱️ PERF: syncViaRest TOTAL took ${performance.now() - syncStart}ms`);
       } else {
         console.warn('REST sync returned unsuccessful response:', syncResponse);
       }

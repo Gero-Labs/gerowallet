@@ -1,15 +1,17 @@
-import { ref, toRefs, Ref, ComputedRef } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Ref, ComputedRef, toRefs, ref } from 'vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { Messaging } from '@/chrome/messaging';
+import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import ledgerUtils from '@/shared/utils/ledger';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from './useTranslation';
+import { UR } from '@keystonehq/keystone-sdk';
 
 export interface TransactionSigningOptions {
   tx: Ref<Cardano.Tx | undefined> | ComputedRef<Cardano.Tx | undefined>;
@@ -28,6 +30,11 @@ export interface TransactionSigningReturn {
   txWitnesses: Ref<string | null>;
   valid: Ref<boolean>;
   passwordRules: Ref<any[]>;
+  // Keystone state
+  overlay: Ref<boolean>;
+  keystoneScan: Ref<boolean>;
+  keystoneType: Ref<string>;
+  keystoneCbor: Ref<string>;
 
   // Methods
   signTx: () => Promise<boolean>;
@@ -38,6 +45,11 @@ export interface TransactionSigningReturn {
   handlePassKeySuccess: () => void;
   handlePassKeyError: (error: string) => void;
   setPasswordFieldRef: (ref: any) => void;
+  // Keystone methods
+  onKeystoneScan: (ur: UR) => Promise<void>;
+  onKeystoneError: (error: string) => void;
+  onKeystoneProgress: (progress: number) => void;
+  backScan: () => void;
 }
 
 export function useTransactionSigning(options: TransactionSigningOptions): TransactionSigningReturn {
@@ -54,6 +66,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   const txCbor = ref<string>('');
   const txWitnesses = ref<string | null>(null);
   const isSubmit = ref(false);
+  // Keystone state
+  const overlay = ref(false);
+  const keystoneScan = ref(false);
+  const keystoneType = ref('');
+  const keystoneCbor = ref('');
 
   const setPasswordFieldRef = (ref: any) => {
     passwordField.value = ref;
@@ -79,9 +96,9 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: spendingPassword.value },
-      })) as { data: { isValid: boolean; error?: string } };
+      })) as BackgroundResponse<VerifyPasswordResponse>;
 
-      if (!passwordVerification.data.isValid) {
+      if (!passwordVerification.data.success) {
         passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
         loading.value = false;
         return false;
@@ -151,6 +168,147 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     }
   };
 
+  const signTrezorTx = async (): Promise<boolean> => {
+    loading.value = true;
+    try {
+      const tx = options.tx.value;
+      if (!tx) {
+        throw new Error(t('common.noTransactionToSign'));
+      }
+
+      txCbor.value = serializeCardanoJsSdkTx(tx);
+
+      // Send serialized transaction to background for Trezor signing
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data: {
+          method: 'signTx',
+          txCbor: txCbor.value
+        },
+      }) as BackgroundResponse<SignTxResponse>;
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Trezor signing failed');
+      }
+
+      // Get signatures from Trezor response (comes as array from Chrome messaging)
+      // Validate that signatures is an array before converting to Map
+      if (!Array.isArray(response.data.signatures)) {
+        throw new Error('Invalid signature format from Trezor');
+      }
+      // Validate array contains valid tuples
+      if (!response.data.signatures.every(
+        item => Array.isArray(item) && item.length === 2 &&
+                typeof item[0] === 'string' && typeof item[1] === 'string'
+      )) {
+        throw new Error('Invalid signature tuple format from Trezor');
+      }
+      const signatures: Cardano.Signatures = new Map(response.data.signatures);
+
+      const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+        signatures,
+      });
+
+      txWitnesses.value = transactionWitnessSet.toCbor();
+      return true;
+    } catch (e) {
+      console.error('Error signing transaction with Trezor:', e);
+      if (e instanceof Error) {
+        if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
+          snackbar.setError(t('wallet.trezorTransactionCancelled'));
+        } else if (e.message.toLowerCase().includes('device')) {
+          snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
+        } else {
+          snackbar.setError(e.message);
+        }
+      } else {
+        snackbar.setError(t('errors.unknownError'));
+      }
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const signKeystoneTx = async (): Promise<boolean> => {
+    try {
+      const tx = options.tx.value;
+      if (!tx) {
+        throw new Error(t('common.noTransactionToSign'));
+      }
+
+      // Validate that xfp exists for Keystone wallet
+      if (!loggedWallet.value.xfp) {
+        throw new Error('Keystone wallet requires xfp (extended fingerprint). Please re-add your Keystone wallet.');
+      }
+
+      // Serialize transaction to CBOR
+      txCbor.value = serializeCardanoJsSdkTx(tx);
+
+      // Convert Cardano.Tx to Serialization.Transaction for Keystone
+      const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
+
+      // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
+      const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
+
+      // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
+      keystoneType.value = signRequestResponse.ur.type;
+      keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
+
+      // Show overlay with animated QR code
+      overlay.value = true;
+      keystoneScan.value = false;
+
+      return true; // Return true to indicate QR is ready (not signed yet)
+    } catch (e) {
+      console.error('Error creating Keystone sign request:', e);
+      snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
+      return false;
+    }
+  };
+
+  const onKeystoneScan = async (ur: UR) => {
+    try {
+      const signature = parseSignature(ur);
+
+      // Get witness set from signature (already a hex string)
+      txWitnesses.value = signature.witnessSet;
+
+      // Close overlay
+      overlay.value = false;
+      keystoneScan.value = false;
+
+      // Submit if txAutoSubmit is enabled
+      if (config.value?.txAutoSubmit) {
+        await submitTx();
+      } else {
+        isSubmit.value = true;
+      }
+    } catch (error) {
+      console.error('[Keystone] Error processing QR code:', error);
+      snackbar.setError(error instanceof Error ? error.message : t('wallet.keystoneQRScanError'));
+      overlay.value = false;
+      keystoneScan.value = false;
+    }
+  };
+
+  const onKeystoneError = (error: string) => {
+    console.error('[Keystone] Scanner error:', error);
+    snackbar.setError(error || t('wallet.keystoneScanError'));
+  };
+
+  const onKeystoneProgress = (progress: number) => {
+    // Progress tracking
+  };
+
+  const backScan = () => {
+    if (keystoneScan.value) {
+      keystoneScan.value = false;
+    } else {
+      overlay.value = false;
+    }
+  };
+
   const submitTx = async (): Promise<void> => {
     try {
       loading.value = true;
@@ -195,8 +353,20 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
             isSubmit.value = true;
           }
         }
+      } else if (loggedWallet.value?.type === WalletType.Keystone) {
+        await signKeystoneTx();
+        // Keystone shows overlay - signing continues via QR scan
       } else if (loggedWallet.value?.type === WalletType.Ledger) {
         const isValid = await signLedgerTx();
+        if (!isValid) return;
+
+        if (config.value?.txAutoSubmit) {
+          await submitTx();
+        } else {
+          isSubmit.value = true;
+        }
+      } else if (loggedWallet.value?.type === WalletType.Trezor) {
+        const isValid = await signTrezorTx();
         if (!isValid) return;
 
         if (config.value?.txAutoSubmit) {
@@ -209,7 +379,6 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   const handlePassKeySuccess = () => {
-    console.log('✅ PassKey autofill successful - triggering sign');
     setTimeout(() => {
       handleSign();
     }, 300);
@@ -230,6 +399,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     txWitnesses,
     valid,
     passwordRules,
+    // Keystone state
+    overlay,
+    keystoneScan,
+    keystoneType,
+    keystoneCbor,
 
     // Methods
     signTx,
@@ -240,5 +414,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     handlePassKeySuccess,
     handlePassKeyError,
     setPasswordFieldRef,
+    // Keystone methods
+    onKeystoneScan,
+    onKeystoneError,
+    onKeystoneProgress,
+    backScan,
   };
 }

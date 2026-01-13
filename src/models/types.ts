@@ -11,7 +11,7 @@ const WalletType = {
 type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
 
 export interface Wallet {
-  id: string;
+  id: number;
   name: string;
   chain: string;
   network: string;

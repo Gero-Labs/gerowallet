@@ -253,10 +253,9 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, toRefs, getCurrentInstance, onMounted } from 'vue';
+import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
 import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import dexHunterApi from '@/api/dexhunter-api';
@@ -389,9 +388,7 @@ const availableTokens = computed(() => {
       //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
     });
-  const result = [nativeToken, ...availableTokens];
-  console.log('availableTokens', result);
-  return result;
+  return [nativeToken, ...availableTokens];
 });
 
 // Methods
@@ -400,7 +397,7 @@ const getTokenBalance = token => {
   const tokenData = tokens.value[token.unit];
   if (tokenData && tokenData.quantity) {
     const decimals = tokenData.decimals || 6;
-    const balance = Number(tokenData.quantity) / Math.pow(10, decimals);
+    const balance = filters.convertFromSmallestUnit(tokenData.quantity, decimals);
     return balance.toFixed(2);
   }
   return '0.00';
@@ -429,7 +426,6 @@ const openFullSwap = () => {
 };
 
 const refreshPrices = () => {
-  console.log('Refreshing prices...');
   // Add price refresh logic here
 };
 
@@ -439,7 +435,6 @@ const getAllTokens = () => {
 
   // Add owned tokens first
   if (tokens.value) {
-    console.log('Tokens', tokens.value);
     // Add other owned tokens
     Object.entries(tokens.value).forEach(([unit, token]) => {
       const tok: any = token;
@@ -508,7 +503,7 @@ const filteredTokenListB = computed(() => {
 // Format balance for display
 const formatBalance = token => {
   if (!token.owned || !token.quantity) return '0';
-  const balance = Number(token.quantity) / Math.pow(10, token.decimals);
+  const balance = filters.convertFromSmallestUnit(token.quantity, token.decimals);
   return balance > 0.01 ? balance.toFixed(2) : balance.toFixed(6);
 };
 
@@ -645,7 +640,6 @@ const averagePrice = (token_in, token_out) => {
       price_ab2.value = res.price_ab;
       price_ba2.value = res.price_ba;
       limit.value = structuredClone(price_ba2.value).toString();
-      console.log(limit.value);
     })
     .catch(() => {
       // console.log(e)

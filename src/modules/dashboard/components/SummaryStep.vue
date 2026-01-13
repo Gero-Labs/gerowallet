@@ -7,7 +7,7 @@
             <Select
               :value="sendData.selectedWallet"
               :items="[sendData.selectedWallet]"
-              :label="$t('wallet.from')"
+              :label="t('wallet.from')"
               :readonly="true"
             ></Select>
           </v-card-title>
@@ -36,7 +36,7 @@
       <v-col cols="6" style="align-content: center">
         <TransactionRisk class="pb-8" :risk="risks?.score" :loading="loading" />
         <div style="flex-flow: row; display: flex; justify-content: center;">
-          <CopyButton v-if="tx" x-small :value="getCborHex()" :title="$t('wallet.copyCBOR')"></CopyButton>
+          <CopyButton v-if="tx" x-small :value="getCborHex()" :title="t('wallet.copyCBOR')"></CopyButton>
         </div>
       </v-col>
     </v-row>
@@ -55,6 +55,8 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Cardano } from '@cardano-sdk/core';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+
+const { t } = useTranslation();
 
 interface Props {
   sendData: any;

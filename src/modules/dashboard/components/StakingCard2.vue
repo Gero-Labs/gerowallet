@@ -16,10 +16,10 @@
                 <v-img :src="JSON.parse(currentPool?.pool_extended_info)?.info?.url_png_icon_64x64" alt="pool logo" contain/>
               </v-avatar>
               <h3 class="staking2-pool-title">{{ `${currentPool.ticker}` }}</h3>
-              <v-menu 
-                v-model="socialMenuOpen" 
-                offset-y 
-                :close-on-content-click="false" 
+              <v-menu
+                v-model="socialMenuOpen"
+                offset-y
+                :close-on-content-click="false"
                 max-width="250"
                 eager
                 transition="fade-transition"
@@ -340,17 +340,15 @@
         </v-row>
       </v-layout>
     </v-card-text>
-    <UnstakeDialog :is-open="unstakeDialog" @close="unstakeDialog = false" :tx="txData"></UnstakeDialog>
-    <WithdrawalDialog :is-open="withdrawalDialog" @close="withdrawalDialog = false" :tx="txData"></WithdrawalDialog>
+    <UnstakeDialog :is-open="unstakeDialog" @close="closeUnstakeDialog" :tx="unstakeTxData"></UnstakeDialog>
+    <WithdrawalDialog :is-open="withdrawalDialog" @close="closeWithdrawalDialog" :tx="withdrawalTxData"></WithdrawalDialog>
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs, watch, onMounted } from 'vue';
+import { toRefs, computed, ref, watch, onMounted } from 'vue';
 import RewardsChart from './RewardsChart.vue';
 import filters from '@/shared/utils/filters';
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
-import { Cardano } from '@cardano-sdk/core';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
@@ -359,16 +357,21 @@ import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
 import { Blockchain } from '@/models/types';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { useUnstake } from '@/shared/composables/useUnstake';
+import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 
-const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore);
-const { tip, epochParams } = toRefs(networkStore);
+const { t } = useTranslation();
+
+// Use the unstake and withdrawal composables
+const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
+const { txData: withdrawalTxData, withdrawalDialog, withdraw, closeWithdrawalDialog } = useWithdrawal();
+
+const { loggedWallet, rewards, account } = toRefs(walletStore);
 const { loadingTxs } = toRefs(loadingState);
 const { currentPool, poolLoading } = toRefs(stakingStoreActions.state);
 
 const hideZero = ref<boolean>(false);
-const unstakeDialog = ref<boolean>(false);
-const withdrawalDialog = ref<boolean>(false);
-const txData = ref<any>(undefined);
 const socialMenuOpen = ref<boolean>(false);
 
 const isApex = computed(() => {
@@ -407,103 +410,6 @@ const rewardsChartData = computed(() => {
   }
   return obj;
 });
-
-const withdraw = async () => {
-  try {
-    // Check if user has DRep delegation
-    if (!account.value?.drep_id) {
-      console.warn('Cannot withdraw: DRep delegation required');
-      // Dialog will still open and show the warning with "Go to Governance" button
-      withdrawalDialog.value = true;
-      return;
-    }
-
-    // Prepare withdrawals if there are any rewards
-    const withdrawals: Cardano.Withdrawal[] = [];
-    if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
-      withdrawals.push({
-        stakeAddress: loggedWallet.value.stakeAddress,
-        quantity: BigInt(account.value.withdrawable_amount),
-      });
-    }
-
-    // Use the generic transaction builder for withdrawal-only transaction
-    txData.value = await buildCardanoTransaction({
-      withdrawals,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-    });
-
-    withdrawalDialog.value = true;
-  } catch (error) {
-    console.error('Error building withdrawal transaction:', error);
-  }
-};
-
-const unstake = async () => {
-  try {
-    // Check if we have epoch parameters
-    if (!epochParams.value) {
-      throw new Error(t('common.epochParametersNotAvailable'));
-    }
-
-    // Check if stake key is registered
-    if (!account.value?.active) {
-      throw new Error(t('common.cannotUnstake'));
-    }
-
-    // Check if keys are loaded
-    if (!keys.value || !keys.value.stake || keys.value.stake.length === 0) {
-      throw new Error(t('common.walletKeysNotAvailable'));
-    }
-
-    const certificates: Cardano.Certificate[] = [];
-
-    // Create stake credential from the key hash
-    const stakeCredential: Cardano.Credential = {
-      type: Cardano.CredentialType.KeyHash,
-      hash: keys.value.stake[0].cred,
-    };
-
-    // Use proper deposit from epoch parameters - ensure BigInt conversion
-    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
-
-    // Conway-era unregistration certificate (returns deposit to user)
-    const certificate: Cardano.Certificate = {
-      __typename: Cardano.CertificateType.Unregistration,
-      stakeCredential,
-      deposit: stakeKeyDepositLovelace,
-    };
-    certificates.push(certificate);
-
-    // Prepare withdrawals if there are any rewards
-    const withdrawals: Cardano.Withdrawal[] = [];
-    if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
-      withdrawals.push({
-        stakeAddress: loggedWallet.value.stakeAddress,
-        quantity: BigInt(account.value.withdrawable_amount),
-      });
-    }
-
-    // Use the generic transaction builder
-    // For unstaking, deposit is returned (negative implicit coin)
-    txData.value = await buildCardanoTransaction({
-      certificates,
-      withdrawals,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-      implicitCoin: -stakeKeyDepositLovelace, // Deposit is returned
-    });
-    unstakeDialog.value = true;
-  } catch (error) {
-    console.error('Error building unstake transaction:', error);
-    // You might want to show an error message to the user here
-  }
-};
 
 const loadPoolData = async (poolId: string) => {
   if (poolId && loggedWallet.value) {
@@ -551,7 +457,7 @@ onMounted(async () => {
   -webkit-backdrop-filter: blur(12px) saturate(1.5) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6),
               0 2px 8px rgba(0, 0, 0, 0.4),
               inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   position: relative !important;

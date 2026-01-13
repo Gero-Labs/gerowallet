@@ -13,7 +13,7 @@ import {
 import { ERROR, WalletType } from '@/models/types';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import { decrypt, encrypt } from '@/shared/utils/crypto';
+import { decrypt, decryptWithPassword, encrypt } from '@/shared/utils/crypto';
 import networks from '@/utils/networks';
 import { encryptPrivateKey } from '@/shared/utils/crypto';
 import { getContextType } from '@/utils/storageSync';
@@ -41,10 +41,8 @@ const context = getContextType();
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  debugLog(`🔌 Initializing gero store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<GeroStore>) => {
-    debugLog('📥 Received gero store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -200,7 +198,7 @@ export default {
       try {
         // Decrypt current private key
         const decrypted = decrypt(wallet.encryptedPrivateKey, currentPassword);
-        const buffer: Buffer = Buffer.from(JSON.parse(decrypted));
+        const buffer: Buffer = decryptWithPassword(currentPassword, JSON.parse(decrypted));
         const rootKey = Bip32PrivateKey.fromBytes(buffer);
 
         // Re-encrypt with new password
@@ -222,6 +220,14 @@ export default {
         broadcastFromBackground({ wallets: updatedWallets });
 
       } catch (e) {
+        console.error('❌ Failed to update spending password:', e);
+        console.error('❌ Error details:', {
+          walletId,
+          walletType: wallet.type,
+          hasEncryptedPrivateKey: !!wallet.encryptedPrivateKey,
+          hasEncryptedMnemonic: !!wallet.encryptedMnemonic,
+          errorMessage: e instanceof Error ? e.message : String(e)
+        });
         throw ERROR.wrongPassword;
       }
     }
