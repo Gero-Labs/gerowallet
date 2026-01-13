@@ -36,8 +36,10 @@
             dense
             outlined
             class="form-input"
-            hide-details
             :placeholder="$t('card.enterStreetAddress')"
+            :error-messages="errors['streetAddress']"
+            @blur="validateStreetAddress"
+            @input="clearError('streetAddress')"
           />
         </div>
       </div>
@@ -50,22 +52,26 @@
             dense
             outlined
             class="form-input"
-            hide-details
             :placeholder="$t('card.enterCity')"
+            :error-messages="errors['city']"
+            @blur="validateCity"
+            @input="clearError('city')"
           />
         </div>
       </div>
 
       <div class="form-row two-columns">
         <div class="input-half">
-          <label class="input-label">{{ $t('card.stateProvince') }}</label>
+          <label class="input-label">{{ $t('card.stateProvince') }} *</label>
           <v-text-field
             v-model="localAddress.stateProvince"
             dense
             outlined
             class="form-input"
-            hide-details
             :placeholder="$t('card.enterState')"
+            :error-messages="errors['stateProvince']"
+            @blur="validateStateProvince"
+            @input="clearError('stateProvince')"
           />
         </div>
         <div class="input-half">
@@ -75,8 +81,10 @@
             dense
             outlined
             class="form-input"
-            hide-details
             :placeholder="$t('card.enterZipCode')"
+            :error-messages="errors['zipCode']"
+            @blur="validateZipCode"
+            @input="clearError('zipCode')"
           />
         </div>
       </div>
@@ -92,8 +100,10 @@
             dense
             outlined
             class="form-input"
-            hide-details
             :placeholder="$t('card.selectCountry')"
+            :error-messages="errors['countryCode']"
+            @blur="validateCountryCode"
+            @change="clearError('countryCode')"
             attach
           />
         </div>
@@ -101,14 +111,16 @@
 
       <div class="form-row">
         <div class="input-full">
-          <label class="input-label">{{ $t('card.phone') }} ({{ $t('common.optional') }})</label>
+          <label class="input-label">{{ $t('card.phone') }}</label>
           <v-text-field
             v-model="localAddress.phone"
             dense
             outlined
             class="form-input"
-            hide-details
             :placeholder="$t('card.enterPhone')"
+            :error-messages="errors['phone']"
+            @blur="validatePhone"
+            @input="clearError('phone')"
           />
         </div>
       </div>
@@ -127,10 +139,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, reactive } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import SecondaryButton from '../../SecondaryButton.vue';
 import GradientButton from '../../GradientButton.vue';
 import countries from '@/plugins/countries';
+
+const { t } = useTranslation();
 
 interface AddressData {
   streetAddress: string;
@@ -155,22 +170,126 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 // Local state
-const selectedOption = ref<'existing' | 'new'>('new'); // Default to 'new'
+const selectedOption = ref<'existing' | 'new'>('new');
 const localAddress = ref<AddressData>({ ...props.address });
+const errors = reactive<Record<string, string>>({
+  streetAddress: '',
+  city: '',
+  stateProvince: '',
+  zipCode: '',
+  countryCode: '',
+  phone: '',
+});
+
+// Validation functions
+const validateStreetAddress = () => {
+  const value = localAddress.value.streetAddress.trim();
+  if (!value) {
+    errors['streetAddress'] = t('validation.required');
+    return false;
+  }
+  if (value.length < 5) {
+    errors['streetAddress'] = t('validation.streetAddressTooShort');
+    return false;
+  }
+  errors['streetAddress'] = '';
+  return true;
+};
+
+const validateCity = () => {
+  const value = localAddress.value.city.trim();
+  if (!value) {
+    errors['city'] = t('validation.required');
+    return false;
+  }
+  if (value.length < 2) {
+    errors['city'] = t('validation.cityTooShort');
+    return false;
+  }
+  errors['city'] = '';
+  return true;
+};
+
+const validateStateProvince = () => {
+  const value = localAddress.value.stateProvince.trim();
+  if (!value) {
+    errors['stateProvince'] = t('validation.required');
+    return false;
+  }
+  errors['stateProvince'] = '';
+  return true;
+};
+
+const validateZipCode = () => {
+  const value = localAddress.value.zipCode.trim();
+  if (!value) {
+    errors['zipCode'] = t('validation.required');
+    return false;
+  }
+  const zipRegex = /^[A-Za-z0-9\s-]{3,10}$/;
+  if (!zipRegex.test(value)) {
+    errors['zipCode'] = t('validation.invalidZipCode');
+    return false;
+  }
+  errors['zipCode'] = '';
+  return true;
+};
+
+const validateCountryCode = () => {
+  if (!localAddress.value.countryCode) {
+    errors['countryCode'] = t('validation.required');
+    return false;
+  }
+  errors['countryCode'] = '';
+  return true;
+};
+
+const validatePhone = () => {
+  const value = localAddress.value.phone.trim();
+  if (!value) {
+    errors['phone'] = '';
+    return true;
+  }
+  const phoneRegex = /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/;
+  if (!phoneRegex.test(value)) {
+    errors['phone'] = t('validation.invalidPhoneNumber');
+    return false;
+  }
+  errors['phone'] = '';
+  return true;
+};
+
+const clearError = (field: string) => {
+  errors[field] = '';
+};
+
+const validateAllFields = () => {
+  const validations = [
+    validateStreetAddress(),
+    validateCity(),
+    validateStateProvince(),
+    validateZipCode(),
+    validateCountryCode(),
+    validatePhone(),
+  ];
+  return validations.every(result => result);
+};
 
 // Form validation
 const isFormValid = computed(() => {
   if (selectedOption.value === 'existing') {
     return true;
   }
-  return (
+  const hasAllRequiredFields =
     localAddress.value.streetAddress.trim() !== '' &&
     localAddress.value.city.trim() !== '' &&
     localAddress.value.stateProvince.trim() !== '' &&
     localAddress.value.zipCode.trim() !== '' &&
-    localAddress.value.countryCode !== ''
-    // Phone is now optional
-  );
+    localAddress.value.countryCode !== '';
+
+  const hasNoErrors = !Object.values(errors).some(error => error !== '');
+
+  return hasAllRequiredFields && hasNoErrors;
 });
 
 // Watch for prop changes
@@ -195,16 +314,19 @@ const handleBack = () => {
 };
 
 const handleContinue = () => {
-  if (!isFormValid.value) return;
-
   if (selectedOption.value === 'existing') {
     emit('submit', { useExisting: true });
-  } else {
-    emit('submit', {
-      useExisting: false,
-      address: { ...localAddress.value },
-    });
+    return;
   }
+
+  if (!validateAllFields()) {
+    return;
+  }
+
+  emit('submit', {
+    useExisting: false,
+    address: { ...localAddress.value },
+  });
 };
 </script>
 
@@ -299,7 +421,6 @@ const handleContinue = () => {
 
 .address-form {
   @include flex-column;
-  gap: $spacing-lg;
   padding: $spacing-lg;
   background: $background-card;
   border-radius: $border-radius-lg;
@@ -336,13 +457,14 @@ const handleContinue = () => {
 
 .form-input {
   :deep(.v-input__control) {
-    background: $background-dark !important;
-    border: 1px solid $border-primary !important;
+
     border-radius: $border-radius-md !important;
   }
 
   :deep(.v-input__slot) {
     background: transparent !important;
+    background: $background-dark !important;
+    border: 1px solid $border-primary !important;
     box-shadow: none !important;
     min-height: 44px !important;
   }
@@ -354,7 +476,18 @@ const handleContinue = () => {
   }
 
   :deep(.v-text-field__details) {
-    display: none;
+    padding: $spacing-xs 0 0 0;
+    margin: 0;
+  }
+
+  :deep(.v-messages) {
+    min-height: 20px;
+  }
+
+  :deep(.v-messages__message) {
+    color: #ff5252 !important;
+    font-size: $font-size-xs;
+    line-height: 1.2;
   }
 
   :deep(input) {
@@ -369,6 +502,12 @@ const handleContinue = () => {
 
   :deep(.v-select__selection) {
     color: $text-primary !important;
+  }
+
+  &.error--text {
+    :deep(.v-input__control) {
+      border-color: #ff5252 !important;
+    }
   }
 }
 
