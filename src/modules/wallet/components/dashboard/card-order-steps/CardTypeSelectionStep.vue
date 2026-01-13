@@ -4,18 +4,21 @@
       <!-- Virtual Card Option -->
       <div
         class="card-option"
-        :class="{ selected: selectedType === 'virtual' }"
-        @click="selectType('virtual')"
-        @keydown.enter="selectType('virtual')"
-        @keydown.space.prevent="selectType('virtual')"
+        :class="{ selected: selectedType === 'virtual', disabled: hasVirtualCard }"
+        @click="!hasVirtualCard && selectType('virtual')"
+        @keydown.enter="!hasVirtualCard && selectType('virtual')"
+        @keydown.space.prevent="!hasVirtualCard && selectType('virtual')"
         role="button"
-        tabindex="0"
+        :tabindex="hasVirtualCard ? -1 : 0"
       >
         <div class="option-icon">
           <v-icon large>mdi-credit-card-outline</v-icon>
         </div>
         <div class="option-content">
-          <h3 class="option-title">{{ $t('card.virtualCardOnly') }}</h3>
+          <h3 class="option-title">
+            {{ $t('card.virtualCardOnly') }}
+            <span v-if="hasVirtualCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
+          </h3>
           <p class="option-description">{{ $t('card.virtualCardDescription') }}</p>
         </div>
         <div class="option-features">
@@ -44,18 +47,21 @@
       <!-- Physical + Virtual Card Option -->
       <div
         class="card-option"
-        :class="{ selected: selectedType === 'physical' }"
-        @click="selectType('physical')"
-        @keydown.enter="selectType('physical')"
-        @keydown.space.prevent="selectType('physical')"
+        :class="{ selected: selectedType === 'physical', disabled: hasPhysicalCard }"
+        @click="!hasPhysicalCard && selectType('physical')"
+        @keydown.enter="!hasPhysicalCard && selectType('physical')"
+        @keydown.space.prevent="!hasPhysicalCard && selectType('physical')"
         role="button"
-        tabindex="0"
+        :tabindex="hasPhysicalCard ? -1 : 0"
       >
         <div class="option-icon physical">
           <v-icon large>mdi-credit-card-multiple-outline</v-icon>
         </div>
         <div class="option-content">
-          <h3 class="option-title">{{ $t('card.physicalPlusVirtualCard') }}</h3>
+          <h3 class="option-title">
+            {{ $t('card.physicalPlusVirtualCard') }}
+            <span v-if="hasPhysicalCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
+          </h3>
           <p class="option-description">{{ $t('card.physicalCardDescription') }}</p>
         </div>
         <div class="option-features">
@@ -87,6 +93,8 @@
 <script setup lang="ts">
 interface Props {
   selectedType?: 'virtual' | 'physical' | null;
+  hasVirtualCard?: boolean;
+  hasPhysicalCard?: boolean;
 }
 
 interface Emits {
@@ -95,6 +103,8 @@ interface Emits {
 
 withDefaults(defineProps<Props>(), {
   selectedType: null,
+  hasVirtualCard: false,
+  hasPhysicalCard: false,
 });
 const emit = defineEmits<Emits>();
 
@@ -143,6 +153,17 @@ const selectType = (type: 'virtual' | 'physical') => {
     outline: none;
     border-color: $primary-cyan;
   }
+
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+
+    &:hover {
+      border-color: $border-primary;
+      background: $background-card;
+    }
+  }
 }
 
 .option-icon {
@@ -173,6 +194,22 @@ const selectType = (type: 'virtual' | 'physical') => {
   font-size: $font-size-lg;
   color: $text-primary;
   margin: 0 0 $spacing-xs 0;
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+}
+
+.disabled-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(#9e9e9e, 0.15);
+  color: #9e9e9e;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .option-description {

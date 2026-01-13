@@ -13,7 +13,7 @@
         <div class="auth-option management-option liquid-glass-card">
           <div class="default-card-view">
             <div class="option-icon">
-              <img src="@/modules/wallet/icons/card.svg" alt="card" class="card-image" />
+              <img src="@/assets/front_card_no_mcx2.png" alt="card" class="card-image" />
             </div>
 
             <div class="option-content">

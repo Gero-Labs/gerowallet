@@ -45,6 +45,8 @@
         <CardTypeSelectionStep
           v-if="currentStep === 1"
           :selected-type="selectedCardType"
+          :has-virtual-card="hasVirtualCard"
+          :has-physical-card="hasPhysicalCard"
           @select="handleCardTypeSelect"
         />
 
@@ -122,6 +124,26 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 
 const { t } = useTranslation();
 const router = useRouter();
+
+// Check if user already has virtual or physical cards
+const hasVirtualCard = computed(() => {
+  return cardStore.state.cards.some(
+    card => card.cardData?.own_type === 'virtual' &&
+    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+  );
+});
+
+const hasPhysicalCard = computed(() => {
+  return cardStore.state.cards.some(
+    card => card.cardData?.own_type === 'physical' &&
+    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+  );
+});
+
+// Check if user can order new cards
+const canOrderNewCard = computed(() => {
+  return !hasVirtualCard.value || !hasPhysicalCard.value;
+});
 
 interface Props {
   open: boolean;
