@@ -181,7 +181,7 @@ const onSearchInput = () => {
 };
 
 const onChange = (item: any) => {
-  selectedToken.value = item;
+  selectedToken.value = { ...item, quantity: formatTokenBalance(item) };
   emit('close');
 };
 
@@ -195,21 +195,18 @@ const handleImageError = (event: Event, item: any) => {
   target.src = item.fallback_img;
 };
 
-// Format token balance: convert from smallest unit and apply currency conversion
+// Format token balance: convert from smallest unit to display balance
 const formatTokenBalance = (token: any): string => {
   if (!token || !token.balance) return '0';
 
-  const decimals = token.decimals || 6;
+  const decimals = token.decimals || token.metadata?.decimals || 6;
   // Convert from smallest unit (Lovelace) to main unit (ADA)
   const balanceInMainUnit = filters.convertFromSmallestUnit(token.balance, decimals);
 
-  // Apply fiat conversion if needed
-  const fiatValue = convertFiat(balanceInMainUnit);
-
-  // Format with consistent locale
-  return fiatValue.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 6
+  // Format balance without currency conversion - show actual token amount
+  return balanceInMainUnit.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
   });
 };
 
@@ -219,10 +216,14 @@ const formatTokenPrice = (price: number): string => {
 
   const fiatPrice = convertFiat(price);
   // Always use en-US locale for consistent formatting
-  return '~' + getCurrencySymbol() + fiatPrice.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4
-  });
+  return (
+    '~' +
+    getCurrencySymbol() +
+    fiatPrice.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    })
+  );
 };
 </script>
 
