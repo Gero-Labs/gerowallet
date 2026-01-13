@@ -61,6 +61,7 @@
         <ShippingMethodStep
           v-if="currentStep === 3"
           :selected-method="shippingMethod"
+          :is-loading="isProcessing"
           @back="handleBack"
           @select="handleShippingMethodSelect"
         />

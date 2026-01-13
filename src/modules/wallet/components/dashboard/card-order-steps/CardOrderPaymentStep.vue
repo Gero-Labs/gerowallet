@@ -8,7 +8,7 @@
       </div>
       <div class="amount-display">
         <div class="amount-row">
-          <span class="amount-value ada">{{ amountAda }} ADA</span>
+          <span class="amount-value ada">{{ amountAda.toFixed(2) }} ADA</span>
           <span class="amount-equivalent">(~{{ '\u20AC' }}{{ amountEur.toFixed(2) }})</span>
         </div>
       </div>

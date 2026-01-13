@@ -50,8 +50,13 @@
 
     <!-- Actions -->
     <div class="step-actions">
-      <SecondaryButton :text="$t('card.back')" @click="handleBack" />
-      <GradientButton :text="$t('card.continueButton')" @click="handleContinue" />
+      <SecondaryButton :text="$t('card.back')" @click="handleBack" :disabled="isLoading" />
+      <GradientButton 
+        :text="$t('card.continueButton')" 
+        @click="handleContinue"
+        :loading="isLoading"
+        :disabled="isLoading"
+      />
     </div>
   </div>
 </template>
@@ -66,6 +71,7 @@ type ShippingMethod = 'regular' | 'express-eu' | 'express-worldwide';
 
 interface Props {
   selectedMethod: ShippingMethod;
+  isLoading?: boolean;
 }
 
 interface Emits {
