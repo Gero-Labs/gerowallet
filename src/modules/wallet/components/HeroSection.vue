@@ -285,8 +285,6 @@ const emptyCard: CardInfo = {
     card_holder_name: null,
     order_uuid: null,
     card_uuid: null,
-    order_uuid: null,
-    own_type: null,
     status: null,
     card_status: null,
     balance: null,
@@ -747,6 +745,8 @@ const formatADA = (eurAmount: number) => {
   align-items: center;
   width: 100%;
   margin-top: -8px;
+  min-height: 28px; // Reserve space for badge even when empty
+  height: 28px; // Fixed height to prevent wiggling
 }
 
 // Card Status Chips
@@ -796,7 +796,7 @@ const formatADA = (eurAmount: number) => {
   aspect-ratio: 345 / 222;
   max-width: 90%;
   margin: 0 auto;
-  background-image: url('@/modules/wallet/icons/card.svg');
+  background-image: url('@/assets/front_card_no_mcx2.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
