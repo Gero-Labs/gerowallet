@@ -942,6 +942,16 @@ export default {
     }
   },
 
+  async getOrderDetails(orderUuid: string): Promise<any> {
+    try {
+      const api = getCardApi();
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/card-uuid/${orderUuid}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Wallet Status Methods - SIMPLE!
   async setKaiserexAuthentication(isAuthenticated: boolean): Promise<void> {
     cardStore.walletStatus.isKaiserexAuthenticated = isAuthenticated;
@@ -1151,6 +1161,20 @@ export default {
       throw error;
     }
   },
+
+  /**
+   * Check payment status for physical card order
+   * Placeholder - will be implemented when backend is ready
+   * @param _txId - Transaction ID to check - reserved for future use
+   * @returns true if payment confirmed, false otherwise
+   */
+  async checkPaymentStatus(_txId: string): Promise<boolean> {
+    // Mock - simulate payment confirmation after delay
+    // In production, this will poll the backend to check if payment was received
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    return true;
+  },
+
   // State getter for compatibility
   get state() {
     return cardStore;
