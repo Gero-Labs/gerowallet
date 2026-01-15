@@ -12,13 +12,13 @@
     </v-btn>
 
     <!-- Loading State -->
-    <div v-if="showLoadingState" class="loading-container">
+    <div v-if="devState === 'loading' || showLoadingState" class="loading-container">
       <div class="loading-spinner"></div>
       <p class="loading-message">{{ loadingMessage || $t('wallet.loadingYourWallet') }}</p>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="showErrorState" class="error-container">
+    <div v-else-if="devState === 'error' || showErrorState" class="error-container">
       <div class="error-icon">⚠️</div>
       <h3 class="error-title">{{ $t('wallet.somethingWentWrong') }}</h3>
       <p class="error-message">{{ error || $t('wallet.unexpectedError') }}</p>
@@ -32,11 +32,30 @@
       @kyc-complete="handleKYCComplete"
       @error="setError"
     />
+
+    <!-- Dev State Toggler (Bottom Right) -->
+    <div class="dev-state-toggler">
+      <v-select
+        v-model="devState"
+        :items="devStateOptions"
+        dense
+        outlined
+        hide-details
+        label="Dev State"
+        clearable
+        attach=".dev-state-toggler"
+        :menu-props="{ top: true, offsetY: true }"
+      >
+        <template #prepend-inner>
+          <v-icon small color="orange">mdi-wrench</v-icon>
+        </template>
+      </v-select>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import cardStore from '@/stores/modules/card';
 
@@ -73,8 +92,27 @@ const WALLET_COMPONENTS = {
   error: null, // Error handled in template
 } as const;
 
+// ============================================================================
+// DEVELOPMENT STATE TOGGLER
+// ============================================================================
+
+const devState = ref<string | null>(null);
+const devStateOptions = [
+  { text: 'Auth (Login/Register)', value: 'auth' },
+  { text: 'New (Order Card)', value: 'new' },
+  { text: 'Pending (KYC Review)', value: 'pending' },
+  { text: 'Approved (Full Access)', value: 'approved' },
+  { text: 'Loading', value: 'loading' },
+  { text: 'Error', value: 'error' },
+];
+
+// Override currentState when devState is set
+const effectiveState = computed(() => {
+  return devState.value || currentState.value;
+});
+
 const currentComponent = computed(() => {
-  const state = currentState.value;
+  const state = effectiveState.value;
   return WALLET_COMPONENTS[state] || KaiserexAuthPage;
 });
 
@@ -294,6 +332,43 @@ onMounted(async () => {
 }
 
 // ============================================================================
+// DEV STATE TOGGLER
+// ============================================================================
+
+.dev-state-toggler {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 280px;
+  z-index: 10000;
+  background: rgba(12, 14, 18, 0.95);
+  border: 2px solid rgba(255, 165, 0, 0.5);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+
+  :deep(.v-input__control) {
+    background: rgba(30, 30, 30, 0.8);
+    border-radius: 4px;
+  }
+
+  :deep(.v-select__selection) {
+    color: #fff;
+    font-size: 13px;
+  }
+
+  :deep(.v-input__slot) {
+    min-height: 36px !important;
+  }
+
+  :deep(.v-label) {
+    color: orange;
+    font-weight: 600;
+    font-size: 12px;
+  }
+}
+
+// ============================================================================
 // RESPONSIVE DESIGN
 // ============================================================================
 
@@ -315,6 +390,12 @@ onMounted(async () => {
 
   .error-message {
     font-size: 14px;
+  }
+
+  .dev-state-toggler {
+    bottom: 10px;
+    right: 10px;
+    width: 240px;
   }
 }
 </style>

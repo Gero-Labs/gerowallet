@@ -8,7 +8,7 @@
             <v-window v-model="currentCardIndex" :show-arrows="cardsWithOrderSlot.length > 1" continuous>
               <v-window-item
                 v-for="(card, index) in cardsWithOrderSlot"
-                :key="card.cardData?.card_uuid || `empty-${index}`"
+                :key="card.cardData?.card_uuid || card.cardData?.order_uuid || `empty-${index}`"
                 style="height: 280px"
               >
                 <div
@@ -117,12 +117,30 @@
               </div>
               <div class="status-text-wrapper">
                 <div class="status-title-wrapper">
-                  <p class="status-title">{{ t('card.cardOrderInProgress') }}</p>
+                  <p class="status-title">
+                    {{ currentCardType === 'physical' ? t('card.physicalCardOrderInProgress') : t('card.virtualCardOrderInProgress') }}
+                  </p>
                 </div>
                 <p class="status-subtitle">
-                  {{ t('card.cardOrderProcessing') }} <br />
-                  {{ t('card.processingTime') }}
+                  <template v-if="currentOrderNeedsPayment">
+                    {{ t('card.physicalCardPaymentRequired') }} <br />
+                    {{ t('card.completePaymentToProceed') }}
+                  </template>
+                  <template v-else>
+                    {{ t('card.cardOrderProcessing') }} <br />
+                    {{ t('card.processingTime') }}
+                  </template>
                 </p>
+                <!-- Payment Button - Show if order needs payment (physical cards only) -->
+                <v-btn
+                  v-if="currentOrderNeedsPayment"
+                  class="complete-payment-btn mt-4"
+                  @click="openPaymentModal"
+                  :loading="loadingOrderDetails"
+                >
+                  <v-icon left>mdi-credit-card-outline</v-icon>
+                  {{ t('card.completePayment') }}
+                </v-btn>
               </div>
             </v-card-text>
           </v-card>
@@ -163,7 +181,7 @@
                 class="order-card-btn"
                 large
                 :loading="orderingCard"
-                @click="showOrderCardConfirmationModal = true"
+                @click="showOrderCardFlowModal = true"
               >
                 <v-icon left>mdi-credit-card-plus</v-icon>
                 {{ t('card.orderNewCard') }}
@@ -175,10 +193,23 @@
     </v-card>
 
     <!-- Modals -->
-    <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
-    <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
+    <ManageCardModal :open="showManageCardModal" @close="handleManageCardClose" />
+    <TopUpModal :open="showTopUpModal" @close="handleTopUpClose" />
     <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
-    <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="showOrderPhysicalCardModal = false" />
+    <OrderPhysicalCardModal :open="showOrderPhysicalCardModal" @close="handleOrderPhysicalCardClose" />
+    <OrderCardFlowModal
+      :open="showOrderCardFlowModal"
+      :has-virtual-card="hasVirtualCard"
+      :has-physical-card="hasPhysicalCard"
+      @close="handleOrderCardFlowClose"
+    />
+    <PayOrderModal
+      v-if="pendingOrderUuid"
+      :open="showPayOrderModal"
+      :order-uuid="pendingOrderUuid"
+      @close="showPayOrderModal = false"
+      @success="handlePaymentSuccess"
+    />
 
     <!-- Confirmation Modal -->
     <ConfirmationPasswordModal
@@ -209,11 +240,13 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import PromotionModal from './PromotionModal.vue';
 import OrderPhysicalCardModal from './dashboard/OrderPhysicalCardModal.vue';
+import OrderCardFlowModal from './dashboard/OrderCardFlowModal.vue';
+import PayOrderModal from './dashboard/PayOrderModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
@@ -232,7 +265,12 @@ const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
 const showOrderCardConfirmationModal = ref(false);
 const showOrderPhysicalCardModal = ref(false);
+const showOrderCardFlowModal = ref(false);
+const showPayOrderModal = ref(false);
 const orderingCard = ref(false);
+const loadingOrderDetails = ref(false);
+const pendingOrderUuid = ref<string | null>(null);
+const hiddenOrderUuids = ref<string[]>([]);
 const emptyCard: CardInfo = {
   cardData: {
     id: null,
@@ -279,12 +317,31 @@ const cards = computed(() => {
   return cardStoreModule.state.cards || [];
 });
 
-// Cards array with empty slot at the end for ordering new card
+const hasVirtualCard = computed(() => {
+  return cards.value.some(card =>
+    card.cardData?.own_type === 'virtual' &&
+    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+  );
+});
+
+const hasPhysicalCard = computed(() => {
+  return cards.value.some(card =>
+    card.cardData?.own_type === 'physical' &&
+    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+  );
+});
+
+const canOrderNewCard = computed(() => {
+  return !hasVirtualCard.value || !hasPhysicalCard.value;
+});
+
 const cardsWithOrderSlot = computed(() => {
   if (cards.value.length === 0) {
     return [emptyCard];
+  } else if (canOrderNewCard.value) {
+    return [...cards.value, emptyCard];
   } else {
-    return [...cards.value];
+    return cards.value;
   }
 });
 
@@ -298,10 +355,6 @@ const handleOrderCard = async () => {
     // Show success message
     snackbar.fireSuccess(t('card.cardOrderedSuccess'));
   } catch (error: any) {
-    console.error('Failed to order card:', error);
-
-    // Extract error reason from response
-    // Backend may return error in different formats, so check all possibilities
     let errorReason: string;
 
     // Check if error.response.data is a string (direct error message)
@@ -336,6 +389,23 @@ const currentCardHasUUID = computed(() => {
   return cardsWithOrderSlot.value[currentCardIndex.value]?.cardData.card_uuid !== null;
 });
 
+// Check if current order needs payment (physical card with order_uuid but no card_uuid)
+const currentOrderNeedsPayment = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  return (
+    currentCard?.cardData?.id &&
+    currentCard?.cardData?.order_uuid &&
+    !currentCard?.cardData?.card_uuid &&
+    currentCard?.cardData?.own_type === 'physical' // Only physical cards need payment
+  );
+});
+
+// Get current card type
+const currentCardType = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  return currentCard?.cardData?.own_type || 'virtual';
+});
+
 // Watch for selected card changes and update current index
 watch(
   () => cardStoreModule.state.selectedCardId,
@@ -368,15 +438,160 @@ const toggleCardVisibility = async () => {
     await cardStoreModule.fetchCardDetails(cardStoreModule.state.selectedCardId);
     showCardDetails.value = !showCardDetails.value;
   } catch (error) {
-    console.error('Failed to fetch card details:', error);
+    // Silent error handling
   }
 };
 
 // Top up handler
 const handleTopUp = () => {
-  console.log('Top up clicked');
   showTopUpModal.value = true;
 };
+
+// Payment handler
+const openPaymentModal = async () => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (currentCard?.cardData?.order_uuid) {
+    try {
+      loadingOrderDetails.value = true;
+      await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
+
+      pendingOrderUuid.value = currentCard.cardData.order_uuid;
+      showPayOrderModal.value = true;
+    } catch (error) {
+      snackbar.setError(t('card.failedToLoadOrderDetails'));
+
+      if (currentCard.cardData.order_uuid && !hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
+        hiddenOrderUuids.value.push(currentCard.cardData.order_uuid);
+      }
+    } finally {
+      loadingOrderDetails.value = false;
+    }
+  }
+};
+
+const handleManageCardClose = async () => {
+  showManageCardModal.value = false;
+  await cardStoreModule.fetchCardData();
+};
+
+const handleTopUpClose = async () => {
+  showTopUpModal.value = false;
+  await cardStoreModule.fetchCardData();
+};
+
+const handleOrderCardFlowClose = async () => {
+  showOrderCardFlowModal.value = false;
+  await cardStoreModule.fetchCardData();
+  checkPendingOrders();
+};
+
+const handleOrderPhysicalCardClose = async () => {
+  showOrderPhysicalCardModal.value = false;
+  await cardStoreModule.fetchCardData();
+  checkPendingOrders();
+};
+
+const handlePaymentSuccess = async () => {
+  await cardStoreModule.fetchCardData();
+  showPayOrderModal.value = false;
+
+  if (pendingOrderUuid.value && hiddenOrderUuids.value.includes(pendingOrderUuid.value)) {
+    const index = hiddenOrderUuids.value.indexOf(pendingOrderUuid.value);
+    hiddenOrderUuids.value.splice(index, 1);
+  }
+
+  checkPendingOrders();
+};
+
+// Check order status for pending cards
+const checkPendingOrders = async () => {
+  const pendingCards = cards.value.filter(
+    card =>
+      card.cardData?.id &&
+      card.cardData?.order_uuid &&
+      !card.cardData?.card_uuid &&
+      !hiddenOrderUuids.value.includes(card.cardData.order_uuid)
+  );
+
+  for (const card of pendingCards) {
+    try {
+      loadingOrderDetails.value = true;
+      const orderDetails = await cardStoreModule.getOrderDetails(card.cardData.order_uuid);
+
+      if (orderDetails.card_uuid) {
+        await cardStoreModule.fetchCardData();
+
+        if (card.cardData.order_uuid && hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
+          const index = hiddenOrderUuids.value.indexOf(card.cardData.order_uuid);
+          hiddenOrderUuids.value.splice(index, 1);
+        }
+        break;
+      }
+    } catch (error) {
+      if (card.cardData.order_uuid && !hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
+        hiddenOrderUuids.value.push(card.cardData.order_uuid);
+      }
+    } finally {
+      loadingOrderDetails.value = false;
+    }
+  }
+};
+
+// Check pending orders on mount and periodically
+let orderCheckInterval: ReturnType<typeof setInterval> | null = null;
+const hasCheckedPendingOrders = ref(false);
+
+const startOrderChecking = () => {
+  if (orderCheckInterval) return; // Already checking
+
+  // Check every 30 seconds if there are pending orders
+  orderCheckInterval = setInterval(() => {
+    if (cards.value.some(card => card.cardData?.order_uuid && !card.cardData?.card_uuid)) {
+      checkPendingOrders();
+    } else {
+      if (orderCheckInterval) {
+        clearInterval(orderCheckInterval);
+        orderCheckInterval = null;
+      }
+    }
+  }, 30000);
+};
+
+// Watch for cards changes to check pending orders
+watch(
+  () => cards.value,
+  (newCards) => {
+    if (hiddenOrderUuids.value.length > 0) {
+      const existingOrderUuids = newCards
+        .filter(c => c.cardData?.order_uuid)
+        .map(c => c.cardData.order_uuid);
+
+      hiddenOrderUuids.value = hiddenOrderUuids.value.filter(uuid =>
+        existingOrderUuids.includes(uuid)
+      );
+    }
+
+    if (newCards.length > 0 && !hasCheckedPendingOrders.value) {
+      const hasPendingOrders = newCards.some(
+        card => card.cardData?.order_uuid && !card.cardData?.card_uuid
+      );
+
+      if (hasPendingOrders) {
+        hasCheckedPendingOrders.value = true;
+        checkPendingOrders();
+        startOrderChecking();
+      }
+    }
+  },
+  { immediate: true, deep: true }
+);
+
+onUnmounted(() => {
+  if (orderCheckInterval) {
+    clearInterval(orderCheckInterval);
+    orderCheckInterval = null;
+  }
+});
 
 // 3D Card tilt effect with shine and dynamic glow
 const handleCardMouseMove = (event: MouseEvent) => {
@@ -530,6 +745,8 @@ const formatADA = (eurAmount: number) => {
   align-items: center;
   width: 100%;
   margin-top: -8px;
+  min-height: 28px; // Reserve space for badge even when empty
+  height: 28px; // Fixed height to prevent wiggling
 }
 
 // Card Status Chips
@@ -579,7 +796,7 @@ const formatADA = (eurAmount: number) => {
   aspect-ratio: 345 / 222;
   max-width: 90%;
   margin: 0 auto;
-  background-image: url('@/modules/wallet/icons/card.svg');
+  background-image: url('@/assets/front_card_no_mcx2.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -1088,6 +1305,34 @@ const formatADA = (eurAmount: number) => {
     color: rgba($text-secondary, 0.9);
     line-height: 1.6;
     margin: 0 !important;
+  }
+
+  .complete-payment-btn {
+    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
+    color: #0c0e12 !important;
+    font-family: $font-family-primary;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-bold;
+    text-transform: none;
+    border-radius: 8px;
+    padding: 8px 20px !important;
+    height: auto !important;
+    min-height: 40px;
+    box-shadow: 0 4px 12px rgba(0, 199, 243, 0.3);
+    transition: all 0.3s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(0, 199, 243, 0.4);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    :deep(.v-icon) {
+      color: #0c0e12 !important;
+    }
   }
 
   .status-steps {
