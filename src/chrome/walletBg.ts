@@ -1010,6 +1010,7 @@ export class WalletBg {
     accountIndex: number,
     utxos: Cardano.Utxo[],
     addresses: Keys,
+    privateKeyBytes?: Uint8Array, // Optional pre-decrypted private key for PRF wallets
   ): Promise<{ witnesses: string }> {
     let transaction: Cardano.Tx;
 
@@ -1022,8 +1023,16 @@ export class WalletBg {
       transaction = txInput;
     }
 
-    // Decrypt root private key (supports both password and PRF encryption)
-    const rootPrivateKey = await this.decryptRootPrivateKey(password);
+    // Get root private key
+    let rootPrivateKey: Bip32PrivateKey;
+    if (privateKeyBytes) {
+      // Use pre-decrypted private key (PRF wallet - already authenticated in browser context)
+      const { Bip32PrivateKey } = await import('@cardano-sdk/crypto');
+      rootPrivateKey = Bip32PrivateKey.fromBytes(privateKeyBytes);
+    } else {
+      // Decrypt root private key (password-based wallets)
+      rootPrivateKey = await this.decryptRootPrivateKey(password);
+    }
     password = null; // Clear password from memory
 
     // Derive an account private key
@@ -1037,7 +1046,6 @@ export class WalletBg {
     const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
-    console.log('🔧 About to analyze transaction for signatures');
     const requiredSigners = analyzeTransactionForSignatures(
       transaction,
       utxos,
@@ -1046,25 +1054,13 @@ export class WalletBg {
       this.stakeAddress,
     );
 
-    console.log('🔧 Required signers analysis:');
-    console.log(`🔧 Found ${requiredSigners.length} required signers`);
-    requiredSigners.forEach((signer, index) => {
-      console.log(`🔧 Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
-    });
-
     // Sign with each required key
     for (const signer of requiredSigners) {
-      console.log(`🔧 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
       const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
       const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
-      console.log(`🔧 Public key hash: ${rawPublicKey.hash().hex()}`);
-      // Sign the transaction hash as a HexBlob type
       const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
       signatures.set(rawPublicKey.hex(), signature.hex());
-      console.log(`🔧 Added signature for public key: ${rawPublicKey.hex().substring(0, 16)}...`);
     }
-
-    console.log(`🔧 Total signatures collected: ${signatures.size}`);
 
     // Create a witness set - ensure a signature map is properly set
     const witness: Cardano.Witness = {

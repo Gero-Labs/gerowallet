@@ -1442,12 +1442,18 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         throw new Error('No transaction data provided (neither tx nor txCbor)');
       }
 
+      // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
+      const privateKeyBytes = request.data.privateKeyBytes
+        ? new Uint8Array(request.data.privateKeyBytes)
+        : undefined;
+
       const witnessResult = await walletBg.signTx(
         transaction,
         request.data.password,
         request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
+        privateKeyBytes, // Pass pre-decrypted private key for PRF wallets
       );
       sendResponse({
         id: request.id,

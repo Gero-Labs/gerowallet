@@ -19,7 +19,22 @@
             <!-- PRF Mode Indicator (if PRF supported - Pure PRF mode only) -->
             <template v-if="prfSupported">
               <v-alert color="primary" icon="mdi-shield-key" prominent dense outlined border="left" class="mb-4" style="width: 100%;">
-                <div class="font-weight-bold">{{ $t('welcome.prfEncryption') }}</div>
+                <div class="d-flex align-center">
+                  <div class="font-weight-bold flex-grow-1">{{ $t('welcome.prfEncryption') }}</div>
+                  <v-tooltip bottom max-width="400">
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-icon small color="primary" v-bind="attrs" v-on="on" class="ml-2">
+                        mdi-information-outline
+                      </v-icon>
+                    </template>
+                    <div class="text-body-2">
+                      <div class="font-weight-bold mb-2">{{ $t('welcome.prfTooltipTitle') }}</div>
+                      <div class="mb-2">{{ $t('welcome.prfTooltipDesc1') }}</div>
+                      <div class="mb-2">{{ $t('welcome.prfTooltipDesc2') }}</div>
+                      <div>{{ $t('welcome.prfTooltipDesc3') }}</div>
+                    </div>
+                  </v-tooltip>
+                </div>
                 <div class="text-caption">{{ $t('welcome.prfEncryptionDesc') }}</div>
               </v-alert>
             </template>

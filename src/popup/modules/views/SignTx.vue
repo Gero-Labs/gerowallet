@@ -58,12 +58,29 @@
                 class="w-100"
               />
             </v-col>
+            <!-- PRF Wallet: PassKey Button or Submit Button -->
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Normal && isPrfWallet" class="pt-3 pb-0">
-              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
-                <span style="color: white; font-size: 12px">
-                  {{ $t('wallet.prfWalletSignInfo') }}
-                </span>
-              </v-alert>
+              <!-- Before signing: PassKey button -->
+              <PassKeyAuthButton
+                v-if="!witnesses"
+                :disabled="txSignLoading"
+                @success="handlePassKeyAuthSuccess"
+                @error="handlePassKeyAuthError"
+                block
+                class="mb-2"
+              />
+              <!-- After signing: Submit button -->
+              <v-btn
+                v-else
+                block
+                class="geroButton"
+                style="color: black!important;"
+                @click="sign"
+                :disabled="txSignLoading"
+                :loading="txSignLoading"
+              >
+                {{ $t('common.confirm') }}
+              </v-btn>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.btSupported" class="py-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
@@ -91,12 +108,13 @@
                 </span>
               </v-alert>
             </v-col>
-            <v-col cols="6">
+            <v-col :cols="isPrfWallet ? 12 : 6">
               <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>
-            <v-col cols="6">
+            <!-- Hide action button for PRF wallets (handled above) -->
+            <v-col cols="6" v-if="!isPrfWallet">
               <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading" :loading="txSignLoading">
                 {{txAutoSubmit ? $t('wallet.signAndConfirm') : !witnesses ? $t('wallet.sign') : $t('common.confirm')}}
               </v-btn>
@@ -211,6 +229,7 @@ import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import {
   diffAssetsFromIncomingToOutgoing,
   getPayAndReceiveTokens,
@@ -243,6 +262,7 @@ const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 const isBT = ref(false);
 const risks = ref<any>(undefined);
 const spendingPassword = ref('');
+const privateKeyBytes = ref<Uint8Array | null>(null);
 const request = ref<any>(null);
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const valid = ref(false);
@@ -430,6 +450,20 @@ const handlePassKeySuccess = () => {
   }, 300); // Small delay for UX feedback
 };
 
+const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+  privateKeyBytes.value = pkBytes;
+  // Automatically proceed to sign after successful authentication
+  setTimeout(() => {
+    sign();
+  }, 300);
+};
+
+const handlePassKeyAuthError = (error: Error) => {
+  console.error('PassKey authentication error:', error);
+  snackbar.setError(error.message || t('security.passKeyAuthFailed'));
+  privateKeyBytes.value = null;
+};
+
 const decline = async () => {
   await controller.value.returnData({ data: undefined, error: TxSignError.UserDeclined });
   window.close();
@@ -456,6 +490,7 @@ const sign = async () => {
             utxos: utxos.value,
             addresses: keys.value,
             mergeWitnesses: mergeWitnesses || false,
+            privateKeyBytes: privateKeyBytes.value ? Array.from(privateKeyBytes.value) : undefined,
           }
         }) as { data: { witnesses?: any; error?: string } };
 

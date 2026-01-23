@@ -32,12 +32,29 @@
                 @passkey-autofill-success="sign"
               />
             </v-col>
-            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Normal && isPrfWallet && !signature" class="pt-3 pb-0">
-              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
-                <span style="color: white; font-size: 12px">
-                  {{ $t('wallet.prfWalletSignInfo') }}
-                </span>
-              </v-alert>
+            <!-- PRF Wallet: PassKey Button or Submit Button -->
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Normal && isPrfWallet" class="pt-3 pb-0">
+              <!-- Before signing: PassKey button -->
+              <PassKeyAuthButton
+                v-if="!signature"
+                :disabled="loading"
+                @success="handlePassKeyAuthSuccess"
+                @error="handlePassKeyAuthError"
+                block
+                class="mb-2"
+              />
+              <!-- After signing: Submit button -->
+              <v-btn
+                v-else
+                block
+                class="geroButton"
+                style="color: black!important;"
+                @click="sign"
+                :disabled="loading"
+                :loading="loading"
+              >
+                {{ $t('common.confirm') }}
+              </v-btn>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
@@ -58,12 +75,13 @@
                 </span>
               </v-alert>
             </v-col>
-            <v-col cols="6">
+            <v-col :cols="isPrfWallet ? 12 : 6">
               <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline" :disabled="loading">
                 Decline
               </v-btn>
             </v-col>
-            <v-col cols="6">
+            <!-- Hide action button for PRF wallets (handled above) -->
+            <v-col cols="6" v-if="!isPrfWallet">
               <v-btn
                 block
                 class="geroButton"
@@ -162,6 +180,7 @@ import { Key, WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { walletStore } from '@/stores/walletStore';
@@ -180,6 +199,7 @@ const { t } = useTranslation();
 const { loggedWallet, config, keys } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any;
 const spendingPassword = ref('');
+const privateKeyBytes = ref<Uint8Array | null>(null);
 const passwordField = ref<any>(null);
 const request = ref<any>(null);
 const message = ref('');
@@ -212,6 +232,20 @@ const isPrfWallet = computed(() => {
          (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
 });
 
+const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+  privateKeyBytes.value = pkBytes;
+  // Automatically proceed to sign after successful authentication
+  setTimeout(() => {
+    sign();
+  }, 300);
+};
+
+const handlePassKeyAuthError = (error: Error) => {
+  console.error('PassKey authentication error:', error);
+  snackbar.setError(error.message || t('security.passKeyAuthFailed'));
+  privateKeyBytes.value = null;
+};
+
 const decline = async () => {
   await controller.value.returnData({ data: undefined, error: DataSignError.UserDeclined });
   window.close();
@@ -234,13 +268,17 @@ const signDataLocallyWithPrf = async () => {
     // Check if we're in a side panel (not a popup window)
     const isSidePanel = window.location.href.includes('tabId=');
 
-    let privateKeyBytes: Uint8Array;
+    let pkBytes: Uint8Array;
 
-    if (isSidePanel) {
+    // Use cached privateKeyBytes if available (from PassKeyAuthButton)
+    if (privateKeyBytes.value) {
+      console.log('[PRF Sign Data] Using cached private key bytes');
+      pkBytes = privateKeyBytes.value;
+    } else if (isSidePanel) {
       // Open PassKeyAuth popup for WebAuthn (doesn't work in side panels)
       console.log('[PRF Sign Data] Opening PassKeyAuth popup for side panel');
 
-      privateKeyBytes = await new Promise<Uint8Array>((resolve, reject) => {
+      pkBytes = await new Promise<Uint8Array>((resolve, reject) => {
         const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
 
         // Listen for postMessage from popup
@@ -290,7 +328,7 @@ const signDataLocallyWithPrf = async () => {
     } else {
       // Direct WebAuthn in popup window (WebAuthn works in popups)
       const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
-      privateKeyBytes = await decryptPrivateKeyWithPrf(
+      pkBytes = await decryptPrivateKeyWithPrf(
         loggedWallet.value.prfEncryptedPrivateKey,
         loggedWallet.value.webAuthnCredentialId,
         loggedWallet.value.id.toString()
@@ -298,7 +336,7 @@ const signDataLocallyWithPrf = async () => {
     }
 
     // Continue with signing using the decrypted private key
-    const rootKey = Bip32PrivateKey.fromBytes(privateKeyBytes);
+    const rootKey = Bip32PrivateKey.fromBytes(pkBytes);
 
     // Step 2: Find the signing key
     // Normalize address format
