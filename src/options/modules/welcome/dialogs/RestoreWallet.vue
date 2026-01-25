@@ -487,8 +487,9 @@ const walletCreationStep2 = async () => {
         const { registerWebAuthnCredential } = await import('@/shared/utils/security');
 
         try {
+          // Step 1: Register WebAuthn credential with PRF
           const { credentialId, prfEnabled } = await registerWebAuthnCredential(
-            'temp-wallet-id', // Temporary ID, actual wallet ID will be allocated in createNewWallet
+            'temp-wallet-id', // Temporary ID, actual wallet ID will be allocated below
             newWallet.value.name
           );
 
@@ -503,15 +504,30 @@ const walletCreationStep2 = async () => {
 
           webAuthnCredentialId.value = credentialId;
 
-          // Step 2: Create wallet with PRF options and provided mnemonic (Pure PRF mode - no password unlock)
+          // Step 2: Pre-allocate wallet ID (same logic as in gero-db.ts)
+          const { getDb, getLatestWalletByOrder } = await import('@/db/gero-db');
+          const db = await getDb();
+          const maxWallet = await db['wallets'].orderBy('id').last();
+          const newWalletId = (maxWallet?.id || 0) + 1;
+
+          console.log('🆔 Pre-allocated wallet ID (Restore):', newWalletId);
+
+          // Step 3: Evaluate PRF immediately after registration (while user just authenticated)
+          const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+          const prfOutput = await evaluatePrfForWallet(credentialId, newWalletId.toString());
+
+          console.log('✅ PRF evaluated successfully (Restore - avoids second prompt in gero-db)');
+
+          // Step 4: Create wallet with PRF options + PRF output and provided mnemonic (Pure PRF mode - no password unlock)
           const prfOptions = {
             usePrf: true,
             credentialId,
             passwordUnlockEnabled: false, // Pure PRF mode - no password
             backupMnemonic: newWallet.value.backupMnemonic,
+            prfOutput, // Pass PRF output to avoid second prompt
           };
 
-          console.log('📦 Calling GeroStore.createNewWallet with PRF options (Restore):', prfOptions);
+          console.log('📦 Calling GeroStore.createNewWallet with PRF options (Restore - including prfOutput)');
 
           wallet = await GeroStore.createNewWallet(
             newWallet.value.name,

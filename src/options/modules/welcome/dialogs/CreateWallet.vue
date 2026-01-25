@@ -283,8 +283,9 @@ const walletCreationStep = async () => {
       const { registerWebAuthnCredential } = await import('@/shared/utils/security');
 
       try {
+        // Step 1: Register WebAuthn credential with PRF
         const { credentialId, prfEnabled } = await registerWebAuthnCredential(
-          'temp-wallet-id', // Temporary ID, actual wallet ID will be allocated in createNewWallet
+          'temp-wallet-id', // Temporary ID, actual wallet ID will be allocated below
           newWallet.name
         );
 
@@ -299,15 +300,30 @@ const walletCreationStep = async () => {
 
         webAuthnCredentialId.value = credentialId;
 
-        // Step 2: Create wallet with PRF options (Pure PRF mode - no password unlock)
+        // Step 2: Pre-allocate wallet ID (same logic as in gero-db.ts)
+        const { getDb, getLatestWalletByOrder } = await import('@/db/gero-db');
+        const db = await getDb();
+        const maxWallet = await db['wallets'].orderBy('id').last();
+        const newWalletId = (maxWallet?.id || 0) + 1;
+
+        console.log('🆔 Pre-allocated wallet ID:', newWalletId);
+
+        // Step 3: Evaluate PRF immediately after registration (while user just authenticated)
+        const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+        const prfOutput = await evaluatePrfForWallet(credentialId, newWalletId.toString());
+
+        console.log('✅ PRF evaluated successfully (avoids second prompt in gero-db)');
+
+        // Step 4: Create wallet with PRF options + PRF output (Pure PRF mode - no password unlock)
         const prfOptions = {
           usePrf: true,
           credentialId,
           passwordUnlockEnabled: false, // Pure PRF mode - no password
           backupMnemonic: true, // Always backup mnemonic for PRF wallets
+          prfOutput, // Pass PRF output to avoid second prompt
         };
 
-        console.log('📦 Calling GeroStore.createNewWallet with PRF options:', prfOptions);
+        console.log('📦 Calling GeroStore.createNewWallet with PRF options (including prfOutput)');
 
         wallet = await GeroStore.createNewWallet(
           newWallet.name,

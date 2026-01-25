@@ -182,6 +182,7 @@ export async function createNewWallet(
     credentialId?: string;
     passwordUnlockEnabled?: boolean;
     backupMnemonic?: boolean;
+    prfOutput?: ArrayBuffer; // PRF output from registration (avoids second prompt)
   }
 ) {
   let isRestore = true;
@@ -237,9 +238,15 @@ export async function createNewWallet(
       hashSpendingPassword
     } = await import('@/shared/utils/webauthn-prf');
 
-    // Step 2: Evaluate PRF once (requires user authentication - second PassKey prompt)
-    console.log('🔐 Evaluating PRF for wallet encryption (PassKey prompt #2)');
-    const prfOutput = await evaluatePrfForWallet(options.credentialId, newWalletId.toString());
+    // Step 2: Evaluate PRF (only if not provided - avoids second PassKey prompt)
+    let prfOutput: ArrayBuffer;
+    if (options.prfOutput) {
+      console.log('✅ Using provided PRF output from registration (no additional prompt)');
+      prfOutput = options.prfOutput;
+    } else {
+      console.log('🔐 Evaluating PRF for wallet encryption (requires PassKey prompt)');
+      prfOutput = await evaluatePrfForWallet(options.credentialId, newWalletId.toString());
+    }
 
     // Step 3: Encrypt private key using PRF output (no additional prompt)
     const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
