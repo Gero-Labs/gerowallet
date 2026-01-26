@@ -220,7 +220,7 @@
               </div>
             </v-card-text>
           </v-card>
-          <div v-else class="order-card-section mt-10">
+          <div v-else-if="shouldShowOrderCardSection" class="order-card-section mt-10">
             <h2 class="order-title">{{ t('card.getYourGeroCard') }}</h2>
             <p class="order-description">{{ t('card.spendCryptoAnywhere') }}</p>
 
@@ -582,6 +582,23 @@ const currentCardStatus = computed(() => {
 const isCurrentCardRejected = computed(() => {
   const status = currentCardStatus.value;
   return status === 'rejected' || status === 'REJECTED';
+});
+
+// Check if current card is pending
+const isCurrentCardPending = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  // Card is pending if it has order_uuid but no card_uuid
+  return !!(currentCard?.cardData?.order_uuid && !currentCard?.cardData?.card_uuid);
+});
+
+// Check if we should show the order card section
+const shouldShowOrderCardSection = computed(() => {
+  // Don't show if card has UUID (active card)
+  if (currentCardHasUUID.value) return false;
+  // Don't show if card is pending
+  if (isCurrentCardPending.value) return false;
+  // Show for empty card slot
+  return true;
 });
 
 // Check if we should show order timer (pending physical card with payment status pending)
