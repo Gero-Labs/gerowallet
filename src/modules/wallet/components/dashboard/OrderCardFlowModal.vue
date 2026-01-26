@@ -21,19 +21,19 @@
         non-linear
       >
         <v-stepper-header>
-          <v-stepper-step :complete="currentStep > 2" step="2" color="#00c7f3">
+          <v-stepper-step :complete="currentStep > 2" step="1" color="#00c7f3">
             {{ $t('card.shippingAddress') }}
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step :complete="currentStep > 3" step="3" color="#00c7f3">
+          <v-stepper-step :complete="currentStep > 3" step="2" color="#00c7f3">
             {{ $t('card.shippingMethod') }}
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step :complete="currentStep > 4" step="4" color="#00c7f3">
+          <v-stepper-step :complete="currentStep > 4" step="3" color="#00c7f3">
             {{ $t('card.paymentDetails') }}
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step step="5" color="#00c7f3">
+          <v-stepper-step step="4" color="#00c7f3">
             {{ $t('card.confirm') }}
           </v-stepper-step>
         </v-stepper-header>
