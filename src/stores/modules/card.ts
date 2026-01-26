@@ -5,6 +5,7 @@ import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { Cardano } from '@cardano-sdk/core';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -68,23 +69,6 @@ export const cardStore = Vue.observable<CardState>({
   },
 });
 
-/**
- * Initialize card store with split storage model:
- *
- * COOKIES (chrome.cookies API):
- * - accessToken: Sensitive auth token
- * - refreshToken: Token refresh credential
- * - tokenExpiry: Token expiration timestamp
- *
- * CHROME STORAGE (chrome.storage.local):
- * - All other card state (user info, cards, balances, etc.)
- * - Tokens are explicitly excluded from chrome.storage for better security
- *
- * Why split storage?
- * - Cookies provide better security boundaries (domain isolation, auto-expiry)
- * - Chrome storage provides larger storage capacity for card data
- * - Tokens don't need to be serialized with other state
- */
 async function initCardStore() {
   try {
     // Load tokens from cookies (secure storage)
@@ -144,21 +128,6 @@ async function initCardStore() {
 }
 initCardStore();
 
-/**
- * Persist card store data to chrome.storage.local
- *
- * IMPORTANT: Tokens are NOT persisted here!
- * - accessToken, refreshToken, tokenExpiry are stored in cookies
- * - They are explicitly deleted before saving to chrome.storage
- * - This ensures tokens have proper security boundaries and auto-expiry
- */
-
-/**
- * Helper to retrieve authentication tokens from cookies
- *
- * Returns null on failure to allow graceful fallback.
- * Used for lazy-loading tokens when not available in memory.
- */
 async function getTokenFromCookie(name: string): Promise<string | null> {
   try {
     if (typeof chrome !== 'undefined' && chrome.cookies) {
@@ -255,18 +224,7 @@ function getCardApi(): Api {
   return api;
 }
 
-/**
- * Internal card store instance for token management
- *
- * Handles token refresh and logout with proper cookie cleanup
- */
 const cardStoreInstance = {
-  /**
-   * Refresh access token using refresh token
-   *
-   * If refresh fails (e.g., refresh token expired or invalid), automatically
-   * logs out user and clears all cookies
-   */
   async refreshAccessToken(): Promise<void> {
     if (!cardStore.refreshToken) {
       console.warn('No refresh token available for refresh');
@@ -295,17 +253,6 @@ const cardStoreInstance = {
     }
   },
 
-  /**
-   * Logout user and clear all session data
-   *
-   * Clears:
-   * - Access and refresh tokens from memory
-   * - All cookies (via clearStoredTokens)
-   * - User data, cards, balances
-   * - Calls backend logout endpoint
-   *
-   * Always succeeds even if backend logout fails
-   */
   async logout(): Promise<void> {
     try {
       // Check if user was logged in before attempting backend logout
@@ -342,19 +289,6 @@ const cardStoreInstance = {
   },
 };
 
-/**
- * Store authentication tokens in secure cookies
- *
- * Uses chrome.cookies API instead of chrome.storage.local for enhanced security:
- * - Domain isolation: Cookies are bound to backend domain
- * - Auto-expiry: Cookies automatically expire based on token lifetime
- * - Secure flag: HTTPS-only transmission
- * - SameSite protection: CSRF protection
- *
- * NOTE: While we can't set httpOnly from client-side, this is still more secure
- * than chrome.storage.local. For full httpOnly protection, backend should set
- * cookies via Set-Cookie headers.
- */
 async function storeTokens(tokens: AuthTokens): Promise<void> {
   try {
     if (typeof chrome !== 'undefined' && chrome.cookies) {
@@ -403,12 +337,6 @@ async function storeTokens(tokens: AuthTokens): Promise<void> {
   }
 }
 
-/**
- * Clear all authentication tokens from cookies
- *
- * Called during logout to ensure tokens are properly removed.
- * Does not throw on failure to ensure logout succeeds even if cookie removal fails.
- */
 async function clearStoredTokens(): Promise<void> {
   try {
     await Promise.all([
@@ -435,28 +363,15 @@ export default {
   // Multi-Card Helper Methods
   // ============================================================================
 
-  /**
-   * Get the currently selected card
-   * @returns The selected card or null if none selected
-   */
   getSelectedCard(): CardInfo | null {
     if (!cardStore.selectedCardId) return null;
     return cardStore.cards.find(c => c.cardData.card_uuid === cardStore.selectedCardId) || null;
   },
 
-  /**
-   * Get a specific card by UUID
-   * @param cardId - The card UUID
-   * @returns The card or null if not found
-   */
   getCard(cardId: string): CardInfo | null {
     return cardStore.cards.find(c => c.cardData.card_uuid === cardId) || null;
   },
 
-  /**
-   * Select a card by UUID
-   * @param cardId - The card UUID to select
-   */
   selectCard(cardId: string | null): void {
     if (cardId === null) {
       // Clear selection (for empty card slot or pending cards)
@@ -472,10 +387,6 @@ export default {
     }
   },
 
-  /**
-   * Add or update a card in the cards array
-   * @param cardInfo - The card info to add/update
-   */
   upsertCard(cardInfo: CardInfo): void {
     const index = cardStore.cards.findIndex(c => c.cardData.card_uuid === cardInfo.cardData.card_uuid);
 
@@ -493,10 +404,6 @@ export default {
     }
   },
 
-  /**
-   * Remove a card by UUID
-   * @param cardId - The card UUID to remove
-   */
   removeCard(cardId: string): void {
     const index = cardStore.cards.findIndex(c => c.cardData.card_uuid === cardId);
     if (index >= 0) {
@@ -952,26 +859,6 @@ export default {
     }
   },
 
-  /**
-   * Get card UUID by order UUID
-   * @param orderUuid - Order UUID to get card UUID for
-   * @returns Card UUID if found, null otherwise
-   */
-  async getCardUuidByOrderUuid(orderUuid: string): Promise<string | null> {
-    try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.get(`/api/kaiserex/cards/card-uuid/${orderUuid}`);
-      return response.data?.card_uuid || null;
-    } catch (error) {
-      return null;
-    }
-  },
-
-  /**
-   * Get delivery payment details by order UUID
-   * @param orderUuid - Order UUID to get payment details for
-   * @returns Payment details object with deposit_address, amount_eur, amount_ada, status, etc.
-   */
   async getDeliveryPayment(orderUuid: string): Promise<{
     payment_id?: string;
     deposit_address?: string;
@@ -1006,11 +893,6 @@ export default {
     }
   },
 
-  /**
-   * Get card state (active/rejected)
-   * @param cardUuid - Card UUID to check
-   * @returns Card state object with status
-   */
   async getCardState(cardUuid: string): Promise<{ status: string } | null> {
     try {
       const api = getCardApi();
@@ -1021,108 +903,178 @@ export default {
     }
   },
 
-  /**
-   * Check if a payment transaction exists for the deposit address
-   * Searches through wallet transactions (from walletStore, not API) to find an output matching the deposit address and amount
-   * Uses the same transaction structure as TransactionsCard.vue
-   * @param depositAddress - The deposit address to check
-   * @param expectedAmountAda - Expected amount in ADA (string, e.g., "30.17330230")
-   * @returns true if a matching transaction is found, false otherwise
-   */
   checkDepositPayment(depositAddress: string, expectedAmountAda: string): boolean {
+    console.log('🔍 [checkDepositPayment] Проверка платежа на депозитный адрес через Cardano-SDK', {
+      depositAddress,
+      expectedAmountAda,
+    });
+
     if (!depositAddress || !expectedAmountAda) {
+      console.log('❌ [checkDepositPayment] Отсутствуют обязательные параметры');
       return false;
     }
 
-    // Get transactions from walletStore (same as TransactionsCard.vue)
-    const transactions = walletStore.transactions || [];
-    if (transactions.length === 0) {
+    if (!walletStore || !walletStore.transactions) {
+      console.log('❌ [checkDepositPayment] walletStore или transactions недоступны');
       return false;
     }
 
-    // Constants
-    const LOVELACE_PER_ADA = 1_000_000;
-    const PAYMENT_TOLERANCE_ADA = 1; // Allow ±1 ADA tolerance
-    
-    // Convert expected amount from ADA to lovelace (1 ADA = 1,000,000 lovelace)
-    const expectedAmountLovelace = parseFloat(expectedAmountAda) * LOVELACE_PER_ADA;
-    // Allow ±1 ADA tolerance (±1,000,000 lovelace)
-    const toleranceLovelace = PAYMENT_TOLERANCE_ADA * LOVELACE_PER_ADA;
-    const minAmount = expectedAmountLovelace - toleranceLovelace;
-    const maxAmount = expectedAmountLovelace + toleranceLovelace;
+    try {
+      const depositCardanoAddress = Cardano.Address.fromString(depositAddress);
+      const depositAddressBech32 = depositCardanoAddress.toBech32();
+      
+      console.log('📍 [checkDepositPayment] Депозитный адрес (валидирован через Cardano-SDK):', depositAddressBech32);
 
-    // Search through all transactions (same structure as TransactionsCard.vue)
-    for (const transaction of transactions) {
-      // Skip pending transactions - only check confirmed ones
-      if (transaction.pending || transaction.status === 'Pending') {
-        continue;
+      const transactions = walletStore.transactions;
+      console.log(`📊 [checkDepositPayment] Проверка транзакций кошелька на наличие outputs на депозитный адрес. Всего транзакций: ${transactions.length}`);
+      
+      if (!transactions || transactions.length === 0) {
+        console.log('❌ [checkDepositPayment] Нет транзакций в кошельке');
+        return false;
       }
 
-      // Check outputs in transaction.body.outputs (new format - same as TransactionsCard.vue)
-      if (transaction.body?.outputs) {
-        for (const output of transaction.body.outputs) {
-          if (output.address === depositAddress) {
-            // Extract lovelace amount from output.value.coins or output.amount
-            let outputAmountLovelace = 0;
-            
-            if (output.value?.coins !== undefined) {
-              // Cardano SDK format: value.coins can be BigInt, string, or number
-              const coinsValue = output.value.coins;
-              if (typeof coinsValue === 'bigint') {
-                outputAmountLovelace = Number(coinsValue.toString());
-              } else if (typeof coinsValue === 'string') {
-                outputAmountLovelace = Number(coinsValue);
-              } else if (typeof coinsValue === 'number') {
-                outputAmountLovelace = coinsValue;
-              }
-            } else if (output.amount) {
-              // Legacy format: amount is array of { unit, quantity }
-              if (Array.isArray(output.amount)) {
-                const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
-                if (lovelaceToken) {
-                  // quantity can be string or number
-                  outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
-                    ? Number(lovelaceToken.quantity) 
-                    : lovelaceToken.quantity;
+      const LOVELACE_PER_ADA = 1_000_000;
+      const PAYMENT_TOLERANCE_ADA = 1;
+      
+      const expectedAmountLovelace = parseFloat(expectedAmountAda) * LOVELACE_PER_ADA;
+      const toleranceLovelace = PAYMENT_TOLERANCE_ADA * LOVELACE_PER_ADA;
+      const minAmount = expectedAmountLovelace - toleranceLovelace;
+      const maxAmount = expectedAmountLovelace + toleranceLovelace;
+
+      console.log('💰 [checkDepositPayment] Параметры поиска:', {
+        expectedAmountAda,
+        expectedAmountLovelace,
+        minAmount,
+        maxAmount,
+        toleranceAda: PAYMENT_TOLERANCE_ADA,
+      });
+
+      let checkedTransactions = 0;
+      for (const transaction of transactions) {
+        if (transaction.pending || transaction.status === 'Pending') {
+          continue;
+        }
+
+        checkedTransactions++;
+
+        const txId = transaction.id || transaction.hash || transaction.txHash || 'unknown';
+        
+        if (transaction.body?.outputs) {
+          for (const output of transaction.body.outputs) {
+            try {
+              const outputAddress = Cardano.Address.fromString(output.address);
+              const outputAddressBech32 = outputAddress.toBech32();
+              
+              if (outputAddressBech32 === depositAddressBech32) {
+                let outputAmountLovelace = 0;
+                
+                if (output.value?.coins !== undefined) {
+                  const coinsValue = output.value.coins;
+                  if (typeof coinsValue === 'bigint') {
+                    outputAmountLovelace = Number(coinsValue.toString());
+                  } else if (typeof coinsValue === 'string') {
+                    outputAmountLovelace = Number(coinsValue);
+                  } else if (typeof coinsValue === 'number') {
+                    outputAmountLovelace = coinsValue;
+                  }
+                } else if (output.amount) {
+                  if (Array.isArray(output.amount)) {
+                    const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
+                    if (lovelaceToken) {
+                      outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
+                        ? Number(lovelaceToken.quantity) 
+                        : lovelaceToken.quantity;
+                    }
+                  }
+                }
+
+                const outputAmountAda = outputAmountLovelace / LOVELACE_PER_ADA;
+                const isInRange = outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount;
+
+                console.log(`🔎 [checkDepositPayment] Найден output на депозитный адрес (body.outputs):`, {
+                  txId,
+                  outputAddress: outputAddressBech32,
+                  depositAddress: depositAddressBech32,
+                  outputAmountLovelace,
+                  outputAmountAda: outputAmountAda.toFixed(8),
+                  isInRange,
+                  minAmount,
+                  maxAmount,
+                });
+
+                if (isInRange) {
+                  console.log('✅ [checkDepositPayment] ПЛАТЕЖ НАЙДЕН через Cardano-SDK!', {
+                    txId,
+                    depositAddress: depositAddressBech32,
+                    expectedAmountAda,
+                    foundAmountAda: outputAmountAda.toFixed(8),
+                    foundAmountLovelace: outputAmountLovelace,
+                  });
+                  return true;
                 }
               }
-            }
-
-            // Check if amount matches within tolerance
-            if (outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount) {
-              return true;
+            } catch (error) {
+              console.debug('Ошибка при парсинге адреса через Cardano-SDK:', error);
             }
           }
         }
-      }
 
-      // Check outputs in transaction.utxo.outputs (legacy format - same as TransactionsCard.vue)
-      if (transaction.utxo?.outputs) {
-        for (const output of transaction.utxo.outputs) {
-          if (output.address === depositAddress) {
-            // Extract lovelace amount from output.amount array
-            let outputAmountLovelace = 0;
-            
-            if (output.amount && Array.isArray(output.amount)) {
-              const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
-              if (lovelaceToken) {
-                // quantity can be string or number
-                outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
-                  ? Number(lovelaceToken.quantity) 
-                  : lovelaceToken.quantity;
+        if (transaction.utxo?.outputs) {
+          for (const output of transaction.utxo.outputs) {
+            try {
+              const outputAddress = Cardano.Address.fromString(output.address);
+              const outputAddressBech32 = outputAddress.toBech32();
+              
+              if (outputAddressBech32 === depositAddressBech32) {
+                let outputAmountLovelace = 0;
+                
+                if (output.amount && Array.isArray(output.amount)) {
+                  const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
+                  if (lovelaceToken) {
+                    outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
+                      ? Number(lovelaceToken.quantity) 
+                      : lovelaceToken.quantity;
+                  }
+                }
+
+                const outputAmountAda = outputAmountLovelace / LOVELACE_PER_ADA;
+                const isInRange = outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount;
+
+                console.log(`🔎 [checkDepositPayment] Найден output на депозитный адрес (utxo.outputs):`, {
+                  txId,
+                  outputAddress: outputAddressBech32,
+                  depositAddress: depositAddressBech32,
+                  outputAmountLovelace,
+                  outputAmountAda: outputAmountAda.toFixed(8),
+                  isInRange,
+                  minAmount,
+                  maxAmount,
+                });
+
+                if (isInRange) {
+                  console.log('✅ [checkDepositPayment] ПЛАТЕЖ НАЙДЕН через Cardano-SDK!', {
+                    txId,
+                    depositAddress: depositAddressBech32,
+                    expectedAmountAda,
+                    foundAmountAda: outputAmountAda.toFixed(8),
+                    foundAmountLovelace: outputAmountLovelace,
+                  });
+                  return true;
+                }
               }
-            }
-
-            // Check if amount matches within tolerance
-            if (outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount) {
-              return true;
+            } catch (error) {
+              console.debug('Ошибка при парсинге адреса через Cardano-SDK:', error);
             }
           }
         }
       }
-    }
 
-    return false;
+      console.log(`❌ [checkDepositPayment] Платеж не найден. Проверено транзакций: ${checkedTransactions}`);
+      return false;
+    } catch (error) {
+      console.error('❌ [checkDepositPayment] Ошибка при проверке платежа через Cardano-SDK:', error);
+      return false;
+    }
   },
 
   // Wallet Status Methods - SIMPLE!
@@ -1335,12 +1287,6 @@ export default {
     }
   },
 
-  /**
-   * Check payment status for physical card order
-   * Placeholder - will be implemented when backend is ready
-   * @param _txId - Transaction ID to check - reserved for future use
-   * @returns true if payment confirmed, false otherwise
-   */
   async checkPaymentStatus(_txId: string): Promise<boolean> {
     // Mock - simulate payment confirmation after delay
     // In production, this will poll the backend to check if payment was received
@@ -1348,56 +1294,6 @@ export default {
     return true;
   },
 
-  /**
-   * Poll for card UUID after order is created
-   * Uses /api/kaiserex/cards/card-uuid/{order_uuid} endpoint
-   * @param orderUuid - Order UUID to poll for
-   * @param timeoutMs - Maximum time to poll in milliseconds (default: 3600000 = 1 hour)
-   * @param intervalMs - Interval between attempts in milliseconds (default: 10000 = 10 seconds)
-   * @param onProgress - Optional callback for progress updates (elapsedMs, timeoutMs)
-   * @returns Card UUID if found, null if timeout
-   */
-  async pollForCardUuid(
-    orderUuid: string,
-    timeoutMs = 3_600_000, // 1 hour default
-    intervalMs = 10_000, // 10 seconds
-    onProgress?: (elapsedMs: number, timeoutMs: number) => void
-  ): Promise<string | null> {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeoutMs) {
-      try {
-        const elapsedMs = Date.now() - startTime;
-        if (onProgress) {
-          onProgress(elapsedMs, timeoutMs);
-        }
-
-        const cardUuid = await this.getCardUuidByOrderUuid(orderUuid);
-        
-        if (cardUuid) {
-          return cardUuid;
-        }
-
-        // Wait before next attempt
-        const remainingTime = timeoutMs - (Date.now() - startTime);
-        if (remainingTime > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.min(intervalMs, remainingTime)));
-        } else {
-          break; // Timeout reached
-        }
-      } catch (error) {
-        // Continue polling even if one request fails
-        const remainingTime = timeoutMs - (Date.now() - startTime);
-        if (remainingTime > 0) {
-          await new Promise(resolve => setTimeout(resolve, Math.min(intervalMs, remainingTime)));
-        } else {
-          break; // Timeout reached
-        }
-      }
-    }
-
-    return null; // Timeout reached
-  },
 
   // State getter for compatibility
   get state() {
