@@ -316,7 +316,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import PromotionModal from './PromotionModal.vue';
@@ -353,6 +353,18 @@ const rejectionAcknowledged = ref(false);
 const paymentDetailsCache = ref<Record<string, { expires_at?: string; status?: string }>>({});
 const paymentTransactionFound = ref<Record<string, boolean>>({});
 let timerInterval: ReturnType<typeof setInterval> | null = null;
+
+// Constants
+const TIMER_UPDATE_INTERVAL_MS = 1000;
+const ORDER_CHECK_INTERVAL_MS = 30000;
+
+// Type definitions
+interface CardDeliveryData {
+  delivery?: {
+    payment_status?: string;
+    expires_at?: string;
+  };
+}
 const emptyCard: CardInfo = {
   cardData: {
     id: null,
@@ -406,65 +418,75 @@ const hasVirtualCard = computed(() => {
   );
 });
 
+// Helper functions for hasPhysicalCard logic
+const isCardRejectedOrExpired = (card: CardInfo): boolean => {
+  const status = card.cardData?.status;
+  return status === 'rejected' || status === 'REJECTED' || status === 'expired';
+};
+
+const shouldAllowPayment = (card: CardInfo): boolean => {
+  const orderUuid = card.cardData?.order_uuid;
+  if (!orderUuid) return false;
+  
+  const paymentDetails = paymentDetailsCache.value[orderUuid];
+  
+  if (paymentDetails) {
+    // If expired or rejected, allow re-ordering
+    if (paymentDetails.status === 'expired' || paymentDetails.status === 'rejected') {
+      return true; // Allow re-ordering
+    }
+    // If payment is pending and transaction not found, allow continuing payment
+    if (paymentDetails.status === 'pending') {
+      const transactionFound = paymentTransactionFound.value[orderUuid];
+      // If transaction found, we wait (timer shows) - consider as already ordered
+      // If transaction not found, allow continuing payment
+      return transactionFound !== true; // Allow payment if transaction not found
+    }
+    // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
+    return false; // Don't allow payment, card is being processed
+  }
+  
+  // Check payment status from delivery object if cache not available
+  const delivery = (card.cardData as CardDeliveryData)?.delivery;
+  if (delivery) {
+    const paymentStatus = delivery.payment_status;
+    // If payment status is 'pending', allow continuing payment
+    if (paymentStatus === 'pending') {
+      return true; // Allow continuing payment
+    }
+    // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
+    // But if it's failed or expired, allow re-ordering
+    if (paymentStatus === 'failed' || paymentStatus === 'expired') {
+      return true; // Allow re-ordering
+    }
+    // Otherwise, payment is in progress, consider it as already ordered
+    return false; // Don't allow payment
+  }
+  
+  // If no delivery object or cache, assume payment is pending and allow continuing
+  return true; // Allow continuing payment
+};
+
 const hasPhysicalCard = computed(() => {
   return cards.value.some(card => {
     if (card.cardData?.own_type !== 'physical') {
       return false;
     }
     
-    const hasCardUuid = card.cardData?.card_uuid;
-    const hasOrderUuid = card.cardData?.order_uuid;
-    const isRejected = card.cardData?.status === 'rejected' || card.cardData?.status === 'REJECTED';
-    
     // If physical card exists but is rejected, allow ordering new one
-    if (isRejected) {
+    if (isCardRejectedOrExpired(card)) {
       return false;
     }
     
     // If card has UUID, it's active - already ordered
-    if (hasCardUuid) {
+    if (card.cardData?.card_uuid) {
       return true;
     }
     
     // If card has order_uuid but no card_uuid, check payment status
-    if (hasOrderUuid && !hasCardUuid) {
-      // Check payment status from cache first (most up-to-date)
-      const paymentDetails = paymentDetailsCache.value[card.cardData.order_uuid];
-      if (paymentDetails) {
-        // If expired or rejected, allow re-ordering
-        if (paymentDetails.status === 'expired' || paymentDetails.status === 'rejected') {
-          return false; // Allow re-ordering
-        }
-        // If payment is pending and transaction not found, allow continuing payment
-        if (paymentDetails.status === 'pending') {
-          const transactionFound = paymentTransactionFound.value[card.cardData.order_uuid];
-          // If transaction found, we wait (timer shows) - consider as already ordered
-          // If transaction not found, allow continuing payment
-          return transactionFound === true; // Only return true if transaction found
-        }
-        // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
-        return true;
-      }
-      
-      // Check payment status from delivery object if cache not available
-      const delivery = (card.cardData as any)?.delivery;
-      if (delivery) {
-        const paymentStatus = delivery.payment_status;
-        // If payment status is 'pending', allow continuing payment
-        if (paymentStatus === 'pending') {
-          return false; // Allow continuing payment
-        }
-        // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
-        // But if it's failed or expired, allow re-ordering
-        if (paymentStatus === 'failed' || paymentStatus === 'expired') {
-          return false; // Allow re-ordering
-        }
-        // Otherwise, payment is in progress, consider it as already ordered
-        return true;
-      }
-      
-      // If no delivery object or cache, assume payment is pending and allow continuing
-      return false;
+    if (card.cardData?.order_uuid && !card.cardData?.card_uuid) {
+      // If should allow payment, then card is not fully ordered yet
+      return !shouldAllowPayment(card);
     }
     
     return false;
@@ -774,7 +796,7 @@ watch(showOrderTimer, (shouldShow) => {
     if (timerInterval) {
       clearInterval(timerInterval);
     }
-    timerInterval = setInterval(updateTimer, 1000);
+    timerInterval = setInterval(updateTimer, TIMER_UPDATE_INTERVAL_MS);
   } else {
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -804,7 +826,7 @@ const toggleCardVisibility = async () => {
     await cardStoreModule.fetchCardDetails(cardStoreModule.state.selectedCardId);
     showCardDetails.value = !showCardDetails.value;
   } catch (error) {
-    // Silent error handling
+    console.debug('Failed to fetch card details:', error);
   }
 };
 
@@ -967,7 +989,7 @@ const startOrderChecking = () => {
         orderCheckInterval = null;
       }
     }
-  }, 30000);
+  }, ORDER_CHECK_INTERVAL_MS);
 };
 
 // Watch for cards changes to check pending orders
@@ -999,7 +1021,7 @@ watch(
   { immediate: true, deep: true }
 );
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   if (orderCheckInterval) {
     clearInterval(orderCheckInterval);
     orderCheckInterval = null;

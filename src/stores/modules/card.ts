@@ -987,15 +987,21 @@ export default {
       const response = await api.axiosInstance.get(`/api/kaiserex/cards/delivery-payment/${orderUuid}`);
       return response.data || null;
     } catch (error: any) {
-      // If API returns any error (410 Gone, 404, 500, etc.), the order/payment is rejected
-      // This includes cases where the payment endpoint is no longer available
-      if (error?.response) {
-        // Any HTTP error response means the payment is rejected
+      // Only treat specific status codes as rejected
+      if (error?.response?.status === 410) {
+        // 410 Gone explicitly means rejected
         return {
           status: 'rejected',
         };
       }
-      // Network errors or other non-HTTP errors - return null to allow retry
+      if (error?.response?.status === 404) {
+        // 404 Not Found could also mean rejected or order doesn't exist
+        return {
+          status: 'rejected',
+        };
+      }
+      // All other errors (500, 401, network, etc.) - return null to allow retry
+      console.debug('Failed to fetch delivery payment:', error);
       return null;
     }
   },
@@ -1034,10 +1040,14 @@ export default {
       return false;
     }
 
+    // Constants
+    const LOVELACE_PER_ADA = 1_000_000;
+    const PAYMENT_TOLERANCE_ADA = 1; // Allow ±1 ADA tolerance
+    
     // Convert expected amount from ADA to lovelace (1 ADA = 1,000,000 lovelace)
-    const expectedAmountLovelace = parseFloat(expectedAmountAda) * 1000000;
+    const expectedAmountLovelace = parseFloat(expectedAmountAda) * LOVELACE_PER_ADA;
     // Allow ±1 ADA tolerance (±1,000,000 lovelace)
-    const toleranceLovelace = 1000000;
+    const toleranceLovelace = PAYMENT_TOLERANCE_ADA * LOVELACE_PER_ADA;
     const minAmount = expectedAmountLovelace - toleranceLovelace;
     const maxAmount = expectedAmountLovelace + toleranceLovelace;
 
@@ -1349,8 +1359,8 @@ export default {
    */
   async pollForCardUuid(
     orderUuid: string,
-    timeoutMs = 3600000, // 1 hour default
-    intervalMs = 10000, // 10 seconds
+    timeoutMs = 3_600_000, // 1 hour default
+    intervalMs = 10_000, // 10 seconds
     onProgress?: (elapsedMs: number, timeoutMs: number) => void
   ): Promise<string | null> {
     const startTime = Date.now();
