@@ -12,18 +12,52 @@
           </template>
         </v-radio>
 
-        <v-radio value="existing" color="#00c7f3" disabled>
+        <v-radio 
+          value="existing" 
+          color="#00c7f3" 
+          :disabled="!hasSavedAddress"
+        >
           <template v-slot:label>
             <div class="radio-label">
               <span class="label-title">
                 {{ $t('card.useExistingAddress') }}
-                <span class="disabled-badge">{{ $t('common.comingSoon') }}</span>
+                <span v-if="!hasSavedAddress" class="disabled-badge">{{ $t('common.comingSoon') }}</span>
               </span>
               <span class="label-description">{{ $t('card.useAddressRegisteredWithKaiserex') }}</span>
             </div>
           </template>
         </v-radio>
       </v-radio-group>
+    </div>
+
+    <!-- Existing Address Display -->
+    <div v-if="selectedOption === 'existing' && hasSavedAddress" class="existing-address-display">
+      <div class="address-card">
+        <div class="address-field">
+          <span class="field-label">{{ $t('card.streetAddress') }}:</span>
+          <span class="field-value">{{ savedAddress?.streetAddress }}</span>
+        </div>
+        <div class="address-field">
+          <span class="field-label">{{ $t('card.city') }}:</span>
+          <span class="field-value">{{ savedAddress?.city }}</span>
+        </div>
+        <div class="address-field">
+          <span class="field-label">{{ $t('card.stateProvince') }}:</span>
+          <span class="field-value">{{ savedAddress?.stateProvince }}</span>
+        </div>
+        <div class="address-field">
+          <span class="field-label">{{ $t('card.zipCode') }}:</span>
+          <span class="field-value">{{ savedAddress?.zipCode }}</span>
+        </div>
+        <div class="address-field">
+          <span class="field-label">{{ $t('card.country') }}:</span>
+          <span class="field-value">{{ getCountryName(savedAddress?.countryCode || '') }}</span>
+        </div>
+        <div class="address-field">
+          <span class="field-label">{{ $t('card.phone') }}:</span>
+          <span class="field-value">{{ savedAddress?.phone }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- New Address Form -->
@@ -139,11 +173,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive } from 'vue';
+import { ref, computed, watch, reactive, onMounted } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import SecondaryButton from '../../SecondaryButton.vue';
 import GradientButton from '../../GradientButton.vue';
 import countries from '@/plugins/countries';
+import cardStore from '@/stores/modules/card';
 
 const { t } = useTranslation();
 
@@ -169,9 +204,46 @@ interface Emits {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
+// Get saved delivery address from last physical card
+const getSavedDeliveryAddress = (): AddressData | null => {
+  const cards = cardStore.state.cards || [];
+  const physicalCards = cards.filter(card => card.cardData?.own_type === 'physical');
+  
+  if (physicalCards.length === 0) return null;
+  
+  // Get the most recent physical card (by created_at or updated_at)
+  const lastPhysicalCard = physicalCards.sort((a, b) => {
+    const dateA = new Date(b.cardData?.updated_at || b.cardData?.created_at || 0).getTime();
+    const dateB = new Date(a.cardData?.updated_at || a.cardData?.created_at || 0).getTime();
+    return dateA - dateB;
+  })[0];
+  
+  // Check if card has delivery object
+  const delivery = (lastPhysicalCard.cardData as any)?.delivery;
+  if (!delivery) return null;
+  
+  return {
+    streetAddress: delivery.address || '',
+    city: delivery.city || '',
+    stateProvince: delivery.region || '',
+    zipCode: delivery.zip || '',
+    countryCode: delivery.country_code || '',
+    phone: delivery.phone || '',
+  };
+};
+
 // Local state
 const selectedOption = ref<'existing' | 'new'>('new');
-const localAddress = ref<AddressData>({ ...props.address });
+const savedAddress = getSavedDeliveryAddress();
+const localAddress = ref<AddressData>(savedAddress || { ...props.address });
+const hasSavedAddress = computed(() => !!savedAddress);
+
+// Load saved address on mount - prefill if available
+onMounted(() => {
+  if (savedAddress && selectedOption.value === 'existing') {
+    localAddress.value = { ...savedAddress };
+  }
+});
 const errors = reactive<Record<string, string>>({
   streetAddress: '',
   city: '',
@@ -292,6 +364,28 @@ const isFormValid = computed(() => {
   return hasAllRequiredFields && hasNoErrors;
 });
 
+// Watch for option changes - fill or clear fields
+watch(selectedOption, (newOption) => {
+  if (newOption === 'existing' && savedAddress) {
+    // Fill fields with saved address
+    localAddress.value = { ...savedAddress };
+  } else if (newOption === 'new') {
+    // Clear all fields
+    localAddress.value = {
+      streetAddress: '',
+      city: '',
+      stateProvince: '',
+      zipCode: '',
+      countryCode: '',
+      phone: '',
+    };
+    // Clear all errors
+    Object.keys(errors).forEach(key => {
+      errors[key] = '';
+    });
+  }
+});
+
 // Watch for prop changes
 watch(
   () => props.useExisting,
@@ -303,10 +397,18 @@ watch(
 watch(
   () => props.address,
   newVal => {
-    localAddress.value = { ...newVal };
+    if (selectedOption.value === 'new') {
+      localAddress.value = { ...newVal };
+    }
   },
   { deep: true }
 );
+
+// Get country name from code
+const getCountryName = (code: string): string => {
+  const country = countries.find(c => c.code === code);
+  return country?.label || code;
+};
 
 // Handlers
 const handleBack = () => {
@@ -314,8 +416,11 @@ const handleBack = () => {
 };
 
 const handleContinue = () => {
-  if (selectedOption.value === 'existing') {
-    emit('submit', { useExisting: true });
+  if (selectedOption.value === 'existing' && savedAddress) {
+    emit('submit', { 
+      useExisting: true,
+      address: savedAddress 
+    });
     return;
   }
 
@@ -508,6 +613,37 @@ const handleContinue = () => {
     :deep(.v-input__control) {
       border-color: #ff5252 !important;
     }
+  }
+}
+
+.existing-address-display {
+  padding: $spacing-lg;
+  background: $background-card;
+  border-radius: $border-radius-lg;
+}
+
+.address-card {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.address-field {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  
+  .field-label {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-medium;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+  
+  .field-value {
+    font-family: $font-family-primary;
+    font-size: $font-size-base;
+    color: $text-primary;
   }
 }
 

@@ -53,6 +53,14 @@
                 {{ t('card.active') }}
               </v-chip>
               <v-chip
+                v-else-if="currentCardStatus === 'rejected'"
+                class="card-status-chip rejected-chip"
+                small
+              >
+                <v-icon small left>mdi-close-circle</v-icon>
+                {{ t('card.rejected') }}
+              </v-chip>
+              <v-chip
                 v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id"
                 class="card-status-chip pending-chip"
                 small
@@ -113,34 +121,78 @@
             <div class="status-card-gradient"></div>
             <v-card-text class="status-card-content">
               <div class="status-icon-wrapper">
-                <v-icon class="status-icon">mdi-credit-card-clock-outline</v-icon>
+                <v-icon 
+                  class="status-icon"
+                  :class="{ 'rejection-icon': isCurrentCardRejected }"
+                >
+                  {{ isCurrentCardRejected ? 'mdi-close-circle' : 'mdi-credit-card-clock-outline' }}
+                </v-icon>
               </div>
               <div class="status-text-wrapper">
-                <div class="status-title-wrapper">
-                  <p class="status-title">
-                    {{ currentCardType === 'physical' ? t('card.physicalCardOrderInProgress') : t('card.virtualCardOrderInProgress') }}
+                <!-- Rejected Card Status -->
+                <template v-if="isCurrentCardRejected">
+                  <div class="status-title-wrapper">
+                    <p class="status-title">
+                      {{ t('card.cardRejected') }}
+                    </p>
+                  </div>
+                  <p class="status-subtitle">
+                    {{ t('card.cardRejectedMessage') }}
                   </p>
-                </div>
-                <p class="status-subtitle">
-                  <template v-if="currentOrderNeedsPayment">
-                    {{ t('card.physicalCardPaymentRequired') }} <br />
-                    {{ t('card.completePaymentToProceed') }}
-                  </template>
-                  <template v-else>
-                    {{ t('card.cardOrderProcessing') }} <br />
-                    {{ t('card.processingTime') }}
-                  </template>
-                </p>
-                <!-- Payment Button - Show if order needs payment (physical cards only) -->
-                <v-btn
-                  v-if="currentOrderNeedsPayment"
-                  class="complete-payment-btn mt-4"
-                  @click="openPaymentModal"
-                  :loading="loadingOrderDetails"
-                >
-                  <v-icon left>mdi-credit-card-outline</v-icon>
-                  {{ t('card.completePayment') }}
-                </v-btn>
+                  <!-- Acknowledgment Checkbox -->
+                  <div class="acknowledgment-section mt-4">
+                    <v-checkbox
+                      v-model="rejectionAcknowledged"
+                      :label="$t('card.iHaveReadRejectionMessage')"
+                      hide-details
+                      class="acknowledgment-checkbox"
+                    />
+                  </div>
+                  <!-- Order New Card Button -->
+                  <v-btn
+                    class="order-new-card-btn mt-4"
+                    @click="handleOrderNewCardAfterRejection"
+                    :disabled="!rejectionAcknowledged"
+                  >
+                    <v-icon left>mdi-credit-card-plus</v-icon>
+                    {{ t('card.orderNewCard') }}
+                  </v-btn>
+                </template>
+                <!-- Pending Card Status -->
+                <template v-else>
+                  <div class="status-title-wrapper">
+                    <p class="status-title">
+                      {{ currentCardType === 'physical' ? t('card.physicalCardOrderInProgress') : t('card.virtualCardOrderInProgress') }}
+                    </p>
+                  </div>
+                  <p class="status-subtitle">
+                    <template v-if="currentOrderNeedsPayment">
+                      {{ t('card.physicalCardPaymentRequired') }} <br />
+                      {{ t('card.completePaymentToProceed') }}
+                    </template>
+                    <template v-else>
+                      {{ t('card.cardOrderProcessing') }} <br />
+                      {{ t('card.processingTime') }}
+                    </template>
+                  </p>
+                  <!-- Payment Button - Show if order needs payment (physical cards only) -->
+                  <v-btn
+                    v-if="currentOrderNeedsPayment"
+                    class="complete-payment-btn mt-4"
+                    @click="openPaymentModal"
+                    :loading="loadingOrderDetails"
+                    :disabled="showOrderTimer && timerDisplay"
+                  >
+                    <template v-if="showOrderTimer && timerDisplay">
+                      <v-icon left>mdi-timer-outline</v-icon>
+                      <span class="timer-in-button">{{ timerDisplay }}</span>
+                    </template>
+                    <template v-else>
+                      <v-icon left>mdi-credit-card-outline</v-icon>
+                      {{ t('card.completePayment') }}
+                    </template>
+                  </v-btn>
+                </template>
               </div>
             </v-card-text>
           </v-card>
@@ -271,6 +323,10 @@ const orderingCard = ref(false);
 const loadingOrderDetails = ref(false);
 const pendingOrderUuid = ref<string | null>(null);
 const hiddenOrderUuids = ref<string[]>([]);
+const orderStatuses = ref<Record<string, string>>({});
+const timerDisplay = ref('');
+const rejectionAcknowledged = ref(false);
+let timerInterval: ReturnType<typeof setInterval> | null = null;
 const emptyCard: CardInfo = {
   cardData: {
     id: null,
@@ -406,6 +462,63 @@ const currentCardType = computed(() => {
   return currentCard?.cardData?.own_type || 'virtual';
 });
 
+// Get current card status
+const currentCardStatus = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.order_uuid) return null;
+  
+  // Check if we have stored status for this order
+  const orderUuid = currentCard.cardData.order_uuid;
+  return orderStatuses.value[orderUuid] || currentCard.cardData.status || null;
+});
+
+// Check if current card is rejected
+const isCurrentCardRejected = computed(() => {
+  const status = currentCardStatus.value;
+  return status === 'rejected' || status === 'REJECTED';
+});
+
+// Check if we should show order timer (pending physical card within 1 hour)
+const showOrderTimer = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.id || currentCard?.cardData?.card_uuid) return false;
+  if (currentCard?.cardData?.own_type !== 'physical') return false;
+  if (!currentCard?.cardData?.created_at) return false;
+  
+  const createdAt = new Date(currentCard.cardData.created_at);
+  const oneHourLater = new Date(createdAt.getTime() + 3600000); // 1 hour
+  const now = new Date();
+  
+  return now < oneHourLater;
+});
+
+// Calculate timer display
+const updateTimer = () => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.created_at || !showOrderTimer.value) {
+    timerDisplay.value = '';
+    return;
+  }
+  
+  const createdAt = new Date(currentCard.cardData.created_at);
+  const oneHourLater = new Date(createdAt.getTime() + 3600000);
+  const now = new Date();
+  const remaining = oneHourLater.getTime() - now.getTime();
+  
+  if (remaining <= 0) {
+    timerDisplay.value = '';
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    return;
+  }
+  
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  timerDisplay.value = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
 // Watch for selected card changes and update current index
 watch(
   () => cardStoreModule.state.selectedCardId,
@@ -420,8 +533,43 @@ watch(
   { immediate: true }
 );
 
+// Check current card status (for pending cards)
+const checkCurrentCardStatus = async () => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.order_uuid || currentCard?.cardData?.card_uuid) {
+    return; // Not a pending card
+  }
+  
+  if (hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
+    return; // Already hidden
+  }
+  
+  try {
+    const orderDetails = await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
+    
+    // Store order status
+    if (orderDetails.status) {
+      orderStatuses.value[currentCard.cardData.order_uuid] = orderDetails.status;
+    }
+    
+    if (orderDetails.card_uuid) {
+      // Card UUID found, now check card state
+      const cardState = await cardStoreModule.getCardState(orderDetails.card_uuid);
+      if (cardState?.status) {
+        orderStatuses.value[currentCard.cardData.order_uuid] = cardState.status;
+      }
+      
+      // Refresh card data to get the new card with UUID
+      await cardStoreModule.fetchCardData();
+    }
+  } catch (error) {
+    // Silent error handling
+  }
+};
+
+
 // Update selected card when carousel index changes
-watch(currentCardIndex, newIndex => {
+watch(currentCardIndex, async (newIndex) => {
   const card = cardsWithOrderSlot.value[newIndex];
   if (card && card.cardData.card_uuid) {
     // Valid card with UUID - select it and fetch its data
@@ -430,7 +578,41 @@ watch(currentCardIndex, newIndex => {
     // Empty card slot (order card) or pending card without UUID - clear selection
     cardStoreModule.selectCard(null);
   }
+  
+  // Update timer when card changes
+  updateTimer();
+  
+  // Check status for pending cards
+  await checkCurrentCardStatus();
+  
+  // Reset acknowledgment when card changes
+  rejectionAcknowledged.value = false;
 });
+
+// Handle order new card after rejection
+const handleOrderNewCardAfterRejection = () => {
+  if (rejectionAcknowledged.value) {
+    showOrderCardFlowModal.value = true;
+    rejectionAcknowledged.value = false;
+  }
+};
+
+// Watch for timer updates
+watch(showOrderTimer, (shouldShow) => {
+  if (shouldShow) {
+    updateTimer();
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    timerInterval = setInterval(updateTimer, 1000);
+  } else {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    timerDisplay.value = '';
+  }
+}, { immediate: true });
 
 // Card visibility toggle
 const toggleCardVisibility = async () => {
@@ -450,22 +632,60 @@ const handleTopUp = () => {
 // Payment handler
 const openPaymentModal = async () => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
-  if (currentCard?.cardData?.order_uuid) {
-    try {
-      loadingOrderDetails.value = true;
-      await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
+  if (!currentCard?.cardData?.order_uuid) return;
+
+  try {
+    loadingOrderDetails.value = true;
+    
+    // Get delivery object from card data
+    const delivery = (currentCard.cardData as any)?.delivery;
+    
+    if (delivery) {
+      // Create new order using delivery data to get fresh payment details
+      const payload = {
+        address: delivery.address || '',
+        region: delivery.region || '',
+        city: delivery.city || '',
+        zipCode: delivery.zip || '',
+        countryCode: delivery.country_code || '',
+        phone: delivery.phone || '',
+        deliveryMethod: delivery.method || 'regular',
+      };
+      
+      // Create order to get fresh payment details
+      const orderResponse = await cardStoreModule.orderPhysicalCard(payload);
+      
+      if (orderResponse?.orderUuid) {
+        // Store new order UUID
+        pendingOrderUuid.value = orderResponse.orderUuid;
+        
+        // Refresh card data to get updated order info
+        await cardStoreModule.fetchCardData();
+        
+        showPayOrderModal.value = true;
+      } else {
+        throw new Error(t('card.failedToGetPaymentDetails'));
+      }
+    } else {
+      // Fallback: use existing order details if delivery not found
+      const orderDetails = await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
+
+      // Store order status
+      if (orderDetails.status) {
+        orderStatuses.value[currentCard.cardData.order_uuid] = orderDetails.status;
+      }
 
       pendingOrderUuid.value = currentCard.cardData.order_uuid;
       showPayOrderModal.value = true;
-    } catch (error) {
-      snackbar.setError(t('card.failedToLoadOrderDetails'));
-
-      if (currentCard.cardData.order_uuid && !hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
-        hiddenOrderUuids.value.push(currentCard.cardData.order_uuid);
-      }
-    } finally {
-      loadingOrderDetails.value = false;
     }
+  } catch (error: any) {
+    snackbar.setError(error?.message || t('card.failedToLoadOrderDetails'));
+
+    if (currentCard.cardData.order_uuid && !hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
+      hiddenOrderUuids.value.push(currentCard.cardData.order_uuid);
+    }
+  } finally {
+    loadingOrderDetails.value = false;
   }
 };
 
@@ -518,7 +738,18 @@ const checkPendingOrders = async () => {
       loadingOrderDetails.value = true;
       const orderDetails = await cardStoreModule.getOrderDetails(card.cardData.order_uuid);
 
+      // Store order status
+      if (orderDetails.status) {
+        orderStatuses.value[card.cardData.order_uuid] = orderDetails.status;
+      }
+
       if (orderDetails.card_uuid) {
+        // Card UUID found, now check card state
+        const cardState = await cardStoreModule.getCardState(orderDetails.card_uuid);
+        if (cardState?.status) {
+          orderStatuses.value[card.cardData.order_uuid] = cardState.status;
+        }
+        
         await cardStoreModule.fetchCardData();
 
         if (card.cardData.order_uuid && hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
@@ -590,6 +821,10 @@ onUnmounted(() => {
   if (orderCheckInterval) {
     clearInterval(orderCheckInterval);
     orderCheckInterval = null;
+  }
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
   }
 });
 
@@ -788,6 +1023,37 @@ const formatADA = (eurAmount: number) => {
       color: #9e9e9e !important;
     }
   }
+
+  &.rejected-chip {
+    background: linear-gradient(135deg, rgba(244, 67, 54, 0.2) 0%, rgba(244, 67, 54, 0.15) 100%) !important;
+    border: 1px solid rgba(244, 67, 54, 0.4) !important;
+    color: #f44336 !important;
+
+    .v-icon {
+      color: #f44336 !important;
+    }
+  }
+}
+
+// Timer in button
+.complete-payment-btn {
+  :deep(.v-icon) {
+    color: #0c0e12 !important;
+  }
+  
+  &.v-btn--disabled {
+    :deep(.v-icon) {
+      color: rgba(#0c0e12, 0.5) !important;
+    }
+  }
+}
+
+.timer-in-button {
+  font-family: 'Courier New', monospace;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  letter-spacing: 0.05rem;
+  color: #0c0e12;
 }
 
 // Credit Card Styling
@@ -1313,6 +1579,42 @@ const formatADA = (eurAmount: number) => {
     font-family: $font-family-primary;
     font-size: $font-size-sm;
     font-weight: $font-weight-bold;
+  }
+
+  .order-new-card-btn {
+    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
+    color: #0c0e12 !important;
+    font-family: $font-family-primary;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-bold;
+  }
+
+  .acknowledgment-section {
+    margin-top: $spacing-md;
+  }
+
+  .acknowledgment-checkbox {
+    :deep(.v-input__control) {
+      .v-input__slot {
+        .v-input--selection-controls__input {
+          .v-icon {
+            color: $primary-cyan;
+          }
+        }
+      }
+    }
+    
+    :deep(.v-label) {
+      color: $text-secondary;
+      font-size: $font-size-sm;
+    }
+  }
+
+  .rejection-icon {
+    color: #f44336 !important;
+  }
+
+  .order-new-card-btn {
     text-transform: none;
     border-radius: 8px;
     padding: 8px 20px !important;
@@ -1321,7 +1623,7 @@ const formatADA = (eurAmount: number) => {
     box-shadow: 0 4px 12px rgba(0, 199, 243, 0.3);
     transition: all 0.3s ease;
 
-    &:hover {
+    &:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 6px 18px rgba(0, 199, 243, 0.4);
     }

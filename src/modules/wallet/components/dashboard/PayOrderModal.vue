@@ -117,14 +117,40 @@ watch(
 const loadOrderDetails = async () => {
   try {
     isProcessing.value = true;
-    const response = await cardStore.getOrderDetails(props.orderUuid);
-    orderResponse.value = response;
     
-    // Convert to numbers for proper display
-    paymentAmount.value = {
-      ada: parseFloat(String(response.depositAmountAda)) || 0,
-      eur: parseFloat(String(response.depositAmountEur)) || 0,
-    };
+    // First, try to get delivery info from current card data
+    const cards = cardStore.state.cards || [];
+    const cardWithOrder = cards.find(c => c.cardData?.order_uuid === props.orderUuid);
+    
+    if (cardWithOrder?.cardData && (cardWithOrder.cardData as any).delivery) {
+      // Use delivery object from card data
+      const delivery = (cardWithOrder.cardData as any).delivery;
+      orderResponse.value = {
+        paymentId: delivery.payment_id || 0,
+        depositAddress: delivery.deposit_address || '',
+        depositAmountEur: delivery.deposit_amount_eur || '0',
+        depositAmountAda: delivery.deposit_amount_ada || '0',
+        exchangeRate: delivery.deposit_exchange_rate || '0',
+        depositExpiresAt: delivery.deposit_expires_at || '',
+        depositQrCode: delivery.deposit_qr_code || '',
+        orderUuid: props.orderUuid,
+        paymentStatus: delivery.payment_status || 'pending',
+      };
+      
+      paymentAmount.value = {
+        ada: parseFloat(String(delivery.deposit_amount_ada)) || 0,
+        eur: parseFloat(String(delivery.deposit_amount_eur)) || 0,
+      };
+    } else {
+      // Fallback to API call if delivery not found in card data
+      const response = await cardStore.getOrderDetails(props.orderUuid);
+      orderResponse.value = response;
+      
+      paymentAmount.value = {
+        ada: parseFloat(String(response.depositAmountAda)) || 0,
+        eur: parseFloat(String(response.depositAmountEur)) || 0,
+      };
+    }
   } catch (error: any) {
     snackbar.setError(error?.message || t('card.failedToLoadOrderDetails'));
     handleClose();
@@ -204,7 +230,36 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
 
     snackbar.fireSuccess(t('notifications.transactionSubmitted'));
 
+    // Refresh card data to get updated order info
     await cardStore.fetchCardData();
+
+    // Start polling for card UUID (with 1 hour timeout)
+    if (props.orderUuid) {
+      try {
+        const cardUuid = await cardStore.pollForCardUuid(
+          props.orderUuid,
+          3600000, // 1 hour timeout
+          10000, // 10 seconds interval
+          (elapsedMs, timeoutMs) => {
+            // Progress callback - can be used for UI updates if needed
+          }
+        );
+
+        if (cardUuid) {
+          // Card UUID found, check card state
+          const cardState = await cardStore.getCardState(cardUuid);
+          if (cardState?.status) {
+            // Status will be stored in card data after fetchCardData
+          }
+          
+          // Refresh card data to get the new card with UUID
+          await cardStore.fetchCardData();
+        }
+      } catch (error) {
+        // Polling failed, but order was successful
+      }
+    }
+
     orderSuccess.value = true;
     emit('success');
   } catch (error: any) {
