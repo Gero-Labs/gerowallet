@@ -126,10 +126,27 @@ const { t } = useTranslation();
 const router = useRouter();
 
 // Check if user already has virtual or physical cards
+// For physical cards, also check if payment is pending - if so, allow continuing payment
 const hasVirtualCard = computed(() => {
   return cardStore.state.cards.some(
-    card => card.cardData?.own_type === 'virtual' &&
-    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+    card => {
+      const isVirtual = card.cardData?.own_type === 'virtual';
+      if (!isVirtual) return false;
+      
+      const hasCardOrOrder = card.cardData?.card_uuid || card.cardData?.order_uuid;
+      if (!hasCardOrOrder) return false;
+      
+      // Check if card is rejected (case-insensitive)
+      const status = card.cardData?.status?.toLowerCase() || '';
+      const isRejected = status === 'rejected';
+      
+      // If virtual card exists but is rejected, allow ordering new one
+      if (isRejected) {
+        return false;
+      }
+      
+      return true;
+    }
   );
 });
 
@@ -137,18 +154,54 @@ const hasPhysicalCard = computed(() => {
   return cardStore.state.cards.some(
     card => {
       const isPhysical = card.cardData?.own_type === 'physical';
-      const hasCardOrOrder = card.cardData?.card_uuid || card.cardData?.order_uuid;
-      const isRejected = card.cardData?.status === 'rejected' || card.cardData?.status === 'REJECTED';
+      if (!isPhysical) return false;
+      
+      const hasCardUuid = !!card.cardData?.card_uuid;
+      const hasOrderUuid = !!card.cardData?.order_uuid;
+      const hasCardOrOrder = hasCardUuid || hasOrderUuid;
+      
+      if (!hasCardOrOrder) return false;
+      
+      // Check if card is rejected FIRST (case-insensitive) - this takes priority
+      const status = card.cardData?.status?.toLowerCase() || '';
+      const isRejected = status === 'rejected';
       
       // If physical card exists but is rejected, allow ordering new one
-      return isPhysical && hasCardOrOrder && !isRejected;
+      if (isRejected) {
+        return false;
+      }
+      
+      // If card has UUID, it's active - already ordered
+      if (hasCardUuid) {
+        return true;
+      }
+      
+      // If card has order_uuid but no card_uuid, check payment status
+      if (hasOrderUuid && !hasCardUuid) {
+        // Check payment status from delivery object
+        const delivery = (card.cardData as any)?.delivery;
+        if (delivery) {
+          const paymentStatus = delivery.payment_status?.toLowerCase();
+          // If payment status is 'pending', allow continuing payment
+          if (paymentStatus === 'pending') {
+            return false; // Allow continuing payment
+          }
+          // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
+          // But if it's failed or expired, allow re-ordering
+          if (paymentStatus === 'failed' || paymentStatus === 'expired') {
+            return false; // Allow re-ordering
+          }
+          // Otherwise, payment is in progress, consider it as already ordered
+          return true;
+        }
+        
+        // If no delivery object, assume payment is pending and allow continuing
+        return false;
+      }
+      
+      return false;
     }
   );
-});
-
-// Check if user can order new cards
-const canOrderNewCard = computed(() => {
-  return !hasVirtualCard.value || !hasPhysicalCard.value;
 });
 
 interface Props {
@@ -516,7 +569,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
           orderUuid.value,
           3600000, // 1 hour timeout
           10000, // 10 seconds interval
-          (elapsedMs, timeoutMs) => {
+          (_elapsedMs, _timeoutMs) => {
             // Progress callback - can be used for UI updates if needed
           }
         );
@@ -581,11 +634,17 @@ const handleClose = () => {
 // Reset state when dialog opens
 watch(
   () => props.open,
-  newVal => {
+  async newVal => {
     if (newVal) {
       currentStep.value = 1;
       selectedCardType.value = null;
       orderSuccess.value = false;
+      // Refresh card data to get latest statuses
+      try {
+        await cardStore.fetchCardData();
+      } catch (error) {
+        // Silent error - continue anyway
+      }
     }
   }
 );
