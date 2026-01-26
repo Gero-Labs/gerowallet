@@ -249,33 +249,6 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
     // Refresh card data to get updated order info
     await cardStore.fetchCardData();
 
-    // Start polling for card UUID (with 1 hour timeout)
-    if (props.orderUuid) {
-      try {
-        const cardUuid = await cardStore.pollForCardUuid(
-          props.orderUuid,
-          3600000, // 1 hour timeout
-          10000, // 10 seconds interval
-          (elapsedMs, timeoutMs) => {
-            // Progress callback - can be used for UI updates if needed
-          }
-        );
-
-        if (cardUuid) {
-          // Card UUID found, check card state
-          const cardState = await cardStore.getCardState(cardUuid);
-          if (cardState?.status) {
-            // Status will be stored in card data after fetchCardData
-          }
-          
-          // Refresh card data to get the new card with UUID
-          await cardStore.fetchCardData();
-        }
-      } catch (error) {
-        // Polling failed, but order was successful
-      }
-    }
-
     orderSuccess.value = true;
     emit('success');
   } catch (error: any) {
