@@ -103,9 +103,9 @@ const handleConfirm = async () => {
     const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value },
-    })) as { data: { isValid: boolean; error?: string } };
-    
-    if (!passwordVerification.data.isValid) {
+    })) as { data: { success: boolean; error?: string } };
+
+    if (!passwordVerification.data.success) {
       snackbar.setError(t('wallet.invalidSpendingPassword'));
       isValidating.value = false;
       return;

@@ -1817,6 +1817,16 @@ const formatADA = (eurAmount: number) => {
     font-family: $font-family-primary;
     font-size: $font-size-sm;
     font-weight: $font-weight-bold;
+
+    &.v-btn--disabled,
+    &:disabled {
+      opacity: 0.4 !important;
+      background: #2a2f3a !important;
+      background-image: none !important;
+      color: #888 !important;
+      box-shadow: none !important;
+      filter: grayscale(1) !important;
+    }
   }
 
   .acknowledgment-section {
@@ -1860,6 +1870,22 @@ const formatADA = (eurAmount: number) => {
 
     &:active {
       transform: translateY(0);
+    }
+
+    &.v-btn--disabled,
+    &:disabled {
+      opacity: 0.4 !important;
+      background: #2a2f3a !important;
+      background-image: none !important;
+      color: #888 !important;
+      box-shadow: none !important;
+      filter: grayscale(1) !important;
+      pointer-events: none !important;
+      cursor: not-allowed !important;
+
+      :deep(.v-icon) {
+        color: #888 !important;
+      }
     }
 
     :deep(.v-icon) {
