@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { Blockchain, Network, Proof, Provider } from '@/models/types';
 
@@ -77,7 +77,7 @@ export class Api {
       );
       if (status === 200) return data;
       throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
+    } catch (error: any) {
       if (error.response?.status === 404) {
         return [];
       }
@@ -93,7 +93,7 @@ export class Api {
       );
       if (status === 200) return data;
       throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
+    } catch (error: any) {
       if (error.response?.status === 404) {
         return [];
       }
@@ -235,7 +235,7 @@ export class Api {
         });
         if (status === 200) return data || [];
         throw parseHttpError(data);
-      } catch (error: any | AxiosError) {
+      } catch (error: any) {
         if (error.response?.status === 404) {
           return [];
         }
@@ -297,7 +297,7 @@ export class Api {
         });
         if (status === 200) return data;
         throw parseHttpError(data);
-      } catch (error: any | AxiosError) {
+      } catch (error: any) {
         if (error.response?.status === 404) {
           return [];
         }
