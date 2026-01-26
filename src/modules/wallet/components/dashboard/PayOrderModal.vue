@@ -142,13 +142,29 @@ const loadOrderDetails = async () => {
         eur: parseFloat(String(delivery.deposit_amount_eur)) || 0,
       };
     } else {
-      // Fallback to API call if delivery not found in card data
-      const response = await cardStore.getOrderDetails(props.orderUuid);
-      orderResponse.value = response;
+      // Use new delivery-payment API endpoint
+      const paymentDetails = await cardStore.getDeliveryPayment(props.orderUuid);
+      
+      if (!paymentDetails) {
+        throw new Error(t('card.failedToLoadOrderDetails'));
+      }
+      
+      // Convert snake_case to camelCase for compatibility
+      orderResponse.value = {
+        paymentId: paymentDetails.payment_id || 0,
+        depositAddress: paymentDetails.deposit_address || '',
+        depositAmountEur: String(paymentDetails.amount_eur || 0),
+        depositAmountAda: String(paymentDetails.amount_ada || 0),
+        exchangeRate: String(paymentDetails.exchange_rate || 0),
+        depositExpiresAt: paymentDetails.expires_at || '',
+        depositQrCode: paymentDetails.qr_code_data || '',
+        orderUuid: props.orderUuid,
+        paymentStatus: paymentDetails.status || 'pending',
+      };
       
       paymentAmount.value = {
-        ada: parseFloat(String(response.depositAmountAda)) || 0,
-        eur: parseFloat(String(response.depositAmountEur)) || 0,
+        ada: parseFloat(String(paymentDetails.amount_ada)) || 0,
+        eur: parseFloat(String(paymentDetails.amount_eur)) || 0,
       };
     }
   } catch (error: any) {

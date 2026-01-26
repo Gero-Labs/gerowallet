@@ -953,6 +953,54 @@ export default {
   },
 
   /**
+   * Get card UUID by order UUID
+   * @param orderUuid - Order UUID to get card UUID for
+   * @returns Card UUID if found, null otherwise
+   */
+  async getCardUuidByOrderUuid(orderUuid: string): Promise<string | null> {
+    try {
+      const api = getCardApi();
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/card-uuid/${orderUuid}`);
+      return response.data?.card_uuid || null;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  /**
+   * Get delivery payment details by order UUID
+   * @param orderUuid - Order UUID to get payment details for
+   * @returns Payment details object with deposit_address, amount_eur, amount_ada, status, etc.
+   */
+  async getDeliveryPayment(orderUuid: string): Promise<{
+    payment_id?: string;
+    deposit_address?: string;
+    amount_eur?: number;
+    amount_ada?: number;
+    exchange_rate?: number;
+    expires_at?: string;
+    status?: string;
+    qr_code_data?: string;
+  } | null> {
+    try {
+      const api = getCardApi();
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/delivery-payment/${orderUuid}`);
+      return response.data || null;
+    } catch (error: any) {
+      // If API returns any error (410 Gone, 404, 500, etc.), the order/payment is rejected
+      // This includes cases where the payment endpoint is no longer available
+      if (error?.response) {
+        // Any HTTP error response means the payment is rejected
+        return {
+          status: 'rejected',
+        };
+      }
+      // Network errors or other non-HTTP errors - return null to allow retry
+      return null;
+    }
+  },
+
+  /**
    * Get card state (active/rejected)
    * @param cardUuid - Card UUID to check
    * @returns Card state object with status
@@ -965,6 +1013,106 @@ export default {
     } catch (error) {
       return null;
     }
+  },
+
+  /**
+   * Check if a payment transaction exists for the deposit address
+   * Searches through wallet transactions (from walletStore, not API) to find an output matching the deposit address and amount
+   * Uses the same transaction structure as TransactionsCard.vue
+   * @param depositAddress - The deposit address to check
+   * @param expectedAmountAda - Expected amount in ADA (string, e.g., "30.17330230")
+   * @returns true if a matching transaction is found, false otherwise
+   */
+  checkDepositPayment(depositAddress: string, expectedAmountAda: string): boolean {
+    if (!depositAddress || !expectedAmountAda) {
+      return false;
+    }
+
+    // Get transactions from walletStore (same as TransactionsCard.vue)
+    const transactions = walletStore.transactions || [];
+    if (transactions.length === 0) {
+      return false;
+    }
+
+    // Convert expected amount from ADA to lovelace (1 ADA = 1,000,000 lovelace)
+    const expectedAmountLovelace = parseFloat(expectedAmountAda) * 1000000;
+    // Allow ±1 ADA tolerance (±1,000,000 lovelace)
+    const toleranceLovelace = 1000000;
+    const minAmount = expectedAmountLovelace - toleranceLovelace;
+    const maxAmount = expectedAmountLovelace + toleranceLovelace;
+
+    // Search through all transactions (same structure as TransactionsCard.vue)
+    for (const transaction of transactions) {
+      // Skip pending transactions - only check confirmed ones
+      if (transaction.pending || transaction.status === 'Pending') {
+        continue;
+      }
+
+      // Check outputs in transaction.body.outputs (new format - same as TransactionsCard.vue)
+      if (transaction.body?.outputs) {
+        for (const output of transaction.body.outputs) {
+          if (output.address === depositAddress) {
+            // Extract lovelace amount from output.value.coins or output.amount
+            let outputAmountLovelace = 0;
+            
+            if (output.value?.coins !== undefined) {
+              // Cardano SDK format: value.coins can be BigInt, string, or number
+              const coinsValue = output.value.coins;
+              if (typeof coinsValue === 'bigint') {
+                outputAmountLovelace = Number(coinsValue.toString());
+              } else if (typeof coinsValue === 'string') {
+                outputAmountLovelace = Number(coinsValue);
+              } else if (typeof coinsValue === 'number') {
+                outputAmountLovelace = coinsValue;
+              }
+            } else if (output.amount) {
+              // Legacy format: amount is array of { unit, quantity }
+              if (Array.isArray(output.amount)) {
+                const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
+                if (lovelaceToken) {
+                  // quantity can be string or number
+                  outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
+                    ? Number(lovelaceToken.quantity) 
+                    : lovelaceToken.quantity;
+                }
+              }
+            }
+
+            // Check if amount matches within tolerance
+            if (outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount) {
+              return true;
+            }
+          }
+        }
+      }
+
+      // Check outputs in transaction.utxo.outputs (legacy format - same as TransactionsCard.vue)
+      if (transaction.utxo?.outputs) {
+        for (const output of transaction.utxo.outputs) {
+          if (output.address === depositAddress) {
+            // Extract lovelace amount from output.amount array
+            let outputAmountLovelace = 0;
+            
+            if (output.amount && Array.isArray(output.amount)) {
+              const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
+              if (lovelaceToken) {
+                // quantity can be string or number
+                outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
+                  ? Number(lovelaceToken.quantity) 
+                  : lovelaceToken.quantity;
+              }
+            }
+
+            // Check if amount matches within tolerance
+            if (outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
   },
 
   // Wallet Status Methods - SIMPLE!
@@ -1192,7 +1340,7 @@ export default {
 
   /**
    * Poll for card UUID after order is created
-   * Uses /api/kaiserex/cards/order/{order_uuid}/status endpoint
+   * Uses /api/kaiserex/cards/card-uuid/{order_uuid} endpoint
    * @param orderUuid - Order UUID to poll for
    * @param timeoutMs - Maximum time to poll in milliseconds (default: 3600000 = 1 hour)
    * @param intervalMs - Interval between attempts in milliseconds (default: 10000 = 10 seconds)
@@ -1214,10 +1362,10 @@ export default {
           onProgress(elapsedMs, timeoutMs);
         }
 
-        const orderDetails = await this.getOrderDetails(orderUuid);
+        const cardUuid = await this.getCardUuidByOrderUuid(orderUuid);
         
-        if (orderDetails?.card_uuid) {
-          return orderDetails.card_uuid;
+        if (cardUuid) {
+          return cardUuid;
         }
 
         // Wait before next attempt
