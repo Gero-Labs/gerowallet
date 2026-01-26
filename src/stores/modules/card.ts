@@ -945,10 +945,25 @@ export default {
   async getOrderDetails(orderUuid: string): Promise<any> {
     try {
       const api = getCardApi();
-      const response = await api.axiosInstance.get(`/api/kaiserex/cards/card-uuid/${orderUuid}`);
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/order/${orderUuid}/status`);
       return response.data;
     } catch (error) {
       throw error;
+    }
+  },
+
+  /**
+   * Get card state (active/rejected)
+   * @param cardUuid - Card UUID to check
+   * @returns Card state object with status
+   */
+  async getCardState(cardUuid: string): Promise<{ status: string } | null> {
+    try {
+      const api = getCardApi();
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/state/${cardUuid}`);
+      return response.data;
+    } catch (error) {
+      return null;
     }
   },
 
@@ -1173,6 +1188,57 @@ export default {
     // In production, this will poll the backend to check if payment was received
     await new Promise(resolve => setTimeout(resolve, 5000));
     return true;
+  },
+
+  /**
+   * Poll for card UUID after order is created
+   * Uses /api/kaiserex/cards/order/{order_uuid}/status endpoint
+   * @param orderUuid - Order UUID to poll for
+   * @param timeoutMs - Maximum time to poll in milliseconds (default: 3600000 = 1 hour)
+   * @param intervalMs - Interval between attempts in milliseconds (default: 10000 = 10 seconds)
+   * @param onProgress - Optional callback for progress updates (elapsedMs, timeoutMs)
+   * @returns Card UUID if found, null if timeout
+   */
+  async pollForCardUuid(
+    orderUuid: string,
+    timeoutMs = 3600000, // 1 hour default
+    intervalMs = 10000, // 10 seconds
+    onProgress?: (elapsedMs: number, timeoutMs: number) => void
+  ): Promise<string | null> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const elapsedMs = Date.now() - startTime;
+        if (onProgress) {
+          onProgress(elapsedMs, timeoutMs);
+        }
+
+        const orderDetails = await this.getOrderDetails(orderUuid);
+        
+        if (orderDetails?.card_uuid) {
+          return orderDetails.card_uuid;
+        }
+
+        // Wait before next attempt
+        const remainingTime = timeoutMs - (Date.now() - startTime);
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, Math.min(intervalMs, remainingTime)));
+        } else {
+          break; // Timeout reached
+        }
+      } catch (error) {
+        // Continue polling even if one request fails
+        const remainingTime = timeoutMs - (Date.now() - startTime);
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, Math.min(intervalMs, remainingTime)));
+        } else {
+          break; // Timeout reached
+        }
+      }
+    }
+
+    return null; // Timeout reached
   },
 
   // State getter for compatibility

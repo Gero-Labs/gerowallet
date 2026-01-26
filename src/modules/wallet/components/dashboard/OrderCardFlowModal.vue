@@ -135,8 +135,14 @@ const hasVirtualCard = computed(() => {
 
 const hasPhysicalCard = computed(() => {
   return cardStore.state.cards.some(
-    card => card.cardData?.own_type === 'physical' &&
-    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+    card => {
+      const isPhysical = card.cardData?.own_type === 'physical';
+      const hasCardOrOrder = card.cardData?.card_uuid || card.cardData?.order_uuid;
+      const isRejected = card.cardData?.status === 'rejected' || card.cardData?.status === 'REJECTED';
+      
+      // If physical card exists but is rejected, allow ordering new one
+      return isPhysical && hasCardOrOrder && !isRejected;
+    }
   );
 });
 
@@ -172,9 +178,38 @@ const currentStep = ref(1);
 // Card type selection
 const selectedCardType = ref<'virtual' | 'physical' | null>(null);
 
+// Get saved delivery address from last physical card
+const getSavedDeliveryAddress = () => {
+  const cards = cardStore.state.cards || [];
+  const physicalCards = cards.filter(card => card.cardData?.own_type === 'physical');
+  
+  if (physicalCards.length === 0) return null;
+  
+  // Get the most recent physical card (by created_at or updated_at)
+  const lastPhysicalCard = physicalCards.sort((a, b) => {
+    const dateA = new Date(b.cardData?.updated_at || b.cardData?.created_at || 0).getTime();
+    const dateB = new Date(a.cardData?.updated_at || a.cardData?.created_at || 0).getTime();
+    return dateA - dateB;
+  })[0];
+  
+  // Check if card has delivery object
+  const delivery = (lastPhysicalCard.cardData as any)?.delivery;
+  if (!delivery) return null;
+  
+  return {
+    streetAddress: delivery.address || '',
+    city: delivery.city || '',
+    stateProvince: delivery.region || '',
+    zipCode: delivery.zip || '',
+    countryCode: delivery.country_code || '',
+    phone: delivery.phone || '',
+  };
+};
+
 // Shipping address
 const useExistingAddress = ref(false);
-const shippingAddress = ref({
+const savedDeliveryAddress = getSavedDeliveryAddress();
+const shippingAddress = ref(savedDeliveryAddress || {
   streetAddress: '',
   city: '',
   stateProvince: '',
@@ -469,14 +504,38 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(submitResult.data.error);
     }
 
-    console.log('✅ Transaction submitted successfully');
-    console.log('📝 Transaction ID:', submitResult.data.txId);
     snackbar.fireSuccess(t('notifications.transactionSubmitted'));
 
-    // Backend will automatically detect the transaction
-    console.log('ℹ️ Backend will track the transaction to deposit address:', paymentAddress.value);
-
+    // Refresh card data to get updated order info
     await cardStore.fetchCardData();
+
+    // Start polling for card UUID (with 1 hour timeout)
+    if (orderUuid.value) {
+      try {
+        const cardUuid = await cardStore.pollForCardUuid(
+          orderUuid.value,
+          3600000, // 1 hour timeout
+          10000, // 10 seconds interval
+          (elapsedMs, timeoutMs) => {
+            // Progress callback - can be used for UI updates if needed
+          }
+        );
+
+        if (cardUuid) {
+          // Card UUID found, check card state
+          const cardState = await cardStore.getCardState(cardUuid);
+          if (cardState?.status) {
+            // Status will be stored in card data after fetchCardData
+          }
+          
+          // Refresh card data to get the new card with UUID
+          await cardStore.fetchCardData();
+        }
+      } catch (error) {
+        // Polling failed, but order was successful
+      }
+    }
+
     orderSuccess.value = true;
   } catch (error: any) {
     console.error('❌ Failed to process payment:', error);
