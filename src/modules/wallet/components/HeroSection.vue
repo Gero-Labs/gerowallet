@@ -147,7 +147,6 @@
                   <p class="status-subtitle">
                     {{ t('card.cardRejectedMessage') }}
                   </p>
-                  <!-- Acknowledgment Checkbox -->
                   <div class="acknowledgment-section mt-4">
                     <v-checkbox
                       v-model="rejectionAcknowledged"
@@ -156,7 +155,6 @@
                       class="acknowledgment-checkbox"
                     />
                   </div>
-                  <!-- Order New Card Button -->
                   <v-btn
                     class="order-new-card-btn mt-4"
                     @click="handleOrderNewCardAfterRejection"
@@ -189,22 +187,20 @@
                       {{ t('card.processingTime') }}
                     </template>
                   </p>
-                  <!-- Payment Button - Show if order needs payment (physical cards only) -->
+                  <!-- Timer Display - Show if payment is pending -->
+                  <div v-if="showOrderTimer && timerDisplay" class="payment-timer mt-4">
+                    <v-icon class="timer-icon">mdi-timer-outline</v-icon>
+                    <span class="timer-text">{{ timerDisplay }}</span>
+                  </div>
+                  <!-- Payment Button - Show only if transaction NOT found -->
                   <v-btn
-                    v-if="currentOrderNeedsPayment && currentCardStatus !== 'expired'"
+                    v-if="shouldShowCompletePaymentButton"
                     class="complete-payment-btn mt-4"
                     @click="openPaymentModal"
                     :loading="loadingOrderDetails"
-                    :disabled="isTimerActive"
                   >
-                    <template v-if="isTimerActive">
-                      <v-icon left class="timer-icon-in-button">mdi-timer-outline</v-icon>
-                      <span class="timer-in-button">{{ timerDisplay }}</span>
-                    </template>
-                    <template v-else>
-                      <v-icon left>mdi-credit-card-outline</v-icon>
-                      {{ t('card.completePayment') }}
-                    </template>
+                    <v-icon left>mdi-credit-card-outline</v-icon>
+                    {{ t('card.completePayment') }}
                   </v-btn>
                   <!-- Re-order Button - Show if payment expired -->
                   <v-btn
@@ -257,7 +253,7 @@
                 class="order-card-btn"
                 large
                 :loading="orderingCard"
-                @click="showOrderCardFlowModal = true"
+                @click="handleOpenOrderCardFlow"
               >
                 <v-icon left>mdi-credit-card-plus</v-icon>
                 {{ t('card.orderNewCard') }}
@@ -406,7 +402,6 @@ const emptyCard: CardInfo = {
   totalDeposits: 0,
   activities: [],
 };
-// Get cards from the real card store
 const cards = computed(() => {
   return cardStoreModule.state.cards || [];
 });
@@ -418,53 +413,9 @@ const hasVirtualCard = computed(() => {
   );
 });
 
-// Helper functions for hasPhysicalCard logic
 const isCardRejectedOrExpired = (card: CardInfo): boolean => {
   const status = card.cardData?.status;
   return status === 'rejected' || status === 'REJECTED' || status === 'expired';
-};
-
-const shouldAllowPayment = (card: CardInfo): boolean => {
-  const orderUuid = card.cardData?.order_uuid;
-  if (!orderUuid) return false;
-  
-  const paymentDetails = paymentDetailsCache.value[orderUuid];
-  
-  if (paymentDetails) {
-    // If expired or rejected, allow re-ordering
-    if (paymentDetails.status === 'expired' || paymentDetails.status === 'rejected') {
-      return true; // Allow re-ordering
-    }
-    // If payment is pending and transaction not found, allow continuing payment
-    if (paymentDetails.status === 'pending') {
-      const transactionFound = paymentTransactionFound.value[orderUuid];
-      // If transaction found, we wait (timer shows) - consider as already ordered
-      // If transaction not found, allow continuing payment
-      return transactionFound !== true; // Allow payment if transaction not found
-    }
-    // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
-    return false; // Don't allow payment, card is being processed
-  }
-  
-  // Check payment status from delivery object if cache not available
-  const delivery = (card.cardData as CardDeliveryData)?.delivery;
-  if (delivery) {
-    const paymentStatus = delivery.payment_status;
-    // If payment status is 'pending', allow continuing payment
-    if (paymentStatus === 'pending') {
-      return true; // Allow continuing payment
-    }
-    // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
-    // But if it's failed or expired, allow re-ordering
-    if (paymentStatus === 'failed' || paymentStatus === 'expired') {
-      return true; // Allow re-ordering
-    }
-    // Otherwise, payment is in progress, consider it as already ordered
-    return false; // Don't allow payment
-  }
-  
-  // If no delivery object or cache, assume payment is pending and allow continuing
-  return true; // Allow continuing payment
 };
 
 const hasPhysicalCard = computed(() => {
@@ -473,20 +424,31 @@ const hasPhysicalCard = computed(() => {
       return false;
     }
     
-    // If physical card exists but is rejected, allow ordering new one
     if (isCardRejectedOrExpired(card)) {
       return false;
     }
     
-    // If card has UUID, it's active - already ordered
     if (card.cardData?.card_uuid) {
       return true;
     }
     
-    // If card has order_uuid but no card_uuid, check payment status
     if (card.cardData?.order_uuid && !card.cardData?.card_uuid) {
-      // If should allow payment, then card is not fully ordered yet
-      return !shouldAllowPayment(card);
+      const paymentDetails = paymentDetailsCache.value[card.cardData.order_uuid];
+      if (paymentDetails) {
+        if (paymentDetails.status === 'rejected' || paymentDetails.status === 'expired') {
+          return false;
+        }
+      }
+      
+      const delivery = (card.cardData as CardDeliveryData)?.delivery;
+      if (delivery) {
+        const paymentStatus = delivery.payment_status?.toLowerCase();
+        if (paymentStatus === 'failed' || paymentStatus === 'expired') {
+          return false;
+        }
+      }
+      
+      return true;
     }
     
     return false;
@@ -514,35 +476,29 @@ const handleOrderCard = async () => {
     await cardStoreModule.orderCard();
     await cardStoreModule.fetchCardData();
 
-    // Show success message
     snackbar.fireSuccess(t('card.cardOrderedSuccess'));
   } catch (error: any) {
     let errorReason: string;
 
-    // Check if error.response.data is a string (direct error message)
     if (typeof error?.response?.data === 'string' && error.response.data) {
       errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
-    }
-    // Otherwise check for object-based error formats
-    else {
+    } else {
       errorReason =
         t('card.failedToOrderCard') +
         ' ' +
-        (error?.response?.data?.error?.message || // Laravel-style error object
-          error?.response?.data?.error || // Direct error string in error field
-          error?.response?.data?.reason || // Custom reason field
-          error?.response?.data?.message || // Standard message field
-          error?.message || // Axios error message
-          t('card.pleaseTryAgain')); // Fallback
+        (error?.response?.data?.error?.message ||
+          error?.response?.data?.error ||
+          error?.response?.data?.reason ||
+          error?.response?.data?.message ||
+          error?.message ||
+          t('card.pleaseTryAgain'));
     }
 
-    // Show error message with reason
     snackbar.setError(errorReason);
   } finally {
     orderingCard.value = false;
   }
 };
-// Get exchange rate from store (fallback to mock rate if not available)
 const exchangeRate = computed(() => {
   return cardStoreModule.state.exchangeRate?.sell ? parseFloat(cardStoreModule.state.exchangeRate.sell) : 0.35;
 });
@@ -551,96 +507,83 @@ const currentCardHasUUID = computed(() => {
   return cardsWithOrderSlot.value[currentCardIndex.value]?.cardData.card_uuid !== null;
 });
 
-// Check if current order needs payment (physical card with order_uuid but no card_uuid)
 const currentOrderNeedsPayment = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   return (
     currentCard?.cardData?.id &&
     currentCard?.cardData?.order_uuid &&
     !currentCard?.cardData?.card_uuid &&
-    currentCard?.cardData?.own_type === 'physical' // Only physical cards need payment
+    currentCard?.cardData?.own_type === 'physical'
   );
 });
 
-// Get current card type
 const currentCardType = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   return currentCard?.cardData?.own_type || 'virtual';
 });
 
-// Get current card status
 const currentCardStatus = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   if (!currentCard?.cardData?.order_uuid) return null;
   
-  // Check if we have stored status for this order
   const orderUuid = currentCard.cardData.order_uuid;
   return orderStatuses.value[orderUuid] || currentCard.cardData.status || null;
 });
 
-// Check if current card is rejected
 const isCurrentCardRejected = computed(() => {
   const status = currentCardStatus.value;
   return status === 'rejected' || status === 'REJECTED';
 });
 
-// Check if current card is pending
 const isCurrentCardPending = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
-  // Card is pending if it has order_uuid but no card_uuid
   return !!(currentCard?.cardData?.order_uuid && !currentCard?.cardData?.card_uuid);
 });
 
-// Check if we should show the order card section
 const shouldShowOrderCardSection = computed(() => {
-  // Don't show if card has UUID (active card)
+  if (hasVirtualCard.value && hasPhysicalCard.value) return false;
   if (currentCardHasUUID.value) return false;
-  // Don't show if card is pending
   if (isCurrentCardPending.value) return false;
-  // Show for empty card slot
   return true;
 });
 
-// Check if we should show order timer (pending physical card with payment status pending)
 const showOrderTimer = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   if (!currentCard?.cardData?.id || currentCard?.cardData?.card_uuid) return false;
   if (currentCard?.cardData?.own_type !== 'physical') return false;
   if (!currentCard?.cardData?.order_uuid) return false;
   
-  // Check payment details from cache
+  if (isCurrentCardRejected.value) return false;
+  
   const paymentDetails = paymentDetailsCache.value[currentCard.cardData.order_uuid];
   if (!paymentDetails) return false;
   
-  // Don't show timer if expired or rejected
-  if (paymentDetails.status === 'expired' || paymentDetails.status === 'rejected') return false;
-  
-  // Only show timer if payment status is 'pending'
+  if (paymentDetails.status === 'expired') return false;
   if (paymentDetails.status !== 'pending') return false;
   
-  // IMPORTANT: Only show timer if transaction is found
-  // If transaction not found, user can pay - no timer needed (button enabled)
-  const transactionFound = paymentTransactionFound.value[currentCard.cardData.order_uuid];
-  if (transactionFound !== true) return false; // Transaction not found - allow payment
-  
-  // Check if expires_at is in the future
   if (!paymentDetails.expires_at) return false;
   
   const expiresAt = new Date(paymentDetails.expires_at);
   const now = new Date();
   
-  // If expired, don't show timer
   if (now >= expiresAt) return false;
   
   return true;
 });
 
-// Check if timer is currently active (has a display value)
-const isTimerActive = computed(() => {
-  return !!(showOrderTimer.value && timerDisplay.value);
+const isPaymentTransactionFound = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.order_uuid) return false;
+  return paymentTransactionFound.value[currentCard.cardData.order_uuid] === true;
 });
 
-// Calculate timer display using expires_at from delivery-payment
+const shouldShowCompletePaymentButton = computed(() => {
+  return currentOrderNeedsPayment.value && 
+         currentCardStatus.value !== 'expired' && 
+         !isPaymentTransactionFound.value;
+});
+
+
 const updateTimer = () => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   if (!currentCard?.cardData?.order_uuid || !showOrderTimer.value) {
@@ -648,7 +591,6 @@ const updateTimer = () => {
     return;
   }
   
-  // Get payment details from cache
   const paymentDetails = paymentDetailsCache.value[currentCard.cardData.order_uuid];
   if (!paymentDetails?.expires_at) {
     timerDisplay.value = '';
@@ -673,7 +615,6 @@ const updateTimer = () => {
   timerDisplay.value = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
-// Watch for selected card changes and update current index
 watch(
   () => cardStoreModule.state.selectedCardId,
   newCardId => {
@@ -687,118 +628,75 @@ watch(
   { immediate: true }
 );
 
-// Check current card status (for pending cards)
 const checkCurrentCardStatus = async () => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   if (!currentCard?.cardData?.order_uuid || currentCard?.cardData?.card_uuid) {
-    return; // Not a pending card
+    return;
   }
   
   if (hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
-    return; // Already hidden
+    return;
   }
   
   try {
-    // First, get order status
     const orderDetails = await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
     
     if (orderDetails?.status) {
       orderStatuses.value[currentCard.cardData.order_uuid] = orderDetails.status;
     }
     
-    // Then, check delivery-payment status (instead of card-uuid check)
     const paymentDetails = await cardStoreModule.getDeliveryPayment(currentCard.cardData.order_uuid);
     
     if (paymentDetails) {
-      // If API returns 410 Gone, status will be 'rejected'
       if (paymentDetails.status === 'rejected') {
         orderStatuses.value[currentCard.cardData.order_uuid] = 'rejected';
-        return; // Stop further processing for rejected orders
       }
       
-      // Check if expires_at has passed - set status to expired
       if (paymentDetails.expires_at) {
         const expiresAt = new Date(paymentDetails.expires_at);
         const now = new Date();
         if (now >= expiresAt && paymentDetails.status === 'pending') {
-          // Payment expired
           paymentDetails.status = 'expired';
           orderStatuses.value[currentCard.cardData.order_uuid] = 'expired';
         }
       }
       
-      // Check if payment transaction exists in wallet transactions (every check, same as status check)
-      let transactionFound = false;
-      if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
-        transactionFound = cardStoreModule.checkDepositPayment(
-          paymentDetails.deposit_address,
-          String(paymentDetails.amount_ada)
-        );
-        paymentTransactionFound.value[currentCard.cardData.order_uuid] = transactionFound;
-        
-        // If payment found but status is still pending, it might be detected/confirming
-        // The backend should update status, but we can note it here
-        // If transaction found, we wait - timer will show (button disabled)
-        // If transaction not found, user can pay later (button enabled)
-      }
+        let transactionFound = false;
+        if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
+          transactionFound = cardStoreModule.checkDepositPayment(
+            paymentDetails.deposit_address,
+            String(paymentDetails.amount_ada)
+          );
+          paymentTransactionFound.value[currentCard.cardData.order_uuid] = transactionFound;
+        }
       
-      // Cache payment details for timer use
       paymentDetailsCache.value[currentCard.cardData.order_uuid] = {
         expires_at: paymentDetails.expires_at,
         status: paymentDetails.status,
       };
       
-      // Update timer if payment status is pending and not expired
       if (paymentDetails.status === 'pending' && !orderStatuses.value[currentCard.cardData.order_uuid]?.includes('expired')) {
         updateTimer();
       }
     }
     
-    // Only check card UUID if payment is not pending
-    // Payment statuses: "pending" | "detected" | "confirming" | "confirmed" | "completed" | "failed" | "expired"
-    // If status is not "pending", payment is in progress or completed, so we can check for card UUID
-    if (paymentDetails?.status && paymentDetails.status !== 'pending') {
-      const cardUuid = await cardStoreModule.getCardUuidByOrderUuid(currentCard.cardData.order_uuid);
-      
-      if (cardUuid) {
-        // Card UUID found, now check card state
-        const cardState = await cardStoreModule.getCardState(cardUuid);
-        if (cardState?.status) {
-          orderStatuses.value[currentCard.cardData.order_uuid] = cardState.status;
-        }
-        
-        // Refresh card data to get the new card with UUID
-        await cardStoreModule.fetchCardData();
-      }
-    }
   } catch (error) {
-    // Silent error handling
   }
 };
 
-
-// Update selected card when carousel index changes
 watch(currentCardIndex, async (newIndex) => {
   const card = cardsWithOrderSlot.value[newIndex];
   if (card && card.cardData.card_uuid) {
-    // Valid card with UUID - select it and fetch its data
     cardStoreModule.selectCard(card.cardData.card_uuid);
   } else {
-    // Empty card slot (order card) or pending card without UUID - clear selection
     cardStoreModule.selectCard(null);
   }
   
-  // Update timer when card changes
   updateTimer();
-  
-  // Check status for pending cards
   await checkCurrentCardStatus();
-  
-  // Reset acknowledgment when card changes
   rejectionAcknowledged.value = false;
 });
 
-// Handle order new card after rejection
 const handleOrderNewCardAfterRejection = () => {
   if (rejectionAcknowledged.value) {
     showOrderCardFlowModal.value = true;
@@ -806,7 +704,6 @@ const handleOrderNewCardAfterRejection = () => {
   }
 };
 
-// Watch for timer updates
 watch(showOrderTimer, (shouldShow) => {
   if (shouldShow) {
     updateTimer();
@@ -823,7 +720,6 @@ watch(showOrderTimer, (shouldShow) => {
   }
 }, { immediate: true });
 
-// Watch for payment details cache changes to update timer
 watch(
   () => {
     const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
@@ -831,13 +727,11 @@ watch(
     return paymentDetailsCache.value[currentCard.cardData.order_uuid];
   },
   () => {
-    // Update timer when payment details change
     updateTimer();
   },
   { deep: true }
 );
 
-// Card visibility toggle
 const toggleCardVisibility = async () => {
   try {
     await cardStoreModule.fetchCardDetails(cardStoreModule.state.selectedCardId);
@@ -847,15 +741,15 @@ const toggleCardVisibility = async () => {
   }
 };
 
-// Top up handler
 const handleTopUp = () => {
   showTopUpModal.value = true;
 };
 
-// Payment handler - opens the full order flow to start the process again
 const openPaymentModal = () => {
-  // Instead of just opening payment modal, open the full order flow
-  // This allows the user to go through the entire process again with fresh data
+  showOrderCardFlowModal.value = true;
+};
+
+const handleOpenOrderCardFlow = () => {
   showOrderCardFlowModal.value = true;
 };
 
@@ -893,7 +787,6 @@ const handlePaymentSuccess = async () => {
   checkPendingOrders();
 };
 
-// Check order status for pending cards
 const checkPendingOrders = async () => {
   const pendingCards = cards.value.filter(
     card =>
@@ -907,35 +800,29 @@ const checkPendingOrders = async () => {
     try {
       loadingOrderDetails.value = true;
       
-      // First, get order status
       const orderDetails = await cardStoreModule.getOrderDetails(card.cardData.order_uuid);
       
       if (orderDetails?.status) {
         orderStatuses.value[card.cardData.order_uuid] = orderDetails.status;
       }
       
-      // Then, check delivery-payment status (instead of card-uuid check)
       const paymentDetails = await cardStoreModule.getDeliveryPayment(card.cardData.order_uuid);
       
       if (paymentDetails) {
-        // If API returns 410 Gone, status will be 'rejected'
         if (paymentDetails.status === 'rejected') {
           orderStatuses.value[card.cardData.order_uuid] = 'rejected';
-          continue; // Skip further processing for rejected orders
+          continue;
         }
         
-        // Check if expires_at has passed - set status to expired
         if (paymentDetails.expires_at) {
           const expiresAt = new Date(paymentDetails.expires_at);
           const now = new Date();
           if (now >= expiresAt && paymentDetails.status === 'pending') {
-            // Payment expired
             paymentDetails.status = 'expired';
             orderStatuses.value[card.cardData.order_uuid] = 'expired';
           }
         }
         
-        // Check if payment transaction exists in wallet transactions (every check, same as status check)
         let transactionFound = false;
         if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
           transactionFound = cardStoreModule.checkDepositPayment(
@@ -943,42 +830,14 @@ const checkPendingOrders = async () => {
             String(paymentDetails.amount_ada)
           );
           paymentTransactionFound.value[card.cardData.order_uuid] = transactionFound;
-          
-          // If payment found but status is still pending, it might be detected/confirming
-          // The backend should update status, but we can note it here
-          // If transaction found, we wait - timer will show (button disabled)
-          // If transaction not found, user can pay later (button enabled)
         }
         
-        // Cache payment details for timer use
         paymentDetailsCache.value[card.cardData.order_uuid] = {
           expires_at: paymentDetails.expires_at,
           status: paymentDetails.status,
         };
       }
       
-      // Only check card UUID if payment is not pending
-      // Payment statuses: "pending" | "detected" | "confirming" | "confirmed" | "completed" | "failed" | "expired"
-      // If status is not "pending", payment is in progress or completed, so we can check for card UUID
-      if (paymentDetails?.status && paymentDetails.status !== 'pending') {
-        const cardUuid = await cardStoreModule.getCardUuidByOrderUuid(card.cardData.order_uuid);
-
-        if (cardUuid) {
-          // Card UUID found, now check card state
-          const cardState = await cardStoreModule.getCardState(cardUuid);
-          if (cardState?.status) {
-            orderStatuses.value[card.cardData.order_uuid] = cardState.status;
-          }
-          
-          await cardStoreModule.fetchCardData();
-
-          if (card.cardData.order_uuid && hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
-            const index = hiddenOrderUuids.value.indexOf(card.cardData.order_uuid);
-            hiddenOrderUuids.value.splice(index, 1);
-          }
-          break;
-        }
-      }
     } catch (error) {
       if (card.cardData.order_uuid && !hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
         hiddenOrderUuids.value.push(card.cardData.order_uuid);
@@ -989,14 +848,12 @@ const checkPendingOrders = async () => {
   }
 };
 
-// Check pending orders on mount and periodically
 let orderCheckInterval: ReturnType<typeof setInterval> | null = null;
 const hasCheckedPendingOrders = ref(false);
 
 const startOrderChecking = () => {
-  if (orderCheckInterval) return; // Already checking
+  if (orderCheckInterval) return;
 
-  // Check every 30 seconds if there are pending orders
   orderCheckInterval = setInterval(() => {
     if (cards.value.some(card => card.cardData?.order_uuid && !card.cardData?.card_uuid)) {
       checkPendingOrders();
@@ -1049,7 +906,6 @@ onBeforeUnmount(() => {
   }
 });
 
-// 3D Card tilt effect with shine and dynamic glow
 const handleCardMouseMove = (event: MouseEvent) => {
   const card = event.currentTarget as HTMLElement;
   const rect = card.getBoundingClientRect();
@@ -1062,13 +918,11 @@ const handleCardMouseMove = (event: MouseEvent) => {
   const rotateX = (y - centerY) / 20;
   const rotateY = (centerX - x) / 20;
 
-  // Calculate shine position based on mouse
   const percentX = (x / rect.width) * 100;
   const percentY = (y / rect.height) * 100;
 
-  // Calculate glow offset based on tilt
-  const glowOffsetX = rotateY * 2; // Horizontal shift
-  const glowOffsetY = -rotateX * 2; // Vertical shift (inverted)
+  const glowOffsetX = rotateY * 2;
+  const glowOffsetY = -rotateX * 2;
 
   cardTiltStyle.value = {
     transform: `scale(0.7) perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(5px)`,
@@ -1106,7 +960,6 @@ const handleCardMouseLeave = () => {
   };
 };
 
-// Formatting helpers
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -1120,27 +973,22 @@ const getFormattedCardNumber = (card: CardInfo) => {
 
   if (!pan || !showCardDetails.value) return '**** **** **** ****';
 
-  // Show full number with spacing: 1234 5678 9012 3456
   return pan.match(/.{1,4}/g)?.join(' ') || pan;
 };
 
 const formatExpiryDate = (card: CardInfo) => {
-  // Only show expiry when card details are visible
   if (!showCardDetails.value) {
     return '**/**';
   }
 
-  // Try to get expiry from card details first (format: "YYYY-MM")
   const apiExpiry = card.cardDetails?.expiryDate;
 
   if (apiExpiry) {
-    // Parse "2028-10" to "10/28"
     const [year, month] = apiExpiry.split('-');
     const shortYear = year.slice(-2);
     return `${month}/${shortYear}`;
   }
 
-  // Fallback to creation date + 4 years
   if (card.cardData?.created_at) {
     const date = new Date(card.cardData.created_at);
     date.setFullYear(date.getFullYear() + 4);
@@ -1153,7 +1001,6 @@ const formatExpiryDate = (card: CardInfo) => {
 };
 
 const formatADA = (eurAmount: number) => {
-  // Use real exchange rate from store (sell rate = EUR -> ADA conversion)
   const adaAmount = eurAmount / exchangeRate.value;
   return adaAmount.toFixed(2);
 };
@@ -1256,34 +1103,35 @@ const formatADA = (eurAmount: number) => {
   }
 }
 
-// Timer in button
+// Payment Timer (separate from button)
+.payment-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(0, 199, 243, 0.1);
+  border: 1px solid rgba(0, 199, 243, 0.3);
+  border-radius: 8px;
+  
+  .timer-icon {
+    color: $primary-cyan;
+    font-size: 20px;
+  }
+  
+  .timer-text {
+    font-family: 'Courier New', monospace;
+    font-size: $font-size-base;
+    font-weight: $font-weight-semibold;
+    letter-spacing: 0.05rem;
+    color: $primary-cyan;
+  }
+}
+
 .complete-payment-btn {
   :deep(.v-icon) {
     color: #0c0e12 !important;
   }
-  
-  .timer-icon-in-button {
-    color: #0c0e12 !important;
-    opacity: 1;
-  }
-  
-  &.v-btn--disabled {
-    :deep(.v-icon) {
-      color: rgba(#0c0e12, 0.5) !important;
-    }
-    
-    .timer-icon-in-button {
-      opacity: 0.5 !important;
-    }
-  }
-}
-
-.timer-in-button {
-  font-family: 'Courier New', monospace;
-  font-size: $font-size-sm;
-  font-weight: $font-weight-semibold;
-  letter-spacing: 0.05rem;
-  color: #0c0e12;
 }
 
 // Credit Card Styling
