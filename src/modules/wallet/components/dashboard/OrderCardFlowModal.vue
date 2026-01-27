@@ -353,7 +353,6 @@ const orderVirtualCard = async () => {
     // Navigate to card page (will show pending section)
     router.push('/card');
   } catch (error: any) {
-    console.error('Failed to order virtual card:', error);
     let errorReason: string;
     if (typeof error?.response?.data === 'string' && error.response.data) {
       errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
@@ -405,13 +404,9 @@ const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'ex
       deliveryMethod: method,
     };
     
-    console.log('📦 Creating order on backend...');
     const orderResponse = await cardStore.orderPhysicalCard(payload);
-    console.log('✅ Order created, full response:', JSON.stringify(orderResponse, null, 2));
     
-    // Extract payment details from response
     if (!orderResponse) {
-      console.error('❌ No response from order API');
       throw new Error(t('card.failedToGetPaymentDetails'));
     }
     
@@ -436,36 +431,12 @@ const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'ex
     depositExpiresAt.value = orderResponse.depositExpiresAt || '';
     depositQrCode.value = orderResponse.depositQrCode || '';
     
-    console.log('💰 Payment details extracted:', {
-      orderUuid: orderUuid.value,
-      paymentId: paymentId.value,
-      address: paymentAddress.value,
-      amount: paymentAmount.value,
-      exchangeRate: exchangeRate.value,
-      expiresAt: depositExpiresAt.value,
-    });
-    
-    // Validate payment details
-    console.log('🔍 Validation check:', {
-      hasAddress: !!paymentAddress.value,
-      addressValue: paymentAddress.value,
-      adaAmount: paymentAmount.value.ada,
-      isAmountValid: paymentAmount.value.ada > 0,
-    });
-    
     if (!paymentAddress.value || paymentAmount.value.ada <= 0) {
-      console.error('❌ Validation failed:', {
-        address: paymentAddress.value,
-        ada: paymentAmount.value.ada,
-      });
       throw new Error(t('card.failedToGetPaymentDetails'));
     }
     
-    console.log('✅ Validation passed, proceeding to payment step');
-    
     currentStep.value = 4;
   } catch (error: any) {
-    console.error('❌ Failed to create order:', error);
     snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
   } finally {
     isProcessing.value = false;
@@ -478,12 +449,6 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
   isProcessing.value = true;
 
   try {
-    // Password is already verified in CardOrderPaymentStep
-    console.log('✅ Password verified, proceeding with transaction');
-    console.log('💰 Payment address:', paymentAddress.value);
-    console.log('💰 Payment amount:', paymentAmount.value);
-
-    // Validate payment details
     if (!paymentAddress.value) {
       throw new Error(t('card.missingPaymentAddress'));
     }
@@ -494,9 +459,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
     }
 
     const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
-    console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${paymentAddress.value}`);
 
-    // Create output
     const outputs: Cardano.TxOut[] = [
       {
         address: paymentAddress.value as Cardano.PaymentAddress,
@@ -507,7 +470,6 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       },
     ];
 
-    // Build transaction
     const tx = await buildCardanoTransaction({
       outputs,
       utxos: walletStore.utxos,
@@ -516,13 +478,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       tip: networkStore.tip,
     });
 
-    console.log('✅ Transaction built successfully');
-
-    // Serialize transaction
     const txCbor = serializeCardanoJsSdkTx(tx);
-    console.log('📦 Serialized transaction CBOR');
-
-    // Sign transaction
     const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
@@ -540,10 +496,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(witnessResult.data.error);
     }
 
-    console.log('✅ Transaction signed successfully');
     const txWitnesses = witnessResult.data.witnesses;
-
-    // Submit transaction
     const submitResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
@@ -559,16 +512,10 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
 
     snackbar.fireSuccess(t('notifications.transactionSubmitted'));
 
-    // Refresh card data to get updated order info
     await cardStore.fetchCardData();
 
-    // Mark order as successful
-    // Note: Polling for card UUID will happen automatically in background via HeroSection.vue
-    // The existing checkPendingOrders mechanism will handle card UUID retrieval
-    // We don't need to poll here - it would block the UI for up to 1 hour
     orderSuccess.value = true;
   } catch (error: any) {
-    console.error('❌ Failed to process payment:', error);
     snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
     currentStep.value = 4;
   } finally {
@@ -576,13 +523,14 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
   }
 };
 
-const handleOrderComplete = () => {
+const handleOrderComplete = async () => {
+  await cardStore.fetchCardData();
   handleClose();
   router.push('/card');
 };
 
-const handleClose = () => {
-  // Reset state
+const handleClose = async () => {
+  await cardStore.fetchCardData();
   currentStep.value = 1;
   selectedCardType.value = null;
   useExistingAddress.value = false;
