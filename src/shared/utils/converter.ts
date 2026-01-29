@@ -87,14 +87,14 @@ export const createCoseKeyHex = (addressBytes: Uint8Array, publicKey: Ed25519Pub
   return keyHex;
 };
 
-export function buildSignatureAndCoseKey(addressBytes: Uint8Array<ArrayBufferLike>, payload: string, accountKey: Ed25519PrivateKey) {
+export function buildSignatureAndCoseKey(addressBytes: Uint8Array<ArrayBufferLike>, payload: string, accountKey: Ed25519PrivateKey): { signature: string; key: HexBlob } {
   const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
   const dataToSign = builder.make_data_to_sign();
   const toSign = dataToSign.to_bytes();
   safeFreeCSLObject(dataToSign);
 
   const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
-  const keyHex = util.bytesToHex(coseKey.to_bytes());
+  const keyHex: HexBlob = util.bytesToHex(coseKey.to_bytes());
   safeFreeCSLObject(coseKey);
 
   return {
@@ -103,7 +103,7 @@ export function buildSignatureAndCoseKey(addressBytes: Uint8Array<ArrayBufferLik
   };
 }
 
-export const buildAndSignData = (builder: COSESign1Builder, signingData: Uint8Array, accountKey: Ed25519PrivateKey | undefined) => {
+export const buildAndSignData = (builder: COSESign1Builder, signingData: Uint8Array, accountKey: Ed25519PrivateKey | undefined): string => {
   const signedData = accountKey ? accountKey.sign(HexBlob.fromBytes(signingData)).bytes() : signingData;
   const coseSign1 = builder.build(signedData);
   const signatureHex = toHexString(coseSign1.to_bytes());

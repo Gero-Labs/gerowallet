@@ -192,30 +192,31 @@ import { DeviceStatusError, SignedMessageData } from '@cardano-foundation/ledger
 import { Cardano } from '@cardano-sdk/core';
 import { getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } from '@/chrome/serialization';
 import { UR } from '@keystonehq/keystone-sdk';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import { Bip32PrivateKey, Ed25519PublicKey } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util/dist/esm';
 
 const { t } = useTranslation();
 
 const { loggedWallet, config, keys } = toRefs(walletStore);
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy;
 const spendingPassword = ref('');
 const privateKeyBytes = ref<Uint8Array | null>(null);
-const passwordField = ref<any>(null);
-const request = ref<any>(null);
+const passwordField = ref(null);
+const request = ref(null);
 const message = ref('');
 const valid = ref(false);
 const isBT = ref(false);
 const loading = ref(false);
-const controller = ref<any>(null);
+const controller = ref(null);
 const tabId = ref<number | null>(null);
-const signature = ref<any>(undefined);
-const form = ref<any>(null);
+const signature = ref<{ signature: string; key: HexBlob }>(undefined);
+const form = ref(null);
 // Keystone state
 const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
 const keystoneType = ref('');
 const keystoneCbor = ref('');
-const keystoneBuilder = ref<any>(null); // Store builder to reuse when parsing signature
+const keystoneBuilder = ref(null); // Store builder to reuse when parsing signature
 const keystoneAddressBytes = ref<Uint8Array | null>(null); // Store address bytes for COSE_Key
 
 const txAutoSubmit = computed(() => {
@@ -379,9 +380,9 @@ const signDataLocallyWithPrf = async () => {
     if (txAutoSubmit.value) {
       await confirm();
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[PRF Sign Data] Error:', e);
-    snackbar.setError(e.message || 'Failed to sign data with PassKey');
+    snackbar.setError(e['message'] || 'Failed to sign data with PassKey');
   } finally {
     loading.value = false;
   }
@@ -414,8 +415,10 @@ const signAndReturnTx = async () => {
     if (txAutoSubmit.value) {
       await confirm();
     }
-  } catch (e: any) {
-    snackbar.setError(e);
+  } catch (e: unknown) {
+    console.error('[SIGN-DATA] Error:', e);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    snackbar.setError(errorMessage);
   }
   loading.value = false;
 };
@@ -470,7 +473,7 @@ const sign = async () => {
       if (txAutoSubmit.value) {
         await confirm();
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof DeviceStatusError) {
         const error: DeviceStatusError = e;
         switch (error.code) {
@@ -482,7 +485,8 @@ const sign = async () => {
             snackbar.setError(String(t('wallet.ledgerDeviceError', { message: error.message })));
         }
       } else {
-        snackbar.setError(e);
+        const errorMessage = e instanceof Error ? e.message : t('wallet.ledgerDeviceError', { message: String(e) });
+        snackbar.setError(errorMessage);
       }
     } finally {
       loading.value = false;
@@ -519,9 +523,10 @@ const sign = async () => {
       if (txAutoSubmit.value) {
         await confirm();
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[TREZOR-SIGN-DATA] Error:', e);
-      snackbar.setError(e.message || t('wallet.trezorSigningFailed'));
+      const errorMessage = e instanceof Error ? e.message : t('wallet.trezorSigningFailed');
+      snackbar.setError(errorMessage);
     } finally {
       loading.value = false;
     }
@@ -569,7 +574,7 @@ const sign = async () => {
       const keyIndex = parseInt(pathParts[5].replace("'", ""), 10);
 
       // Derive the appropriate key based on the role
-      let derivedKey;
+      let derivedKey: Ed25519PublicKey;
       if (role === 0) {
         derivedKey = getPaymentKeyExternal(xpubBech32, keyIndex);
       } else if (role === 1) {
@@ -596,9 +601,10 @@ const sign = async () => {
       // Show overlay with animated QR code
       keystoneOverlay.value = true;
       keystoneScan.value = false;
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[KEYSTONE-SIGN-DATA] Error:', e);
-      snackbar.setError(e.message || t('wallet.keystoneSigningFailed'));
+      const errorMessage = e instanceof Error ? e.message : t('wallet.keystoneSigningFailed');
+      snackbar.setError(errorMessage);
     }
   } else {
     await signAndReturnTx();
