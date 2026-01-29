@@ -19,7 +19,7 @@
     <v-card-text class="px-0 pb-0" style="z-index: 1;">
       <v-tabs-items class="transparent" v-model="activeTab">
         <!-- What's New Tab -->
-        <v-tab-item>
+        <v-tab-item :transition="false">
           <v-card-text class="px-3 justify-center text-center pb-0">
             <v-timeline align-top dense class="pt-0 mt-4">
               <v-timeline-item small color="#00DFF3" v-for="(release, index) in releases" :key="index">
@@ -63,7 +63,7 @@
         </v-tab-item>
 
         <!-- About Us Tab -->
-        <v-tab-item>
+        <v-tab-item :transition="false">
           <v-card-text class="px-6 pb-0">
             <!-- About Description -->
             <v-card flat class="transparent mb-6" style="background-image: linear-gradient(90deg, rgba(153, 153, 153, 0.05) 0%, rgba(163.62, 238.55, 255, 0.05) 100%); border-radius: 16px;">
@@ -213,9 +213,7 @@
             <!-- Version & Credits -->
             <v-divider class="my-4"></v-divider>
             <div class="text-center">
-              <p class="text-caption text--secondary mb-1">
-                {{ $t('navigation.version') }}: {{ currentVersion }}
-              </p>
+              <v-img :src="assets.adLabsLogoWhite" width="50" class="mx-auto mb-3" />
               <p class="text-caption text--secondary">
                 {{ (new Date().getFullYear())+' © '+$t('welcome.adLabs') }}
               </p>
@@ -250,34 +248,28 @@ defineEmits(['close']);
 const { t } = useTranslation()
 const loading = ref(false);
 const activeTab = ref(0);
-const releases = ref<any[]>([]);
+const releases = ref<Release[]>([]);
 const currentVersion = packageJson.version;
 
-const normalizeVersion = (version: string) => {
-  return version.startsWith('v') ? version.substring(1) : version;
-};
-
-const compareVersions = (versionA: string, versionB: string) => {
-  const [majorA, minorA, patchA] = normalizeVersion(versionA)
-    .split('.')
-    .map(num => parseInt(num, 10));
-  const [majorB, minorB, patchB] = normalizeVersion(versionB)
-    .split('.')
-    .map(num => parseInt(num, 10));
-
-  if (majorA !== majorB) return majorA - majorB;
-  if (minorA !== minorB) return minorA - minorB;
-
-  return patchA - patchB;
-};
+interface Release {
+  body?: string,
+  htmlUrl?: string,
+  name?: string,
+  publishedAt?: string,
+  tagName?: string
+}
 
 onMounted(async () => {
   loading.value = true;
   try {
     const res = await cryptoApi.fetchReleases(0);
     if (res.status === 200) {
-      let list = res.data.content;
-      list.sort((a: any, b: any) => compareVersions(b.tagName, a.tagName));
+      let list: Release[] = res.data.content;
+      list.sort((a: Release, b: Release) => {
+        const dateA = new Date(a.publishedAt || 0).getTime();
+        const dateB = new Date(b.publishedAt || 0).getTime();
+        return dateB - dateA; // Sort descending (newest first)
+      });
       releases.value = list;
     }
   } catch (e) {
