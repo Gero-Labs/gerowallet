@@ -193,7 +193,7 @@ import { Cardano } from '@cardano-sdk/core';
 import { getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } from '@/chrome/serialization';
 import { UR } from '@keystonehq/keystone-sdk';
 import { Bip32PrivateKey, Ed25519PublicKey } from '@cardano-sdk/crypto';
-import { HexBlob } from '@cardano-sdk/util/dist/esm';
+import { HexBlob } from '@cardano-sdk/util';
 
 const { t } = useTranslation();
 
