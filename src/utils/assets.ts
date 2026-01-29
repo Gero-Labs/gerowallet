@@ -136,6 +136,8 @@ import passKeySvg from '@/assets/svg/pass-key.svg'
 import autoTriggerSvg from '@/assets/svg/auto-trigger.svg'
 import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
 import mediumSvg from '@/assets/svg/medium.svg'
+import adLabsLogo from '@/assets/svg/ad-labs_black.svg'
+import adLabsLogoWhite from '@/assets/svg/ad-labs_white.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -377,7 +379,9 @@ export default {
   cardanoBlueLogo,
   apex,
   geroDashboardXmas,
-  mediumSvg
+  mediumSvg,
+  adLabsLogo,
+  adLabsLogoWhite
 }
 
 export {

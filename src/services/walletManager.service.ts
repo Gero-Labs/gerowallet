@@ -55,7 +55,7 @@ export class WalletManager {
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
    */
-  async restore(wallet: any): Promise<WalletBg | null> {
+  async restore(wallet): Promise<WalletBg | null> {
     debugLog('WalletManager: Starting restore process');
     LoadingState.setText('Restoring wallet instance...');
     LoadingState.setLoading(true);
@@ -131,7 +131,7 @@ export class WalletManager {
    * @param wallet - Wallet data to log in with
    * @returns WalletBg instance or null if failed
    */
-  async login(wallet: any): Promise<WalletBg | null> {
+  async login(wallet): Promise<WalletBg | null> {
     debugLog('WalletManager: Starting login process');
     LoadingState.setText('Creating wallet instance...');
     LoadingState.setLoading(true);
@@ -144,17 +144,6 @@ export class WalletManager {
 
       // Create a new wallet instance if needed
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
-        debugLog('Creating new WalletBg instance for wallet:', wallet.id);
-
-        // Debug: Check what fields the wallet object has from database
-        console.log('🔍 [WalletManager] Wallet from database - all keys:', Object.keys(wallet));
-        console.log('🔍 [WalletManager] Wallet PRF fields:', {
-          encryptionMethod: wallet.encryptionMethod,
-          hasPrfEncryptedPrivateKey: !!wallet.prfEncryptedPrivateKey,
-          hasPrfEncryptedMnemonic: !!wallet.prfEncryptedMnemonic,
-          hasWebAuthnCredentialId: !!wallet.webAuthnCredentialId,
-        });
-
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
         TapToolsStore.clear();
@@ -257,7 +246,7 @@ export class WalletManager {
     LoadingState.setText('Loading blockchain data...');
     walletBg.loadGenesis();
 
-    const promises2: any[] = [];
+    const promises2 = [];
     promises2.push(
       walletBg.loadAssets(),
       walletBg.loadEpochParams()
@@ -379,8 +368,8 @@ export class WalletManager {
           },
         });
         console.log('✅ Subscribed to Ably group channel');
-      } catch (error: any) {
-        console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
+      } catch (error: unknown) {
+        console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error['message'] || error);
       }
     })(); // Execute immediately but don't await - fully non-blocking
 
