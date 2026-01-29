@@ -170,7 +170,6 @@ const priceService = new PriceService();
 // Handle HMR (Hot Module Replacement) - re-register callback with updated priceStore instance
 if (import.meta.hot) {
   import.meta.hot.accept(() => {
-    debugLog('🦑 PriceStore HMR: Re-registering ticker callback...');
     // Re-register callback if already initialized
     if (priceService['isInitialized']) {
       priceService['registerTickerCallback']();

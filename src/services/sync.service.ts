@@ -440,8 +440,6 @@ export class SyncService {
     return null;
   }
 
-
-
   /**
    * Get the block height of the latest transaction
    * @returns The latest transaction's block height, or 0 if no transactions exist
@@ -452,7 +450,6 @@ export class SyncService {
       const transactionsTable = db.table('transactions');
 
       if (!transactionsTable) {
-        debugLog('No transactions table found');
         return 0;
       }
 
@@ -460,7 +457,6 @@ export class SyncService {
       const transactions = await transactionsTable.toArray();
 
       if (!transactions || transactions.length === 0) {
-        debugLog('No transactions found');
         return 0;
       }
 

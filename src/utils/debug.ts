@@ -1,9 +1,10 @@
 /**
  * Global debug logging utility
- * Controls console.debug output based on environment variable
+ * Controls console output based on environment variables
  */
 
 // Check if debug mode is enabled via environment variable
+// Set VITE_DEBUG_STORES=true in .env file to enable debug logging
 // @ts-ignore
 const isDebugEnabled = import.meta.env.VITE_DEBUG_STORES === 'true';
 
@@ -13,7 +14,15 @@ const isDebugEnabled = import.meta.env.VITE_DEBUG_STORES === 'true';
  * @param args - Arguments to pass to console.log
  */
 export const debugLog: (...args: any[]) => void = isDebugEnabled
-  ? console.debug.bind(console)
+  ? console.log.bind(console)
+  : () => {};
+
+/**
+ * Conditional warning logger for development mode
+ * @param args - Arguments to pass to console.warn
+ */
+export const debugWarn: (...args: any[]) => void = isDebugEnabled
+  ? console.warn.bind(console)
   : () => {};
 
 /**

@@ -55,9 +55,33 @@
               <span>{{ t('card.pleaseReviewLedger') }}</span>
             </v-alert>
 
-            <!-- Password field for Normal wallet on step 2 (hidden after signing) -->
+            <!-- PRF Wallet: PassKey Button or Submit Button -->
             <div
-              v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit"
+              v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && isPrfWallet"
+              class="password-section"
+            >
+              <!-- Before signing: PassKey button -->
+              <PassKeyAuthButton
+                v-if="!isSubmit"
+                :disabled="txSubmitLoading"
+                @success="handlePassKeyAuthSuccess"
+                @error="handlePassKeyAuthError"
+                class="passkey-button"
+              />
+              <!-- After signing: Submit button -->
+              <GradientButton
+                v-else
+                :text="t('card.submitTransaction')"
+                @click="handleTopUp"
+                :disabled="txSubmitLoading"
+                :loading="txSubmitLoading"
+                class="passkey-button"
+              />
+            </div>
+
+            <!-- Password field for Normal wallet on step 2 (hidden after signing, hidden for PRF wallets) -->
+            <div
+              v-else-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isPrfWallet && !isSubmit"
               class="password-section"
             >
               <PassKeyPasswordField
@@ -94,7 +118,8 @@
             <!-- Action Buttons -->
             <div class="modal-actions">
               <SecondaryButton :text="$t('wallet.cancel')" @click="closeModal()" :disabled="txSubmitLoading" />
-              <v-tooltip top :disabled="canTopUp || currentStep !== 1">
+              <!-- Hide action button for PRF wallets on step 2 (handled in password-section above) -->
+              <v-tooltip top :disabled="canTopUp || currentStep !== 1" v-if="currentStep === 1 || !isPrfWallet">
                 <template v-slot:activator="{ on, attrs }">
                   <div v-bind="attrs" v-on="on" style="flex: 1;">
                     <GradientButton
@@ -123,7 +148,7 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
-import { ref, computed, toRefs } from 'vue';
+import { ref, computed, toRefs, watch } from 'vue';
 import SecondaryButton from '../SecondaryButton.vue';
 import GradientButton from '../GradientButton.vue';
 import AmountInputStep from './top-up/AmountInputStep.vue';
@@ -139,6 +164,7 @@ import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
@@ -169,10 +195,15 @@ const {
   spendingPassword,
   isSubmit,
   isBT,
+  isPrfWallet,
+  privateKeyBytes,
   handleSign,
   resetState,
   handlePassKeySuccess: composableHandlePassKeySuccess,
   handlePassKeyError: composableHandlePassKeyError,
+  handlePassKeyAuthSuccess: composableHandlePassKeyAuthSuccess,
+  handlePassKeyAuthError: composableHandlePassKeyAuthError,
+  setPasswordFieldRef,
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'notifications.transactionSubmitted',
@@ -191,11 +222,11 @@ const canTopUp = computed(() => {
     return !isNaN(adaAmount) && adaAmount >= 2 && amounts.value.eurAmount !== '';
   }
   if (currentStep.value === 2) {
-    // Step 2: Check if password is required for Normal wallet
-    if (walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit.value) {
+    // Step 2: Check if password is required for Normal wallet (but not for PRF wallets)
+    if (walletStore.loggedWallet?.type === WalletType.Normal && !isPrfWallet.value && !isSubmit.value) {
       return spendingPassword.value !== '';
     }
-    return true; // Other wallet types don't need password, or transaction is already signed
+    return true; // Other wallet types don't need password, or transaction is already signed, or PRF wallet
   }
   return true;
 });
@@ -240,13 +271,41 @@ const updateFeeOption = (newFeeOption: string) => {
   feeOption.value = newFeeOption;
 };
 
-// Use composable's passkey handlers
+// Custom passkey handlers that build transaction first
 const handlePassKeySuccess = () => {
   composableHandlePassKeySuccess();
 };
 
 const handlePassKeyError = (error: string) => {
   composableHandlePassKeyError(error);
+};
+
+const handlePassKeyAuthSuccess = async (pkBytes: Uint8Array) => {
+  // Set privateKeyBytes manually (don't use composable handler yet)
+  privateKeyBytes.value = pkBytes;
+
+  // Store transaction amounts for later use
+  transactionAmounts.value = {
+    adaAmount: amounts.value.adaAmount,
+    eurAmount: amounts.value.eurAmount,
+  };
+  console.log(`💾 Stored amounts:`, transactionAmounts.value);
+
+  // Build transaction first (required for TopUpModal, unlike staking dialogs)
+  if (!isSubmit.value) {
+    const buildSuccess = await buildTx();
+    if (!buildSuccess) {
+      console.error('❌ Failed to build transaction');
+      return;
+    }
+  }
+
+  // Now sign the transaction
+  await handleSign();
+};
+
+const handlePassKeyAuthError = (error: Error) => {
+  composableHandlePassKeyAuthError(error);
 };
 
 // Build transaction
@@ -344,6 +403,13 @@ const handleBackToAccount = () => {
   console.log('Back to account clicked');
   closeModal();
 };
+
+// Watch for password field ref changes
+watch(passwordField, (newVal) => {
+  if (newVal) {
+    setPasswordFieldRef(newVal);
+  }
+});
 </script>
 
 <style lang="scss" scoped>
@@ -386,6 +452,10 @@ const handleBackToAccount = () => {
   :deep(.v-text-field__details) {
     display: none;
   }
+}
+
+.passkey-button {
+  width: 100%;
 }
 
 .ledger-section {

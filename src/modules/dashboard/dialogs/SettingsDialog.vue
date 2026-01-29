@@ -17,11 +17,13 @@
         color="white"
         class="v-tabs-border-bottom mb-0"
         background-color="transparent"
+        show-arrows
       >
         <v-tab
           v-for="tab in tabs"
           :key="tab.value"
           :disabled="tab.disabled"
+          style="word-break: keep-all;"
         >
           {{ tab.label }}
           <v-icon color="error" x-small class="ml-1" v-if="tab.badge">

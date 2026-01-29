@@ -43,7 +43,7 @@ import { ref, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { getDb } from '@/db/wallet-db';
-import { authenticateWebAuthn, decryptSpendingPasswordForPassKey } from '@/shared/utils/security';
+import { decryptSpendingPasswordWithPrf, decryptPrivateKeyWithPrf } from '@/shared/utils/webauthn-prf';
 
 const loading = ref(true);
 const error = ref('');
@@ -55,35 +55,58 @@ onMounted(async () => {
       throw new Error('No wallet logged in');
     }
 
-    // Get database config
-    const db = await getDb(wallet.id);
-    const configTable = db.table('config');
+    // Get mode from query parameter ('password' or 'privateKey')
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode') || 'password'; // Default to password for backwards compatibility
 
-    // Get WebAuthn credential ID
-    const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
-    if (!credentialConfig || !credentialConfig.value) {
-      throw new Error('PassKey credential not found');
+    let resultPayload: any;
+
+    if (mode === 'privateKey') {
+      // Decrypt private key using PRF (for data signing)
+      if (!wallet.prfEncryptedPrivateKey || !wallet.webAuthnCredentialId) {
+        throw new Error('PRF wallet not properly configured');
+      }
+
+      const privateKeyBytes = await decryptPrivateKeyWithPrf(
+        wallet.prfEncryptedPrivateKey,
+        wallet.webAuthnCredentialId,
+        wallet.id.toString()
+      );
+
+      resultPayload = {
+        success: true,
+        privateKeyBytes: Array.from(privateKeyBytes) // Convert Uint8Array to regular array for postMessage
+      };
+    } else {
+      // Default: Decrypt spending password using PRF
+      // Get database config
+      const db = await getDb(wallet.id);
+      const configTable = db.table('config');
+
+      // Get WebAuthn credential ID
+      const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
+      if (!credentialConfig || !credentialConfig.value) {
+        throw new Error('PassKey credential not found');
+      }
+
+      // Get encrypted password
+      const encryptedPasswordConfig = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
+      if (!encryptedPasswordConfig || !encryptedPasswordConfig.value) {
+        throw new Error('Encrypted password not found');
+      }
+
+      // Decrypt spending password using PRF (includes authentication)
+      const decryptedPassword = await decryptSpendingPasswordWithPrf(
+        encryptedPasswordConfig.value,
+        credentialConfig.value,
+        wallet.id
+      );
+
+      resultPayload = {
+        success: true,
+        password: decryptedPassword
+      };
     }
-
-    // Get encrypted password
-    const encryptedPasswordConfig = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
-    if (!encryptedPasswordConfig || !encryptedPasswordConfig.value) {
-      throw new Error('Encrypted password not found');
-    }
-
-    // Authenticate with WebAuthn
-    const authenticated = await authenticateWebAuthn(credentialConfig.value);
-
-    if (!authenticated) {
-      throw new Error('PassKey authentication failed');
-    }
-
-    // Decrypt spending password
-    const decryptedPassword = await decryptSpendingPasswordForPassKey(
-      encryptedPasswordConfig.value,
-      credentialConfig.value,
-      wallet.id
-    );
 
     // Send result to parent window (with secure origin restriction)
     if (window.opener) {
@@ -91,10 +114,7 @@ onMounted(async () => {
       window.opener.postMessage(
         {
           type: 'PASSKEY_AUTH_RESULT',
-          payload: {
-            success: true,
-            password: decryptedPassword
-          }
+          payload: resultPayload
         },
         extensionOrigin
       );

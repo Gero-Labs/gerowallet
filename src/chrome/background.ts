@@ -662,6 +662,7 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
 
 app.add(METHOD.signData, (request, sendResponse) => {
   let responsePromise: Promise<any>;
+
   if (WalletStore.state.config.useSidePanel) {
     const url =
       `index.html#/${POPUP.dappSignData}` +
@@ -1357,7 +1358,8 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
     // Note: Never log password data
     const walletBg = walletManager.getWallet();
     if (walletBg) {
-      const isValid = walletBg.verifySpendingPassword(request.data.password);
+      // Await verifySpendingPassword (now async to support PRF wallets)
+      const isValid = await walletBg.verifySpendingPassword(request.data.password);
       sendResponse({
         id: request.id,
         data: { success: isValid, error: isValid ? undefined : 'Invalid spending password' },
@@ -1440,13 +1442,18 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         throw new Error('No transaction data provided (neither tx nor txCbor)');
       }
 
+      // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
+      const privateKeyBytes = request.data.privateKeyBytes
+        ? new Uint8Array(request.data.privateKeyBytes)
+        : undefined;
+
       const witnessResult = await walletBg.signTx(
         transaction,
-        request.data.partialSign || false,
         request.data.password,
         request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
+        privateKeyBytes, // Pass pre-decrypted private key for PRF wallets
       );
       sendResponse({
         id: request.id,

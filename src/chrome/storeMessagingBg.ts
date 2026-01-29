@@ -66,7 +66,6 @@ class BackgroundStoreMessaging {
 
     // Handle disconnection
     port.onDisconnect.addListener(() => {
-      debugLog('📡 Store sync connection disconnected');
       this.connectedPorts.delete(port);
 
       // Remove from all subscriptions

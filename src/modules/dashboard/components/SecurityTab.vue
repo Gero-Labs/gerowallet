@@ -336,6 +336,7 @@
     />
     <PinSetupDialog v-model="pinSetupDialog" @updated="handleSecuritySetupComplete" />
     <PatternSetupDialog v-model="patternSetupDialog" @updated="handleSecuritySetupComplete" />
+    <LockPasswordSetupDialog v-model="lockPasswordSetupDialog" @updated="handleSecuritySetupComplete" />
 
     <!-- 2FA Dialog -->
     <TwoFactorSetupDialog v-model="twoFactorDialog" @updated="loadSecurityConfig" />
@@ -349,6 +350,7 @@ import ChangePasswordDialog from '@/modules/dashboard/dialogs/ChangePasswordDial
 import LockSettingsDialog from '@/modules/dashboard/dialogs/LockSettingsDialog.vue';
 import PinSetupDialog from '@/modules/dashboard/dialogs/PinSetupDialog.vue';
 import PatternSetupDialog from '@/modules/dashboard/dialogs/PatternSetupDialog.vue';
+import LockPasswordSetupDialog from '@/modules/dashboard/dialogs/LockPasswordSetupDialog.vue';
 import TwoFactorSetupDialog from '@/modules/dashboard/dialogs/TwoFactorSetupDialog.vue';
 import PatternLock from '@/modules/dashboard/components/PatternLock.vue';
 import { Blockchain, WalletType } from '@/models/types';
@@ -371,6 +373,7 @@ const changePasswordDialog = ref<boolean>(false);
 const securitySettingsDialog = ref<boolean>(false);
 const pinSetupDialog = ref<boolean>(false);
 const patternSetupDialog = ref<boolean>(false);
+const lockPasswordSetupDialog = ref<boolean>(false);
 const twoFactorDialog = ref<boolean>(false);
 
 // Reload trigger for LockSettingsDialog
@@ -527,6 +530,8 @@ function handleUnlockMethodSelect(method: string) {
     pinSetupDialog.value = true;
   } else if (method === 'pattern') {
     patternSetupDialog.value = true;
+  } else if (method === 'password') {
+    lockPasswordSetupDialog.value = true;
   }
 }
 

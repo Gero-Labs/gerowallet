@@ -208,15 +208,15 @@ const hasPhysicalCard = computed(() => {
     if (card.cardData?.own_type !== 'physical') {
       return false;
     }
-    
+
     if (isCardRejectedOrExpired(card)) {
       return false;
     }
-    
+
     if (card.cardData?.card_uuid) {
       return true;
     }
-    
+
     return false;
   });
 });
@@ -228,7 +228,7 @@ const canOrderNewCard = computed(() => {
 const cardsWithOrderSlot = computed(() => {
   const filteredCards: CardInfo[] = [];
   const seenIds = new Set<string>();
-  
+
   const getCardUniqueId = (card: CardInfo): string | null => {
     if (card.cardData?.card_uuid) {
       return `card_${card.cardData.card_uuid}`;
@@ -241,25 +241,25 @@ const cardsWithOrderSlot = computed(() => {
     }
     return null;
   };
-  
+
   const virtualCards = cards.value.filter(card => {
-    return card.cardData?.own_type === 'virtual' && 
+    return card.cardData?.own_type === 'virtual' &&
     (card.cardData?.card_uuid || card.cardData?.order_uuid)
   });
   const physicalCards = cards.value.filter(card => {
     if (card.cardData?.own_type !== 'physical') {
       return false;
     }
-    
+
     const status = card.cardData?.status;
     if (status === 'rejected' || status === 'REJECTED') {
       return false;
     }
-    
+
     if (card.cardData?.card_uuid) {
       return true;
     }
-    
+
     if (card.cardData?.order_uuid && !card.cardData?.card_uuid) {
       const paymentDetails = paymentDetailsCache.value[card.cardData.order_uuid];
       if (paymentDetails) {
@@ -267,7 +267,7 @@ const cardsWithOrderSlot = computed(() => {
           return false;
         }
       }
-      
+
       const delivery = (card.cardData as CardDeliveryData)?.delivery;
       if (delivery) {
         const paymentStatus = delivery.payment_status?.toLowerCase();
@@ -275,27 +275,27 @@ const cardsWithOrderSlot = computed(() => {
           return false;
         }
       }
-      
+
       return true;
     }
-    
+
     return false;
   });
   if (virtualCards.length > 0) {
     const activeVirtual = virtualCards.find(card => card.cardData?.card_uuid);
     const cardToAdd = activeVirtual || virtualCards[0];
     const uniqueId = getCardUniqueId(cardToAdd);
-    
+
     if (uniqueId && !seenIds.has(uniqueId)) {
       filteredCards.push(cardToAdd);
       seenIds.add(uniqueId);
     }
   }
-  
+
   if (physicalCards.length > 0) {
     const activePhysical = physicalCards.find(card => card.cardData?.card_uuid);
     const pendingPhysical = physicalCards.filter(card => !card.cardData?.card_uuid && card.cardData?.order_uuid);
-    
+
     if (activePhysical) {
       const uniqueId = getCardUniqueId(activePhysical);
       if (uniqueId && !seenIds.has(uniqueId)) {
@@ -303,7 +303,7 @@ const cardsWithOrderSlot = computed(() => {
         seenIds.add(uniqueId);
       }
     }
-    
+
     for (const pendingCard of pendingPhysical) {
       const uniqueId = getCardUniqueId(pendingCard);
       if (uniqueId && !seenIds.has(uniqueId)) {
@@ -312,11 +312,11 @@ const cardsWithOrderSlot = computed(() => {
       }
     }
   }
-  
-  const hasPendingCards = filteredCards.some(card => 
+
+  const hasPendingCards = filteredCards.some(card =>
     card.cardData?.order_uuid && !card.cardData?.card_uuid
   );
-  
+
   if (filteredCards.length === 0) {
     return [emptyCard];
   } else if (canOrderNewCard.value && !hasPendingCards) {
@@ -417,21 +417,21 @@ const currentCardType = computed(() => {
 const currentCardStatus = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   if (!currentCard?.cardData?.order_uuid) return null;
-  
+
   const orderUuid = currentCard.cardData.order_uuid;
   const status = orderStatuses.value[orderUuid];
-  
+
   if (status) return status;
-  
+
   const paymentDetails = paymentDetailsCache.value[orderUuid];
   if (paymentDetails?.status) {
     return paymentDetails.status;
   }
-  
+
   if (!currentCard.cardData.card_uuid) {
     return 'pending';
   }
-  
+
   return null;
 });
 
@@ -452,15 +452,15 @@ const isCurrentCardEmpty = computed(() => {
 
 const shouldShowOrderCardSection = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
-  
+
   if (!currentCard) return false;
-  
+
   if (isCurrentCardEmpty.value) return true;
-  
+
   if (hasVirtualCard.value && hasPhysicalCard.value) return false;
   if (currentCardHasUUID.value) return false;
   if (isCurrentCardPending.value) return false;
-  
+
   return true;
 });
 
@@ -469,24 +469,24 @@ const showOrderTimer = computed(() => {
   if (!currentCard?.cardData?.id || currentCard?.cardData?.card_uuid) return false;
   if (currentCard?.cardData?.own_type !== 'physical') return false;
   if (!currentCard?.cardData?.order_uuid) return false;
-  
+
   if (isCurrentCardRejected.value) return false;
-  
+
   const orderUuid = currentCard.cardData.order_uuid;
   const paymentDetails = paymentDetailsCache.value[orderUuid];
   if (!paymentDetails) return false;
-  
+
   if (paymentDetails.status === 'expired') return false;
   if (paymentDetails.status !== 'pending' && paymentDetails.status !== 'completed') return false;
-  
+
   if (!paymentDetails.expires_at) return false;
-  
+
   const expiresAt = new Date(paymentDetails.expires_at);
   const now = new Date();
   if (now >= expiresAt) {
     return false;
   }
-  
+
   return true;
 });
 
@@ -498,23 +498,23 @@ const updateTimer = () => {
     timerDisplay.value = '';
     return;
   }
-  
+
   const orderUuid = currentCard.cardData.order_uuid;
   const paymentDetails = paymentDetailsCache.value[orderUuid];
   if (!paymentDetails?.expires_at) {
     timerDisplay.value = '';
     return;
   }
-  
+
   const expiresAt = new Date(paymentDetails.expires_at);
   const now = new Date();
   const remaining = expiresAt.getTime() - now.getTime();
-  
+
   if (remaining <= 0) {
     timerDisplay.value = '';
     return;
   }
-  
+
   const minutes = Math.floor(remaining / 60000);
   const seconds = Math.floor((remaining % 60000) / 1000);
   timerDisplay.value = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
@@ -554,32 +554,32 @@ const checkCurrentCardStatus = async () => {
   if (!currentCard?.cardData?.order_uuid || currentCard?.cardData?.card_uuid) {
     return;
   }
-  
+
   if (hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
     return;
   }
-  
+
   try {
     const orderDetails = await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
-    
+
     if (orderDetails?.status) {
       orderStatuses.value = {
         ...orderStatuses.value,
         [currentCard.cardData.order_uuid]: orderDetails.status,
       };
     }
-    
+
     if (orderDetails?.card_uuid && !currentCard.cardData.card_uuid) {
       await cardStoreModule.fetchCardData();
       return;
     }
-    
+
     if (currentCard.cardData?.own_type === 'virtual') {
       return;
     }
-    
+
     const paymentDetails = await cardStoreModule.getDeliveryPayment(currentCard.cardData.order_uuid);
-    
+
     if (paymentDetails) {
       if (paymentDetails.status === 'rejected') {
         orderStatuses.value = {
@@ -592,7 +592,7 @@ const checkCurrentCardStatus = async () => {
           [currentCard.cardData.order_uuid]: 'expired',
         };
       }
-      
+
       if (paymentDetails.expires_at && paymentDetails.status === 'pending') {
         const expiresAt = new Date(paymentDetails.expires_at);
         const now = new Date();
@@ -604,7 +604,7 @@ const checkCurrentCardStatus = async () => {
           };
         }
       }
-      
+
       let transactionFound = false;
       if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
         transactionFound = cardStoreModule.checkDepositPayment(
@@ -616,7 +616,7 @@ const checkCurrentCardStatus = async () => {
           [currentCard.cardData.order_uuid]: transactionFound,
         };
       }
-      
+
       paymentDetailsCache.value = {
         ...paymentDetailsCache.value,
         [currentCard.cardData.order_uuid]: {
@@ -624,28 +624,28 @@ const checkCurrentCardStatus = async () => {
           status: paymentDetails.status,
         },
       };
-      
+
       updateTimer();
     }
-    
+
   } catch (error) {
   }
 };
 
 watch(currentCardIndex, async (newIndex, oldIndex) => {
   if (newIndex === oldIndex) return;
-  
+
   const card = cardsWithOrderSlot.value[newIndex];
-  
+
   if (!card) return;
-  
+
   const isEmpty = !card.cardData?.id && !card.cardData?.card_uuid && !card.cardData?.order_uuid;
-  
+
   if (isEmpty) {
     cardStoreModule.selectCard(null);
     return;
   }
-  
+
   if (card.cardData.card_uuid) {
     cardStoreModule.selectCard(card.cardData.card_uuid);
     try {
@@ -666,7 +666,7 @@ watch(currentCardIndex, async (newIndex, oldIndex) => {
   } else {
     cardStoreModule.selectCard(null);
   }
-  
+
   updateTimer();
   rejectionAcknowledged.value = false;
 });
@@ -722,7 +722,7 @@ const handleTopUp = () => {
 const openPaymentModal = () => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   if (!currentCard?.cardData?.order_uuid) return;
-  
+
   if (currentCardStatus.value === 'expired') {
     showOrderCardFlowModal.value = true;
   } else {
@@ -781,24 +781,24 @@ const checkPendingOrders = async () => {
   for (const card of pendingCards) {
     try {
       loadingOrderDetails.value = true;
-      
+
       const orderDetails = await cardStoreModule.getOrderDetails(card.cardData.order_uuid);
-      
+
       if (orderDetails?.status) {
         orderStatuses.value[card.cardData.order_uuid] = orderDetails.status;
       }
-      
+
       if (orderDetails?.card_uuid && !card.cardData.card_uuid) {
         await cardStoreModule.fetchCardData();
         continue;
       }
-      
+
       if (card.cardData?.own_type === 'virtual') {
         continue;
       }
-      
+
       const paymentDetails = await cardStoreModule.getDeliveryPayment(card.cardData.order_uuid);
-      
+
       if (paymentDetails) {
         if (paymentDetails.status === 'rejected') {
           orderStatuses.value[card.cardData.order_uuid] = 'rejected';
@@ -806,7 +806,7 @@ const checkPendingOrders = async () => {
         } else if (paymentDetails.status === 'expired') {
           orderStatuses.value[card.cardData.order_uuid] = 'expired';
         }
-        
+
         if (paymentDetails.expires_at && paymentDetails.status === 'pending') {
           const expiresAt = new Date(paymentDetails.expires_at);
           const now = new Date();
@@ -815,7 +815,7 @@ const checkPendingOrders = async () => {
             orderStatuses.value[card.cardData.order_uuid] = 'expired';
           }
         }
-        
+
         let transactionFound = false;
         if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
           transactionFound = cardStoreModule.checkDepositPayment(
@@ -824,17 +824,17 @@ const checkPendingOrders = async () => {
           );
           paymentTransactionFound.value[card.cardData.order_uuid] = transactionFound;
         }
-        
+
         paymentDetailsCache.value[card.cardData.order_uuid] = {
           expires_at: paymentDetails.expires_at,
           status: paymentDetails.status,
         };
-        
+
         if (card.cardData.order_uuid === cardsWithOrderSlot.value[currentCardIndex.value]?.cardData?.order_uuid) {
           updateTimer();
         }
       }
-      
+
     } catch (error) {
       if (card.cardData.order_uuid && !hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
         hiddenOrderUuids.value.push(card.cardData.order_uuid);
@@ -907,7 +907,7 @@ onBeforeUnmount(() => {
 
 const handleCardClick = (card: CardInfo) => {
   const isEmpty = !card.cardData?.id && !card.cardData?.card_uuid && !card.cardData?.order_uuid;
-  
+
   if (isEmpty) {
     handleOpenOrderCardFlow();
   } else if (currentCardHasUUID.value) {

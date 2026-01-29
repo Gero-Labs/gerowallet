@@ -1,5 +1,4 @@
 import Vue from 'vue';
-import { debugLog } from '@/utils/debug';
 import {
   deleteWallet,
   createNewWallet,
@@ -56,7 +55,6 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(geroStore, result[STORE_NAME]);
-      debugLog('💾 Hydrated gero store from storage');
     }
   });
 }
@@ -119,8 +117,22 @@ export default {
       deleteWallet(walletId);
     }
   },
-  async createNewWallet(name: string, icon: string, theme: string, mnemonic: string, password: string, chain: string, network: string) {
-    const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network);
+  async createNewWallet(
+    name: string,
+    icon: string,
+    theme: string,
+    mnemonic: string,
+    password: string,
+    chain: string,
+    network: string,
+    options?: {
+      usePrf?: boolean;
+      credentialId?: string;
+      passwordUnlockEnabled?: boolean;
+      backupMnemonic?: boolean;
+    }
+  ) {
+    const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network, options);
     // Update the wallets field with the latest wallets from the database
     const updatedWallets = await getAllWallets();
     geroStore.wallets = updatedWallets;

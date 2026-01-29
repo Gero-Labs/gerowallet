@@ -1,10 +1,10 @@
 export const geroWalletDbName: string = 'GeroWalletDatabase';
 
-export const geroDBVersion: number = 13;
+export const geroDBVersion: number = 14;
 
 export const geroDBSchema = {
   wallets:
-    '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId',
+    '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId, encryptionMethod, webAuthnCredentialId',
   config: '++id, key, value',
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 };

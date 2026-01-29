@@ -319,9 +319,22 @@ async function loadSecurityConfig() {
     unlockMethod.value = unlockMethodConfig?.value || null;
     twoFactorEnabled.value = twoFactorConfig?.value || false;
     passKeyEnabled.value = passKeyUnlockConfig?.value || false;
-    webAuthnCredentialId.value = credentialIdConfig?.value || null;
     pinLength.value = pinLengthConfig?.value || 6;
     passKeyAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
+
+    // Check for PRF wallets: credential ID stored in wallet record, not config
+    const wallet = walletStore.loggedWallet;
+    const isPrfWallet = wallet?.encryptionMethod === 'prf';
+
+    if (isPrfWallet && wallet?.webAuthnCredentialId) {
+      // PRF wallet: Use credential from wallet record
+      webAuthnCredentialId.value = wallet.webAuthnCredentialId;
+      // PRF wallets can always use PassKey for unlock
+      passKeyEnabled.value = true;
+    } else {
+      // Normal wallet: Use credential from config table
+      webAuthnCredentialId.value = credentialIdConfig?.value || null;
+    }
 
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
     // that works alongside PIN, password, or pattern

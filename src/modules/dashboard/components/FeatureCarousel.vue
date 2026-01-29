@@ -32,7 +32,7 @@
                   <div class="debit-card-3d-wrapper" @mousemove="handleCardMouseMove" @mouseleave="handleCardMouseLeave" :style="debitCardStyle">
                     <img
                       :src="item.cardImage"
-                      :alt="$t('card.geroDebitCard')"
+                      :alt="t('card.geroDebitCard')"
                       class="debit-card-floating"
                     />
                   </div>
@@ -52,7 +52,7 @@
                 <div class="cashback-container">
                   <img
                     :src="item.cardImage"
-                    :alt="$t('cashback.adaCashback')"
+                    :alt="t('cashback.adaCashback')"
                     class="cashback-floating"
                   />
                   <div class="debit-card-glow"></div>
@@ -109,6 +109,8 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, onUnmounted } from 'vue';
 
+const { t } = useTranslation();
+
 // Define and export carousel item interface
 export interface CarouselItem {
   id: string;
@@ -147,13 +149,20 @@ const emit = defineEmits([
   'mouse-leave'
 ]);
 
+interface DebitCardStyle {
+  transform: string;
+  transition: string;
+}
+
 // Reactive data
 const progressValue = ref(0);
 const carouselInterval = ref<ReturnType<typeof setInterval> | null>(null);
-const debitCardStyle = ref<any>({});
+const debitCardStyle = ref<DebitCardStyle>({
+  transform: 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)',
+  transition: 'transform 0.3s ease-out'
+});
 const progressKey = ref(0);
 const isHovered = ref(false);
-const carousel = ref<any>(null);
 
 // Methods
 const handleMouseEnter = () => {

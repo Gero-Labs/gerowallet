@@ -41,9 +41,7 @@ class KrakenWebSocketService {
   private lastTickerTime = 0;
   private tickerRequestInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor() {
-    debugLog('🦑 Kraken WebSocket Service initialized');
-  }
+  constructor() {}
 
   /**
    * Connect to Kraken WebSocket API
@@ -113,8 +111,6 @@ class KrakenWebSocketService {
         name: 'ticker'
       }
     };
-
-    debugLog('🦑 📡 Subscribing to ADA/USD ticker:', subscription);
     this.ws.send(JSON.stringify(subscription));
     this.subscriptions.add('ADA/USD');
   }

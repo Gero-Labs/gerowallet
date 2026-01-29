@@ -2,7 +2,7 @@ import Dexie from 'dexie';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { APIError, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, TxSendError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -96,6 +96,12 @@ export class WalletBg {
   baseAddress: string;
   stakeAddress?: string;
   token?: string;
+  // PRF Encryption Support (Version 14+)
+  encryptionMethod?: 'password' | 'prf';
+  prfEncryptedPrivateKey?: string;
+  prfEncryptedMnemonic?: string;
+  webAuthnCredentialId?: string;
+  prfSpendingPassword?: string;
 
   constructor(wallet: any, googleBaseAddress?: string) {
     this.id = wallet.id;
@@ -111,6 +117,12 @@ export class WalletBg {
     this.network = wallet.network;
     this.userId = wallet.userId;
     this.encryptedMnemonic = wallet.encryptedMnemonic;
+    // PRF encryption fields
+    this.encryptionMethod = wallet.encryptionMethod;
+    this.prfEncryptedPrivateKey = wallet.prfEncryptedPrivateKey;
+    this.prfEncryptedMnemonic = wallet.prfEncryptedMnemonic;
+    this.webAuthnCredentialId = wallet.webAuthnCredentialId;
+    this.prfSpendingPassword = wallet.prfSpendingPassword;
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
     this.xfp = wallet.xfp; // xfp is validated during wallet creation
@@ -207,8 +219,6 @@ export class WalletBg {
     const addresses: Set<string> = new Set<string>();
     addresses.add(this.baseAddress);
     const uniqueAssets: Set<string> = new Set<string>();
-
-    debugLog('🔍 Processing transactions for UTXOs...');
 
     for (const transaction of transactions) {
       if (transaction.body) {
@@ -324,10 +334,7 @@ export class WalletBg {
     // For regular logins, assets are already cached in NetworkStore
     const lastSyncInfo = await this.getLastSyncInfo();
     if (!lastSyncInfo) {
-      debugLog('🔄 First-time import detected - waiting for assets to load...');
       await this.waitForAssetsToLoad(Array.from(uniqueAssets));
-    } else {
-      debugLog('✅ Regular login - assets already cached in NetworkStore');
     }
 
     // Resolve Assets from UTxOs
@@ -343,9 +350,7 @@ export class WalletBg {
     }
 
     // UTxOs
-    debugLog('💰 Setting', utxos.size, 'UTXOs to store');
     WalletStore.setUtxos(Array.from(utxos.values()));
-    debugLog('✅ setUtxosAndAddresses completed successfully');
   }
 
   /**
@@ -828,24 +833,92 @@ export class WalletBg {
     return getStakeKey(this.publicKey, 0);
   }
 
-  requestAccountKey(
+  /**
+   * Decrypt root private key (supports both password and PRF encryption)
+   *
+   * @param password - Spending password (may be optional for PRF wallets without passwordUnlockEnabled)
+   * @returns Promise<Bip32PrivateKey> - Decrypted root private key
+   * @throws Error if decryption fails or password is incorrect
+   */
+  private async decryptRootPrivateKey(password?: string): Promise<Bip32PrivateKey> {
+    if (this.encryptionMethod === 'prf') {
+      // ============================================================================
+      // PRF DECRYPTION MODE
+      // ============================================================================
+
+      if (!this.prfEncryptedPrivateKey || !this.webAuthnCredentialId) {
+        throw new Error('PRF wallet missing required encrypted data or credential ID');
+      }
+
+      // Step 1: Verify spending password if required (password unlock enabled)
+      if (this.prfSpendingPassword) {
+        if (!password) {
+          throw ERROR.wrongPassword; // Password required but not provided
+        }
+
+        const { verifySpendingPassword } = await import('@/shared/utils/webauthn-prf');
+        const isValid = await verifySpendingPassword(password, this.prfSpendingPassword);
+
+        if (!isValid) {
+          throw ERROR.wrongPassword;
+        }
+      }
+
+      // Step 2: Decrypt private key with PRF (requires biometric authentication)
+      const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
+
+      try {
+        const privateKeyBytes = await decryptPrivateKeyWithPrf(
+          this.prfEncryptedPrivateKey,
+          this.webAuthnCredentialId,
+          this.id.toString()
+        );
+
+        return Bip32PrivateKey.fromBytes(privateKeyBytes);
+      } catch (error: any) {
+        // User cancelled or PRF evaluation failed
+        if (error.message?.includes('cancelled')) {
+          throw new Error('Biometric authentication was cancelled');
+        }
+        throw new Error(`Failed to decrypt private key with PRF: ${error.message}`);
+      }
+
+    } else {
+      // ============================================================================
+      // PASSWORD DECRYPTION MODE (EXISTING)
+      // ============================================================================
+
+      if (!password) {
+        throw ERROR.wrongPassword;
+      }
+
+      try {
+        const decrypted = decrypt(this.encryptedPrivateKey, password);
+        const buffer: Buffer = decryptWithPassword(password, JSON.parse(decrypted));
+        return Bip32PrivateKey.fromBytes(buffer);
+      } catch (e) {
+        throw ERROR.wrongPassword;
+      }
+    }
+  }
+
+  async requestAccountKey(
     type: 'stake' | 'payment' | 'change' | 'drep',
     password: string,
     accountIndex: number,
     index: number,
-  ): Ed25519PrivateKey {
-    let accountKey: Bip32PrivateKey;
-    try {
-      const decrypted = decrypt(this.encryptedPrivateKey, password);
-      const buffer: Buffer = decryptWithPassword(password, JSON.parse(decrypted));
-      accountKey = Bip32PrivateKey.fromBytes(buffer).derive([
-        WalletTypePurpose.CIP1852,
-        CoinTypes.CARDANO,
-        HARDENED + accountIndex,
-      ]);
-    } catch (e) {
-      throw ERROR.wrongPassword;
-    }
+  ): Promise<Ed25519PrivateKey> {
+    // Decrypt root private key (supports both password and PRF encryption)
+    const rootKey = await this.decryptRootPrivateKey(password);
+
+    // Derive account key
+    const accountKey: Bip32PrivateKey = rootKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex,
+    ]);
+
+    // Derive specific key type
     if (type === 'stake') {
       return accountKey.derive([ChainDerivations.CHIMERIC_ACCOUNT, index]).toRawKey();
     } else if (type === 'payment') {
@@ -887,13 +960,37 @@ export class WalletBg {
     await this.setLastSyncInfo(tip);
   }
 
-  verifySpendingPassword(password: string) {
-    try {
-      const decrypted = decrypt(this.encryptedPrivateKey, password);
-      decryptWithPassword(password, JSON.parse(decrypted));
-      return true;
-    } catch (e) {
-      return false;
+  async verifySpendingPassword(password: string): Promise<boolean> {
+    if (this.encryptionMethod === 'prf') {
+      // ============================================================================
+      // PRF WALLET - VERIFY SPENDING PASSWORD HASH
+      // ============================================================================
+
+      // If no spending password hash is stored, password verification is not required
+      if (!this.prfSpendingPassword) {
+        return true; // Pure PRF mode (no password)
+      }
+
+      // Verify password hash (password unlock is enabled)
+      try {
+        const { verifySpendingPassword } = await import('@/shared/utils/webauthn-prf');
+        return await verifySpendingPassword(password, this.prfSpendingPassword);
+      } catch (e) {
+        return false;
+      }
+
+    } else {
+      // ============================================================================
+      // PASSWORD WALLET - VERIFY BY DECRYPTION
+      // ============================================================================
+
+      try {
+        const decrypted = decrypt(this.encryptedPrivateKey, password);
+        decryptWithPassword(password, JSON.parse(decrypted));
+        return true;
+      } catch (e) {
+        return false;
+      }
     }
   }
 
@@ -909,11 +1006,11 @@ export class WalletBg {
    */
   async signTx(
     txInput: string | Cardano.Tx,
-    partialSign: boolean = false,
     password: string,
     accountIndex: number,
     utxos: Cardano.Utxo[],
     addresses: Keys,
+    privateKeyBytes?: Uint8Array, // Optional pre-decrypted private key for PRF wallets
   ): Promise<{ witnesses: string }> {
     let transaction: Cardano.Tx;
 
@@ -925,16 +1022,18 @@ export class WalletBg {
       // Already a Cardano JS SDK transaction object
       transaction = txInput;
     }
-    // Decrypt private key
-    const decrypted = decrypt(this.encryptedPrivateKey, password);
-    const decodedHash = decryptWithPassword(password, JSON.parse(decrypted));
-    password = null;
 
-    if (!decodedHash && partialSign === false) {
-      throw TxSignError.ProofGeneration;
+    // Get root private key
+    let rootPrivateKey: Bip32PrivateKey;
+    if (privateKeyBytes) {
+      // Use pre-decrypted private key (PRF wallet - already authenticated in browser context)
+      const { Bip32PrivateKey } = await import('@cardano-sdk/crypto');
+      rootPrivateKey = Bip32PrivateKey.fromBytes(privateKeyBytes);
+    } else {
+      // Decrypt root private key (password-based wallets)
+      rootPrivateKey = await this.decryptRootPrivateKey(password);
     }
-
-    const rootPrivateKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
+    password = null; // Clear password from memory
 
     // Derive an account private key
     const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
@@ -947,7 +1046,6 @@ export class WalletBg {
     const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
-    console.log('🔧 About to analyze transaction for signatures');
     const requiredSigners = analyzeTransactionForSignatures(
       transaction,
       utxos,
@@ -956,25 +1054,13 @@ export class WalletBg {
       this.stakeAddress,
     );
 
-    console.log('🔧 Required signers analysis:');
-    console.log(`🔧 Found ${requiredSigners.length} required signers`);
-    requiredSigners.forEach((signer, index) => {
-      console.log(`🔧 Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
-    });
-
     // Sign with each required key
     for (const signer of requiredSigners) {
-      console.log(`🔧 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
       const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
       const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
-      console.log(`🔧 Public key hash: ${rawPublicKey.hash().hex()}`);
-      // Sign the transaction hash as a HexBlob type
       const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
       signatures.set(rawPublicKey.hex(), signature.hex());
-      console.log(`🔧 Added signature for public key: ${rawPublicKey.hex().substring(0, 16)}...`);
     }
-
-    console.log(`🔧 Total signatures collected: ${signatures.size}`);
 
     // Create a witness set - ensure a signature map is properly set
     const witness: Cardano.Witness = {
@@ -1094,7 +1180,7 @@ export class WalletBg {
         }
 
         // Get the private key
-        const privateKey = this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
+        const privateKey = await this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
 
         // Sign the blob
         const signature = privateKey.sign(HexBlob(blob));

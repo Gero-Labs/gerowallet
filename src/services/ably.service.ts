@@ -72,8 +72,6 @@ class AblyService {
       } as Ably.ErrorInfo;
       return callback(errorInfo, null);
     }
-
-    debugLog('🔑 Fetching fresh Ably token for address:', this.authParams.address);
     this.api.ablyToken(this.authParams.address)
       .then(res => {
         const tokenData = typeof res.data === 'string' ? res.data : res.data.token;

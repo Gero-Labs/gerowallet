@@ -50,7 +50,6 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(networkStore, result[STORE_NAME]);
-      debugLog('💾 Hydrated network store from storage');
     }
   });
 }

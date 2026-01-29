@@ -2,7 +2,6 @@ import * as OTPAuth from 'otpauth';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import cryptoRandomString from 'crypto-random-string';
 import { Buffer } from 'buffer';
-import { chacha20poly1305 } from '@noble/ciphers/chacha';
 import { pbkdf2 } from '@noble/hashes/pbkdf2';
 import { sha512 } from '@noble/hashes/sha2';
 import { debugLog } from '@/utils/debug';
@@ -284,12 +283,15 @@ export function isWebAuthnSupported(): boolean {
 }
 
 /**
- * Register a new WebAuthn credential for passkey authentication
+ * Register a new WebAuthn credential for passkey authentication with PRF support
  * @param walletId - Wallet ID to use as credential ID
  * @param walletName - Wallet name for display
- * @returns Credential ID (base64-encoded)
+ * @returns Object with credential ID and PRF enabled status
  */
-export async function registerWebAuthnCredential(walletId: string, walletName: string): Promise<string> {
+export async function registerWebAuthnCredential(
+  walletId: string,
+  walletName: string
+): Promise<{ credentialId: string; prfEnabled: boolean }> {
   if (!isWebAuthnSupported()) {
     throw new Error('WebAuthn is not supported in this browser');
   }
@@ -299,7 +301,7 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
     const challenge = new Uint8Array(32);
     crypto.getRandomValues(challenge);
 
-    // Create credential options
+    // Create credential options with PRF extension
     const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
       challenge,
       rp: {
@@ -327,7 +329,11 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
         requireResidentKey: false
       },
       timeout: 60000,
-      attestation: 'none'
+      attestation: 'none',
+      // Enable PRF extension for secure password encryption
+      extensions: {
+        prf: {} // Request PRF support during registration
+      }
     };
 
     // Create the credential
@@ -339,8 +345,26 @@ export async function registerWebAuthnCredential(walletId: string, walletName: s
       throw new Error('Failed to create credential');
     }
 
-    // Return the credential ID as base64
-    return arrayBufferToBase64(credential.rawId);
+    // Check if PRF was enabled by the authenticator
+    const extensionResults = credential.getClientExtensionResults();
+    const prfResults = extensionResults?.prf;
+    const prfEnabled = prfResults?.enabled === true;
+
+    debugLog('[WebAuthn] Registration extension results:', {
+      hasExtensions: !!extensionResults,
+      hasPrf: !!prfResults,
+      prfEnabled: prfResults?.enabled,
+      fullPrfResults: prfResults,
+      allExtensions: extensionResults
+    });
+
+    debugLog('[WebAuthn] Credential registered with PRF:', prfEnabled ? '✅ Enabled' : '❌ Not supported');
+
+    // Return credential ID and PRF status
+    return {
+      credentialId: arrayBufferToBase64(credential.rawId),
+      prfEnabled
+    };
   } catch (error) {
     console.error('WebAuthn registration error:', error);
 
@@ -371,10 +395,8 @@ export async function authenticateWebAuthn(credentialId: string, timeoutMs: numb
   }, timeoutMs);
 
   try {
-    console.log('[WebAuthn] Starting authentication...');
-    console.log('[WebAuthn] Credential ID:', credentialId);
-    console.log('[WebAuthn] rpId:', window.location.hostname);
-    console.log('[WebAuthn] Context:', window.location.href);
+    debugLog('[WebAuthn] Starting authentication...');
+    debugLog('[WebAuthn] Credential ID:', credentialId);
 
     // Generate a random challenge
     const challenge = new Uint8Array(32);
@@ -395,34 +417,26 @@ export async function authenticateWebAuthn(credentialId: string, timeoutMs: numb
       rpId: window.location.hostname
     };
 
-    console.log('[WebAuthn] Calling navigator.credentials.get()...');
-
     // Get the credential (authenticate) with AbortSignal
     const assertion = await navigator.credentials.get({
       publicKey: publicKeyCredentialRequestOptions,
       signal: abortController.signal
     }) as PublicKeyCredential;
 
-    console.log('[WebAuthn] Assertion received:', assertion);
-
     if (!assertion) {
       throw new Error('Authentication failed');
     }
 
-    // If we got this far, authentication was successful
-    console.log('[WebAuthn] Authentication successful!');
+    debugLog('[WebAuthn] ✅ Authentication successful');
     return true;
   } catch (error) {
-    console.error('[WebAuthn] Authentication error:', error);
-    console.error('[WebAuthn] Error name:', (error as Error).name);
-    console.error('[WebAuthn] Error message:', (error as Error).message);
-
     // User cancelled or authentication failed
     if ((error as Error).name === 'NotAllowedError' || (error as Error).name === 'AbortError') {
-      console.log('[WebAuthn] User cancelled or timeout reached');
+      debugLog('[WebAuthn] User cancelled or timeout reached');
       return false;
     }
 
+    console.error('[WebAuthn] Authentication error:', error);
     throw new Error(`PassKey authentication failed: ${(error as Error).message}`);
   } finally {
     // Clear timeout to prevent memory leaks
@@ -459,154 +473,39 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 /**
- * Get or generate the device-specific passkey master key
- * This is a device-wide master key that is used to derive per-wallet keys
- * @returns 32-byte master key as hex string
+ * LEGACY ENCRYPTION FUNCTIONS REMOVED
+ *
+ * The following functions have been removed in favor of WebAuthn PRF extension:
+ * - getDevicePassKeyMasterKey() - No longer needed (PRF derives keys from authenticator)
+ * - deriveWalletPassKeyKey() - Replaced by PRF-based key derivation
+ * - encryptSpendingPasswordForPassKey() - Replaced by encryptSpendingPasswordWithPrf()
+ * - decryptSpendingPasswordForPassKey() - Replaced by decryptSpendingPasswordWithPrf()
+ *
+ * New PRF-based functions are located in: src/shared/utils/webauthn-prf.ts
+ *
+ * Migration: Users with existing passkeys must delete and re-register to use PRF encryption.
  */
-async function getDevicePassKeyMasterKey(): Promise<string> {
-  const STORAGE_KEY = 'passkey_device_master_key';
-
-  // Try to retrieve existing master key
-  const result = await chrome.storage.local.get(STORAGE_KEY);
-
-  if (result[STORAGE_KEY]) {
-    return result[STORAGE_KEY];
-  }
-
-  // Generate new master key
-  const masterKeyBytes = new Uint8Array(KEY_SIZE);
-  crypto.getRandomValues(masterKeyBytes);
-  const masterKey = Buffer.from(masterKeyBytes).toString('hex');
-
-  // Store for future use
-  await chrome.storage.local.set({ [STORAGE_KEY]: masterKey });
-
-  debugLog('🔐 Generated new device passkey master key');
-  return masterKey;
-}
 
 /**
- * Derive a wallet-specific passkey key from the device master key
- * This ensures that if one wallet's key is compromised, others remain secure
- * @param walletId - Wallet ID to derive key for
- * @returns 32-byte wallet-specific key as Buffer
+ * Remove legacy passkey master key from localStorage
+ *
+ * This function cleans up the insecure device master key that was previously
+ * stored in localStorage. Should be called during app initialization to ensure
+ * the legacy key is removed after migration to PRF.
  */
-async function deriveWalletPassKeyKey(walletId: string): Promise<Buffer> {
-  const deviceMasterKey = await getDevicePassKeyMasterKey();
-  const deviceMasterKeyBytes = Buffer.from(deviceMasterKey, 'hex');
+export async function removeLegacyPassKeyMasterKey(): Promise<void> {
+  const LEGACY_KEY = 'passkey_device_master_key';
 
-  // Derive wallet-specific key using PBKDF2-HMAC-SHA512
-  // Input: deviceMasterKey + walletId
-  // This binds the key to both the device and the specific wallet
-  const walletKey = pbkdf2(
-    sha512,
-    deviceMasterKeyBytes,
-    Buffer.from(`wallet:${walletId}`, 'utf8'), // Use walletId as salt with prefix
-    {
-      c: PBKDF2_ITERATIONS,
-      dkLen: KEY_SIZE
-    }
-  );
-
-  return Buffer.from(walletKey);
-}
-
-/**
- * Encrypt spending password for passkey autofill
- * Uses PBKDF2 + ChaCha20-Poly1305 with device-specific master key and WebAuthn credential ID
- * @param password - Spending password to encrypt
- * @param credentialId - WebAuthn credential ID (base64) for binding to passkey credential
- * @param walletId - Wallet ID for key derivation (binds password to wallet)
- * @returns Encrypted password as hex string (format: salt + nonce + tag + ciphertext)
- */
-export async function encryptSpendingPasswordForPassKey(
-  password: string,
-  credentialId: string,
-  walletId: string
-): Promise<string> {
-  const passwordBytes = Buffer.from(password, 'utf8');
-
-  // Get wallet-specific key derived from device master key
-  const walletKey = await deriveWalletPassKeyKey(walletId);
-
-  // Generate random salt and nonce for ChaCha20
-  const salt = new Uint8Array(SALT_SIZE);
-  const nonce = new Uint8Array(NONCE_SIZE);
-  crypto.getRandomValues(salt);
-  crypto.getRandomValues(nonce);
-
-  // Derive encryption key using PBKDF2-HMAC-SHA512
-  // Input: walletKey + credentialId (binds to device + wallet + passkey credential)
-  const keyMaterial = Buffer.concat([
-    walletKey,
-    Buffer.from(credentialId, 'utf8')
-  ]);
-
-  const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-    c: PBKDF2_ITERATIONS,
-    dkLen: KEY_SIZE
-  });
-
-  // Encrypt using ChaCha20-Poly1305 AEAD
-  const cipher = chacha20poly1305(derivedKey, nonce);
-  const encrypted = cipher.encrypt(passwordBytes);
-
-  // ChaCha20-Poly1305 returns: ciphertext + tag (tag is last TAG_SIZE bytes)
-  const encryptedBytes = Buffer.from(encrypted);
-  const ciphertext = encryptedBytes.subarray(0, encryptedBytes.length - TAG_SIZE);
-  const tag = encryptedBytes.subarray(encryptedBytes.length - TAG_SIZE);
-
-  // Format: salt(32B) + nonce(12B) + tag(16B) + ciphertext
-  const result = Buffer.concat([salt, nonce, tag, ciphertext]);
-  return result.toString('hex');
-}
-
-/**
- * Decrypt spending password for passkey autofill
- * Uses PBKDF2 + ChaCha20-Poly1305 with device-specific master key and WebAuthn credential ID
- * @param encryptedPassword - Encrypted password as hex string
- * @param credentialId - WebAuthn credential ID (base64) for binding to passkey credential
- * @param walletId - Wallet ID for key derivation (must match encryption)
- * @returns Decrypted spending password
- */
-export async function decryptSpendingPasswordForPassKey(
-  encryptedPassword: string,
-  credentialId: string,
-  walletId: string
-): Promise<string> {
   try {
-    const encryptedBytes = Buffer.from(encryptedPassword, 'hex');
+    // Check if legacy key exists
+    const result = await chrome.storage.local.get(LEGACY_KEY);
 
-    // Extract components: salt + nonce + tag + ciphertext
-    const salt = encryptedBytes.subarray(0, SALT_SIZE);
-    const nonce = encryptedBytes.subarray(SALT_SIZE, SALT_SIZE + NONCE_SIZE);
-    const tag = encryptedBytes.subarray(SALT_SIZE + NONCE_SIZE, SALT_SIZE + NONCE_SIZE + TAG_SIZE);
-    const ciphertext = encryptedBytes.subarray(SALT_SIZE + NONCE_SIZE + TAG_SIZE);
-
-    // Get wallet-specific key derived from device master key
-    const walletKey = await deriveWalletPassKeyKey(walletId);
-
-    // Derive decryption key using same inputs as encryption
-    const keyMaterial = Buffer.concat([
-      walletKey,
-      Buffer.from(credentialId, 'utf8')
-    ]);
-
-    const derivedKey = pbkdf2(sha512, keyMaterial, salt, {
-      c: PBKDF2_ITERATIONS,
-      dkLen: KEY_SIZE
-    });
-
-    // ChaCha20-Poly1305 expects: ciphertext + tag (tag at the end)
-    const combined = Buffer.concat([ciphertext, tag]);
-
-    // Decrypt using ChaCha20-Poly1305
-    const cipher = chacha20poly1305(derivedKey, nonce);
-    const decrypted = cipher.decrypt(combined);
-
-    return Buffer.from(decrypted).toString('utf8');
+    if (result[LEGACY_KEY]) {
+      // Remove from localStorage
+      await chrome.storage.local.remove(LEGACY_KEY);
+      debugLog('🗑️ Removed legacy passkey master key from localStorage');
+    }
   } catch (error) {
-    console.error('PassKey spending password decryption failed:', error);
-    throw new Error('Failed to decrypt passkey spending password');
+    console.error('Error removing legacy passkey master key:', error);
   }
 }

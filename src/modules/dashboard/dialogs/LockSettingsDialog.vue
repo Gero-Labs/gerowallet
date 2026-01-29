@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="$t('security.lockSettings')"
+    :title="t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"
@@ -36,21 +36,29 @@
 
             <v-divider class="mx-1" />
 
-            <!-- Spending Password (Normal wallets only) -->
-            <v-list-item two-line v-if="isNormalWallet" @click="handleUnlockMethodSelect('password')" class="mb-0">
+            <!-- Password Unlock -->
+            <v-list-item two-line @click="handleUnlockMethodSelect('password')" class="mb-0">
               <v-list-item-avatar class="my-0">
                 <v-icon>mdi-form-textbox-password</v-icon>
               </v-list-item-avatar>
               <v-list-item-content>
-                <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
-                <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
+                <!-- Normal wallets: Use spending password for unlock -->
+                <template v-if="isNormalWallet">
+                  <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
+                </template>
+                <!-- PRF wallets: Separate password for UI locking only -->
+                <template v-else>
+                  <v-list-item-title>{{ $t('security.lockPassword') }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ $t('security.useLockPasswordToUnlock') }}</v-list-item-subtitle>
+                </template>
               </v-list-item-content>
               <v-list-item-icon v-if="selectedUnlockMethod === 'password'" style="align-self: center;">
                 <v-icon color="primary">mdi-check-circle</v-icon>
               </v-list-item-icon>
             </v-list-item>
 
-            <v-divider v-if="isNormalWallet" class="mx-1" />
+            <v-divider class="mx-1" />
 
             <!-- PIN Code -->
             <v-list-item two-line @click="handleUnlockMethodSelect('pin')" class="mb-0">
@@ -170,10 +178,17 @@
                   {{ isPassKeyRegistered ? $t('security.passKeyRegistered') : $t('security.passKeyNotRegistered') }}
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ isPassKeyRegistered ? $t('security.passKeyRegisteredDescription') : $t('security.passKeyNotRegisteredDescription') }}
+                  <!-- PRF wallets: PassKey is core encryption, cannot be deregistered -->
+                  <template v-if="isPrfWallet && isPassKeyRegistered">
+                    {{ $t('security.passKeyPrfWalletDescription') }}
+                  </template>
+                  <!-- Normal wallets: Regular descriptions -->
+                  <template v-else>
+                    {{ isPassKeyRegistered ? $t('security.passKeyRegisteredDescription') : $t('security.passKeyNotRegisteredDescription') }}
+                  </template>
                 </v-list-item-subtitle>
               </v-list-item-content>
-              <v-list-item-action>
+              <v-list-item-action v-if="!isPrfWallet">
                 <v-btn
                   small
                   text
@@ -185,14 +200,30 @@
                   {{ isPassKeyRegistered ? $t('security.deregister') : $t('security.register') }}
                 </v-btn>
               </v-list-item-action>
+              <!-- PRF wallets: Show lock icon instead of button -->
+              <v-list-item-action v-else-if="isPrfWallet && isPassKeyRegistered">
+                <v-tooltip bottom content-class="custom-tooltip">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-icon
+                      color="primary"
+                      v-bind="attrs"
+                      v-on="on"
+                    >
+                      mdi-lock
+                    </v-icon>
+                  </template>
+                  <span>{{ $t('security.passKeyRequiredForPrfWallet') }}</span>
+                </v-tooltip>
+              </v-list-item-action>
             </v-list-item>
           </v-list>
 
-          <v-divider class="my-3 mx-1" />
+          <!-- Divider before password autofill section (Normal non-PRF wallets only) -->
+          <v-divider class="my-3 mx-1" v-if="isNormalWallet && !isPrfWallet" />
 
           <v-list dense class="pa-0 transparent" nav>
-            <!-- Use PassKey for Password Autofill (Normal wallets only) -->
-            <v-list-item v-if="isNormalWallet" :disabled="isPassKeyAutofillDisabled">
+            <!-- Use PassKey for Password Autofill (Normal non-PRF wallets only) -->
+            <v-list-item v-if="isNormalWallet && !isPrfWallet" :disabled="isPassKeyAutofillDisabled">
               <v-list-item-avatar class="my-0">
                 <v-icon :disabled="isPassKeyAutofillDisabled">mdi-form-textbox-password</v-icon>
               </v-list-item-avatar>
@@ -217,8 +248,8 @@
               </v-list-item-action>
             </v-list-item>
 
-            <!-- Auto-Trigger PassKey Authentication (Normal wallets only) -->
-            <v-list-item v-if="isNormalWallet" :disabled="!passKeyForPasswordAutofill">
+            <!-- Auto-Trigger PassKey Authentication (Normal non-PRF wallets only) -->
+            <v-list-item v-if="isNormalWallet && !isPrfWallet" :disabled="!passKeyForPasswordAutofill">
               <v-list-item-avatar class="my-0">
                 <v-img :src="assets.autoTriggerSvg" contain :style="{
                   width: '24px',
@@ -247,7 +278,8 @@
               </v-list-item-action>
             </v-list-item>
 
-            <v-divider class="my-3 mx-1" v-if="isNormalWallet" />
+            <!-- Divider after password autofill section (Normal non-PRF wallets only) -->
+            <v-divider class="my-3 mx-1" v-if="isNormalWallet && !isPrfWallet" />
 
             <!-- Use PassKey for Unlocking -->
             <v-list-item :disabled="isPassKeyUnlockDisabled">
@@ -418,6 +450,11 @@ const isNormalWallet = computed(() => {
   return wallet?.type === WalletType.Normal;
 });
 
+const isPrfWallet = computed(() => {
+  const wallet = walletStore.loggedWallet;
+  return wallet?.encryptionMethod === 'prf';
+});
+
 const isPassKeyAutofillDisabled = computed(() => {
   // Disable if browser doesn't support PassKey, if PassKey not registered, if loading, or if no unlock method is set
   return !isPassKeySupported.value || !isPassKeyRegistered.value || loadingPassKeyAutofill.value || !selectedUnlockMethod.value;
@@ -504,7 +541,12 @@ async function loadCurrentSettings() {
     const passKeyAutoTriggerUnlockConfig = await configTable.where({ key: 'passKeyAutoTriggerUnlock' }).first();
 
     // Check if PassKey is registered
-    isPassKeyRegistered.value = !!(credentialConfig?.value);
+    // For PRF wallets, credential is in wallet record; for normal wallets, it's in config table
+    const isPrfWallet = walletStore.loggedWallet?.encryptionMethod === 'prf' ||
+                        !!walletStore.loggedWallet?.webAuthnCredentialId;
+    isPassKeyRegistered.value = isPrfWallet
+      ? !!walletStore.loggedWallet?.webAuthnCredentialId
+      : !!(credentialConfig?.value);
 
     passKeyForUnlock.value = passKeyUnlockConfig?.value || false;
     passKeyForPasswordAutofill.value = passKeyAutofillConfig?.value || false;
@@ -527,9 +569,18 @@ async function loadCurrentSettings() {
 async function handleUnlockMethodSelect(method: UnlockMethod) {
   errorMessage.value = '';
 
-  if (method === null || method === 'password') {
-    // These methods don't require setup, save immediately
+  if (method === null) {
+    // None - save immediately
     await saveUnlockMethod(method);
+  } else if (method === 'password') {
+    // Password unlock:
+    // - Normal wallets: Use existing spending password (save immediately)
+    // - PRF wallets: Need to set up lock password (require setup)
+    if (isPrfWallet.value) {
+      emit('setup-unlock-method', method); // PRF wallets need lock password setup
+    } else {
+      await saveUnlockMethod(method); // Normal wallets use spending password
+    }
   } else {
     // PIN and Pattern require setup
     emit('setup-unlock-method', method);
@@ -578,9 +629,9 @@ async function saveUnlockMethod(method: UnlockMethod) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving unlock method:', error);
-    errorMessage.value = error.message || t('security.unlockMethodUpdateFailed');
+    errorMessage.value = error['message'] || t('security.unlockMethodUpdateFailed');
   } finally {
     loading.value = false;
   }
@@ -606,9 +657,9 @@ async function handleAutoLockSelect(minutes: number) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving auto-lock setting:', error);
-    errorMessage.value = error.message || t('security.autoLockUpdateFailed');
+    errorMessage.value = error['message'] || t('security.autoLockUpdateFailed');
   } finally {
     loading.value = false;
   }
@@ -644,11 +695,11 @@ async function handlePassKeyUnlockChange(enabled: boolean) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey unlock setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyForUnlock.value = !enabled;
@@ -676,21 +727,16 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
       const credentialConfig = await configTable.where({ key: 'webAuthnCredentialId' }).first();
 
       if (existingEncryptedPassword?.value && credentialConfig?.value) {
-        // Encrypted password exists - verify it's still valid by attempting decryption
+        // Encrypted password exists - verify it's still valid by attempting PRF decryption
         // This requires WebAuthn authentication, ensuring the user has device access
-        const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
+        const { decryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
 
-        debugLog('🔐 Verifying existing PassKey encrypted password...');
-
-        // Authenticate with WebAuthn first
-        const authenticated = await authenticateWebAuthn(credentialConfig.value);
-        if (!authenticated) {
-          throw new Error(t('security.passKeyAuthFailed'));
-        }
+        debugLog('🔐 Verifying existing PassKey encrypted password with PRF...');
 
         // Try to decrypt to verify the encrypted password is still valid
+        // PRF decryption includes authentication automatically
         try {
-          await decryptSpendingPasswordForPassKey(
+          await decryptSpendingPasswordWithPrf(
             existingEncryptedPassword.value,
             credentialConfig.value,
             wallet.id
@@ -714,32 +760,52 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
         // Password is already verified at this point
         // Get or register WebAuthn credential
         let credentialId: string;
+        let prfEnabled = false;
 
         if (!credentialConfig || !credentialConfig.value) {
-          // No credential exists - register a new one for PassKey autofill
-          debugLog('🔐 Registering WebAuthn credential for PassKey password autofill');
-          credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+          // No credential exists - register a new one for PassKey autofill with PRF
+          debugLog('🔐 Registering WebAuthn credential with PRF for PassKey password autofill');
+          const { credentialId: newCredentialId, prfEnabled: isPrfEnabled } = await registerWebAuthnCredential(
+            wallet.id,
+            wallet.name || 'Wallet'
+          );
+          credentialId = newCredentialId;
+          prfEnabled = isPrfEnabled;
+
+          // Check if PRF is enabled
+          if (!prfEnabled) {
+            throw new Error(t('security.passKeyPrfNotSupported'));
+          }
 
           // Store credential ID in database
           await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
-          debugLog('✅ WebAuthn credential registered');
+          debugLog('✅ WebAuthn credential registered with PRF enabled');
         } else {
           // Use existing credential
           credentialId = credentialConfig.value;
-          debugLog('🔐 Using existing WebAuthn credential for PassKey password autofill');
+          debugLog('🔐 Using existing WebAuthn credential for PRF encryption');
         }
 
-        // Encrypt password for PassKey storage
-        const { encryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
-        const encryptedPassword = await encryptSpendingPasswordForPassKey(password, credentialId, wallet.id);
+        // Encrypt password for PassKey storage using PRF
+        // This will authenticate the user and verify PRF support in one step
+        const { encryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
+        try {
+          const encryptedPassword = await encryptSpendingPasswordWithPrf(password, credentialId, wallet.id);
 
-        // Store encrypted password in database
-        await configTable.put({
-          key: 'passKeyEncryptedSpendingPassword',
-          value: encryptedPassword
-        });
+          // Store encrypted password in database
+          await configTable.put({
+            key: 'passKeyEncryptedSpendingPassword',
+            value: encryptedPassword
+          });
 
-        debugLog('✅ Spending password encrypted and stored for PassKey autofill');
+          debugLog('✅ Spending password encrypted and stored for PassKey autofill');
+        } catch (prfError: unknown) {
+          // If PRF fails, show user-friendly error
+          if (prfError['message']?.includes('PRF evaluation failed')) {
+            throw new Error(t('security.passKeyLegacyDetected'));
+          }
+          throw prfError;
+        }
       }
     } else {
       // When disabling, keep the encrypted password for potential re-enabling
@@ -757,11 +823,11 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey autofill setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyForPasswordAutofill.value = !enabled;
@@ -797,11 +863,11 @@ async function handlePassKeyAutoTriggerChange() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey auto-trigger setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyAutoTrigger.value = !enabled;
@@ -824,9 +890,14 @@ async function handlePassKeyRegister() {
     const db = await getDb(wallet.id);
     const configTable = db.table('config');
 
-    // Register WebAuthn credential
-    debugLog('🔐 Registering WebAuthn credential...');
-    const credentialId = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+    // Register WebAuthn credential with PRF
+    debugLog('🔐 Registering WebAuthn credential with PRF support...');
+    const { credentialId, prfEnabled } = await registerWebAuthnCredential(wallet.id, wallet.name || 'Wallet');
+
+    // Check if PRF is enabled
+    if (!prfEnabled) {
+      throw new Error(t('security.passKeyPrfNotSupported'));
+    }
 
     // Store credential ID in database
     await configTable.put({ key: 'webAuthnCredentialId', value: credentialId });
@@ -839,9 +910,9 @@ async function handlePassKeyRegister() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error registering PassKey:', error);
-    snackbar.setError(error.message || t('security.passKeyRegistrationFailed'));
+    snackbar.setError(error['message'] || t('security.passKeyRegistrationFailed'));
   } finally {
     loadingPassKeyRegistration.value = false;
   }
@@ -884,9 +955,9 @@ async function handlePassKeyDeregister() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deregistering PassKey:', error);
-    snackbar.setError(error.message || t('security.passKeyDeregistrationFailed'));
+    snackbar.setError(error['message'] || t('security.passKeyDeregistrationFailed'));
   } finally {
     loadingPassKeyRegistration.value = false;
   }
@@ -919,11 +990,11 @@ async function handlePassKeyAutoTriggerUnlockChange() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey auto-trigger unlock setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyAutoTriggerUnlock.value = !enabled;
@@ -932,7 +1003,7 @@ async function handlePassKeyAutoTriggerUnlockChange() {
 
 /**
  * Prompt user for spending password with a dialog
- * @returns Promise<string | null> - Password or null if cancelled
+ * @returns Promise<string | null> - Password or null if canceled
  */
 async function promptForSpendingPassword(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -985,11 +1056,11 @@ async function confirmPassword() {
     passwordResolve(passwordInput.value);
     passwordResolve = null;
     showPasswordDialog.value = false;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error verifying password:', error);
 
     // Show error tooltip
-    passwordErrorTooltipText.value = error.message || t('common.error');
+    passwordErrorTooltipText.value = error['message'] || t('common.error');
     passwordErrorTooltipColor.value = 'red';
     passwordErrorTooltipEnabled.value = true;
 

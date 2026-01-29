@@ -312,7 +312,7 @@ const isSwapEnabled = computed(() => {
 });
 
 // Empty state computed
-const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === 0);
+const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === '0');
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
   // Access config directly from the reactive store for better reactivity
@@ -342,9 +342,9 @@ const computedValues = computed(() => {
 
   // Fallback for chains without portfolio API support (like Apex)
   if (account.value) {
-    if (account.value.controlled_amount && account.value.controlled_amount > 0) {
+    if (account.value.controlled_amount && Number(account.value.controlled_amount) > 0) {
       // Handle native tokens: 'lovelace' for Cardano, empty string '' for Apex
-      assetsValue += account.value.controlled_amount / 1000000; // Convert to main unit (ADA/APEX)
+      assetsValue += Number(account.value.controlled_amount) / 1000000; // Convert to main unit (ADA/APEX)
     }
     // Add other asset values if they have USD/ADA pricing data
   }
@@ -507,7 +507,7 @@ const resumeApexCarousel = () => {
   apexCarouselPaused.value = false;
 };
 
-const handleCarouselClick = (item: any) => {
+const handleCarouselClick = (item: CarouselItem) => {
   switch (item.action) {
     case 'showUpdateInfo':
       showUpdateInfo();

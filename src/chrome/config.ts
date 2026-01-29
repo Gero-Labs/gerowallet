@@ -75,6 +75,7 @@ export const POPUP = {
   dappSignData: 'dapp-sign',
   login: 'plogin',
   warning:'warning',
+  passKeyAuth: 'passkey-auth',
 };
 
 export const POPUP_WINDOW = {

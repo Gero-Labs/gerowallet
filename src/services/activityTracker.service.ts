@@ -12,7 +12,6 @@
 
 import { getDb } from '@/db/wallet-db';
 import { walletStore } from '@/stores/walletStore';
-import { debugLog } from '@/utils/debug';
 
 class ActivityTrackerService {
   private isTracking = false;
@@ -27,11 +26,9 @@ class ActivityTrackerService {
    */
   public start(): void {
     if (this.isTracking) {
-      debugLog('⏱️ Activity tracker already running');
       return;
     }
 
-    debugLog('⏱️ Starting activity tracker');
     this.isTracking = true;
     this.updateLastActivity(); // Update immediately on start
 
@@ -59,7 +56,6 @@ class ActivityTrackerService {
       return;
     }
 
-    debugLog('⏱️ Stopping activity tracker');
     this.isTracking = false;
 
     // Remove event listeners
@@ -111,12 +107,10 @@ class ActivityTrackerService {
 
     if (document.hidden) {
       // Tab is hidden - stop periodic updates
-      debugLog('⏱️ Tab hidden, stopping visibility-based updates');
       this.stopVisibilityUpdates();
     } else {
       // Tab is visible - check if wallet should be locked immediately
       // (in case the lock time passed while tab was closed)
-      debugLog('⏱️ Tab visible, checking auto-lock status');
       this.checkAutoLockImmediate();
 
       // Then start periodic updates and update activity timestamp
@@ -155,12 +149,9 @@ class ActivityTrackerService {
     // Update periodically while tab is visible
     this.visibilityIntervalId = window.setInterval(() => {
       if (!document.hidden && this.isTracking) {
-        debugLog('⏱️ Updating activity (tab visible)');
         this.updateLastActivity();
       }
     }, this.VISIBILITY_UPDATE_INTERVAL);
-
-    debugLog(`⏱️ Started visibility-based updates (every ${this.VISIBILITY_UPDATE_INTERVAL / 1000}s)`);
   }
 
   /**
@@ -170,7 +161,6 @@ class ActivityTrackerService {
     if (this.visibilityIntervalId) {
       clearInterval(this.visibilityIntervalId);
       this.visibilityIntervalId = null;
-      debugLog('⏱️ Stopped visibility-based updates');
     }
   }
 
@@ -181,7 +171,6 @@ class ActivityTrackerService {
     try {
       const wallet = walletStore.loggedWallet;
       if (!wallet) {
-        debugLog('⏱️ No wallet logged in, skipping activity update');
         return;
       }
 
@@ -192,7 +181,6 @@ class ActivityTrackerService {
       const configTable = db.table('config');
 
       await configTable.put({ key: 'lastActivityTimestamp', value: now });
-      debugLog(`⏱️ Updated lastActivityTimestamp: ${new Date(now).toISOString()}`);
     } catch (error) {
       console.error('❌ Failed to update activity timestamp:', error);
     }

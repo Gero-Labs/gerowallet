@@ -40,43 +40,62 @@
             <h4><strong>{{ filters.toCurrency(Number(withdrawals)+Number(depositFee)-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
-            <!-- Show success state when transaction is signed -->
-            <v-alert
-              v-if="isSubmit"
-              type="success"
-              dense
-              border="left"
-              colored-border
-              class="mb-0"
-              style="width: 100%;"
-            >
-              <span>{{ $t('staking.transactionSigned') }}</span>
-            </v-alert>
-            <!-- Password input (hidden after signing) -->
-            <PassKeyPasswordField
-              ref="passwordField"
-              v-if="loggedWallet?.type === WalletType.Normal && !isSubmit"
-              :value="spendingPassword"
-              @input="spendingPassword = $event"
-              outlined
-              dense
-              hide-details
-              :label="t('wallet.spendingPassword')"
-              :rules="passwordRules"
-              :disabled="loading"
-              required
+            <!-- Transaction Authentication Section -->
+            <TransactionAuthSection
+              :wallet-type="loggedWallet?.type"
+              :is-prf-wallet="isPrfWallet"
+              :is-signed="isSubmit"
+              :loading="loading"
+              :password="spendingPassword"
+              @update:password="spendingPassword = $event"
+              :password-label="t('wallet.spendingPassword')"
+              :password-rules="passwordRules"
+              :submit-text="$t('staking.submitTransaction')"
+              submit-color="error"
+              :submit-elevation="0"
+              :submit-outlined="true"
+              :show-bt-toggle="isBTSupported"
+              :is-b-t="isBT"
+              @update:isBT="isBT = $event"
+              :usb-text="t('staking.usb')"
+              :bluetooth-text="t('staking.bluetooth')"
+              @passkey-success="handlePassKeyAuthSuccess"
+              @passkey-error="handlePassKeyAuthError"
+              @autofill-success="handlePassKeySuccess"
+              @autofill-error="handlePassKeyError"
+              @submit="signUnStakeTx"
               @enter="signUnStakeTx"
-              @passkey-autofill-success="handlePassKeySuccess"
-              @passkey-autofill-error="handlePassKeyError"
-              style="width: 295px; max-width: 295px"
+              @password-field-ref="setPasswordFieldRef"
+              button-style="width: 295px; max-width: 295px"
             />
-            <div v-else-if="isBTSupported" class="py-0" style="align-content: center;">
-              <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch :text-left="t('staking.usb')" icon-left="mdi-usb" :text-right="t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
-              </v-card-subtitle>
-            </div>
-            <v-btn color="error" outlined elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              {{ isSubmit ? $t('staking.submitTransaction') : $t('staking.signAndUnstake') }}
+            <!-- Hide action button for PRF wallets (handled above), show for password/hardware wallets -->
+            <v-btn
+              v-if="!isPrfWallet && isSubmit"
+              color="error"
+              outlined
+              elevation="0"
+              @click="signUnStakeTx"
+              height="40"
+              :disabled="loading || !valid"
+              :loading="loading"
+              class="mx-2"
+              style="margin-bottom: 1px"
+            >
+              {{ $t('staking.submitTransaction') }}
+            </v-btn>
+            <v-btn
+              v-else-if="!isPrfWallet && !isSubmit"
+              color="error"
+              outlined
+              elevation="0"
+              @click="signUnStakeTx"
+              height="40"
+              :disabled="loading || !valid"
+              :loading="loading"
+              class="mx-2"
+              style="margin-bottom: 1px"
+            >
+              {{ $t('staking.signAndUnstake') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -100,12 +119,11 @@ import { useTransactionSigning } from '@/shared/composables/useTransactionSignin
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
-import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
-import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -138,10 +156,14 @@ const {
   isBT,
   valid,
   passwordRules,
+  isPrfWallet,
+  isBTSupported,
   handleSign,
   resetState,
   handlePassKeySuccess,
   handlePassKeyError,
+  handlePassKeyAuthSuccess,
+  handlePassKeyAuthError,
   setPasswordFieldRef,
   // Keystone state and methods
   overlay,
@@ -157,7 +179,6 @@ const {
 });
 
 const form = ref<any>(null);
-const passwordField = ref<any>(null);
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
@@ -192,28 +213,12 @@ const signUnStakeTx = async () => {
   await handleSign(form.value || undefined);
 };
 
-const isBTSupported = computed(() => {
-  return (loggedWallet.value?.type === WalletType.Ledger || loggedWallet.value?.type === WalletType.Trezor) &&
-    !isSubmit &&
-    loggedWallet.value?.btSupported;
-});
-
 watch(() => props.isOpen, (val) => {
   if (val) {
     resetState();
     if (form.value) {
       form.value.resetValidation();
     }
-  }
-});
-
-watch(spendingPassword, () => {
-  passwordRules.value = [rules.required()];
-});
-
-watch(passwordField, (newVal) => {
-  if (newVal) {
-    setPasswordFieldRef(newVal);
   }
 });
 </script>

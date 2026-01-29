@@ -70,9 +70,34 @@
     </v-card-text>
     <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <div class="" v-if="currentStep === 3">
+        <!-- PRF Wallet: PassKey Button or Submit Button -->
+        <div v-if="loggedWallet?.type === WalletType.Normal && isPrfWallet">
+          <!-- Before signing: PassKey button -->
+          <PassKeyAuthButton
+            v-if="!txWitnesses"
+            :disabled="txSubmitLoading"
+            @success="handlePassKeyAuthSuccess"
+            @error="handlePassKeyAuthError"
+            style="width: 295px"
+            class="mb-2"
+          />
+          <!-- After signing: Submit button -->
+          <v-btn
+            v-else
+            class="continue-button"
+            @click="nextStep"
+            :disabled="txSubmitLoading"
+            :loading="txSubmitLoading"
+            style="width: 295px"
+          >
+            {{ $t('common.confirm') }}
+          </v-btn>
+        </div>
+
+        <!-- Password Wallet: Password Field -->
         <PassKeyPasswordField
           ref="passwordField"
-          v-if="loggedWallet?.type === WalletType.Normal"
+          v-else-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet"
           :value="spendingPassword"
           @input="spendingPassword = $event"
           outlined
@@ -87,6 +112,8 @@
           style="width: 295px"
           class="mb-2"
         />
+
+        <!-- Hardware Wallets: USB/Bluetooth Toggle -->
         <div v-else-if="loggedWallet?.btSupported" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
             <ToggleSwitch :text-left="t('dashboard.usb')" icon-left="mdi-usb" :text-right="t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
@@ -103,7 +130,9 @@
         >
           <v-icon small class="mr-1">mdi-arrow-left</v-icon>Back
         </v-btn>
+        <!-- Hide action button for PRF wallets on step 3 (handled above) -->
         <v-btn
+          v-if="currentStep !== 3 || !isPrfWallet"
           class="continue-button"
           @click="nextStep"
           :disabled="!isValid || txSubmitLoading"
@@ -125,6 +154,7 @@ import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import networks from '@/utils/networks';
@@ -168,6 +198,7 @@ const sendData = ref<any>({
 const txValid = ref<boolean>(false);
 const spendingPassword = ref<string>('');
 const passwordField = ref<any>(null);
+const privateKeyBytes = ref<Uint8Array | null>(null); // For PRF wallet authentication
 const steps = ref<any[]>([
   {
     name: 'recipientDetails',
@@ -199,6 +230,11 @@ const keystoneUseHash = ref(false);
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
+});
+
+const isPrfWallet = computed(() => {
+  return loggedWallet.value?.encryptionMethod === 'prf' ||
+         (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
 });
 
 const tokens = computed(() => {
@@ -246,6 +282,11 @@ const isValid = computed(() => {
   }
   if (currentStep.value === 3) {
     if (loggedWallet.value?.type === WalletType.Normal) {
+      // PRF wallet: Check for authenticated privateKeyBytes
+      if (isPrfWallet.value) {
+        return !!privateKeyBytes.value;
+      }
+      // Password wallet: Check for password
       return !!spendingPassword.value;
     } else {
       return true
@@ -260,6 +301,7 @@ const resetData = () => {
   isInit.value = false
   overlay.value = false
   spendingPassword.value = ''
+  privateKeyBytes.value = null // Clear PRF authentication
   currentStep.value = 1;
   txSubmitLoading.value = false
   tx.value = undefined
@@ -334,23 +376,46 @@ const handlePassKeyError = (error: string) => {
   snackbar.setError(error || t('security.passKeyAuthFailed'));
 }
 
+const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+  privateKeyBytes.value = pkBytes;
+  // Automatically proceed to sign after successful authentication
+  setTimeout(() => {
+    nextStep();
+  }, 300);
+}
+
+const handlePassKeyAuthError = (error: Error) => {
+  console.error('PassKey authentication error:', error);
+  snackbar.setError(error.message || t('security.passKeyAuthFailed'));
+  privateKeyBytes.value = null;
+}
+
 const signTx = async (): Promise<boolean> => {
   txSubmitLoading.value = true;
   try {
     // Serialize the Cardano.Tx to CBOR for Chrome messaging
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
+
+    // Prepare signing data
+    const signingData: any = {
+      txCbor: txCbor.value,
+      partialSign: false,
+      password: spendingPassword.value,
+      accountIndex: 0,
+      utxos: utxos.value,
+      addresses: keys.value,
+      mergeWitnesses: false,
+    };
+
+    // For PRF wallets, pass the already-decrypted privateKeyBytes
+    if (isPrfWallet.value && privateKeyBytes.value) {
+      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
+    }
+
     // Sign the transaction via a background message
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
-      data: {
-        txCbor: txCbor.value,
-        partialSign: false,
-        password: spendingPassword.value,
-        accountIndex: 0,
-        utxos: utxos.value,
-        addresses: keys.value,
-        mergeWitnesses: false,
-      }
+      data: signingData
     }) as { data: { witnesses?: any; error?: string } };
     if (witnessResult.data.error) {
       throw new Error(witnessResult.data.error);
@@ -482,22 +547,40 @@ const signTrezorTx = async () => {
 
 async function signAndSubmitTx() {
   if (loggedWallet.value?.type === WalletType.Normal) {
-    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: spendingPassword.value }
-    }) as BackgroundResponse<VerifyPasswordResponse>;
+    // PRF Wallet: Use privateKeyBytes from PassKey authentication
+    if (isPrfWallet.value) {
+      if (!privateKeyBytes.value) {
+        snackbar.setError(t('security.passKeyAuthRequired'));
+        return;
+      }
+      // privateKeyBytes already authenticated, proceed with signing
+      const isValid: boolean = await signTx();
+      if (!isValid) {
+        return;
+      }
+      // Submit if txAutoSubmit is enabled
+      if (txAutoSubmit.value) {
+        await submitTx();
+      }
+    } else {
+      // Password Wallet: Verify password first
+      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+        data: { password: spendingPassword.value }
+      }) as BackgroundResponse<VerifyPasswordResponse>;
 
-    if (!passwordVerification.data.success) {
-      passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
-      return;
-    }
-    const isValid: boolean = await signTx();
-    if (!isValid) {
-      return;
-    }
-    // Submit if txAutoSubmit is enabled
-    if (txAutoSubmit.value) {
-      await submitTx();
+      if (!passwordVerification.data.success) {
+        passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
+        return;
+      }
+      const isValid: boolean = await signTx();
+      if (!isValid) {
+        return;
+      }
+      // Submit if txAutoSubmit is enabled
+      if (txAutoSubmit.value) {
+        await submitTx();
+      }
     }
   } else if (loggedWallet.value?.type === WalletType.Keystone) {
     // Keystone Hardware Wallet Signing
