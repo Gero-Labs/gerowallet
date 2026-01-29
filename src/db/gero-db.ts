@@ -217,7 +217,6 @@ export async function createNewWallet(
     // ============================================================================
     // PRF ENCRYPTION MODE (NEW WALLETS)
     // ============================================================================
-    console.log('🔐 PRF Encryption Branch Entered');
 
     if (!options?.credentialId) {
       throw new Error('Credential ID is required for PRF encryption');
@@ -241,69 +240,62 @@ export async function createNewWallet(
     // Step 2: Evaluate PRF (only if not provided - avoids second PassKey prompt)
     let prfOutput: ArrayBuffer;
     if (options.prfOutput) {
-      console.log('✅ Using provided PRF output from registration (no additional prompt)');
       prfOutput = options.prfOutput;
     } else {
-      console.log('🔐 Evaluating PRF for wallet encryption (requires PassKey prompt)');
       prfOutput = await evaluatePrfForWallet(options.credentialId, newWalletId.toString());
     }
 
-    // Step 3: Encrypt private key using PRF output (no additional prompt)
-    const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
-      rootKey.bytes(),
-      options.credentialId,
-      newWalletId.toString(),
-      prfOutput // Pass PRF output to avoid re-evaluation
-    );
+    try {
+      // Step 3: Encrypt private key using PRF output (no additional prompt)
+      const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
+        rootKey.bytes(),
+        options.credentialId,
+        newWalletId.toString(),
+        prfOutput // Pass PRF output to avoid re-evaluation
+      );
 
-    // Step 4: Optionally encrypt mnemonic using same PRF output (no additional prompt)
-    // Default to true unless explicitly disabled
-    const shouldBackupMnemonic = options.backupMnemonic !== false;
-    const prfEncryptedMnemonic = shouldBackupMnemonic
-      ? await encryptMnemonicWithPrf(mnemonic, options.credentialId, newWalletId.toString(), prfOutput)
-      : undefined;
+      // Step 4: Optionally encrypt mnemonic using same PRF output (no additional prompt)
+      // Default to true unless explicitly disabled
+      const shouldBackupMnemonic = options.backupMnemonic !== false;
+      const prfEncryptedMnemonic = shouldBackupMnemonic
+        ? await encryptMnemonicWithPrf(mnemonic, options.credentialId, newWalletId.toString(), prfOutput)
+        : undefined;
 
-    // Step 4: Optionally hash spending password if password unlock is enabled
-    const prfSpendingPassword = options.passwordUnlockEnabled
-      ? await hashSpendingPassword(password)
-      : undefined;
+      // Step 4: Optionally hash spending password if password unlock is enabled
+      const prfSpendingPassword = options.passwordUnlockEnabled
+        ? await hashSpendingPassword(password)
+        : undefined;
 
-    // Step 5: Insert wallet with pre-allocated ID
-    // IndexedDB allows specifying the ID directly
-    const walletData = {
-      id: newWalletId,
-      name,
-      icon,
-      type: WalletType.Normal,
-      theme,
-      order,
-      publicKey,
-      passwordLastUpdate: new Date(),
-      chain,
-      network,
-      // PRF encryption fields (Version 14+)
-      encryptionMethod: 'prf',
-      prfEncryptedPrivateKey,
-      prfEncryptedMnemonic,
-      webAuthnCredentialId: options.credentialId,
-      prfSpendingPassword
-    };
+      // Step 5: Insert wallet with pre-allocated ID
+      // IndexedDB allows specifying the ID directly
+      const walletData = {
+        id: newWalletId,
+        name,
+        icon,
+        type: WalletType.Normal,
+        theme,
+        order,
+        publicKey,
+        passwordLastUpdate: new Date(),
+        chain,
+        network,
+        // PRF encryption fields (Version 14+)
+        encryptionMethod: 'prf',
+        prfEncryptedPrivateKey,
+        prfEncryptedMnemonic,
+        webAuthnCredentialId: options.credentialId,
+        prfSpendingPassword
+      };
 
-    console.log('💾 Adding PRF wallet to database with fields:', {
-      id: newWalletId,
-      encryptionMethod: walletData.encryptionMethod,
-      hasPrfEncryptedPrivateKey: !!walletData.prfEncryptedPrivateKey,
-      hasPrfEncryptedMnemonic: !!walletData.prfEncryptedMnemonic,
-      hasWebAuthnCredentialId: !!walletData.webAuthnCredentialId,
-      hasPrfSpendingPassword: !!walletData.prfSpendingPassword
-    });
+      await db['wallets'].add(walletData);
 
-    await db['wallets'].add(walletData);
-
-    console.log('✅ PRF wallet added to database successfully');
-
-    await createNewWalletDb(newWalletId, !!prfEncryptedMnemonic, isRestore);
-    return newWalletId;
+      await createNewWalletDb(newWalletId, !!prfEncryptedMnemonic, isRestore);
+      return newWalletId;
+    } finally {
+      if (prfOutput) {
+        new Uint8Array(prfOutput).fill(0);
+      }
+    }
 
   } else {
     // ============================================================================
@@ -345,7 +337,7 @@ export async function createNewWallet(
   }
 }
 
-export async function createNewHardwareWallet(wallet: any) {
+export async function createNewHardwareWallet(wallet) {
   // Validate xfp format before creating wallet (for Keystone wallets)
   if (wallet.xfp) {
     if (!/^[0-9a-fA-F]{8}$/.test(wallet.xfp)) {
@@ -478,7 +470,7 @@ export async function updatePrivateKeyAndMnemonic(
   encryptedMnemonic?: string | null
 ): Promise<void> {
   const db: Dexie = await getDb();
-  const updateData: any = {
+  const updateData: { encryptedPrivateKey?: string, encryptedMnemonic?: string, passwordLastUpdate: Date } = {
     encryptedPrivateKey,
     passwordLastUpdate: new Date()
   };

@@ -449,7 +449,7 @@ export async function encryptPrivateKeyWithPrf(
       additionalData: new TextEncoder().encode(credentialId)
     },
     encryptionKey,
-    privateKeyBytes
+    privateKeyBytes as Uint8Array<ArrayBuffer>
   );
 
   // Format: iv (12B) + ciphertext

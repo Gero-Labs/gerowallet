@@ -58,7 +58,7 @@ const createCryptoKeypath = (pathStr: string, xfp: string): CryptoKeypath => {
   return new CryptoKeypath(components, sourceFingerprint);
 };
 
-export const getKeystonePublicKeyUR = (accPurpose = purpose.hdwallet, accIndex = 0): any => {
+export const getKeystonePublicKeyUR = (accPurpose = purpose.hdwallet, accIndex = 0): Options => {
   const ur: UR = sdk.generateKeyDerivationCall({ schemas: [ { path: `m/${accPurpose}'/1815'/${accIndex}'`, curve: Curve.ed25519, algo: DerivationAlgorithm.bip32ed25519 } ], origin: 'gerowallet' })
   return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190)
 }
@@ -76,7 +76,7 @@ export const parseSignature = (ur: UR): CardanoSignature => {
  * @param addressPath - Derivation path for the signing address
  * @returns Object with UR for QR code generation, builder to reuse when parsing response, and addressBytes
  */
-export const createKeystoneDataSignRequest = (address: string, payloadHex: string, xfp: string, xpub: string, addressPath: string): { ur: UR; builder: any; addressBytes: Uint8Array } => {
+export const createKeystoneDataSignRequest = (address: string, payloadHex: string, xfp: string, xpub: string, addressPath: string): { ur: UR; builder; addressBytes: Uint8Array } => {
   // Decode address to get raw bytes - handle both hex and bech32 formats
   let addressBytes: Uint8Array;
   if (address.startsWith('addr') || address.startsWith('stake')) {
@@ -111,7 +111,7 @@ export const createKeystoneDataSignRequest = (address: string, payloadHex: strin
  * @param addressBytes - The address bytes (for COSE_Key construction)
  * @returns Object with COSE_Sign1 signature and COSE_Key in hex format
  */
-export const parseDataSignature = (ur: UR, builder: any, addressBytes: Uint8Array): { signature: string; key: string } => {
+export const parseDataSignature = (ur: UR, builder, addressBytes: Uint8Array): { signature: string; key: string } => {
   const keystoneSign: CardanoSignDataSignature = sdk.cardano.parseSignDataSignature(ur);
 
   // Build COSE_Sign1 using the builder with Keystone's raw signature (frees builder internally)
