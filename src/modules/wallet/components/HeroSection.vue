@@ -4,191 +4,44 @@
     <v-card flat class="transparent">
       <v-row>
         <v-col cols="12" md="6" class="py-0" style="align-content: center; justify-items: center">
-          <div class="card-carousel">
-            <v-window v-model="currentCardIndex" :show-arrows="cardsWithOrderSlot.length > 1" continuous>
-              <v-window-item
-                v-for="(card, index) in cardsWithOrderSlot"
-                :key="card.cardData?.card_uuid || card.cardData?.order_uuid || `empty-${index}`"
-                style="height: 280px"
-              >
-                <div
-                  class="credit-card"
-                  @mousemove="handleCardMouseMove"
-                  @mouseleave="handleCardMouseLeave"
-                  @click="currentCardHasUUID && (showManageCardConfirmationModal = true)"
-                  :style="cardTiltStyle"
-                >
-                  <!-- Shine effect -->
-                  <div class="card-shine" :style="cardShineStyle"></div>
-
-                  <!-- Card Number -->
-                  <p class="card-number">
-                    {{ getFormattedCardNumber(card) }}
-                  </p>
-
-                  <!-- Card Bottom Info -->
-                  <div class="card-bottom" style="max-width: 310px">
-                    <div class="card-holder">
-                      <p class="label">{{ t('card.cardholderName') }}</p>
-                      <p class="value">{{ card.cardData.card_holder_name || t('card.geroWallet') }}</p>
-                    </div>
-                    <div class="card-cvv">
-                      <p class="label">{{ t('card.cvv') }}</p>
-                      <p class="value">
-                        {{ showCardDetails && card.cardDetails?.cvc2 ? card.cardDetails.cvc2 : '***' }}
-                      </p>
-                    </div>
-                    <div class="card-expiry">
-                      <p class="label">{{ t('card.exp') }}</p>
-                      <p class="value">{{ formatExpiryDate(card) }}</p>
-                    </div>
-                  </div>
-                </div>
-              </v-window-item>
-            </v-window>
-            <!-- Status Chip under the card -->
-            <div class="card-status-chip-container">
-              <v-chip v-if="currentCardHasUUID" class="card-status-chip active-chip" small>
-                <v-icon small left>mdi-check-circle</v-icon>
-                {{ t('card.active') }}
-              </v-chip>
-              <v-chip
-                v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id"
-                class="card-status-chip pending-chip"
-                small
-              >
-                <v-icon small left>mdi-clock-outline</v-icon>
-                {{ t('card.pending') }}
-              </v-chip>
-            </div>
-          </div>
+          <CardCarousel
+            :cards="cardsWithOrderSlot"
+            :current-card-index="currentCardIndex"
+            :current-card-status="currentCardStatus"
+            :current-card-has-u-u-i-d="currentCardHasUUID"
+            :show-card-details="showCardDetails"
+            @update:current-card-index="cardStoreModule.setCurrentCardIndex($event)"
+            @card-click="handleCardClick"
+          />
         </v-col>
-
-        <!-- Order Card Section - Show when ready to order -->
-        <v-col cols="12" md="6" class="py-0 card-status-column" style="align-content: center; justify-items: center">
-          <div class="balance-section" v-if="currentCardHasUUID">
-            <div class="balance-container">
-              <p class="balance-label">{{ t('card.totalBalance') }}</p>
-              <p class="balance-amount">
-                {{
-                  cards[currentCardIndex]?.cardBalance?.currentBalance?.amount
-                    ? formatCurrency(cards[currentCardIndex].cardBalance.currentBalance.amount)
-                    : '€0.00'
-                }}
-              </p>
-              <p class="balance-conversion">
-                ≈ {{ formatADA(cards[currentCardIndex]?.cardBalance?.currentBalance?.amount || 0) }} ADA
-              </p>
-
-              <!-- Action Buttons -->
-              <div class="balance-actions">
-                <v-btn class="action-btn top-up-btn" variant="outlined" @click="handleTopUp">
-                  <img src="@/modules/wallet/icons/currency-euro.svg" :alt="t('card.topUp')" class="btn-icon" />
-                  {{ t('card.topUp') }}
-                </v-btn>
-<!--                <v-btn-->
-<!--                  class="action-btn order-physical-btn"-->
-<!--                  variant="outlined"-->
-<!--                  @click="showOrderPhysicalCardModal = true"-->
-<!--                >-->
-<!--                  <v-icon left>mdi-credit-card-outline</v-icon>-->
-<!--                  {{ t('card.orderPhysicalCard') }}-->
-<!--                </v-btn>-->
-                <v-btn
-                  class="action-btn eye-btn"
-                  variant="outlined"
-                  @click="showCardDetails ? (showCardDetails = false) : (showConfirmationModal = true)"
-                >
-                  <v-icon>{{ showCardDetails ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
-                </v-btn>
-              </div>
-            </div>
-          </div>
-          <!-- Waiting Status Card - Show when order is in progress -->
-          <v-card
-            v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id"
-            outlined
-            class="waiting-status-card mt-6"
-          >
-            <div class="status-card-gradient"></div>
-            <v-card-text class="status-card-content">
-              <div class="status-icon-wrapper">
-                <v-icon class="status-icon">mdi-credit-card-clock-outline</v-icon>
-              </div>
-              <div class="status-text-wrapper">
-                <div class="status-title-wrapper">
-                  <p class="status-title">
-                    {{ currentCardType === 'physical' ? t('card.physicalCardOrderInProgress') : t('card.virtualCardOrderInProgress') }}
-                  </p>
-                </div>
-                <p class="status-subtitle">
-                  <template v-if="currentOrderNeedsPayment">
-                    {{ t('card.physicalCardPaymentRequired') }} <br />
-                    {{ t('card.completePaymentToProceed') }}
-                  </template>
-                  <template v-else>
-                    {{ t('card.cardOrderProcessing') }} <br />
-                    {{ t('card.processingTime') }}
-                  </template>
-                </p>
-                <!-- Payment Button - Show if order needs payment (physical cards only) -->
-                <v-btn
-                  v-if="currentOrderNeedsPayment"
-                  class="complete-payment-btn mt-4"
-                  @click="openPaymentModal"
-                  :loading="loadingOrderDetails"
-                >
-                  <v-icon left>mdi-credit-card-outline</v-icon>
-                  {{ t('card.completePayment') }}
-                </v-btn>
-              </div>
-            </v-card-text>
-          </v-card>
-          <div v-else class="order-card-section mt-10">
-            <h2 class="order-title">{{ t('card.getYourGeroCard') }}</h2>
-            <p class="order-description">{{ t('card.spendCryptoAnywhere') }}</p>
-
-            <!-- Promo and Button Row -->
-            <div class="promo-button-row">
-              <!-- Promo Section -->
-              <div class="promo-section">
-                <p
-                  class="promo-title"
-                  @click="showPromotionModal = true"
-                  @keydown.enter="showPromotionModal = true"
-                  @keydown.space.prevent="showPromotionModal = true"
-                  role="button"
-                  tabindex="0"
-                  aria-label="View promotional details and fee information"
-                >
-                  <span class="clickable-text">{{ t('card.enjoyZeroFeesUntil') }}</span>
-                  <v-icon small class="info-icon">mdi-information-outline</v-icon>
-                </p>
-                <div class="promo-features">
-                  <div class="promo-item">
-                    <v-icon class="promo-icon">mdi-check-circle</v-icon>
-                    <span class="promo-text">{{ t('card.zeroMonthlyFees') }}</span>
-                  </div>
-                  <div class="promo-item">
-                    <v-icon class="promo-icon">mdi-check-circle</v-icon>
-                    <span class="promo-text">{{ t('card.zeroAdaEurFees') }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Button -->
-              <v-btn
-                class="order-card-btn"
-                large
-                :loading="orderingCard"
-                @click="showOrderCardFlowModal = true"
-              >
-                <v-icon left>mdi-credit-card-plus</v-icon>
-                {{ t('card.orderNewCard') }}
-              </v-btn>
-            </div>
-          </div>
-        </v-col>
+        <CardStatusSection
+          :cards="cards"
+          :current-card-index="currentCardIndex"
+          :cards-with-order-slot="cardsWithOrderSlot"
+          :current-card-has-u-u-i-d="currentCardHasUUID"
+          :current-card-type="currentCardType"
+          :current-card-status="currentCardStatus"
+          :current-order-needs-payment="currentOrderNeedsPayment"
+          :is-current-card-rejected="isCurrentCardRejected"
+          :should-show-order-card-section="shouldShowOrderCardSection"
+          :show-order-timer="showOrderTimer"
+          :timer-display="timerDisplay"
+          :loading-order-details="loadingOrderDetails"
+          :ordering-card="orderingCard"
+          :rejection-acknowledged="rejectionAcknowledged"
+          :show-card-details="showCardDetails"
+          :exchange-rate="exchangeRate"
+          :payment-transaction-found="paymentTransactionFound"
+          :payment-details-cache="paymentDetailsCache"
+          @top-up="handleTopUp"
+          @toggle-card-visibility="showCardDetails ? (showCardDetails = false) : (showConfirmationModal = true)"
+          @order-new-card-after-rejection="handleOrderNewCardAfterRejection"
+          @complete-payment="openPaymentModal"
+          @open-order-card-flow="handleOpenOrderCardFlow"
+          @show-promotion-modal="showPromotionModal = true"
+          @update:rejection-acknowledged="rejectionAcknowledged = $event"
+          @update:timer-display="timerDisplay = $event"
+        />
       </v-row>
     </v-card>
 
@@ -240,13 +93,15 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import PromotionModal from './PromotionModal.vue';
 import OrderPhysicalCardModal from './dashboard/OrderPhysicalCardModal.vue';
 import OrderCardFlowModal from './dashboard/OrderCardFlowModal.vue';
 import PayOrderModal from './dashboard/PayOrderModal.vue';
+import CardCarousel from './dashboard/CardCarousel.vue';
+import CardStatusSection from './dashboard/CardStatusSection.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
@@ -254,9 +109,10 @@ import { CardInfo } from '@/models/card';
 
 const { t } = useTranslation();
 
-const currentCardIndex = ref(0);
-const cardTiltStyle = ref<any>({});
-const cardShineStyle = ref<any>({});
+const currentCardIndex = computed({
+  get: () => cardStoreModule.state.currentCardIndex,
+  set: (value) => cardStoreModule.setCurrentCardIndex(value),
+});
 const showCardDetails = ref(false);
 const showManageCardModal = ref(false);
 const showTopUpModal = ref(false);
@@ -271,6 +127,24 @@ const orderingCard = ref(false);
 const loadingOrderDetails = ref(false);
 const pendingOrderUuid = ref<string | null>(null);
 const hiddenOrderUuids = ref<string[]>([]);
+const orderStatuses = ref<Record<string, string>>({});
+const timerDisplay = ref('');
+const rejectionAcknowledged = ref(false);
+const paymentDetailsCache = ref<Record<string, { expires_at?: string; status?: string }>>({});
+const paymentTransactionFound = ref<Record<string, boolean>>({});
+let timerInterval: ReturnType<typeof setInterval> | null = null;
+
+// Constants
+const TIMER_UPDATE_INTERVAL_MS = 1000;
+const ORDER_CHECK_INTERVAL_MS = 30000;
+
+// Type definitions
+interface CardDeliveryData {
+  delivery?: {
+    payment_status?: string;
+    expires_at?: string;
+  };
+}
 const emptyCard: CardInfo = {
   cardData: {
     id: null,
@@ -312,23 +186,39 @@ const emptyCard: CardInfo = {
   totalDeposits: 0,
   activities: [],
 };
-// Get cards from the real card store
 const cards = computed(() => {
   return cardStoreModule.state.cards || [];
 });
 
+
 const hasVirtualCard = computed(() => {
   return cards.value.some(card =>
     card.cardData?.own_type === 'virtual' &&
-    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+    card.cardData?.card_uuid
   );
 });
 
+const isCardRejectedOrExpired = (card: CardInfo): boolean => {
+  const status = card.cardData?.status;
+  return status === 'rejected' || status === 'REJECTED' || status === 'expired';
+};
+
 const hasPhysicalCard = computed(() => {
-  return cards.value.some(card =>
-    card.cardData?.own_type === 'physical' &&
-    (card.cardData?.card_uuid || card.cardData?.order_uuid)
-  );
+  return cards.value.some(card => {
+    if (card.cardData?.own_type !== 'physical') {
+      return false;
+    }
+    
+    if (isCardRejectedOrExpired(card)) {
+      return false;
+    }
+    
+    if (card.cardData?.card_uuid) {
+      return true;
+    }
+    
+    return false;
+  });
 });
 
 const canOrderNewCard = computed(() => {
@@ -336,14 +226,139 @@ const canOrderNewCard = computed(() => {
 });
 
 const cardsWithOrderSlot = computed(() => {
-  if (cards.value.length === 0) {
+  const filteredCards: CardInfo[] = [];
+  const seenIds = new Set<string>();
+  
+  const getCardUniqueId = (card: CardInfo): string | null => {
+    if (card.cardData?.card_uuid) {
+      return `card_${card.cardData.card_uuid}`;
+    }
+    if (card.cardData?.order_uuid) {
+      return `order_${card.cardData.order_uuid}`;
+    }
+    if (card.cardData?.id) {
+      return `id_${card.cardData.id}`;
+    }
+    return null;
+  };
+  
+  const virtualCards = cards.value.filter(card => {
+    return card.cardData?.own_type === 'virtual' && 
+    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+  });
+  const physicalCards = cards.value.filter(card => {
+    if (card.cardData?.own_type !== 'physical') {
+      return false;
+    }
+    
+    const status = card.cardData?.status;
+    if (status === 'rejected' || status === 'REJECTED') {
+      return false;
+    }
+    
+    if (card.cardData?.card_uuid) {
+      return true;
+    }
+    
+    if (card.cardData?.order_uuid && !card.cardData?.card_uuid) {
+      const paymentDetails = paymentDetailsCache.value[card.cardData.order_uuid];
+      if (paymentDetails) {
+        if (paymentDetails.status === 'rejected') {
+          return false;
+        }
+      }
+      
+      const delivery = (card.cardData as CardDeliveryData)?.delivery;
+      if (delivery) {
+        const paymentStatus = delivery.payment_status?.toLowerCase();
+        if (paymentStatus === 'failed' || paymentStatus === 'expired') {
+          return false;
+        }
+      }
+      
+      return true;
+    }
+    
+    return false;
+  });
+  if (virtualCards.length > 0) {
+    const activeVirtual = virtualCards.find(card => card.cardData?.card_uuid);
+    const cardToAdd = activeVirtual || virtualCards[0];
+    const uniqueId = getCardUniqueId(cardToAdd);
+    
+    if (uniqueId && !seenIds.has(uniqueId)) {
+      filteredCards.push(cardToAdd);
+      seenIds.add(uniqueId);
+    }
+  }
+  
+  if (physicalCards.length > 0) {
+    const activePhysical = physicalCards.find(card => card.cardData?.card_uuid);
+    const pendingPhysical = physicalCards.filter(card => !card.cardData?.card_uuid && card.cardData?.order_uuid);
+    
+    if (activePhysical) {
+      const uniqueId = getCardUniqueId(activePhysical);
+      if (uniqueId && !seenIds.has(uniqueId)) {
+        filteredCards.push(activePhysical);
+        seenIds.add(uniqueId);
+      }
+    }
+    
+    for (const pendingCard of pendingPhysical) {
+      const uniqueId = getCardUniqueId(pendingCard);
+      if (uniqueId && !seenIds.has(uniqueId)) {
+        filteredCards.push(pendingCard);
+        seenIds.add(uniqueId);
+      }
+    }
+  }
+  
+  const hasPendingCards = filteredCards.some(card => 
+    card.cardData?.order_uuid && !card.cardData?.card_uuid
+  );
+  
+  if (filteredCards.length === 0) {
     return [emptyCard];
-  } else if (canOrderNewCard.value) {
-    return [...cards.value, emptyCard];
+  } else if (canOrderNewCard.value && !hasPendingCards) {
+    return [...filteredCards, emptyCard];
   } else {
-    return cards.value;
+    return filteredCards;
   }
 });
+
+watch(
+  () => cardStoreModule.state.cards,
+  (newCards) => {
+    for (const storeCard of newCards) {
+      if (storeCard.cardData.card_uuid && storeCard.cardBalance) {
+        const cardInSlot = cardsWithOrderSlot.value.find(
+          c => c.cardData.card_uuid === storeCard.cardData.card_uuid
+        );
+        if (cardInSlot) {
+          cardInSlot.cardBalance = storeCard.cardBalance;
+        }
+      }
+    }
+  },
+  { deep: true, immediate: true }
+);
+
+watch(
+  () => cardStoreModule.state.cards,
+  () => {
+    if (currentCardIndex.value >= 0 && cardsWithOrderSlot.value[currentCardIndex.value]?.cardData?.card_uuid) {
+      const cardUuid = cardsWithOrderSlot.value[currentCardIndex.value].cardData.card_uuid;
+      const cardInStore = cards.value.find(c => c.cardData.card_uuid === cardUuid);
+      if (cardInStore && cardInStore.cardBalance) {
+        const cardInSlot = cardsWithOrderSlot.value[currentCardIndex.value];
+        if (cardInSlot && cardInSlot.cardData.card_uuid === cardUuid) {
+          cardInSlot.cardBalance = cardInStore.cardBalance;
+        }
+      }
+    }
+  },
+  { deep: true, immediate: true }
+);
 
 const handleOrderCard = async () => {
   try {
@@ -352,35 +367,29 @@ const handleOrderCard = async () => {
     await cardStoreModule.orderCard();
     await cardStoreModule.fetchCardData();
 
-    // Show success message
     snackbar.fireSuccess(t('card.cardOrderedSuccess'));
   } catch (error: any) {
     let errorReason: string;
 
-    // Check if error.response.data is a string (direct error message)
     if (typeof error?.response?.data === 'string' && error.response.data) {
       errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
-    }
-    // Otherwise check for object-based error formats
-    else {
+    } else {
       errorReason =
         t('card.failedToOrderCard') +
         ' ' +
-        (error?.response?.data?.error?.message || // Laravel-style error object
-          error?.response?.data?.error || // Direct error string in error field
-          error?.response?.data?.reason || // Custom reason field
-          error?.response?.data?.message || // Standard message field
-          error?.message || // Axios error message
-          t('card.pleaseTryAgain')); // Fallback
+        (error?.response?.data?.error?.message ||
+          error?.response?.data?.error ||
+          error?.response?.data?.reason ||
+          error?.response?.data?.message ||
+          error?.message ||
+          t('card.pleaseTryAgain'));
     }
 
-    // Show error message with reason
     snackbar.setError(errorReason);
   } finally {
     orderingCard.value = false;
   }
 };
-// Get exchange rate from store (fallback to mock rate if not available)
 const exchangeRate = computed(() => {
   return cardStoreModule.state.exchangeRate?.sell ? parseFloat(cardStoreModule.state.exchangeRate.sell) : 0.35;
 });
@@ -389,50 +398,314 @@ const currentCardHasUUID = computed(() => {
   return cardsWithOrderSlot.value[currentCardIndex.value]?.cardData.card_uuid !== null;
 });
 
-// Check if current order needs payment (physical card with order_uuid but no card_uuid)
 const currentOrderNeedsPayment = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
-  return (
+  if (!currentCard) return false;
+  return !!(
     currentCard?.cardData?.id &&
     currentCard?.cardData?.order_uuid &&
     !currentCard?.cardData?.card_uuid &&
-    currentCard?.cardData?.own_type === 'physical' // Only physical cards need payment
+    currentCard?.cardData?.own_type === 'physical'
   );
 });
 
-// Get current card type
 const currentCardType = computed(() => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   return currentCard?.cardData?.own_type || 'virtual';
 });
 
-// Watch for selected card changes and update current index
+const currentCardStatus = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.order_uuid) return null;
+  
+  const orderUuid = currentCard.cardData.order_uuid;
+  const status = orderStatuses.value[orderUuid];
+  
+  if (status) return status;
+  
+  const paymentDetails = paymentDetailsCache.value[orderUuid];
+  if (paymentDetails?.status) {
+    return paymentDetails.status;
+  }
+  
+  if (!currentCard.cardData.card_uuid) {
+    return 'pending';
+  }
+  
+  return null;
+});
+
+const isCurrentCardRejected = computed(() => {
+  const status = currentCardStatus.value;
+  return status === 'rejected' || status === 'REJECTED';
+});
+
+const isCurrentCardPending = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  return !!(currentCard?.cardData?.order_uuid && !currentCard?.cardData?.card_uuid);
+});
+
+const isCurrentCardEmpty = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  return !currentCard?.cardData?.id && !currentCard?.cardData?.card_uuid && !currentCard?.cardData?.order_uuid;
+});
+
+const shouldShowOrderCardSection = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  
+  if (!currentCard) return false;
+  
+  if (isCurrentCardEmpty.value) return true;
+  
+  if (hasVirtualCard.value && hasPhysicalCard.value) return false;
+  if (currentCardHasUUID.value) return false;
+  if (isCurrentCardPending.value) return false;
+  
+  return true;
+});
+
+const showOrderTimer = computed(() => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.id || currentCard?.cardData?.card_uuid) return false;
+  if (currentCard?.cardData?.own_type !== 'physical') return false;
+  if (!currentCard?.cardData?.order_uuid) return false;
+  
+  if (isCurrentCardRejected.value) return false;
+  
+  const orderUuid = currentCard.cardData.order_uuid;
+  const paymentDetails = paymentDetailsCache.value[orderUuid];
+  if (!paymentDetails) return false;
+  
+  if (paymentDetails.status === 'expired') return false;
+  if (paymentDetails.status !== 'pending' && paymentDetails.status !== 'completed') return false;
+  
+  if (!paymentDetails.expires_at) return false;
+  
+  const expiresAt = new Date(paymentDetails.expires_at);
+  const now = new Date();
+  if (now >= expiresAt) {
+    return false;
+  }
+  
+  return true;
+});
+
+
+
+const updateTimer = () => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.order_uuid || !showOrderTimer.value) {
+    timerDisplay.value = '';
+    return;
+  }
+  
+  const orderUuid = currentCard.cardData.order_uuid;
+  const paymentDetails = paymentDetailsCache.value[orderUuid];
+  if (!paymentDetails?.expires_at) {
+    timerDisplay.value = '';
+    return;
+  }
+  
+  const expiresAt = new Date(paymentDetails.expires_at);
+  const now = new Date();
+  const remaining = expiresAt.getTime() - now.getTime();
+  
+  if (remaining <= 0) {
+    timerDisplay.value = '';
+    return;
+  }
+  
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  timerDisplay.value = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
 watch(
   () => cardStoreModule.state.selectedCardId,
   newCardId => {
-    if (newCardId && cards.value.length > 0) {
-      const index = cards.value.findIndex(c => c.cardData.card_uuid === newCardId);
-      if (index >= 0) {
+    if (newCardId && cardsWithOrderSlot.value.length > 0) {
+      const index = cardsWithOrderSlot.value.findIndex(c => c.cardData.card_uuid === newCardId);
+      if (index >= 0 && index !== currentCardIndex.value) {
         currentCardIndex.value = index;
+      }
+    } else if (!newCardId && cardsWithOrderSlot.value.length > 0) {
+      const emptyIndex = cardsWithOrderSlot.value.findIndex(
+        c => !c.cardData?.id && !c.cardData?.card_uuid && !c.cardData?.order_uuid
+      );
+      if (emptyIndex >= 0 && emptyIndex !== currentCardIndex.value) {
+        currentCardIndex.value = emptyIndex;
       }
     }
   },
   { immediate: true }
 );
 
-// Update selected card when carousel index changes
-watch(currentCardIndex, newIndex => {
+watch(
+  () => cardsWithOrderSlot.value.length,
+  (newLength) => {
+    if (currentCardIndex.value >= newLength) {
+      currentCardIndex.value = Math.max(0, newLength - 1);
+    }
+  }
+);
+
+const checkCurrentCardStatus = async () => {
+  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+  if (!currentCard?.cardData?.order_uuid || currentCard?.cardData?.card_uuid) {
+    return;
+  }
+  
+  if (hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
+    return;
+  }
+  
+  try {
+    const orderDetails = await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
+    
+    if (orderDetails?.status) {
+      orderStatuses.value = {
+        ...orderStatuses.value,
+        [currentCard.cardData.order_uuid]: orderDetails.status,
+      };
+    }
+    
+    if (orderDetails?.card_uuid && !currentCard.cardData.card_uuid) {
+      await cardStoreModule.fetchCardData();
+      return;
+    }
+    
+    if (currentCard.cardData?.own_type === 'virtual') {
+      return;
+    }
+    
+    const paymentDetails = await cardStoreModule.getDeliveryPayment(currentCard.cardData.order_uuid);
+    
+    if (paymentDetails) {
+      if (paymentDetails.status === 'rejected') {
+        orderStatuses.value = {
+          ...orderStatuses.value,
+          [currentCard.cardData.order_uuid]: 'rejected',
+        };
+      } else if (paymentDetails.status === 'expired') {
+        orderStatuses.value = {
+          ...orderStatuses.value,
+          [currentCard.cardData.order_uuid]: 'expired',
+        };
+      }
+      
+      if (paymentDetails.expires_at && paymentDetails.status === 'pending') {
+        const expiresAt = new Date(paymentDetails.expires_at);
+        const now = new Date();
+        if (now >= expiresAt) {
+          paymentDetails.status = 'expired';
+          orderStatuses.value = {
+            ...orderStatuses.value,
+            [currentCard.cardData.order_uuid]: 'expired',
+          };
+        }
+      }
+      
+      let transactionFound = false;
+      if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
+        transactionFound = cardStoreModule.checkDepositPayment(
+          paymentDetails.deposit_address,
+          String(paymentDetails.amount_ada)
+        );
+        paymentTransactionFound.value = {
+          ...paymentTransactionFound.value,
+          [currentCard.cardData.order_uuid]: transactionFound,
+        };
+      }
+      
+      paymentDetailsCache.value = {
+        ...paymentDetailsCache.value,
+        [currentCard.cardData.order_uuid]: {
+          expires_at: paymentDetails.expires_at,
+          status: paymentDetails.status,
+        },
+      };
+      
+      updateTimer();
+    }
+    
+  } catch (error) {
+  }
+};
+
+watch(currentCardIndex, async (newIndex, oldIndex) => {
+  if (newIndex === oldIndex) return;
+  
   const card = cardsWithOrderSlot.value[newIndex];
-  if (card && card.cardData.card_uuid) {
-    // Valid card with UUID - select it and fetch its data
+  
+  if (!card) return;
+  
+  const isEmpty = !card.cardData?.id && !card.cardData?.card_uuid && !card.cardData?.order_uuid;
+  
+  if (isEmpty) {
+    cardStoreModule.selectCard(null);
+    return;
+  }
+  
+  if (card.cardData.card_uuid) {
     cardStoreModule.selectCard(card.cardData.card_uuid);
+    try {
+      await cardStoreModule.fetchCardBalance(card.cardData.card_uuid);
+      const updatedCard = cards.value.find(c => c.cardData.card_uuid === card.cardData.card_uuid);
+      if (updatedCard && updatedCard.cardBalance) {
+        const cardInSlot = cardsWithOrderSlot.value[newIndex];
+        if (cardInSlot && cardInSlot.cardData.card_uuid === card.cardData.card_uuid) {
+          cardInSlot.cardBalance = updatedCard.cardBalance;
+        }
+      }
+    } catch (error) {
+      // Silent error handling
+    }
+  } else if (card.cardData.order_uuid) {
+    cardStoreModule.selectCard(null);
+    await checkCurrentCardStatus();
   } else {
-    // Empty card slot (order card) or pending card without UUID - clear selection
     cardStoreModule.selectCard(null);
   }
+  
+  updateTimer();
+  rejectionAcknowledged.value = false;
 });
 
-// Card visibility toggle
+const handleOrderNewCardAfterRejection = () => {
+  if (rejectionAcknowledged.value) {
+    showOrderCardFlowModal.value = true;
+    rejectionAcknowledged.value = false;
+  }
+};
+
+watch(showOrderTimer, (shouldShow) => {
+  if (shouldShow) {
+    updateTimer();
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    timerInterval = setInterval(updateTimer, TIMER_UPDATE_INTERVAL_MS);
+  } else {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    timerDisplay.value = '';
+  }
+}, { immediate: true });
+
+watch(
+  () => {
+    const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+    if (!currentCard?.cardData?.order_uuid) return null;
+    return paymentDetailsCache.value[currentCard.cardData.order_uuid];
+  },
+  () => {
+    updateTimer();
+  },
+  { deep: true }
+);
+
 const toggleCardVisibility = async () => {
   try {
     await cardStoreModule.fetchCardDetails(cardStoreModule.state.selectedCardId);
@@ -442,31 +715,24 @@ const toggleCardVisibility = async () => {
   }
 };
 
-// Top up handler
 const handleTopUp = () => {
   showTopUpModal.value = true;
 };
 
-// Payment handler
-const openPaymentModal = async () => {
+const openPaymentModal = () => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
-  if (currentCard?.cardData?.order_uuid) {
-    try {
-      loadingOrderDetails.value = true;
-      await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
-
-      pendingOrderUuid.value = currentCard.cardData.order_uuid;
-      showPayOrderModal.value = true;
-    } catch (error) {
-      snackbar.setError(t('card.failedToLoadOrderDetails'));
-
-      if (currentCard.cardData.order_uuid && !hiddenOrderUuids.value.includes(currentCard.cardData.order_uuid)) {
-        hiddenOrderUuids.value.push(currentCard.cardData.order_uuid);
-      }
-    } finally {
-      loadingOrderDetails.value = false;
-    }
+  if (!currentCard?.cardData?.order_uuid) return;
+  
+  if (currentCardStatus.value === 'expired') {
+    showOrderCardFlowModal.value = true;
+  } else {
+    pendingOrderUuid.value = currentCard.cardData.order_uuid;
+    showPayOrderModal.value = true;
   }
+};
+
+const handleOpenOrderCardFlow = () => {
+  showOrderCardFlowModal.value = true;
 };
 
 const handleManageCardClose = async () => {
@@ -503,7 +769,6 @@ const handlePaymentSuccess = async () => {
   checkPendingOrders();
 };
 
-// Check order status for pending cards
 const checkPendingOrders = async () => {
   const pendingCards = cards.value.filter(
     card =>
@@ -516,17 +781,60 @@ const checkPendingOrders = async () => {
   for (const card of pendingCards) {
     try {
       loadingOrderDetails.value = true;
+      
       const orderDetails = await cardStoreModule.getOrderDetails(card.cardData.order_uuid);
-
-      if (orderDetails.card_uuid) {
-        await cardStoreModule.fetchCardData();
-
-        if (card.cardData.order_uuid && hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
-          const index = hiddenOrderUuids.value.indexOf(card.cardData.order_uuid);
-          hiddenOrderUuids.value.splice(index, 1);
-        }
-        break;
+      
+      if (orderDetails?.status) {
+        orderStatuses.value[card.cardData.order_uuid] = orderDetails.status;
       }
+      
+      if (orderDetails?.card_uuid && !card.cardData.card_uuid) {
+        await cardStoreModule.fetchCardData();
+        continue;
+      }
+      
+      if (card.cardData?.own_type === 'virtual') {
+        continue;
+      }
+      
+      const paymentDetails = await cardStoreModule.getDeliveryPayment(card.cardData.order_uuid);
+      
+      if (paymentDetails) {
+        if (paymentDetails.status === 'rejected') {
+          orderStatuses.value[card.cardData.order_uuid] = 'rejected';
+          continue;
+        } else if (paymentDetails.status === 'expired') {
+          orderStatuses.value[card.cardData.order_uuid] = 'expired';
+        }
+        
+        if (paymentDetails.expires_at && paymentDetails.status === 'pending') {
+          const expiresAt = new Date(paymentDetails.expires_at);
+          const now = new Date();
+          if (now >= expiresAt) {
+            paymentDetails.status = 'expired';
+            orderStatuses.value[card.cardData.order_uuid] = 'expired';
+          }
+        }
+        
+        let transactionFound = false;
+        if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
+          transactionFound = cardStoreModule.checkDepositPayment(
+            paymentDetails.deposit_address,
+            String(paymentDetails.amount_ada)
+          );
+          paymentTransactionFound.value[card.cardData.order_uuid] = transactionFound;
+        }
+        
+        paymentDetailsCache.value[card.cardData.order_uuid] = {
+          expires_at: paymentDetails.expires_at,
+          status: paymentDetails.status,
+        };
+        
+        if (card.cardData.order_uuid === cardsWithOrderSlot.value[currentCardIndex.value]?.cardData?.order_uuid) {
+          updateTimer();
+        }
+      }
+      
     } catch (error) {
       if (card.cardData.order_uuid && !hiddenOrderUuids.value.includes(card.cardData.order_uuid)) {
         hiddenOrderUuids.value.push(card.cardData.order_uuid);
@@ -537,14 +845,12 @@ const checkPendingOrders = async () => {
   }
 };
 
-// Check pending orders on mount and periodically
 let orderCheckInterval: ReturnType<typeof setInterval> | null = null;
 const hasCheckedPendingOrders = ref(false);
 
 const startOrderChecking = () => {
-  if (orderCheckInterval) return; // Already checking
+  if (orderCheckInterval) return;
 
-  // Check every 30 seconds if there are pending orders
   orderCheckInterval = setInterval(() => {
     if (cards.value.some(card => card.cardData?.order_uuid && !card.cardData?.card_uuid)) {
       checkPendingOrders();
@@ -554,7 +860,7 @@ const startOrderChecking = () => {
         orderCheckInterval = null;
       }
     }
-  }, 30000);
+  }, ORDER_CHECK_INTERVAL_MS);
 };
 
 // Watch for cards changes to check pending orders
@@ -578,7 +884,9 @@ watch(
 
       if (hasPendingOrders) {
         hasCheckedPendingOrders.value = true;
-        checkPendingOrders();
+        checkPendingOrders().then(() => {
+          updateTimer();
+        });
         startOrderChecking();
       }
     }
@@ -586,121 +894,27 @@ watch(
   { immediate: true, deep: true }
 );
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   if (orderCheckInterval) {
     clearInterval(orderCheckInterval);
     orderCheckInterval = null;
   }
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
 });
 
-// 3D Card tilt effect with shine and dynamic glow
-const handleCardMouseMove = (event: MouseEvent) => {
-  const card = event.currentTarget as HTMLElement;
-  const rect = card.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-
-  const rotateX = (y - centerY) / 20;
-  const rotateY = (centerX - x) / 20;
-
-  // Calculate shine position based on mouse
-  const percentX = (x / rect.width) * 100;
-  const percentY = (y / rect.height) * 100;
-
-  // Calculate glow offset based on tilt
-  const glowOffsetX = rotateY * 2; // Horizontal shift
-  const glowOffsetY = -rotateX * 2; // Vertical shift (inverted)
-
-  cardTiltStyle.value = {
-    transform: `scale(0.7) perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(5px)`,
-    transition: 'transform 0.1s ease-out',
-    boxShadow: `
-      0 10px 30px rgba(0, 0, 0, 0.3),
-      ${glowOffsetX}px ${glowOffsetY}px 120px rgba(0, 200, 200, 0.12),
-      ${glowOffsetX * 0.5}px ${glowOffsetY * 0.5}px 60px rgba(0, 200, 200, 0.08)
-    `,
-  };
-
-  cardShineStyle.value = {
-    background: `
-      radial-gradient(circle at ${percentX}% ${percentY}%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
-      linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%, rgba(255, 255, 255, 0.02) 100%)
-    `,
-    opacity: 1,
-  };
-};
-
-const handleCardMouseLeave = () => {
-  cardTiltStyle.value = {
-    transform: 'scale(0.7) perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)',
-    transition: 'transform 0.3s ease-out',
-    boxShadow: `
-      0 10px 30px rgba(0, 0, 0, 0.3),
-      0 0 120px rgba(0, 200, 200, 0.12),
-      0 0 60px rgba(0, 200, 200, 0.08)
-    `,
-  };
-
-  cardShineStyle.value = {
-    opacity: 0,
-    transition: 'opacity 0.3s ease-out',
-  };
-};
-
-// Formatting helpers
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 2,
-  }).format(amount);
-};
-
-const getFormattedCardNumber = (card: CardInfo) => {
-  const pan = card.cardDetails?.pan;
-
-  if (!pan || !showCardDetails.value) return '**** **** **** ****';
-
-  // Show full number with spacing: 1234 5678 9012 3456
-  return pan.match(/.{1,4}/g)?.join(' ') || pan;
-};
-
-const formatExpiryDate = (card: CardInfo) => {
-  // Only show expiry when card details are visible
-  if (!showCardDetails.value) {
-    return '**/**';
+const handleCardClick = (card: CardInfo) => {
+  const isEmpty = !card.cardData?.id && !card.cardData?.card_uuid && !card.cardData?.order_uuid;
+  
+  if (isEmpty) {
+    handleOpenOrderCardFlow();
+  } else if (currentCardHasUUID.value) {
+    showManageCardConfirmationModal.value = true;
   }
-
-  // Try to get expiry from card details first (format: "YYYY-MM")
-  const apiExpiry = card.cardDetails?.expiryDate;
-
-  if (apiExpiry) {
-    // Parse "2028-10" to "10/28"
-    const [year, month] = apiExpiry.split('-');
-    const shortYear = year.slice(-2);
-    return `${month}/${shortYear}`;
-  }
-
-  // Fallback to creation date + 4 years
-  if (card.cardData?.created_at) {
-    const date = new Date(card.cardData.created_at);
-    date.setFullYear(date.getFullYear() + 4);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = String(date.getFullYear()).slice(-2);
-    return `${month}/${year}`;
-  }
-
-  return '**/**';
 };
 
-const formatADA = (eurAmount: number) => {
-  // Use real exchange rate from store (sell rate = EUR -> ADA conversion)
-  const adaAmount = eurAmount / exchangeRate.value;
-  return adaAmount.toFixed(2);
-};
 </script>
 
 <style lang="scss" scoped>
@@ -714,12 +928,6 @@ const formatADA = (eurAmount: number) => {
   align-content: center;
 }
 
-.card-status-column {
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
 // Card Layout (side by side)
 .card-layout {
@@ -729,272 +937,7 @@ const formatADA = (eurAmount: number) => {
   width: 100%;
 }
 
-.card-carousel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-}
 
-// Card Status Chip Container
-.card-status-chip-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  margin-top: -8px;
-  min-height: 28px; // Reserve space for badge even when empty
-  height: 28px; // Fixed height to prevent wiggling
-}
-
-// Card Status Chips
-.card-status-chip {
-  font-size: 0.75rem !important;
-  font-weight: $font-weight-semibold;
-  height: 28px !important;
-  padding: 0 12px !important;
-  border-radius: 14px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-
-  &.active-chip {
-    background: linear-gradient(135deg, rgba(0, 199, 243, 0.2) 0%, rgba(0, 199, 243, 0.15) 100%) !important;
-    border: 1px solid rgba(0, 199, 243, 0.4) !important;
-    color: $primary-cyan !important;
-
-    .v-icon {
-      color: $primary-cyan !important;
-    }
-  }
-
-  &.pending-chip {
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 152, 0, 0.15) 100%) !important;
-    border: 1px solid rgba(255, 152, 0, 0.4) !important;
-    color: #ff9800 !important;
-
-    .v-icon {
-      color: #ff9800 !important;
-    }
-  }
-
-  &.inactive-chip {
-    background: linear-gradient(135deg, rgba(158, 158, 158, 0.2) 0%, rgba(158, 158, 158, 0.15) 100%) !important;
-    border: 1px solid rgba(158, 158, 158, 0.4) !important;
-    color: #9e9e9e !important;
-
-    .v-icon {
-      color: #9e9e9e !important;
-    }
-  }
-}
-
-// Credit Card Styling
-.credit-card {
-  width: 35rem;
-  aspect-ratio: 345 / 222;
-  max-width: 90%;
-  margin: 0 auto;
-  background-image: url('@/assets/front_card_no_mcx2.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  border-radius: 1rem;
-  padding: 2rem;
-  color: white;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 120px rgba(0, 200, 200, 0.12), 0 0 60px rgba(0, 200, 200, 0.08);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  cursor: pointer;
-  transform-style: preserve-3d;
-  transform: scale(0.7);
-  overflow: hidden;
-}
-
-.card-shine {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 1rem;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.1s ease-out;
-  z-index: 1;
-}
-
-.card-number {
-  font-family: 'Courier New', monospace;
-  font-size: 1.5rem;
-  letter-spacing: 0.25rem;
-  margin-top: auto;
-  margin-bottom: 1rem;
-  font-weight: 500;
-  position: relative;
-  z-index: 2;
-}
-
-.card-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 1rem;
-  position: relative;
-  z-index: 2;
-
-  .card-holder,
-  .card-cvv,
-  .card-expiry {
-    .label {
-      font-size: 0.625rem;
-      letter-spacing: 0.1rem;
-      opacity: 0.8;
-      margin: 0 0 0.25rem 0;
-      font-weight: 500;
-    }
-
-    .value {
-      font-size: 0.875rem;
-      font-weight: 600;
-      margin: 0;
-      letter-spacing: 0.05rem;
-    }
-  }
-
-  .card-holder {
-    flex: 1;
-  }
-
-  .card-cvv {
-    margin-right: 0.5rem;
-  }
-}
-
-// Balance Section
-.balance-section {
-  justify-self: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  flex-shrink: 0;
-  min-width: 300px;
-
-  .balance-container {
-    align-self: center;
-    text-align: center;
-  }
-
-  .balance-label {
-    justify-self: center;
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    font-weight: $font-weight-medium;
-    color: $text-secondary;
-    margin: 0 0 0.5rem 0;
-    text-transform: uppercase;
-    letter-spacing: 0.05rem;
-  }
-
-  .balance-amount {
-    justify-self: center;
-    font-family: $font-family-primary;
-    font-size: $font-size-3xl;
-    font-weight: $font-weight-bold;
-    color: $text-primary;
-    margin: 0 0 0.5rem 0;
-  }
-
-  .balance-conversion {
-    justify-self: center;
-    font-family: $font-family-primary;
-    font-size: $font-size-base;
-    font-weight: $font-weight-medium;
-    color: $text-muted;
-    margin: 0 0 $spacing-lg 0;
-  }
-
-  .balance-actions {
-    display: flex;
-    gap: $spacing-md;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .action-btn {
-    font-family: $font-family-primary;
-    font-weight: $font-weight-semibold;
-    text-transform: none;
-    border-radius: $border-radius-md;
-    box-shadow: $shadow-button;
-
-    &.top-up-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 16px;
-      background: $background-card;
-      color: $text-primary;
-      border: 1px solid $primary-cyan !important;
-
-      &:hover {
-        background: lighten($background-card, 5%);
-      }
-
-      &:focus {
-        outline: none;
-      }
-
-      .btn-icon {
-        width: 20px;
-        height: 20px;
-        flex-shrink: 0;
-        margin-right: 6px;
-      }
-    }
-
-    &.order-physical-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 16px;
-      background: $background-card;
-      color: $text-primary;
-      border: 1px solid $primary-cyan !important;
-
-      &:hover {
-        background: lighten($background-card, 5%);
-      }
-
-      &:focus {
-        outline: none;
-      }
-
-      :deep(.v-icon) {
-        margin-right: 6px;
-      }
-    }
-
-    &.eye-btn {
-      background: $background-card;
-      border: 1px solid $primary-cyan !important;
-      color: $text-primary;
-
-      &:hover {
-        background: lighten($background-card, 5%);
-      }
-
-      &:focus {
-        outline: none;
-      }
-    }
-  }
-}
 
 .no-cards {
   @include flex-center;
@@ -1016,169 +959,6 @@ const formatADA = (eurAmount: number) => {
   }
 }
 
-// Order Card Section
-.order-card-section {
-  max-width: 600px;
-  width: 100%;
-  min-height: 180px;
-  margin: 0 auto;
-  text-align: center;
-  padding: 24px;
-  background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  position: relative;
-  overflow: hidden;
-  box-sizing: border-box;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(
-      90deg,
-      rgba(0, 199, 243, 0.8) 0%,
-      rgba(0, 255, 209, 0.8) 50%,
-      rgba(0, 199, 243, 0.8) 100%
-    );
-    background-size: 200% 100%;
-    animation: gradientShift 3s ease infinite;
-  }
-
-  .order-title {
-    font-family: $font-family-primary;
-    font-size: 1.5rem;
-    font-weight: $font-weight-bold;
-    color: $text-primary;
-    margin: 0 0 8px 0;
-    letter-spacing: 0.02em;
-    position: relative;
-    z-index: 1;
-  }
-
-  .order-description {
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    color: rgba($text-secondary, 0.9);
-    margin: 0 0 16px 0;
-    line-height: 1.6;
-    max-width: 500px;
-    margin-left: auto;
-    margin-right: auto;
-    position: relative;
-    z-index: 1;
-  }
-
-  .promo-button-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 32px;
-    margin-top: 24px;
-    position: relative;
-    z-index: 1;
-  }
-
-  .promo-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-
-    .promo-title {
-      font-family: $font-family-primary;
-      font-size: $font-size-base;
-      font-weight: $font-weight-semibold;
-      color: $text-primary;
-      text-align: center;
-      margin: 0 0 12px 0;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-
-      .clickable-text {
-        color: $primary-cyan;
-        border-bottom: 1px dotted $primary-cyan;
-        transition: all 0.2s ease;
-      }
-
-      &:hover {
-        .clickable-text {
-          color: lighten($primary-cyan, 10%);
-          border-bottom-color: lighten($primary-cyan, 10%);
-        }
-
-        .info-icon {
-          color: lighten($primary-cyan, 10%);
-        }
-      }
-
-      .info-icon {
-        color: $primary-cyan;
-        transition: all 0.2s ease;
-      }
-    }
-
-    .promo-features {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      align-items: flex-start;
-    }
-
-    .promo-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .promo-icon {
-      font-size: 16px;
-      color: rgba(0, 199, 243, 0.7);
-    }
-
-    .promo-text {
-      font-family: $font-family-primary;
-      font-size: $font-size-sm;
-      color: $text-secondary;
-    }
-  }
-
-  .order-card-btn {
-    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
-    color: #0c0e12 !important;
-    font-family: $font-family-primary;
-    font-size: $font-size-base;
-    font-weight: $font-weight-bold;
-    text-transform: none;
-    letter-spacing: 0.02em;
-    border-radius: 12px;
-    padding: 10px 24px !important;
-    height: auto !important;
-    min-height: 44px;
-    box-shadow: 0 4px 16px rgba(0, 199, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    transition: all 0.3s ease;
-    position: relative;
-    z-index: 1;
-
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 24px rgba(0, 199, 243, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-    }
-
-    &:active {
-      transform: translateY(0);
-    }
-
-    :deep(.v-icon) {
-      color: #0c0e12 !important;
-    }
-  }
-}
 
 @keyframes shimmer {
   0% {
@@ -1199,299 +979,5 @@ const formatADA = (eurAmount: number) => {
   color: $primary-cyan !important;
 }
 
-// Waiting Status Card - Enhanced Design
-.waiting-status-card {
-  max-width: 600px;
-  width: 100%;
-  margin: 0 auto;
-  position: relative;
-  background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
-  overflow: hidden;
-  box-sizing: border-box;
 
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: transparent;
-    pointer-events: none;
-  }
-
-  .status-card-gradient {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(
-      90deg,
-      rgba(0, 199, 243, 0.8) 0%,
-      rgba(0, 255, 209, 0.8) 50%,
-      rgba(0, 199, 243, 0.8) 100%
-    );
-    background-size: 200% 100%;
-    animation: gradientShift 3s ease infinite;
-  }
-
-  .status-card-content {
-    display: flex;
-    gap: 24px;
-    align-items: center;
-    padding: 32px 24px !important;
-    position: relative;
-    z-index: 1;
-    min-height: 132px;
-  }
-
-  .status-icon-wrapper {
-    position: relative;
-    flex-shrink: 0;
-    width: 56px;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, rgba(0, 199, 243, 0.15) 0%, rgba(0, 255, 209, 0.1) 100%);
-    border-radius: 12px;
-    border: 1px solid rgba(0, 199, 243, 0.2);
-
-    .status-spinner {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    }
-
-    .status-icon {
-      font-size: 28px !important;
-      color: $primary-cyan;
-      animation: pulse 2s ease-in-out infinite;
-    }
-  }
-
-  .status-text-wrapper {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .status-title-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-
-  .status-title {
-    font-family: $font-family-primary;
-    font-size: 1.5rem;
-    font-weight: $font-weight-bold;
-    color: $text-primary;
-    margin: 0 !important;
-    letter-spacing: 0.02em;
-  }
-
-  .status-subtitle {
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    color: rgba($text-secondary, 0.9);
-    line-height: 1.6;
-    margin: 0 !important;
-  }
-
-  .complete-payment-btn {
-    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
-    color: #0c0e12 !important;
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    font-weight: $font-weight-bold;
-    text-transform: none;
-    border-radius: 8px;
-    padding: 8px 20px !important;
-    height: auto !important;
-    min-height: 40px;
-    box-shadow: 0 4px 12px rgba(0, 199, 243, 0.3);
-    transition: all 0.3s ease;
-
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 18px rgba(0, 199, 243, 0.4);
-    }
-
-    &:active {
-      transform: translateY(0);
-    }
-
-    :deep(.v-icon) {
-      color: #0c0e12 !important;
-    }
-  }
-
-  .status-steps {
-    display: flex;
-    gap: 24px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-
-    .step {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex: 1;
-      min-width: 0;
-
-      .step-icon {
-        color: rgba($text-secondary, 0.4);
-        transition: color 0.3s ease;
-      }
-
-      .step-text {
-        font-family: $font-family-primary;
-        font-size: 0.8125rem;
-        font-weight: $font-weight-medium;
-        color: rgba($text-secondary, 0.5);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: color 0.3s ease;
-      }
-
-      &.completed {
-        .step-icon {
-          color: #4caf50;
-        }
-
-        .step-text {
-          color: rgba($text-secondary, 0.7);
-        }
-      }
-
-      &.active {
-        .step-icon {
-          color: $primary-cyan;
-          animation: pulse 2s ease-in-out infinite;
-        }
-
-        .step-text {
-          color: $primary-cyan;
-          font-weight: $font-weight-semibold;
-        }
-      }
-    }
-  }
-}
-
-@keyframes gradientShift {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(0.95);
-  }
-}
-
-@media (max-width: $breakpoint-md) {
-  .credit-card {
-    width: 30rem;
-  }
-
-  .order-card-section {
-    padding: 24px;
-
-    .order-title {
-      font-size: 1.5rem;
-    }
-
-    .order-description {
-      font-size: $font-size-sm;
-    }
-  }
-
-  .waiting-status-card {
-    .status-steps {
-      flex-direction: column;
-      gap: 12px;
-
-      .step {
-        justify-content: flex-start;
-      }
-    }
-  }
-}
-
-@media (max-width: 425px) {
-  .credit-card {
-    width: 28rem;
-  }
-
-  .order-card-section {
-    padding: 20px;
-
-    .order-title {
-      font-size: 1.25rem;
-    }
-
-    .order-description {
-      font-size: 0.875rem;
-      margin-bottom: 24px;
-    }
-
-    .order-card-btn {
-      width: 100%;
-    }
-  }
-
-  .waiting-status-card {
-    .status-card-content {
-      flex-direction: column;
-      gap: 16px;
-      padding: 20px !important;
-    }
-
-    .status-icon-wrapper {
-      width: 48px;
-      height: 48px;
-
-      .status-icon {
-        font-size: 24px !important;
-      }
-    }
-
-    .status-title {
-      font-size: 1rem;
-    }
-
-    .status-steps {
-      gap: 10px;
-
-      .step {
-        .step-text {
-          font-size: 0.75rem;
-        }
-      }
-    }
-  }
-}
 </style>

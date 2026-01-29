@@ -38,7 +38,9 @@
       "Bash(npm run build)",
       "Bash(curl:*)",
       "Bash(gh pr view:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

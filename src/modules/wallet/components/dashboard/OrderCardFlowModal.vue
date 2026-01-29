@@ -21,19 +21,19 @@
         non-linear
       >
         <v-stepper-header>
-          <v-stepper-step :complete="currentStep > 2" step="2" color="#00c7f3">
+          <v-stepper-step :complete="currentStep > 2" step="1" color="#00c7f3">
             {{ $t('card.shippingAddress') }}
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step :complete="currentStep > 3" step="3" color="#00c7f3">
+          <v-stepper-step :complete="currentStep > 3" step="2" color="#00c7f3">
             {{ $t('card.shippingMethod') }}
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step :complete="currentStep > 4" step="4" color="#00c7f3">
+          <v-stepper-step :complete="currentStep > 4" step="3" color="#00c7f3">
             {{ $t('card.paymentDetails') }}
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step step="5" color="#00c7f3">
+          <v-stepper-step step="4" color="#00c7f3">
             {{ $t('card.confirm') }}
           </v-stepper-step>
         </v-stepper-header>
@@ -126,23 +126,82 @@ const { t } = useTranslation();
 const router = useRouter();
 
 // Check if user already has virtual or physical cards
+// For physical cards, also check if payment is pending - if so, allow continuing payment
 const hasVirtualCard = computed(() => {
   return cardStore.state.cards.some(
-    card => card.cardData?.own_type === 'virtual' &&
-    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+    card => {
+      const isVirtual = card.cardData?.own_type === 'virtual';
+      if (!isVirtual) return false;
+      
+      const hasCardOrOrder = card.cardData?.card_uuid || card.cardData?.order_uuid;
+      if (!hasCardOrOrder) return false;
+      
+      // Check if card is rejected (case-insensitive)
+      const status = card.cardData?.status?.toLowerCase() || '';
+      const isRejected = status === 'rejected';
+      
+      // If virtual card exists but is rejected, allow ordering new one
+      if (isRejected) {
+        return false;
+      }
+      
+      return true;
+    }
   );
 });
 
 const hasPhysicalCard = computed(() => {
   return cardStore.state.cards.some(
-    card => card.cardData?.own_type === 'physical' &&
-    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+    card => {
+      const isPhysical = card.cardData?.own_type === 'physical';
+      if (!isPhysical) return false;
+      
+      const hasCardUuid = !!card.cardData?.card_uuid;
+      const hasOrderUuid = !!card.cardData?.order_uuid;
+      const hasCardOrOrder = hasCardUuid || hasOrderUuid;
+      
+      if (!hasCardOrOrder) return false;
+      
+      // Check if card is rejected FIRST (case-insensitive) - this takes priority
+      const status = card.cardData?.status?.toLowerCase() || '';
+      const isRejected = status === 'rejected';
+      
+      // If physical card exists but is rejected, allow ordering new one
+      if (isRejected) {
+        return false;
+      }
+      
+      // If card has UUID, it's active - already ordered
+      if (hasCardUuid) {
+        return true;
+      }
+      
+      // If card has order_uuid but no card_uuid, check payment status
+      if (hasOrderUuid && !hasCardUuid) {
+        // Check payment status from delivery object
+        const delivery = (card.cardData as any)?.delivery;
+        if (delivery) {
+          const paymentStatus = delivery.payment_status?.toLowerCase();
+          // If payment status is 'pending', allow continuing payment
+          if (paymentStatus === 'pending') {
+            return false; // Allow continuing payment
+          }
+          // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
+          // But if it's failed or expired, allow re-ordering
+          if (paymentStatus === 'failed' || paymentStatus === 'expired') {
+            return false; // Allow re-ordering
+          }
+          // Otherwise, payment is in progress, consider it as already ordered
+          return true;
+        }
+        
+        // If no delivery object, assume payment is pending and allow continuing
+        return false;
+      }
+      
+      return false;
+    }
   );
-});
-
-// Check if user can order new cards
-const canOrderNewCard = computed(() => {
-  return !hasVirtualCard.value || !hasPhysicalCard.value;
 });
 
 interface Props {
@@ -172,9 +231,38 @@ const currentStep = ref(1);
 // Card type selection
 const selectedCardType = ref<'virtual' | 'physical' | null>(null);
 
+// Get saved delivery address from last physical card
+const getSavedDeliveryAddress = () => {
+  const cards = cardStore.state.cards || [];
+  const physicalCards = cards.filter(card => card.cardData?.own_type === 'physical');
+  
+  if (physicalCards.length === 0) return null;
+  
+  // Get the most recent physical card (by created_at or updated_at)
+  const lastPhysicalCard = physicalCards.sort((a, b) => {
+    const dateA = new Date(b.cardData?.updated_at || b.cardData?.created_at || 0).getTime();
+    const dateB = new Date(a.cardData?.updated_at || a.cardData?.created_at || 0).getTime();
+    return dateA - dateB;
+  })[0];
+  
+  // Check if card has delivery object
+  const delivery = (lastPhysicalCard.cardData as any)?.delivery;
+  if (!delivery) return null;
+  
+  return {
+    streetAddress: delivery.address || '',
+    city: delivery.city || '',
+    stateProvince: delivery.region || '',
+    zipCode: delivery.zip || '',
+    countryCode: delivery.country_code || '',
+    phone: delivery.phone || '',
+  };
+};
+
 // Shipping address
 const useExistingAddress = ref(false);
-const shippingAddress = ref({
+const savedDeliveryAddress = getSavedDeliveryAddress();
+const shippingAddress = ref(savedDeliveryAddress || {
   streetAddress: '',
   city: '',
   stateProvince: '',
@@ -265,7 +353,6 @@ const orderVirtualCard = async () => {
     // Navigate to card page (will show pending section)
     router.push('/card');
   } catch (error: any) {
-    console.error('Failed to order virtual card:', error);
     let errorReason: string;
     if (typeof error?.response?.data === 'string' && error.response.data) {
       errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
@@ -317,13 +404,9 @@ const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'ex
       deliveryMethod: method,
     };
     
-    console.log('📦 Creating order on backend...');
     const orderResponse = await cardStore.orderPhysicalCard(payload);
-    console.log('✅ Order created, full response:', JSON.stringify(orderResponse, null, 2));
     
-    // Extract payment details from response
     if (!orderResponse) {
-      console.error('❌ No response from order API');
       throw new Error(t('card.failedToGetPaymentDetails'));
     }
     
@@ -348,36 +431,12 @@ const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'ex
     depositExpiresAt.value = orderResponse.depositExpiresAt || '';
     depositQrCode.value = orderResponse.depositQrCode || '';
     
-    console.log('💰 Payment details extracted:', {
-      orderUuid: orderUuid.value,
-      paymentId: paymentId.value,
-      address: paymentAddress.value,
-      amount: paymentAmount.value,
-      exchangeRate: exchangeRate.value,
-      expiresAt: depositExpiresAt.value,
-    });
-    
-    // Validate payment details
-    console.log('🔍 Validation check:', {
-      hasAddress: !!paymentAddress.value,
-      addressValue: paymentAddress.value,
-      adaAmount: paymentAmount.value.ada,
-      isAmountValid: paymentAmount.value.ada > 0,
-    });
-    
     if (!paymentAddress.value || paymentAmount.value.ada <= 0) {
-      console.error('❌ Validation failed:', {
-        address: paymentAddress.value,
-        ada: paymentAmount.value.ada,
-      });
       throw new Error(t('card.failedToGetPaymentDetails'));
     }
     
-    console.log('✅ Validation passed, proceeding to payment step');
-    
     currentStep.value = 4;
   } catch (error: any) {
-    console.error('❌ Failed to create order:', error);
     snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
   } finally {
     isProcessing.value = false;
@@ -390,12 +449,6 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
   isProcessing.value = true;
 
   try {
-    // Password is already verified in CardOrderPaymentStep
-    console.log('✅ Password verified, proceeding with transaction');
-    console.log('💰 Payment address:', paymentAddress.value);
-    console.log('💰 Payment amount:', paymentAmount.value);
-
-    // Validate payment details
     if (!paymentAddress.value) {
       throw new Error(t('card.missingPaymentAddress'));
     }
@@ -406,9 +459,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
     }
 
     const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
-    console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${paymentAddress.value}`);
 
-    // Create output
     const outputs: Cardano.TxOut[] = [
       {
         address: paymentAddress.value as Cardano.PaymentAddress,
@@ -419,7 +470,6 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       },
     ];
 
-    // Build transaction
     const tx = await buildCardanoTransaction({
       outputs,
       utxos: walletStore.utxos,
@@ -428,13 +478,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       tip: networkStore.tip,
     });
 
-    console.log('✅ Transaction built successfully');
-
-    // Serialize transaction
     const txCbor = serializeCardanoJsSdkTx(tx);
-    console.log('📦 Serialized transaction CBOR');
-
-    // Sign transaction
     const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
@@ -452,10 +496,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(witnessResult.data.error);
     }
 
-    console.log('✅ Transaction signed successfully');
     const txWitnesses = witnessResult.data.witnesses;
-
-    // Submit transaction
     const submitResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
@@ -469,17 +510,12 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(submitResult.data.error);
     }
 
-    console.log('✅ Transaction submitted successfully');
-    console.log('📝 Transaction ID:', submitResult.data.txId);
     snackbar.fireSuccess(t('notifications.transactionSubmitted'));
 
-    // Backend will automatically detect the transaction
-    console.log('ℹ️ Backend will track the transaction to deposit address:', paymentAddress.value);
-
     await cardStore.fetchCardData();
+
     orderSuccess.value = true;
   } catch (error: any) {
-    console.error('❌ Failed to process payment:', error);
     snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
     currentStep.value = 4;
   } finally {
@@ -487,13 +523,14 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
   }
 };
 
-const handleOrderComplete = () => {
+const handleOrderComplete = async () => {
+  await cardStore.fetchCardData();
   handleClose();
   router.push('/card');
 };
 
-const handleClose = () => {
-  // Reset state
+const handleClose = async () => {
+  await cardStore.fetchCardData();
   currentStep.value = 1;
   selectedCardType.value = null;
   useExistingAddress.value = false;
@@ -522,11 +559,17 @@ const handleClose = () => {
 // Reset state when dialog opens
 watch(
   () => props.open,
-  newVal => {
+  async newVal => {
     if (newVal) {
       currentStep.value = 1;
       selectedCardType.value = null;
       orderSuccess.value = false;
+      // Refresh card data to get latest statuses
+      try {
+        await cardStore.fetchCardData();
+      } catch (error) {
+        // Silent error - continue anyway
+      }
     }
   }
 );

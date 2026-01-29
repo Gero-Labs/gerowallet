@@ -29,17 +29,6 @@ defineEmits<{
   overflow: hidden;
   border-radius: 8px;
   color: #0c0e12 !important; // Dark text color (override white from mixin)
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background: #1f242f;
-    color: #666 !important;
-
-    &::before {
-      display: none;
-    }
-  }
 }
 
 .gradient-button::before {

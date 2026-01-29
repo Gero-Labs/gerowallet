@@ -38,11 +38,11 @@
         <!-- Main Content -->
         <div class="status-main">
           <h2 class="status-title">
-            {{ kycStatus === 'verified' ? $t('card.verification') : $t('card.reviewingApplication') }}
+            {{ isCardRejected ? $t('card.cardRejected') : (kycStatus === 'verified' ? $t('card.verification') : $t('card.reviewingApplication')) }}
           </h2>
 
           <p class="status-description">
-            {{ kycStatus === 'verified' ? $t('card.verificationDesc') : $t('card.reviewingApplicationDesc') }}
+            {{ isCardRejected ? $t('card.cardRejectedMessage') : (kycStatus === 'verified' ? $t('card.verificationDesc') : $t('card.reviewingApplicationDesc')) }}
           </p>
         </div>
 
@@ -87,19 +87,17 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
-
 interface Props {
   kycStatus?: string;
+  isCardRejected?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
-  kycStatus: 'verification_started'
+  kycStatus: 'verification_started',
+  isCardRejected: false
 });
 
 defineEmits(['logout']);
-
-const { t } = useTranslation();
 </script>
 
 <style lang="scss" scoped>

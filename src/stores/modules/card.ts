@@ -5,6 +5,7 @@ import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { Cardano } from '@cardano-sdk/core';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -29,6 +30,7 @@ export const cardStore = Vue.observable<CardState>({
   // Multiple cards support
   cards: [],
   selectedCardId: null,
+  currentCardIndex: 0,
   exchangeRate: null,
 
   // Wallet status integration - EVERYTHING IN ONE STORE!
@@ -68,23 +70,6 @@ export const cardStore = Vue.observable<CardState>({
   },
 });
 
-/**
- * Initialize card store with split storage model:
- *
- * COOKIES (chrome.cookies API):
- * - accessToken: Sensitive auth token
- * - refreshToken: Token refresh credential
- * - tokenExpiry: Token expiration timestamp
- *
- * CHROME STORAGE (chrome.storage.local):
- * - All other card state (user info, cards, balances, etc.)
- * - Tokens are explicitly excluded from chrome.storage for better security
- *
- * Why split storage?
- * - Cookies provide better security boundaries (domain isolation, auto-expiry)
- * - Chrome storage provides larger storage capacity for card data
- * - Tokens don't need to be serialized with other state
- */
 async function initCardStore() {
   try {
     // Load tokens from cookies (secure storage)
@@ -129,36 +114,20 @@ async function initCardStore() {
 
       storeMessaging.subscribe('walletStore', async (updates) => {
         if ('isLocked' in updates && updates['isLocked'] && cardStore.accessToken) {
-          console.log('🔒 Wallet locked - logging out from card');
           try {
             await cardStoreInstance.logout();
           } catch (error) {
-            console.error('Failed to logout from card during wallet lock:', error);
+            // Silent error handling
           }
         }
       });
     }
   } catch (error) {
-    console.error('Failed to initialize card store:', error);
+    // Silent error handling
   }
 }
 initCardStore();
 
-/**
- * Persist card store data to chrome.storage.local
- *
- * IMPORTANT: Tokens are NOT persisted here!
- * - accessToken, refreshToken, tokenExpiry are stored in cookies
- * - They are explicitly deleted before saving to chrome.storage
- * - This ensures tokens have proper security boundaries and auto-expiry
- */
-
-/**
- * Helper to retrieve authentication tokens from cookies
- *
- * Returns null on failure to allow graceful fallback.
- * Used for lazy-loading tokens when not available in memory.
- */
 async function getTokenFromCookie(name: string): Promise<string | null> {
   try {
     if (typeof chrome !== 'undefined' && chrome.cookies) {
@@ -170,7 +139,6 @@ async function getTokenFromCookie(name: string): Promise<string | null> {
     }
     return null;
   } catch (error) {
-    console.error(`Failed to get cookie ${name}:`, error);
     return null;
   }
 }
@@ -197,12 +165,10 @@ function getCardApi(): Api {
         }
         return config;
       } catch (error) {
-        console.error('Failed to add auth token to request:', error);
         return config;
       }
     },
     error => {
-      console.error('Request interceptor error:', error);
       return Promise.reject(error);
     }
   );
@@ -217,8 +183,6 @@ function getCardApi(): Api {
 
         // Prevent infinite retry loops
         if (originalRequest._retry) {
-          console.warn('Token refresh failed, clearing session');
-        //  await cardStoreInstance.logout();
           throw error;
         }
 
@@ -232,13 +196,10 @@ function getCardApi(): Api {
             originalRequest.headers.Authorization = `Bearer ${cardStore.accessToken}`;
             return api.axiosInstance(originalRequest);
           } catch (refreshError) {
-            console.warn('Token refresh failed, clearing session');
-        //    await cardStoreInstance.logout();
             throw refreshError;
           }
         } else {
           // No refresh token available - session is invalid, clear everything
-          console.warn('No refresh token available, clearing session');
           await clearStoredTokens();
           cardStore.accessToken = null;
           cardStore.refreshToken = null;
@@ -255,22 +216,9 @@ function getCardApi(): Api {
   return api;
 }
 
-/**
- * Internal card store instance for token management
- *
- * Handles token refresh and logout with proper cookie cleanup
- */
 const cardStoreInstance = {
-  /**
-   * Refresh access token using refresh token
-   *
-   * If refresh fails (e.g., refresh token expired or invalid), automatically
-   * logs out user and clears all cookies
-   */
   async refreshAccessToken(): Promise<void> {
     if (!cardStore.refreshToken) {
-      console.warn('No refresh token available for refresh');
-    //  await this.logout();
       throw new Error('No refresh token available');
     }
 
@@ -288,30 +236,14 @@ const cardStoreInstance = {
       // Update tokens in cookies
       await storeTokens(tokens);
     } catch (error) {
-      // Refresh failed - logout and clear cookies
-      console.warn('Token refresh failed, logging out');
-    //  await this.logout();
       throw error;
     }
   },
 
-  /**
-   * Logout user and clear all session data
-   *
-   * Clears:
-   * - Access and refresh tokens from memory
-   * - All cookies (via clearStoredTokens)
-   * - User data, cards, balances
-   * - Calls backend logout endpoint
-   *
-   * Always succeeds even if backend logout fails
-   */
   async logout(): Promise<void> {
     try {
-      // Check if user was logged in before attempting backend logout
       const wasLoggedIn = cardStore.accessToken !== null;
 
-      // Clear tokens and user data from memory
       cardStore.accessToken = null;
       cardStore.refreshToken = null;
       cardStore.tokenExpiry = null;
@@ -322,46 +254,27 @@ const cardStoreInstance = {
       cardStore.exchangeRate = null;
       cardStore.walletStatus.isKaiserexAuthenticated = false;
 
-      // Only call backend logout endpoint if user was logged in
       if (wasLoggedIn) {
         try {
           const api = getCardApi();
           await api.axiosInstance.get('/api/kaiserex/logout');
         } catch (backendError) {
-          console.warn('Backend logout failed, continuing with local cleanup:', backendError);
         }
       }
 
-      // Always clear cookies regardless of backend response
       await clearStoredTokens();
     } catch (error) {
-      console.error('Failed to logout from card store:', error);
-      // Ensure cookies are cleared even if something fails
       await clearStoredTokens();
     }
   },
 };
 
-/**
- * Store authentication tokens in secure cookies
- *
- * Uses chrome.cookies API instead of chrome.storage.local for enhanced security:
- * - Domain isolation: Cookies are bound to backend domain
- * - Auto-expiry: Cookies automatically expire based on token lifetime
- * - Secure flag: HTTPS-only transmission
- * - SameSite protection: CSRF protection
- *
- * NOTE: While we can't set httpOnly from client-side, this is still more secure
- * than chrome.storage.local. For full httpOnly protection, backend should set
- * cookies via Set-Cookie headers.
- */
 async function storeTokens(tokens: AuthTokens): Promise<void> {
   try {
     if (typeof chrome !== 'undefined' && chrome.cookies) {
       const domain = new URL(import.meta.env['VITE_BACKEND_URL']).hostname;
       const expirationDate = Math.floor(Date.now() / 1000) + tokens.expires_in;
 
-      // Store access token in cookie
       await chrome.cookies.set({
         url: import.meta.env['VITE_BACKEND_URL'],
         name: 'kaiserex_access_token',
@@ -373,7 +286,6 @@ async function storeTokens(tokens: AuthTokens): Promise<void> {
         expirationDate: expirationDate,
       });
 
-      // Store refresh token in cookie (longer expiration, e.g., 30 days)
       await chrome.cookies.set({
         url: import.meta.env['VITE_BACKEND_URL'],
         name: 'kaiserex_refresh_token',
@@ -385,7 +297,6 @@ async function storeTokens(tokens: AuthTokens): Promise<void> {
         expirationDate: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days
       });
 
-      // Store token expiry
       await chrome.cookies.set({
         url: import.meta.env['VITE_BACKEND_URL'],
         name: 'kaiserex_token_expiry',
@@ -398,17 +309,10 @@ async function storeTokens(tokens: AuthTokens): Promise<void> {
       });
     }
   } catch (error) {
-    console.error('Failed to store tokens in cookies:', error);
     throw new Error('Failed to store authentication tokens');
   }
 }
 
-/**
- * Clear all authentication tokens from cookies
- *
- * Called during logout to ensure tokens are properly removed.
- * Does not throw on failure to ensure logout succeeds even if cookie removal fails.
- */
 async function clearStoredTokens(): Promise<void> {
   try {
     await Promise.all([
@@ -426,8 +330,6 @@ async function clearStoredTokens(): Promise<void> {
       }),
     ]);
   } catch (error) {
-    console.error('Failed to clear stored tokens from cookies:', error);
-    // Don't throw - we want logout to succeed even if cookie removal fails
   }
 }
 export default {
@@ -435,31 +337,17 @@ export default {
   // Multi-Card Helper Methods
   // ============================================================================
 
-  /**
-   * Get the currently selected card
-   * @returns The selected card or null if none selected
-   */
   getSelectedCard(): CardInfo | null {
     if (!cardStore.selectedCardId) return null;
     return cardStore.cards.find(c => c.cardData.card_uuid === cardStore.selectedCardId) || null;
   },
 
-  /**
-   * Get a specific card by UUID
-   * @param cardId - The card UUID
-   * @returns The card or null if not found
-   */
   getCard(cardId: string): CardInfo | null {
     return cardStore.cards.find(c => c.cardData.card_uuid === cardId) || null;
   },
 
-  /**
-   * Select a card by UUID
-   * @param cardId - The card UUID to select
-   */
   selectCard(cardId: string | null): void {
     if (cardId === null) {
-      // Clear selection (for empty card slot or pending cards)
       cardStore.selectedCardId = null;
       return;
     }
@@ -472,37 +360,40 @@ export default {
     }
   },
 
-  /**
-   * Add or update a card in the cards array
-   * @param cardInfo - The card info to add/update
-   */
+  setCurrentCardIndex(index: number): void {
+    cardStore.currentCardIndex = index;
+  },
+
   upsertCard(cardInfo: CardInfo): void {
-    const index = cardStore.cards.findIndex(c => c.cardData.card_uuid === cardInfo.cardData.card_uuid);
+    const index = cardStore.cards.findIndex(c => {
+      if (c.cardData.card_uuid && cardInfo.cardData.card_uuid && c.cardData.card_uuid === cardInfo.cardData.card_uuid) {
+        return true;
+      }
+      if (c.cardData.order_uuid && cardInfo.cardData.order_uuid && c.cardData.order_uuid === cardInfo.cardData.order_uuid) {
+        return true;
+      }
+      if (c.cardData.id && cardInfo.cardData.id && c.cardData.id === cardInfo.cardData.id) {
+        return true;
+      }
+      return false;
+    });
 
     if (index >= 0) {
-      // Update existing card
       Vue.set(cardStore.cards, index, cardInfo);
     } else {
-      // Add new card
       cardStore.cards.push(cardInfo);
 
-      // Auto-select if it's the first card
       if (cardStore.cards.length === 1) {
         cardStore.selectedCardId = cardInfo.cardData.card_uuid;
       }
     }
   },
 
-  /**
-   * Remove a card by UUID
-   * @param cardId - The card UUID to remove
-   */
   removeCard(cardId: string): void {
     const index = cardStore.cards.findIndex(c => c.cardData.card_uuid === cardId);
     if (index >= 0) {
       cardStore.cards.splice(index, 1);
 
-      // If removed card was selected, select first available card
       if (cardStore.selectedCardId === cardId) {
         cardStore.selectedCardId = cardStore.cards.length > 0 ? cardStore.cards[0].cardData.card_uuid : null;
       }
@@ -517,9 +408,7 @@ export default {
     if (!cardStore.accessToken || !cardStore.tokenExpiry) return false;
     const isValid = Date.now() < cardStore.tokenExpiry;
 
-    // Auto-logout if token expired
     if (!isValid && cardStore.accessToken) {
-    //  this.logout();
     }
 
     return isValid;
@@ -597,16 +486,14 @@ export default {
     store.refreshToken = tokens.refresh_token;
     store.tokenExpiry = Date.now() + (tokens.expires_in || 3600) * 1000;
 
-    // Store tokens in cookies
-    await storeTokens({
+      await storeTokens({
       token_type: 'Bearer',
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expires_in: tokens.expires_in || 3600,
     });
 
-    // Set authentication status
-    await this.setKaiserexAuthentication(true);
+      await this.setKaiserexAuthentication(true);
   },
 
   async authenticate(wallet: any, code: string, codeVerifier: string): Promise<void> {
@@ -685,17 +572,24 @@ export default {
 
     try {
       const response = await getCardApi().axiosInstance.get<PaginatedCardsResponse>('/api/kaiserex/cards');
-      const cardsData = response.data.data || [];
-
-      // Populate cards array with all user's cards
+      const cardsData = response.data || [];
+      
       for (const cardData of cardsData) {
-        const existingCard = cardStore.cards.find(c => c.cardData.card_uuid === cardData.card_uuid);
-
+        const existingCard = cardStore.cards.find(c => {
+          if (c.cardData.card_uuid && cardData.card_uuid && c.cardData.card_uuid === cardData.card_uuid) {
+            return true;
+          }
+          if (c.cardData.order_uuid && cardData.order_uuid && c.cardData.order_uuid === cardData.order_uuid) {
+            return true;
+          }
+          if (c.cardData.id && cardData.id && c.cardData.id === cardData.id) {
+            return true;
+          }
+          return false;
+        });
         if (existingCard) {
-          // Update existing card's cardData
           existingCard.cardData = cardData;
         } else {
-          // Add new card with minimal info (other fields will be populated by other fetch methods)
           const newCard: CardInfo = {
             cardData,
             cardDetails: null,
@@ -710,12 +604,9 @@ export default {
         }
       }
     } catch (error: any) {
-      // Check if it's an axios error with a 500 status code
       if (error?.response?.status >= 500) {
-        // Set wallet status to error state for 5xx server errors
         cardStore.walletStatus.currentState = 'error';
         cardStore.walletStatus.error = 'Server error. Please try again later.';
-        console.error('Server error (5xx) when fetching card data:', error);
       }
 
       cardStore.errors.cardData =
@@ -727,7 +618,6 @@ export default {
   },
 
   async fetchCardNumber(cardId?: string): Promise<void> {
-    // Use provided cardId or selected card
     const targetCardId = cardId || cardStore.selectedCardId;
     if (!targetCardId) {
       return;
@@ -745,7 +635,6 @@ export default {
       const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/cards/number/${targetCardId}`);
 
-      // Update the specific card's number
       card.cardNumber = response.data;
     } catch (error) {
       cardStore.errors.cardNumber =
@@ -759,7 +648,6 @@ export default {
   },
 
   async fetchCardBalance(cardId?: string): Promise<void> {
-    // Use provided cardId or selected card
     const targetCardId = cardId || cardStore.selectedCardId;
     if (!targetCardId) {
       return;
@@ -777,7 +665,6 @@ export default {
       const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/cards/balance/${targetCardId}`);
 
-      // Update the specific card's balance
       card.cardBalance = response.data;
     } catch (error) {
       cardStore.errors.cardBalance =
@@ -803,7 +690,6 @@ export default {
   },
 
   async fetchCardHistory(params: HistoryParams = {}, cardId?: string): Promise<void> {
-    // Use provided cardId or selected card
     const targetCardId = cardId || cardStore.selectedCardId;
     if (!targetCardId) {
       return;
@@ -821,11 +707,9 @@ export default {
       const api = getCardApi();
       const queryParams = new URLSearchParams();
 
-      // Set default period to last 60 days if not provided
       const now = new Date();
       const ninetyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
-      // Format dates as dd/mm/yyyy
       const formatDate = (date: Date): string => {
         const day = date.getDate().toString().padStart(2, '0');
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -846,7 +730,6 @@ export default {
       }`;
       const response = await api.axiosInstance.get(url);
 
-      // Update the specific card's history
       card.cardHistory = response.data;
     } catch (error) {
       cardStore.errors.cardHistory =
@@ -859,7 +742,6 @@ export default {
     }
   },
 
-  // Fetch card history for export without updating store
   async fetchCardHistoryForExport(params: HistoryParams, cardId?: string): Promise<CardTransactionHistory[]> {
     const targetCardId = cardId || cardStore.selectedCardId;
     if (!targetCardId) {
@@ -870,13 +752,10 @@ export default {
       const api = getCardApi();
       const queryParams = new URLSearchParams();
 
-      // Format dates as dd/mm/yyyy
       const formatDate = (dateStr: string): string => {
-        // If dateStr is already in dd.mm.yyyy format, return as is
         if (dateStr.includes('.')) {
           return dateStr;
         }
-        // Otherwise parse and format
         const date = new Date(dateStr);
         const day = date.getDate().toString().padStart(2, '0');
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -899,7 +778,6 @@ export default {
       const url = `/api/kaiserex/cards/history/${targetCardId}?${queryParams.toString()}`;
       const response = await api.axiosInstance.get(url);
 
-      // Return transactions without updating store
       return response.data?.records || [];
     } catch (error) {
       throw error;
@@ -945,10 +823,161 @@ export default {
   async getOrderDetails(orderUuid: string): Promise<any> {
     try {
       const api = getCardApi();
-      const response = await api.axiosInstance.get(`/api/kaiserex/cards/card-uuid/${orderUuid}`);
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/order/${orderUuid}/status`);
       return response.data;
     } catch (error) {
       throw error;
+    }
+  },
+
+  async getDeliveryPayment(orderUuid: string): Promise<{
+    payment_id?: string;
+    deposit_address?: string;
+    amount_eur?: number;
+    amount_ada?: number;
+    exchange_rate?: number;
+    expires_at?: string;
+    status?: string;
+    qr_code_data?: string;
+  } | null> {
+    try {
+      const api = getCardApi();
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/delivery-payment/${orderUuid}`);
+      return response.data || null;
+    } catch (error: any) {
+      if (error?.response?.status === 410) {
+        const errorData = error?.response?.data;
+        return {
+          status: 'expired',
+          expires_at: errorData?.expires_at || undefined,
+        };
+      }
+      if (error?.response?.status === 404) {
+        return {
+          status: 'rejected',
+        };
+      }
+      return null;
+    }
+  },
+
+  async getCardState(cardUuid: string): Promise<{ status: string } | null> {
+    try {
+      const api = getCardApi();
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/state/${cardUuid}`);
+      return response.data;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  checkDepositPayment(depositAddress: string, expectedAmountAda: string): boolean {
+    if (!depositAddress || !expectedAmountAda) {
+      return false;
+    }
+
+    if (!walletStore || !walletStore.transactions) {
+      return false;
+    }
+
+    try {
+      const depositCardanoAddress = Cardano.Address.fromString(depositAddress);
+      const depositAddressBech32 = depositCardanoAddress.toBech32();
+
+      const transactions = walletStore.transactions;
+      
+      if (!transactions || transactions.length === 0) {
+        return false;
+      }
+
+      const LOVELACE_PER_ADA = 1_000_000;
+      const PAYMENT_TOLERANCE_ADA = 1;
+      
+      const expectedAmountLovelace = parseFloat(expectedAmountAda) * LOVELACE_PER_ADA;
+      const toleranceLovelace = PAYMENT_TOLERANCE_ADA * LOVELACE_PER_ADA;
+      const minAmount = expectedAmountLovelace - toleranceLovelace;
+      const maxAmount = expectedAmountLovelace + toleranceLovelace;
+
+      for (const transaction of transactions) {
+        if (transaction.pending || transaction.status === 'Pending') {
+          continue;
+        }
+
+        if (transaction.body?.outputs) {
+          for (const output of transaction.body.outputs) {
+            try {
+              const outputAddress = Cardano.Address.fromString(output.address);
+              const outputAddressBech32 = outputAddress.toBech32();
+              
+              if (outputAddressBech32 === depositAddressBech32) {
+                let outputAmountLovelace = 0;
+                
+                if (output.value?.coins !== undefined) {
+                  const coinsValue = output.value.coins;
+                  if (typeof coinsValue === 'bigint') {
+                    outputAmountLovelace = Number(coinsValue.toString());
+                  } else if (typeof coinsValue === 'string') {
+                    outputAmountLovelace = Number(coinsValue);
+                  } else if (typeof coinsValue === 'number') {
+                    outputAmountLovelace = coinsValue;
+                  }
+                } else if (output.amount) {
+                  if (Array.isArray(output.amount)) {
+                    const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
+                    if (lovelaceToken) {
+                      outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
+                        ? Number(lovelaceToken.quantity) 
+                        : lovelaceToken.quantity;
+                    }
+                  }
+                }
+
+                const isInRange = outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount;
+
+                if (isInRange) {
+                  return true;
+                }
+              }
+            } catch (error) {
+              // Silent error handling
+            }
+          }
+        }
+
+        if (transaction.utxo?.outputs) {
+          for (const output of transaction.utxo.outputs) {
+            try {
+              const outputAddress = Cardano.Address.fromString(output.address);
+              const outputAddressBech32 = outputAddress.toBech32();
+              
+              if (outputAddressBech32 === depositAddressBech32) {
+                let outputAmountLovelace = 0;
+                
+                if (output.amount && Array.isArray(output.amount)) {
+                  const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
+                  if (lovelaceToken) {
+                    outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
+                      ? Number(lovelaceToken.quantity) 
+                      : lovelaceToken.quantity;
+                  }
+                }
+
+                const isInRange = outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount;
+
+                if (isInRange) {
+                  return true;
+                }
+              }
+            } catch (error) {
+              // Silent error handling
+            }
+          }
+        }
+      }
+
+      return false;
+    } catch (error) {
+      return false;
     }
   },
 
@@ -998,7 +1027,6 @@ export default {
             cardStore.walletStatus.isKaiserexAuthenticated = true;
           }
         } catch (cookieError) {
-          console.error('Failed to read tokens from cookies during initialization:', cookieError);
           // Continue initialization even if cookie reading fails
         }
       }
@@ -1162,18 +1190,13 @@ export default {
     }
   },
 
-  /**
-   * Check payment status for physical card order
-   * Placeholder - will be implemented when backend is ready
-   * @param _txId - Transaction ID to check - reserved for future use
-   * @returns true if payment confirmed, false otherwise
-   */
   async checkPaymentStatus(_txId: string): Promise<boolean> {
     // Mock - simulate payment confirmation after delay
     // In production, this will poll the backend to check if payment was received
     await new Promise(resolve => setTimeout(resolve, 5000));
     return true;
   },
+
 
   // State getter for compatibility
   get state() {

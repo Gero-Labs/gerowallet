@@ -16,13 +16,19 @@
       <div class="modal-content">
         <!-- Payment Step -->
         <CardOrderPaymentStep
-          v-if="!orderSuccess"
+          v-if="!orderSuccess && orderResponse"
           :amount-ada="paymentAmount.ada"
           :amount-eur="paymentAmount.eur"
           :exchange-rate="orderResponse ? parseFloat(String(orderResponse.exchangeRate)) : undefined"
+          :payment-status="orderResponse?.paymentStatus"
           @back="handleClose"
           @confirm="handlePaymentConfirm"
         />
+        <!-- Loading State -->
+        <div v-else-if="isProcessing && !orderResponse" class="loading-state">
+          <v-progress-circular indeterminate color="primary"></v-progress-circular>
+          <p class="loading-text">{{ $t('card.loadingCardDetails') }}</p>
+        </div>
 
         <!-- Success State -->
         <PaymentConfirmationStep
@@ -101,29 +107,33 @@ const orderResponse = ref<{
 const isProcessing = ref(false);
 const orderSuccess = ref(false);
 
-// Load order details when modal opens
-watch(
-  () => props.open,
-  async newVal => {
-    if (newVal && props.orderUuid) {
-      await loadOrderDetails();
-    } else {
-      orderSuccess.value = false;
-      isProcessing.value = false;
-    }
-  }
-);
-
 const loadOrderDetails = async () => {
   try {
     isProcessing.value = true;
-    const response = await cardStore.getOrderDetails(props.orderUuid);
-    orderResponse.value = response;
     
-    // Convert to numbers for proper display
+    const paymentDetails = await cardStore.getDeliveryPayment(props.orderUuid);
+    
+    if (!paymentDetails) {
+      throw new Error(t('card.failedToLoadOrderDetails'));
+    }
+    
+    orderResponse.value = {
+      paymentId: typeof paymentDetails.payment_id === 'string' 
+        ? parseInt(paymentDetails.payment_id, 10) || 0
+        : (paymentDetails.payment_id || 0),
+      depositAddress: paymentDetails.deposit_address || '',
+      depositAmountEur: String(paymentDetails.amount_eur || 0),
+      depositAmountAda: String(paymentDetails.amount_ada || 0),
+      exchangeRate: String(paymentDetails.exchange_rate || 0),
+      depositExpiresAt: paymentDetails.expires_at || '',
+      depositQrCode: paymentDetails.qr_code_data || '',
+      orderUuid: props.orderUuid,
+      paymentStatus: paymentDetails.status || '',
+    };
+    
     paymentAmount.value = {
-      ada: parseFloat(String(response.depositAmountAda)) || 0,
-      eur: parseFloat(String(response.depositAmountEur)) || 0,
+      ada: parseFloat(String(paymentDetails.amount_ada)) || 0,
+      eur: parseFloat(String(paymentDetails.amount_eur)) || 0,
     };
   } catch (error: any) {
     snackbar.setError(error?.message || t('card.failedToLoadOrderDetails'));
@@ -132,6 +142,24 @@ const loadOrderDetails = async () => {
     isProcessing.value = false;
   }
 };
+
+watch(
+  () => props.open,
+  async newVal => {
+    if (newVal && props.orderUuid) {
+      orderResponse.value = null;
+      orderSuccess.value = false;
+      paymentAmount.value = { ada: 0, eur: 0 };
+      await loadOrderDetails();
+    } else {
+      orderResponse.value = null;
+      orderSuccess.value = false;
+      isProcessing.value = false;
+      paymentAmount.value = { ada: 0, eur: 0 };
+    }
+  },
+  { immediate: true }
+);
 
 const handlePaymentConfirm = async (spendingPassword: string) => {
   isProcessing.value = true;
@@ -204,7 +232,9 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
 
     snackbar.fireSuccess(t('notifications.transactionSubmitted'));
 
+    // Refresh card data to get updated order info
     await cardStore.fetchCardData();
+
     orderSuccess.value = true;
     emit('success');
   } catch (error: any) {
@@ -214,12 +244,14 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
   }
 };
 
-const handleOrderComplete = () => {
+const handleOrderComplete = async () => {
+  await cardStore.fetchCardData();
   handleClose();
   router.push('/card');
 };
 
-const handleClose = () => {
+const handleClose = async () => {
+  await cardStore.fetchCardData();
   orderResponse.value = null;
   isProcessing.value = false;
   orderSuccess.value = false;
@@ -286,6 +318,22 @@ const handleClose = () => {
 
 .modal-content {
   padding: 0 $spacing-3xl $spacing-3xl;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-3xl;
+  gap: $spacing-md;
+  
+  .loading-text {
+    font-family: $font-family-primary;
+    font-size: $font-size-base;
+    color: $text-secondary;
+    margin: 0;
+  }
 }
 
 @media (max-width: $breakpoint-sm) {
