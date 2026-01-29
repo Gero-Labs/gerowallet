@@ -185,12 +185,13 @@ import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { NetworkInfo } from '@/utils/networks';
 
 const { t } = useTranslation();
 
 interface Props {
   isOpen: boolean;
-  network: any;
+  network: NetworkInfo;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -199,10 +200,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits(['close']);
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 const router = vmProxy?.$router;
 
-const form = ref<any>(null);
+const form = ref(null);
 const show1 = ref(false);
 const show2 = ref(false);
 const valid = ref(false);
@@ -272,12 +273,6 @@ const walletCreationStep = async () => {
       // ========================================================================
       // PRF WALLET CREATION (PURE PRF MODE - NO PASSWORD)
       // ========================================================================
-      console.log('🔐 PRF Mode Detected (Pure PRF):', {
-        isPrfMode: isPrfMode.value,
-        prfSupported: prfSupported.value,
-        encryptionMethod: newWallet.encryptionMethod,
-        backupMnemonic: newWallet.backupMnemonic
-      });
 
       // Step 1: Register WebAuthn credential with PRF
       const { registerWebAuthnCredential } = await import('@/shared/utils/security');
@@ -289,57 +284,50 @@ const walletCreationStep = async () => {
           newWallet.name
         );
 
-        console.log('🔑 WebAuthn Registration Result:', {
-          credentialId,
-          prfEnabled
-        });
-
         if (!prfEnabled) {
-          throw new Error(vmProxy.$t('security.passKeyPrfNotSupported'));
+          throw new Error(vmProxy.$t('security.passKeyPrfNotSupported') as string);
         }
 
         webAuthnCredentialId.value = credentialId;
 
         // Step 2: Pre-allocate wallet ID (same logic as in gero-db.ts)
-        const { getDb, getLatestWalletByOrder } = await import('@/db/gero-db');
+        const { getDb } = await import('@/db/gero-db');
         const db = await getDb();
         const maxWallet = await db['wallets'].orderBy('id').last();
         const newWalletId = (maxWallet?.id || 0) + 1;
-
-        console.log('🆔 Pre-allocated wallet ID:', newWalletId);
 
         // Step 3: Evaluate PRF immediately after registration (while user just authenticated)
         const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
         const prfOutput = await evaluatePrfForWallet(credentialId, newWalletId.toString());
 
-        console.log('✅ PRF evaluated successfully (avoids second prompt in gero-db)');
+        try {
+          // Step 4: Create wallet with PRF options + PRF output (Pure PRF mode - no password unlock)
+          const prfOptions = {
+            usePrf: true,
+            credentialId,
+            passwordUnlockEnabled: false, // Pure PRF mode - no password
+            backupMnemonic: true, // Always backup mnemonic for PRF wallets
+            prfOutput, // Pass PRF output to avoid second prompt
+          };
 
-        // Step 4: Create wallet with PRF options + PRF output (Pure PRF mode - no password unlock)
-        const prfOptions = {
-          usePrf: true,
-          credentialId,
-          passwordUnlockEnabled: false, // Pure PRF mode - no password
-          backupMnemonic: true, // Always backup mnemonic for PRF wallets
-          prfOutput, // Pass PRF output to avoid second prompt
-        };
-
-        console.log('📦 Calling GeroStore.createNewWallet with PRF options (including prfOutput)');
-
-        wallet = await GeroStore.createNewWallet(
-          newWallet.name,
-          newWallet.icon,
-          Theme.GERO,
-          null, // No mnemonic (generate new)
-          newWallet.password || 'temp-password', // Temp password for PRF wallets without password
-          props.network.blockchain,
-          props.network.network,
-          prfOptions
-        );
-
-        console.log('✅ Wallet created:', wallet);
-      } catch (error: any) {
+          wallet = await GeroStore.createNewWallet(
+            newWallet.name,
+            newWallet.icon,
+            Theme.GERO,
+            null, // No mnemonic (generate new)
+            newWallet.password || 'temp-password', // Temp password for PRF wallets without password
+            props.network.blockchain,
+            props.network.network,
+            prfOptions
+          );
+        } finally {
+          if (prfOutput) {
+            new Uint8Array(prfOutput).fill(0);
+          }
+        }
+      } catch (error: unknown) {
         // User cancelled or PRF not supported
-        if (error.message?.includes('cancelled') || error.message?.includes('NotAllowedError')) {
+        if (error['message']?.includes('cancelled') || error['message']?.includes('NotAllowedError')) {
           console.log('User cancelled WebAuthn registration');
           return; // Don't show error, user cancelled
         }
@@ -365,12 +353,13 @@ const walletCreationStep = async () => {
     dialogLocal.value = false;
 
     // Login to the newly created wallet
-    const response: any = await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
 
-    if (response && !response.error) {
+    const hasError = response && typeof response === 'object' && 'error' in response;
+    if (response && !hasError) {
       vmProxy.$nextTick(() => {
         resetDialog();
         router.push('/').catch(err => {
@@ -379,17 +368,20 @@ const walletCreationStep = async () => {
           }
         });
       });
-    } else if (response?.error) {
-      console.warn('Login response error:', response.error);
+    } else if (hasError) {
+      const errorResponse = response as { error: unknown };
+      console.warn('Login response error:', errorResponse.error);
       vmProxy.$nextTick(() => {
         resetDialog();
         router.push('/').catch(() => {});
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating wallet:', error);
-    // Show user-friendly error message
-    vmProxy.$snackbar?.setError(error.message || vmProxy.$t('errors.unknownError'));
+    const errorMessage = error instanceof Error
+      ? error.message
+      : vmProxy.$t('errors.unknownError') as string;
+    vmProxy['$snackbar']?.setError(errorMessage);
   } finally {
     creatingWalletLoader.value = false;
   }
