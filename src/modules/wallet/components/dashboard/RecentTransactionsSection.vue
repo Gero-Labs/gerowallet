@@ -174,8 +174,6 @@ const formattedTransactions = computed(() => {
   const transactionsToDisplay = props.transactions || [];
 
   const allTransactions = transactionsToDisplay.map((tx, index) => {
-    console.log('Transaction:', tx);
-
     // Extract merchant name from cardAcceptorNameAndLocation
     const merchantName: string = tx.narrative || 'Unknown';
 

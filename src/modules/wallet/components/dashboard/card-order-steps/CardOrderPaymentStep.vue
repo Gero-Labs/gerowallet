@@ -14,8 +14,21 @@
       </div>
     </div>
 
+    <!-- Expired Payment Alert -->
+    <v-alert v-if="isExpired" type="error" colored-border border="left" class="expired-alert" elevation="0">
+      <div class="alert-content">
+        <div class="alert-title">
+          <v-icon small color="#f44336">mdi-alert-circle</v-icon>
+          <span>{{ $t('card.paymentExpired') }}</span>
+        </div>
+        <div class="alert-body">
+          <p>{{ $t('card.paymentExpiredMessage') }}</p>
+        </div>
+      </div>
+    </v-alert>
+
     <!-- Important Information Alert -->
-    <v-alert type="info" colored-border border="left" class="info-alert" elevation="0">
+    <v-alert v-else type="info" colored-border border="left" class="info-alert" elevation="0">
       <div class="alert-content">
         <div class="alert-title">
           <v-icon small color="#00c7f3">mdi-information</v-icon>
@@ -55,7 +68,7 @@
       <GradientButton 
         :text="$t('card.confirmPayment')" 
         @click="handleConfirm" 
-        :disabled="!spendingPassword || isValidating"
+        :disabled="!spendingPassword || isValidating || isExpired"
         :loading="isValidating"
       />
     </div>
@@ -63,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import SecondaryButton from '../../SecondaryButton.vue';
 import GradientButton from '../../GradientButton.vue';
 import { Messaging } from '@/chrome/messaging';
@@ -74,6 +87,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 interface Props {
   amountAda: number;
   amountEur: number;
+  paymentStatus?: string;
 }
 
 interface Emits {
@@ -85,6 +99,11 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const { t } = useTranslation();
+
+const isExpired = computed(() => {
+  const status = props.paymentStatus?.toLowerCase() || '';
+  return status === 'expired';
+});
 
 // Local state
 const spendingPassword = ref('');
@@ -103,9 +122,9 @@ const handleConfirm = async () => {
     const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value },
-    })) as { data: { isValid: boolean; error?: string } };
-    
-    if (!passwordVerification.data.isValid) {
+    })) as { data: { success: boolean; error?: string } };
+
+    if (!passwordVerification.data.success) {
       snackbar.setError(t('wallet.invalidSpendingPassword'));
       isValidating.value = false;
       return;
@@ -190,6 +209,19 @@ const handleConfirm = async () => {
   font-family: $font-family-primary;
   font-size: $font-size-lg;
   color: $text-muted;
+}
+
+.expired-alert {
+  background: rgba(#f44336, 0.1) !important;
+  border-color: #f44336 !important;
+
+  :deep(.v-alert__content) {
+    width: 100%;
+  }
+
+  .alert-title {
+    color: #f44336;
+  }
 }
 
 .info-alert {
