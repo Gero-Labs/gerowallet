@@ -273,12 +273,6 @@ const walletCreationStep = async () => {
       // ========================================================================
       // PRF WALLET CREATION (PURE PRF MODE - NO PASSWORD)
       // ========================================================================
-      console.log('🔐 PRF Mode Detected (Pure PRF):', {
-        isPrfMode: isPrfMode.value,
-        prfSupported: prfSupported.value,
-        encryptionMethod: newWallet.encryptionMethod,
-        backupMnemonic: newWallet.backupMnemonic
-      });
 
       // Step 1: Register WebAuthn credential with PRF
       const { registerWebAuthnCredential } = await import('@/shared/utils/security');
@@ -289,11 +283,6 @@ const walletCreationStep = async () => {
           'temp-wallet-id', // Temporary ID, actual wallet ID will be allocated below
           newWallet.name
         );
-
-        console.log('🔑 WebAuthn Registration Result:', {
-          credentialId,
-          prfEnabled
-        });
 
         if (!prfEnabled) {
           throw new Error(vmProxy.$t('security.passKeyPrfNotSupported') as string);

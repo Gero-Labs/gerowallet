@@ -205,14 +205,6 @@ export async function createNewWallet(
   // Determine if we're using PRF encryption
   const usePrf = options?.usePrf || false;
 
-  console.log('📊 gero-db.createNewWallet - Received options:', {
-    options,
-    usePrf,
-    hasCredentialId: !!options?.credentialId,
-    passwordUnlockEnabled: options?.passwordUnlockEnabled,
-    backupMnemonic: options?.backupMnemonic
-  });
-
   if (usePrf) {
     // ============================================================================
     // PRF ENCRYPTION MODE (NEW WALLETS)
@@ -226,8 +218,6 @@ export async function createNewWallet(
     // We need the wallet ID before encryption for PRF salt generation
     const maxWallet = await db['wallets'].orderBy('id').last();
     const newWalletId = (maxWallet?.id || 0) + 1;
-
-    console.log('🆔 Pre-allocated wallet ID:', newWalletId);
 
     // Import PRF encryption functions
     const {
