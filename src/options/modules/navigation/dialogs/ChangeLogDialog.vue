@@ -229,7 +229,6 @@ import { ref, onMounted } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import time from '@/plugins/time';
 import cryptoApi from '@/api/crypto-api';
-import packageJson from '@/../package.json';
 import assets from '@/utils/assets';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
@@ -249,7 +248,6 @@ const { t } = useTranslation()
 const loading = ref(false);
 const activeTab = ref(0);
 const releases = ref<Release[]>([]);
-const currentVersion = packageJson.version;
 
 interface Release {
   body?: string,
