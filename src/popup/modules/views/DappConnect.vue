@@ -1,7 +1,7 @@
 <template>
-  <PopupHeader :title="$t('navigation.connectWithGeroDashboard')" ref="popupHeader">
+  <PopupHeader :title="t('navigation.connectWithGeroDashboard')" ref="popupHeader">
     <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
-      <v-card-title class="justify-center pt-0" style="color: white; font-size: 14px">
+      <v-card-title class="justify-center text-center pt-0" style="color: white; font-size: 14px; word-break: break-word">
         {{ $t('navigation.confirmUrlBeforeGranting') }}
       </v-card-title>
           <section style="font-weight: bold; color: white; font-size: 16px">

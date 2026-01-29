@@ -32,7 +32,9 @@ export default [
                 'ignoreRestSiblings': true,
                 'varsIgnorePattern': '^_',
                 'argsIgnorePattern': '^_'
-            }]
+            }],
+            // Disallow explicit 'any' types
+            '@typescript-eslint/no-explicit-any': 'error'
         }
     },
     {

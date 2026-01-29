@@ -5,7 +5,6 @@ import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { walletStore } from '@/stores/walletStore';
-import { debugLog } from '@/utils/debug';
 
 export interface MusicStore {
   musicPlaylist: any;
@@ -37,7 +36,6 @@ const context = getContextType();
 
 // Function to clear music store data immediately
 function clearMusicStoreImmediately() {
-  debugLog('MusicStore: Clearing immediately for wallet change');
 
   // Stop any playing audio
   if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
@@ -77,7 +75,6 @@ new Vue({
     currentWalletId: {
       handler(newWalletId, oldWalletId) {
         if (oldWalletId !== null && newWalletId !== oldWalletId) {
-          debugLog('MusicStore: Wallet changed from', oldWalletId, 'to', newWalletId);
           clearMusicStoreImmediately();
         }
       },
@@ -118,7 +115,6 @@ if (context === 'browser') {
         storedData.context.seek = 0;
       }
       Object.assign(musicStore, storedData);
-      debugLog('💾 Hydrated music store from storage');
     }
   });
 }
@@ -447,7 +443,6 @@ const MusicStoreModule = {
     if (chrome?.storage?.local) {
       try {
         await chrome.storage.local.remove(STORE_NAME);
-        debugLog('MusicStore: Cleared from Chrome storage');
       } catch (error) {
         console.error('MusicStore: Failed to clear from Chrome storage:', error);
       }

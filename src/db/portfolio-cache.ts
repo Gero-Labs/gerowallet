@@ -287,7 +287,6 @@ export class PortfolioCacheService {
             console.warn('Found portfolio cache entry without id, cannot delete:', entry);
           }
         }
-        debugLog(`🗑️ Delete successful`);
       } catch (error: any) {
         console.error(`🗑️ Error during delete:`, error);
         throw error;

@@ -69,7 +69,9 @@ export async function getDb() {
     }
   });
 
-  db.version(geroDBVersion).stores(geroDBSchema)
+  // Version 14: Add PRF encryption support (optional fields for new wallets only)
+  // No migration needed - all new fields are optional
+  db.version(geroDBVersion).stores(geroDBSchema);
 
   await db.open().catch(err => {
     console.error(`Failed to open database: ${err.stack || err}`);
@@ -150,17 +152,46 @@ export async function createNewWalletDb(walletId: number|string, hasEncryptedMne
   });
 }
 
-export async function createNewWallet(name, icon, theme, mnemonic: string, password, chain, network) {
+/**
+ * Create a new wallet with password or PRF encryption
+ *
+ * @param name - Wallet name
+ * @param icon - Wallet icon
+ * @param theme - Wallet theme
+ * @param mnemonic - BIP39 mnemonic (24 words). If empty, generates new one
+ * @param password - Spending password
+ * @param chain - Blockchain (e.g., 'Cardano')
+ * @param network - Network (e.g., 'Mainnet', 'Preprod')
+ * @param options - Optional PRF encryption options
+ * @param options.usePrf - Use PRF encryption instead of password encryption
+ * @param options.credentialId - WebAuthn credential ID (required if usePrf is true)
+ * @param options.passwordUnlockEnabled - Whether password unlock is enabled (determines if spending password hash is stored)
+ * @param options.backupMnemonic - Whether to encrypt mnemonic for backup (default: true)
+ * @returns Promise<number> - Wallet ID
+ */
+export async function createNewWallet(
+  name: string,
+  icon: string,
+  theme: string,
+  mnemonic: string,
+  password: string,
+  chain: string,
+  network: string,
+  options?: {
+    usePrf?: boolean;
+    credentialId?: string;
+    passwordUnlockEnabled?: boolean;
+    backupMnemonic?: boolean;
+    prfOutput?: ArrayBuffer; // PRF output from registration (avoids second prompt)
+  }
+) {
   let isRestore = true;
   if (!mnemonic) {
     isRestore = false;
     mnemonic = bip39.generateMnemonic(256);
   }
-  const encryptedMnemonic: string = encrypt(mnemonic, password);
-  const rootKey: Bip32PrivateKey = resolvePrivateKey(mnemonic);
-  const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
 
-  // Use shared helper function for public key derivation
+  const rootKey: Bip32PrivateKey = resolvePrivateKey(mnemonic);
   const publicKey = await derivePublicKeyFromMnemonic(mnemonic);
 
   const db: Dexie = await getDb();
@@ -170,21 +201,148 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
   } else {
     order++;
   }
-  const walletId = await db['wallets'].add({
-    name,
-    icon,
-    type: WalletType.Normal,
-    theme,
-    order,
-    encryptedPrivateKey,
-    encryptedMnemonic,
-    publicKey,
-    passwordLastUpdate: new Date(),
-    chain,
-    network
+
+  // Determine if we're using PRF encryption
+  const usePrf = options?.usePrf || false;
+
+  console.log('📊 gero-db.createNewWallet - Received options:', {
+    options,
+    usePrf,
+    hasCredentialId: !!options?.credentialId,
+    passwordUnlockEnabled: options?.passwordUnlockEnabled,
+    backupMnemonic: options?.backupMnemonic
   });
-  await createNewWalletDb(walletId, !!encryptedMnemonic, isRestore);
-  return walletId;
+
+  if (usePrf) {
+    // ============================================================================
+    // PRF ENCRYPTION MODE (NEW WALLETS)
+    // ============================================================================
+    console.log('🔐 PRF Encryption Branch Entered');
+
+    if (!options?.credentialId) {
+      throw new Error('Credential ID is required for PRF encryption');
+    }
+
+    // Step 1: Pre-allocate wallet ID (Option A from decisions document)
+    // We need the wallet ID before encryption for PRF salt generation
+    const maxWallet = await db['wallets'].orderBy('id').last();
+    const newWalletId = (maxWallet?.id || 0) + 1;
+
+    console.log('🆔 Pre-allocated wallet ID:', newWalletId);
+
+    // Import PRF encryption functions
+    const {
+      evaluatePrfForWallet,
+      encryptPrivateKeyWithPrf,
+      encryptMnemonicWithPrf,
+      hashSpendingPassword
+    } = await import('@/shared/utils/webauthn-prf');
+
+    // Step 2: Evaluate PRF (only if not provided - avoids second PassKey prompt)
+    let prfOutput: ArrayBuffer;
+    if (options.prfOutput) {
+      console.log('✅ Using provided PRF output from registration (no additional prompt)');
+      prfOutput = options.prfOutput;
+    } else {
+      console.log('🔐 Evaluating PRF for wallet encryption (requires PassKey prompt)');
+      prfOutput = await evaluatePrfForWallet(options.credentialId, newWalletId.toString());
+    }
+
+    // Step 3: Encrypt private key using PRF output (no additional prompt)
+    const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
+      rootKey.bytes(),
+      options.credentialId,
+      newWalletId.toString(),
+      prfOutput // Pass PRF output to avoid re-evaluation
+    );
+
+    // Step 4: Optionally encrypt mnemonic using same PRF output (no additional prompt)
+    // Default to true unless explicitly disabled
+    const shouldBackupMnemonic = options.backupMnemonic !== false;
+    const prfEncryptedMnemonic = shouldBackupMnemonic
+      ? await encryptMnemonicWithPrf(mnemonic, options.credentialId, newWalletId.toString(), prfOutput)
+      : undefined;
+
+    // Step 4: Optionally hash spending password if password unlock is enabled
+    const prfSpendingPassword = options.passwordUnlockEnabled
+      ? await hashSpendingPassword(password)
+      : undefined;
+
+    // Step 5: Insert wallet with pre-allocated ID
+    // IndexedDB allows specifying the ID directly
+    const walletData = {
+      id: newWalletId,
+      name,
+      icon,
+      type: WalletType.Normal,
+      theme,
+      order,
+      publicKey,
+      passwordLastUpdate: new Date(),
+      chain,
+      network,
+      // PRF encryption fields (Version 14+)
+      encryptionMethod: 'prf',
+      prfEncryptedPrivateKey,
+      prfEncryptedMnemonic,
+      webAuthnCredentialId: options.credentialId,
+      prfSpendingPassword
+    };
+
+    console.log('💾 Adding PRF wallet to database with fields:', {
+      id: newWalletId,
+      encryptionMethod: walletData.encryptionMethod,
+      hasPrfEncryptedPrivateKey: !!walletData.prfEncryptedPrivateKey,
+      hasPrfEncryptedMnemonic: !!walletData.prfEncryptedMnemonic,
+      hasWebAuthnCredentialId: !!walletData.webAuthnCredentialId,
+      hasPrfSpendingPassword: !!walletData.prfSpendingPassword
+    });
+
+    await db['wallets'].add(walletData);
+
+    console.log('✅ PRF wallet added to database successfully');
+
+    await createNewWalletDb(newWalletId, !!prfEncryptedMnemonic, isRestore);
+    return newWalletId;
+
+  } else {
+    // ============================================================================
+    // PASSWORD ENCRYPTION MODE (EXISTING WALLETS)
+    // ============================================================================
+    console.log('🔑 Password Encryption Branch Entered (usePrf was false)');
+
+    const encryptedMnemonic: string = encrypt(mnemonic, password);
+    const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
+
+    const walletData = {
+      name,
+      icon,
+      type: WalletType.Normal,
+      theme,
+      order,
+      encryptedPrivateKey,
+      encryptedMnemonic,
+      publicKey,
+      passwordLastUpdate: new Date(),
+      chain,
+      network,
+      // Explicitly set encryptionMethod for clarity (optional for backward compatibility)
+      encryptionMethod: 'password'
+    };
+
+    console.log('💾 Adding PASSWORD wallet to database with fields:', {
+      encryptionMethod: walletData.encryptionMethod,
+      hasEncryptedPrivateKey: !!walletData.encryptedPrivateKey,
+      hasEncryptedMnemonic: !!walletData.encryptedMnemonic
+    });
+
+    const walletId = await db['wallets'].add(walletData);
+
+    console.log('✅ Password wallet added to database successfully, ID:', walletId);
+
+    await createNewWalletDb(walletId, !!encryptedMnemonic, isRestore);
+    return walletId;
+  }
 }
 
 export async function createNewHardwareWallet(wallet: any) {

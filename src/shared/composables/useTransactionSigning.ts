@@ -1,5 +1,5 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { Ref, ComputedRef, toRefs, ref } from 'vue';
+import { Ref, ComputedRef, toRefs, ref, computed } from 'vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -30,6 +30,9 @@ export interface TransactionSigningReturn {
   txWitnesses: Ref<string | null>;
   valid: Ref<boolean>;
   passwordRules: Ref<any[]>;
+  privateKeyBytes: Ref<Uint8Array | null>;
+  isPrfWallet: ComputedRef<boolean>;
+  isBTSupported: ComputedRef<boolean>;
   // Keystone state
   overlay: Ref<boolean>;
   keystoneScan: Ref<boolean>;
@@ -44,6 +47,8 @@ export interface TransactionSigningReturn {
   resetState: () => void;
   handlePassKeySuccess: () => void;
   handlePassKeyError: (error: string) => void;
+  handlePassKeyAuthSuccess: (pkBytes: Uint8Array) => void;
+  handlePassKeyAuthError: (error: Error) => void;
   setPasswordFieldRef: (ref: any) => void;
   // Keystone methods
   onKeystoneScan: (ur: UR) => Promise<void>;
@@ -66,11 +71,25 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   const txCbor = ref<string>('');
   const txWitnesses = ref<string | null>(null);
   const isSubmit = ref(false);
+  const privateKeyBytes = ref<Uint8Array | null>(null);
   // Keystone state
   const overlay = ref(false);
   const keystoneScan = ref(false);
   const keystoneType = ref('');
   const keystoneCbor = ref('');
+
+  // PRF wallet detection
+  const isPrfWallet = computed(() => {
+    return loggedWallet.value?.encryptionMethod === 'prf' ||
+           (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
+  });
+
+  // Bluetooth support detection for Ledger/Trezor
+  const isBTSupported = computed(() => {
+    return (loggedWallet.value?.type === WalletType.Ledger || loggedWallet.value?.type === WalletType.Trezor) &&
+      !isSubmit.value &&
+      loggedWallet.value?.btSupported;
+  });
 
   const setPasswordFieldRef = (ref: any) => {
     passwordField.value = ref;
@@ -81,6 +100,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     isSubmit.value = false;
     txCbor.value = '';
     txWitnesses.value = null;
+    privateKeyBytes.value = null;
     loading.value = false;
   };
 
@@ -92,33 +112,43 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         throw new Error(t('common.noTransactionToSign'));
       }
 
-      // Verify password via background message
-      const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value },
-      })) as BackgroundResponse<VerifyPasswordResponse>;
+      // For password-based wallets, verify password via background message
+      if (!isPrfWallet.value) {
+        const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+          data: { password: spendingPassword.value },
+        })) as BackgroundResponse<VerifyPasswordResponse>;
 
-      if (!passwordVerification.data.success) {
-        passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
-        loading.value = false;
-        return false;
+        if (!passwordVerification.data.success) {
+          passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
+          loading.value = false;
+          return false;
+        }
       }
 
       // Serialize the Cardano.Tx to CBOR
       txCbor.value = serializeCardanoJsSdkTx(tx);
 
+      // Prepare signing data
+      const signingData: any = {
+        txCbor: txCbor.value,
+        partialSign: false,
+        password: spendingPassword.value,
+        accountIndex: 0,
+        utxos: utxos.value,
+        addresses: keys.value,
+        mergeWitnesses: false,
+      };
+
+      // For PRF wallets, pass the already-decrypted privateKeyBytes
+      if (isPrfWallet.value && privateKeyBytes.value) {
+        signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
+      }
+
       // Sign the transaction via background message
       const witnessResult = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
-        data: {
-          txCbor: txCbor.value,
-          partialSign: false,
-          password: spendingPassword.value,
-          accountIndex: 0,
-          utxos: utxos.value,
-          addresses: keys.value,
-          mergeWitnesses: false,
-        },
+        data: signingData,
       })) as { data: { witnesses?: any; error?: string } };
 
       if (witnessResult.data.error) {
@@ -389,6 +419,20 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     snackbar.setError(error || t('security.passKeyAuthFailed'));
   };
 
+  const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+    privateKeyBytes.value = pkBytes;
+    // Automatically proceed to sign after successful authentication
+    setTimeout(() => {
+      handleSign();
+    }, 300);
+  };
+
+  const handlePassKeyAuthError = (error: Error) => {
+    console.error('PassKey authentication error:', error);
+    snackbar.setError(error.message || t('security.passKeyAuthFailed'));
+    privateKeyBytes.value = null;
+  };
+
   return {
     // State
     loading,
@@ -399,6 +443,9 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     txWitnesses,
     valid,
     passwordRules,
+    privateKeyBytes,
+    isPrfWallet,
+    isBTSupported,
     // Keystone state
     overlay,
     keystoneScan,
@@ -413,6 +460,8 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     resetState,
     handlePassKeySuccess,
     handlePassKeyError,
+    handlePassKeyAuthSuccess,
+    handlePassKeyAuthError,
     setPasswordFieldRef,
     // Keystone methods
     onKeystoneScan,

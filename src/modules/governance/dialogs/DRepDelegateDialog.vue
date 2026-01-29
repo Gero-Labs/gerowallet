@@ -119,47 +119,58 @@
             </h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: center">
-            <!-- Password input (hidden after signing) -->
-            <PassKeyPasswordField
-              ref="passwordField"
-              v-if="loggedWallet.type === WalletType.Normal && !isSubmit"
-              :value="spendingPassword"
-              @input="spendingPassword = $event"
-              outlined
-              dense
-              :label="t('wallet.spendingPassword')"
-              :rules="passwordRules"
-              hide-details
-              required
-              :disabled="loading"
+            <!-- Transaction Authentication Section -->
+            <TransactionAuthSection
+              :wallet-type="loggedWallet.type"
+              :is-prf-wallet="isPrfWallet"
+              :is-signed="isSubmit"
+              :loading="loading"
+              :password="spendingPassword"
+              @update:password="spendingPassword = $event"
+              :password-label="t('wallet.spendingPassword')"
+              :password-rules="passwordRules"
+              :submit-text="t('governance.submitTransaction')"
+              submit-color="primary"
+              :submit-elevation="0"
+              :show-bt-toggle="loggedWallet.btSupported && !isSubmit"
+              :is-b-t="isBT"
+              @update:isBT="isBT = $event"
+              :usb-text="t('governance.usb')"
+              :bluetooth-text="t('governance.bluetooth')"
+              @passkey-success="handlePassKeyAuthSuccess"
+              @passkey-error="handlePassKeyAuthError"
+              @autofill-success="handlePassKeySuccess"
+              @autofill-error="handlePassKeyError"
+              @submit="signAndSubmitDelegationTx"
               @enter="signAndSubmitDelegationTx"
-              @passkey-autofill-success="handlePassKeySuccess"
-              @passkey-autofill-error="handlePassKeyError"
-              style="max-width: 295px"
+              @password-field-ref="setPasswordFieldRef"
             />
-            <div v-else-if="loggedWallet.btSupported && !isSubmit" class="py-0" style="align-content: center">
-              <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch
-                  :text-left="t('governance.usb')"
-                  icon-left="mdi-usb"
-                  :text-right="t('governance.bluetooth')"
-                  icon-right="mdi-bluetooth"
-                  v-model="isBT"
-                  :disabled="loading"
-                />
-              </v-card-subtitle>
-            </div>
+            <!-- Hide action button for PRF wallets (handled above), show for password/hardware wallets -->
             <v-btn
+              v-if="!isPrfWallet && isSubmit"
               color="primary"
               elevation="0"
               @click="signAndSubmitDelegationTx"
               height="40"
-              :disabled="loading || (!valid && !isSubmit)"
+              :disabled="loading || !valid"
               :loading="loading"
               class="mx-2"
               style="margin-bottom: 1px"
             >
-              {{ isSubmit ? t('governance.submitTransaction') : t('governance.signAndDelegate') }}
+              {{ t('governance.submitTransaction') }}
+            </v-btn>
+            <v-btn
+              v-else-if="!isPrfWallet && !isSubmit"
+              color="primary"
+              elevation="0"
+              @click="signAndSubmitDelegationTx"
+              height="40"
+              :disabled="loading || !valid"
+              :loading="loading"
+              class="mx-2"
+              style="margin-bottom: 1px"
+            >
+              {{ t('governance.signAndDelegate') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -193,8 +204,7 @@ import rules from '@/utils/rules';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';
-import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
@@ -225,10 +235,13 @@ const {
   isBT,
   valid,
   passwordRules,
+  isPrfWallet,
   handleSign,
   resetState,
   handlePassKeySuccess: composableHandlePassKeySuccess,
   handlePassKeyError: composableHandlePassKeyError,
+  handlePassKeyAuthSuccess,
+  handlePassKeyAuthError,
   setPasswordFieldRef,
   // Keystone state and methods
   overlay,
@@ -244,7 +257,6 @@ const {
 });
 
 const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
-const passwordField = ref<any>(null);
 
 const { toCurrency, truncate } = filters;
 
@@ -330,15 +342,5 @@ watch(
     }
   }
 );
-
-watch(passwordField, (newVal) => {
-  if (newVal) {
-    setPasswordFieldRef(newVal);
-  }
-});
-
-watch(spendingPassword, () => {
-  passwordRules.value = [rules.required()];
-});
 </script>
 <style scoped></style>

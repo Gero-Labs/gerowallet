@@ -140,36 +140,18 @@ export default {
   }),
 
   setRestoring: createSetter('isRestoring',
-    (v) => {
-      if (v) {
-        debugLog(`🔄 Starting wallet restore from ${context} context`);
-      } else {
-        debugLog(`✅ Wallet restore completed from ${context} context`);
-      }
-    },
+    undefined,
     (v) => ({
       loading: v,
       text: v ? loadingState.text : ''
     })
   ),
 
-  setConnected: createSetter('connected', (v) => {
-    if (loadingState.connected !== v) {
-      debugLog(`🔗 Connection state changed to ${v ? 'connected' : 'disconnected'}`);
-    }
-  }),
+  setConnected: createSetter('connected'),
 
-  setConnecting: createSetter('connecting', (v) => {
-    if (loadingState.connecting !== v) {
-      debugLog(`🔌 Connecting state changed to ${v ? 'connecting' : 'idle'}`);
-    }
-  }),
+  setConnecting: createSetter('connecting'),
 
-  setLoadingTxs: createSetter('loadingTxs', (v) => {
-    if (loadingState.loadingTxs !== v) {
-      debugLog(`💳 Transaction loading state: ${v ? 'loading' : 'completed'}`);
-    }
-  }),
+  setLoadingTxs: createSetter('loadingTxs'),
 
   // Expose the observable state
   state: loadingState,

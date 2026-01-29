@@ -1,6 +1,7 @@
 <template>
   <BaseDialog
-    :title="$t('navigation.walletBackup')"
+    :title="t('settings.recoveryPhrase')"
+    :subtitle="backup ? t('settings.seedPhraseMasterKey') : t('settings.walletBackupRequired')"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
@@ -9,6 +10,7 @@
     max-width="850"
     :min-height="0"
     :persistent="persistent"
+    icon="mdi-key"
   >
     <v-card-title class="pa-0" style="font-size: 12px">
       <v-stepper
@@ -101,32 +103,51 @@
                           <v-list-item class="px-0">
                             <v-list-item-content>
                               <v-list-item-title>
-                                {{ $t('wallet.passwordProtected') }}
+                                {{ isPrfWallet ? $t('wallet.passkeyProtected') : $t('wallet.passwordProtected') }}
                               </v-list-item-title>
                               <v-list-item-subtitle>
-                                {{ $t('wallet.enterPasswordToUnlock') }}
+                                {{ isPrfWallet ? $t('wallet.usePassKeyToUnlock') : $t('wallet.enterPasswordToUnlock') }}
                               </v-list-item-subtitle>
                             </v-list-item-content>
                           </v-list-item>
-                          <PassKeyPasswordField
-                            ref="passwordField"
-                            :value="password"
-                            @input="password = $event"
-                            outlined
-                            dense
-                            :rules="[rules.required()]"
-                            :label="$t('wallet.password')"
-                            @enter="validUnlock && decryptMnemonic()"
-                          />
-                          <v-btn
-                            color="primary"
-                            block
-                            :disabled="!validUnlock"
-                            @click="decryptMnemonic"
-                          >
-                            <v-icon class="mr-1">mdi-key</v-icon>
-                            {{ $t('wallet.unlock').toUpperCase() }}
-                          </v-btn>
+
+                          <!-- Password field for normal wallets -->
+                          <template v-if="!isPrfWallet">
+                            <PassKeyPasswordField
+                              ref="passwordField"
+                              :value="password"
+                              @input="password = $event"
+                              outlined
+                              dense
+                              :rules="[rules.required()]"
+                              :label="t('wallet.password')"
+                              @enter="validUnlock && decryptMnemonic()"
+                            />
+                            <v-btn
+                              color="primary"
+                              block
+                              :disabled="!validUnlock"
+                              @click="decryptMnemonic"
+                            >
+                              <v-icon class="mr-1">mdi-key</v-icon>
+                              {{ t('wallet.unlock').toUpperCase() }}
+                            </v-btn>
+                          </template>
+
+                          <!-- PassKey button for PRF wallets -->
+                          <template v-else>
+                            <v-btn
+                              color="primary"
+                              block
+                              @click="decryptMnemonicWithPassKey"
+                              :loading="decryptingWithPassKey"
+                            >
+                              <v-avatar size="18" class="mr-1">
+                                <v-img :src="assets.passKeySvg" contain></v-img>
+                              </v-avatar>
+                              {{ t('security.usePassKey').toUpperCase() }}
+                            </v-btn>
+                          </template>
                         </v-form>
                       </v-overlay>
                     </v-card>
@@ -228,16 +249,17 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-const { t } = useTranslation();
-import { toRefs, ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
+import { computed, getCurrentInstance, nextTick, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
 import { decrypt } from '@/shared/utils/crypto';
 import snackbar from '@/plugins/snackbar';
-import { walletStore } from '@/stores/walletStore';
-import WalletStore from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
+import assets from '@/utils/assets';
+
+const { t } = useTranslation();
 
 interface Props {
   isOpen: boolean;
@@ -260,6 +282,17 @@ const overlay = ref<boolean>(true);
 const recoverSeedChecked = ref<boolean>(false);
 const password = ref<string>('');
 const passwordField = ref<any>(null);
+const decryptingWithPassKey = ref<boolean>(false);
+const backup = computed(() => config.value?.backup || false);
+
+// Check if wallet uses PRF encryption
+const isPrfWallet = computed(() => {
+  const wallet = loggedWallet.value;
+
+  // Check encryptionMethod field, OR fallback to checking for PRF-specific fields
+  return wallet?.encryptionMethod === 'prf' ||
+    (!!wallet?.prfEncryptedMnemonic && !!wallet?.webAuthnCredentialId);
+});
 
 const seedToStr = () => {
   let str = ''
@@ -399,6 +432,51 @@ const decryptMnemonic = async (): Promise<void> => {
       passwordField.value?.showError(t('common.wrongPassword'));
       console.log(e) //TODO
     }
+  }
+}
+
+const decryptMnemonicWithPassKey = async (): Promise<void> => {
+  decryptingWithPassKey.value = true;
+  try {
+    console.log('🔐 Decrypting mnemonic with PassKey for PRF wallet');
+
+    // Check if mnemonic is backed up
+    if (!loggedWallet.value.prfEncryptedMnemonic) {
+      throw new Error(t('wallet.mnemonicNotBackedUp'));
+    }
+
+    // Import PRF decryption function
+    const { decryptMnemonicWithPrf } = await import('@/shared/utils/webauthn-prf');
+
+    // Decrypt mnemonic using PRF (triggers PassKey prompt)
+    const decryptedMnemonic = await decryptMnemonicWithPrf(
+      loggedWallet.value.prfEncryptedMnemonic,
+      loggedWallet.value.webAuthnCredentialId,
+      loggedWallet.value.id.toString()
+    );
+
+    // Validate mnemonic
+    if (!bip39.validateMnemonic(decryptedMnemonic)) {
+      throw new Error('Invalid mnemonic');
+    }
+
+    // Set seed phrase and prepare confirmation
+    seedPhrase.value = decryptedMnemonic.split(' ');
+    [seedPhraseToConfirm.value, seedPhraseReplaced.value] = randomReplace(seedPhrase.value, 4);
+    overlay.value = false;
+
+    console.log('✅ Mnemonic decrypted successfully');
+  } catch (e: any) {
+    console.error('❌ PassKey mnemonic decryption failed:', e);
+
+    // Show user-friendly error
+    if (e.message?.includes('User cancelled')) {
+      console.log('User cancelled PassKey authentication');
+    } else {
+      vmProxy.$snackbar?.setError(e.message || t('common.decryptionFailed'));
+    }
+  } finally {
+    decryptingWithPassKey.value = false;
   }
 }
 

@@ -168,26 +168,13 @@ async function handlePassKeyAutofill() {
       throw new Error('Encrypted password not found');
     }
 
-    console.log('🔐 Authenticating with PassKey...');
-
-    // Authenticate with WebAuthn
-    const { authenticateWebAuthn, decryptSpendingPasswordForPassKey } = await import('@/shared/utils/security');
-    const authenticated = await authenticateWebAuthn(credentialConfig.value);
-
-    if (!authenticated) {
-      throw new Error('PassKey authentication failed');
-    }
-
-    console.log('✅ PassKey authentication successful');
-
-    // Decrypt spending password
-    const decryptedPassword = await decryptSpendingPasswordForPassKey(
+    // Decrypt spending password using PRF (includes authentication)
+    const { decryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
+    const decryptedPassword = await decryptSpendingPasswordWithPrf(
       encryptedPasswordConfig.value,
       credentialConfig.value,
       wallet.id
     );
-
-    console.log('🔓 Password decrypted successfully');
 
     // Auto-fill password
     password.value = decryptedPassword;

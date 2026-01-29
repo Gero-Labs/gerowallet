@@ -1387,6 +1387,7 @@ export default {
   'staking.selectOptionToScan': 'Select the option to scan a QR code.',
   'staking.signAndDelegate': 'Sign & Delegate',
   'staking.signAndUnstake': 'Sign & Unstake',
+  'staking.signAndWithdraw': 'Sign & Withdraw',
   'staking.spendingPassword': 'Spending Password',
   'staking.stakeWithGero': 'Stake with GERO',
   'staking.staking': 'Staking',

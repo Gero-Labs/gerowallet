@@ -148,11 +148,11 @@
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup || hasNewSettingsFeatures">
                       <v-avatar size="20">
-                        <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
+                        <img :src="assets.settingsSvg" :alt="t('common.settings')" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="20" v-else>
-                      <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
+                      <img :src="assets.settingsSvg" :alt="t('common.settings')" />
                     </v-avatar>
                   </v-btn>
                 </v-app-bar>
@@ -171,15 +171,14 @@
                       <v-list-item>
                         <v-list-item-content>
                           <v-list-item-title style="white-space: break-spaces">
-                            Export your seed phrase
+                            {{ $t('settings.backupYourSeedPhrase') }}
                           </v-list-item-title>
                           <v-list-item-subtitle style="white-space: break-spaces">
-                            Safeguard your assets: store your recovery phrase securely.
-                            <b>If you lose it, you’ll lose access to all your funds.</b>
+                            <span>{{ $t('settings.backupSeedPhraseWarning') }}</span>
                           </v-list-item-subtitle>
                         </v-list-item-content>
                         <v-list-item-action>
-                          <v-btn depressed color="error" @click="backupWalletDialog = true"> Export </v-btn>
+                          <v-btn depressed color="error" @click="backupWalletDialog = true">{{ $t('common.backup') }}</v-btn>
                         </v-list-item-action>
                       </v-list-item>
                     </v-alert>
@@ -345,7 +344,7 @@ const hasNewSettingsFeatures = computed(() => hasNewFeaturesInPath(['settings'])
 
 // Check if wallet is empty (no native tokens)
 const isWalletEmpty = computed(() => {
-  return !account.value || account.value.controlled_amount === 0;
+  return !account.value || account.value.controlled_amount === '0';
 });
 const epochSlotPercentage = computed(() => {
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;

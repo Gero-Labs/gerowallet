@@ -16,7 +16,7 @@
       <v-card-actions class="justify-center pb-0 pt-3 px-0">
         <v-layout>
           <v-row>
-            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !signature" class="pb-0">
+            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !isPrfWallet && !signature" class="pb-0">
               <PassKeyPasswordField
                 ref="passwordField"
                 :value="spendingPassword"
@@ -31,6 +31,30 @@
                 @enter="sign"
                 @passkey-autofill-success="sign"
               />
+            </v-col>
+            <!-- PRF Wallet: PassKey Button or Submit Button -->
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Normal && isPrfWallet" class="pt-3 pb-0">
+              <!-- Before signing: PassKey button -->
+              <PassKeyAuthButton
+                v-if="!signature"
+                :disabled="loading"
+                @success="handlePassKeyAuthSuccess"
+                @error="handlePassKeyAuthError"
+                block
+                class="mb-2"
+              />
+              <!-- After signing: Submit button -->
+              <v-btn
+                v-else
+                block
+                class="geroButton"
+                style="color: black!important;"
+                @click="sign"
+                :disabled="loading"
+                :loading="loading"
+              >
+                {{ $t('common.confirm') }}
+              </v-btn>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
@@ -51,12 +75,13 @@
                 </span>
               </v-alert>
             </v-col>
-            <v-col cols="6">
+            <v-col :cols="isPrfWallet ? 12 : 6">
               <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline" :disabled="loading">
                 Decline
               </v-btn>
             </v-col>
-            <v-col cols="6">
+            <!-- Hide action button for PRF wallets (handled above) -->
+            <v-col cols="6" v-if="!isPrfWallet">
               <v-btn
                 block
                 class="geroButton"
@@ -146,7 +171,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
+import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { BackgroundResponse, Messaging, SignDataResponse, VerifyPasswordResponse } from '@/chrome/messaging';
@@ -155,24 +180,26 @@ import { Key, WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';
 import { createKeystoneDataSignRequest, parseDataSignature } from '@/shared/utils/keystone';
-import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import networks from '@/utils/networks';
-import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+import { DeviceStatusError, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Cardano } from '@cardano-sdk/core';
 import { getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } from '@/chrome/serialization';
 import { UR } from '@keystonehq/keystone-sdk';
+import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 
 const { t } = useTranslation();
 
 const { loggedWallet, config, keys } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any;
 const spendingPassword = ref('');
+const privateKeyBytes = ref<Uint8Array | null>(null);
 const passwordField = ref<any>(null);
 const request = ref<any>(null);
 const message = ref('');
@@ -199,6 +226,26 @@ const useSidePanel = computed(() => {
   return config.value?.useSidePanel;
 });
 
+// Check if wallet uses PRF encryption (PassKey)
+const isPrfWallet = computed(() => {
+  return loggedWallet.value?.encryptionMethod === 'prf' ||
+         (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
+});
+
+const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+  privateKeyBytes.value = pkBytes;
+  // Automatically proceed to sign after successful authentication
+  setTimeout(() => {
+    sign();
+  }, 300);
+};
+
+const handlePassKeyAuthError = (error: Error) => {
+  console.error('PassKey authentication error:', error);
+  snackbar.setError(error.message || t('security.passKeyAuthFailed'));
+  privateKeyBytes.value = null;
+};
+
 const decline = async () => {
   await controller.value.returnData({ data: undefined, error: DataSignError.UserDeclined });
   window.close();
@@ -209,7 +256,145 @@ const confirm = async () => {
   window.close();
 };
 
+const signDataLocallyWithPrf = async () => {
+  loading.value = true;
+  try {
+    const address = request.value.data.address;
+    const payload = request.value.data.payload;
+
+    // Import required modules
+    const { buildSignatureAndCoseKey } = await import('@/shared/utils/converter');
+
+    // Check if we're in a side panel (not a popup window)
+    const isSidePanel = window.location.href.includes('tabId=');
+
+    let pkBytes: Uint8Array;
+
+    // Use cached privateKeyBytes if available (from PassKeyAuthButton)
+    if (privateKeyBytes.value) {
+      console.log('[PRF Sign Data] Using cached private key bytes');
+      pkBytes = privateKeyBytes.value;
+    } else if (isSidePanel) {
+      // Open PassKeyAuth popup for WebAuthn (doesn't work in side panels)
+      console.log('[PRF Sign Data] Opening PassKeyAuth popup for side panel');
+
+      pkBytes = await new Promise<Uint8Array>((resolve, reject) => {
+        const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+
+        // Listen for postMessage from popup
+        const messageHandler = (event: MessageEvent) => {
+          // Verify origin
+          if (event.origin !== extensionOrigin) {
+            console.warn('[PRF Sign Data] Ignoring message from untrusted origin:', event.origin);
+            return;
+          }
+
+          if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+            window.removeEventListener('message', messageHandler);
+
+            if (event.data.payload.success) {
+              // Convert array back to Uint8Array
+              const bytes = new Uint8Array(event.data.payload.privateKeyBytes);
+              resolve(bytes);
+            } else if (event.data.payload.cancelled) {
+              reject(new Error('PassKey authentication cancelled'));
+            } else {
+              reject(new Error(event.data.payload.error || 'PassKey authentication failed'));
+            }
+          }
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        // Open PassKeyAuth popup
+        // Query params must come BEFORE the hash in Vue Router hash mode
+        const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
+        const popup = window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+
+        if (!popup) {
+          window.removeEventListener('message', messageHandler);
+          reject(new Error('Failed to open PassKey authentication popup. Please allow popups.'));
+        }
+
+        // Timeout after 60 seconds
+        setTimeout(() => {
+          window.removeEventListener('message', messageHandler);
+          if (popup && !popup.closed) {
+            popup.close();
+          }
+          reject(new Error('PassKey authentication timed out'));
+        }, 60000);
+      });
+    } else {
+      // Direct WebAuthn in popup window (WebAuthn works in popups)
+      const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
+      pkBytes = await decryptPrivateKeyWithPrf(
+        loggedWallet.value.prfEncryptedPrivateKey,
+        loggedWallet.value.webAuthnCredentialId,
+        loggedWallet.value.id.toString()
+      );
+    }
+
+    // Continue with signing using the decrypted private key
+    const rootKey = Bip32PrivateKey.fromBytes(pkBytes);
+
+    // Step 2: Find the signing key
+    // Normalize address format
+    let addressBech32: string;
+    if (address.startsWith('addr') || address.startsWith('stake')) {
+      addressBech32 = address;
+    } else {
+      const addressBytes = Buffer.from(address, 'hex');
+      addressBech32 = Cardano.Address.fromBytes(addressBytes).toBech32();
+    }
+
+    // Find the key in wallet
+    const allKeys = [...keys.value.payment, ...keys.value.change, ...keys.value.stake];
+    const foundKey = allKeys.find(k => k.address === addressBech32);
+
+    if (!foundKey || !foundKey.path) {
+      throw new Error(`Address not found in wallet keys: ${addressBech32}`);
+    }
+
+    // Step 3: Derive the signing key
+    const pathParts = foundKey.path.split('/');
+    const role = parseInt(pathParts[4].replace("'", ""), 10);
+    const index = parseInt(pathParts[5].replace("'", ""), 10);
+
+    const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]); // m/1852'/1815'/0'
+    const derived = accountKey.derive([role, index]);
+    const signingKey = derived.toRawKey();
+
+    // Step 4: Get address bytes for COSE_Key
+    let addressBytes: Uint8Array;
+    if (address.startsWith('addr') || address.startsWith('stake')) {
+      addressBytes = Cardano.Address.fromBech32(address).toBytes();
+    } else {
+      addressBytes = Buffer.from(address, 'hex');
+    }
+
+    // Step 5: Sign with proper COSE format
+    signature.value = buildSignatureAndCoseKey(addressBytes, payload, signingKey);
+
+    if (txAutoSubmit.value) {
+      await confirm();
+    }
+  } catch (e: any) {
+    console.error('[PRF Sign Data] Error:', e);
+    snackbar.setError(e.message || 'Failed to sign data with PassKey');
+  } finally {
+    loading.value = false;
+  }
+};
+
 const signAndReturnTx = async () => {
+  // PRF wallets: Sign locally in browser context (WebAuthn only works here)
+  if (isPrfWallet.value) {
+    await signDataLocallyWithPrf();
+    return;
+  }
+
+  // Normal wallets: Send to background for signing
   loading.value = true;
   try {
     const address = request.value.data.address;
@@ -241,16 +426,22 @@ const sign = async () => {
     return;
   }
   if (loggedWallet.value.type === WalletType.Normal) {
-    if (form.value.validate()) {
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as BackgroundResponse<VerifyPasswordResponse>;
+    // PRF wallets: Skip password verification, go directly to signing (will trigger PassKey in background)
+    if (isPrfWallet.value) {
+      await signAndReturnTx();
+    } else {
+      // Normal password-based wallets: Verify password first
+      if (form.value.validate()) {
+        const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+          data: { password: spendingPassword.value }
+        }) as BackgroundResponse<VerifyPasswordResponse>;
 
-      if (!passwordVerification.data.success) {
-        passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
-      } else {
-        await signAndReturnTx();
+        if (!passwordVerification.data.success) {
+          passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
+        } else {
+          await signAndReturnTx();
+        }
       }
     }
   } else if (loggedWallet.value.type === WalletType.Ledger) {
