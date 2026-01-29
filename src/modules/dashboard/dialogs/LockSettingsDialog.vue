@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="$t('security.lockSettings')"
+    :title="t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"
@@ -629,9 +629,9 @@ async function saveUnlockMethod(method: UnlockMethod) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving unlock method:', error);
-    errorMessage.value = error.message || t('security.unlockMethodUpdateFailed');
+    errorMessage.value = error['message'] || t('security.unlockMethodUpdateFailed');
   } finally {
     loading.value = false;
   }
@@ -657,9 +657,9 @@ async function handleAutoLockSelect(minutes: number) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving auto-lock setting:', error);
-    errorMessage.value = error.message || t('security.autoLockUpdateFailed');
+    errorMessage.value = error['message'] || t('security.autoLockUpdateFailed');
   } finally {
     loading.value = false;
   }
@@ -695,11 +695,11 @@ async function handlePassKeyUnlockChange(enabled: boolean) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey unlock setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyForUnlock.value = !enabled;
@@ -799,9 +799,9 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
           });
 
           debugLog('✅ Spending password encrypted and stored for PassKey autofill');
-        } catch (prfError: any) {
+        } catch (prfError: unknown) {
           // If PRF fails, show user-friendly error
-          if (prfError.message?.includes('PRF evaluation failed')) {
+          if (prfError['message']?.includes('PRF evaluation failed')) {
             throw new Error(t('security.passKeyLegacyDetected'));
           }
           throw prfError;
@@ -823,11 +823,11 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey autofill setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyForPasswordAutofill.value = !enabled;
@@ -863,11 +863,11 @@ async function handlePassKeyAutoTriggerChange() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey auto-trigger setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyAutoTrigger.value = !enabled;
@@ -910,9 +910,9 @@ async function handlePassKeyRegister() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error registering PassKey:', error);
-    snackbar.setError(error.message || t('security.passKeyRegistrationFailed'));
+    snackbar.setError(error['message'] || t('security.passKeyRegistrationFailed'));
   } finally {
     loadingPassKeyRegistration.value = false;
   }
@@ -955,9 +955,9 @@ async function handlePassKeyDeregister() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deregistering PassKey:', error);
-    snackbar.setError(error.message || t('security.passKeyDeregistrationFailed'));
+    snackbar.setError(error['message'] || t('security.passKeyDeregistrationFailed'));
   } finally {
     loadingPassKeyRegistration.value = false;
   }
@@ -990,11 +990,11 @@ async function handlePassKeyAutoTriggerUnlockChange() {
 
     // Emit update event
     emit('updated');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving PassKey auto-trigger unlock setting:', error);
 
     // Show error snackbar
-    snackbar.setError(error.message || t('security.passKeySettingsUpdateFailed'));
+    snackbar.setError(error['message'] || t('security.passKeySettingsUpdateFailed'));
 
     // Revert the switch
     passKeyAutoTriggerUnlock.value = !enabled;
@@ -1003,7 +1003,7 @@ async function handlePassKeyAutoTriggerUnlockChange() {
 
 /**
  * Prompt user for spending password with a dialog
- * @returns Promise<string | null> - Password or null if cancelled
+ * @returns Promise<string | null> - Password or null if canceled
  */
 async function promptForSpendingPassword(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -1056,11 +1056,11 @@ async function confirmPassword() {
     passwordResolve(passwordInput.value);
     passwordResolve = null;
     showPasswordDialog.value = false;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error verifying password:', error);
 
     // Show error tooltip
-    passwordErrorTooltipText.value = error.message || t('common.error');
+    passwordErrorTooltipText.value = error['message'] || t('common.error');
     passwordErrorTooltipColor.value = 'red';
     passwordErrorTooltipEnabled.value = true;
 

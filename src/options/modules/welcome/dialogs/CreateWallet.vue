@@ -21,7 +21,7 @@
               <v-alert color="primary" icon="mdi-shield-key" prominent dense outlined border="left" class="mb-4" style="width: 100%;">
                 <div class="d-flex align-center">
                   <div class="font-weight-bold flex-grow-1">{{ $t('welcome.prfEncryption') }}</div>
-                  <v-tooltip bottom max-width="400">
+                  <v-tooltip bottom max-width="400" content-class="custom-tooltip">
                     <template v-slot:activator="{ on, attrs }">
                       <v-icon small color="primary" v-bind="attrs" v-on="on" class="ml-2">
                         mdi-information-outline

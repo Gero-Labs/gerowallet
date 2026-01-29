@@ -1,4 +1,4 @@
-import Dexie, { DexieError } from 'dexie';
+import Dexie from 'dexie';
 import {
   walletDBSchema,
   walletDBVersion
@@ -101,9 +101,9 @@ export async function getDb(id: number): Promise<Dexie | null> {
         await db.open();
         dbCache.set(dbName, db);
         return db;
-    } catch (error: DexieError | any) {
+    } catch (error: unknown) {
       debugLog('Database error:', error)
-        if (error.name === 'NoSuchDatabaseError') {
+        if (error['name'] === 'NoSuchDatabaseError') {
             const db: Dexie = new Dexie(dbName);
             db.version(walletDBVersion).stores(walletDBSchema);
             await db.open();
@@ -116,7 +116,7 @@ export async function getDb(id: number): Promise<Dexie | null> {
     }
 }
 
-export async function setWalletConfiguration(id: number, key: string, value: any) {
+export async function setWalletConfiguration(id: number, key: string, value) {
   const db: Dexie = await getDb(id);
   const configTable = db.table('config');
   const configuration = await configTable.where({ key: key }).first();

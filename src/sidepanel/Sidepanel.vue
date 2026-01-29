@@ -7,9 +7,9 @@
 import { computed, watch, getCurrentInstance } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 const route = vmProxy.$route;
-const layout = computed(() => route.meta.layout || 'div');
+const layout = computed(() => route.meta['layout'] || 'div');
 
 watch(() => walletStore.config?.locale, async (newLocale, oldLocale) => {
   if (newLocale && vmProxy.$i18n && newLocale !== oldLocale) {
@@ -17,7 +17,7 @@ watch(() => walletStore.config?.locale, async (newLocale, oldLocale) => {
     const { loadLanguage } = await import('@/plugins/i18n');
     try {
       await loadLanguage(newLocale);
-      
+
       // Update i18n locale ONLY after successful load
       vmProxy.$i18n.locale = newLocale;
       console.log('🌐 Sidepanel language changed to:', newLocale);
