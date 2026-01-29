@@ -190,6 +190,7 @@ export interface CardState {
   // Multiple cards support
   cards: CardInfo[]; // Array of all user's cards
   selectedCardId: string | null; // Currently selected card UUID
+  currentCardIndex: number; // Currently selected card index in carousel
   exchangeRate: ExchangeRate | null;
 
   // Wallet status integration - ALL IN ONE!

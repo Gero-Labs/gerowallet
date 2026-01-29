@@ -1,6 +1,6 @@
 <template>
   <div class="management-content">
-    <img src="@/modules/wallet/icons/card.svg" alt="card" />
+    <img src="@/assets/front_card_no_mcx2.png" alt="card" />
     <div class="management-column-content">
       <h3 class="management-heading">{{ t('card.manageYourCardInSeconds') }}</h3>
       <p class="management-description">
