@@ -241,7 +241,7 @@ watch(
 );
 
 watch(localRejectionAcknowledged, (newValue) => {
-  emit('update:rejection-acknowledged', newValue);
+  emit('update:rejectionAcknowledged', newValue);
 });
 
 const localTimerDisplay = ref('');
