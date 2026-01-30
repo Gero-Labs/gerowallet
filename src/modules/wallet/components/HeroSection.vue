@@ -138,13 +138,6 @@ let timerInterval: ReturnType<typeof setInterval> | null = null;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
 const ORDER_CHECK_INTERVAL_MS = 30000;
 
-// Type definitions
-interface CardDeliveryData {
-  delivery?: {
-    payment_status?: string;
-    expires_at?: string;
-  };
-}
 const emptyCard: CardInfo = {
   cardData: {
     id: null,
@@ -264,14 +257,6 @@ const cardsWithOrderSlot = computed(() => {
       const paymentDetails = paymentDetailsCache.value[card.cardData.order_uuid];
       if (paymentDetails) {
         if (paymentDetails.status === 'rejected') {
-          return false;
-        }
-      }
-
-      const delivery = (card.cardData as CardDeliveryData)?.delivery;
-      if (delivery) {
-        const paymentStatus = delivery.payment_status?.toLowerCase();
-        if (paymentStatus === 'failed' || paymentStatus === 'expired') {
           return false;
         }
       }
@@ -458,10 +443,12 @@ const shouldShowOrderCardSection = computed(() => {
   if (isCurrentCardEmpty.value) return true;
 
   if (hasVirtualCard.value && hasPhysicalCard.value) return false;
-  if (currentCardHasUUID.value) return false;
+  
   if (isCurrentCardPending.value) return false;
 
-  return true;
+  if (canOrderNewCard.value) return true;
+
+  return false;
 });
 
 const showOrderTimer = computed(() => {
