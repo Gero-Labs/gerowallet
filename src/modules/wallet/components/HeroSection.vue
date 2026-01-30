@@ -192,8 +192,8 @@ const hasVirtualCard = computed(() => {
 });
 
 const isCardRejectedOrExpired = (card: CardInfo): boolean => {
-  const status = card.cardData?.status;
-  return status === 'rejected' || status === 'REJECTED' || status === 'expired';
+  const status = normalizeStatus(card.cardData?.status);
+  return status === 'rejected' || status === 'expired';
 };
 
 const hasPhysicalCard = computed(() => {
@@ -420,9 +420,14 @@ const currentCardStatus = computed(() => {
   return null;
 });
 
+const normalizeStatus = (status: string | null | undefined): string | null => {
+  if (!status) return null;
+  return status.toLowerCase();
+};
+
 const isCurrentCardRejected = computed(() => {
-  const status = currentCardStatus.value;
-  return status === 'rejected' || status === 'REJECTED' || status === 'expired';
+  const status = normalizeStatus(currentCardStatus.value);
+  return status === 'rejected' || status === 'expired';
 });
 
 const isCurrentCardPending = computed(() => {
@@ -441,6 +446,8 @@ const shouldShowOrderCardSection = computed(() => {
   if (!currentCard) return false;
 
   if (isCurrentCardEmpty.value) return true;
+
+  if (currentCardHasUUID.value) return false;
 
   if (hasVirtualCard.value && hasPhysicalCard.value) return false;
   
@@ -617,6 +624,7 @@ const checkCurrentCardStatus = async () => {
     }
 
   } catch (error) {
+    // Silent error handling - status check failed, but don't block UI
   } finally {
     loadingOrderDetails.value = false;
   }

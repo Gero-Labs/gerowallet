@@ -70,12 +70,12 @@
         {{ $t('card.loading') }}
       </v-chip>
       <v-chip
-        v-else-if="cards[currentCardIndex]?.cardData.id && (currentCardStatus === 'rejected' || currentCardStatus === 'expired')"
+        v-else-if="cards[currentCardIndex]?.cardData.id && (normalizedCurrentCardStatus === 'rejected' || normalizedCurrentCardStatus === 'expired')"
         class="card-status-chip rejected-chip"
         small
       >
         <v-icon small left>mdi-close-circle</v-icon>
-        {{ currentCardStatus === 'expired' ? $t('card.expired') : $t('card.rejected') }}
+        {{ normalizedCurrentCardStatus === 'expired' ? $t('card.expired') : $t('card.rejected') }}
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'pending'"
@@ -114,6 +114,15 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   currentCardStatus: null,
   loadingOrderDetails: false,
+});
+
+const normalizeStatus = (status: string | null | undefined): string | null => {
+  if (!status) return null;
+  return status.toLowerCase();
+};
+
+const normalizedCurrentCardStatus = computed(() => {
+  return normalizeStatus(props.currentCardStatus);
 });
 
 const isCurrentCardEmpty = computed(() => {
