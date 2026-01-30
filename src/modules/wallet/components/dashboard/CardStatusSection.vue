@@ -230,9 +230,18 @@ const props = withDefaults(defineProps<Props>(), {
 });
 const emit = defineEmits<Emits>();
 
-const localRejectionAcknowledged = computed({
-  get: () => props.rejectionAcknowledged,
-  set: (value) => emit('update:rejectionAcknowledged', value),
+const localRejectionAcknowledged = ref(props.rejectionAcknowledged);
+
+watch(
+  () => props.rejectionAcknowledged,
+  (newValue) => {
+    localRejectionAcknowledged.value = newValue;
+  },
+  { immediate: true }
+);
+
+watch(localRejectionAcknowledged, (newValue) => {
+  emit('update:rejection-acknowledged', newValue);
 });
 
 const localTimerDisplay = ref('');

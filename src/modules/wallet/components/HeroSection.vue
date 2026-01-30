@@ -137,7 +137,6 @@ let timerInterval: ReturnType<typeof setInterval> | null = null;
 
 // Constants
 const TIMER_UPDATE_INTERVAL_MS = 1000;
-const ORDER_CHECK_INTERVAL_MS = 30000;
 
 const emptyCard: CardInfo = {
   cardData: {
@@ -836,23 +835,7 @@ const checkPendingOrders = async () => {
   }
 };
 
-let orderCheckInterval: ReturnType<typeof setInterval> | null = null;
 const hasCheckedPendingOrders = ref(false);
-
-const startOrderChecking = () => {
-  if (orderCheckInterval) return;
-
-  orderCheckInterval = setInterval(() => {
-    if (cards.value.some(card => card.cardData?.order_uuid && !card.cardData?.card_uuid)) {
-      checkPendingOrders();
-    } else {
-      if (orderCheckInterval) {
-        clearInterval(orderCheckInterval);
-        orderCheckInterval = null;
-      }
-    }
-  }, ORDER_CHECK_INTERVAL_MS);
-};
 
 // Watch for cards changes to check pending orders
 watch(
@@ -878,7 +861,6 @@ watch(
         checkPendingOrders().then(() => {
           updateTimer();
         });
-        startOrderChecking();
       }
     }
   },
@@ -886,10 +868,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  if (orderCheckInterval) {
-    clearInterval(orderCheckInterval);
-    orderCheckInterval = null;
-  }
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
