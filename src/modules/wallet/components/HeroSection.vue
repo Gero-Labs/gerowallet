@@ -10,6 +10,7 @@
             :current-card-status="currentCardStatus"
             :current-card-has-u-u-i-d="currentCardHasUUID"
             :show-card-details="showCardDetails"
+            :loading-order-details="loadingOrderDetails"
             @update:current-card-index="cardStoreModule.setCurrentCardIndex($event)"
             @card-click="handleCardClick"
           />
@@ -422,7 +423,7 @@ const currentCardStatus = computed(() => {
 
 const isCurrentCardRejected = computed(() => {
   const status = currentCardStatus.value;
-  return status === 'rejected' || status === 'REJECTED';
+  return status === 'rejected' || status === 'REJECTED' || status === 'expired';
 });
 
 const isCurrentCardPending = computed(() => {
@@ -547,6 +548,7 @@ const checkCurrentCardStatus = async () => {
   }
 
   try {
+    loadingOrderDetails.value = true;
     const orderDetails = await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
 
     if (orderDetails?.status) {
@@ -616,6 +618,8 @@ const checkCurrentCardStatus = async () => {
     }
 
   } catch (error) {
+  } finally {
+    loadingOrderDetails.value = false;
   }
 };
 
