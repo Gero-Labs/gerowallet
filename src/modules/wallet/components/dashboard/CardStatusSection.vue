@@ -39,28 +39,48 @@
       <div class="status-card-gradient"></div>
       <v-card-text class="status-card-content">
         <div class="status-icon-wrapper">
+          <v-progress-circular
+            v-if="loadingOrderDetails"
+            indeterminate
+            size="48"
+            width="3"
+            color="primary"
+            class="status-loading"
+          ></v-progress-circular>
           <v-icon 
+            v-else
             class="status-icon"
-            :class="{ 'rejection-icon': isCurrentCardRejected }"
+            :class="{ 'rejection-icon': isRejectedOrExpired }"
           >
-            {{ isCurrentCardRejected ? 'mdi-close-circle' : 'mdi-credit-card-clock-outline' }}
+            {{ isRejectedOrExpired ? 'mdi-close-circle' : 'mdi-credit-card-clock-outline' }}
           </v-icon>
         </div>
         <div class="status-text-wrapper">
-          <!-- Rejected Card Status -->
-          <template v-if="isCurrentCardRejected">
+          <!-- Loading State -->
+          <template v-if="loadingOrderDetails">
             <div class="status-title-wrapper">
               <p class="status-title">
-                {{ $t('card.cardRejected') }}
+                {{ $t('card.loadingCardStatus') }}
               </p>
             </div>
             <p class="status-subtitle">
-              {{ $t('card.cardRejectedMessage') }}
+              {{ $t('card.pleaseWait') }}
+            </p>
+          </template>
+          <!-- Rejected or Expired Card Status -->
+          <template v-else-if="isRejectedOrExpired">
+            <div class="status-title-wrapper">
+              <p class="status-title">
+                {{ isCurrentCardExpired ? $t('card.paymentExpired') : $t('card.cardRejected') }}
+              </p>
+            </div>
+            <p class="status-subtitle">
+              {{ isCurrentCardExpired ? $t('card.orderNewCardToContinue') : $t('card.cardRejectedMessage') }}
             </p>
             <div class="acknowledgment-section mt-4">
               <v-checkbox
                 v-model="localRejectionAcknowledged"
-                :label="$t('card.iHaveReadRejectionMessage')"
+                :label="isCurrentCardExpired ? $t('card.iHaveReadExpiredMessage') : $t('card.iHaveReadRejectionMessage')"
                 hide-details
                 class="acknowledgment-checkbox"
               />
@@ -83,11 +103,7 @@
             </div>
             <p class="status-subtitle">
               <template v-if="currentOrderNeedsPayment">
-                <template v-if="currentCardStatus === 'expired'">
-                  {{ $t('card.paymentExpired') }} <br />
-                  {{ $t('card.orderNewCardToContinue') }}
-                </template>
-                <template v-else-if="isPaymentStatusCompleted">
+                <template v-if="isPaymentStatusCompleted">
                   {{ $t('card.waitingForOrderProcessing') }} <br />
                   {{ $t('card.processingTime') }}
                 </template>
@@ -119,16 +135,6 @@
             >
               <v-icon left>mdi-credit-card-outline</v-icon>
               {{ $t('card.completePayment') }}
-            </v-btn>
-            <!-- Re-order Button - Show if payment expired -->
-            <v-btn
-              v-if="currentOrderNeedsPayment && currentCardStatus === 'expired'"
-              class="order-new-card-btn mt-4"
-              @click="$emit('complete-payment')"
-              :loading="loadingOrderDetails"
-            >
-              <v-icon left>mdi-credit-card-plus</v-icon>
-              {{ $t('card.orderNewCard') }}
             </v-btn>
           </template>
         </div>
@@ -224,9 +230,18 @@ const props = withDefaults(defineProps<Props>(), {
 });
 const emit = defineEmits<Emits>();
 
-const localRejectionAcknowledged = computed({
-  get: () => props.rejectionAcknowledged,
-  set: (value) => emit('update:rejectionAcknowledged', value),
+const localRejectionAcknowledged = ref(props.rejectionAcknowledged);
+
+watch(
+  () => props.rejectionAcknowledged,
+  (newValue) => {
+    localRejectionAcknowledged.value = newValue;
+  },
+  { immediate: true }
+);
+
+watch(localRejectionAcknowledged, (newValue) => {
+  emit('update:rejectionAcknowledged', newValue);
 });
 
 const localTimerDisplay = ref('');
@@ -251,6 +266,14 @@ const isPaymentStatusCompleted = computed(() => {
   return paymentDetails?.status === 'completed';
 });
 
+const isCurrentCardExpired = computed(() => {
+  return props.currentCardStatus === 'expired';
+});
+
+const isRejectedOrExpired = computed(() => {
+  return props.isCurrentCardRejected || isCurrentCardExpired.value;
+});
+
 const shouldShowCompletePaymentButton = computed(() => {
   return props.currentOrderNeedsPayment && 
          props.currentCardStatus !== 'expired' && 
@@ -263,7 +286,7 @@ const localShowOrderTimer = computed(() => {
   if (currentCard.value?.cardData?.own_type !== 'physical') return false;
   if (!currentCard.value?.cardData?.order_uuid) return false;
   
-  if (props.isCurrentCardRejected) return false;
+  if (isRejectedOrExpired.value) return false;
   
   const orderUuid = currentCard.value.cardData.order_uuid;
   const paymentDetails = props.paymentDetailsCache[orderUuid];
@@ -773,6 +796,10 @@ const formatADA = (eurAmount: number) => {
       font-size: 28px !important;
       color: $primary-cyan;
       animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-loading {
+      color: $primary-cyan !important;
     }
   }
 

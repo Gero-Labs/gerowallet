@@ -56,20 +56,26 @@
         {{ $t('card.orderNewCard') }}
       </v-chip>
       <v-chip
-        v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'rejected'"
+        v-else-if="loadingOrderDetails && cards[currentCardIndex]?.cardData.id"
+        class="card-status-chip loading-chip"
+        small
+      >
+        <v-progress-circular
+          indeterminate
+          size="16"
+          width="2"
+          color="primary"
+          class="mr-1"
+        ></v-progress-circular>
+        {{ $t('card.loading') }}
+      </v-chip>
+      <v-chip
+        v-else-if="cards[currentCardIndex]?.cardData.id && (normalizedCurrentCardStatus === 'rejected' || normalizedCurrentCardStatus === 'expired')"
         class="card-status-chip rejected-chip"
         small
       >
         <v-icon small left>mdi-close-circle</v-icon>
-        {{ $t('card.rejected') }}
-      </v-chip>
-      <v-chip
-        v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'expired'"
-        class="card-status-chip expired-chip"
-        small
-      >
-        <v-icon small left>mdi-clock-alert-outline</v-icon>
-        {{ $t('card.expired') }}
+        {{ normalizedCurrentCardStatus === 'expired' ? $t('card.expired') : $t('card.rejected') }}
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'pending'"
@@ -102,10 +108,21 @@ interface Props {
   currentCardStatus?: string | null;
   currentCardHasUUID: boolean;
   showCardDetails: boolean;
+  loadingOrderDetails?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   currentCardStatus: null,
+  loadingOrderDetails: false,
+});
+
+const normalizeStatus = (status: string | null | undefined): string | null => {
+  if (!status) return null;
+  return status.toLowerCase();
+};
+
+const normalizedCurrentCardStatus = computed(() => {
+  return normalizeStatus(props.currentCardStatus);
 });
 
 const isCurrentCardEmpty = computed(() => {
@@ -313,6 +330,19 @@ const handleCardMouseLeave = () => {
 
     .v-icon {
       color: $primary-cyan !important;
+    }
+  }
+
+  &.loading-chip {
+    background: linear-gradient(135deg, rgba(158, 158, 158, 0.2) 0%, rgba(158, 158, 158, 0.15) 100%) !important;
+    border: 1px solid rgba(158, 158, 158, 0.4) !important;
+    color: #9e9e9e !important;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .v-progress-circular {
+      margin-right: 0 !important;
     }
   }
 }
