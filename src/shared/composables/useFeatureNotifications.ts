@@ -14,7 +14,7 @@
  */
 
 // Current app version - update this when releasing new features
-const APP_VERSION = '2.6.2';
+const APP_VERSION = '2.6.3';
 
 // Feature definitions - add new features here
 export interface FeatureDefinition {
@@ -30,6 +30,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     id: 'settings.security.lockSettings',
     version: '2.6.2',
     path: ['settings', 'security', 'lockSettings']
+  },
+  // Settings > Profile > German Language
+  {
+    id: 'settings.profile.germanLanguage',
+    version: '2.6.3',
+    path: ['settings', 'profile', 'germanLanguage']
   },
   // Navigation > Governance (example of new page in navigation menu)
   // {

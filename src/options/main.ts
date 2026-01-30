@@ -71,11 +71,15 @@ loadPersistedWallet().then(() => {
   Vue.component('notifications', Notifications);
 
   return new Promise<void>((resolve) => {
-    chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
-      if (saved?.loggedWallet?.id && saved?.config?.locale) {
-        i18n.locale = saved.config.locale;
+    chrome.storage.local.get(['walletStore', 'geroStore'], ({ walletStore: saved, geroStore }) => {
+      // Priority: geroStore.config.locale (global) -> walletStore.config.locale (wallet-specific) -> 'us'
+      const locale = geroStore?.config?.locale || saved?.config?.locale || 'us';
+
+      if (locale !== 'us') {
+        i18n.locale = locale;
+        console.log('🌐 Options: Setting initial locale:', locale);
       } else {
-        console.log('🌐 Using default locale: us');
+        console.log('🌐 Options: Using default locale: us');
       }
       resolve();
     });

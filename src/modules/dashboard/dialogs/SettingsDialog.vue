@@ -87,13 +87,16 @@ const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 // Check if there are new features in the security section
 const hasNewSecurityFeatures = computed(() => hasNewFeaturesInPath(['settings', 'security']))
 
+// Check if there are new features in the profile section (e.g., German language)
+const hasNewProfileFeatures = computed(() => hasNewFeaturesInPath(['settings', 'profile']))
+
 // Local reactive state
 const tab     = ref<string | null>(null)
 const loading = ref(false)
 
 // Build your tab array, injecting the dynamic badge
 const tabs = computed(() => [
-  { label: t('settings.profile'), value: 'profile' },
+  { label: t('settings.profile'), value: 'profile', badge: hasNewProfileFeatures.value },
   // { label: 'Password', value: 'password' },
   { label: t('settings.collateral'), value: 'collateral', disabled: false },
   { label: t('settings.contacts'), value: 'contacts', disabled: false },
