@@ -10,6 +10,7 @@
             :current-card-status="currentCardStatus"
             :current-card-has-u-u-i-d="currentCardHasUUID"
             :show-card-details="showCardDetails"
+            :loading-order-details="loadingOrderDetails"
             @update:current-card-index="cardStoreModule.setCurrentCardIndex($event)"
             @card-click="handleCardClick"
           />
@@ -136,15 +137,7 @@ let timerInterval: ReturnType<typeof setInterval> | null = null;
 
 // Constants
 const TIMER_UPDATE_INTERVAL_MS = 1000;
-const ORDER_CHECK_INTERVAL_MS = 30000;
 
-// Type definitions
-interface CardDeliveryData {
-  delivery?: {
-    payment_status?: string;
-    expires_at?: string;
-  };
-}
 const emptyCard: CardInfo = {
   cardData: {
     id: null,
@@ -199,8 +192,8 @@ const hasVirtualCard = computed(() => {
 });
 
 const isCardRejectedOrExpired = (card: CardInfo): boolean => {
-  const status = card.cardData?.status;
-  return status === 'rejected' || status === 'REJECTED' || status === 'expired';
+  const status = normalizeStatus(card.cardData?.status);
+  return status === 'rejected' || status === 'expired';
 };
 
 const hasPhysicalCard = computed(() => {
@@ -264,14 +257,6 @@ const cardsWithOrderSlot = computed(() => {
       const paymentDetails = paymentDetailsCache.value[card.cardData.order_uuid];
       if (paymentDetails) {
         if (paymentDetails.status === 'rejected') {
-          return false;
-        }
-      }
-
-      const delivery = (card.cardData as CardDeliveryData)?.delivery;
-      if (delivery) {
-        const paymentStatus = delivery.payment_status?.toLowerCase();
-        if (paymentStatus === 'failed' || paymentStatus === 'expired') {
           return false;
         }
       }
@@ -435,9 +420,14 @@ const currentCardStatus = computed(() => {
   return null;
 });
 
+const normalizeStatus = (status: string | null | undefined): string | null => {
+  if (!status) return null;
+  return status.toLowerCase();
+};
+
 const isCurrentCardRejected = computed(() => {
-  const status = currentCardStatus.value;
-  return status === 'rejected' || status === 'REJECTED';
+  const status = normalizeStatus(currentCardStatus.value);
+  return status === 'rejected' || status === 'expired';
 });
 
 const isCurrentCardPending = computed(() => {
@@ -457,11 +447,15 @@ const shouldShowOrderCardSection = computed(() => {
 
   if (isCurrentCardEmpty.value) return true;
 
-  if (hasVirtualCard.value && hasPhysicalCard.value) return false;
   if (currentCardHasUUID.value) return false;
+
+  if (hasVirtualCard.value && hasPhysicalCard.value) return false;
+  
   if (isCurrentCardPending.value) return false;
 
-  return true;
+  if (canOrderNewCard.value) return true;
+
+  return false;
 });
 
 const showOrderTimer = computed(() => {
@@ -560,6 +554,7 @@ const checkCurrentCardStatus = async () => {
   }
 
   try {
+    loadingOrderDetails.value = true;
     const orderDetails = await cardStoreModule.getOrderDetails(currentCard.cardData.order_uuid);
 
     if (orderDetails?.status) {
@@ -629,6 +624,9 @@ const checkCurrentCardStatus = async () => {
     }
 
   } catch (error) {
+    // Silent error handling - status check failed, but don't block UI
+  } finally {
+    loadingOrderDetails.value = false;
   }
 };
 
@@ -845,23 +843,7 @@ const checkPendingOrders = async () => {
   }
 };
 
-let orderCheckInterval: ReturnType<typeof setInterval> | null = null;
 const hasCheckedPendingOrders = ref(false);
-
-const startOrderChecking = () => {
-  if (orderCheckInterval) return;
-
-  orderCheckInterval = setInterval(() => {
-    if (cards.value.some(card => card.cardData?.order_uuid && !card.cardData?.card_uuid)) {
-      checkPendingOrders();
-    } else {
-      if (orderCheckInterval) {
-        clearInterval(orderCheckInterval);
-        orderCheckInterval = null;
-      }
-    }
-  }, ORDER_CHECK_INTERVAL_MS);
-};
 
 // Watch for cards changes to check pending orders
 watch(
@@ -887,7 +869,6 @@ watch(
         checkPendingOrders().then(() => {
           updateTimer();
         });
-        startOrderChecking();
       }
     }
   },
@@ -895,10 +876,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  if (orderCheckInterval) {
-    clearInterval(orderCheckInterval);
-    orderCheckInterval = null;
-  }
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
