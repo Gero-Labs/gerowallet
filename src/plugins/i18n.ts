@@ -1,6 +1,7 @@
 import Vue from 'vue';
 import VueI18n from 'vue-i18n';
 import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
 
 // Vuetify locales - import all available
 import {
@@ -121,22 +122,36 @@ function getLocaleCode(lang: string): string {
 Vue.use(VueI18n);
 
 /**
- * Get saved locale from Pinia store (centralized)
- * FIXED: Use walletStore instead of direct localStorage access
+ * Get saved locale from stores (centralized)
+ * PRIORITY: geroStore (global) -> walletStore (wallet-specific) -> fallback
  */
 const getSavedLocale = (): string => {
   try {
-    // Use centralized store pattern (walletStore) instead of localStorage
-    const locale = walletStore.config?.locale;
-    if (locale) {
-      return locale;
+    // 1. Check geroStore.config.locale (global preference, persists across login/logout)
+    const globalLocale = geroStore.config?.locale;
+    if (globalLocale) {
+      return globalLocale;
     }
 
-    // Fallback: read from localStorage only if store is not initialized yet
+    // 2. Fallback: walletStore.config.locale (wallet-specific, for backward compatibility)
+    const walletLocale = walletStore.config?.locale;
+    if (walletLocale) {
+      return walletLocale;
+    }
+
+    // 3. Fallback: read from localStorage only if stores are not initialized yet
     // (e.g., during very first app start before store hydration)
-    const savedConfig = localStorage.getItem('walletStore');
-    if (savedConfig) {
-      const config = JSON.parse(savedConfig);
+    const savedGeroConfig = localStorage.getItem('geroStore');
+    if (savedGeroConfig) {
+      const config = JSON.parse(savedGeroConfig);
+      if (config?.config?.locale) {
+        return config.config.locale;
+      }
+    }
+
+    const savedWalletConfig = localStorage.getItem('walletStore');
+    if (savedWalletConfig) {
+      const config = JSON.parse(savedWalletConfig);
       return config?.config?.locale || 'us';
     }
   } catch (e) {

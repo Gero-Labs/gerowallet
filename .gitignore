@@ -44,3 +44,13 @@ coverage/
 # Local cache
 .cache/
 .eslintcache
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Translation batch files (temporary)
+.claude/i18n-localization/batches/
+
+# Translation utility scripts (temporary)
+scripts/translate-*.js
+scripts/merge-translations.js

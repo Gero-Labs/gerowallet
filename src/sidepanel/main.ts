@@ -13,14 +13,17 @@ import App from './Sidepanel.vue';
 Vue.config.productionTip = false;
 Vue.use(VueRouter);
 
-chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
-  if (saved?.loggedWallet?.id && saved?.config?.locale) {
-    console.log('🌐 Sidepanel: Setting initial locale from storage:', saved.config.locale);
-    i18n.locale = saved.config.locale;
+chrome.storage.local.get(['walletStore', 'geroStore'], ({ walletStore: saved, geroStore }) => {
+  // Priority: geroStore.config.locale (global) -> walletStore.config.locale (wallet-specific) -> 'us'
+  const locale = geroStore?.config?.locale || saved?.config?.locale || 'us';
+
+  if (locale !== 'us') {
+    console.log('🌐 Sidepanel: Setting initial locale:', locale);
+    i18n.locale = locale;
   } else {
     console.log('🌐 Sidepanel: Using default locale: us');
   }
-  
+
   new Vue({
     vuetify,
     i18n,

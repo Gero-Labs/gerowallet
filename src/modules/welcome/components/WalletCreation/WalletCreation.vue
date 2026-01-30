@@ -152,11 +152,12 @@ const gradientClass = computed(() =>
 
 .text-container {
   width: 100%;
-  max-width: 360px;
+  max-width: 400px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  padding: 0 10px;
 }
 
 .subtitle {
@@ -167,22 +168,24 @@ const gradientClass = computed(() =>
 
 .title {
   font-size: 36px !important;
-  white-space: nowrap;
+  white-space: normal;
   margin-bottom: 20px;
-  line-height: 1 !important;
+  line-height: 1.2 !important;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .title-regular {
   font-weight: 400 !important;
   font-size: 36px !important;
-  line-height: 1 !important;
+  line-height: 1.2 !important;
   letter-spacing: 1.32px;
 }
 
 .title-gradient {
   font-weight: 700 !important;
   font-size: 36px !important;
-  line-height: 1 !important;
+  line-height: 1.2 !important;
   letter-spacing: 1.32px;
 }
 
@@ -223,5 +226,28 @@ const gradientClass = computed(() =>
   color: rgba(255, 255, 255, 0.7);
   position: relative;
   z-index: 2;
+}
+
+/* Responsive font sizing for longer text */
+@media (max-width: 1200px) {
+  .title {
+    font-size: 32px !important;
+  }
+
+  .title-regular,
+  .title-gradient {
+    font-size: 32px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .title {
+    font-size: 28px !important;
+  }
+
+  .title-regular,
+  .title-gradient {
+    font-size: 28px !important;
+  }
 }
 </style>

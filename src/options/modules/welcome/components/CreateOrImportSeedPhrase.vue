@@ -7,10 +7,10 @@
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
-            Create Wallet
+            {{ $t('welcome.createWallet') }}
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
-            Set up a new wallet to manage your digital assets.
+            {{ $t('welcome.createWalletDescription') }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -20,10 +20,10 @@
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
-            Restore Wallet
+            {{ $t('welcome.restoreWallet') }}
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
-            Restore a wallet using your recovery phrase.
+            {{ $t('welcome.restoreWalletDescription') }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -33,10 +33,10 @@
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
-            Pair Hardware Wallet
+            {{ $t('welcome.pairHardwareWallet') }}
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
-            Connect your hardware wallet.
+            {{ $t('welcome.pairHardwareWalletDescription') }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -46,7 +46,7 @@
       <v-icon>
         mdi-arrow-left
       </v-icon>
-      Back
+      {{ $t('common.back') }}
     </v-btn>
     <CreateWallet :is-open="createWalletDialog" @close="createWalletDialog = false" :persistent="false" :network="props.network"></CreateWallet>
     <RestoreWallet :dialog="restoreWalletDialog" @dialogChange="restoreWalletDialogChange" :network="props.network"></RestoreWallet>

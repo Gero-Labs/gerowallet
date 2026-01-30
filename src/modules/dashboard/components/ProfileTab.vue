@@ -71,18 +71,26 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">{{ $t('settings.displayLanguage') }}</h3>
+          <h3 style="color: white">
+            {{ $t('settings.displayLanguage') }}
+            <NotificationDot
+              :show="hasNewLanguage"
+              color="success"
+              :pulse="true"
+            />
+          </h3>
           <span class="helper">{{ $t('settings.setLanguageHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-select
             v-model="loc"
-            :items="Object.values(languages)"
+            :items="availableLanguages"
             item-text="name"
             outlined
             dense
             hide-details
-            disabled
+            attach
+            @focus="handleLanguageSelectorFocus"
           >
             <template v-slot:item="{ item }">
               <v-list-item-avatar size="20">
@@ -135,6 +143,7 @@ import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
+import NotificationDot from '@/shared/components/NotificationDot.vue';
 import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
@@ -142,12 +151,23 @@ import geroStoreDefault from '@/stores/geroStore';
 import WalletStore from '@/stores/walletStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { setWalletConfiguration } from '@/db/wallet-db';
+import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 // Define emits
 const emit = defineEmits(['close']);
 
 // Translation
 const { t } = useTranslation();
+
+// Feature notifications for new German language
+const hasNewLanguage = computed(() => isFeatureNew('settings.profile.germanLanguage'));
+
+// Filter to only show ready languages (English US, English GB, German)
+const READY_LANGUAGES = ['us', 'gb', 'de'];
+
+const availableLanguages = computed(() => {
+  return Object.values(languages).filter(lang => READY_LANGUAGES.includes(lang.iso));
+});
 
 // Get store instance
 const { loggedWallet, config } = toRefs(walletStore);
@@ -239,6 +259,13 @@ const onFileChange = async (event: Event) => {
   reader.readAsDataURL(file);
 };
 
+const handleLanguageSelectorFocus = () => {
+  // Mark German language feature as seen when user opens the language selector
+  if (hasNewLanguage.value) {
+    markFeatureAsSeen('settings.profile.germanLanguage');
+  }
+};
+
 // Watchers
 watch(loc, async (val) => {
   if (val) {
@@ -261,10 +288,22 @@ watch(loc, async (val) => {
   }
 }, { immediate: false });
 
+// Watch for locale changes from other sources (e.g., LanguageSelector on Welcome screen)
+watch(() => geroStore.config?.locale, (newLocale) => {
+  if (newLocale && languages[newLocale]) {
+    const newLanguageName = languages[newLocale].name;
+    if (loc.value !== newLanguageName) {
+      loc.value = newLanguageName;
+    }
+  }
+});
+
 // Lifecycle
 onMounted(() => {
   walletName.value = loggedWallet.value.name;
-  loc.value = languages[config.value.locale || 'us'].name;
+  // CRITICAL: Read from geroStore (global preference) instead of walletStore
+  // This ensures locale persists across login/logout
+  loc.value = languages[geroStore.config?.locale || 'us'].name;
 });
 </script>
 

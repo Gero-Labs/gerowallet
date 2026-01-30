@@ -29,7 +29,8 @@ export const geroStore: GeroStore =  Vue.observable<GeroStore>({
   wallets: {},
   network: networks[0],
   config: {
-    welcomeDone: true
+    welcomeDone: true,
+    locale: 'us'  // Global locale preference (persists across login/logout)
   },
 });
 
@@ -87,7 +88,8 @@ function broadcastFromBackground(updates: Partial<GeroStore>) {
         wallets: {},
         network: networks[0],
         config: {
-          welcomeDone: true
+          welcomeDone: true,
+          locale: 'us'  // Default global locale
         }
       };
       chrome.storage.local.set({
@@ -105,6 +107,10 @@ export default {
   setConfig(config: any) {
     geroStore.config = config;
     broadcastFromBackground({ config });
+  },
+  setLocale(locale: string) {
+    geroStore.config.locale = locale;
+    broadcastFromBackground({ config: geroStore.config });
   },
   setNetwork(network: any) {
     geroStore.network = network;
@@ -258,7 +264,8 @@ export default {
       wallets: {},
       network: networks[0],
       config: {
-        welcomeDone: true
+        welcomeDone: true,
+        locale: geroStore.config?.locale || 'us'  // Preserve locale during reset
       }
     };
 
@@ -289,5 +296,10 @@ export default {
   // Utility method to check if wallet exists
   hasWallet(walletId: number): boolean {
     return geroStore.wallets && walletId in geroStore.wallets;
+  },
+
+  // Utility method to get current locale
+  getLocale(): string {
+    return geroStore.config?.locale || 'us';
   }
 }

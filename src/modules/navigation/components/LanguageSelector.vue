@@ -11,7 +11,7 @@
     </template>
     <v-list dense class="pa-0" light style="background-color: #ffffff88;">
       <v-list-item-group v-model="selectedLang" mandatory>
-        <v-list-item v-for="(item, index) in languages" :key="index">
+        <v-list-item v-for="(item, index) in availableLanguages" :key="index">
           <v-list-item-avatar size="20">
             <flag :iso="item.iso" style="font-size: 20px;"></flag>
           </v-list-item-avatar>
@@ -25,27 +25,43 @@
 import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
 import languages from '@/plugins/languages';
 import { loadLanguage } from '@/plugins/i18n';
 
 const selectedLang = ref(-1);
 const instance = getCurrentInstance();
 
+// Filter to only show ready languages (English US, English GB, German)
+const READY_LANGUAGES = ['us', 'gb', 'de'];
+
+const availableLanguages = computed(() => {
+  return Object.entries(languages)
+    .filter(([key]) => READY_LANGUAGES.includes(key))
+    .map(([, value]) => value);
+});
+
+const availableLanguageKeys = computed(() => {
+  return Object.keys(languages).filter(key => READY_LANGUAGES.includes(key));
+});
+
 const currentLanguage = computed(() => {
   return languages[instance?.proxy?.$i18n?.locale || 'us']
 });
 
 const currentLocale = computed(() => {
-  return walletStore.config?.locale || 'us';
+  // CRITICAL: Read from geroStore (global preference) instead of walletStore
+  // This ensures locale persists across login/logout
+  return geroStore.config?.locale || 'us';
 });
 
 watch(selectedLang, async (val) => {
-  const localeKey = Object.keys(languages)[val]
-  
+  const localeKey = availableLanguageKeys.value[val]
+
   // CRITICAL FIX: Load language file before switching (race condition fix)
   try {
     await loadLanguage(localeKey);
-    
+
     // Update store and i18n locale ONLY after successful load
     WalletStore.setLocale(localeKey);
     if (instance?.proxy?.$i18n) {
@@ -57,9 +73,17 @@ watch(selectedLang, async (val) => {
   }
 });
 
+// Watch for locale changes from other sources (e.g., ProfileTab settings)
+watch(currentLocale, (newLocale) => {
+  const newIndex = availableLanguageKeys.value.indexOf(newLocale);
+  if (newIndex !== -1 && selectedLang.value !== newIndex) {
+    selectedLang.value = newIndex;
+  }
+});
+
 onMounted(async () => {
-  selectedLang.value = Object.keys(languages).indexOf(currentLocale.value)
-  
+  selectedLang.value = availableLanguageKeys.value.indexOf(currentLocale.value)
+
   // Load saved language on mount if not 'us'
   if (currentLocale.value !== 'us') {
     try {
