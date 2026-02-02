@@ -108,9 +108,19 @@ export default {
     geroStore.config = config;
     broadcastFromBackground({ config });
   },
-  setLocale(locale: string) {
+  async setLocale(locale: string) {
     geroStore.config.locale = locale;
     broadcastFromBackground({ config: geroStore.config });
+
+    // CRITICAL: Also save to gero-db to persist across liveQuery reloads
+    // Without this, the liveQuery subscription in geroLoader.ts will reload
+    // the old locale value from the database and override the in-memory value
+    try {
+      const { setConfiguration } = await import('@/db/gero-db');
+      await setConfiguration('locale', locale);
+    } catch (error) {
+      console.error('Failed to save locale to database:', error);
+    }
   },
   setNetwork(network: any) {
     geroStore.network = network;
