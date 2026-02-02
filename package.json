@@ -52,7 +52,7 @@
     "@noble/hashes": "^2.0.1",
     "@trezor/connect-webextension": "^9.7.1",
     "@vueuse/core": "6.6.2",
-    "@vueuse/rxjs": "6.6.2",
+    "@vueuse/rxjs": "14.2.0",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "ably": "^2.11.0",
