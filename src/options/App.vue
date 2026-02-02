@@ -39,11 +39,13 @@ import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
 import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 
 const { loading, isRestoring, text } = toRefs(loadingState);
 const { config } = toRefs(walletStore);
+const geroConfig = toRefs(geroStore).config;
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
@@ -65,19 +67,36 @@ onMounted(async () => {
   }
 });
 
-watch(() => config.value?.locale, async (newLocale, oldLocale) => {
-  if (newLocale && vmProxy.$i18n && newLocale !== oldLocale) {
-    // CRITICAL FIX: Load language file before switching (race condition fix)
-    const { loadLanguage } = await import('@/plugins/i18n');
-    try {
-      await loadLanguage(newLocale);
+// Watch geroStore for locale changes (global preference) instead of walletStore
+// CRITICAL: The initial locale is set by main.ts BEFORE Vue mounts
+// This watcher should only react to SUBSEQUENT changes made by the user
+watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
+  // Skip if no locale value or i18n not ready
+  if (!newLocale || !vmProxy.$i18n) return;
 
-      // Update i18n locale ONLY after successful load
-      vmProxy.$i18n.locale = newLocale;
-    } catch (error) {
-      console.error(`Failed to load language ${newLocale}:`, error);
-      // Don't update i18n if load failed
-    }
+  // CRITICAL: Skip if this is the initial watcher run and i18n is already set correctly
+  // This prevents the watcher from overwriting the locale set by main.ts
+  // The geroStore default is 'us', but main.ts may have already loaded 'de' from storage
+  if (vmProxy.$i18n.locale === newLocale) {
+    return; // Already at the correct locale, no action needed
+  }
+
+  // Skip if oldLocale is undefined/null (first run) and newLocale is the default 'us'
+  // This means geroStore hasn't been hydrated yet, so trust main.ts's locale setting
+  if (!oldLocale && newLocale === 'us' && vmProxy.$i18n.locale !== 'us') {
+    console.log('🔄 App.vue: Skipping initial hydration reset, current i18n.locale:', vmProxy.$i18n.locale);
+    return;
+  }
+
+  // Proceed with locale change
+  console.log('🔄 App.vue: Locale change detected:', oldLocale, '->', newLocale);
+  const { loadLanguage } = await import('@/plugins/i18n');
+  try {
+    await loadLanguage(newLocale);
+    vmProxy.$i18n.locale = newLocale;
+    console.log('✅ App.vue: i18n.locale updated to:', newLocale);
+  } catch (error) {
+    console.error(`Failed to load language ${newLocale}:`, error);
   }
 }, { immediate: true, deep: true });
 </script>

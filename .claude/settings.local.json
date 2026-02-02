@@ -21,7 +21,20 @@
       "Bash(cd:*)",
       "Bash(npm run build)",
       "Bash(curl:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(where python python3 py)",
+      "Bash(node scripts/translate-batch.js:*)",
+      "Bash(node scripts/translate-ai.js:*)",
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(node -e:*)",
+      "Bash(node scripts/translate-ai-simple.js:*)",
+      "Bash(ls:*)",
+      "Bash(test:*)",
+      "Bash(node scripts/merge-translations.js:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
