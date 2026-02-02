@@ -23,9 +23,8 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
-import { walletStore } from '@/stores/walletStore';
-import WalletStore from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
+import GeroStore from '@/stores/geroStore';
 import languages from '@/plugins/languages';
 import { loadLanguage } from '@/plugins/i18n';
 import { READY_LANGUAGES } from '@/plugins/i18n/config';
@@ -61,11 +60,9 @@ watch(selectedLang, async (val) => {
   try {
     await loadLanguage(localeKey);
 
-    // Update store and i18n locale ONLY after successful load
-    WalletStore.setLocale(localeKey);
-    if (instance?.proxy?.$i18n) {
-      instance.proxy.$i18n.locale = localeKey;
-    }
+    // Update geroStore directly (source of truth for global locale preference)
+    // This updates i18n.locale internally and persists to database
+    await GeroStore.setLocale(localeKey);
   } catch (error) {
     console.error(`Failed to load language ${localeKey}:`, error);
     // Don't update store if load failed - will cause UI inconsistency

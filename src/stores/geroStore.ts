@@ -84,8 +84,11 @@ let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
  * instead of reading from chrome.storage.local.get() to prevent race conditions.
  * The previous async read pattern caused locale to alternate between values
  * because the liveQuery and storage writes were racing.
+ *
+ * @param updates - Partial GeroStore updates to broadcast
+ * @param immediate - If true, write to chrome.storage immediately (no debounce)
  */
-function broadcastFromBackground(updates: Partial<GeroStore>) {
+function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false) {
   if (context === 'background') {
     // Serialize data for broadcasting
     const serializedUpdates = JSON.parse(JSON.stringify(updates, serializeValue));
@@ -93,13 +96,13 @@ function broadcastFromBackground(updates: Partial<GeroStore>) {
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Debounced storage write to reduce I/O operations during rapid updates
-    // This batches multiple updates together while maintaining data consistency
-    if (storageWriteTimeout) {
-      clearTimeout(storageWriteTimeout);
-    }
-
-    storageWriteTimeout = setTimeout(() => {
+    // For critical state changes (e.g., locale), write immediately to storage
+    // so browser context gets correct state on hydration
+    if (immediate || (updates.config && 'locale' in updates.config)) {
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+        storageWriteTimeout = null;
+      }
       try {
         // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
         // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
@@ -108,9 +111,28 @@ function broadcastFromBackground(updates: Partial<GeroStore>) {
           [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
         });
       } catch (error) {
-        console.error('Failed to persist gero store to storage:', Object.keys(updates), error);
+        console.error('Failed to persist gero store to storage (immediate):', Object.keys(updates), error);
       }
-    }, 300); // 300ms debounce - balances performance with data safety
+    } else {
+      // Debounced storage write to reduce I/O operations during rapid updates
+      // This batches multiple updates together while maintaining data consistency
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+      }
+
+      storageWriteTimeout = setTimeout(() => {
+        try {
+          // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
+          // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
+          const finalState = { ...geroStore };
+          chrome.storage.local.set({
+            [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
+          });
+        } catch (error) {
+          console.error('Failed to persist gero store to storage:', Object.keys(updates), error);
+        }
+      }, 300); // 300ms debounce - balances performance with data safety
+    }
   }
 }
 
@@ -174,9 +196,15 @@ export default {
       return;
     }
 
+    // Capture previous locale for error recovery
+    const previousLocale = geroStore.config.locale;
+
     // Update in-memory state first
     geroStore.config.locale = locale;
-    broadcastFromBackground({ config: geroStore.config });
+
+    // CRITICAL: Use immediate flag for locale changes to prevent race conditions
+    // This ensures browser context hydrates the correct state on initialization
+    broadcastFromBackground({ config: geroStore.config }, true);
 
     // Update i18n.locale directly to ensure UI updates immediately
     const { updateI18nLocale } = await import('@/plugins/i18n');
@@ -189,6 +217,12 @@ export default {
       await setConfiguration('locale', locale);
     } catch (error) {
       console.error('Failed to save locale to database:', error);
+
+      // Error recovery: Revert in-memory state if database write fails
+      // This ensures consistency between memory and persisted state
+      geroStore.config.locale = previousLocale;
+      broadcastFromBackground({ config: geroStore.config }, true);
+      await updateI18nLocale(previousLocale);
     }
   },
   setNetwork(network: any) {
