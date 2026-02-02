@@ -105,8 +105,22 @@ export default {
     broadcastFromBackground({ wallets });
   },
   setConfig(config: any) {
-    geroStore.config = config;
-    broadcastFromBackground({ config });
+    // CRITICAL: Preserve locale from in-memory state
+    // The liveQuery in geroLoader.ts reloads config from gero-db, which may have
+    // stale data due to async database writes. Always preserve the current locale.
+    const currentLocale = geroStore.config?.locale;
+
+    geroStore.config = { ...config };
+
+    // Always restore the current locale (don't let database override it)
+    if (currentLocale) {
+      geroStore.config.locale = currentLocale;
+    } else if (!config.locale) {
+      // No current locale and no locale in loaded config - use default
+      geroStore.config.locale = 'us';
+    }
+
+    broadcastFromBackground({ config: geroStore.config });
   },
   async setLocale(locale: string) {
     geroStore.config.locale = locale;
