@@ -284,7 +284,7 @@ const items = computed((): NavigationItemUnion[] => {
 
   return [
     { title: t('navigation.dashboard'), icon: assts.barChart, link: '/', enabled: true },
-    { title: t('navigation.blog'), icon: assts.blog, link: '/blog', enabled: true },
+    { title: t('navigation.blog'), icon: assts.blog, link: '/blog', enabled: false }, // Disabled - under maintenance
     { header: t('navigation.financialHub'), enabled: true },
     { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
@@ -463,6 +463,7 @@ onMounted(() => {
 // Cleanup on unmount
 import { onUnmounted } from 'vue'
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { fa } from 'vuetify/src/locale';
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)
