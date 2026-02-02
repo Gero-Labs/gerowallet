@@ -126,6 +126,19 @@ export default {
     geroStore.config.locale = locale;
     broadcastFromBackground({ config: geroStore.config });
 
+    // CRITICAL: Update i18n.locale directly to ensure UI updates immediately
+    // The watcher approach doesn't work reliably in global scope
+    try {
+      const { default: i18n, loadLanguage } = await import('@/plugins/i18n');
+      if (i18n.locale !== locale) {
+        await loadLanguage(locale);
+        i18n.locale = locale;
+        console.log(`🌐 setLocale: Updated i18n.locale to ${locale}`);
+      }
+    } catch (error) {
+      console.error('Failed to update i18n.locale:', error);
+    }
+
     // CRITICAL: Also save to gero-db to persist across liveQuery reloads
     // Without this, the liveQuery subscription in geroLoader.ts will reload
     // the old locale value from the database and override the in-memory value

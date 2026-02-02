@@ -185,25 +185,6 @@ const i18n: VueI18n = new VueI18n({
   }
 })();
 
-// Watch for global locale changes and sync i18n.locale
-// This ensures i18n stays in sync when user changes language while logged out and then logs in
-import { watch } from 'vue';
-watch(
-  () => geroStore.config?.locale,
-  async (newLocale) => {
-    if (newLocale && newLocale !== i18n.locale) {
-      console.log(`🌐 Global locale changed to: ${newLocale}, updating i18n`);
-      try {
-        await loadLanguage(newLocale);
-        i18n.locale = newLocale;
-      } catch (error) {
-        console.error('❌ Failed to load language after locale change:', newLocale, error);
-      }
-    }
-  },
-  { immediate: true } // Run immediately to sync on startup
-);
-
 // Export both i18n and loadLanguage helper
 export { loadLanguage };
 export default i18n;
