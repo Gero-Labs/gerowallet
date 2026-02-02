@@ -139,7 +139,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
+import { ref, computed, watch, onMounted, toRefs, getCurrentInstance, nextTick } from 'vue';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
@@ -159,12 +159,12 @@ const emit = defineEmits(['close']);
 // Translation
 const { t } = useTranslation();
 
+import { READY_LANGUAGES } from '@/plugins/i18n/config';
+
 // Feature notifications for new German language
 const hasNewLanguage = computed(() => isFeatureNew('settings.profile.germanLanguage'));
 
-// Filter to only show ready languages (English US, English GB, German)
-const READY_LANGUAGES = ['us', 'gb', 'de'];
-
+// Filter to only show ready languages
 const availableLanguages = computed(() => {
   return Object.values(languages).filter(lang => READY_LANGUAGES.includes(lang.iso));
 });
@@ -267,42 +267,33 @@ const handleLanguageSelectorFocus = () => {
 };
 
 // Watchers
+// Watch for user changing the dropdown
 watch(loc, async (val) => {
   if (val) {
     const iso = Object.values(languages).find(value => value.name === val)?.iso;
     if (iso) {
-      // CRITICAL FIX: Load language file before switching (race condition fix)
+      // CRITICAL: Don't call setLocale if we're already at this locale
+      if (iso === geroStore.config?.locale) {
+        return;
+      }
+
+      // Load language file and update locale
       const { loadLanguage } = await import('@/plugins/i18n');
       try {
         await loadLanguage(iso);
-
-        // Update store and i18n locale ONLY after successful load
         await WalletStore.setLocale(iso);
         vmProxy.$i18n.locale = iso;
         await vmProxy.$nextTick();
       } catch (error) {
         console.error(`Failed to load language ${iso}:`, error);
-        // Don't update store if load failed - will cause UI inconsistency
       }
     }
   }
 }, { immediate: false });
 
-// Watch for locale changes from other sources (e.g., LanguageSelector on Welcome screen)
-watch(() => geroStore.config?.locale, (newLocale) => {
-  if (newLocale && languages[newLocale]) {
-    const newLanguageName = languages[newLocale].name;
-    if (loc.value !== newLanguageName) {
-      loc.value = newLanguageName;
-    }
-  }
-});
-
-// Lifecycle
+// Lifecycle - Set initial value from store
 onMounted(() => {
   walletName.value = loggedWallet.value.name;
-  // CRITICAL: Read from geroStore (global preference) instead of walletStore
-  // This ensures locale persists across login/logout
   loc.value = languages[geroStore.config?.locale || 'us'].name;
 });
 </script>

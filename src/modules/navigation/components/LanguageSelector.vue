@@ -28,13 +28,12 @@ import WalletStore from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
 import languages from '@/plugins/languages';
 import { loadLanguage } from '@/plugins/i18n';
+import { READY_LANGUAGES } from '@/plugins/i18n/config';
 
 const selectedLang = ref(-1);
 const instance = getCurrentInstance();
 
-// Filter to only show ready languages (English US, English GB, German)
-const READY_LANGUAGES = ['us', 'gb', 'de'];
-
+// Filter to only show ready languages
 const availableLanguages = computed(() => {
   return Object.entries(languages)
     .filter(([key]) => READY_LANGUAGES.includes(key))
@@ -81,17 +80,10 @@ watch(currentLocale, (newLocale) => {
   }
 });
 
-onMounted(async () => {
-  selectedLang.value = availableLanguageKeys.value.indexOf(currentLocale.value)
-
-  // Load saved language on mount if not 'us'
-  if (currentLocale.value !== 'us') {
-    try {
-      await loadLanguage(currentLocale.value);
-    } catch (error) {
-      console.error(`Failed to load saved language ${currentLocale.value}:`, error);
-    }
-  }
+onMounted(() => {
+  // Set the selected language index based on current locale
+  // The language file is already loaded by main.ts before the app mounts
+  selectedLang.value = availableLanguageKeys.value.indexOf(currentLocale.value);
 });
 </script>
 <style>
