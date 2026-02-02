@@ -336,7 +336,7 @@ export default {
   async setLocale(value: string) {
     // CRITICAL: Always save to geroStore (global preference, persists across login/logout)
     const { default: GeroStore } = await import('@/stores/geroStore');
-    GeroStore.setLocale(value);
+    await GeroStore.setLocale(value);
 
     // Also save to walletStore config if a wallet is logged in (backward compatibility)
     if (walletStore.config && walletStore.loggedWallet) {
