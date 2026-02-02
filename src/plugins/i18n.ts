@@ -121,45 +121,6 @@ function getLocaleCode(lang: string): string {
 
 Vue.use(VueI18n);
 
-/**
- * Get saved locale from stores (centralized)
- * PRIORITY: geroStore (global) -> walletStore (wallet-specific) -> fallback
- */
-const getSavedLocale = (): string => {
-  try {
-    // 1. Check geroStore.config.locale (global preference, persists across login/logout)
-    const globalLocale = geroStore.config?.locale;
-    if (globalLocale) {
-      return globalLocale;
-    }
-
-    // 2. Fallback: walletStore.config.locale (wallet-specific, for backward compatibility)
-    const walletLocale = walletStore.config?.locale;
-    if (walletLocale) {
-      return walletLocale;
-    }
-
-    // 3. Fallback: read from localStorage only if stores are not initialized yet
-    // (e.g., during very first app start before store hydration)
-    const savedGeroConfig = localStorage.getItem('geroStore');
-    if (savedGeroConfig) {
-      const config = JSON.parse(savedGeroConfig);
-      if (config?.config?.locale) {
-        return config.config.locale;
-      }
-    }
-
-    const savedWalletConfig = localStorage.getItem('walletStore');
-    if (savedWalletConfig) {
-      const config = JSON.parse(savedWalletConfig);
-      return config?.config?.locale || 'us';
-    }
-  } catch (e) {
-    console.warn('Failed to load saved locale:', e);
-  }
-  return 'us';
-};
-
 const i18n: VueI18n = new VueI18n({
   locale: 'us', // Initial locale
   fallbackLocale: 'us', // Fallback to US English
