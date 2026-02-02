@@ -11,14 +11,18 @@
         role="button"
         :tabindex="hasVirtualCard ? -1 : 0"
       >
-        <div class="option-icon">
-          <v-icon large>mdi-credit-card-outline</v-icon>
-        </div>
+        <v-list-item class="px-0">
+          <v-list-item-icon class="option-icon mr-3 my-0">
+            <v-icon large>mdi-credit-card-outline</v-icon>
+          </v-list-item-icon>
+          <v-list-item-content class="option-content">
+            <v-list-item-title class="option-title">
+              {{ $t('card.virtualCardOnly') }}
+              <span v-if="hasVirtualCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
+            </v-list-item-title>
+          </v-list-item-content>
+        </v-list-item>
         <div class="option-content">
-          <h3 class="option-title">
-            {{ $t('card.virtualCardOnly') }}
-            <span v-if="hasVirtualCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
-          </h3>
           <p class="option-description">{{ $t('card.virtualCardDescription') }}</p>
         </div>
         <div class="option-features">
@@ -54,14 +58,18 @@
         role="button"
         :tabindex="hasPhysicalCard ? -1 : 0"
       >
-        <div class="option-icon physical">
-          <v-icon large>mdi-credit-card-multiple-outline</v-icon>
-        </div>
+        <v-list-item class="px-0">
+          <v-list-item-icon class="option-icon mr-3 my-0">
+            <v-icon large>mdi-credit-card-multiple-outline</v-icon>
+          </v-list-item-icon>
+          <v-list-item-content class="option-content">
+            <v-list-item-title class="option-title">
+              {{ $t('card.physicalPlusVirtualCard') }}
+              <span v-if="hasPhysicalCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
+            </v-list-item-title>
+          </v-list-item-content>
+        </v-list-item>
         <div class="option-content">
-          <h3 class="option-title">
-            {{ $t('card.physicalPlusVirtualCard') }}
-            <span v-if="hasPhysicalCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
-          </h3>
           <p class="option-description">{{ $t('card.physicalCardDescription') }}</p>
         </div>
         <div class="option-features">
@@ -131,7 +139,7 @@ const selectType = (type: 'virtual' | 'physical') => {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: $spacing-md;
+  gap: $spacing-sm;
   padding: $spacing-xl;
   background: $background-card;
   border: 2px solid $border-primary;

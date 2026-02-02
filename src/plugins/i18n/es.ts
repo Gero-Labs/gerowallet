@@ -198,7 +198,7 @@ export default {
   'card.loadingSecureForm': 'Loading secure registration form...',
   'card.loadingTopUp': 'Loading your top up',
   'card.loadingTransactions': 'Loading transactions...',
-  'card.loading': 'Loading...',
+  'card.loading': 'Loading',
   'card.manageAccountSettings': 'Manage account settings',
   'card.manageCard': 'Manage Card',
   'card.manageCardSubtitle': 'Manage the details of your card. This action cannot be undone.',

@@ -47,4 +47,15 @@ export default {
   paymentAddressOrAdaHandle: () => {
     return (value: string) => (value && (value.startsWith('addr1') || value.startsWith('DdzFF') || (value.startsWith('$') && value.length > 1))) || (i18n.t('common.invalidPaymentAddress') as string);
   },
+  phone: () => {
+    return (value: string) => {
+      if (!value) return true; // Allow empty if not required
+      // Remove all non-digit characters to count digits
+      const digitsOnly = value.replace(/\D/g, '');
+      // Check if it has between 10-15 digits and only contains valid characters
+      const validFormat = /^[\d\s\-+()]+$/.test(value);
+      const validLength = digitsOnly.length >= 10 && digitsOnly.length <= 15;
+      return (validFormat && validLength) || (i18n.t('common.invalidPhoneNumber') as string);
+    };
+  },
 };

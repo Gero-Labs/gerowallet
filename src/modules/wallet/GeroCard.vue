@@ -4,7 +4,7 @@
     <v-btn
       v-if="!showAuthPage && !showLoadingState && !showErrorState && currentState !== 'pending'"
       icon
-      class="logout-btn ma-3"
+      class="logout-btn my-3"
       @click="handleLogout"
       :title="$t('wallet.logout')"
     >
