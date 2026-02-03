@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
 import cardStore from '@/stores/modules/card';
@@ -19,6 +19,32 @@ const isCardRejected = computed(() => {
     const status = card.cardData?.status;
     return status === 'rejected' || status === 'REJECTED';
   });
+});
+
+// Poll KYC status every 15 seconds (between 10-20 as requested)
+let kycPollInterval: ReturnType<typeof setInterval> | null = null;
+
+async function pollKYCStatus() {
+  try {
+    await cardStore.fetchUserKYCStatus();
+    // If KYC is verified, the page will automatically refresh via wallet status management
+  } catch (error) {
+    // Silent error handling - don't interrupt user experience
+  }
+}
+
+onMounted(() => {
+  // Start polling KYC status every 15 seconds
+  kycPollInterval = setInterval(pollKYCStatus, 15000);
+  // Also poll immediately on mount
+  pollKYCStatus();
+});
+
+onUnmounted(() => {
+  if (kycPollInterval) {
+    clearInterval(kycPollInterval);
+    kycPollInterval = null;
+  }
 });
 
 async function handleLogout() {
