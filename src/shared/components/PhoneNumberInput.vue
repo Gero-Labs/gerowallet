@@ -10,7 +10,7 @@
       hide-details
       item-text="dialCode"
       style="max-width: 180px;"
-      class="ml-2 country-code-select"
+      class="country-code-select"
       :disabled="disabled"
       attach
       :menu-props="{ maxHeight: 200 }"

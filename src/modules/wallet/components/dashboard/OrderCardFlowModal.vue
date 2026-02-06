@@ -436,58 +436,6 @@ const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'ex
   await cardStore.getExchangeRate();
   currentStep.value = 4;
   isLoadingAdaAmountToPay.value = false;
-  //
-  // try {
-  //   isProcessing.value = true;
-  //
-  //   // Create order on backend to get payment details
-  //   const payload: OrderPhysicalCardPayload = {
-  //     address: shippingAddress.value.streetAddress,
-  //     region: shippingAddress.value.stateProvince,
-  //     city: shippingAddress.value.city,
-  //     zipCode: shippingAddress.value.zipCode,
-  //     countryCode: shippingAddress.value.countryCode,
-  //     phone: shippingAddress.value.phone,
-  //     deliveryMethod: method,
-  //   };
-  //
-  //   // const orderResponse = await cardStore.orderPhysicalCard(payload);
-  //
-  //   if (!orderResponse) {
-  //     throw new Error(t('card.failedToGetPaymentDetails'));
-  //   }
-  //
-  //   // Store order details
-  //   orderUuid.value = orderResponse.orderUuid || '';
-  //   paymentId.value = orderResponse.paymentId || 0;
-  //
-  //   // Get payment address (depositAddress)
-  //   paymentAddress.value = orderResponse.depositAddress || '';
-  //
-  //   // Get payment amount (depositAmountAda, depositAmountEur)
-  //   const amountAda = parseFloat(orderResponse.depositAmountAda || '0');
-  //   const amountEur = parseFloat(orderResponse.depositAmountEur || '0');
-  //
-  //   paymentAmount.value = {
-  //     ada: amountAda,
-  //     eur: amountEur,
-  //   };
-  //
-  //   // Store additional payment info
-  //   exchangeRate.value = orderResponse.exchangeRate || '';
-  //   depositExpiresAt.value = orderResponse.depositExpiresAt || '';
-  //   depositQrCode.value = orderResponse.depositQrCode || '';
-  //
-  //   if (!paymentAddress.value || paymentAmount.value.ada <= 0) {
-  //     throw new Error(t('card.failedToGetPaymentDetails'));
-  //   }
-  //
-  //   currentStep.value = 4;
-  // } catch (error: any) {
-  //   snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
-  // } finally {
-  //   isProcessing.value = false;
-  // }
 };
 
 const handlePaymentConfirm = async (spendingPassword: string, privateKeyBytes?: Uint8Array) => {
@@ -542,7 +490,15 @@ const handlePaymentConfirm = async (spendingPassword: string, privateKeyBytes?: 
     if (!paymentAddress.value) {
       throw new Error(t('card.missingPaymentAddress'));
     }
-    const lovelaceAmount = BigInt(amountAda * 1_000_000) as Cardano.Lovelace;
+
+    // Convert ADA to lovelace (6 decimal precision)
+    // depositAmountAda comes as string like "47.99946773" with 8 decimals
+    // ADA only supports 6 decimals, so we truncate to 6 and convert to integer lovelace
+    const adaString = orderResponse.depositAmountAda || '0';
+    const [integerPart = '0', decimalPart = ''] = adaString.split('.');
+    // Take only first 6 decimal digits (ADA precision)
+    const truncatedDecimal = decimalPart.substring(0, 6).padEnd(6, '0');
+    const lovelaceAmount = BigInt(integerPart + truncatedDecimal) as Cardano.Lovelace;
     const outputs: Cardano.TxOut[] = [
       {
         address: paymentAddress.value as Cardano.PaymentAddress,

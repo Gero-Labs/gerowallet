@@ -312,6 +312,13 @@ defineExpose({
         border-color: $border-primary;
       }
     }
+
+    // Remove hover effect from radio button circle
+    .v-input--selection-controls__ripple {
+      &:hover::before {
+        opacity: 0 !important;
+      }
+    }
   }
 
   :deep(.v-label) {

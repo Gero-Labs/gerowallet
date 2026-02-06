@@ -34,7 +34,7 @@
     />
 
     <!-- Dev State Toggler (Bottom Right) -->
-    <div class="dev-state-toggler">
+    <div class="dev-state-toggler" v-if="false">
       <v-select
         v-model="devState"
         :items="devStateOptions"

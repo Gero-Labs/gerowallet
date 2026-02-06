@@ -21,7 +21,6 @@
           :current-card-has-u-u-i-d="currentCardHasUUID"
           :current-card-type="currentCardType"
           :current-card-status="currentCardStatus"
-          :current-order-needs-payment="currentOrderNeedsPayment"
           :is-current-card-rejected="isCurrentCardRejected"
           :should-show-order-card-section="shouldShowOrderCardSection"
           :show-order-timer="showOrderTimer"
@@ -65,7 +64,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
@@ -77,8 +75,6 @@ import CardCarousel from './dashboard/CardCarousel.vue';
 import CardStatusSection from './dashboard/CardStatusSection.vue';
 import cardStoreModule from '@/stores/modules/card';
 import { CardInfo } from '@/models/card';
-
-const { t } = useTranslation();
 
 const currentCardIndex = computed({
   get: () => cardStoreModule.state.currentCardIndex,
@@ -321,17 +317,6 @@ const exchangeRate = computed(() => {
 
 const currentCardHasUUID = computed(() => {
   return cardsWithOrderSlot.value[currentCardIndex.value]?.cardData.card_uuid !== null;
-});
-
-const currentOrderNeedsPayment = computed(() => {
-  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
-  if (!currentCard) return false;
-  return !!(
-    currentCard?.cardData?.id &&
-    currentCard?.cardData?.order_uuid &&
-    !currentCard?.cardData?.card_uuid &&
-    currentCard?.cardData?.own_type === 'physical'
-  );
 });
 
 const currentCardType = computed(() => {
@@ -592,7 +577,6 @@ watch(currentCardIndex, async (newIndex, oldIndex) => {
     }
   } else if (card.cardData.order_uuid) {
     cardStoreModule.selectCard(null);
-    await checkCurrentCardStatus();
   } else {
     cardStoreModule.selectCard(null);
   }

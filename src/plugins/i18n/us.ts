@@ -90,6 +90,8 @@ export default {
   'card.completePaymentToProceed': 'Complete payment to proceed with your order.',
   'card.paymentReceived': 'Payment received successfully.',
   'card.waitingForOrderProcessing': 'Waiting for order processing.',
+  'card.paymentInProgress': 'Payment is being processed.',
+  'card.pleaseWaitForConfirmation': 'Please wait for transaction confirmation.',
   'card.alreadyOrdered': 'Already Ordered',
   'card.cardPoweredByKaiser': 'Your Gero Card is powered by Kaiser Exchange International, a fully licensed and regulated cryptocurrency financial services provider',
   'card.cardWillReceiveExactly': 'Card will receive exactly',
