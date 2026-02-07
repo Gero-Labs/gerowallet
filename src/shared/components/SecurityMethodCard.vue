@@ -3,37 +3,37 @@
     flat
     :class="[
       'security-method-card',
-      { 'security-method-card--selected': selected },
-      { 'security-method-card--disabled': disabled }
+      { 'security-method-card--selected': selected }
     ]"
     :style="{ backgroundColor: '#00000080' }"
-    @click="!disabled && $emit('select')"
+    @click="$emit('select')"
   >
-    <!-- Recommended badge -->
-    <v-chip
-      v-if="recommended"
-      color="primary"
-      small
-      class="recommended-chip"
-    >
-      {{ $t('welcome.recommended') }}
-    </v-chip>
-
-    <!-- Icon and title -->
-    <v-card-title class="justify-center flex-column">
-      <v-avatar :color="iconColor" size="42" class="mb-3">
-        <v-icon dark>{{ icon }}</v-icon>
+    <!-- Icon + Title as list-item row -->
+    <v-list-item class="px-4 pt-0" :class="benefits && benefits.length ? 'pb-1' : 'pb-3'" style="background: transparent;">
+      <v-avatar :color="iconColor" size="24" class="mr-3 my-0 align-self-center">
+        <v-icon dark small>{{ icon }}</v-icon>
       </v-avatar>
-      <span class="text-h6">{{ title }}</span>
-    </v-card-title>
-
-    <!-- Description -->
-    <v-card-subtitle class="text-center">
-      {{ description }}
-    </v-card-subtitle>
+      <v-list-item-content class="py-0">
+        <v-list-item-title class="text-subtitle-1 white--text font-weight-medium d-flex align-center" style="white-space: normal;">
+          {{ title }}
+          <v-tooltip v-if="learnMoreContent" bottom max-width="300" content-class="custom-tooltip">
+            <template v-slot:activator="{ on }">
+              <v-icon x-small class="ml-1 info-icon" color="grey lighten-1" v-on="on" @click.stop>mdi-information-outline</v-icon>
+            </template>
+            <span class="text-body-2">{{ learnMoreContent }}</span>
+          </v-tooltip>
+        </v-list-item-title>
+        <v-list-item-subtitle v-if="description" class="text-body-2" style="white-space: normal;">
+          {{ description }}
+        </v-list-item-subtitle>
+      </v-list-item-content>
+      <v-chip v-if="recommended" color="primary" x-small class="ml-2 align-self-center">
+        {{ $t('welcome.recommended') }}
+      </v-chip>
+    </v-list-item>
 
     <!-- Benefits list -->
-    <v-card-text class="flex-grow-1">
+    <v-card-text v-if="benefits && benefits.length > 0" class="flex-grow-1 pt-0 pb-3">
       <div
         v-for="(benefit, index) in benefits"
         :key="index"
@@ -44,74 +44,32 @@
       </div>
     </v-card-text>
 
-    <!-- Learn more expandable -->
-    <v-expand-transition>
-      <div v-show="expanded">
-        <v-card-text class="pt-0 text-body-2 grey--text text--lighten-1">
-          {{ learnMoreContent }}
-        </v-card-text>
-      </div>
-    </v-expand-transition>
-
-    <v-card-actions class="justify-center">
-      <v-btn text small @click.stop="expanded = !expanded">
-        {{ $t('welcome.learnMore') }}
-        <v-icon small class="ml-1">
-          {{ expanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
-        </v-icon>
-      </v-btn>
-    </v-card-actions>
-
-    <!-- Selection indicator -->
-    <v-scroll-y-transition>
-      <v-icon
-        v-if="selected"
-        color="primary"
-        class="selection-check"
-      >
-        mdi-check-circle
-      </v-icon>
-    </v-scroll-y-transition>
-
-    <!-- Disabled overlay -->
-    <v-overlay
-      v-if="disabled"
-      absolute
-      color="black"
-      opacity="0.7"
-    >
-      <span class="text-caption">{{ disabledReason }}</span>
-    </v-overlay>
+    <!-- Selection checkmark — bottom right -->
+    <v-icon v-if="selected" color="primary" class="selection-check">mdi-check-circle</v-icon>
   </v-card>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-
 interface Props {
   title: string;
-  description: string;
+  description?: string;
   icon: string;
   iconColor?: string;
   benefits: string[];
-  learnMoreContent: string;
+  learnMoreContent?: string;
   selected?: boolean;
   recommended?: boolean;
-  disabled?: boolean;
-  disabledReason?: string;
 }
 
 withDefaults(defineProps<Props>(), {
+  description: '',
   iconColor: 'primary',
+  learnMoreContent: '',
   selected: false,
   recommended: false,
-  disabled: false,
-  disabledReason: '',
 });
 
 defineEmits(['select']);
-
-const expanded = ref(false);
 </script>
 
 <style scoped lang="scss">
@@ -121,28 +79,16 @@ const expanded = ref(false);
   flex-direction: column;
   border: 2px solid transparent;
   border-radius: 12px !important;
-  transition: border-color 0.2s ease, transform 0.2s ease, min-height 0.3s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease;
   cursor: pointer;
 }
 
-.security-method-card:hover:not(.security-method-card--disabled) {
-  transform: translateY(-4px);
+.security-method-card:hover {
+  transform: translateY(-2px);
 }
 
 .security-method-card--selected {
   border-color: var(--v-primary-base);
-}
-
-.security-method-card--disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.recommended-chip {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
 }
 
 .selection-check {
@@ -151,9 +97,12 @@ const expanded = ref(false);
   right: 12px;
 }
 
-// Smooth expand transition
-::v-deep .v-card__text {
-  transition: all 0.3s ease;
+.info-icon {
+  cursor: help;
+  opacity: 0.7;
+  &:hover {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 600px) {

@@ -12,272 +12,253 @@
     :persistent="false"
   >
     <v-card-text class="px-0 py-2">
-      <v-stepper v-model="step" flat class="transparent" non-linear>
-        <!-- Stepper Header -->
-        <v-stepper-header style="box-shadow: none">
-          <v-stepper-step :complete="step > 1" step="1">
-            {{ $t('welcome.securityMethod') }}
-          </v-stepper-step>
-          <v-divider></v-divider>
-
-          <v-stepper-step
-            v-if="selectedSecurityMethod === 'prf'"
-            :complete="step > 2"
-            step="2"
-          >
-            {{ $t('welcome.education') }}
-          </v-stepper-step>
-          <v-divider v-if="selectedSecurityMethod === 'prf'"></v-divider>
-
-          <v-stepper-step
-            :complete="step > (selectedSecurityMethod === 'prf' ? 3 : 2)"
-            :step="selectedSecurityMethod === 'prf' ? 3 : 2"
-          >
-            {{ $t('welcome.walletSetup') }}
-          </v-stepper-step>
-          <v-divider></v-divider>
-
-          <v-stepper-step :step="selectedSecurityMethod === 'prf' ? 4 : 3">
-            {{ $t('welcome.confirm') }}
-          </v-stepper-step>
-        </v-stepper-header>
-
-        <!-- Stepper Content -->
+      <v-stepper v-model="step" flat class="transparent">
         <v-stepper-items>
-          <!-- Step 1: Security Method Selection -->
+          <!-- ============================================ -->
+          <!-- SCREEN 1: Name + Security Method             -->
+          <!-- ============================================ -->
           <v-stepper-content step="1">
             <v-card flat class="transparent d-flex justify-center">
-              <div style="max-width: 800px; width: 100%;">
-                <!-- PRF Not Supported Alert -->
-                <v-alert
-                  v-if="!prfSupported"
-                  color="warning"
-                  icon="mdi-alert-outline"
-                  dense
-                  outlined
-                  border="left"
-                  class="mb-4"
-                >
-                  {{ $t('welcome.prfNotSupported') }}
-                </v-alert>
-
-                <!-- Security Method Selection -->
-                <v-row no-gutters justify="center" align="start">
-                  <!-- PassKey Card -->
-                  <v-col cols="12" sm="6" class="pa-2">
-                    <SecurityMethodCard
-                      :title="t('welcome.passKeyMethod')"
-                      :description="t('welcome.passKeyMethodDesc')"
-                      icon="mdi-shield-key"
-                      :benefits="[
-                        t('welcome.passKeyBenefit1'),
-                        t('welcome.passKeyBenefit2'),
-                        t('welcome.passKeyBenefit3')
-                      ]"
-                      :learn-more-content="t('welcome.passKeyLearnMoreContent')"
-                      :selected="selectedSecurityMethod === 'prf'"
-                      :recommended="prfSupported"
-                      :disabled="!prfSupported"
-                      :disabled-reason="t('welcome.prfNotSupported')"
-                      @select="selectedSecurityMethod = 'prf'"
-                    />
-                  </v-col>
-
-                  <!-- Password Card -->
-                  <v-col cols="12" sm="6" class="pa-2">
-                    <SecurityMethodCard
-                      :title="t('welcome.passwordMethod')"
-                      :description="t('welcome.passwordMethodDesc')"
-                      icon="mdi-key-variant"
-                      :benefits="[
-                        t('welcome.passwordBenefit1'),
-                        t('welcome.passwordBenefit2'),
-                        t('welcome.passwordBenefit3')
-                      ]"
-                      :learn-more-content="t('welcome.passwordLearnMoreContent')"
-                      :selected="selectedSecurityMethod === 'password'"
-                      @select="selectedSecurityMethod = 'password'"
-                    />
-                  </v-col>
-                </v-row>
-              </div>
-            </v-card>
-          </v-stepper-content>
-
-          <!-- Step 2: PRF Education (PassKey Only) -->
-          <v-stepper-content v-if="selectedSecurityMethod === 'prf'" step="2"  class="align-content-center">
-            <v-card flat class="transparent d-flex justify-center">
-              <PrfEducationContent />
-            </v-card>
-          </v-stepper-content>
-
-          <!-- Step 3: Wallet Setup (Name + Icon + Password for password mode) -->
-          <v-stepper-content :step="selectedSecurityMethod === 'prf' ? 3 : 2"  class="align-content-center">
-            <v-card flat class="transparent d-flex justify-center">
-              <v-form ref="setupForm" v-model="setupValid" style="max-width: 540px; width: 100%;">
-                <div class="d-flex align-center pb-3">
-                  <h2 class="text-left px-0 pt-0 pb-0 white--text mb-0">{{ $t('welcome.setUpWalletName') }}</h2>
-                  <v-tooltip content-class="custom-tooltip" bottom>
-                    <template v-slot:activator="{ on }">
-                      <v-icon small class="ml-2 mt-1" v-on="on" color="grey lighten-1">mdi-information-outline</v-icon>
-                    </template>
-                    <span>{{ $t('welcome.chooseNameToIdentify') }}</span>
-                  </v-tooltip>
-                </div>
+              <v-form ref="nameForm" v-model="nameValid" style="max-width: 540px; width: 100%;">
+                <!-- Wallet Name -->
+                <h2 class="text-left white--text mb-3">{{ $t('welcome.setUpWalletName') }}</h2>
 
                 <v-text-field
                   v-model="newWallet.name"
                   dense
                   filled
+                  autofocus
                   :label="$t('welcome.walletName')"
                   :placeholder="$t('welcome.walletNamePlaceholder')"
                   :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                 ></v-text-field>
 
-                <h2 class="text-left px-0 pt-0 pb-1 white--text">{{ $t('welcome.walletIcon') }}</h2>
-                <v-radio-group v-model="newWallet.icon" row mandatory class="mt-2 mb-2" style="justify-content: space-around;">
-                  <v-radio value="green">
-                    <template v-slot:label>
-                      <v-avatar size="32"><v-img :src="assets.greenSvg" cover></v-img></v-avatar>
-                    </template>
-                  </v-radio>
-                  <v-radio value="purple">
-                    <template v-slot:label>
-                      <v-avatar size="32"><v-img :src="assets.purpleSvg" cover></v-img></v-avatar>
-                    </template>
-                  </v-radio>
-                  <v-radio value="pink">
-                    <template v-slot:label>
-                      <v-avatar size="32"><v-img :src="assets.pinkSvg" cover></v-img></v-avatar>
-                    </template>
-                  </v-radio>
-                  <v-radio value="orange">
-                    <template v-slot:label>
-                      <v-avatar size="32"><v-img :src="assets.orangeSvg" cover></v-img></v-avatar>
-                    </template>
-                  </v-radio>
-                  <v-radio value="blue">
-                    <template v-slot:label>
-                      <v-avatar size="32"><v-img :src="assets.blueSvg" cover></v-img></v-avatar>
-                    </template>
-                  </v-radio>
-                  <v-radio value="grey">
-                    <template v-slot:label>
-                      <v-avatar size="32"><v-img :src="assets.greySvg" cover></v-img></v-avatar>
-                    </template>
-                  </v-radio>
-                </v-radio-group>
+                <!-- Security Method (only when PRF is available) -->
+                <template v-if="prfSupported">
+                  <v-divider class="my-5" style="border-color: rgba(255, 255, 255, 0.12);" />
 
-                <!-- Password fields (Password mode only) -->
-                <template v-if="selectedSecurityMethod === 'password'">
-                  <div class="d-flex align-center pb-3">
-                    <h2 class="text-left px-0 pt-0 pb-0 white--text mb-0">{{ $t('welcome.setUpSpendingPassword') }}</h2>
-                    <v-tooltip content-class="custom-tooltip" bottom>
-                      <template v-slot:activator="{ on }">
-                        <v-icon small class="ml-2 mt-1" v-on="on" color="grey lighten-1">mdi-information-outline</v-icon>
-                      </template>
-                      <span>{{ $t('welcome.youllUseThisToLogin') }}</span>
-                    </v-tooltip>
-                  </div>
-
-                  <v-text-field
-                    v-model="newWallet.password"
-                    dense
-                    filled
-                    :label="$t('welcome.password')"
-                    :placeholder="$t('welcome.password')"
-                    :type="show1 ? 'text' : 'password'"
-                    :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-                    @click:append="show1 = !show1"
-                    :rules="[
-                      rules.required(),
-                      rules.minCharacters(10),
-                      rules.oneOrMoreNumbers,
-                      rules.containCapital,
-                      rules.containLowerCase,
-                      rules.containSpecialCharacter,
-                      rules.spaceNotAllowed
+                  <!-- PassKey card -->
+                  <SecurityMethodCard
+                    :title="t('welcome.passKeyMethod')"
+                    icon="mdi-shield-key"
+                    :benefits="[
+                      t('welcome.passKeyBenefit1'),
+                      t('welcome.passKeyBenefit2'),
+                      t('welcome.passKeyBenefitKeysSecure')
                     ]"
-                  ></v-text-field>
+                    :learn-more-content="t('welcome.passKeyLearnMoreFull')"
+                    :selected="selectedSecurityMethod === 'prf'"
+                    :recommended="true"
+                    @select="selectedSecurityMethod = 'prf'"
+                  />
 
-                  <v-text-field
-                    v-model="newWallet.confirmPassword"
-                    dense
-                    filled
-                    :label="$t('welcome.confirmPassword')"
-                    :placeholder="$t('welcome.confirmPassword')"
-                    :type="show2 ? 'text' : 'password'"
-                    :append-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
-                    @click:append="show2 = !show2"
-                    :rules="[
-                      rules.required(),
-                      (v) => v === newWallet.password || $t('welcome.passwordsMustMatch')
+                  <!-- Password card (minimal) -->
+                  <v-card
+                    flat
+                    :class="[
+                      'method-card mt-3',
+                      { 'method-card--selected': selectedSecurityMethod === 'password' }
                     ]"
-                  ></v-text-field>
+                    style="background-color: #00000080;"
+                    @click="selectedSecurityMethod = 'password'"
+                  >
+                    <v-list-item class="px-4 py-2" style="background: transparent;">
+                      <v-avatar color="grey darken-1" size="24" class="mr-3 my-0 align-self-center">
+                        <v-icon dark small>mdi-key-variant</v-icon>
+                      </v-avatar>
+                      <v-list-item-content class="py-0">
+                        <v-list-item-title class="text-subtitle-1 white--text font-weight-medium">
+                          {{ $t('welcome.passwordMethod') }}
+                        </v-list-item-title>
+                        <v-list-item-subtitle class="text-body-2">
+                          {{ $t('welcome.passwordMethodDesc') }}
+                        </v-list-item-subtitle>
+                      </v-list-item-content>
+                      <v-icon v-if="selectedSecurityMethod === 'password'" color="primary" class="ml-2 align-self-center">mdi-check-circle</v-icon>
+                    </v-list-item>
+                  </v-card>
                 </template>
+
+                <!-- PRF not supported alert -->
+                <v-alert
+                  v-else
+                  color="warning"
+                  icon="mdi-alert-outline"
+                  dense
+                  outlined
+                  border="left"
+                  class="mt-4"
+                >
+                  {{ $t('welcome.prfNotSupported') }}
+                </v-alert>
               </v-form>
             </v-card>
           </v-stepper-content>
 
-          <!-- Step 4: Enhanced Acknowledgments -->
-          <v-stepper-content :step="selectedSecurityMethod === 'prf' ? 4 : 3" class="align-content-center">
+          <!-- ============================================ -->
+          <!-- SCREEN 2: Adaptive — PRF confirm / Password  -->
+          <!-- ============================================ -->
+          <v-stepper-content step="2" class="align-content-center">
             <v-card flat class="transparent d-flex justify-center">
               <div style="max-width: 540px; width: 100%;">
-                <!-- Welcome Message -->
-                <div class="text-center mb-3">
-                  <v-icon color="primary" size="28" class="mb-1">mdi-check-circle-outline</v-icon>
-                  <h3 class="white--text mb-1 text-h6">{{ $t('welcome.almostDone') }}</h3>
-                  <p class="grey--text text--lighten-1 mb-0">{{ $t('welcome.reviewYourChoices') }}</p>
-                </div>
 
-                <!-- Wallet Summary Card -->
-                <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
-                  <v-card-text class="pa-3">
-                    <div class="d-flex align-center mb-2">
-                      <v-avatar size="32" class="mr-2">
-                        <v-img :src="assets[`${newWallet.icon}Svg`]" cover></v-img>
-                      </v-avatar>
-                      <div>
-                        <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
-                        <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ newWallet.name }}</div>
+                <!-- ===== PRF PATH ===== -->
+                <template v-if="selectedSecurityMethod === 'prf'">
+                  <!-- Summary header -->
+                  <div class="text-center mb-3">
+                    <v-icon color="primary" size="28" class="mb-1">mdi-check-circle-outline</v-icon>
+                    <h3 class="white--text mb-1 text-h6">{{ $t('welcome.almostDone') }}</h3>
+                    <p class="grey--text text--lighten-1 mb-0">{{ $t('welcome.reviewYourChoices') }}</p>
+                  </div>
+
+                  <!-- Wallet summary card -->
+                  <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
+                    <v-card-text class="pa-3">
+                      <div class="d-flex align-center mb-2">
+                        <v-avatar size="32" class="mr-2">
+                          <v-img :src="assets[`${newWallet.icon}Svg`]" cover></v-img>
+                        </v-avatar>
+                        <div>
+                          <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
+                          <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ newWallet.name }}</div>
+                        </div>
                       </div>
-                    </div>
-                    <v-divider class="my-2" style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
-                    <v-row no-gutters>
-                      <v-col cols="6" class="pr-3">
-                        <div class="d-flex align-center">
-                          <v-icon :color="selectedSecurityMethod === 'prf' ? 'primary' : 'grey'" size="20" class="mr-2">
-                            {{ selectedSecurityMethod === 'prf' ? 'mdi-shield-key' : 'mdi-key-variant' }}
-                          </v-icon>
-                          <div>
-                            <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.securityMethod') }}</div>
-                            <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">
-                              {{ selectedSecurityMethod === 'prf' ? $t('welcome.passKeyMethod') : $t('welcome.passwordMethod') }}
+                      <v-divider class="my-2" style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+                      <v-row no-gutters>
+                        <v-col cols="6" class="pr-3">
+                          <div class="d-flex align-center">
+                            <v-icon color="primary" size="20" class="mr-2">mdi-shield-key</v-icon>
+                            <div>
+                              <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.securityMethod') }}</div>
+                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ $t('welcome.passKeyMethod') }}</div>
                             </div>
                           </div>
-                        </div>
-                      </v-col>
-                      <v-divider vertical style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
-                      <v-col cols="6" class="pl-3">
-                        <div class="d-flex align-center">
-                          <v-avatar size="20" class="mr-2">
-                            <v-img :src="props.network.icon" contain></v-img>
-                          </v-avatar>
-                          <div>
-                            <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
-                            <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ props.network.title }}</div>
+                        </v-col>
+                        <v-divider vertical style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+                        <v-col cols="6" class="pl-3">
+                          <div class="d-flex align-center">
+                            <v-avatar size="20" class="mr-2">
+                              <v-img :src="props.network.icon" contain></v-img>
+                            </v-avatar>
+                            <div>
+                              <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
+                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ props.network.title }}</div>
+                            </div>
                           </div>
-                        </div>
-                      </v-col>
-                    </v-row>
-                  </v-card-text>
-                </v-card>
+                        </v-col>
+                      </v-row>
+                    </v-card-text>
+                  </v-card>
 
-                <EnhancedAcknowledgments
-                  ref="acknowledgmentsRef"
-                  :is-prf-mode="selectedSecurityMethod === 'prf'"
-                  @update:valid="acknowledgeValid = $event"
-                />
+                  <!-- PRF acknowledgments -->
+                  <v-form ref="prfForm" v-model="prfFormValid">
+                    <v-checkbox
+                      v-model="acknowledgments.recoveryPhrase"
+                      :rules="[rules.required()]"
+                      hide-details
+                      class="mb-1 mt-0"
+                    >
+                      <template v-slot:label>
+                        <span class="text-body-2">{{ $t('welcome.saveRecoveryBackup') }}</span>
+                      </template>
+                    </v-checkbox>
+
+                    <v-checkbox
+                      v-model="acknowledgments.termsAccepted"
+                      :rules="[rules.required()]"
+                      hide-details
+                      class="mb-1 mt-0"
+                    >
+                      <template v-slot:label>
+                        <span class="text-body-2">
+                          {{ $t('welcome.iHaveReadTerms') }}
+                          <a class="terms-link" @click.stop="openTerms">{{ $t('welcome.termsOfService') }}</a>.
+                        </span>
+                      </template>
+                    </v-checkbox>
+                  </v-form>
+                </template>
+
+                <!-- ===== PASSWORD PATH ===== -->
+                <template v-else>
+                  <h2 class="text-left white--text mb-3">{{ $t('welcome.setUpSpendingPassword') }}</h2>
+
+                  <v-form ref="passwordForm" v-model="passwordFormValid">
+                    <v-text-field
+                      v-model="newWallet.password"
+                      dense
+                      filled
+                      :label="$t('welcome.password')"
+                      :placeholder="$t('welcome.password')"
+                      :type="show1 ? 'text' : 'password'"
+                      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
+                      @click:append="show1 = !show1"
+                      :rules="[
+                        rules.required(),
+                        rules.minCharacters(10),
+                        rules.oneOrMoreNumbers,
+                        rules.containCapital,
+                        rules.containLowerCase,
+                        rules.containSpecialCharacter,
+                        rules.spaceNotAllowed
+                      ]"
+                    ></v-text-field>
+
+                    <v-text-field
+                      v-model="newWallet.confirmPassword"
+                      dense
+                      filled
+                      :label="$t('welcome.confirmPassword')"
+                      :placeholder="$t('welcome.confirmPassword')"
+                      :type="show2 ? 'text' : 'password'"
+                      :append-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
+                      @click:append="show2 = !show2"
+                      :rules="[
+                        rules.required(),
+                        (v) => v === newWallet.password || $t('welcome.passwordsMustMatch')
+                      ]"
+                    ></v-text-field>
+
+                    <!-- No-recovery warning -->
+                    <v-alert
+                      color="warning"
+                      icon="mdi-alert-outline"
+                      outlined
+                      dense
+                      border="left"
+                      class="mb-3"
+                    >
+                      <span class="text-body-2">{{ $t('welcome.passwordNoRecoveryWarning') }}</span>
+                    </v-alert>
+
+                    <!-- Password acknowledgments -->
+                    <v-checkbox
+                      v-model="acknowledgments.passwordRecovery"
+                      :rules="[rules.required()]"
+                      hide-details
+                      class="mb-1 mt-0"
+                    >
+                      <template v-slot:label>
+                        <span class="text-body-2">{{ $t('welcome.understandPasswordRecovery') }}</span>
+                      </template>
+                    </v-checkbox>
+
+                    <v-checkbox
+                      v-model="acknowledgments.termsAccepted"
+                      :rules="[rules.required()]"
+                      hide-details
+                      class="mb-1 mt-0"
+                    >
+                      <template v-slot:label>
+                        <span class="text-body-2">
+                          {{ $t('welcome.iHaveReadTerms') }}
+                          <a class="terms-link" @click.stop="openTerms">{{ $t('welcome.termsOfService') }}</a>.
+                        </span>
+                      </template>
+                    </v-checkbox>
+                  </v-form>
+                </template>
+
               </div>
             </v-card>
           </v-stepper-content>
@@ -285,23 +266,24 @@
       </v-stepper>
     </v-card-text>
 
-    <!-- Consolidated Action Buttons (outside stepper) -->
+    <!-- Action Buttons -->
     <v-card-actions class="justify-space-between px-6 pb-4">
-      <!-- Step 1: Only Continue button -->
+      <!-- Screen 1: Continue -->
       <template v-if="step === 1">
         <v-spacer></v-spacer>
         <v-btn
           color="primary"
           class="geroButton"
           style="color: black!important;"
+          :disabled="!nameValid"
           @click="handleContinue"
         >
           {{ $t('common.continue') }}
         </v-btn>
       </template>
 
-      <!-- Step 2: Back + I Understand -->
-      <template v-else-if="step === 2 && selectedSecurityMethod === 'prf'">
+      <!-- Screen 2: Back + Create -->
+      <template v-else>
         <v-btn text @click="handleBack">
           {{ $t('welcome.back') }}
         </v-btn>
@@ -309,38 +291,7 @@
           color="primary"
           class="geroButton"
           style="color: black!important;"
-          @click="handleContinue"
-        >
-          {{ $t('welcome.iUnderstand') }}
-        </v-btn>
-      </template>
-
-      <!-- Step 3 (or 2 for password): Back + Continue -->
-      <template v-else-if="(step === 3 && selectedSecurityMethod === 'prf') || (step === 2 && selectedSecurityMethod === 'password')">
-        <v-btn text @click="handleBack">
-          {{ $t('welcome.back') }}
-        </v-btn>
-        <v-btn
-          color="primary"
-          class="geroButton"
-          style="color: black!important;"
-          :disabled="!setupValid"
-          @click="handleContinue"
-        >
-          {{ $t('common.continue') }}
-        </v-btn>
-      </template>
-
-      <!-- Step 4 (or 3 for password): Back + Create -->
-      <template v-else-if="(step === 4 && selectedSecurityMethod === 'prf') || (step === 3 && selectedSecurityMethod === 'password')">
-        <v-btn text @click="handleBack">
-          {{ $t('welcome.back') }}
-        </v-btn>
-        <v-btn
-          color="primary"
-          class="geroButton"
-          style="color: black!important;"
-          :disabled="!acknowledgeValid"
+          :disabled="!canCreate"
           :loading="creatingWalletLoader"
           @click="walletCreationStep"
         >
@@ -358,8 +309,6 @@ import { Theme } from "@/models/types";
 import assets from '@/utils/assets';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import SecurityMethodCard from '@/shared/components/SecurityMethodCard.vue';
-import PrfEducationContent from '@/shared/components/PrfEducationContent.vue';
-import EnhancedAcknowledgments from '@/shared/components/EnhancedAcknowledgments.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -382,15 +331,17 @@ const emit = defineEmits(['close']);
 const vmProxy = getCurrentInstance()!.proxy
 const router = vmProxy?.$router;
 
-// Stepper state
+// Step state (2 screens only)
 const step = ref(1);
 const selectedSecurityMethod = ref<'prf' | 'password'>('prf');
 
 // Form refs and validation
-const setupForm = ref(null);
-const acknowledgmentsRef = ref(null);
-const setupValid = ref(false);
-const acknowledgeValid = ref(false);
+const nameForm = ref(null);
+const nameValid = ref(false);
+const passwordForm = ref(null);
+const passwordFormValid = ref(false);
+const prfForm = ref(null);
+const prfFormValid = ref(false);
 
 // Password visibility
 const show1 = ref(false);
@@ -399,17 +350,20 @@ const show2 = ref(false);
 // Wallet state
 const creatingWalletLoader = ref(false);
 const prfSupported = ref(false);
-const webAuthnCredentialId = ref<string | null>(null);
 
 const newWallet = reactive({
   name: '',
   icon: 'green',
   password: '',
   confirmPassword: '',
-  termsChecked: false,
-  recoverPasswordChecked: false,
   encryptionMethod: 'password' as 'password' | 'prf',
   backupMnemonic: true,
+});
+
+const acknowledgments = reactive({
+  recoveryPhrase: false,
+  passwordRecovery: false,
+  termsAccepted: false,
 });
 
 // Check PRF support on mount
@@ -418,7 +372,6 @@ onMounted(async () => {
     const { isPrfSupported } = await import('@/shared/utils/webauthn-prf');
     prfSupported.value = await isPrfSupported();
 
-    // Default to PRF if supported
     if (prfSupported.value) {
       selectedSecurityMethod.value = 'prf';
       newWallet.encryptionMethod = 'prf';
@@ -441,10 +394,17 @@ watch(selectedSecurityMethod, (newMethod) => {
   if (newMethod === 'prf') {
     newWallet.backupMnemonic = true;
   }
+  // Reset acknowledgments when switching methods
+  acknowledgments.recoveryPhrase = false;
+  acknowledgments.passwordRecovery = false;
+  acknowledgments.termsAccepted = false;
 });
 
-const isPrfMode = computed(() => {
-  return prfSupported.value && newWallet.encryptionMethod === 'prf';
+const canCreate = computed(() => {
+  if (selectedSecurityMethod.value === 'prf') {
+    return prfFormValid.value;
+  }
+  return passwordFormValid.value;
 });
 
 const dialogLocal = computed({
@@ -459,51 +419,44 @@ const dialogLocal = computed({
   },
 });
 
-// Step navigation
-const handleBack = () => {
-  if (step.value > 1) {
-    // Skip PRF education step when going back in password mode
-    if (selectedSecurityMethod.value === 'password' && step.value === 2) {
-      step.value = 1;
-    } else if (selectedSecurityMethod.value === 'prf' && step.value === 3) {
-      step.value = 2;
-    } else {
-      step.value--;
-    }
-  }
+// Navigation (simplified — only 2 screens)
+const handleContinue = () => {
+  // Reset acknowledgments and validation before showing step 2
+  acknowledgments.recoveryPhrase = false;
+  acknowledgments.passwordRecovery = false;
+  acknowledgments.termsAccepted = false;
+  nextTick(() => {
+    if (prfForm.value) prfForm.value.resetValidation();
+    if (passwordForm.value) passwordForm.value.resetValidation();
+    step.value = 2;
+  });
 };
 
-const handleContinue = () => {
-  // Skip PRF education step for password mode
-  if (step.value === 1 && selectedSecurityMethod.value === 'password') {
-    step.value = 2;
-  } else if (step.value === 1 && selectedSecurityMethod.value === 'prf') {
-    step.value = 2;
-  } else {
-    step.value++;
-  }
+const handleBack = () => {
+  step.value = 1;
+};
+
+const openTerms = () => {
+  window.open('https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true', '_blank');
 };
 
 // ========================================================================
-// WALLET CREATION LOGIC - PRESERVED FROM ORIGINAL
+// WALLET CREATION LOGIC — PRESERVED FROM ORIGINAL
 // ========================================================================
 const walletCreationStep = async () => {
   creatingWalletLoader.value = true;
   try {
     let wallet;
 
-    if (isPrfMode.value) {
+    if (selectedSecurityMethod.value === 'prf') {
       // ========================================================================
       // PRF WALLET CREATION (PURE PRF MODE - NO PASSWORD)
       // ========================================================================
-
-      // Step 1: Register WebAuthn credential with PRF
       const { registerWebAuthnCredential } = await import('@/shared/utils/security');
 
       try {
-        // Step 1: Register WebAuthn credential with PRF
         const { credentialId, prfEnabled } = await registerWebAuthnCredential(
-          'temp-wallet-id', // Temporary ID, actual wallet ID will be allocated below
+          'temp-wallet-id',
           newWallet.name
         );
 
@@ -511,34 +464,29 @@ const walletCreationStep = async () => {
           throw new Error(vmProxy.$t('security.passKeyPrfNotSupported') as string);
         }
 
-        webAuthnCredentialId.value = credentialId;
-
-        // Step 2: Pre-allocate wallet ID (same logic as in gero-db.ts)
         const { getDb } = await import('@/db/gero-db');
         const db = await getDb();
         const maxWallet = await db['wallets'].orderBy('id').last();
         const newWalletId = (maxWallet?.id || 0) + 1;
 
-        // Step 3: Evaluate PRF immediately after registration (while user just authenticated)
         const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
         const prfOutput = await evaluatePrfForWallet(credentialId, newWalletId.toString());
 
         try {
-          // Step 4: Create wallet with PRF options + PRF output (Pure PRF mode - no password unlock)
           const prfOptions = {
             usePrf: true,
             credentialId,
-            passwordUnlockEnabled: false, // Pure PRF mode - no password
-            backupMnemonic: true, // Always backup mnemonic for PRF wallets
-            prfOutput, // Pass PRF output to avoid second prompt
+            passwordUnlockEnabled: false,
+            backupMnemonic: true,
+            prfOutput,
           };
 
           wallet = await GeroStore.createNewWallet(
             newWallet.name,
             newWallet.icon,
             Theme.GERO,
-            null, // No mnemonic (generate new)
-            newWallet.password || 'temp-password', // Temp password for PRF wallets without password
+            null,
+            newWallet.password || 'temp-password',
             props.network.blockchain,
             props.network.network,
             prfOptions
@@ -549,23 +497,21 @@ const walletCreationStep = async () => {
           }
         }
       } catch (error: unknown) {
-        // User cancelled or PRF not supported
         if (error['message']?.includes('cancelled') || error['message']?.includes('NotAllowedError')) {
           console.log('User cancelled WebAuthn registration');
-          return; // Don't show error, user cancelled
+          return;
         }
         throw error;
       }
     } else {
       // ========================================================================
-      // PASSWORD WALLET CREATION (EXISTING)
+      // PASSWORD WALLET CREATION
       // ========================================================================
-
       wallet = await GeroStore.createNewWallet(
         newWallet.name,
         newWallet.icon,
         Theme.GERO,
-        null, // No mnemonic (generate new)
+        null,
         newWallet.password,
         props.network.blockchain,
         props.network.network
@@ -575,7 +521,6 @@ const walletCreationStep = async () => {
     console.log('walletCreationStep', wallet);
     dialogLocal.value = false;
 
-    // Login to the newly created wallet
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
@@ -616,17 +561,25 @@ const resetDialog = () => {
     icon: 'green',
     password: '',
     confirmPassword: '',
-    termsChecked: false,
-    recoverPasswordChecked: false,
+    encryptionMethod: 'password',
+    backupMnemonic: true,
+  });
+  Object.assign(acknowledgments, {
+    recoveryPhrase: false,
+    passwordRecovery: false,
+    termsAccepted: false,
   });
   step.value = 1;
-  setupValid.value = false;
-  acknowledgeValid.value = false;
   creatingWalletLoader.value = false;
-  console.log('resetDialog');
   nextTick(() => {
-    if (setupForm.value) {
-      setupForm.value.resetValidation();
+    if (nameForm.value) {
+      nameForm.value.resetValidation();
+    }
+    if (passwordForm.value) {
+      passwordForm.value.resetValidation();
+    }
+    if (prfForm.value) {
+      prfForm.value.resetValidation();
     }
   });
 };
@@ -638,17 +591,13 @@ const resetDialog = () => {
   backdrop-filter: blur(8px);
 }
 
-// Stepper customization
+// Stepper — no header, content only
 ::v-deep .v-stepper {
   box-shadow: none !important;
 }
 
-::v-deep .v-stepper__header {
-  box-shadow: none !important;
-}
-
 ::v-deep .v-stepper__content {
-  min-height: 420px;
+  min-height: 380px;
   transition: min-height 0.3s ease;
   padding: 0 16px;
 }
@@ -657,18 +606,46 @@ const resetDialog = () => {
   transition: height 0.3s ease;
 }
 
-// Action buttons at dialog level
+// Action buttons
 ::v-deep .v-card__actions {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(0, 0, 0, 0.2);
   min-height: 68px;
 }
 
-@media (max-width: 600px) {
-  ::v-deep .v-stepper__header {
-    flex-direction: column;
+// Minimal password card
+.method-card {
+  border: 2px solid transparent;
+  border-radius: 12px !important;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
   }
 
+  &--selected {
+    border-color: var(--v-primary-base);
+  }
+}
+
+// Remove checkbox hover highlight
+::v-deep .v-input--checkbox {
+  .v-input--selection-controls__ripple {
+    display: none;
+  }
+}
+
+// Terms link
+.terms-link {
+  color: var(--v-primary-base);
+  text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+@media (max-width: 600px) {
   ::v-deep .v-stepper__content {
     min-height: auto;
   }
