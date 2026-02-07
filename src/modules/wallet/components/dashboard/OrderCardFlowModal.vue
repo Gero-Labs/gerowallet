@@ -37,7 +37,7 @@
           {{ $t('card.paymentDetails') }}
         </v-stepper-step>
         <v-divider></v-divider>
-        <v-stepper-step step="5" color="primary" class="pa-2" editable>
+        <v-stepper-step step="5" color="primary" class="pa-2">
           {{ $t('card.confirm') }}
         </v-stepper-step>
       </v-stepper-header>
