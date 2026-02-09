@@ -29,6 +29,7 @@ import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
 import mediaPlayer from '@/assets/svg/play-square.svg'
+import cardIcon from '@/assets/svg/card.svg'
 import cashback from '@/assets/svg/cashback.svg'
 import governance from '@/assets/svg/governance.svg'
 import dao from '@/assets/svg/dao.svg'
@@ -172,6 +173,7 @@ export default {
   coinsStacked,
   blog,
   mediaPlayer,
+  cardIcon,
   cashback,
   governance,
   transactions,

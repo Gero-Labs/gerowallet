@@ -333,12 +333,11 @@ export default {
     }
   },
 
-  setLocale(value: string) {
-    if (walletStore.config && walletStore.loggedWallet) {
-      walletStore.config.locale = value;
-      broadcastFromBackground({ config: walletStore.config });
-      setWalletConfiguration(walletStore.loggedWallet.id, 'locale', value);
-    }
+  async setLocale(value: string) {
+    // CRITICAL: Only save to geroStore (global preference, persists across login/logout)
+    // DO NOT save to wallet-specific config to avoid duplicate liveQuery triggers
+    const { default: GeroStore } = await import('@/stores/geroStore');
+    await GeroStore.setLocale(value);
   },
 
   setWebsiteProtection(value: boolean) {

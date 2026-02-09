@@ -44,3 +44,10 @@ coverage/
 # Local cache
 .cache/
 .eslintcache
+
+# Claude Code
+.claude/
+
+# Translation utility scripts (temporary)
+scripts/translate-*.js
+scripts/merge-translations.js

@@ -6,7 +6,7 @@ import Vue from 'vue';
 import VueRouter from 'vue-router';
 import FlagIcon from 'vue-flag-icon';
 import VueShowdown from 'vue-showdown'
-import i18n from '../plugins/i18n';
+import i18n, { loadLanguage } from '../plugins/i18n';
 import vuetify from '../plugins/vuetify';
 import router from '../modules/navigation/router';
 import { ClickOutside } from 'vuetify/lib/directives';
@@ -71,11 +71,19 @@ loadPersistedWallet().then(() => {
   Vue.component('notifications', Notifications);
 
   return new Promise<void>((resolve) => {
-    chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
-      if (saved?.loggedWallet?.id && saved?.config?.locale) {
-        i18n.locale = saved.config.locale;
-      } else {
-        console.log('🌐 Using default locale: us');
+    chrome.storage.local.get(['walletStore', 'geroStore'], async ({ walletStore: saved, geroStore }) => {
+      // Priority: geroStore.config.locale (global) -> walletStore.config.locale (wallet-specific) -> 'us'
+      const locale = geroStore?.config?.locale || saved?.config?.locale || 'us';
+
+      if (locale !== 'us') {
+        try {
+          // CRITICAL: Load language file BEFORE setting locale
+          await loadLanguage(locale);
+          i18n.locale = locale;
+        } catch (error) {
+          console.error('Failed to load language file:', locale, error);
+          i18n.locale = 'us'; // Fallback to English
+        }
       }
       resolve();
     });

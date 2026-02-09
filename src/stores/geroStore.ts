@@ -29,7 +29,8 @@ export const geroStore: GeroStore =  Vue.observable<GeroStore>({
   wallets: {},
   network: networks[0],
   config: {
-    welcomeDone: true
+    welcomeDone: true,
+    locale: 'us'  // Global locale preference (persists across login/logout)
   },
 });
 
@@ -59,41 +60,79 @@ if (context === 'browser') {
   });
 }
 
+// Serializer function for complex data types (used with JSON.stringify replacer)
+function serializeValue(_key: string, value: any): any {
+  if (value instanceof Map) {
+    return Array.from(value.entries()).reduce((obj, [k, v]) => {
+      obj[k] = v;
+      return obj;
+    }, {} as Record<string, any>);
+  } else if (typeof value === 'bigint') {
+    return value.toString();
+  } else {
+    return value;
+  }
+}
+
+// Debounced storage write to reduce I/O operations during rapid updates
+let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
+
 /**
  * Broadcast updates from background context
+ *
+ * CRITICAL: Uses in-memory state (geroStore) as the base for Chrome storage writes
+ * instead of reading from chrome.storage.local.get() to prevent race conditions.
+ * The previous async read pattern caused locale to alternate between values
+ * because the liveQuery and storage writes were racing.
+ *
+ * @param updates - Partial GeroStore updates to broadcast
+ * @param immediate - If true, write to chrome.storage immediately (no debounce)
  */
-function broadcastFromBackground(updates: Partial<GeroStore>) {
+function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false) {
   if (context === 'background') {
     // Serialize data for broadcasting
-    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
-      if (value instanceof Map) {
-        return Array.from(value.entries()).reduce((obj, [key, value]) => {
-          obj[key] = value;
-          return obj;
-        }, {});
-      } else if (typeof value === 'bigint') {
-        return value.toString();
-      } else {
-        return value;
-      }
-    }));
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, serializeValue));
 
-    // Broadcast to all connected browser contexts
+    // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Also persist to storage as fallback
-    chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || {
-        wallets: {},
-        network: networks[0],
-        config: {
-          welcomeDone: true
+    // For critical state changes (e.g., locale), write immediately to storage
+    // so browser context gets correct state on hydration
+    if (immediate || (updates.config && 'locale' in updates.config)) {
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+        storageWriteTimeout = null;
+      }
+      try {
+        // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
+        // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
+        const finalState = { ...geroStore };
+        chrome.storage.local.set({
+          [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
+        });
+      } catch (error) {
+        console.error('Failed to persist gero store to storage (immediate):', Object.keys(updates), error);
+      }
+    } else {
+      // Debounced storage write to reduce I/O operations during rapid updates
+      // This batches multiple updates together while maintaining data consistency
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+      }
+
+      storageWriteTimeout = setTimeout(() => {
+        try {
+          // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
+          // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
+          const finalState = { ...geroStore };
+          chrome.storage.local.set({
+            [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
+          });
+        } catch (error) {
+          console.error('Failed to persist gero store to storage:', Object.keys(updates), error);
         }
-      };
-      chrome.storage.local.set({
-        [STORE_NAME]: { ...current, ...serializedUpdates }
-      });
-    });
+      }, 300); // 300ms debounce - balances performance with data safety
+    }
   }
 }
 
@@ -103,8 +142,88 @@ export default {
     broadcastFromBackground({ wallets });
   },
   setConfig(config: any) {
-    geroStore.config = config;
-    broadcastFromBackground({ config });
+    // CRITICAL: Trust the incoming locale from database if it exists
+    // The database is the source of truth after setLocale() saves to it
+    const currentLocale = geroStore.config?.locale;
+    const incomingLocale = config.locale;
+
+    // Determine final locale value
+    let finalLocale: string;
+    if (incomingLocale) {
+      // Trust the database locale (it's the result of a recent setLocale call)
+      finalLocale = incomingLocale;
+    } else if (currentLocale) {
+      // No incoming locale, preserve current in-memory value
+      finalLocale = currentLocale;
+    } else {
+      // No locale anywhere, use default
+      finalLocale = 'us';
+    }
+
+    // CRITICAL: Check if anything actually changed to prevent unnecessary reactive updates
+    // This helps break potential circular loops from liveQuery -> setConfig -> broadcast -> liveQuery
+    let hasChanges = false;
+
+    // Check non-locale keys for changes
+    Object.keys(config).forEach(key => {
+      if (key !== 'locale' && geroStore.config[key] !== config[key]) {
+        geroStore.config[key] = config[key];
+        hasChanges = true;
+      }
+    });
+
+    // Check locale for changes
+    if (geroStore.config.locale !== finalLocale) {
+      geroStore.config.locale = finalLocale;
+      hasChanges = true;
+
+      // CRITICAL: Also update i18n.locale when locale changes
+      // This ensures UI updates when database liveQuery loads locale on startup
+      (async () => {
+        const { updateI18nLocale } = await import('@/plugins/i18n');
+        await updateI18nLocale(finalLocale);
+      })();
+    }
+
+    // Only broadcast if something actually changed
+    if (hasChanges) {
+      broadcastFromBackground({ config: geroStore.config });
+    }
+  },
+  async setLocale(locale: string) {
+    // CRITICAL: Skip if locale hasn't actually changed to prevent loops
+    if (geroStore.config.locale === locale) {
+      return;
+    }
+
+    // Capture previous locale for error recovery
+    const previousLocale = geroStore.config.locale;
+
+    // Update in-memory state first
+    geroStore.config.locale = locale;
+
+    // CRITICAL: Use immediate flag for locale changes to prevent race conditions
+    // This ensures browser context hydrates the correct state on initialization
+    broadcastFromBackground({ config: geroStore.config }, true);
+
+    // Update i18n.locale directly to ensure UI updates immediately
+    const { updateI18nLocale } = await import('@/plugins/i18n');
+    await updateI18nLocale(locale);
+
+    // Save to gero-db to persist the change
+    // The liveQuery will fire but setConfig() will detect no change and skip broadcasting
+    try {
+      const { setConfiguration } = await import('@/db/gero-db');
+      await setConfiguration('locale', locale);
+    } catch (error) {
+      console.error('Failed to save locale to database:', error);
+
+      // Error recovery: Revert in-memory state if database write fails
+      // This ensures consistency between memory and persisted state
+      geroStore.config.locale = previousLocale;
+      broadcastFromBackground({ config: geroStore.config }, true);
+      await updateI18nLocale(previousLocale);
+    }
   },
   setNetwork(network: any) {
     geroStore.network = network;
@@ -258,7 +377,8 @@ export default {
       wallets: {},
       network: networks[0],
       config: {
-        welcomeDone: true
+        welcomeDone: true,
+        locale: geroStore.config?.locale || 'us'  // Preserve locale during reset
       }
     };
 
@@ -289,5 +409,10 @@ export default {
   // Utility method to check if wallet exists
   hasWallet(walletId: number): boolean {
     return geroStore.wallets && walletId in geroStore.wallets;
+  },
+
+  // Utility method to get current locale
+  getLocale(): string {
+    return geroStore.config?.locale || 'us';
   }
 }
