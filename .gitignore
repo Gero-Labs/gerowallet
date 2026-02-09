@@ -45,11 +45,8 @@ coverage/
 .cache/
 .eslintcache
 
-# Claude Code local settings
-.claude/settings.local.json
-
-# Translation batch files (temporary)
-.claude/i18n-localization/batches/
+# Claude Code
+.claude/
 
 # Translation utility scripts (temporary)
 scripts/translate-*.js
