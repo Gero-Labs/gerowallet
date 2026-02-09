@@ -73,7 +73,7 @@ import PassKeyPasswordField from './PassKeyPasswordField.vue';
 import ToggleSwitch from './ToggleSwitch.vue';
 
 interface Props {
-  walletType: WalletType;
+  walletType: string;
   isPrfWallet: boolean;
   isSigned: boolean;
   loading: boolean;

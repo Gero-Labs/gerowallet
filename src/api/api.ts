@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { Blockchain, Network, Proof, Provider } from '@/models/types';
+import { Blockchain, Network, Provider } from '@/models/types';
 
 export class Api {
   public chain: string;
@@ -9,8 +9,8 @@ export class Api {
   public axiosInstance: AxiosInstance;
 
   constructor(wallet, provider: Provider) {
-    this.chain = Object.keys(Blockchain).find(key => Blockchain[key] === wallet.chain);
-    this.network = Object.keys(Network).find(key => Network[key] === wallet.network);
+    this.chain = Object.keys(Blockchain).find(key => Blockchain[key] === wallet?.chain);
+    this.network = Object.keys(Network).find(key => Network[key] === wallet?.network);
     this.provider = Provider[provider];
     this.axiosInstance = axios.create({
       baseURL: import.meta.env['VITE_BACKEND_URL'],
@@ -85,30 +85,12 @@ export class Api {
     }
   }
 
-  async getTransactionsInfo(txHashes: string[]) {
-    try {
-      const { data, status } = await this.axiosInstance.post(
-        `/api/transactions/info?chain=${this.chain}&network=${this.network}`,
-        txHashes
-      );
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error: any) {
-      if (error.response?.status === 404) {
-        return [];
-      }
-      throw parseHttpError(error);
-    }
-  }
-
   async getTransactionsCbor(txHashes: string[]) {
     return this.axiosInstance.post(
       `/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
       txHashes
     );
   }
-
-
 
   async getAssetsInfo(units: string[]) {
     const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`;
@@ -147,12 +129,6 @@ export class Api {
     );
   }
 
-  async getEpochParameters(epochNo: number): Promise<any> {
-    return this.axiosInstance.get(
-      `/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`
-    );
-  }
-
   async fetchTickerStatistics() {
     const { data, status } = await this.axiosInstance.get(`/api/price/ticker?chain=${this.chain}`);
     if (status === 200) return data;
@@ -165,121 +141,12 @@ export class Api {
     return parseHttpError(data);
   }
 
-  async fetchADAStatistics() {
-    try {
-      const { data, status } = await this.axiosInstance.get('/crypto/ticker/ADAUSDT');
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async submitTx(body: string): Promise<any> {
     const { data } = await this.axiosInstance.post(
       `/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`,
       body
     );
     return data;
-  }
-
-  async getBankAccountId(userId: number): Promise<number> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/zk-snark/accountId/${userId}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async verifyProof(proof: Proof, publicSignals: string[]): Promise<boolean> {
-    try {
-      const response = await this.axiosInstance.post('api/zk-snark/verify-proof', {
-        proof,
-        publicSignals,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error verifying proof:', error);
-      return false;
-    }
-  }
-
-  async charts(tokenIn: string, tokenOut: string, period: string, from: number, to: number): Promise<any> {
-    try {
-      const requestBody = {
-        tokenIn,
-        tokenOut,
-        period,
-        from,
-        to,
-      };
-      const { data, status } = await this.axiosInstance.post(`/api/v2/charts`, requestBody);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  // Strike Finance Perpetuals API methods
-  strike = {
-    /**
-     * Get all perpetual positions for a wallet address
-     */
-    getPositions: async (address: string): Promise<any[]> => {
-      try {
-        const { data, status } = await this.axiosInstance.get(`/api/strike/perpetuals/getPositions`, {
-          params: { address }
-        });
-        if (status === 200) return data || [];
-        throw parseHttpError(data);
-      } catch (error: any) {
-        if (error.response?.status === 404) {
-          return [];
-        }
-        throw parseHttpError(error);
-      }
-    },
-
-    /**
-     * Open a new perpetual position
-     */
-    openPosition: async (request: any): Promise<string> => {
-      try {
-        const requestBody = { request };
-        const { data, status } = await this.axiosInstance.post(`/api/strike/perpetuals/openPosition`, requestBody);
-        if (status === 200) return data;
-        throw parseHttpError(data);
-      } catch (error) {
-        throw parseHttpError(error);
-      }
-    },
-
-    /**
-     * Close an existing perpetual position
-     */
-    closePosition: async (request: any): Promise<string> => {
-      try {
-        const requestBody = { request };
-        const { data, status } = await this.axiosInstance.post(`/api/strike/perpetuals/closePosition`, requestBody);
-        if (status === 200) return data;
-        throw parseHttpError(data);
-      } catch (error) {
-        throw parseHttpError(error);
-      }
-    },
-  };
-
-  async getMember(memberId: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/members/${memberId}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
   }
 
   multiSig = {
@@ -345,47 +212,6 @@ export class Api {
           throw parseHttpError(error);
         }
       },
-
-      /**
-       * Get a transaction by ID
-       * @param id - The ID of the transaction to get
-       * @returns The transaction or throws an error on failure
-       */
-      getByID: async (id: string): Promise<any> => {
-        try {
-          const { data } = await this.axiosInstance.get(`/api/multisig/transactions/${id}`);
-          return data;
-        } catch (error) {
-          throw parseHttpError(error);
-        }
-      },
-
-      /**
-       * Get all transactions by wallet address
-       * @param walletAddress - The address of the wallet to get the transactions for
-       * @returns The transactions or throws an error on failure
-       */
-      getByWallet: async (walletAddress: string): Promise<any> => {
-        try {
-          const { data } = await this.axiosInstance.get(`/api/multisig/address/${walletAddress}/transactions`);
-          return data;
-        } catch (error) {
-          throw parseHttpError(error);
-        }
-      },
-
-      /**
-       * Update a transaction by ID
-       * @param id - The ID of the transaction to update
-       * @param body - The body of the transaction to update
-       * body example:
-       * {
-            "multisigAddress": "{multisigAddress}",
-            "txnCBOR": "{txnCBOR}",
-            "requiredSignatures": 2
-        }
-       * @returns The updated transaction
-       */
       update: async (id: string, body: string): Promise<any> => {
         try {
           const { data } = await this.axiosInstance.put(`/api/multisig/transactions/${id}`, body);
@@ -408,23 +234,6 @@ export class Api {
           throw parseHttpError(error);
         }
       },
-
-      /**
-       * Get the signers of a transaction
-       * @param transactionId - The ID of the transaction to get the signers for
-       * @returns The signers or throws an error on failure
-       */
-      getSigners: async (transactionId: string): Promise<any> => {
-        try {
-          const { data } = await this.axiosInstance.get(`/api/multisig/transactions/${transactionId}/signers`);
-          return data;
-        } catch (error) {
-          throw parseHttpError(error);
-        }
-      },
-
-      // TODO: Implement "Get Pending Signature Transactions"
-      // TODO: Implement "Get Fully Signed Transactions"
     },
 
     signers: {
@@ -449,39 +258,6 @@ export class Api {
             ));
           }
 
-          return data;
-        } catch (error) {
-          throw parseHttpError(error);
-        }
-      },
-
-      /**
-       * Record a signature for a signer
-       * @param transactionId - The ID of the transaction to record the signature for
-       * @param signerAddress - The address of the signer to record the signature for
-       * @param signature - The signature to record
-       * @returns The updated transaction
-       */
-      recordSignature: async (transactionId: string, signerAddress: string, signature: string): Promise<any> => {
-        try {
-          const { data } = await this.axiosInstance.post(
-            `/api/multisig/transactions/${transactionId}/signers/${signerAddress}/signature`,
-            { signature }
-          );
-          return data;
-        } catch (error) {
-          throw parseHttpError(error);
-        }
-      },
-
-      /**
-       * Get the transactions of a signer
-       * @param signerAddress - The address of the signer to get the transactions for
-       * @returns The transactions or throws an error on failure
-       */
-      getTransactions: async (signerAddress: string): Promise<any> => {
-        try {
-          const { data } = await this.axiosInstance.get(`/api/multisig/signers/${signerAddress}/transactions`);
           return data;
         } catch (error) {
           throw parseHttpError(error);

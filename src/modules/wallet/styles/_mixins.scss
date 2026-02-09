@@ -45,12 +45,12 @@
   color: white;
   border-image: linear-gradient(135deg, #00dff3 0%, #00818d 100%) 1;
   box-shadow: $shadow-button;
-  
+
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 25px rgba($primary-cyan, 0.3);
   }
-  
+
   &:active {
     transform: translateY(0);
   }
@@ -62,7 +62,7 @@
   border: 1px solid $border-primary;
   color: $text-secondary;
   box-shadow: $shadow-button;
-  
+
   &:hover {
     border-color: $primary-cyan;
     color: $primary-cyan;
@@ -141,4 +141,4 @@
     transform: translateY(0);
     opacity: 1;
   }
-} 
+}

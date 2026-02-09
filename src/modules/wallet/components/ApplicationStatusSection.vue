@@ -1,15 +1,5 @@
 <template>
-  <section class="application-status-section">
-    <!-- Logout Button -->
-    <v-btn
-      icon
-      class="logout-btn"
-      @click="$emit('logout')"
-      :title="$t('wallet.logout')"
-    >
-      <v-icon>mdi-logout</v-icon>
-    </v-btn>
-
+  <section class="application-status-section mt-8 mx-8">
     <div class="status-content">
       <!-- Left: Card Visual with Animated Status -->
       <div class="card-visual-container">
@@ -85,9 +75,7 @@
     </div>
   </section>
 </template>
-
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 
 interface Props {
@@ -513,6 +501,7 @@ defineEmits(['logout']);
   }
 
   .progress-section {
+    width: 100%;
     padding: $spacing-lg 0;
   }
 

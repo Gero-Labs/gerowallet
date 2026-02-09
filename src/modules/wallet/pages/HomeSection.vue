@@ -2,14 +2,8 @@
   <div class="home-section">
     <div class="content-wrapper">
       <HeroSection />
-      <!-- <ExchangeRateSection/> -->
       <div class="dashboard-layout" v-if="selectedCard">
-        <!-- <div class="left-column"> -->
         <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
-        <!-- </div> -->
-        <!-- <div class="right-column">
-           <ChartSection @filter="handleFilter" /
-        </div>> -->
       </div>
     </div>
 
@@ -21,16 +15,12 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref } from 'vue';
 import cardStore from '@/stores/modules/card';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import HeroSection from '../components/HeroSection.vue';
 import KaiserexPartnershipBadge from '../components/KaiserexPartnershipBadge.vue';
 import { useIntervalFn } from '@vueuse/core';
-import ExchangeRateSection from '@/modules/wallet/components/dashboard/ExchangeRateSection.vue';
-
-const { t } = useTranslation();
 const loading = ref(false);
 
 const currentState = computed(() => cardStore.currentState)
@@ -57,11 +47,7 @@ const initData = () => {
 
 const cardHistoryRecords = computed(() => {
   const selectedCard = cardStore.getSelectedCard();
-  const records = selectedCard?.cardHistory?.records || [];
-  if (records.length > 0) {
-    console.log('🏠 First record:', records[0]);
-  }
-  return records;
+  return selectedCard?.cardHistory?.records || [];
 });
 </script>
 

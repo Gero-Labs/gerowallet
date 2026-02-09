@@ -1303,7 +1303,7 @@ export default {
   'settings.uploadPicture': 'Upload Picture',
   'settings.utxo': 'UTxO',
   'settings.walletBackupRequired': 'Wallet backup required',
-  'settings.walletDeletedSuccess': 'Wallet ',
+  'settings.walletDeletedSuccess': 'Wallet "{name}" has been deleted',
   'settings.walletName': 'Wallet Name',
   'settings.walletNamePlaceholder': 'e.g. My New Wallet',
   'settings.walletNameTaken': 'Wallet name already taken',

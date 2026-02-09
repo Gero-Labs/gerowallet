@@ -1,6 +1,6 @@
 <template>
   <div class="card-carousel">
-    <v-window 
+    <v-window
       v-model="localCardIndex"
       :show-arrows="cards.length > 1"
       continuous
@@ -18,14 +18,14 @@
           :style="cardTiltStyle"
         >
           <div class="card-shine" :style="cardShineStyle"></div>
-
+          <div v-if="card.cardData.own_type" class="pl-2 primary--text" style="text-transform: capitalize">{{ card.cardData.own_type }} Card</div>
           <p class="card-number">
             {{ getFormattedCardNumber(card) }}
           </p>
 
           <div class="card-bottom" style="max-width: 310px">
             <div class="card-holder">
-              <p class="label">{{ $t('card.cardholderName') }}</p>
+              <p class="label"></p>
               <p class="value">{{ card.cardData.card_holder_name || $t('card.geroWallet') }}</p>
             </div>
             <div class="card-cvv">
@@ -59,20 +59,21 @@
         v-else-if="loadingOrderDetails && cards[currentCardIndex]?.cardData.id"
         class="card-status-chip loading-chip"
         small
+        style="width: 100px"
       >
         <v-progress-circular
           indeterminate
-          size="16"
+          size="12"
           width="2"
           color="primary"
-          class="mr-1"
-        ></v-progress-circular>
-        {{ $t('card.loading') }}
+        />
+        &nbsp;&nbsp;{{ $t('card.loading') }}
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && (normalizedCurrentCardStatus === 'rejected' || normalizedCurrentCardStatus === 'expired')"
         class="card-status-chip rejected-chip"
         small
+        style="width: 100px"
       >
         <v-icon small left>mdi-close-circle</v-icon>
         {{ normalizedCurrentCardStatus === 'expired' ? $t('card.expired') : $t('card.rejected') }}
@@ -81,6 +82,7 @@
         v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'pending'"
         class="card-status-chip pending-chip"
         small
+        style="width: 100px"
       >
         <v-icon small left>mdi-clock-outline</v-icon>
         {{ $t('card.pending') }}
@@ -161,8 +163,8 @@ watch(localCardIndex, (newIndex) => {
   }
 });
 
-const cardTiltStyle = ref<any>({});
-const cardShineStyle = ref<any>({});
+const cardTiltStyle = ref<Record<string, string | number>>({});
+const cardShineStyle = ref<Record<string, string | number>>({});
 
 const getFormattedCardNumber = (card: CardInfo) => {
   const pan = card.cardDetails?.pan;

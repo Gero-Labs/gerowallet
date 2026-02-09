@@ -20,9 +20,9 @@ const getWalletAddress = async (): Promise<string> => {
       return addresses[0];
     }
   } catch (e) {
-    console.log(e);
+    console.warn('Failed to get wallet address:', e);
   }
-  return undefined;
+  return '';
 };
 
 const injectScript = () => {
@@ -147,6 +147,63 @@ async function injectBring() {
       activateTitleBoldFS: '--activate-title-bold-f-s',
       activateTitleBoldFW: '--activate-title-bold-f-w',
       activateTitleBoldFC: '--activate-title-bold-f-c',
+      obBg: "linear-gradient(179deg, #00D6E9 0.68%, #00B0CF 99.85%)",
+      obCloseBtnTopHoverBg: "#00ADCC",
+      obOfferTextFS: "13px",
+      obOfferTextFW: "500",
+      obOfferTextFC: "#1A1A1A",
+      obOfferTextLH: "13px",
+      obOfferAmountFS: "21px",
+      obOfferAmountFW: "700",
+      obOfferAmountFC: "#1A1A1A",
+      obOfferAmountLH: "17px",
+      obActivateBtnBg: "#1A1A1A",
+      obActivateBtnFS: "13px",
+      obActivateBtnFW: "700",
+      obActivateBtnFC: "#FFF",
+      obActivateBtnLH: "13px",
+      obActivateBtnBorderC: "transparent",
+      obActivateBtnBorderW: "0",
+      obActivateBtnRadius: "4px",
+      obOptOutBtnBg: "#1A1A1A",
+      obOptOutBtnFS: "13px",
+      obOptOutBtnFW: "700",
+      obOptOutBtnFC: "#FFFFFF",
+      obOptOutBtnLH: "13px",
+      obOptOutBtnBorderC: "transparent",
+      obOptOutBtnBorderW: "0",
+      obOptOutBtnRadius: "4px",
+      obCloseBtnFS: "13px",
+      obCloseBtnFW: "500",
+      obCloseBtnFC: "#1A1A1A",
+      obCloseBtnLH: "13px",
+      obPlatformLogosBg: "#00ADCC",
+      obRetailerLogoBg: "#FFFFFF",
+      obPlatformWalletLogoBg: "#1A1A1A",
+      obOptOutTitleFS: "14px",
+      obOptOutTitleFW: "600",
+      obOptOutTitleFC: "#1A1A1A",
+      obOptOutTitleLH: "18px",
+      obOptOutMainBtnBg: "#1A1A1A",
+      obOptOutMainBtnFS: "13px",
+      obOptOutMainBtnFW: "700",
+      obOptOutMainBtnFC: "#FFF",
+      obOptOutMainBtnLH: "13px",
+      obOptOutMainBtnBorderW: "0",
+      obOptOutMainBtnBorderC: "transparent",
+      obOptOutMainBtnRadius: "4px",
+      obOptOutSecondaryBtnBg: "transparent",
+      obOptOutSecondaryBtnFS: "13px",
+      obOptOutSecondaryBtnFW: "700",
+      obOptOutSecondaryBtnFC: "#1A1A1A",
+      obOptOutSecondaryBtnLH: "13px",
+      obOptOutSecondaryBtnBorderW: "1px",
+      obOptOutSecondaryBtnBorderC: "#1A1A1A",
+      obOptOutSecondaryBtnRadius: "4px",
+      obOptOutBackBtnFS: "11px",
+      obOptOutBackBtnFW: "500",
+      obOptOutBackBtnFC: "#1A1A1A",
+      obOptOutBackBtnLH: "25px",
     }
   });
 }
@@ -160,7 +217,7 @@ if (shouldInject()) {
   (async () => {
     await injectBring();
     Messaging.createProxyController();
-    
+
     // Store listener reference for cleanup
     messageListener = (message, _sender, _sendResponse) => {
       if (message.action === 'showOverlay') {
@@ -172,7 +229,7 @@ if (shouldInject()) {
         }
       }
     };
-    
+
     chrome.runtime.onMessage.addListener(messageListener);
   })();
 }
@@ -198,7 +255,7 @@ window.addEventListener('beforeunload', () => {
     chrome.runtime.onMessage.removeListener(messageListener);
     messageListener = null;
   }
-  
+
   if (windowLoadListener) {
     window.removeEventListener('load', windowLoadListener);
     windowLoadListener = null;
@@ -211,7 +268,7 @@ window.addEventListener('pagehide', () => {
     chrome.runtime.onMessage.removeListener(messageListener);
     messageListener = null;
   }
-  
+
   if (windowLoadListener) {
     window.removeEventListener('load', windowLoadListener);
     windowLoadListener = null;
