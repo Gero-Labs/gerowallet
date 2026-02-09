@@ -1382,7 +1382,7 @@ export default {
   'settings.uploadPicture': 'Upload Picture',
   'settings.utxo': 'UTxO',
   'settings.walletBackupRequired': 'Wallet backup required',
-  'settings.walletDeletedSuccess': 'Wallet ',
+  'settings.walletDeletedSuccess': 'Wallet "{name}" has been deleted',
   'settings.walletName': 'Wallet Name',
   'settings.walletNamePlaceholder': 'e.g. My New Wallet',
   'settings.walletNameTaken': 'Wallet name already taken',
@@ -1912,8 +1912,6 @@ export default {
   'welcome.chooseNameToIdentify': 'Choose a name to identify your wallet',
   'welcome.saveRecoveryBackup': 'I\'ll save my recovery phrase as a backup',
   'welcome.passwordNoRecoveryWarning': 'If you forget this password, you\'ll need your recovery phrase to restore your wallet.',
-  'welcome.howToProtectWallet': 'How would you like to protect your wallet?',
-  'welcome.passwordSecurityWarning': 'Make sure your password is strong and stored securely. If you forget it, you\'ll need your recovery phrase to restore access.',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',
