@@ -34,38 +34,12 @@
         </div>
       </div>
     </div>
-
-    <!-- Cost Summary -->
-    <div class="cost-summary">
-      <div class="summary-row">
-        <span class="summary-label">{{ $t('card.shippingFee') }}</span>
-        <span class="summary-value">{{ selectedOptionPrice }}</span>
-      </div>
-      <div class="summary-divider"></div>
-      <div class="summary-row total">
-        <span class="summary-label">{{ $t('card.total') }}</span>
-        <span class="summary-value">{{ selectedOptionPrice }}</span>
-      </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="step-actions">
-      <SecondaryButton :text="$t('card.back')" @click="handleBack" :disabled="isLoading" />
-      <GradientButton 
-        :text="$t('card.continueButton')" 
-        @click="handleContinue"
-        :loading="isLoading"
-        :disabled="isLoading"
-      />
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import SecondaryButton from '../../SecondaryButton.vue';
-import GradientButton from '../../GradientButton.vue';
 
 type ShippingMethod = 'regular' | 'express-eu' | 'express-worldwide';
 
@@ -140,6 +114,12 @@ const handleBack = () => {
 const handleContinue = () => {
   emit('select', localSelectedMethod.value);
 };
+
+// Expose handlers so parent can call them
+defineExpose({
+  handleBack,
+  handleContinue
+});
 </script>
 
 <style lang="scss" scoped>
@@ -313,22 +293,6 @@ const handleContinue = () => {
   height: 1px;
   background: $border-primary;
   margin: $spacing-sm 0;
-}
-
-.step-actions {
-  display: flex;
-  gap: $spacing-md;
-  margin-top: $spacing-md;
-}
-
-.step-actions :deep(.secondary-button),
-.step-actions :deep(.gradient-button) {
-  flex: 1;
-  width: 100%;
-  height: 44px;
-  font-size: $font-size-base;
-  font-weight: $font-weight-semibold;
-  text-transform: none;
 }
 
 @media (max-width: $breakpoint-sm) {

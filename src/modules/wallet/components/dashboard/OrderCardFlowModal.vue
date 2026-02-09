@@ -1,109 +1,145 @@
 <template>
-  <v-dialog v-model="dialog" max-width="600" persistent content-class="order-card-flow-modal">
-    <v-card class="modal-card">
-      <!-- Header -->
-      <div class="modal-header">
-        <div class="header-content">
-          <h2 class="modal-title">{{ currentTitle }}</h2>
-          <p class="modal-subtitle">{{ currentSubtitle }}</p>
-        </div>
-        <v-btn icon class="close-btn" @click="handleClose" :disabled="isProcessing">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </div>
+  <BaseDialog
+    :is-open="dialog"
+    :title="currentTitle"
+    :subtitle="currentSubtitle"
+    :width="650"
+    :persistent="true"
+    :loading="isLoadingAdaAmountToPay || isProcessing"
+    @close="handleClose"
+    :min-height="600"
+    icon="mdi-credit-card-plus"
+    scrollable
+  >
+    <!-- Progress Stepper -->
+    <v-stepper
+      v-if="selectedCardType === 'physical' && currentStep > 1 && currentStep < 6"
+      :value="Number(currentStep)"
+      @change="currentStep = Number($event)"
+      flat
+      class="transparent px-2"
+      style="min-height: 72px;"
+    >
+      <v-stepper-header>
+        <v-stepper-step :complete="currentStep > 1" step="1" color="primary" class="pa-2">
+          {{ $t('card.cardType') }}
+        </v-stepper-step>
+        <v-divider></v-divider>
+        <v-stepper-step :complete="currentStep > 2" step="2" color="primary" class="pa-2">
+          {{ $t('card.shippingAddress') }}
+        </v-stepper-step>
+        <v-divider></v-divider>
+        <v-stepper-step :complete="currentStep > 3" step="3" color="primary" class="pa-2">
+          {{ $t('card.shippingMethod') }}
+        </v-stepper-step>
+        <v-divider></v-divider>
+        <v-stepper-step :complete="currentStep > 4" step="4" color="primary" class="pa-2">
+          {{ $t('card.paymentDetails') }}
+        </v-stepper-step>
+        <v-divider></v-divider>
+        <v-stepper-step step="5" color="primary" class="pa-2">
+          {{ $t('card.confirm') }}
+        </v-stepper-step>
+      </v-stepper-header>
+    </v-stepper>
 
-      <!-- Progress Stepper -->
-      <v-stepper
-        v-if="selectedCardType === 'physical' && currentStep > 1 && currentStep < 6"
-        v-model="currentStep"
-        class="order-stepper"
-        flat
-        non-linear
-      >
-        <v-stepper-header>
-          <v-stepper-step :complete="currentStep > 2" step="1" color="#00c7f3">
-            {{ $t('card.shippingAddress') }}
-          </v-stepper-step>
-          <v-divider></v-divider>
-          <v-stepper-step :complete="currentStep > 3" step="2" color="#00c7f3">
-            {{ $t('card.shippingMethod') }}
-          </v-stepper-step>
-          <v-divider></v-divider>
-          <v-stepper-step :complete="currentStep > 4" step="3" color="#00c7f3">
-            {{ $t('card.paymentDetails') }}
-          </v-stepper-step>
-          <v-divider></v-divider>
-          <v-stepper-step step="4" color="#00c7f3">
-            {{ $t('card.confirm') }}
-          </v-stepper-step>
-        </v-stepper-header>
-      </v-stepper>
+    <!-- Step Content -->
+    <v-card-text class="modal-content px-3">
+      <!-- Step 1: Card Type Selection -->
+      <CardTypeSelectionStep
+        v-if="currentStep === 1"
+        :selected-type="selectedCardType"
+        :has-virtual-card="hasVirtualCard"
+        :has-physical-card="hasPhysicalCard"
+        @select="handleCardTypeSelect"
+      />
 
-      <!-- Step Content -->
-      <div class="modal-content">
-        <!-- Step 1: Card Type Selection -->
-        <CardTypeSelectionStep
-          v-if="currentStep === 1"
-          :selected-type="selectedCardType"
-          :has-virtual-card="hasVirtualCard"
-          :has-physical-card="hasPhysicalCard"
-          @select="handleCardTypeSelect"
-        />
+      <!-- Step 2: Shipping Address Selection (Physical only) -->
+      <ShippingAddressSelectionStep
+        v-if="currentStep === 2"
+        ref="addressStepRef"
+        :address="shippingAddress"
+        @back="handleBack"
+        @submit="handleAddressSubmit"
+      />
 
-        <!-- Step 2: Shipping Address Selection (Physical only) -->
-        <ShippingAddressSelectionStep
-          v-if="currentStep === 2"
-          :use-existing="useExistingAddress"
-          :address="shippingAddress"
-          @back="handleBack"
-          @submit="handleAddressSubmit"
-        />
+      <!-- Step 3: Shipping Method Selection (Physical only) -->
+      <ShippingMethodStep
+        v-if="currentStep === 3"
+        ref="methodStepRef"
+        :selected-method="shippingMethod"
+        :is-loading="isLoadingAdaAmountToPay"
+        @back="handleBack"
+        @select="handleShippingMethodSelect"
+      />
 
-        <!-- Step 3: Shipping Method Selection (Physical only) -->
-        <ShippingMethodStep
-          v-if="currentStep === 3"
-          :selected-method="shippingMethod"
-          :is-loading="isProcessing"
-          @back="handleBack"
-          @select="handleShippingMethodSelect"
-        />
+      <!-- Step 4: Payment Info (Physical only) -->
+      <CardOrderPaymentStep
+        v-if="currentStep === 4"
+        ref="paymentStepRef"
+        :amount-eur="paymentAmount.eur"
+        @back="handleBack"
+        @confirm="handlePaymentConfirm"
+      />
 
-        <!-- Step 4: Payment Info (Physical only) -->
-        <CardOrderPaymentStep
-          v-if="currentStep === 4"
-          :amount-ada="paymentAmount.ada"
-          :amount-eur="paymentAmount.eur"
-          @back="handleBack"
-          @confirm="handlePaymentConfirm"
-        />
+      <!-- Step 5: Payment Confirmation (Physical only) -->
+      <PaymentConfirmationStep
+        v-if="currentStep === 5"
+        :is-loading="isProcessing"
+        :is-success="orderSuccess"
+        @complete="handleClose"
+      />
+    </v-card-text>
 
-        <!-- Step 5: Payment Confirmation (Physical only) -->
-        <PaymentConfirmationStep
-          v-if="currentStep === 5"
-          :is-loading="isProcessing"
-          :is-success="orderSuccess"
-          @complete="handleOrderComplete"
-        />
-      </div>
+    <!-- Actions for Step 1 -->
+    <v-card-actions v-if="currentStep === 1" class="modal-actions px-3">
+      <SecondaryButton :text="t('common.cancel')" @click="handleClose" />
+      <GradientButton
+        :text="t('card.continueButton')"
+        @click="handleContinueFromTypeSelection"
+        :disabled="!selectedCardType"
+        :loading="orderingVirtualCard"
+      />
+    </v-card-actions>
 
-      <!-- Actions for Step 1 -->
-      <div v-if="currentStep === 1" class="modal-actions">
-        <SecondaryButton :text="$t('common.cancel')" @click="handleClose" />
-        <GradientButton
-          :text="$t('card.continueButton')"
-          @click="handleContinueFromTypeSelection"
-          :disabled="!selectedCardType"
-          :loading="orderingVirtualCard"
-        />
-      </div>
-    </v-card>
-  </v-dialog>
+    <!-- Actions for Step 2 -->
+    <v-card-actions v-if="currentStep === 2" class="modal-actions px-3">
+      <SecondaryButton :text="t('common.back')" @click="addressStepRef?.handleBack()" />
+      <GradientButton
+        :text="t('card.continueButton')"
+        @click="addressStepRef?.handleContinue()"
+      />
+    </v-card-actions>
+
+    <!-- Actions for Step 3 -->
+    <v-card-actions v-if="currentStep === 3" class="modal-actions px-3">
+      <SecondaryButton :text="t('common.back')" @click="methodStepRef?.handleBack()" :disabled="isLoadingAdaAmountToPay" />
+      <GradientButton
+        :text="t('card.continueButton')"
+        @click="methodStepRef?.handleContinue()"
+        :loading="isLoadingAdaAmountToPay"
+        :disabled="isLoadingAdaAmountToPay"
+      />
+    </v-card-actions>
+
+    <!-- Actions for Step 4 -->
+    <v-card-actions v-if="currentStep === 4" class="modal-actions px-3">
+      <SecondaryButton :text="t('common.back')" @click="paymentStepRef?.handleBack()" :disabled="paymentStepRef?.isValidating" />
+      <GradientButton
+        :text="t('card.confirmPayment')"
+        :icon-image="paymentStepRef?.isPrfWallet ? assets.passKeySvg : undefined"
+        @click="paymentStepRef?.handleConfirm()"
+        :disabled="(!paymentStepRef?.isPrfWallet && !paymentStepRef?.spendingPassword) || paymentStepRef?.isValidating || paymentStepRef?.isExpired"
+        :loading="paymentStepRef?.isValidating"
+      />
+    </v-card-actions>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useRouter } from 'vue-router/composables';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import SecondaryButton from '../SecondaryButton.vue';
 import GradientButton from '../GradientButton.vue';
 import CardTypeSelectionStep from './card-order-steps/CardTypeSelectionStep.vue';
@@ -111,11 +147,11 @@ import ShippingAddressSelectionStep from './card-order-steps/ShippingAddressSele
 import ShippingMethodStep from './card-order-steps/ShippingMethodStep.vue';
 import CardOrderPaymentStep from './card-order-steps/CardOrderPaymentStep.vue';
 import PaymentConfirmationStep from './card-order-steps/PaymentConfirmationStep.vue';
-import cardStore from '@/stores/modules/card';
+import cardStore, { OrderPhysicalCardPayload } from '@/stores/modules/card';
 import snackbar from '@/plugins/snackbar';
-import { OrderPhysicalCardPayload } from '@/stores/modules/card';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import assets from '@/utils/assets';
 import { Cardano } from '@cardano-sdk/core';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { walletStore } from '@/stores/walletStore';
@@ -123,7 +159,7 @@ import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 
 const { t } = useTranslation();
-const router = useRouter();
+const { loggedWallet, keys } = toRefs(walletStore)
 
 // Check if user already has virtual or physical cards
 // For physical cards, also check if payment is pending - if so, allow continuing payment
@@ -132,20 +168,16 @@ const hasVirtualCard = computed(() => {
     card => {
       const isVirtual = card.cardData?.own_type === 'virtual';
       if (!isVirtual) return false;
-      
+
       const hasCardOrOrder = card.cardData?.card_uuid || card.cardData?.order_uuid;
       if (!hasCardOrOrder) return false;
-      
+
       // Check if card is rejected (case-insensitive)
       const status = card.cardData?.status?.toLowerCase() || '';
       const isRejected = status === 'rejected';
-      
+
       // If virtual card exists but is rejected, allow ordering new one
-      if (isRejected) {
-        return false;
-      }
-      
-      return true;
+      return !isRejected;
     }
   );
 });
@@ -155,31 +187,31 @@ const hasPhysicalCard = computed(() => {
     card => {
       const isPhysical = card.cardData?.own_type === 'physical';
       if (!isPhysical) return false;
-      
+
       const hasCardUuid = !!card.cardData?.card_uuid;
       const hasOrderUuid = !!card.cardData?.order_uuid;
       const hasCardOrOrder = hasCardUuid || hasOrderUuid;
-      
+
       if (!hasCardOrOrder) return false;
-      
+
       // Check if card is rejected FIRST (case-insensitive) - this takes priority
       const status = card.cardData?.status?.toLowerCase() || '';
       const isRejected = status === 'rejected';
-      
+
       // If physical card exists but is rejected, allow ordering new one
       if (isRejected) {
         return false;
       }
-      
+
       // If card has UUID, it's active - already ordered
       if (hasCardUuid) {
         return true;
       }
-      
+
       // If card has order_uuid but no card_uuid, check payment status
       if (hasOrderUuid && !hasCardUuid) {
         // Check payment status from delivery object
-        const delivery = (card.cardData as any)?.delivery;
+        const delivery = card.cardData?.delivery;
         if (delivery) {
           const paymentStatus = delivery.payment_status?.toLowerCase();
           // If payment status is 'pending', allow continuing payment
@@ -194,11 +226,11 @@ const hasPhysicalCard = computed(() => {
           // Otherwise, payment is in progress, consider it as already ordered
           return true;
         }
-        
+
         // If no delivery object, assume payment is pending and allow continuing
         return false;
       }
-      
+
       return false;
     }
   );
@@ -225,8 +257,20 @@ const dialog = computed({
   },
 });
 
+// Refs for steps
+const addressStepRef = ref(null);
+const methodStepRef = ref(null);
+const paymentStepRef = ref(null);
+
 // Step management
 const currentStep = ref(1);
+
+// Ensure currentStep is always a number (v-stepper can set it as string)
+watch(currentStep, (newVal) => {
+  if (typeof newVal === 'string') {
+    currentStep.value = Number(newVal);
+  }
+});
 
 // Card type selection
 const selectedCardType = ref<'virtual' | 'physical' | null>(null);
@@ -235,20 +279,20 @@ const selectedCardType = ref<'virtual' | 'physical' | null>(null);
 const getSavedDeliveryAddress = () => {
   const cards = cardStore.state.cards || [];
   const physicalCards = cards.filter(card => card.cardData?.own_type === 'physical');
-  
+
   if (physicalCards.length === 0) return null;
-  
+
   // Get the most recent physical card (by created_at or updated_at)
   const lastPhysicalCard = physicalCards.sort((a, b) => {
     const dateA = new Date(b.cardData?.updated_at || b.cardData?.created_at || 0).getTime();
     const dateB = new Date(a.cardData?.updated_at || a.cardData?.created_at || 0).getTime();
     return dateA - dateB;
   })[0];
-  
+
   // Check if card has delivery object
-  const delivery = (lastPhysicalCard.cardData as any)?.delivery;
+  const delivery = lastPhysicalCard.cardData?.delivery;
   if (!delivery) return null;
-  
+
   return {
     streetAddress: delivery.address || '',
     city: delivery.city || '',
@@ -260,7 +304,6 @@ const getSavedDeliveryAddress = () => {
 };
 
 // Shipping address
-const useExistingAddress = ref(false);
 const savedDeliveryAddress = getSavedDeliveryAddress();
 const shippingAddress = ref(savedDeliveryAddress || {
   streetAddress: '',
@@ -276,7 +319,6 @@ const shippingMethod = ref<'regular' | 'express-eu' | 'express-worldwide'>('regu
 
 // Payment
 const paymentAmount = ref({
-  ada: 0,
   eur: 0,
 });
 const paymentAddress = ref('');
@@ -287,6 +329,7 @@ const depositExpiresAt = ref('');
 const depositQrCode = ref('');
 
 // Processing states
+const isLoadingAdaAmountToPay = ref(false);
 const isProcessing = ref(false);
 const orderingVirtualCard = ref(false);
 const orderSuccess = ref(false);
@@ -347,11 +390,8 @@ const orderVirtualCard = async () => {
   try {
     orderingVirtualCard.value = true;
     await cardStore.orderCard();
-    await cardStore.fetchCardData();
     snackbar.fireSuccess(t('card.cardOrderedSuccess'));
     handleClose();
-    // Navigate to card page (will show pending section)
-    router.push('/card');
   } catch (error: any) {
     let errorReason: string;
     if (typeof error?.response?.data === 'string' && error.response.data) {
@@ -379,21 +419,32 @@ const handleBack = () => {
   }
 };
 
-const handleAddressSubmit = (payload: { useExisting: boolean; address?: typeof shippingAddress.value }) => {
-  useExistingAddress.value = payload.useExisting;
+const handleAddressSubmit = async (payload: { address?: typeof shippingAddress.value }) => {
   if (payload.address) {
+    console.log(payload.address);
     shippingAddress.value = payload.address;
   }
   currentStep.value = 3;
 };
 
 const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'express-worldwide') => {
+  isLoadingAdaAmountToPay.value = true;
   shippingMethod.value = method;
-  
+  if (method === 'regular') {
+    paymentAmount.value.eur = 10;
+  }
+  await cardStore.getExchangeRate();
+  currentStep.value = 4;
+  isLoadingAdaAmountToPay.value = false;
+};
+
+const handlePaymentConfirm = async (spendingPassword: string, privateKeyBytes?: Uint8Array) => {
+  isProcessing.value = true;
+  currentStep.value = 5;
+  await nextTick();
+
   try {
-    isProcessing.value = true;
-    
-    // Create order on backend to get payment details
+    // TODO Check balance first
     const payload: OrderPhysicalCardPayload = {
       address: shippingAddress.value.streetAddress,
       region: shippingAddress.value.stateProvince,
@@ -401,65 +452,53 @@ const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'ex
       zipCode: shippingAddress.value.zipCode,
       countryCode: shippingAddress.value.countryCode,
       phone: shippingAddress.value.phone,
-      deliveryMethod: method,
+      deliveryMethod: shippingMethod.value,
     };
-    
     const orderResponse = await cardStore.orderPhysicalCard(payload);
-    
+
     if (!orderResponse) {
       throw new Error(t('card.failedToGetPaymentDetails'));
     }
-    
+
     // Store order details
     orderUuid.value = orderResponse.orderUuid || '';
     paymentId.value = orderResponse.paymentId || 0;
-    
+
     // Get payment address (depositAddress)
     paymentAddress.value = orderResponse.depositAddress || '';
-    
+
     // Get payment amount (depositAmountAda, depositAmountEur)
     const amountAda = parseFloat(orderResponse.depositAmountAda || '0');
+    if (isNaN(amountAda) || amountAda <= 0) {
+      throw new Error(t('errors.invalidAmount'));
+    }
     const amountEur = parseFloat(orderResponse.depositAmountEur || '0');
-    
+
     paymentAmount.value = {
-      ada: amountAda,
       eur: amountEur,
     };
-    
+
     // Store additional payment info
     exchangeRate.value = orderResponse.exchangeRate || '';
     depositExpiresAt.value = orderResponse.depositExpiresAt || '';
     depositQrCode.value = orderResponse.depositQrCode || '';
-    
-    if (!paymentAddress.value || paymentAmount.value.ada <= 0) {
+
+    if (!paymentAddress.value || amountAda <= 0) {
       throw new Error(t('card.failedToGetPaymentDetails'));
     }
-    
-    currentStep.value = 4;
-  } catch (error: any) {
-    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
-  } finally {
-    isProcessing.value = false;
-  }
-};
 
-const handlePaymentConfirm = async (spendingPassword: string) => {
-  // Move to confirmation step
-  currentStep.value = 5;
-  isProcessing.value = true;
-
-  try {
     if (!paymentAddress.value) {
       throw new Error(t('card.missingPaymentAddress'));
     }
 
-    const adaAmount = paymentAmount.value.ada;
-    if (isNaN(adaAmount) || adaAmount <= 0) {
-      throw new Error(t('errors.invalidAmount'));
-    }
-
-    const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
-
+    // Convert ADA to lovelace (6 decimal precision)
+    // depositAmountAda comes as string like "47.99946773" with 8 decimals
+    // ADA only supports 6 decimals, so we truncate to 6 and convert to integer lovelace
+    const adaString = orderResponse.depositAmountAda || '0';
+    const [integerPart = '0', decimalPart = ''] = adaString.split('.');
+    // Take only first 6 decimal digits (ADA precision)
+    const truncatedDecimal = decimalPart.substring(0, 6).padEnd(6, '0');
+    const lovelaceAmount = BigInt(integerPart + truncatedDecimal) as Cardano.Lovelace;
     const outputs: Cardano.TxOut[] = [
       {
         address: paymentAddress.value as Cardano.PaymentAddress,
@@ -476,9 +515,15 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       epochParams: networkStore.epochParams,
       changeAddress: walletStore.loggedWallet.baseAddress,
       tip: networkStore.tip,
+      walletContext: {
+        keys: keys.value,
+        stakeAddress: loggedWallet.value.stakeAddress,
+        accountIndex: 0
+      }
     });
 
     const txCbor = serializeCardanoJsSdkTx(tx);
+
     const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
@@ -489,6 +534,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
         utxos: walletStore.utxos,
         addresses: walletStore.keys,
         mergeWitnesses: false,
+        privateKeyBytes: privateKeyBytes ? Array.from(privateKeyBytes) : undefined,
       },
     })) as { data: { witnesses?: any; error?: string } };
 
@@ -510,7 +556,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(t('notifications.transactionSubmitted'));
+    snackbar.fireSuccess(t('wallet.txSubmittedSuccess', { txId: submitResult.data.txId }));
 
     await cardStore.fetchCardData();
 
@@ -523,17 +569,9 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
   }
 };
 
-const handleOrderComplete = async () => {
-  await cardStore.fetchCardData();
-  handleClose();
-  router.push('/card');
-};
-
-const handleClose = async () => {
-  await cardStore.fetchCardData();
+const handleClose = () => {
   currentStep.value = 1;
   selectedCardType.value = null;
-  useExistingAddress.value = false;
   shippingAddress.value = {
     streetAddress: '',
     city: '',
@@ -543,7 +581,7 @@ const handleClose = async () => {
     phone: '',
   };
   shippingMethod.value = 'regular';
-  paymentAmount.value = { ada: 0, eur: 0 };
+  paymentAmount.value = { eur: 0 };
   paymentAddress.value = '';
   orderUuid.value = '';
   paymentId.value = 0;
@@ -564,72 +602,13 @@ watch(
       currentStep.value = 1;
       selectedCardType.value = null;
       orderSuccess.value = false;
-      // Refresh card data to get latest statuses
-      try {
-        await cardStore.fetchCardData();
-      } catch (error) {
-        // Silent error - continue anyway
-      }
     }
   }
 );
 </script>
-
 <style lang="scss" scoped>
 @import '../../styles/variables';
 @import '../../styles/mixins';
-
-.order-card-flow-modal {
-  border-radius: $border-radius-lg;
-}
-
-.modal-card {
-  background: $background-dark !important;
-  border-radius: $border-radius-lg !important;
-  overflow: hidden;
-}
-
-.modal-header {
-  position: relative;
-  padding: $spacing-3xl $spacing-3xl $spacing-lg;
-  display: flex;
-  align-items: flex-start;
-}
-
-.header-content {
-  flex: 1;
-}
-
-.modal-title {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-bold;
-  font-size: $font-size-2xl;
-  line-height: $line-height-tight;
-  color: $text-primary;
-  margin: 0 0 $spacing-sm 0;
-}
-
-.modal-subtitle {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-normal;
-  font-size: $font-size-base;
-  line-height: $line-height-relaxed;
-  color: $text-muted;
-  margin: 0;
-}
-
-.close-btn {
-  position: absolute;
-  right: $spacing-lg;
-  top: $spacing-lg;
-  width: 44px;
-  height: 44px;
-
-  .v-icon {
-    color: #85888e;
-    font-size: $font-size-xl;
-  }
-}
 
 .order-stepper {
   background: transparent !important;
@@ -698,13 +677,14 @@ watch(
 }
 
 .modal-content {
-  padding: 0 $spacing-3xl $spacing-lg;
+  align-content: center;
+  padding: $spacing-lg 0;
 }
 
 .modal-actions {
   display: flex;
   gap: $spacing-md;
-  padding: $spacing-lg $spacing-3xl $spacing-3xl;
+  padding: $spacing-lg 0;
 }
 
 .modal-actions :deep(.secondary-button),
@@ -718,21 +698,17 @@ watch(
 }
 
 @media (max-width: $breakpoint-sm) {
-  .modal-header {
-    padding: $spacing-2xl $spacing-2xl $spacing-md;
-  }
-
   .modal-content {
-    padding: 0 $spacing-2xl $spacing-md;
+    padding: $spacing-md 0;
   }
 
   .modal-actions {
-    padding: $spacing-md $spacing-2xl $spacing-2xl;
+    padding: $spacing-md 0;
     flex-direction: column;
   }
 
-  .progress-indicator {
-    padding: 0 $spacing-2xl $spacing-md;
+  .order-stepper {
+    padding: 0 $spacing-md $spacing-md;
   }
 }
 </style>

@@ -112,6 +112,7 @@ import rectangle2 from '@/assets/img/rectangle2.png';
 import walletGeroSvg from '@/assets/svg/walletGero.svg';
 import walletGeroApexSvg from '@/assets/svg/walletGeroApex.svg';
 import keySvg from '@/assets/svg/key.svg';
+import keyGeroSvg from '@/assets/svg/keyGero.svg';
 import keyApexSvg from '@/assets/svg/keyApex.svg';
 import pairSvg from '@/assets/svg/pair.svg';
 import pairApexSvg from '@/assets/svg/pairApex.svg';
@@ -359,6 +360,7 @@ export default {
   walletGeroSvg,
   walletGeroApexSvg,
   keySvg,
+  keyGeroSvg,
   keyApexSvg,
   pairSvg,
   pairApexSvg,

@@ -1,5 +1,5 @@
 <template>
-  <v-col cols="12" md="6" class="py-0 card-status-column" style="align-content: center; justify-items: center">
+  <v-col cols="12" md="6" class="py-0 card-status-column" style="align-content: center; justify-items: center; min-height: 144px">
     <div class="balance-section" v-if="currentCardHasUUID">
       <div class="balance-container">
         <p class="balance-label">{{ $t('card.totalBalance') }}</p>
@@ -42,12 +42,12 @@
           <v-progress-circular
             v-if="loadingOrderDetails"
             indeterminate
-            size="48"
-            width="3"
+            size="24"
+            width="2"
             color="primary"
             class="status-loading"
           ></v-progress-circular>
-          <v-icon 
+          <v-icon
             v-else
             class="status-icon"
             :class="{ 'rejection-icon': isRejectedOrExpired }"
@@ -77,18 +77,9 @@
             <p class="status-subtitle">
               {{ isCurrentCardExpired ? $t('card.orderNewCardToContinue') : $t('card.cardRejectedMessage') }}
             </p>
-            <div class="acknowledgment-section mt-4">
-              <v-checkbox
-                v-model="localRejectionAcknowledged"
-                :label="isCurrentCardExpired ? $t('card.iHaveReadExpiredMessage') : $t('card.iHaveReadRejectionMessage')"
-                hide-details
-                class="acknowledgment-checkbox"
-              />
-            </div>
             <v-btn
               class="order-new-card-btn mt-4"
               @click="$emit('order-new-card-after-rejection')"
-              :disabled="!localRejectionAcknowledged"
             >
               <v-icon left>mdi-credit-card-plus</v-icon>
               {{ $t('card.orderNewCard') }}
@@ -103,13 +94,13 @@
             </div>
             <p class="status-subtitle">
               <template v-if="currentOrderNeedsPayment">
-                <template v-if="isPaymentStatusCompleted">
-                  {{ $t('card.waitingForOrderProcessing') }} <br />
-                  {{ $t('card.processingTime') }}
-                </template>
-                <template v-else-if="isPaymentTransactionFound">
+                <template v-if="!isPaymentStatusCompleted">
                   {{ $t('card.paymentReceived') }} <br />
-                  {{ $t('card.waitingForOrderProcessing') }}
+                  {{ $t('card.waitingForOrderProcessing') }} <br />
+                </template>
+                <template v-else-if="isPaymentInProgress">
+                  {{ $t('card.paymentInProgress') }} <br />
+                  {{ $t('card.pleaseWaitForConfirmation') }}
                 </template>
                 <template v-else>
                   {{ $t('card.physicalCardPaymentRequired') }} <br />
@@ -118,24 +109,8 @@
               </template>
               <template v-else>
                 {{ $t('card.cardOrderProcessing') }} <br />
-                {{ $t('card.processingTime') }}
               </template>
             </p>
-            <!-- Timer Display - Show if payment is pending or found -->
-            <div v-if="localShowOrderTimer && localTimerDisplay" class="payment-timer mt-4">
-              <v-icon class="timer-icon">mdi-timer-outline</v-icon>
-              <span class="timer-text">{{ localTimerDisplay }}</span>
-            </div>
-            <!-- Payment Button - Show only if transaction NOT found -->
-            <v-btn
-              v-if="shouldShowCompletePaymentButton"
-              class="complete-payment-btn mt-4"
-              @click="$emit('complete-payment')"
-              :loading="loadingOrderDetails"
-            >
-              <v-icon left>mdi-credit-card-outline</v-icon>
-              {{ $t('card.completePayment') }}
-            </v-btn>
           </template>
         </div>
       </v-card-text>
@@ -188,9 +163,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, toRefs } from 'vue';
 import { CardInfo } from '@/models/card';
 import cardStoreModule from '@/stores/modules/card';
+import { walletStore } from '@/stores/walletStore';
+
+const { transactions } = toRefs(walletStore);
 
 interface Props {
   cards: CardInfo[];
@@ -199,17 +177,14 @@ interface Props {
   currentCardHasUUID: boolean;
   currentCardType: string;
   currentCardStatus?: string | null;
-  currentOrderNeedsPayment?: boolean | null;
   isCurrentCardRejected: boolean;
   shouldShowOrderCardSection: boolean;
   showOrderTimer: boolean;
   timerDisplay: string;
   loadingOrderDetails: boolean;
   orderingCard: boolean;
-  rejectionAcknowledged: boolean;
   showCardDetails: boolean;
   exchangeRate: number;
-  paymentTransactionFound: Record<string, boolean>;
   paymentDetailsCache: Record<string, { expires_at?: string; status?: string }>;
 }
 
@@ -220,44 +195,18 @@ interface Emits {
   (e: 'complete-payment'): void;
   (e: 'open-order-card-flow'): void;
   (e: 'show-promotion-modal'): void;
-  (e: 'update:rejectionAcknowledged', value: boolean): void;
   (e: 'update:timerDisplay', value: string): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   currentCardStatus: null,
-  currentOrderNeedsPayment: null,
 });
-const emit = defineEmits<Emits>();
-
-const localRejectionAcknowledged = ref(props.rejectionAcknowledged);
-
-watch(
-  () => props.rejectionAcknowledged,
-  (newValue) => {
-    localRejectionAcknowledged.value = newValue;
-  },
-  { immediate: true }
-);
-
-watch(localRejectionAcknowledged, (newValue) => {
-  emit('update:rejectionAcknowledged', newValue);
-});
-
-const localTimerDisplay = ref('');
-let timerInterval: ReturnType<typeof setInterval> | null = null;
-
-const TIMER_UPDATE_INTERVAL_MS = 1000;
+defineEmits<Emits>();
 
 const currentCardIndex = computed(() => cardStoreModule.state.currentCardIndex);
 
 const currentCard = computed(() => {
   return props.cardsWithOrderSlot[currentCardIndex.value];
-});
-
-const isPaymentTransactionFound = computed(() => {
-  if (!currentCard.value?.cardData?.order_uuid) return false;
-  return props.paymentTransactionFound[currentCard.value.cardData.order_uuid] === true;
 });
 
 const isPaymentStatusCompleted = computed(() => {
@@ -266,163 +215,22 @@ const isPaymentStatusCompleted = computed(() => {
   return paymentDetails?.status === 'completed';
 });
 
+const isPaymentInProgress = computed(() => {
+  const depositAddress = currentCard.value?.cardData?.delivery?.deposit_address;
+  let adaAmount = currentCard.value?.cardData?.delivery?.deposit_amount_ada;
+  const [integerPart = '0', decimalPart = ''] = adaAmount.split('.');
+  // Take only first 6 decimal digits (ADA precision)
+  const truncatedDecimal = decimalPart.substring(0, 6).padEnd(6, '0');
+  adaAmount = integerPart + truncatedDecimal
+  return transactions.value.some(tx => tx.body.outputs.some(output => output.address === depositAddress && output.value.coins === adaAmount));
+})
+
 const isCurrentCardExpired = computed(() => {
   return props.currentCardStatus === 'expired';
 });
 
 const isRejectedOrExpired = computed(() => {
   return props.isCurrentCardRejected || isCurrentCardExpired.value;
-});
-
-const shouldShowCompletePaymentButton = computed(() => {
-  return props.currentOrderNeedsPayment && 
-         props.currentCardStatus !== 'expired' && 
-         !isPaymentTransactionFound.value &&
-         !isPaymentStatusCompleted.value;
-});
-
-const localShowOrderTimer = computed(() => {
-  if (!currentCard.value?.cardData?.id || currentCard.value?.cardData?.card_uuid) return false;
-  if (currentCard.value?.cardData?.own_type !== 'physical') return false;
-  if (!currentCard.value?.cardData?.order_uuid) return false;
-  
-  if (isRejectedOrExpired.value) return false;
-  
-  const orderUuid = currentCard.value.cardData.order_uuid;
-  const paymentDetails = props.paymentDetailsCache[orderUuid];
-  if (!paymentDetails) return false;
-  
-  if (paymentDetails.status === 'expired') return false;
-  if (paymentDetails.status !== 'pending' && paymentDetails.status !== 'completed') return false;
-  
-  if (!paymentDetails.expires_at) return false;
-  
-  const expiresAt = new Date(paymentDetails.expires_at);
-  const now = new Date();
-  if (now >= expiresAt) {
-    return false;
-  }
-  
-  return true;
-});
-
-
-const updateTimer = () => {
-  if (!currentCard.value?.cardData?.order_uuid || !localShowOrderTimer.value) {
-    localTimerDisplay.value = '';
-    emit('update:timerDisplay', '');
-    return;
-  }
-  
-  const orderUuid = currentCard.value.cardData.order_uuid;
-  const paymentDetails = props.paymentDetailsCache[orderUuid];
-  if (!paymentDetails?.expires_at) {
-    localTimerDisplay.value = '';
-    emit('update:timerDisplay', '');
-    return;
-  }
-  
-  const expiresAt = new Date(paymentDetails.expires_at);
-  const now = new Date();
-  const remaining = expiresAt.getTime() - now.getTime();
-  
-  if (remaining <= 0) {
-    localTimerDisplay.value = '';
-    emit('update:timerDisplay', '');
-    return;
-  }
-  
-  const minutes = Math.floor(remaining / 60000);
-  const seconds = Math.floor((remaining % 60000) / 1000);
-  const timerValue = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  localTimerDisplay.value = timerValue;
-  emit('update:timerDisplay', timerValue);
-};
-
-watch(
-  () => currentCardIndex.value,
-  () => {
-    updateTimer();
-  },
-  { immediate: true }
-);
-
-watch(
-  () => currentCard.value?.cardData?.order_uuid,
-  (newOrderUuid, oldOrderUuid) => {
-    if (newOrderUuid && newOrderUuid !== oldOrderUuid) {
-      updateTimer();
-    }
-  }
-);
-
-watch(
-  () => props.currentOrderNeedsPayment,
-  (needsPayment) => {
-    if (needsPayment) {
-      updateTimer();
-    }
-  }
-);
-
-watch(
-  () => props.currentCardStatus,
-  () => {
-    updateTimer();
-  }
-);
-
-watch(
-  localShowOrderTimer,
-  (shouldShow) => {
-    if (shouldShow) {
-      updateTimer();
-      if (timerInterval) {
-        clearInterval(timerInterval);
-      }
-      timerInterval = setInterval(updateTimer, TIMER_UPDATE_INTERVAL_MS);
-    } else {
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-      }
-      localTimerDisplay.value = '';
-      emit('update:timerDisplay', '');
-    }
-  },
-  { immediate: true }
-);
-
-watch(
-  () => {
-    if (!currentCard.value?.cardData?.order_uuid) return null;
-    return props.paymentDetailsCache[currentCard.value.cardData.order_uuid];
-  },
-  () => {
-    updateTimer();
-  },
-  { deep: true }
-);
-
-watch(
-  () => {
-    if (!currentCard.value?.cardData?.order_uuid) return null;
-    return props.paymentTransactionFound[currentCard.value.cardData.order_uuid];
-  },
-  () => {
-    updateTimer();
-  }
-);
-
-onMounted(() => {
-  updateTimer();
-});
-
-onBeforeUnmount(() => {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
 });
 
 const formatCurrency = (amount: number) => {
@@ -437,6 +245,15 @@ const formatADA = (eurAmount: number) => {
   const adaAmount = eurAmount / props.exchangeRate;
   return adaAmount.toFixed(2);
 };
+
+const currentOrderNeedsPayment = computed(() => {
+  return !!(
+    currentCard?.value.cardData?.id &&
+    currentCard?.value.cardData?.order_uuid &&
+    !currentCard?.value.cardData?.card_uuid &&
+    currentCard?.value.cardData?.own_type === 'physical'
+  );
+});
 </script>
 
 <style lang="scss" scoped>
@@ -459,12 +276,12 @@ const formatADA = (eurAmount: number) => {
   background: rgba(0, 199, 243, 0.1);
   border: 1px solid rgba(0, 199, 243, 0.3);
   border-radius: 8px;
-  
+
   .timer-icon {
     color: $primary-cyan;
     font-size: 20px;
   }
-  
+
   .timer-text {
     font-family: 'Courier New', monospace;
     font-size: $font-size-base;
@@ -626,11 +443,9 @@ const formatADA = (eurAmount: number) => {
     font-family: $font-family-primary;
     font-size: $font-size-sm;
     color: rgba($text-secondary, 0.9);
-    margin: 0 0 16px 0;
     line-height: 1.6;
     max-width: 500px;
-    margin-left: auto;
-    margin-right: auto;
+    margin: 0 auto 16px;
     position: relative;
     z-index: 1;
   }
@@ -869,8 +684,7 @@ const formatADA = (eurAmount: number) => {
     &.v-btn--disabled,
     &:disabled {
       opacity: 0.4 !important;
-      background: #2a2f3a !important;
-      background-image: none !important;
+      background: #2a2f3a none !important;
       color: #888 !important;
       box-shadow: none !important;
       filter: grayscale(1) !important;
@@ -901,7 +715,7 @@ const formatADA = (eurAmount: number) => {
         }
       }
     }
-    
+
     :deep(.v-label) {
       color: $text-secondary;
       font-size: $font-size-sm;
@@ -916,7 +730,7 @@ const formatADA = (eurAmount: number) => {
 @keyframes gradientShift {
   0%,
   100% {
-    background-position: 0% 50%;
+    background-position: 0 50%;
   }
   50% {
     background-position: 100% 50%;

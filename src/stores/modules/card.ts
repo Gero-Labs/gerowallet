@@ -1,11 +1,11 @@
 import Vue from 'vue';
-import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo, PaginatedCardsResponse } from '@/models/card';
+import type {
+  AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo, ExchangeRate, CardData,
+} from '@/models/card';
 import type { KaiserExTokenData } from '@/services/kaiserEx.service';
-import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
-import { Cardano } from '@cardano-sdk/core';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -18,22 +18,15 @@ export interface OrderPhysicalCardPayload {
 }
 
 export const cardStore = Vue.observable<CardState>({
-  // Auth
   accessToken: null,
   refreshToken: null,
   tokenExpiry: null,
-
-  // User data
   userInfo: null,
   cardanoAddress: null,
-
-  // Multiple cards support
   cards: [],
   selectedCardId: null,
   currentCardIndex: 0,
   exchangeRate: null,
-
-  // Wallet status integration - EVERYTHING IN ONE STORE!
   walletStatus: {
     currentState: 'loading' as 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error',
     isKaiserexAuthenticated: false,
@@ -78,7 +71,7 @@ async function initCardStore() {
     const expiryValue = await getTokenFromCookie('kaiserex_token_expiry');
     cardStore.tokenExpiry = expiryValue ? parseInt(expiryValue, 10) : null;
 
-    // Load other state from chrome.storage.local (promisified to avoid race conditions)
+    // Load another state from chrome.storage.local (promisified to avoid race conditions)
     const result = await new Promise<{ cardStore?: Partial<CardState> }>((resolve, reject) => {
       try {
         chrome.storage.local.get('cardStore', res => {
@@ -372,10 +365,7 @@ export default {
       if (c.cardData.order_uuid && cardInfo.cardData.order_uuid && c.cardData.order_uuid === cardInfo.cardData.order_uuid) {
         return true;
       }
-      if (c.cardData.id && cardInfo.cardData.id && c.cardData.id === cardInfo.cardData.id) {
-        return true;
-      }
-      return false;
+      return c.cardData.id && cardInfo.cardData.id && c.cardData.id === cardInfo.cardData.id;
     });
 
     if (index >= 0) {
@@ -385,17 +375,6 @@ export default {
 
       if (cardStore.cards.length === 1) {
         cardStore.selectedCardId = cardInfo.cardData.card_uuid;
-      }
-    }
-  },
-
-  removeCard(cardId: string): void {
-    const index = cardStore.cards.findIndex(c => c.cardData.card_uuid === cardId);
-    if (index >= 0) {
-      cardStore.cards.splice(index, 1);
-
-      if (cardStore.selectedCardId === cardId) {
-        cardStore.selectedCardId = cardStore.cards.length > 0 ? cardStore.cards[0].cardData.card_uuid : null;
       }
     }
   },
@@ -412,31 +391,6 @@ export default {
     }
 
     return isValid;
-  },
-
-  // Card Getters
-  get hasCard() {
-    const selectedCard = this.getSelectedCard();
-    return selectedCard !== null && selectedCard.cardData !== null;
-  },
-
-  get hasCardanoAddress() {
-    return cardStore.cardanoAddress !== null;
-  },
-
-  get formattedBalance() {
-    const selectedCard = this.getSelectedCard();
-    if (!selectedCard || !selectedCard.cardBalance) return null;
-    return {
-      amount: selectedCard.cardBalance.currentBalance.amount,
-      currency: selectedCard.cardBalance.currentBalance.currencyCode,
-      state: selectedCard.cardBalance.state,
-    };
-  },
-
-  get cardHistoryRecords() {
-    const selectedCard = this.getSelectedCard();
-    return selectedCard?.cardHistory?.records || [];
   },
 
   get cardHistoryMeta() {
@@ -496,35 +450,6 @@ export default {
       await this.setKaiserexAuthentication(true);
   },
 
-  async authenticate(wallet: any, code: string, codeVerifier: string): Promise<void> {
-    cardStore.loading.auth = true;
-    cardStore.errors.auth = null;
-
-    try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.post('/api/token', {
-        code,
-        codeVerifier,
-      });
-      const tokens: AuthTokens = response.data;
-      cardStore.accessToken = tokens.access_token;
-      cardStore.refreshToken = tokens.refresh_token;
-      cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
-
-      await storeTokens(tokens);
-    } catch (error) {
-      cardStore.errors.auth =
-        error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Authentication failed';
-      throw error;
-    } finally {
-      cardStore.loading.auth = false;
-    }
-  },
-
-  async refreshAccessToken(): Promise<void> {
-    return cardStoreInstance.refreshAccessToken();
-  },
-
   async logout(): Promise<void> {
     return cardStoreInstance.logout();
   },
@@ -551,8 +476,7 @@ export default {
     cardStore.errors.cardanoAddress = null;
 
     try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.get('/api/kaiserex/cardano-address');
+      const response = await getCardApi().axiosInstance.get('/api/kaiserex/cardano-address');
       cardStore.cardanoAddress = response.data;
     } catch (error) {
       cardStore.errors.cardanoAddress =
@@ -567,13 +491,15 @@ export default {
 
   // Card methods
   async fetchCardData(): Promise<void> {
+    console.log('Fetching card data');
     cardStore.loading.cardData = true;
     cardStore.errors.cardData = null;
 
     try {
-      const response = await getCardApi().axiosInstance.get<PaginatedCardsResponse>('/api/kaiserex/cards');
+      const response = await getCardApi().axiosInstance.get<CardData[]>('/api/kaiserex/cards');
       const cardsData = response.data || [];
-      
+      console.log('Fetched card data', cardsData);
+
       for (const cardData of cardsData) {
         const existingCard = cardStore.cards.find(c => {
           if (c.cardData.card_uuid && cardData.card_uuid && c.cardData.card_uuid === cardData.card_uuid) {
@@ -582,10 +508,7 @@ export default {
           if (c.cardData.order_uuid && cardData.order_uuid && c.cardData.order_uuid === cardData.order_uuid) {
             return true;
           }
-          if (c.cardData.id && cardData.id && c.cardData.id === cardData.id) {
-            return true;
-          }
-          return false;
+          return c.cardData.id && cardData.id && c.cardData.id === cardData.id;
         });
         if (existingCard) {
           existingCard.cardData = cardData;
@@ -614,36 +537,6 @@ export default {
       throw error;
     } finally {
       cardStore.loading.cardData = false;
-    }
-  },
-
-  async fetchCardNumber(cardId?: string): Promise<void> {
-    const targetCardId = cardId || cardStore.selectedCardId;
-    if (!targetCardId) {
-      return;
-    }
-
-    const card = this.getCard(targetCardId);
-    if (!card) {
-      throw new Error(`Card with ID ${targetCardId} not found`);
-    }
-
-    cardStore.loading.cardNumber = true;
-    cardStore.errors.cardNumber = null;
-
-    try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.get(`/api/kaiserex/cards/number/${targetCardId}`);
-
-      card.cardNumber = response.data;
-    } catch (error) {
-      cardStore.errors.cardNumber =
-        error && typeof error === 'object' && 'message' in error
-          ? String(error.message)
-          : 'Failed to fetch card number';
-      throw error;
-    } finally {
-      cardStore.loading.cardNumber = false;
     }
   },
 
@@ -822,8 +715,7 @@ export default {
 
   async getOrderDetails(orderUuid: string): Promise<any> {
     try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.get(`/api/kaiserex/cards/order/${orderUuid}/status`);
+      const response = await getCardApi().axiosInstance.get(`/api/kaiserex/cards/order/${orderUuid}/status`);
       return response.data;
     } catch (error) {
       throw error;
@@ -861,126 +753,6 @@ export default {
     }
   },
 
-  async getCardState(cardUuid: string): Promise<{ status: string } | null> {
-    try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.get(`/api/kaiserex/cards/state/${cardUuid}`);
-      return response.data;
-    } catch (error) {
-      return null;
-    }
-  },
-
-  checkDepositPayment(depositAddress: string, expectedAmountAda: string): boolean {
-    if (!depositAddress || !expectedAmountAda) {
-      return false;
-    }
-
-    if (!walletStore || !walletStore.transactions) {
-      return false;
-    }
-
-    try {
-      const depositCardanoAddress = Cardano.Address.fromString(depositAddress);
-      const depositAddressBech32 = depositCardanoAddress.toBech32();
-
-      const transactions = walletStore.transactions;
-      
-      if (!transactions || transactions.length === 0) {
-        return false;
-      }
-
-      const LOVELACE_PER_ADA = 1_000_000;
-      const PAYMENT_TOLERANCE_ADA = 1;
-      
-      const expectedAmountLovelace = parseFloat(expectedAmountAda) * LOVELACE_PER_ADA;
-      const toleranceLovelace = PAYMENT_TOLERANCE_ADA * LOVELACE_PER_ADA;
-      const minAmount = expectedAmountLovelace - toleranceLovelace;
-      const maxAmount = expectedAmountLovelace + toleranceLovelace;
-
-      for (const transaction of transactions) {
-        if (transaction.pending || transaction.status === 'Pending') {
-          continue;
-        }
-
-        if (transaction.body?.outputs) {
-          for (const output of transaction.body.outputs) {
-            try {
-              const outputAddress = Cardano.Address.fromString(output.address);
-              const outputAddressBech32 = outputAddress.toBech32();
-              
-              if (outputAddressBech32 === depositAddressBech32) {
-                let outputAmountLovelace = 0;
-                
-                if (output.value?.coins !== undefined) {
-                  const coinsValue = output.value.coins;
-                  if (typeof coinsValue === 'bigint') {
-                    outputAmountLovelace = Number(coinsValue.toString());
-                  } else if (typeof coinsValue === 'string') {
-                    outputAmountLovelace = Number(coinsValue);
-                  } else if (typeof coinsValue === 'number') {
-                    outputAmountLovelace = coinsValue;
-                  }
-                } else if (output.amount) {
-                  if (Array.isArray(output.amount)) {
-                    const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
-                    if (lovelaceToken) {
-                      outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
-                        ? Number(lovelaceToken.quantity) 
-                        : lovelaceToken.quantity;
-                    }
-                  }
-                }
-
-                const isInRange = outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount;
-
-                if (isInRange) {
-                  return true;
-                }
-              }
-            } catch (error) {
-              // Silent error handling
-            }
-          }
-        }
-
-        if (transaction.utxo?.outputs) {
-          for (const output of transaction.utxo.outputs) {
-            try {
-              const outputAddress = Cardano.Address.fromString(output.address);
-              const outputAddressBech32 = outputAddress.toBech32();
-              
-              if (outputAddressBech32 === depositAddressBech32) {
-                let outputAmountLovelace = 0;
-                
-                if (output.amount && Array.isArray(output.amount)) {
-                  const lovelaceToken = output.amount.find((token: any) => token.unit === 'lovelace');
-                  if (lovelaceToken) {
-                    outputAmountLovelace = typeof lovelaceToken.quantity === 'string' 
-                      ? Number(lovelaceToken.quantity) 
-                      : lovelaceToken.quantity;
-                  }
-                }
-
-                const isInRange = outputAmountLovelace >= minAmount && outputAmountLovelace <= maxAmount;
-
-                if (isInRange) {
-                  return true;
-                }
-              }
-            } catch (error) {
-              // Silent error handling
-            }
-          }
-        }
-      }
-
-      return false;
-    } catch (error) {
-      return false;
-    }
-  },
-
   // Wallet Status Methods - SIMPLE!
   async setKaiserexAuthentication(isAuthenticated: boolean): Promise<void> {
     cardStore.walletStatus.isKaiserexAuthenticated = isAuthenticated;
@@ -989,9 +761,8 @@ export default {
     }
   },
 
-  async getExchangeRate(): Promise<void> {
-    const api = getCardApi();
-    const response = await api.axiosInstance.get(`/api/kaiserex/exchange-rate/ADA/EUR`);
+  async getExchangeRate(): Promise<ExchangeRate> {
+    const response = await getCardApi().axiosInstance.get(`/api/kaiserex/exchange-rate/ADA/EUR`);
     cardStore.exchangeRate = response.data;
     return response.data;
   },
@@ -1055,18 +826,6 @@ export default {
     }
   },
 
-  // Top-up methods
-  updateCardBalance(additionalAmount: number, cardId?: string): void {
-    const targetCardId = cardId || cardStore.selectedCardId;
-    if (!targetCardId) return;
-
-    const card = this.getCard(targetCardId);
-    if (card && card.cardBalance) {
-      card.cardBalance.currentBalance.amount += additionalAmount;
-      card.totalDeposits += additionalAmount;
-    }
-  },
-
   async fetchCardPin(cardUuid: string): Promise<void> {
     const card = this.getCard(cardUuid);
     if (!card) {
@@ -1089,79 +848,6 @@ export default {
     const response = await api.axiosInstance.get(`/api/kaiserex/cards/details/${cardUuid}`);
     card.cardDetails = response.data;
     return response.data;
-  },
-
-  addTopUpTransaction(adaAmount: number, eurAmount: number, transactionId: string, cardId?: string): void {
-    const targetCardId = cardId || cardStore.selectedCardId;
-    if (!targetCardId) return;
-
-    const card = this.getCard(targetCardId);
-    if (!card) return;
-
-    if (!card.cardHistory) {
-      card.cardHistory = {
-        meta: { page: 1, records: 0, totalRecords: 0 },
-        records: [],
-      };
-    }
-
-    const newTransaction: CardTransactionHistory = {
-      reference: transactionId,
-      amount: {
-        amount: eurAmount,
-        currencyCode: 'EUR',
-      },
-      createTime: new Date().toISOString(),
-      settlementDate: new Date().toISOString(),
-      exchangeRate: eurAmount / adaAmount, // ADA to EUR rate
-      actionCode: 'APPROVE',
-      processingName: 'ADA Top-up',
-      authorizationCode: `AUTH${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
-      cardAcceptorTerminalId: 'GERO001',
-      cardAcceptorId: 'GEROWALLET',
-      cardAcceptorNameAndLocation: 'Gero Wallet Top-up Service',
-      acquireCountryCode: 'US',
-      mcc: {
-        code: '6012',
-        description: 'Financial Institution',
-      },
-      reversedAmount: {
-        amount: 0,
-        currencyCode: 'EUR',
-      },
-      narrative: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`,
-      debit: false, // Credit transaction (adding money)
-      state: 'SETTLED',
-    };
-
-    // Add to beginning of transactions array
-    card.cardHistory.records.unshift(newTransaction);
-    card.cardHistory.meta.records += 1;
-    card.cardHistory.meta.totalRecords += 1;
-  },
-
-  addTopUpActivity(adaAmount: number, eurAmount: number, cardId?: string): void {
-    const targetCardId = cardId || cardStore.selectedCardId;
-    if (!targetCardId) return;
-
-    const card = this.getCard(targetCardId);
-    if (!card) return;
-
-    const newActivity: Activity = {
-      id: Date.now(), // Use timestamp as unique ID
-      type: 'Top-up',
-      cryptoAmount: `₳${adaAmount.toFixed(0)}`,
-      fiatAmount: `+€${eurAmount.toFixed(2)}`,
-      date: new Date().toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      }),
-      status: 'Completed',
-    };
-
-    // Add to beginning of activities array
-    card.activities.unshift(newActivity);
   },
 
   async blockCard(cardId?: string): Promise<void> {
@@ -1189,14 +875,6 @@ export default {
       throw error;
     }
   },
-
-  async checkPaymentStatus(_txId: string): Promise<boolean> {
-    // Mock - simulate payment confirmation after delay
-    // In production, this will poll the backend to check if payment was received
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    return true;
-  },
-
 
   // State getter for compatibility
   get state() {
