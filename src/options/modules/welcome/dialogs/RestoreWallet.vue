@@ -476,10 +476,14 @@ const recoverySeedPhraseLength = computed(() => {
 const valid = computed({
   get() {
     if (computedRecoverySeedPhrase.value) {
-      return (
-        computedRecoverySeedPhrase.value.length === Number(seedPhraseLength.value) &&
-        bip39.validateMnemonic(computedRecoverySeedPhrase.value.join(' '))
-      );
+      try {
+        return (
+          computedRecoverySeedPhrase.value.length === Number(seedPhraseLength.value) &&
+          bip39.validateMnemonic(computedRecoverySeedPhrase.value.join(' '))
+        );
+      } catch {
+        return false;
+      }
     }
     return false;
   },
@@ -544,7 +548,6 @@ const onKeydown = (event: KeyboardEvent) => {
 };
 
 const focusNextCell = (el: HTMLElement) => {
-  console.log('nextCell');
   const currentCell = el.closest('.v-input');
   const nextCell = currentCell?.nextElementSibling;
   if (nextCell) {
@@ -557,10 +560,15 @@ const focusNextCell = (el: HTMLElement) => {
 
 const pasteFromClipboard = async () => {
   if (step.value === 1) {
-    const text = await navigator.clipboard.readText();
-    recoverySeedPhrase.value = text.split(' ');
-    if ([12, 15, 24].includes(recoverySeedPhrase.value.length)) {
-      seedPhraseLength.value = recoverySeedPhrase.value.length.toString();
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text?.trim()) return;
+      recoverySeedPhrase.value = text.split(' ');
+      if ([12, 15, 24].includes(recoverySeedPhrase.value.length)) {
+        seedPhraseLength.value = recoverySeedPhrase.value.length.toString();
+      }
+    } catch {
+      // Clipboard access denied or unavailable
     }
   }
 };
@@ -649,8 +657,9 @@ const walletCreationStep3 = async () => {
           }
         }
       } catch (error: unknown) {
-        if (error['message']?.includes('cancelled') || error['message']?.includes('NotAllowedError')) {
-          console.log('User cancelled WebAuthn registration');
+        const message = error instanceof Error ? error.message : String(error);
+        const isDOMException = error instanceof DOMException && error.name === 'NotAllowedError';
+        if (message.includes('cancelled') || isDOMException) {
           creatingWalletLoader.value = false;
           return;
         }
@@ -673,11 +682,8 @@ const walletCreationStep3 = async () => {
 
     await performLogin(wallet);
   } catch (error: unknown) {
-    console.error('Error restoring wallet:', error);
-    const errorMessage = error instanceof Error
-      ? error.message
-      : vmProxy.$t('errors.unknownError') as string;
-    vmProxy['$snackbar']?.setError(errorMessage);
+    console.error('Wallet restoration failed');
+    vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);
     creatingWalletLoader.value = false;
   }
 };
@@ -698,13 +704,12 @@ const performLogin = async (wallet) => {
         resetDialog();
         router.push('/').catch(err => {
           if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-            console.error('Navigation error:', err);
+            console.warn('Navigation error:', err);
           }
         });
       });
     } else if (hasError) {
-      const errorResponse = response as { error: unknown };
-      console.warn('Login response error:', errorResponse.error);
+      console.warn('Login response contained error, proceeding anyway');
       vmProxy.$nextTick(() => {
         resetDialog();
         router.push('/').catch(() => {});

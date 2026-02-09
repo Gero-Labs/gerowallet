@@ -87,11 +87,11 @@ export default defineComponent({
     },
     label: {
       type: String,
-      default: 'Phone'
+      default: ''
     },
     placeholder: {
       type: String,
-      default: 'Enter phone number'
+      default: ''
     },
     value: {
       type: String,

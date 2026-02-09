@@ -20,9 +20,9 @@ const getWalletAddress = async (): Promise<string> => {
       return addresses[0];
     }
   } catch (e) {
-    console.log(e);
+    console.warn('Failed to get wallet address:', e);
   }
-  return undefined;
+  return '';
 };
 
 const injectScript = () => {

@@ -497,8 +497,9 @@ const walletCreationStep = async () => {
           }
         }
       } catch (error: unknown) {
-        if (error['message']?.includes('cancelled') || error['message']?.includes('NotAllowedError')) {
-          console.log('User cancelled WebAuthn registration');
+        const message = error instanceof Error ? error.message : String(error);
+        const isDOMException = error instanceof DOMException && error.name === 'NotAllowedError';
+        if (message.includes('cancelled') || isDOMException) {
           return;
         }
         throw error;
@@ -518,7 +519,6 @@ const walletCreationStep = async () => {
       );
     }
 
-    console.log('walletCreationStep', wallet);
     dialogLocal.value = false;
 
     const response = await Messaging.sendToBackgroundFromOptions({
@@ -532,24 +532,20 @@ const walletCreationStep = async () => {
         resetDialog();
         router.push('/').catch(err => {
           if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-            console.error('Navigation error:', err);
+            console.warn('Navigation error:', err);
           }
         });
       });
     } else if (hasError) {
-      const errorResponse = response as { error: unknown };
-      console.warn('Login response error:', errorResponse.error);
+      console.warn('Login response contained error, proceeding anyway');
       vmProxy.$nextTick(() => {
         resetDialog();
         router.push('/').catch(() => {});
       });
     }
   } catch (error: unknown) {
-    console.error('Error creating wallet:', error);
-    const errorMessage = error instanceof Error
-      ? error.message
-      : vmProxy.$t('errors.unknownError') as string;
-    vmProxy['$snackbar']?.setError(errorMessage);
+    console.error('Wallet creation failed');
+    vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);
   } finally {
     creatingWalletLoader.value = false;
   }
