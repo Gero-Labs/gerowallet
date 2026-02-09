@@ -475,6 +475,7 @@ onMounted(() => {
 // Cleanup on unmount
 import { onUnmounted } from 'vue'
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { fa } from 'vuetify/src/locale';
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)
