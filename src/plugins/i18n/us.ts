@@ -1816,6 +1816,7 @@ export default {
   'welcome.chooseAWallet': 'Choose a wallet to sign in',
   'welcome.chooseRecoveryPhraseLength': 'Choose recovery phrase length',
   'welcome.confirmPassword': 'Confirm Password',
+  'welcome.confirm': 'Confirm',
   'welcome.continue': 'Continue',
   'common.create': 'CREATE',
   'welcome.createNewWallet': 'Create New Wallet',
@@ -1911,6 +1912,8 @@ export default {
   'welcome.chooseNameToIdentify': 'Choose a name to identify your wallet',
   'welcome.saveRecoveryBackup': 'I\'ll save my recovery phrase as a backup',
   'welcome.passwordNoRecoveryWarning': 'If you forget this password, you\'ll need your recovery phrase to restore your wallet.',
+  'welcome.howToProtectWallet': 'How would you like to protect your wallet?',
+  'welcome.passwordSecurityWarning': 'Make sure your password is strong and stored securely. If you forget it, you\'ll need your recovery phrase to restore access.',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',

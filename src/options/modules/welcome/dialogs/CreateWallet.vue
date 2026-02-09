@@ -31,7 +31,7 @@
                   :label="$t('welcome.walletName')"
                   :placeholder="$t('welcome.walletNamePlaceholder')"
                   :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
-                ></v-text-field>
+                />
 
                 <!-- Security Method (only when PRF is available) -->
                 <template v-if="prfSupported">
