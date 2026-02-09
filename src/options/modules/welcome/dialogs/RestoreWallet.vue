@@ -682,7 +682,8 @@ const walletCreationStep3 = async () => {
 
     await performLogin(wallet);
   } catch (error: unknown) {
-    console.error('Wallet restoration failed');
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Wallet restoration failed:', msg);
     vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);
     creatingWalletLoader.value = false;
   }

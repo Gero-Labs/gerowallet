@@ -544,7 +544,8 @@ const walletCreationStep = async () => {
       });
     }
   } catch (error: unknown) {
-    console.error('Wallet creation failed');
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Wallet creation failed:', msg);
     vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);
   } finally {
     creatingWalletLoader.value = false;
