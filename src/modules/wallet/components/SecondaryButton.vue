@@ -1,15 +1,20 @@
 <template>
-  <button class="secondary-button" @click="$emit('click')">
+  <button class="secondary-button" :disabled="disabled" @click="$emit('click')">
     <span class="button-text">{{ text }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
 interface Props {
-  text: string | any;
+  text: string;
+  disabled?: boolean;
 }
 
-defineProps<Props>();
+withDefaults(defineProps<Props>(), {
+  text: '',
+  disabled: false
+});
+
 defineEmits<{
   click: [];
 }>();
@@ -22,6 +27,25 @@ defineEmits<{
   @include secondary-button;
   @include button-size;
   width: fit-content;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(50%);
+
+    &:hover {
+      background: inherit;
+      border-color: inherit;
+      color: inherit;
+      transform: none;
+      box-shadow: none;
+    }
+
+    &:active {
+      transform: none;
+    }
+  }
 }
 
 .secondary-button:hover {

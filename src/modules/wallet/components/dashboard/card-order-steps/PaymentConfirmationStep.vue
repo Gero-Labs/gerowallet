@@ -1,6 +1,5 @@
 <template>
   <div class="payment-confirmation">
-    <!-- Loading State -->
     <div v-if="isLoading" class="confirmation-loading">
       <div class="loading-animation">
         <v-progress-circular indeterminate size="64" width="4" color="#00c7f3" />
@@ -47,7 +46,7 @@
         </div>
       </div>
       <div class="success-actions">
-        <GradientButton :text="$t('card.viewOrderStatus')" @click="handleComplete" />
+        <GradientButton :text="t('common.done')" @click="handleComplete" />
       </div>
     </div>
   </div>
@@ -56,6 +55,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import GradientButton from '../../GradientButton.vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+
+const { t } = useTranslation();
 
 interface Props {
   isLoading: boolean;

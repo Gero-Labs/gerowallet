@@ -4,6 +4,7 @@ import launchDarklyService from '@/services/featureFlag.service';
 export interface FeatureFlags {
   swapEnabled: boolean;
   isGeroCardEnabled: boolean;
+  isBlogEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -15,7 +16,8 @@ interface FeatureFlagsState {
 const featureFlagsState = Vue.observable<FeatureFlagsState>({
   flags: {
     swapEnabled: false,
-    isGeroCardEnabled: false
+    isGeroCardEnabled: false,
+    isBlogEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -52,6 +54,7 @@ export const featureFlagsStore = {
   loadFlags(): void {
     featureFlagsState.flags.swapEnabled = launchDarklyService.getFlag('isSwapEnabled', false);
     featureFlagsState.flags.isGeroCardEnabled = launchDarklyService.getFlag('isGeroCardEnabled', false);
+    featureFlagsState.flags.isBlogEnabled = launchDarklyService.getFlag('isBlogEnabled', false);
   },
 
   /**
@@ -63,6 +66,9 @@ export const featureFlagsStore = {
     });
     launchDarklyService.onFlagChange('isGeroCardEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isGeroCardEnabled', newValue);
+    });
+    launchDarklyService.onFlagChange('isBlogEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isBlogEnabled', newValue);
     });
   },
 
@@ -81,12 +87,20 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if Blog Page is enabled
+   */
+  isBlogEnabled(): boolean {
+    return featureFlagsState.flags.isBlogEnabled;
+  },
+
+  /**
    * Reset flags (disable all until reloaded from LaunchDarkly)
    */
   reset(): void {
     Vue.set(featureFlagsState, 'flags', {
       swapEnabled: false,
-      isGeroCardEnabled: false
+      isGeroCardEnabled: false,
+      isBlogEnabled: false
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
