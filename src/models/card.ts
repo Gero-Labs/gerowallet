@@ -42,6 +42,26 @@ export interface CardData {
   currentBalance: string;
   created_at: string;
   updated_at: string;
+  delivery?: {
+    id: number,
+    card_id: number,
+    address_name: string,
+    address: string,
+    city: string,
+    region: string,
+    zip: string,
+    country_code: string,
+    phone: string,
+    payment_id: number,
+    payment_status: string,
+    deposit_address: string,
+    deposit_amount_eur: string,
+    deposit_amount_ada: string,
+    deposit_exchange_rate: string,
+    deposit_expires_at: string,
+    deposit_qr_code: string,
+    method: string
+  }
 }
 
 // Pagination Types (Laravel-style)

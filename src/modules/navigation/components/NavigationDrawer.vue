@@ -229,9 +229,9 @@ const props = defineProps<{ value: boolean }>()
 const emit = defineEmits(['input'])
 
 // Access Vuetify instance
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 const breakpoint = vmProxy.$vuetify.breakpoint
-const themeDark = vmProxy.$vuetify.theme.isDark
+const themeDark = vmProxy.$vuetify.theme.dark
 const router = vmProxy.$router
 
 // Reactive state
@@ -284,7 +284,13 @@ const items = computed((): NavigationItemUnion[] => {
 
   return [
     { title: t('navigation.dashboard'), icon: assts.barChart, link: '/', enabled: true },
-    { title: t('navigation.blog'), icon: assts.blog, link: '/blog', enabled: true },
+    {
+      title: t('navigation.blog'),
+      icon: assts.blog,
+      link: '/blog',
+      enabled: true,
+      underMaintenance: !isBlogEnabledByFeatureFlag.value,
+    },
     { header: t('navigation.financialHub'), enabled: true },
     { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
@@ -320,6 +326,7 @@ const items = computed((): NavigationItemUnion[] => {
 
 // Loading state for swap feature flag
 const loadingFFs = computed(() => {
+  console.log('loadingFFs:', featureFlagsStore.state);
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
 
@@ -327,6 +334,11 @@ const loadingFFs = computed(() => {
 const isGeroCardEnabledByFeatureFlag = computed(() => {
   return featureFlagsStore.isGeroCardEnabled();
 });
+
+const isBlogEnabledByFeatureFlag = computed(() => {
+  console.log('isBlogEnabledByFeatureFlag:', featureFlagsStore.isBlogEnabled());
+  return featureFlagsStore.isBlogEnabled();
+})
 
 // Drawer getter/setter
 const drawer = computed({
@@ -463,6 +475,7 @@ onMounted(() => {
 // Cleanup on unmount
 import { onUnmounted } from 'vue'
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { fa } from 'vuetify/src/locale';
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)

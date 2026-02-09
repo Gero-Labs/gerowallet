@@ -16,7 +16,7 @@
       </v-list-item>
       <v-list-item class="mb-6 py-2" @click="restoreWalletDialog = true;">
         <v-list-item-avatar size="50" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 14px; background-color: #13161B">
-          <v-img :src="keySvg" style="width: 22px;" max-width="22" contain></v-img>
+          <v-img :src="keyGeroSvg" style="width: 22px;" max-width="22" contain></v-img>
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
@@ -90,11 +90,11 @@ const walletSvg = computed(() => {
   }
   return assets.walletGeroSvg
 })
-const keySvg = computed(() => {
+const keyGeroSvg = computed(() => {
   if (props.network?.blockchain?.includes('Apex')) {
     return assets.keyApexSvg
   }
-  return assets.keySvg
+  return assets.keyGeroSvg
 })
 
 const pairSvg = computed(() => {

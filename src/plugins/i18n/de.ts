@@ -1516,7 +1516,7 @@ export default {
   'settings.uploadPicture': 'Bild hochladen',
   'settings.utxo': 'UTxO',
   'settings.walletBackupRequired': 'Wallet-Backup erforderlich',
-  'settings.walletDeletedSuccess': 'Wallet',
+  'settings.walletDeletedSuccess': 'Wallet "{name}" wurde gelöscht',
   'settings.walletName': 'Wallet-Name',
   'settings.walletNamePlaceholder': 'z. B. Meine neue Wallet',
   'settings.walletNameTaken': 'Wallet-Name bereits vergeben',
