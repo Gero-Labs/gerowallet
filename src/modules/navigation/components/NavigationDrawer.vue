@@ -298,7 +298,7 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.multisig'), icon: assts.multisigTree, link: '/multisig', enabled: false }, // Disabled - under maintenance
     {
       title: t('navigation.geroCard'),
-      icon: assts.card,
+      icon: assts.cardIcon,
       link: '/card',
       enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
       new: true,

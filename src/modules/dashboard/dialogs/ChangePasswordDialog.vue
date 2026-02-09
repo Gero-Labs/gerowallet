@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
-    :title="t('settings.spendingPasswordSettings')"
-    :subtitle="t('settings.modifySpendingPassword')"
+    :title="t('settings.spendingSecuritySettings')"
+    :subtitle="t('settings.modifySpendingSecuritySettings')"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"

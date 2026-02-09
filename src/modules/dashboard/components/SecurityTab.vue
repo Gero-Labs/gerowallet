@@ -87,10 +87,10 @@
         </v-list-item-avatar>
         <v-list-item-content class="py-0">
           <v-list-item-title class="text-left">
-            <h3 style="color: white; font-size: 16px;">{{ $t('settings.spendingPasswordSettings') }}</h3>
+            <h3 style="color: white; font-size: 16px;">{{ $t('settings.spendingSecuritySettings') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            {{ $t('settings.modifySpendingPassword') }}
+            {{ $t('settings.modifySpendingSecuritySettings') }}
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-icon class="my-0" style="align-self: center">

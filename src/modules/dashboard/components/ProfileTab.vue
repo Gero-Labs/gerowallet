@@ -71,18 +71,26 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">{{ $t('settings.displayLanguage') }}</h3>
+          <h3 style="color: white">
+            {{ $t('settings.displayLanguage') }}
+            <NotificationDot
+              :show="hasNewLanguage"
+              color="success"
+              :pulse="true"
+            />
+          </h3>
           <span class="helper">{{ $t('settings.setLanguageHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-select
             v-model="loc"
-            :items="Object.values(languages)"
+            :items="availableLanguages"
             item-text="name"
             outlined
             dense
             hide-details
-            disabled
+            attach
+            @focus="handleLanguageSelectorFocus"
           >
             <template v-slot:item="{ item }">
               <v-list-item-avatar size="20">
@@ -131,10 +139,11 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
+import { ref, computed, watch, onMounted, toRefs, getCurrentInstance, nextTick } from 'vue';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
+import NotificationDot from '@/shared/components/NotificationDot.vue';
 import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
@@ -142,12 +151,23 @@ import geroStoreDefault from '@/stores/geroStore';
 import WalletStore from '@/stores/walletStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { setWalletConfiguration } from '@/db/wallet-db';
+import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 // Define emits
 const emit = defineEmits(['close']);
 
 // Translation
 const { t } = useTranslation();
+
+import { READY_LANGUAGES } from '@/plugins/i18n/config';
+
+// Feature notifications for new German language
+const hasNewLanguage = computed(() => isFeatureNew('settings.profile.germanLanguage'));
+
+// Filter to only show ready languages
+const availableLanguages = computed(() => {
+  return Object.values(languages).filter(lang => READY_LANGUAGES.includes(lang.iso));
+});
 
 // Get store instance
 const { loggedWallet, config } = toRefs(walletStore);
@@ -239,32 +259,42 @@ const onFileChange = async (event: Event) => {
   reader.readAsDataURL(file);
 };
 
+const handleLanguageSelectorFocus = () => {
+  // Mark German language feature as seen when user opens the language selector
+  if (hasNewLanguage.value) {
+    markFeatureAsSeen('settings.profile.germanLanguage');
+  }
+};
+
 // Watchers
+// Watch for user changing the dropdown
 watch(loc, async (val) => {
   if (val) {
     const iso = Object.values(languages).find(value => value.name === val)?.iso;
     if (iso) {
-      // CRITICAL FIX: Load language file before switching (race condition fix)
+      // CRITICAL: Don't call setLocale if we're already at this locale
+      if (iso === geroStore.config?.locale) {
+        return;
+      }
+
+      // Load language file and update locale
       const { loadLanguage } = await import('@/plugins/i18n');
       try {
         await loadLanguage(iso);
-
-        // Update store and i18n locale ONLY after successful load
         await WalletStore.setLocale(iso);
         vmProxy.$i18n.locale = iso;
         await vmProxy.$nextTick();
       } catch (error) {
         console.error(`Failed to load language ${iso}:`, error);
-        // Don't update store if load failed - will cause UI inconsistency
       }
     }
   }
 }, { immediate: false });
 
-// Lifecycle
+// Lifecycle - Set initial value from store
 onMounted(() => {
   walletName.value = loggedWallet.value.name;
-  loc.value = languages[config.value.locale || 'us'].name;
+  loc.value = languages[geroStore.config?.locale || 'us'].name;
 });
 </script>
 

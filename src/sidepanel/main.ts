@@ -4,7 +4,7 @@ import '../shared/styles/liquid-glass.css';
 
 import Vue from 'vue';
 import VueRouter from 'vue-router';
-import i18n from '../plugins/i18n';
+import i18n, { loadLanguage } from '../plugins/i18n';
 import vuetify from '../plugins/vuetify';
 import router from '../modules/navigation/router';
 
@@ -13,14 +13,21 @@ import App from './Sidepanel.vue';
 Vue.config.productionTip = false;
 Vue.use(VueRouter);
 
-chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
-  if (saved?.loggedWallet?.id && saved?.config?.locale) {
-    console.log('🌐 Sidepanel: Setting initial locale from storage:', saved.config.locale);
-    i18n.locale = saved.config.locale;
-  } else {
-    console.log('🌐 Sidepanel: Using default locale: us');
+chrome.storage.local.get(['walletStore', 'geroStore'], async ({ walletStore: saved, geroStore }) => {
+  // Priority: geroStore.config.locale (global) -> walletStore.config.locale (wallet-specific) -> 'us'
+  const locale = geroStore?.config?.locale || saved?.config?.locale || 'us';
+
+  if (locale !== 'us') {
+    try {
+      // CRITICAL: Load language file BEFORE setting locale
+      await loadLanguage(locale);
+      i18n.locale = locale;
+    } catch (error) {
+      console.error('Failed to load language file:', locale, error);
+      i18n.locale = 'us'; // Fallback to English
+    }
   }
-  
+
   new Vue({
     vuetify,
     i18n,
