@@ -2,7 +2,7 @@ import Dexie from 'dexie';
 import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import * as bip39 from 'bip39';
 import { encrypt, encryptPrivateKey } from '@/shared/utils/crypto';
-import { CoinTypes, Currency, HARDENED, WalletType, WalletTypePurpose } from '@/models/types';
+import { CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
@@ -108,7 +108,7 @@ export async function getAllWallets() {
   const db: Dexie = await getDb();
   const wallets = await db['wallets'].toArray();
   const walletsMap = {};
-  wallets.forEach(wallet => {
+  wallets.forEach((wallet: Wallet) => {
     walletsMap[wallet.id] = wallet;
   });
   return walletsMap;

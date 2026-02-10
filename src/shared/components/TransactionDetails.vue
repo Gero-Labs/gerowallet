@@ -947,6 +947,9 @@ const getMint = (transactionInfo: any) => {
 }
 
 const getMetadata = (transactionInfo: any) => {
+  if (!transactionInfo?.cbor) {
+    return null;
+  }
   return JSON.stringify(
     Serialization.Transaction.fromCbor(transactionInfo.cbor).auxiliaryData()?.metadata()?.toCore(),
     (_key, value) => {

@@ -5,6 +5,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import snackbar from '@/plugins/snackbar';
+import { Blockchain } from '@/models/types';
 
 /**
  * Composable for handling Cardano staking reward withdrawals
@@ -24,8 +25,9 @@ export function useWithdrawal() {
    */
   const withdraw = async () => {
     try {
-      // Check if user has DRep delegation
-      if (!account.value?.drep_id) {
+      // Check if user has DRep delegation (Cardano only)
+      const isCardano = loggedWallet.value?.chain === Blockchain.CARDANO;
+      if (isCardano && !account.value?.drep_id) {
         console.warn('Cannot withdraw: DRep delegation required');
         // Dialog will still open and show the warning with "Go to Governance" button
         withdrawalDialog.value = true;
@@ -56,9 +58,10 @@ export function useWithdrawal() {
       });
 
       withdrawalDialog.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error building withdrawal transaction:', error);
-      snackbar.setError(t('errors.buildTransactionFailed') + ': ' + (error.message || t('errors.unknownError')));
+      const message = error instanceof Error ? error.message : t('errors.unknownError');
+      snackbar.setError(t('errors.buildTransactionFailed') + ': ' + message);
     }
   };
 

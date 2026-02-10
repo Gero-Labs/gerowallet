@@ -347,7 +347,7 @@
                 </v-avatar>
               </v-btn>
             </div>
-            <v-btn class="geroButton mt-4" x-large style="font-size: 14px" @click="setWelcomeDone()">
+            <v-btn class="geroButton mt-4" x-large style="font-size: 14px" @click="setWelcomeDone">
               {{ $t('navigation.getStarted') }}
             </v-btn>
           </div>
@@ -366,8 +366,6 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 
 const { t } = useTranslation();
-
-
 
 const props = defineProps({
   isOpen: {
