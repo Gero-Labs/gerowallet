@@ -3,7 +3,7 @@
     <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
       {{ $t('welcome.welcomeMessage') }}
     </v-card-title>
-    <v-card-subtitle class="text-center px-6" style="font-size: 20px">
+    <v-card-subtitle class="text-center px-0" style="font-size: 20px">
       {{ $t('welcome.chooseAWallet') }}
     </v-card-subtitle>
     <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
@@ -92,7 +92,7 @@ import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.v
 const selectedWallet = ref<string | null>(null);
 const showUnlockDialog = ref<boolean>(false);
 const pendingNavigation = ref<string | null>(null);
-const pendingLoginWalletId = ref<string | null>(null);
+const pendingLoginWalletId = ref<number | null>(null);
 
 // Pre-login unlock props
 const preLoginWalletId = ref<number | null>(null);
@@ -124,7 +124,7 @@ const isWalletLocked = (wallet: Wallet): boolean => {
 
 const vmProxy = getCurrentInstance()!.proxy as any
 
-const submitLogin = async (walletId: string): Promise<void> => {
+const submitLogin = async (walletId: number): Promise<void> => {
   // Check if wallet is locked
   if (isLocked.value) {
     // If clicking on a different wallet while current wallet is locked, logout and login to new wallet

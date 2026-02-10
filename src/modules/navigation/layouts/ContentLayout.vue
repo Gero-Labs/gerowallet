@@ -375,7 +375,12 @@ const isWelcomeDone = computed({
 });
 
 function closeWelcomeDialog() {
-  isWelcomeDone.value = true;
+  // Update reactive config directly for immediate dialog close
+  if (geroConfig.value) {
+    geroConfig.value.welcomeDone = true;
+  }
+  // Persist to database
+  setConfiguration('welcomeDone', true);
 }
 
 function closeChangeLogDialog() {

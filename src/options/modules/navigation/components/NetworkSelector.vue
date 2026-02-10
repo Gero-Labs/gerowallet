@@ -24,9 +24,10 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
+import { updateVuetifyTheme } from '@/plugins/vuetify';
 
 interface Props {
-  modelValue?: any;
+  modelValue?: NetworkInfo;
 }
 
 const props = defineProps<Props>();
@@ -39,11 +40,9 @@ watch(selectedNetwork, (val) => {
   if (val) {
     emit('update:modelValue', val);
     emit('network-changed', val);
-    // if (val.blockchain.includes("Apex")) {
-    //   this.$vuetify.theme.themes.dark.primary ='#dc753e'
-    // } else {
-    //   this.$vuetify.theme.themes.dark.primary ='#2f9cac'
-    // }
+    // Update Vuetify theme based on selected network
+    const isApex = val.blockchain?.includes('Apex');
+    updateVuetifyTheme(isApex, true);
   }
 });
 

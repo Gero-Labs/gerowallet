@@ -9,19 +9,19 @@ import {
   setWalletIcon as dbSetWalletIcon,
   updatePrivateKeyAndMnemonic as dbUpdatePrivateKeyAndMnemonic
 } from '@/db/gero-db';
-import { ERROR, WalletType } from '@/models/types';
+import { ERROR, Wallet, WalletType } from '@/models/types';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, decryptWithPassword, encrypt } from '@/shared/utils/crypto';
-import networks from '@/utils/networks';
+import networks, { NetworkInfo } from '@/utils/networks';
 import { encryptPrivateKey } from '@/shared/utils/crypto';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface GeroStore {
-  wallets: any;
-  network: any;
+  wallets: Record<number, Wallet>;
+  network: NetworkInfo;
   config: any;
 }
 
@@ -47,7 +47,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in geroStore) {
-        (geroStore as any)[key] = updates[key as keyof GeroStore];
+        geroStore[key] = updates[key as keyof GeroStore];
       }
     });
   });
@@ -137,7 +137,7 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
 }
 
 export default {
-  setWallets(wallets: any) {
+  setWallets(wallets: Record<number, Wallet>) {
     geroStore.wallets = wallets;
     broadcastFromBackground({ wallets });
   },
@@ -225,7 +225,7 @@ export default {
       await updateI18nLocale(previousLocale);
     }
   },
-  setNetwork(network: any) {
+  setNetwork(network: NetworkInfo) {
     geroStore.network = network;
     broadcastFromBackground({ network });
   },
@@ -253,7 +253,7 @@ export default {
   ) {
     const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network, options);
     // Update the wallets field with the latest wallets from the database
-    const updatedWallets = await getAllWallets();
+    const updatedWallets: Record<number, Wallet> = await getAllWallets();
     geroStore.wallets = updatedWallets;
     broadcastFromBackground({ wallets: updatedWallets });
     return geroStore.wallets[walletId];
@@ -392,17 +392,17 @@ export default {
   },
 
   // Utility method to get current network
-  getCurrentNetwork(): any {
+  getCurrentNetwork(): NetworkInfo {
     return geroStore.network;
   },
 
   // Utility method to get all wallets
-  getAllWallets(): any {
+  getAllWallets(): Record<number, Wallet> {
     return geroStore.wallets;
   },
 
   // Utility method to get wallet by ID
-  getWallet(walletId: number): any {
+  getWallet(walletId: number): Wallet {
     return geroStore.wallets?.[walletId];
   },
 

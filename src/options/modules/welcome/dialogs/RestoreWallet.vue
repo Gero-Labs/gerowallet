@@ -315,7 +315,7 @@
         <v-spacer></v-spacer>
         <v-btn
           color="primary"
-          class="geroButton"
+          :class="isApex ? 'apexButton' : 'geroButton'"
           style="color: black!important;"
           :disabled="!valid"
           @click="walletCreationStep1"
@@ -331,7 +331,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          class="geroButton"
+          :class="isApex ? 'apexButton' : 'geroButton'"
           style="color: black!important;"
           :disabled="!nameValid"
           @click="handleContinue"
@@ -347,7 +347,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          class="geroButton"
+          :class="isApex ? 'apexButton' : 'geroButton'"
           style="color: black!important;"
           :disabled="!canCreate"
           :loading="creatingWalletLoader"
@@ -436,7 +436,7 @@ const prfSupported = ref<boolean>(false);
 
 const newWallet = reactive({
   name: '',
-  icon: 'green',
+  icon: props.network?.blockchain?.includes('Apex') ? 'orange' : 'green',
   password: '',
   confirmPassword: '',
   encryptionMethod: 'password' as 'password' | 'prf',
@@ -460,6 +460,11 @@ const existingWalletInfo = ref(null);
 // Computed properties
 const seedToStr = computed(() => {
   return computedRecoverySeedPhrase.value.join(' ');
+});
+
+// Check if selected network is Apex
+const isApex = computed(() => {
+  return props.network?.blockchain?.includes('Apex');
 });
 
 const computedRecoverySeedPhrase = computed(() => {

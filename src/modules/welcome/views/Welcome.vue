@@ -2,7 +2,17 @@
   <div class="welcome-root">
     <!-- Full-width crisp background image -->
     <div class="welcome-background">
-      <img :src="welcomeBg" class="welcome-background-image" />
+      <!-- Two separate images for cross-fade transition -->
+      <img
+        :src="assets.cardanoBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': !selectedNetwork?.blockchain?.includes('Apex') }"
+      />
+      <img
+        :src="assets.apexBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Apex') }"
+      />
     </div>
 
     <!-- Language Selector - Floating top-right -->
@@ -55,7 +65,7 @@ import { ref, computed, toRefs } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
-import { WalletType } from '@/models/types';
+import { Wallet, WalletType } from '@/models/types';
 import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
 import CreateOrImportSeedPhrase from '@/options/modules/welcome/components/CreateOrImportSeedPhrase.vue';
 import { geroStore } from '@/stores/geroStore';
@@ -80,15 +90,8 @@ const enableCreateOrImportSeedPhrase = (): void => {
 
 const availableWallets = computed(() => {
   return Object.values(wallets.value)?.filter(
-    (wallet: any) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
+    (wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
   );
-});
-
-const welcomeBg = computed(() => {
-  if (selectedNetwork.value?.blockchain?.includes('Apex')) {
-    return assets.apexBg;
-  }
-  return assets.cardanoBg;
 });
 </script>
 <style scoped>
@@ -111,6 +114,9 @@ const welcomeBg = computed(() => {
 }
 
 .welcome-background-image {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -118,6 +124,12 @@ const welcomeBg = computed(() => {
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
   transform: translateY(20%);
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.welcome-background-image.background-active {
+  opacity: 1;
 }
 
 .language-selector-container {
@@ -126,10 +138,8 @@ const welcomeBg = computed(() => {
   right: 20px;
   z-index: 100;
   backdrop-filter: blur(10px);
-  background: rgba(19, 22, 27, 0.6);
   border-radius: 8px;
   padding: 4px 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .welcome-container {

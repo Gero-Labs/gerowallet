@@ -3,7 +3,7 @@
               :subtitle="t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
-        v-if="!account?.drep_id"
+        v-if="!account?.drep_id && loggedWallet?.chain === Blockchain.CARDANO"
         border="left"
         color="warning"
         type="warning"
@@ -49,7 +49,7 @@
             <h4>{{ $t('common.total') }}</h4>
             <h4><strong>{{ toCurrency(withdrawals-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
-          <v-col cols="12" class="pt-6" v-if="!account?.drep_id">
+          <v-col cols="12" class="pt-6" v-if="!account?.drep_id && loggedWallet?.chain === Blockchain.CARDANO">
             <v-btn color="primary" elevation="2" block to="/governance" class="mx-2">
               {{ $t('staking.goToGovernanceDelegate') }}
             </v-btn>
@@ -65,7 +65,7 @@
               @update:password="spendingPassword = $event"
               :password-label="t('wallet.spendingPassword')"
               :password-rules="passwordRules"
-              :submit-text="$t('staking.submitTransaction')"
+              :submit-text="t('staking.submitTransaction')"
               submit-color="primary"
               :submit-elevation="0"
               :show-bt-toggle="isBTSupported"
@@ -135,8 +135,7 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
-import rules from '@/utils/rules';
-import { WalletType } from '@/models/types';
+import { WalletType, Blockchain } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 
 
@@ -191,7 +190,7 @@ const {
   onClose: () => emit('close'),
 });
 
-const form = ref<any>(null);
+const form = ref(null);
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;

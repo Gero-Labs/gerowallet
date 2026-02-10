@@ -273,7 +273,7 @@
         <v-spacer></v-spacer>
         <v-btn
           color="primary"
-          class="geroButton"
+          :class="isApex ? 'apexButton' : 'geroButton'"
           style="color: black!important;"
           :disabled="!nameValid"
           @click="handleContinue"
@@ -289,7 +289,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          class="geroButton"
+          :class="isApex ? 'apexButton' : 'geroButton'"
           style="color: black!important;"
           :disabled="!canCreate"
           :loading="creatingWalletLoader"
@@ -405,6 +405,10 @@ const canCreate = computed(() => {
     return prfFormValid.value;
   }
   return passwordFormValid.value;
+});
+
+const isApex = computed(() => {
+  return props.network?.blockchain?.includes('Apex');
 });
 
 const dialogLocal = computed({
@@ -555,7 +559,7 @@ const walletCreationStep = async () => {
 const resetDialog = () => {
   Object.assign(newWallet, {
     name: '',
-    icon: 'green',
+    icon: props.network?.blockchain?.includes('Apex') ? 'orange' : 'green',
     password: '',
     confirmPassword: '',
     encryptionMethod: 'password',

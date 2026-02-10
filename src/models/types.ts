@@ -18,6 +18,8 @@ export interface Wallet {
   icon?: string;
   type?: WalletTypeValue;
   // PRF Encryption Support (Version 14+)
+  encryptedPrivateKey?: string;
+  encryptedMnemonic?: string;
   encryptionMethod?: 'password' | 'prf'; // Encryption method for wallet keys
   prfEncryptedPrivateKey?: string; // Private key encrypted with PRF (hex)
   prfEncryptedMnemonic?: string; // Mnemonic encrypted with PRF (hex)

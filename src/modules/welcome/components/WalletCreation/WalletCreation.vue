@@ -16,10 +16,12 @@
 
       <div class="text-container">
         <div class="subtitle">{{ $t('welcome.yourNew') }}</div>
-        <div class="title">
-          <span class="title-regular">{{ $t('welcome.singlePaneOf') }}</span>
-          <span :class="['title-gradient', gradientClass]">&nbsp;{{ $t('welcome.glass') }}</span>
-        </div>
+        <v-list-item>
+          <v-list-item-content>
+            <v-list-item-title class="title-regular">{{ $t('welcome.singlePaneOf') }}</v-list-item-title>
+            <v-list-item-subtitle :class="['title-gradient', gradientClass]">{{ $t('welcome.glass') }}</v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
         <NetworkSelector @network-changed="onNetworkChanged" />
 
         <GButton
@@ -52,18 +54,18 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import { NetworkInfo } from '@/utils/networks';
 
 const emits = defineEmits<{
-  (e: 'networkChanged', network: any): void;
+  (e: 'networkChanged', network: NetworkInfo): void;
   (e: 'createOrImportSeedPhrase'): void;
 }>();
 
 const props = defineProps<{
   selectedNetwork: NetworkInfo;
-  createOrImportSeedPhrase: any;
+  createOrImportSeedPhrase: boolean;
 }>();
 
 const isApex = ref(false);
 
-const onNetworkChanged = (network: any) => {
+const onNetworkChanged = (network: NetworkInfo) => {
     emits('networkChanged', network);
 };
 
@@ -137,9 +139,10 @@ const gradientClass = computed(() =>
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 18px;
   position: relative;
   z-index: 2;
+  max-width: 428px;
 }
 
 .logo-container {
