@@ -293,13 +293,12 @@
               @click="unstake"
               block
               outlined
-              class="staking2-unstake-btn"
             >
               <span class="staking2-unstake-text">{{ $t('staking.unstake') }}</span>
             </v-btn>
           </v-col>
           <v-col cols="6" class="pl-3">
-            <v-tooltip top v-if="account?.withdrawable_amount > 0 && !account?.drep_id" max-width="250">
+            <v-tooltip top content-class="custom-tooltip" v-if="account && Number(account.withdrawable_amount) > 0 && !account?.drep_id && !isApex" max-width="250">
               <template v-slot:activator="{ on, attrs }">
                 <v-btn
                   elevation="2"
@@ -316,7 +315,7 @@
               <span>DRep delegation required to withdraw rewards. Visit the Governance tab to delegate.</span>
             </v-tooltip>
             <v-btn
-              v-else-if="account?.withdrawable_amount > 0"
+              v-else-if="account && Number(account?.withdrawable_amount) > 0"
               elevation="2"
               small
               color="#1a1a1a"
@@ -353,15 +352,11 @@ import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
 import { Blockchain } from '@/models/types';
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { useUnstake } from '@/shared/composables/useUnstake';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
-
-const { t } = useTranslation();
 
 // Use the unstake and withdrawal composables
 const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
@@ -599,11 +594,6 @@ onMounted(async () => {
 .staking2-chart {
   height: 100%;
   width: 100%;
-}
-
-/* Action buttons styles */
-.staking2-unstake-btn {
-  text-transform: capitalize;
 }
 
 .staking2-unstake-text {

@@ -555,7 +555,7 @@ const walletCreationStep = async () => {
 const resetDialog = () => {
   Object.assign(newWallet, {
     name: '',
-    icon: 'green',
+    icon: props.network?.blockchain?.includes('Apex') ? 'orange' : 'green',
     password: '',
     confirmPassword: '',
     encryptionMethod: 'password',

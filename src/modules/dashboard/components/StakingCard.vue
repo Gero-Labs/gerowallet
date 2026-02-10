@@ -5,7 +5,7 @@
       <v-layout column>
         <v-row no-gutters>
           <v-col cols="5">
-            <v-card outlined flat tile class="fill-height staking-left-card">
+            <v-card outlined flat tile class="fill-height staking-left-card transparent">
               <v-card-title class="staking-card-title pa-2">
                 <v-row no-gutters class="staking-info-row py-4">
                   <v-col cols="6" class="px-1 text-center">
@@ -42,7 +42,7 @@
                         )
                       }}
                     </h4>
-                    <v-tooltip top v-if="Number(account?.withdrawable_amount) > 0 && !account?.drep_id" max-width="250">
+                    <v-tooltip top v-if="Number(account?.withdrawable_amount) > 0 && !account?.drep_id && !isApex" max-width="250" content-class="custom-tooltip">
                       <template v-slot:activator="{ on, attrs }">
                         <v-btn x-small text color="warning" v-bind="attrs" v-on="on" @click="withdraw">
                           {{ $t('staking.withdraw') }}
@@ -212,9 +212,9 @@
             </v-card>
           </v-col>
           <v-col cols="7">
-            <v-card outlined flat tile class="fill-height staking-right-card">
+            <v-card outlined flat tile class="fill-height staking-right-card transparent">
               <v-card-text class="pa-2">
-                <v-card outlined flat>
+                <v-card outlined flat style="background-color: transparent!important;">
                   <v-data-table
                     :items="rewardsData"
                     :headers="stakingHeaders"
@@ -332,6 +332,7 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
+import { Blockchain } from '@/models/types';
 
 
 const { t } = useTranslation();
@@ -347,12 +348,17 @@ const { currentPool, poolLoading } = toRefs(stakingStoreActions.state);
 const hideZero = ref<boolean>(false);
 const sortBy = ref<string>('epoch');
 const sortDesc = ref<boolean>(true);
-const stakingHeaders = ref<any>([
+const stakingHeaders = ref([
   { text: String(t('staking.poolName')), align: 'start', sortable: true, value: 'pool_id' },
   { text: String(t('staking.epoch')), align: 'start', sortable: true, value: 'epoch', width: 88 },
   { text: String(t('staking.reward')), align: 'start', sortable: true, value: 'amount', width: 100 },
   { text: String(t('staking.change')), align: 'start', sortable: true, value: 'change', width: 120 },
 ]);
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 
 const pool = computed(() => {
   if (currentPool.value) {
@@ -465,10 +471,6 @@ onMounted(async () => {
 <style scoped>
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
-}
-
-.v-data-table-header {
-  background-color: rgb(22, 27, 38);
 }
 
 /* StakingCard specific styles */

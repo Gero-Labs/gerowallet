@@ -5,7 +5,7 @@
                   @keydown.tab.exact="handleTab" @keydown.shift.tab="handleShiftTab"
   >
     <template v-slot:prepend>
-      <span style="color: #2f9cac;margin-top: 4px; min-width: 22px">{{index}}.</span>
+      <span :style="{ color: primaryColor, marginTop: '4px', minWidth: '22px' }">{{index}}.</span>
     </template>
   </v-autocomplete>
 </template>
@@ -28,6 +28,11 @@ const emit = defineEmits(['input']);
 
 const instance = getCurrentInstance();
 const mnemonic = ref('');
+
+// Get primary color from Vuetify theme
+const primaryColor = computed(() => {
+  return String(instance?.proxy?.$vuetify?.theme?.currentTheme?.primary);
+});
 const search = ref('');
 
 const englishWords = computed(() => {
