@@ -241,6 +241,152 @@ export async function evaluatePrfForWallet(
 }
 
 /**
+ * Register a new WebAuthn credential with PRF extension AND evaluate PRF in one prompt
+ *
+ * This function combines credential registration and PRF evaluation into a single
+ * PassKey prompt, improving UX by avoiding the double-prompt issue.
+ *
+ * @param walletId - Wallet ID to use for PRF salt generation
+ * @param walletName - Wallet name for display
+ * @returns Object with credential ID, PRF enabled status, and PRF output
+ * @throws Error if registration fails or user cancels
+ */
+export async function registerWebAuthnCredentialWithPrf(
+  walletId: string,
+  walletName: string
+): Promise<{ credentialId: string; prfEnabled: boolean; prfOutput: ArrayBuffer | null }> {
+  debugLog('[PRF] Registering credential with PRF evaluation for wallet:', walletId);
+
+  // Check WebAuthn support
+  if (!window.PublicKeyCredential) {
+    throw new Error('WebAuthn is not supported in this browser');
+  }
+
+  try {
+    // Generate random challenge
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+    // PRF salt format: "gero-wallet-passkey-v1:{walletId}"
+    const salt = new TextEncoder().encode(`gero-wallet-passkey-v1:${walletId}`);
+
+    // Create credential options with PRF extension AND evaluation
+    const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
+      challenge,
+      rp: {
+        name: 'Gero Dashboard',
+        id: window.location.hostname
+      },
+      user: {
+        id: new TextEncoder().encode(walletId),
+        name: walletName,
+        displayName: walletName
+      },
+      pubKeyCredParams: [
+        {
+          type: 'public-key',
+          alg: -7 // ES256 (ECDSA with SHA-256)
+        },
+        {
+          type: 'public-key',
+          alg: -257 // RS256 (RSASSA-PKCS1-v1_5 with SHA-256)
+        }
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform',
+        userVerification: 'required',
+        requireResidentKey: false
+      },
+      timeout: 60000,
+      attestation: 'none',
+      // Enable PRF extension AND evaluate during registration (single prompt!)
+      extensions: {
+        prf: {
+          eval: {
+            first: salt // Evaluate PRF with wallet-specific salt during registration
+          }
+        }
+      }
+    };
+
+    // Create the credential (single PassKey prompt)
+    const credential = await navigator.credentials.create({
+      publicKey: publicKeyCredentialCreationOptions
+    }) as PublicKeyCredential;
+
+    if (!credential) {
+      throw new Error('Failed to create credential');
+    }
+
+    // Check if PRF was enabled and evaluated
+    const extensionResults = credential.getClientExtensionResults();
+    const prfResults = extensionResults?.prf;
+    const prfEnabled = prfResults?.enabled === true;
+
+    debugLog('[PRF] Registration extension results:', {
+      hasExtensions: !!extensionResults,
+      hasPrf: !!prfResults,
+      prfEnabled: prfResults?.enabled,
+      hasResults: !!prfResults?.results,
+      hasFirst: !!prfResults?.results?.first
+    });
+
+    // Extract PRF output if available
+    let prfOutput: ArrayBuffer | null = null;
+    if (prfEnabled && prfResults?.results?.first) {
+      const result = prfResults.results.first;
+      if (result instanceof ArrayBuffer) {
+        prfOutput = result;
+      } else {
+        // If it's an ArrayBufferView, get the underlying buffer
+        const buffer = (result as ArrayBufferView).buffer;
+        if (buffer instanceof SharedArrayBuffer) {
+          // Copy SharedArrayBuffer to regular ArrayBuffer
+          const arrayBuffer = new ArrayBuffer(buffer.byteLength);
+          new Uint8Array(arrayBuffer).set(new Uint8Array(buffer));
+          prfOutput = arrayBuffer;
+        } else {
+          prfOutput = buffer;
+        }
+      }
+      debugLog('[PRF] ✅ PRF evaluation successful during registration (32 bytes)');
+    } else {
+      debugWarn('[PRF] ⚠️ PRF enabled but no evaluation results returned');
+    }
+
+    // Convert credential ID to base64
+    const credentialId = arrayBufferToBase64(credential.rawId);
+
+    return {
+      credentialId,
+      prfEnabled,
+      prfOutput
+    };
+  } catch (error) {
+    console.error('[PRF] Registration error:', error);
+
+    // User cancelled the passkey prompt
+    if ((error as Error).name === 'NotAllowedError') {
+      throw new Error('PassKey registration was cancelled');
+    }
+
+    // Other errors
+    throw new Error(`PassKey registration failed: ${(error as Error).message}`);
+  }
+}
+
+/**
+ * Convert ArrayBuffer to base64 string
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
  * Derive non-extractable AES-GCM key from PRF output using HKDF
  *
  * Uses HKDF (HMAC-based Key Derivation Function) to derive a wallet-specific
