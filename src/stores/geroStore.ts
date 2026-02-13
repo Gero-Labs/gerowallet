@@ -249,6 +249,8 @@ export default {
       credentialId?: string;
       passwordUnlockEnabled?: boolean;
       backupMnemonic?: boolean;
+      prfOutput?: ArrayBuffer;
+      walletId?: number;
     }
   ) {
     const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network, options);
