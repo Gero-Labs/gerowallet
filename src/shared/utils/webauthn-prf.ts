@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 import { debugLog, debugWarn } from '@/utils/debug';
+import { arrayBufferToBase64, base64ToArrayBuffer } from '@/shared/utils/security';
 
 /**
  * WebAuthn PRF (Pseudo-Random Function) Extension Utilities
@@ -24,18 +25,6 @@ import { debugLog, debugWarn } from '@/utils/debug';
  * - https://github.com/w3c/webauthn/wiki/Explainer:-PRF-extension
  * - https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/
  */
-
-/**
- * Convert base64 string to ArrayBuffer
- */
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
 
 /**
  * Check if WebAuthn PRF extension is supported by the browser
@@ -372,18 +361,6 @@ export async function registerWebAuthnCredentialWithPrf(
     // Other errors
     throw new Error(`PassKey registration failed: ${(error as Error).message}`);
   }
-}
-
-/**
- * Convert ArrayBuffer to base64 string
- */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
 }
 
 /**
