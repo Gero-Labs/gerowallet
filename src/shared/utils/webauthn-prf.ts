@@ -3,6 +3,19 @@ import { debugLog, debugWarn } from '@/utils/debug';
 import { arrayBufferToBase64, base64ToArrayBuffer } from '@/shared/utils/security';
 
 /**
+ * TypeScript interfaces for WebAuthn PRF extension results
+ */
+interface PrfValues {
+  first?: BufferSource;
+  second?: BufferSource;
+}
+
+export interface PrfExtensionResults {
+  enabled?: boolean;
+  results?: PrfValues;
+}
+
+/**
  * WebAuthn PRF (Pseudo-Random Function) Extension Utilities
  *
  * This module provides secure passkey-based password encryption using the WebAuthn PRF extension.
@@ -107,9 +120,9 @@ export async function isCredentialPrfEnabled(credentialId: string): Promise<bool
 
     debugLog('[PRF] Authentication succeeded, checking extension results...');
 
-    // Check PRF extension results
+    // Check PRF extension results with type safety
     const extensionResults = assertion.getClientExtensionResults();
-    const prfResults = extensionResults?.prf;
+    const prfResults = extensionResults?.prf as PrfExtensionResults | undefined;
 
     // Debug logging to understand what we're getting back
     debugLog('[PRF] Extension results:', {
@@ -193,8 +206,9 @@ export async function evaluatePrfForWallet(
       }
     }) as PublicKeyCredential;
 
-    // Extract PRF results
-    const prfResults = assertion.getClientExtensionResults()?.prf;
+    // Extract PRF results with type safety
+    const extensionResults = assertion.getClientExtensionResults();
+    const prfResults = extensionResults?.prf as PrfExtensionResults | undefined;
 
     if (!prfResults?.results?.first) {
       throw new Error('PRF evaluation failed - no results returned from authenticator');
@@ -306,9 +320,9 @@ export async function registerWebAuthnCredentialWithPrf(
       throw new Error('Failed to create credential');
     }
 
-    // Check if PRF was enabled and evaluated
+    // Check if PRF was enabled and evaluated with type safety
     const extensionResults = credential.getClientExtensionResults();
-    const prfResults = extensionResults?.prf;
+    const prfResults = extensionResults?.prf as PrfExtensionResults | undefined;
     const prfEnabled = prfResults?.enabled === true;
 
     debugLog('[PRF] Registration extension results:', {

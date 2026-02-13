@@ -112,11 +112,17 @@ export async function getLatestWalletByOrder() {
  * (needed for PRF salt generation during credential registration).
  *
  * @returns Promise<number> - Next available wallet ID
+ * @throws Error if database is unavailable or operation fails
  */
 export async function getNextWalletId(): Promise<number> {
-  const db: Dexie = await getDb();
-  const maxWallet = await db['wallets'].orderBy('id').last();
-  return (maxWallet?.id || 0) + 1;
+  try {
+    const db: Dexie = await getDb();
+    const maxWallet = await db['wallets'].orderBy('id').last();
+    return (maxWallet?.id || 0) + 1;
+  } catch (error) {
+    console.error('Failed to get next wallet ID:', error);
+    throw new Error('Unable to access wallet database. Please check browser permissions and try again.');
+  }
 }
 
 export async function getAllWallets() {
