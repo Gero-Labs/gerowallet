@@ -619,11 +619,9 @@ const walletCreationStep3 = async () => {
       // ========================================================================
 
       try {
-        // Step 1: Calculate wallet ID FIRST (before registration)
-        const { getDb } = await import('@/db/gero-db');
-        const db = await getDb();
-        const maxWallet = await db['wallets'].orderBy('id').last();
-        const newWalletId = (maxWallet?.id || 0) + 1;
+        // Step 1: Get next wallet ID from single source of truth
+        const { getNextWalletId } = await import('@/db/gero-db');
+        const newWalletId = await getNextWalletId();
 
         // Step 2: Register credential AND evaluate PRF in one prompt
         const { registerWebAuthnCredentialWithPrf } = await import('@/shared/utils/webauthn-prf');
@@ -643,6 +641,7 @@ const walletCreationStep3 = async () => {
             passwordUnlockEnabled: false,
             backupMnemonic: true,
             prfOutput,
+            walletId: newWalletId, // CRITICAL: Must match ID used for PRF salt
           };
 
           wallet = await GeroStore.createNewWallet(
