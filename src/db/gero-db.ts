@@ -104,6 +104,27 @@ export async function getLatestWalletByOrder() {
   return null;
 }
 
+/**
+ * Get the next available wallet ID
+ *
+ * This is the single source of truth for wallet ID allocation.
+ * Used for PRF wallets where the ID must be known before wallet creation
+ * (needed for PRF salt generation during credential registration).
+ *
+ * @returns Promise<number> - Next available wallet ID
+ * @throws Error if database is unavailable or operation fails
+ */
+export async function getNextWalletId(): Promise<number> {
+  try {
+    const db: Dexie = await getDb();
+    const maxWallet = await db['wallets'].orderBy('id').last();
+    return (maxWallet?.id || 0) + 1;
+  } catch (error) {
+    console.error('Failed to get next wallet ID:', error);
+    throw new Error('Unable to access wallet database. Please check browser permissions and try again.');
+  }
+}
+
 export async function getAllWallets() {
   const db: Dexie = await getDb();
   const wallets = await db['wallets'].toArray();
@@ -183,6 +204,7 @@ export async function createNewWallet(
     passwordUnlockEnabled?: boolean;
     backupMnemonic?: boolean;
     prfOutput?: ArrayBuffer; // PRF output from registration (avoids second prompt)
+    walletId?: number; // Pre-allocated wallet ID for PRF wallets (must match PRF salt)
   }
 ) {
   let isRestore = true;
@@ -214,10 +236,18 @@ export async function createNewWallet(
       throw new Error('Credential ID is required for PRF encryption');
     }
 
-    // Step 1: Pre-allocate wallet ID (Option A from decisions document)
-    // We need the wallet ID before encryption for PRF salt generation
-    const maxWallet = await db['wallets'].orderBy('id').last();
-    const newWalletId = (maxWallet?.id || 0) + 1;
+    // Step 1: Get wallet ID (must be pre-allocated for PRF salt consistency)
+    // The wallet ID MUST match the one used for PRF salt during credential registration
+    let newWalletId: number;
+    if (options.walletId !== undefined) {
+      // Use pre-allocated ID (ensures PRF salt consistency)
+      newWalletId = options.walletId;
+    } else {
+      // Fallback: Calculate ID (backward compatibility, but risky for race conditions)
+      const maxWallet = await db['wallets'].orderBy('id').last();
+      newWalletId = (maxWallet?.id || 0) + 1;
+      console.warn('[PRF] ⚠️ Wallet ID not provided in options, calculating on-the-fly (potential race condition)');
+    }
 
     // Import PRF encryption functions
     const {
@@ -282,8 +312,16 @@ export async function createNewWallet(
       await createNewWalletDb(newWalletId, !!prfEncryptedMnemonic, isRestore);
       return newWalletId;
     } finally {
+      // CRITICAL: Zero all ArrayBuffer references to prevent memory leaks
+      // Zero the local prfOutput reference
       if (prfOutput) {
         new Uint8Array(prfOutput).fill(0);
+      }
+
+      // Also zero the passed-in prfOutput if it exists and is a different reference
+      // (defensive programming - ensures caller's reference is also zeroed)
+      if (options?.prfOutput && options.prfOutput !== prfOutput) {
+        new Uint8Array(options.prfOutput).fill(0);
       }
     }
 
