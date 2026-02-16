@@ -98,7 +98,7 @@
                   {{ $t('card.paymentReceived') }} <br />
                   {{ $t('card.waitingForOrderProcessing') }} <br />
                 </template>
-                <template v-else-if="isPaymentInProgress">
+                <template v-else-if="!isPaymentStatusCompleted && isPaymentInProgress">
                   {{ $t('card.paymentInProgress') }} <br />
                   {{ $t('card.pleaseWaitForConfirmation') }}
                 </template>
@@ -108,7 +108,7 @@
                 </template>
               </template>
               <template v-else>
-                {{ $t('card.cardOrderProcessing') }} <br />
+                {{ $t('card.paymentReceived') }} <br />
               </template>
             </p>
           </template>
@@ -251,7 +251,8 @@ const currentOrderNeedsPayment = computed(() => {
     currentCard?.value.cardData?.id &&
     currentCard?.value.cardData?.order_uuid &&
     !currentCard?.value.cardData?.card_uuid &&
-    currentCard?.value.cardData?.own_type === 'physical'
+    currentCard?.value.cardData?.own_type === 'physical' &&
+      currentCard?.value.cardData?.delivery?.payment_status !== 'completed'
   );
 });
 </script>

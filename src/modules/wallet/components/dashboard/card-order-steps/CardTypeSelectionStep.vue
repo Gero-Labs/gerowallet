@@ -51,12 +51,15 @@
       <!-- Physical + Virtual Card Option -->
       <div
         class="card-option"
-        :class="{ selected: selectedType === 'physical', disabled: hasPhysicalCard }"
-        @click="!hasPhysicalCard && selectType('physical')"
-        @keydown.enter="!hasPhysicalCard && selectType('physical')"
-        @keydown.space.prevent="!hasPhysicalCard && selectType('physical')"
+        :class="{
+          selected: selectedType === 'physical' && !hasPhysicalCard && isPhysicalCardOrderingEnabled,
+          disabled: hasPhysicalCard || !isPhysicalCardOrderingEnabled
+        }"
+        @click="!hasPhysicalCard && isPhysicalCardOrderingEnabled && selectType('physical')"
+        @keydown.enter="!hasPhysicalCard && isPhysicalCardOrderingEnabled && selectType('physical')"
+        @keydown.space.prevent="!hasPhysicalCard && isPhysicalCardOrderingEnabled && selectType('physical')"
         role="button"
-        :tabindex="hasPhysicalCard ? -1 : 0"
+        :tabindex="hasPhysicalCard || !isPhysicalCardOrderingEnabled ? -1 : 0"
       >
         <v-list-item class="px-0">
           <v-list-item-icon class="option-icon mr-3 my-0">
@@ -93,12 +96,26 @@
           <v-icon v-if="selectedType === 'physical'" color="#00c7f3">mdi-check-circle</v-icon>
           <v-icon v-else color="#373a41">mdi-circle-outline</v-icon>
         </div>
+
+        <!-- Coming Soon Overlay (when feature flag is disabled) -->
+        <div v-if="!isPhysicalCardOrderingEnabled" class="coming-soon-overlay">
+          <div class="coming-soon-content">
+            <div class="coming-soon-badge">
+              <div class="badge-shimmer"></div>
+              <h3 class="coming-soon-title">{{ $t('wallet.comingSoon') }}</h3>
+              <p class="coming-soon-message">{{ $t('wallet.stayTuned') }}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import featureFlagsStore from '@/stores/featureFlagsStore';
+
 interface Props {
   selectedType?: 'virtual' | 'physical' | null;
   hasVirtualCard?: boolean;
@@ -115,6 +132,11 @@ withDefaults(defineProps<Props>(), {
   hasPhysicalCard: false,
 });
 const emit = defineEmits<Emits>();
+
+// Feature flag check for physical card ordering
+const isPhysicalCardOrderingEnabled = computed(() =>
+  featureFlagsStore.isPhysicalCardOrderingEnabled()
+);
 
 const selectType = (type: 'virtual' | 'physical') => {
   emit('select', type);
@@ -147,7 +169,7 @@ const selectType = (type: 'virtual' | 'physical') => {
   cursor: pointer;
   transition: all 0.3s ease;
 
-  &:hover {
+  &:not(.disabled):hover {
     border-color: rgba($primary-cyan, 0.5);
     background: rgba($primary-cyan, 0.05);
   }
@@ -157,19 +179,18 @@ const selectType = (type: 'virtual' | 'physical') => {
     background: rgba($primary-cyan, 0.1);
   }
 
-  &:focus {
+  &:not(.disabled):focus {
     outline: none;
     border-color: $primary-cyan;
   }
 
   &.disabled {
-    opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
 
-    &:hover {
-      border-color: $border-primary;
-      background: $background-card;
+    // Apply opacity only to card content (not the overlay)
+    > *:not(.coming-soon-overlay) {
+      opacity: 0.5;
     }
   }
 }
@@ -267,6 +288,133 @@ const selectType = (type: 'virtual' | 'physical') => {
   right: $spacing-lg;
 }
 
+// Coming Soon Overlay
+.coming-soon-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(12, 14, 18, 0.5);
+  border-radius: $border-radius-lg;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  opacity: 1 !important;
+}
+
+.coming-soon-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: $spacing-lg;
+}
+
+.coming-soon-badge {
+  position: relative;
+  background: linear-gradient(135deg, #0c0e12 0%, #1a1d24 100%);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: $border-radius-md;
+  padding: $spacing-lg $spacing-xl;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.8),
+    0 0 40px rgba(0, 199, 243, 0.5),
+    inset 0 0 40px rgba(0, 199, 243, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  opacity: 1 !important;
+  overflow: hidden;
+
+  // Animated gradient border
+  &::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(135deg, #00c7f3, #00ffd1, #00c7f3);
+    background-size: 200% 200%;
+    border-radius: $border-radius-md;
+    z-index: -1;
+    animation: gradient-rotate 3s linear infinite;
+  }
+}
+
+@keyframes gradient-rotate {
+  0% {
+    background-position: 0 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.badge-shimmer {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 199, 243, 0.1) 45%,
+    rgba(0, 255, 209, 0.2) 50%,
+    rgba(0, 199, 243, 0.1) 55%,
+    transparent 100%
+  );
+  animation: shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%) translateY(-100%) rotate(45deg);
+  }
+  100% {
+    transform: translateX(100%) translateY(100%) rotate(45deg);
+  }
+}
+
+.coming-soon-title {
+  position: relative;
+  z-index: 1;
+  font-size: 20px;
+  font-weight: $font-weight-bold;
+  margin: 0 0 $spacing-xs 0;
+  background: linear-gradient(135deg, #ffffff 0%, #00ffd1 50%, #00c7f3 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 12px rgba(0, 199, 243, 0.5));
+}
+
+.coming-soon-message {
+  position: relative;
+  z-index: 1;
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-size: $font-size-sm;
+  margin: 0;
+  line-height: $line-height-relaxed;
+  opacity: 1 !important;
+  font-weight: $font-weight-medium;
+  letter-spacing: 0.3px;
+}
+
 @media (max-width: $breakpoint-sm) {
   .card-option {
     padding: $spacing-lg;
@@ -275,6 +423,19 @@ const selectType = (type: 'virtual' | 'physical') => {
   .option-features {
     flex-direction: column;
     gap: $spacing-xs;
+  }
+
+  .coming-soon-badge {
+    padding: $spacing-md $spacing-lg;
+  }
+
+  .coming-soon-title {
+    font-size: 16px;
+    letter-spacing: 1.5px;
+  }
+
+  .coming-soon-message {
+    font-size: $font-size-xs;
   }
 }
 </style>

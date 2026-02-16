@@ -5,6 +5,7 @@ export interface FeatureFlags {
   swapEnabled: boolean;
   isGeroCardEnabled: boolean;
   isBlogEnabled: boolean;
+  isPhysicalCardOrderingEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -18,6 +19,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     swapEnabled: false,
     isGeroCardEnabled: false,
     isBlogEnabled: false,
+    isPhysicalCardOrderingEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -55,6 +57,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.swapEnabled = launchDarklyService.getFlag('isSwapEnabled', false);
     featureFlagsState.flags.isGeroCardEnabled = launchDarklyService.getFlag('isGeroCardEnabled', false);
     featureFlagsState.flags.isBlogEnabled = launchDarklyService.getFlag('isBlogEnabled', false);
+    featureFlagsState.flags.isPhysicalCardOrderingEnabled = launchDarklyService.getFlag('isPhysicalCardOrderingEnabled', false);
   },
 
   /**
@@ -69,6 +72,9 @@ export const featureFlagsStore = {
     });
     launchDarklyService.onFlagChange('isBlogEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isBlogEnabled', newValue);
+    });
+    launchDarklyService.onFlagChange('isPhysicalCardOrderingEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isPhysicalCardOrderingEnabled', newValue);
     });
   },
 
@@ -94,13 +100,21 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if Physical Card Ordering is enabled
+   */
+  isPhysicalCardOrderingEnabled(): boolean {
+    return featureFlagsState.flags.isPhysicalCardOrderingEnabled;
+  },
+
+  /**
    * Reset flags (disable all until reloaded from LaunchDarkly)
    */
   reset(): void {
     Vue.set(featureFlagsState, 'flags', {
       swapEnabled: false,
       isGeroCardEnabled: false,
-      isBlogEnabled: false
+      isBlogEnabled: false,
+      isPhysicalCardOrderingEnabled: false
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

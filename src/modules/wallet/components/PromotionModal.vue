@@ -11,7 +11,7 @@
         <!-- Zero Fees Promotion -->
         <div class="promo-banner">
           <div class="promo-text">
-            <h3 class="promo-heading">{{ t('card.enjoyZeroFeesUntilDate') }}</h3>
+            <h3 class="promo-heading">{{ t('card.enjoyZeroFeesUntil') }}</h3>
             <p class="promo-subheading">{{ t('card.getStartedFree') }}</p>
           </div>
         </div>
