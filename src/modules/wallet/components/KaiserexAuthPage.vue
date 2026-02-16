@@ -48,7 +48,7 @@
                   tabindex="0"
                   aria-label="View promotional details and fee information"
                 >
-                  <span class="clickable-text">{{ t('card.enjoyZeroFeesSixMonths') }}</span>
+                  <span class="clickable-text">{{ t('card.enjoyZeroFeesUntil') }}</span>
                   <v-icon small class="info-icon">mdi-information-outline</v-icon>
                 </p>
                 <div class="option-features promo-list">
@@ -301,9 +301,10 @@ const handleLogin = async () => {
         kaiserExLoading.value = false;
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle window closed gracefully (don't log as error)
-    if (error?.message === 'Authentication window was closed by user') {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage === 'Authentication window was closed by user') {
       console.log('ℹ️ Authentication cancelled by user');
     } else {
       console.error('❌ Failed to receive KaiserEx token:', error);
