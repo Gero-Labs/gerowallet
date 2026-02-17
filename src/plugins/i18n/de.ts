@@ -833,6 +833,8 @@ export default {
   'emptyState.noPortfolioData': 'Keine Portfoliodaten',
   'emptyState.noTokens': 'Keine Tokens',
   'emptyState.noTransactions': 'Keine Transaktionen',
+  'emptyState.noMediaNFTs': 'Keine Medien-NFTs',
+  'emptyState.noMediaNFTsDescription': 'Sie haben keine Musik- oder Video-NFTs in Ihrem Wallet',
   'emptyState.portfolioDescription': 'Fügen Sie {currency} hinzu, um Ihr Portfolio-Diagramm zu sehen',
   'emptyState.receiveCurrency': '{currency} empfangen',
   'emptyState.receiveTokens': 'Tokens empfangen',
