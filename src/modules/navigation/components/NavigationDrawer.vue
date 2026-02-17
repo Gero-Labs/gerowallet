@@ -311,8 +311,8 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
     // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
-    { header: t('navigation.media'), enabled: musicPlaylist.value?.length > 0 },
-    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: musicPlaylist.value?.length > 0 },
+    { header: t('navigation.media'), enabled: true },
+    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: true },
     // Uncomment to add more items:
     // { header: 'Tools' },
     // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
