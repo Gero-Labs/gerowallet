@@ -319,7 +319,7 @@ const limitSplit = ref<number>(1);
 
 const swapButtonText = computed(() => {
   if (isInsufficientBalance.value) {
-    return t('swap.insufficientBalance');
+    return t('errors.insufficientBalance');
   } else if (swapType.value === 'limit') {
     if (limitType.value === 'one' || (limitType.value === 'split' && limitSplit.value === 1)) {
       return t('swap.placeOrder');

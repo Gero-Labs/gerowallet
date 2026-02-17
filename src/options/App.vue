@@ -38,18 +38,16 @@ import { ref, computed, toRefs, watch, getCurrentInstance, onMounted } from 'vue
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
-import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 
 const { loading, isRestoring, text } = toRefs(loadingState);
-const { config } = toRefs(walletStore);
 const geroConfig = toRefs(geroStore).config;
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy;
 
 const isLoading = computed(() => {
   return loading.value || isRestoring.value;
@@ -195,7 +193,9 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
 .voerro-notifications-container {
   z-index: 99999 !important;
   border-radius: .3rem;
-  filter: opacity(90%);
+  width: max-content !important;
+  max-width: min(480px, calc(100vw - 40px)) !important;
+  min-width: unset !important;
 }
 
 .v-select.v-text-field input {
