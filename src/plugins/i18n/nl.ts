@@ -760,6 +760,8 @@ export default {
   'emptyState.noPortfolioData': 'No Portfolio Data',
   'emptyState.noTokens': 'No Tokens',
   'emptyState.noTransactions': 'No Transactions',
+  'emptyState.noMediaNFTs': 'No Media NFTs',
+  'emptyState.noMediaNFTsDescription': "You don't have any music or video NFTs in your wallet",
   'emptyState.portfolioDescription': 'Add {currency} to see your portfolio chart',
   'emptyState.receiveCurrency': 'Receive {currency}',
   'emptyState.receiveTokens': 'Receive Tokens',
