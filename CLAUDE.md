@@ -844,7 +844,7 @@ const hasSpendingPassword = !!wallet?.prfSpendingPasswordHash;
   <!-- Script setup -->
   import { useTranslation } from '@/shared/composables/useTranslation';
   const { t } = useTranslation();
-  const message = computed(() => t('swap.insufficientBalance'));
+  const message = computed(() => t('errors.insufficientBalance'));
   ```
 - **Translation files**: Located in `src/locales/` (e.g., `en.json`, `es.json`)
 - **Adding new translations**: Add keys to all language files to maintain consistency

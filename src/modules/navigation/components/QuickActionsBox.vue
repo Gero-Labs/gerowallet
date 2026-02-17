@@ -11,7 +11,7 @@
           class="expandable-button buy-button"
           color="#FFF59E1A"
           height="28"
-          @click="currentDialog = dialogs.BUY"
+          @click="openDialog(dialogs.BUY)"
           :style="getButtonGlowStyle('buy')"
         >
           <v-avatar tile size="14">
@@ -31,7 +31,7 @@
           class="expandable-button send-button"
           color="#00DFF31A"
           height="28"
-          @click="currentDialog = dialogs.SEND"
+          @click="openDialog(dialogs.SEND)"
           :style="getButtonGlowStyle('send')"
         >
           <v-avatar tile size="14">
@@ -52,7 +52,7 @@
           class="expandable-button receive-button"
           color="#75E0A71A"
           height="28"
-          @click="currentDialog = dialogs.RECEIVE"
+          @click="openDialog(dialogs.RECEIVE)"
           :style="getButtonGlowStyle('receive')"
         >
           <v-avatar tile size="14">
@@ -72,7 +72,7 @@
           class="expandable-button swap-button"
           color="#FDA29B1A"
           height="28"
-          @click="currentDialog = dialogs.SWAP"
+          @click="openDialog(dialogs.SWAP)"
           :style="getButtonGlowStyle('swap')"
           :disabled="!isSwapEnabledByFeatureFlag"
           :loading="loadingSwap"
@@ -97,7 +97,7 @@
           class="expandable-button perpetuals-button"
           color="#B794F41A"
           height="28"
-          @click="currentDialog = dialogs.PERPETUALS"
+          @click="openDialog(dialogs.PERPETUALS)"
           :style="getButtonGlowStyle('perpetuals')"
           :disabled="priceStore.connectionStatus !== 'connected'"
           :loading="priceStore.connectionStatus === 'connecting'"
@@ -117,15 +117,15 @@
         </v-btn>
       </div>
     </div>
-    <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
+    <ReceiveDialog :isOpen="quickActionState.activeDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
     <SwapDialog
       v-if="isSwapSupportedByNetwork"
-      :isOpen="currentDialog === dialogs.SWAP"
+      :isOpen="quickActionState.activeDialog === dialogs.SWAP"
       @close="closeDialog"
     ></SwapDialog>
-    <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
-    <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
-    <PerpetualsDialog v-if="!isPerpetualsDisabled" :isOpen="currentDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
+    <BuyDialog :isOpen="!isBuyDisabled && quickActionState.activeDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
+    <SendDialog :isOpen="quickActionState.activeDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
+    <PerpetualsDialog v-if="!isPerpetualsDisabled" :isOpen="quickActionState.activeDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
   </div>
 </template>
 <script setup lang="ts">
@@ -140,18 +140,20 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { priceStore } from '@/stores/priceStore';
+import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 
 const { loggedWallet } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any
 
-const currentDialog = ref(null);
-const dialogs = ref<any>({
+const { state: quickActionState, openDialog, closeDialog } = useQuickActionDialogs();
+
+const dialogs = {
   SEND: 'SEND',
   RECEIVE: 'RECEIVE',
   SWAP: 'SWAP',
   BUY: 'BUY',
   PERPETUALS: 'PERPETUALS',
-});
+};
 
 const mousePosition = ref<{x: number, y: number} | null>(null);
 const buttonGlows = ref<Record<string, any>>({});
@@ -196,9 +198,6 @@ const isPerpetualsDisabled = computed(() => {
   return true;
 })
 
-const closeDialog = () => {
-  currentDialog.value = null;
-}
 
 const handleMouseMove = (event: MouseEvent) => {
   const container = event.currentTarget as HTMLElement;

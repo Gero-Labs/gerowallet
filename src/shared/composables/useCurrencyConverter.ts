@@ -8,7 +8,6 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const rateLoaded = ref(false);
 const usdToAdaRate = ref<number>(1);
-const adaToEurRate = ref<number>(1);
 
 export function useCurrencyConverter() {
   const api = new Api(walletStore.loggedWallet, walletStore.loggedWallet.provider);

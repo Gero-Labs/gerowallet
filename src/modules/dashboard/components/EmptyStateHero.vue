@@ -157,35 +157,6 @@
           </div>
         </v-col>
 
-        <!-- Card 3: Learn -->
-<!--        <v-col cols="12" sm="6" md="4" lg="2">-->
-<!--          <div class="feature-card-container">-->
-<!--            <div-->
-<!--              class="feature-card-background card-3"-->
-<!--              :style="{-->
-<!--                backgroundImage: `url(${featureBackgroundImage})`,-->
-<!--                backgroundSize: cardBackgroundSize,-->
-<!--                backgroundPosition: isApex ? '33% center' : '40% center',-->
-<!--                backgroundRepeat: 'no-repeat'-->
-<!--              }"-->
-<!--            ></div>-->
-<!--            <div class="feature-card-glass" @click="$emit('open-learn')">-->
-<!--              <div class="feature-card-content">-->
-<!--                <div class="feature-card-main">-->
-<!--                  <v-icon size="48" :color="primaryColor" class="mb-3">-->
-<!--                    mdi-school-->
-<!--                  </v-icon>-->
-<!--                  <h3 class="feature-title">Learn</h3>-->
-<!--                  <p class="feature-description">Discover {{ blockchain }} ecosystem</p>-->
-<!--                </div>-->
-<!--                <v-chip small :color="primaryColor" text-color="white">-->
-<!--                  Learn-->
-<!--                </v-chip>-->
-<!--              </div>-->
-<!--            </div>-->
-<!--          </div>-->
-<!--        </v-col>-->
-
         <!-- Card 4: Gero Card (only for Cardano) -->
         <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveGeroCardSupport(loggedWallet?.chain, loggedWallet?.network)">
           <div class="feature-card-container">
@@ -298,15 +269,16 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, ref, getCurrentInstance, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import { Blockchain, Network } from '@/models/types';
+import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
-
 
 const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();
+const proxy = instance?.proxy;
+const router = proxy?.$router;
 
 interface Props {
   isNewUser?: boolean;
@@ -319,7 +291,7 @@ const props = withDefaults(defineProps<Props>(), {
   showTutorial: true
 });
 
-const emit = defineEmits([
+defineEmits([
   'buy-crypto',
   'show-receive',
   'open-learn',
@@ -402,21 +374,18 @@ const copyToClipboard = async () => {
 
 // Navigation functions
 const navigateToCard = () => {
-  const router = instance?.proxy?.$router;
   if (router) {
     router.push('/card');
   }
 };
 
 const navigateToStaking = () => {
-  const router = (instance?.proxy as any)?.$router;
   if (router) {
     router.push('/staking');
   }
 };
 
 const navigateToCashback = () => {
-  const router = (instance?.proxy as any)?.$router;
   if (router) {
     router.push('/cashback');
   }
@@ -627,6 +596,10 @@ const navigateToCashback = () => {
   bottom: 0;
   border-radius: 12px;
   z-index: 1;
+}
+
+.feature-card-glass ::v-deep .v-chip {
+  cursor: pointer !important;
 }
 
 .feature-card-glass {

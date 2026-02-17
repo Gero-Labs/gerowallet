@@ -1562,7 +1562,7 @@ export default {
   'swap.wingrider': 'WINGRIDER',
   'swap.youPay': 'You Pay',
   'swap.youReceive': 'You Receive',
-  'swap.insufficientBalance': 'Insufficient balance',
+  'errors.insufficientBalance': 'Insufficient balance',
   'swap.placeOrder': 'Place Order',
   'transactions.activity': 'Activity',
   'transactions.allTransactions': 'All Transactions',

@@ -165,32 +165,13 @@
         <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
           <SwapWidget class="fill-height" />
         </v-col>
-        <!-- <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <CashbackCard></CashbackCard>
-      </v-col> -->
       </v-row>
-
-      <!-- KaiserEx Token Reception -->
-      <!--      <v-row no-gutters>-->
-      <!--        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">-->
-      <!--          <v-card outlined class="liquid-glass">-->
-      <!--            <v-card-title>KaiserEx Token Reception</v-card-title>-->
-      <!--            <v-card-text>-->
-      <!--              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">-->
-      <!--                Receive Token from KaiserEx-->
-      <!--              </v-btn>-->
-      <!--              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">-->
-      <!--                {{ kaiserExMessage.text }}-->
-      <!--              </v-alert>-->
-      <!--            </v-card-text>-->
-      <!--          </v-card>-->
-      <!--        </v-col>-->
-      <!--      </v-row>-->
     </template>
   </v-layout>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
@@ -199,8 +180,6 @@ import { Blockchain, Network } from '@/models/types';
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
-// import CashbackCard from '@/modules/dashboard/components/CashbackCard.vue';
-// import SwapCard from '@/modules/dashboard/components/SwapCard.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
@@ -209,15 +188,12 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
-
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-// Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
 import { getBalance } from '@/chrome/serialization';
-// import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Translation composable
 const { t } = useTranslation();
@@ -225,17 +201,18 @@ const { t } = useTranslation();
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
 
+const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
+
 // Store refs
 const { loggedWallet, transactions, account, utxos, collateral } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
 
+const proxy = instance?.proxy;
+
 // Load exchange rate immediately on component mount
 loadExchangeRate();
-
-// const kaiserExLoading = ref(false);
-// const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
 
 // Carousel state
 const currentCarouselIndex = ref(0);
@@ -278,24 +255,6 @@ const apexCarouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.apexBgDashboard,
     action: 'showApexWelcome',
   },
-  // {
-  //   id: 'apex-wallet',
-  //   title: 'Apex Wallet',
-  //   subtitle: 'Secure decentralized storage',
-  //   logo: assets.walletGeroApex,
-  //   logoAlt: 'Apex Wallet Logo',
-  //   backgroundImage: assets.apexImage,
-  //   action: 'showApexWallet',
-  // },
-  // {
-  //   id: 'apex-features',
-  //   title: 'Apex Features',
-  //   subtitle: 'Explore advanced capabilities',
-  //   logo: assets.apexSvg,
-  //   logoAlt: 'Apex Features Logo',
-  //   backgroundImage: assets.apexBgDashboard,
-  //   action: 'showApexFeatures',
-  // },
 ]);
 
 const isStakingEnabled = computed(() => {
@@ -535,7 +494,6 @@ const showUpdateInfo = () => {
 };
 
 const showDebitCardInfo = () => {
-  const proxy = instance?.proxy as any;
   if (proxy && proxy.$router && proxy.$route.path !== '/card') {
     proxy.$router.push('/card');
   }
@@ -543,7 +501,6 @@ const showDebitCardInfo = () => {
 
 const navigateToCashback = () => {
   // Only navigate if not already on the cashback page
-  const proxy = instance?.proxy as any;
   if (proxy && proxy.$router && proxy.$route.path !== '/cashback') {
     proxy.$router.push('/cashback');
   }
@@ -561,39 +518,13 @@ const showApexFeatures = () => {
   // Add your Apex features logic here
 };
 
-// const handleReceiveKaiserExToken = async () => {
-//   kaiserExLoading.value = true;
-//   kaiserExMessage.value = null;
-//
-//   try {
-//     await receiveKaiserExToken(tokenData => {
-//       kaiserExMessage.value = {
-//         type: 'success',
-//         text: `Token received successfully! Token: ${tokenData.access_token}`,
-//       };
-//       kaiserExLoading.value = false;
-//     });
-//   } catch (error) {
-//     kaiserExMessage.value = {
-//       type: 'error',
-//       text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-//     };
-//     kaiserExLoading.value = false;
-//   } finally {
-//     // Always ensure loading state is cleared, even if popup was manually closed
-//     setTimeout(() => {
-//       kaiserExLoading.value = false;
-//     }, 1000);
-//   }
-// };
-
 // Empty state handlers
 const handleBuyCrypto = () => {
-  instance?.proxy?.$emit('open-buy-dialog');
+  openBuyDialog();
 };
 
 const handleShowReceive = () => {
-  instance?.proxy?.$emit('open-receive-dialog');
+  openReceiveDialog();
 };
 
 const handleOpenLearn = () => {

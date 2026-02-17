@@ -1669,7 +1669,7 @@ export default {
   'swap.fee': 'Gebühr',
   'swap.from': 'Von',
   'swap.genius': 'GENIUS',
-  'swap.insufficientBalance': 'Unzureichendes Guthaben',
+  'errors.insufficientBalance': 'Unzureichendes Guthaben',
   'swap.learnMore': 'Mehr erfahren',
   'swap.limit': 'Limit',
   'swap.minReceive': 'Min. erhalten',
