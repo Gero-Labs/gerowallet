@@ -188,6 +188,8 @@ export default {
   'card.kycRegisteredDesc': 'KYC process not started yet',
   'card.kycVerificationStarted': 'Verification Started',
   'card.kycVerificationStartedDesc': 'KYC in progress, pending approval',
+  'card.kycApprovalInProgress': 'KYC Approval in Progress',
+  'card.kycApprovalInProgressDesc': 'Your KYC verification has been submitted and is currently being reviewed. You\'ll be notified once it\'s approved.',
   'card.learnMoreKaiserex': 'Learn more about Kaiserex',
   'card.licensedRegulated': 'Licensed & Regulated Financial Services',
   'card.licensedRegulatedDesc': 'Registered with Lithuania\'s Financial Crime Investigation Service as a Virtual Currency Exchange and Depository Wallet Operator',

@@ -204,6 +204,8 @@ export default {
   'card.kycRegisteredDesc': 'KYC-Prozess noch nicht gestartet',
   'card.kycVerificationStarted': 'Verifizierung gestartet',
   'card.kycVerificationStartedDesc': 'KYC läuft, Genehmigung ausstehend',
+  'card.kycApprovalInProgress': 'KYC-Genehmigung läuft',
+  'card.kycApprovalInProgressDesc': 'Ihre KYC-Verifizierung wurde eingereicht und wird derzeit überprüft. Sie werden benachrichtigt, sobald sie genehmigt wurde.',
   'card.last24Hours': '24 Std.',
   'card.last30Days': '30 Tage',
   'card.last7Days': '7 Tage',

@@ -28,11 +28,11 @@
         <!-- Main Content -->
         <div class="status-main">
           <h2 class="status-title">
-            {{ isCardRejected ? $t('card.cardRejected') : (kycStatus === 'verified' ? $t('card.verification') : $t('card.reviewingApplication')) }}
+            {{ isCardRejected ? $t('card.cardRejected') : (kycStatus === 'verified' ? $t('card.kycApprovalInProgress') : $t('card.reviewingApplication')) }}
           </h2>
 
           <p class="status-description">
-            {{ isCardRejected ? $t('card.cardRejectedMessage') : (kycStatus === 'verified' ? $t('card.verificationDesc') : $t('card.reviewingApplicationDesc')) }}
+            {{ isCardRejected ? $t('card.cardRejectedMessage') : (kycStatus === 'verified' ? $t('card.kycApprovalInProgressDesc') : $t('card.reviewingApplicationDesc')) }}
           </p>
         </div>
 

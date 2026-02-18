@@ -18,7 +18,7 @@
           :style="cardTiltStyle"
         >
           <div class="card-shine" :style="cardShineStyle"></div>
-          <div v-if="card.cardData.own_type" class="pl-2 primary--text" style="text-transform: capitalize">{{ card.cardData.own_type }} Card</div>
+          <div v-if="card.cardData.own_type" class="card-type-badge">{{ card.cardData.own_type }} Card</div>
           <p class="card-number">
             {{ getFormattedCardNumber(card) }}
           </p>
@@ -383,6 +383,17 @@ const handleCardMouseLeave = () => {
   opacity: 0;
   transition: opacity 0.1s ease-out;
   z-index: 1;
+}
+
+.card-type-badge {
+  position: relative;
+  z-index: 2;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+  color: white;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .card-number {
