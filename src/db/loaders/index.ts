@@ -9,6 +9,7 @@ import {
   ConnectedDappsLoader,
   TransactionsLoader,
 } from './walletLoader';
+import { StoredTransaction } from '@/models/transaction.types';
 
 /**
  * Factory for creating and managing all wallet loaders
@@ -18,16 +19,16 @@ export class LoaderFactory {
 
   constructor(
     private walletContext: {
-      id: any;
-      chain: any;
-      network: any;
+      id: number;
+      chain: string;
+      network: string;
       baseAddress: string;
       stakeAddress: string;
       isEnterpriseAddress: () => boolean;
       networkId: () => number;
       getDb: () => Promise<Dexie>;
       getBlockchainDb: () => Promise<Dexie>;
-      setUtxosAndAddresses: (transactions: any[]) => Promise<void>;
+      setUtxosAndAddresses: (transactions: StoredTransaction[]) => Promise<void>;
       triggerResync?: () => Promise<void>;
     }
   ) {}

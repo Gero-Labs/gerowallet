@@ -4,6 +4,7 @@ import WalletStore from '@/stores/walletStore';
 import { toStakeAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
 import Loading from '@/stores/loading';
+import { StoredTransaction } from '@/models/transaction.types';
 
 /**
  * Loader for wallet account information
@@ -11,7 +12,7 @@ import Loading from '@/stores/loading';
 export class AccountLoader extends BaseLoader {
   constructor(
     private getDb: () => Promise<Dexie>,
-    private walletId: any
+    private walletId: number
   ) {
     super('account');
   }
@@ -133,11 +134,11 @@ export class TransactionsLoader extends BaseLoader {
     private walletContext: {
       baseAddress: string;
       stakeAddress: string;
-      chain: any;
-      network: any;
+      chain: string;
+      network: string;
       isEnterpriseAddress: () => boolean;
       networkId: () => number;
-      setUtxosAndAddresses: (transactions: any[]) => Promise<void>;
+      setUtxosAndAddresses: (transactions: StoredTransaction[]) => Promise<void>;
       triggerResync?: () => Promise<void>;
     }
   ) {
@@ -149,7 +150,7 @@ export class TransactionsLoader extends BaseLoader {
 
     return this.createSubscription(
       () => walletDB.table('transactions').toArray(),
-      async (newTransactions: any[]) => {
+      async (newTransactions: StoredTransaction[]) => {
         Loading.setLoadingTxs(true);
         console.log('new TXs', newTransactions)
         try {
@@ -158,7 +159,7 @@ export class TransactionsLoader extends BaseLoader {
             return; // Exit early as a resync is in progress
           }
 
-          let transactions: any = [];
+          let transactions: StoredTransaction[] = [];
           if (newTransactions?.length) {
             const isEnterpriseAddress = this.walletContext.isEnterpriseAddress();
             const currentAddress = isEnterpriseAddress ? this.walletContext.baseAddress : '';

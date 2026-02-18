@@ -58,7 +58,7 @@
                   <div class="debit-card-glow"></div>
                 </div>
                 <div class="debit-card-text cashback-text">
-                  <v-card-title class="pt-0 pb-0 white--text text-center debit-card-title cashback-title" style="margin-bottom: 0;">{{ item.title }}</v-card-title>
+                  <v-card-title class="pa-0 white--text text-center debit-card-title cashback-title" style="margin-bottom: 0; word-break: break-word;">{{ item.title }}</v-card-title>
                   <div class="debit-card-description white--text text-center mb-2 cashback-subtitle">
                     {{ item.subtitle.split('\n')[0] }}
                   </div>

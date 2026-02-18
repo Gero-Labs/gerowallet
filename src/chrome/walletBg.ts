@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { type StoredTransaction, isCardanoTx } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
@@ -76,20 +77,20 @@ export class WalletBg {
   syncService: SyncService;
   loaderFactory: LoaderFactory;
 
-  id: any;
-  name: any;
-  icon: any;
-  type: any;
-  theme: any;
-  order: any;
-  chain: any;
-  network: any;
+  id: number;
+  name: string;
+  icon: string;
+  type: string;
+  theme: string;
+  order: number;
+  chain: string;
+  network: string;
   publicKey: string;
   provider: Provider;
   btSupported: boolean;
   xfp?: string;
 
-  encryptedPrivateKey: any;
+  encryptedPrivateKey: string;
   passwordLastUpdate: Date;
   userId?: string;
   encryptedMnemonic?: string;
@@ -130,7 +131,7 @@ export class WalletBg {
     if (wallet.type === WalletType.Google) {
       this.baseAddress = googleBaseAddress
       this.stakeAddress = toStakeAddress(googleBaseAddress, networks.resolveNetworkId(wallet.chain, wallet.network) as Cardano.NetworkId)
-      console.log('wallet', wallet)
+      console.log('wallet', this)
     } else {
       this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
       this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
@@ -203,7 +204,7 @@ export class WalletBg {
     return epoch;
   }
 
-  async setUtxosAndAddresses(transactions: any[]) {
+  async setUtxosAndAddresses(transactions: StoredTransaction[]) {
     debugLog('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
     let stakeAddress: string = '';
     let address: string = '';
@@ -221,7 +222,7 @@ export class WalletBg {
     const uniqueAssets: Set<string> = new Set<string>();
 
     for (const transaction of transactions) {
-      if (transaction.body) {
+      if (isCardanoTx(transaction)) {
         transaction.body.outputs.forEach((out, idx) => {
           let outAddress = out.address;
           const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
@@ -290,9 +291,9 @@ export class WalletBg {
                 {
                   address: out.address,
                   value: toValueCore(out.amount),
-                  datumHash: out.datum_hash ? Hash32ByteBase16.fromHexBlob(HexBlob(out.datum_hash)) : null,
-                  datum: out.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(out.inline_datum.bytes)).toCore() : null,
-                  scriptReference: out.reference_script ? Serialization.Script.fromCbor(HexBlob(out.reference_script.bytes)).toCore() : null
+                  datumHash: out.data_hash ? Hash32ByteBase16.fromHexBlob(HexBlob(out.data_hash)) : null,
+                  datum: out.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(out.inline_datum)).toCore() : null,
+                  scriptReference: null // only reference_script_hash is available from sync, not full script bytes
                 },
               ]);
             }
@@ -310,8 +311,21 @@ export class WalletBg {
       }
     }
 
+    const currentSlot = NetworkStore.getCurrentSlot() ?? 0;
+
     for (const transaction of transactions) {
-      if (transaction.body) {
+      if (isCardanoTx(transaction)) {
+        const invalidHereafter = transaction.body.validityInterval?.invalidHereafter;
+        const isPendingExpired =
+          transaction.pending &&
+          invalidHereafter != null &&
+          currentSlot > Number(invalidHereafter);
+
+        if (isPendingExpired) {
+          debugLog(`⏰ Skipping expired pending tx ${transaction.id}: slot ${currentSlot} > invalidHereafter ${invalidHereafter}`);
+          continue;
+        }
+
         for (const inp of transaction.body.inputs) {
           const utxoKey = `${inp.txId}#${inp.index}`;
           utxos.delete(utxoKey);
