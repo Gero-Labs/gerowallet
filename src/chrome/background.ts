@@ -423,16 +423,25 @@ app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
 });
 
 app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
-  const whitelisted = await isWhitelisted(request.origin);
-  if (whitelisted) {
+  try {
+    const whitelisted = await isWhitelisted(request.origin);
+    if (whitelisted) {
+      sendResponse({
+        data: whitelisted,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        error: APIError.Refused,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (e) {
+    console.error('[isWhitelisted] handler error:', e);
     sendResponse({
-      data: whitelisted,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } else {
-    sendResponse({
-      error: APIError.Refused,
+      error: APIError.InternalError,
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -449,7 +458,7 @@ let bringDomainsCache: { data: string[] | null; timestamp: number } = { data: nu
 const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
 async function isWhitelisted(origin: string): Promise<boolean> {
-  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps;
+  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps || [];
   if (whitelisted.find(el => origin.includes(el.domain))) return true;
 
   // Only check bringDomains for Cardano Mainnet
