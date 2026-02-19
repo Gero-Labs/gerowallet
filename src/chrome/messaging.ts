@@ -210,13 +210,21 @@ class BackgroundController {
   listen = () => {
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener((request, sender: chrome.runtime.MessageSender, sendResponse) => {
-        request.send = sender
-        if (request.sender === SENDER.webpage) {
-          this.methodList[request.method](request, sendResponse);
-        } else if (request.sender === SENDER.options) {
-          this.optionsMethodList[request.method](request, sendResponse);
+        request.send = sender;
+        try {
+          if (request.sender === SENDER.webpage && this.methodList[request.method]) {
+            this.methodList[request.method](request, sendResponse);
+            return true;
+          } else if (request.sender === SENDER.options && this.optionsMethodList[request.method]) {
+            this.optionsMethodList[request.method](request, sendResponse);
+            return true;
+          }
+        } catch (error) {
+          console.error('Error dispatching message handler:', error);
+          sendResponse({ error: 'Internal error' });
         }
-        return true;
+        // Message not handled by this listener - don't keep the channel open
+        return false;
       });
     }
   };
