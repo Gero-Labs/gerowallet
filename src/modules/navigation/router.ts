@@ -18,6 +18,7 @@ const SignTx = () => import('@/popup/modules/views/SignTx.vue');
 const Cashback = () => import("@/modules/cashback/Cashback.vue");
 const MediaPlayer = () => import("@/modules/media-player/MediaPlayer.vue");
 const Swap = () => import('@/modules/swap/Swap.vue');
+const Market = () => import('@/modules/market/Market.vue');
 const DevTools = () => import('@/modules/devTools/DevTools.vue');
 const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
@@ -51,6 +52,15 @@ const routes = [
   {
     path: '/market',
     name: 'market',
+    component: Market,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/swap',
+    name: 'swap',
     component: Swap,
     meta: {
       layout: ContentLayout,
