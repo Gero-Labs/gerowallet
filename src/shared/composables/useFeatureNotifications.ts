@@ -43,6 +43,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   //   version: '2.6.0',
   //   path: ['navigation', 'governance']
   // },
+  // Navigation > Market page
+  {
+    id: 'navigation.market',
+    version: '2.7.0',
+    path: ['navigation', 'market']
+  },
   // Add more features here as needed
 ];
 
