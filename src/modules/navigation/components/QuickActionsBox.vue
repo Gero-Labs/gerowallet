@@ -124,7 +124,12 @@
       @close="closeDialog"
     ></SwapDialog>
     <BuyDialog :isOpen="!isBuyDisabled && quickActionState.activeDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
-    <SendDialog :isOpen="quickActionState.activeDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
+    <BitcoinSendDialog
+      v-if="isBitcoin"
+      :value="quickActionState.activeDialog === dialogs.SEND"
+      @input="val => !val && closeDialog()"
+    />
+    <SendDialog v-else :isOpen="quickActionState.activeDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
     <PerpetualsDialog v-if="!isPerpetualsDisabled" :isOpen="quickActionState.activeDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
   </div>
 </template>
@@ -133,6 +138,7 @@ import { toRefs, computed, ref, getCurrentInstance } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
+import BitcoinSendDialog from '@/modules/transactions/dialogs/BitcoinSendDialog.vue';
 import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
 import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
@@ -140,6 +146,7 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { priceStore } from '@/stores/priceStore';
+import { Blockchain } from '@/models/types';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 
 const { loggedWallet } = toRefs(walletStore);
@@ -164,6 +171,8 @@ const sendButton = ref(null);
 const receiveButton = ref(null);
 const swapButton = ref(null);
 const perpetualsButton = ref(null);
+
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 
 const isBuyDisabled = computed(() => {
   if (loggedWallet.value) {

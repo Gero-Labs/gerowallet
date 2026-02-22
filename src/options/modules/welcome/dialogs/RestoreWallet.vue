@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :title="t('welcome.restoreWallet')"
-    :subtitle="props.network.title"
+    :subtitle="localNetwork ? localNetwork.title : ''"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="dialog"
@@ -22,6 +22,27 @@
                 style="min-height: 380px"
               >
                 <v-card-text class="px-0 pb-0 justify-space-around no-gutters">
+
+                  <!-- Network Selector -->
+                  <div class="mb-3">
+                    <div class="text-caption grey--text text--lighten-1 mb-2 text-uppercase" style="letter-spacing: 0.08em;">{{ $t('common.selectNetwork') }}</div>
+                    <div class="network-chips-row">
+                      <div
+                        v-for="net in allNetworks"
+                        :key="net.blockchain + net.network"
+                        class="network-chip-item"
+                        :class="{ 'network-chip-item--selected': isNetworkSelected(net) }"
+                        @click="selectNetwork(net)"
+                      >
+                        <v-avatar size="18" class="mr-1">
+                          <v-img :src="net.icon" contain></v-img>
+                        </v-avatar>
+                        <span class="text-caption">{{ net.title }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <v-divider class="mb-3" style="border-color: rgba(255, 255, 255, 0.12);" />
+
                   <v-row no-gutters class="pb-2">
                     <strong style="align-content: center; color: white">{{ $t('welcome.chooseRecoveryPhraseLength') }}</strong>
                     <v-spacer></v-spacer>
@@ -181,11 +202,11 @@
                         <v-col cols="6" class="pl-3">
                           <div class="d-flex align-center">
                             <v-avatar size="20" class="mr-2">
-                              <v-img :src="props.network.icon" contain></v-img>
+                              <v-img :src="localNetwork ? localNetwork.icon : ''" contain></v-img>
                             </v-avatar>
                             <div>
                               <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
-                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ props.network.title }}</div>
+                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ localNetwork ? localNetwork.title : '' }}</div>
                             </div>
                           </div>
                         </v-col>
@@ -390,7 +411,7 @@ import { ref, computed, watch, onUnmounted, onMounted, getCurrentInstance, react
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
 import { Theme } from '@/models/types';
-import { NetworkInfo } from '@/utils/networks';
+import networks, { NetworkInfo } from '@/utils/networks';
 import MnemonicAutocomplete from '@/modules/welcome/components/MnemonicAutocomplete.vue';
 import SecurityMethodCard from '@/shared/components/SecurityMethodCard.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -405,7 +426,7 @@ const { t } = useTranslation();
 // Props
 interface Props {
   dialog: boolean;
-  network: NetworkInfo;
+  network?: NetworkInfo;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -428,6 +449,18 @@ const passwordFormValid = ref(false);
 const prfForm = ref(null);
 const prfFormValid = ref(false);
 
+// Network selection
+const allNetworks = networks.networks;
+const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
+
+const isNetworkSelected = (net: NetworkInfo) =>
+  localNetwork.value?.blockchain === net.blockchain && localNetwork.value?.network === net.network;
+
+const selectNetwork = (net: NetworkInfo) => {
+  localNetwork.value = net;
+  newWallet.icon = networks.resolveIconColor(net.blockchain, net.network);
+};
+
 // Reactive data
 const step = ref(1);
 const show1 = ref<boolean>(false);
@@ -436,10 +469,10 @@ const prfSupported = ref<boolean>(false);
 
 const newWallet = reactive({
   name: '',
-  icon: props.network?.blockchain?.includes('Apex') ? 'orange' : 'green',
+  icon: networks.resolveIconColor(props.network?.blockchain || networks.networks[0].blockchain, props.network?.network || networks.networks[0].network),
   password: '',
   confirmPassword: '',
-  encryptionMethod: 'password' as 'password' | 'prf',
+  encryptionMethod: 'prf' as 'password' | 'prf',
   backupMnemonic: true,
 });
 
@@ -464,7 +497,7 @@ const seedToStr = computed(() => {
 
 // Check if selected network is Apex
 const isApex = computed(() => {
-  return props.network?.blockchain?.includes('Apex');
+  return localNetwork.value?.blockchain?.includes('Apex');
 });
 
 const computedRecoverySeedPhrase = computed(() => {
@@ -650,8 +683,9 @@ const walletCreationStep3 = async () => {
             Theme.GERO,
             seedToStr.value,
             newWallet.password || 'temp-password',
-            props.network.blockchain,
-            props.network.network,
+            localNetwork.value.blockchain,
+            localNetwork.value.network,
+            undefined,  // addressType - use default based on chain
             prfOptions
           );
         } finally {
@@ -678,8 +712,9 @@ const walletCreationStep3 = async () => {
         Theme.GERO,
         seedToStr.value,
         newWallet.password,
-        props.network.blockchain,
-        props.network.network
+        localNetwork.value.blockchain,
+        localNetwork.value.network,
+        undefined  // addressType - use default based on chain
       );
     }
 
@@ -745,7 +780,7 @@ const openTerms = () => {
 const resetDialog = () => {
   Object.assign(newWallet, {
     name: '',
-    icon: 'green',
+    icon: networks.resolveIconColor(localNetwork.value?.blockchain || '', localNetwork.value?.network || ''),
     password: '',
     confirmPassword: '',
     encryptionMethod: 'password',
@@ -836,6 +871,39 @@ onUnmounted(() => {
 @media (max-width: 600px) {
   ::v-deep .v-stepper__content {
     min-height: auto;
+  }
+}
+
+// Network chip selector
+.network-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.network-chip-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  user-select: none;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &--selected {
+    border-color: var(--v-primary-base);
+    background: rgba(45, 240, 247, 0.1);
+    color: white;
+    font-weight: 500;
   }
 }
 </style>

@@ -179,7 +179,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
         tx,
         keys.value,
-        utxos.value,
+        utxos.value as Cardano.Utxo[],
         !isBT.value, // isUsb flag (inverted from isBT)
         networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network)
       );
@@ -279,7 +279,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
 
       // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
-      const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
+      const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value as Cardano.Utxo[], keys.value);
 
       // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
       keystoneType.value = signRequestResponse.ur.type;

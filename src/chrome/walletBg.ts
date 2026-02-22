@@ -7,6 +7,7 @@ import { APIError, TxSendError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
+  Blockchain,
   HARDENED,
   BIP44_SCAN_SIZE,
   ChainDerivations,
@@ -39,6 +40,7 @@ import {
   toValueCore,
 } from '@/chrome/serialization';
 import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
+import { deriveBitcoinAddress } from '@/chains/bitcoin/bitcoinKeyManager';
 import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
 import DexHunterStore from '@/stores/dexHunterStore';
@@ -85,6 +87,7 @@ export class WalletBg {
   order: number;
   chain: string;
   network: string;
+  addressType?: string;
   publicKey: string;
   provider: Provider;
   btSupported: boolean;
@@ -124,15 +127,30 @@ export class WalletBg {
     this.prfEncryptedMnemonic = wallet.prfEncryptedMnemonic;
     this.webAuthnCredentialId = wallet.webAuthnCredentialId;
     this.prfSpendingPassword = wallet.prfSpendingPassword;
+    this.addressType = wallet.addressType || 'segwit';  // Version 15+
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.btSupported = wallet.btSupported;
     this.xfp = wallet.xfp; // xfp is validated during wallet creation
     this.api = new Api(wallet, this.provider);
-    if (wallet.type === WalletType.Google) {
+
+    // Chain-specific address derivation
+    if (this.chain === Blockchain.BITCOIN) {
+      // Bitcoin address derivation (synchronous)
+      this.baseAddress = deriveBitcoinAddress(
+        this.publicKey,
+        this.network,
+        this.addressType,
+        0,  // External chain (receive addresses)
+        0   // Address index 0
+      );
+      this.stakeAddress = '';  // Bitcoin has no staking address
+      console.log('✅ Bitcoin address initialized:', this.baseAddress);
+    } else if (wallet.type === WalletType.Google) {
+      // Google wallet (Cardano)
       this.baseAddress = googleBaseAddress
       this.stakeAddress = toStakeAddress(googleBaseAddress, networks.resolveNetworkId(wallet.chain, wallet.network) as Cardano.NetworkId)
-      console.log('wallet', this)
     } else {
+      // Normal Cardano wallet
       this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
       this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
     }
@@ -206,6 +224,13 @@ export class WalletBg {
 
   async setUtxosAndAddresses(transactions: StoredTransaction[]) {
     debugLog('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
+
+    // Bitcoin wallets don't process Cardano transactions (Phase 1)
+    if (this.chain === Blockchain.BITCOIN) {
+      debugLog('⏭️ Skipping Cardano transaction processing for Bitcoin wallet');
+      return;
+    }
+
     let stakeAddress: string = '';
     let address: string = '';
     if (this.isEnterpriseAddress()) {
@@ -667,7 +692,7 @@ export class WalletBg {
         const txsTable = db.table('transactions');
         if (txsTable) {
           // Use centralized conversion logic from converter.ts
-          const convertedTxs = convertTransactionsForStorage(txs, WalletStore.state.utxos);
+          const convertedTxs = convertTransactionsForStorage(txs, WalletStore.state.utxos as Cardano.Utxo[]);
 
           // Get existing transactions by their IDs
           const txIds = convertedTxs.map(tx => tx.id);
@@ -974,6 +999,265 @@ export class WalletBg {
     await this.setLastSyncInfo(tip);
   }
 
+  /**
+   * Fetch Bitcoin UTXOs from the Bitcoin API
+   * @returns Promise<IUnifiedUtxo[]> Array of unified UTXOs
+   */
+  async fetchBitcoinUtxos(): Promise<any[]> {
+    const { BitcoinApi } = await import('@/api/bitcoin-api');
+    const { parseBitcoinUtxos } = await import('@/chains/bitcoin/bitcoinUtxoManager');
+
+    const bitcoinApi = new BitcoinApi({ chain: this.chain, network: this.network }, this.provider);
+
+    try {
+      // Fetch UTXOs from Bitcoin API
+      const rawUtxos = await bitcoinApi.getUtxos(this.baseAddress);
+
+      // Parse to unified format
+      const unifiedUtxos = parseBitcoinUtxos(rawUtxos, this.baseAddress);
+
+      debugLog(`📦 Fetched ${unifiedUtxos.length} Bitcoin UTXOs for ${this.baseAddress}`);
+
+      return unifiedUtxos;
+    } catch (error) {
+      console.error('Failed to fetch Bitcoin UTXOs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync Bitcoin wallet data (UTXOs and balance)
+   * Called during wallet login and periodic sync
+   */
+  async syncBitcoinWallet(): Promise<void> {
+    try {
+      debugLog('🔄 Syncing Bitcoin wallet...');
+
+      // Fetch UTXOs
+      const utxos = await this.fetchBitcoinUtxos();
+
+      // Update wallet store with UTXOs (balance is calculated automatically in setUtxos)
+      WalletStore.setUtxos(utxos);
+
+      debugLog('✅ Bitcoin wallet sync complete');
+    } catch (error) {
+      console.error('Failed to sync Bitcoin wallet:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync Bitcoin transaction history
+   * Discovers used addresses and fetches transaction history
+   */
+  async syncBitcoinTransactions(): Promise<void> {
+    try {
+      debugLog('🔄 Syncing Bitcoin transactions...');
+
+      const { syncBitcoinTransactions } = await import('@/chains/bitcoin/bitcoinTransactionSync');
+      const { BitcoinApi } = await import('@/api/bitcoin-api');
+
+      // Get current block height for confirmation calculation
+      const bitcoinApi = new BitcoinApi({ chain: this.chain, network: this.network }, this.provider);
+      const tip = await bitcoinApi.getTip();
+
+      // Sync transaction history
+      const transactions = await syncBitcoinTransactions(
+        {
+          chain: this.chain,
+          network: this.network,
+          publicKey: this.publicKey,
+          addressType: this.addressType || 'segwit',
+        },
+        this.provider,
+        tip.height
+      );
+
+      // Update wallet store with transactions
+      WalletStore.setTransactions(transactions);
+
+      debugLog(`✅ Bitcoin transaction sync complete: ${transactions.length} transactions`);
+    } catch (error) {
+      console.error('Failed to sync Bitcoin transactions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete Bitcoin wallet sync (UTXOs + transactions)
+   * Called periodically and after transactions
+   */
+  async syncBitcoinWalletComplete(): Promise<void> {
+    try {
+      debugLog('🔄 Starting complete Bitcoin wallet sync...');
+
+      // Sync UTXOs first (updates balance)
+      await this.syncBitcoinWallet();
+
+      // Then sync transaction history
+      await this.syncBitcoinTransactions();
+
+      debugLog('✅ Complete Bitcoin wallet sync finished');
+    } catch (error) {
+      console.error('Failed to sync Bitcoin wallet:', error);
+      // Don't throw - allow partial sync to succeed
+    }
+  }
+
+  // Bitcoin sync interval tracking
+  private bitcoinSyncInterval: NodeJS.Timeout | null = null;
+  private readonly BITCOIN_SYNC_INTERVAL_MS = 60000; // 1 minute
+
+  /**
+   * Start periodic Bitcoin wallet sync
+   * Syncs UTXOs and transactions every minute
+   */
+  startBitcoinPeriodicSync(): void {
+    if (this.chain !== Blockchain.BITCOIN) {
+      debugLog('⚠️ Not a Bitcoin wallet, skipping periodic sync');
+      return;
+    }
+
+    // Clear any existing interval
+    this.stopBitcoinPeriodicSync();
+
+    debugLog('🔄 Starting Bitcoin periodic sync (every 60 seconds)...');
+
+    // Set up periodic sync
+    this.bitcoinSyncInterval = setInterval(async () => {
+      try {
+        await this.syncBitcoinWalletComplete();
+      } catch (error) {
+        console.error('Bitcoin periodic sync failed:', error);
+      }
+    }, this.BITCOIN_SYNC_INTERVAL_MS);
+  }
+
+  /**
+   * Stop periodic Bitcoin wallet sync
+   */
+  stopBitcoinPeriodicSync(): void {
+    if (this.bitcoinSyncInterval) {
+      clearInterval(this.bitcoinSyncInterval);
+      this.bitcoinSyncInterval = null;
+      debugLog('🛑 Bitcoin periodic sync stopped');
+    }
+  }
+
+  /**
+   * Sign Bitcoin PSBT transaction (software wallets)
+   * Supports both password and PRF wallet encryption
+   *
+   * @param psbtHex PSBT in hexadecimal format
+   * @param password Wallet password (for password wallets)
+   * @param prfSecret PRF secret from WebAuthn (for PRF wallets)
+   * @returns Signed transaction with hex and txid
+   */
+  async signBitcoinTransaction(
+    psbtHex: string,
+    password?: string,
+    prfSecret?: Uint8Array
+  ): Promise<{ txHex: string; txId: string }> {
+    const { signAndFinalizePsbt } = await import('@/chains/bitcoin/bitcoinSigner');
+    const { decrypt } = await import('@/shared/utils/crypto');
+
+    try {
+      debugLog('🔐 Signing Bitcoin transaction...');
+
+      if (this.encryptionMethod === 'prf') {
+        // ============================================================================
+        // PRF WALLET - SIGN WITH PRF SECRET
+        // ============================================================================
+
+        if (!this.prfEncryptedMnemonic) {
+          throw new Error('PRF wallet has no encrypted mnemonic');
+        }
+
+        if (!prfSecret) {
+          throw new Error('PRF secret is required for PRF wallet signing');
+        }
+
+        // Decrypt mnemonic using the raw PRF output from the frontend
+        const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+        if (!this.webAuthnCredentialId) {
+          throw new Error('PRF wallet missing credential ID');
+        }
+        const mnemonic = await decryptMnemonicWithPrfOutput(
+          this.prfEncryptedMnemonic,
+          prfSecret,
+          this.webAuthnCredentialId,
+          this.id.toString()
+        );
+
+        // Sign and finalize PSBT
+        const signedTx = await signAndFinalizePsbt(
+          psbtHex,
+          mnemonic,
+          this.network,
+          this.addressType,
+          0
+        );
+
+        debugLog('✅ Bitcoin transaction signed with PRF');
+        return { txHex: signedTx.hex, txId: signedTx.id };
+
+      } else {
+        // ============================================================================
+        // PASSWORD WALLET - SIGN WITH PASSWORD
+        // ============================================================================
+
+        if (!password) {
+          throw new Error('Password is required for password wallet signing');
+        }
+
+        if (!this.encryptedMnemonic) {
+          throw new Error('Password wallet has no encrypted mnemonic');
+        }
+
+        // Decrypt mnemonic with password
+        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password);
+
+        // Sign and finalize PSBT
+        const signedTx = await signAndFinalizePsbt(
+          psbtHex,
+          decryptedMnemonic,
+          this.network,
+          this.addressType,
+          0
+        );
+
+        debugLog('✅ Bitcoin transaction signed with password');
+        return { txHex: signedTx.hex, txId: signedTx.id };
+      }
+    } catch (error) {
+      console.error('Failed to sign Bitcoin transaction:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Transaction signing failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Sign Bitcoin PSBT with hardware wallet
+   *
+   * NOTE: Hardware wallet signing for Bitcoin is not yet implemented in the background context.
+   * Hardware wallets (Ledger, Trezor, Keystone) require frontend APIs (WebUSB, WebBLE, QR codes)
+   * and cannot run in the service worker background context.
+   *
+   * Bitcoin hardware wallet support will be implemented in the frontend,
+   * similar to how Cardano hardware wallet signing works.
+   *
+   * @throws Error indicating hardware wallet signing is not supported in background
+   */
+  async signBitcoinTransactionWithHardware(): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    return {
+      success: false,
+      error: 'Bitcoin hardware wallet signing must be handled in the frontend context. Please use a software wallet or implement frontend hardware wallet support.',
+    };
+  }
+
   async verifySpendingPassword(password: string): Promise<boolean> {
     if (this.encryptionMethod === 'prf') {
       // ============================================================================
@@ -1248,7 +1532,22 @@ export class WalletBg {
   }
 
   isEnterpriseAddress(): boolean {
-    return Cardano.Address.fromBech32(this.baseAddress).getType() === Cardano.AddressType.EnterpriseScript;
+    // Bitcoin has no enterprise addresses
+    if (this.chain === Blockchain.BITCOIN) {
+      return false;
+    }
+
+    // Guard against empty address (async initialization)
+    if (!this.baseAddress) {
+      return false;
+    }
+
+    try {
+      return Cardano.Address.fromBech32(this.baseAddress).getType() === Cardano.AddressType.EnterpriseScript;
+    } catch (error) {
+      console.error('Error parsing address in isEnterpriseAddress:', error);
+      return false;
+    }
   }
 
   public async getDb(): Promise<Dexie> {

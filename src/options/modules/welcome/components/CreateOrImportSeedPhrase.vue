@@ -62,7 +62,7 @@ import { computed, ref } from 'vue';
 import { NetworkInfo } from '@/utils/networks';
 
 interface Props {
-  network: NetworkInfo;
+  network?: NetworkInfo;
 }
 
 const props = defineProps<Props>();

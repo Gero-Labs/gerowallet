@@ -244,6 +244,7 @@ export default {
     password: string,
     chain: string,
     network: string,
+    addressType?: string,
     options?: {
       usePrf?: boolean;
       credentialId?: string;
@@ -253,7 +254,7 @@ export default {
       walletId?: number;
     }
   ) {
-    const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network, options);
+    const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network, addressType, options);
     // Update the wallets field with the latest wallets from the database
     const updatedWallets: Record<number, Wallet> = await getAllWallets();
     geroStore.wallets = updatedWallets;

@@ -36,6 +36,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
+import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -288,7 +289,7 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
   try {
     const collateral = WalletStore.state.collateral;
     const utxosFromStorage = WalletStore.state.utxos;
-    const balance = getBalance(utxosFromStorage, collateral)
+    const balance = getBalance(utxosFromStorage as Cardano.Utxo[], collateral)
     sendResponse({
       id: request.id,
       data: balance.toCbor(),
@@ -395,6 +396,19 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+    return;
+  }
+  // Only support Cardano-based chains for dApp API
+  if (loggedWallet.chain !== Blockchain.CARDANO &&
+      loggedWallet.chain !== Blockchain.APEX_PRIME &&
+      loggedWallet.chain !== Blockchain.APEX_VECTOR) {
+    sendResponse({
+      id: request.id,
+      error: APIError.Refused,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+    return;
   }
   sendResponse({
     id: request.id,
@@ -521,7 +535,7 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
   try {
-    const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
+    const utxosFromStorage = WalletStore.state.utxos as Cardano.Utxo[];
     const collateral = WalletStore.state.collateral;
     const utxos = getUtxos(request.data.amount, request.data.paginate, utxosFromStorage, collateral)
     let res: string[] | null;
@@ -550,7 +564,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
   const storedUtxos = WalletStore.state.utxos;
   try {
-    const utxos: string[] = getCollateral(request.data.params, storedUtxos)
+    const utxos: string[] = getCollateral(request.data.params, storedUtxos as Cardano.Utxo[])
     sendResponse({
       id: request.id,
       data: utxos,
@@ -1489,6 +1503,236 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   }
 });
 
+// Bitcoin transaction signing handler (software wallets)
+app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (walletBg && walletBg.chain === Blockchain.BITCOIN) {
+      const { psbtHex, password, prfSecret } = request.data;
+
+      // Sign Bitcoin transaction
+      const signedTx = await walletBg.signBitcoinTransaction(psbtHex, password, prfSecret);
+
+      sendResponse({
+        id: request.id,
+        data: { success: true, ...signedTx },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing Bitcoin transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Bitcoin hardware wallet signing handler
+app.addToOptions(MessageTypes.SIGN_BITCOIN_TX_HARDWARE, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (walletBg && walletBg.chain === Blockchain.BITCOIN) {
+      // Sign Bitcoin transaction with hardware wallet
+      const result = await walletBg.signBitcoinTransactionWithHardware();
+
+      sendResponse({
+        id: request.id,
+        data: result,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing Bitcoin transaction with hardware wallet:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Bitcoin sync handler (manual refresh)
+app.addToOptions(MessageTypes.SYNC_BITCOIN, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    // Sync UTXOs and transactions
+    await walletBg.syncBitcoinWalletComplete();
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error syncing Bitcoin wallet:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Bitcoin send transaction handler (complete flow: build, sign, broadcast)
+app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    const { recipientAddress, amount, feeRate, password, privateKeyBytes } = request.data;
+
+    // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
+    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+
+    // Import Bitcoin transaction building modules
+    const { buildSimpleSendPsbt } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const { BitcoinApi } = await import('@/api/bitcoin-api');
+
+    // Step 1: Fetch UTXOs from store (WalletBg doesn't hold UTXOs directly)
+    const utxos = WalletStore.state.utxos;
+    if (!utxos || utxos.length === 0) {
+      throw new Error('No UTXOs available');
+    }
+
+    // Step 2: Build PSBT
+    const changeAddress = walletBg.baseAddress;
+    const unsignedTx = buildSimpleSendPsbt(
+      utxos as IUnifiedUtxo[],
+      recipientAddress,
+      BigInt(amount),
+      changeAddress,
+      feeRate,
+      walletBg.network
+    );
+
+    // Step 3: Sign PSBT
+    const signedTx = await walletBg.signBitcoinTransaction(
+      unsignedTx.raw.hex,
+      password,
+      prfSecret
+    );
+
+    // Step 4: Broadcast transaction
+    const bitcoinApi = new BitcoinApi(
+      { chain: walletBg.chain, network: walletBg.network },
+      walletBg.provider
+    );
+    const txId = await bitcoinApi.broadcastTransaction(signedTx.txHex);
+
+    // Step 5: Refresh wallet data
+    await walletBg.syncBitcoinWallet();
+    await walletBg.syncBitcoinTransactions();
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, txId, txHex: signedTx.txHex },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error sending Bitcoin transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Babylon staking handler
+// PSBT is built in the frontend (BabylonStakeDialog) to avoid bundling the heavy
+// @babylonlabs-io/btc-staking-ts library into the background service worker.
+// This handler only receives the pre-built psbtHex, signs it, and broadcasts.
+app.addToOptions(MessageTypes.BABYLON_STAKE, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    const { psbtHex, password, privateKeyBytes } = request.data;
+    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+
+    const { BitcoinApi } = await import('@/api/bitcoin-api');
+
+    // Step 1: Sign the pre-built PSBT
+    const signedTx = await walletBg.signBitcoinTransaction(psbtHex, password, prfSecret);
+
+    // Step 2: Broadcast
+    const bitcoinApi = new BitcoinApi(
+      { chain: walletBg.chain, network: walletBg.network },
+      walletBg.provider
+    );
+    const txId = await bitcoinApi.broadcastTransaction(signedTx.txHex);
+
+    // Step 3: Refresh wallet data
+    await walletBg.syncBitcoinWallet();
+    await walletBg.syncBitcoinTransactions();
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, txId, txHex: signedTx.txHex },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error signing/broadcasting Babylon staking transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
   try {
     console.log('submit tx', request);
@@ -1831,12 +2075,27 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
     if (request.data.method === 'initTrezor') {
       const network = networks.resolveNetwork(request.data.chain, request.data.network);
 
-      let path;
+      let coldWalletProps;
       if (network.blockchain === Blockchain.CARDANO) {
-        path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`
+        const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`;
+        coldWalletProps = await trezor.getXpub(path);
+      } else if (network.blockchain === Blockchain.BITCOIN) {
+        // Bitcoin wallet - use default SegWit address type
+        coldWalletProps = await trezor.initBitcoinTrezor('segwit', 0);
+
+        // Format Bitcoin response to match expected structure
+        if (coldWalletProps) {
+          const { xpub, deviceLabel, firmwareVersion } = coldWalletProps;
+          coldWalletProps = {
+            productName: deviceLabel,
+            hwPublicKey: xpub,
+            keys: [{ publicKey: xpub, chainCode: '', path: "m/84'/0'/0'" }],
+            btSupported: true,
+            version: firmwareVersion
+          };
+        }
       }
-      // Use the clean Trezor wrapper (handles initialization, device name, etc.)
-      const coldWalletProps = await trezor.getXpub(path);
+
       sendResponse({
         id: request.id,
         data: { success: true, coldWalletProps },
@@ -1880,7 +2139,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         }
       };
 
-      const utxos: Cardano.Utxo[] = WalletStore.state.utxos;
+      const utxos = WalletStore.state.utxos as Cardano.Utxo[];
 
       // Get current wallet and network info
       const currentWallet = walletManager.getWallet();
@@ -1906,6 +2165,23 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       sendResponse({
         id: request.id,
         data: { success: true, signatures: signaturesArray },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else if (request.data.method === 'verifyBitcoinAddress') {
+      // Verify Bitcoin address on Trezor device
+      const { addressType, accountIndex, addressIndex, isChange } = request.data;
+
+      const verifiedAddress = await trezor.verifyBitcoinAddress(
+        addressType || 'segwit',
+        accountIndex || 0,
+        addressIndex || 0,
+        isChange || false
+      );
+
+      sendResponse({
+        id: request.id,
+        data: { success: true, address: verifiedAddress },
         target: TARGET,
         sender: SENDER.extension,
       });

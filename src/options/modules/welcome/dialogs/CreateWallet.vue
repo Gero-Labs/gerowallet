@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :title="t('welcome.createNewWallet')"
-    :subtitle="props.network.title"
+    :subtitle="localNetwork ? localNetwork.title : ''"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="isOpen"
@@ -20,6 +20,27 @@
           <v-stepper-content step="1">
             <v-card flat class="transparent d-flex justify-center">
               <v-form ref="nameForm" v-model="nameValid" style="max-width: 540px; width: 100%;">
+
+                <!-- Network Selector -->
+                <div class="mb-4">
+                  <div class="text-caption grey--text text--lighten-1 mb-2 text-uppercase" style="letter-spacing: 0.08em;">{{ $t('common.selectNetwork') }}</div>
+                  <div class="network-chips-row">
+                    <div
+                      v-for="net in allNetworks"
+                      :key="net.blockchain + net.network"
+                      class="network-chip-item"
+                      :class="{ 'network-chip-item--selected': isNetworkSelected(net) }"
+                      @click="selectNetwork(net)"
+                    >
+                      <v-avatar size="18" class="mr-1">
+                        <v-img :src="net.icon" contain></v-img>
+                      </v-avatar>
+                      <span class="text-caption">{{ net.title }}</span>
+                    </div>
+                  </div>
+                </div>
+                <v-divider class="mb-4" style="border-color: rgba(255, 255, 255, 0.12);" />
+
                 <!-- Wallet Name -->
                 <h2 class="text-left white--text mb-3">{{ $t('welcome.setUpWalletName') }}</h2>
 
@@ -138,11 +159,11 @@
                         <v-col cols="6" class="pl-3">
                           <div class="d-flex align-center">
                             <v-avatar size="20" class="mr-2">
-                              <v-img :src="props.network.icon" contain></v-img>
+                              <v-img :src="localNetwork ? localNetwork.icon : ''" contain></v-img>
                             </v-avatar>
                             <div>
                               <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
-                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ props.network.title }}</div>
+                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ localNetwork ? localNetwork.title : '' }}</div>
                             </div>
                           </div>
                         </v-col>
@@ -313,13 +334,13 @@ import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { NetworkInfo } from '@/utils/networks';
+import networks, { NetworkInfo } from '@/utils/networks';
 
 const { t } = useTranslation();
 
 interface Props {
   isOpen: boolean;
-  network: NetworkInfo;
+  network?: NetworkInfo;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -330,6 +351,18 @@ const emit = defineEmits(['close']);
 
 const vmProxy = getCurrentInstance()!.proxy
 const router = vmProxy?.$router;
+
+// Network selection
+const allNetworks = networks.networks;
+const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
+
+const isNetworkSelected = (net: NetworkInfo) =>
+  localNetwork.value?.blockchain === net.blockchain && localNetwork.value?.network === net.network;
+
+const selectNetwork = (net: NetworkInfo) => {
+  localNetwork.value = net;
+  newWallet.icon = networks.resolveIconColor(net.blockchain, net.network);
+};
 
 // Step state (2 screens only)
 const step = ref(1);
@@ -353,7 +386,7 @@ const prfSupported = ref(false);
 
 const newWallet = reactive({
   name: '',
-  icon: 'green',
+  icon: networks.resolveIconColor(props.network?.blockchain || networks.networks[0].blockchain, props.network?.network || networks.networks[0].network),
   password: '',
   confirmPassword: '',
   encryptionMethod: 'password' as 'password' | 'prf',
@@ -408,7 +441,7 @@ const canCreate = computed(() => {
 });
 
 const isApex = computed(() => {
-  return props.network?.blockchain?.includes('Apex');
+  return localNetwork.value?.blockchain?.includes('Apex');
 });
 
 const dialogLocal = computed({
@@ -489,8 +522,9 @@ const walletCreationStep = async () => {
             Theme.GERO,
             null,
             newWallet.password || 'temp-password',
-            props.network.blockchain,
-            props.network.network,
+            localNetwork.value.blockchain,
+            localNetwork.value.network,
+            undefined,  // addressType - use default based on chain
             prfOptions
           );
         } finally {
@@ -516,8 +550,9 @@ const walletCreationStep = async () => {
         Theme.GERO,
         null,
         newWallet.password,
-        props.network.blockchain,
-        props.network.network
+        localNetwork.value.blockchain,
+        localNetwork.value.network,
+        undefined  // addressType - use default based on chain
       );
     }
 
@@ -557,7 +592,7 @@ const walletCreationStep = async () => {
 const resetDialog = () => {
   Object.assign(newWallet, {
     name: '',
-    icon: props.network?.blockchain?.includes('Apex') ? 'orange' : 'green',
+    icon: networks.resolveIconColor(localNetwork.value?.blockchain || '', localNetwork.value?.network || ''),
     password: '',
     confirmPassword: '',
     encryptionMethod: 'password',
@@ -647,6 +682,39 @@ const resetDialog = () => {
 @media (max-width: 600px) {
   ::v-deep .v-stepper__content {
     min-height: auto;
+  }
+}
+
+// Network chip selector
+.network-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.network-chip-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  user-select: none;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &--selected {
+    border-color: var(--v-primary-base);
+    background: rgba(var(--v-primary-base), 0.15);
+    color: white;
+    font-weight: 500;
   }
 }
 </style>

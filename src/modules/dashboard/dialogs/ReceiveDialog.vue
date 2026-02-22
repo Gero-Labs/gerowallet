@@ -3,14 +3,35 @@
     :isOpen="isOpen"
     @close="emit('close')"
     :title="t('wallet.receive')"
-    :subtitle="t('wallet.myWalletAddresses')"
+    :subtitle="isBitcoinWallet ? t('receive.yourAddress') : t('wallet.myWalletAddresses')"
     :min-height="300"
     :height="600"
     :persistent="false"
     :img="assets.qrCodeSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
-    <v-card-title class="py-0 transparent">
+    <!-- Bitcoin Wallet UI -->
+    <v-card-title v-if="isBitcoinWallet" class="py-0 transparent">
+      <v-list-item three-line class="px-0">
+        <v-list-item-avatar size="160" rounded>
+          <div class="qr-container" ref="btcQrContainer"></div>
+        </v-list-item-avatar>
+        <v-list-item-content class="pl-4">
+          <h4 class="address-label">{{ bitcoinAddressTypeLabel }}</h4>
+          <div class="address-row">
+            <span class="address-text" @click="triggerCopy(bitcoinAddress)">
+              {{ filters.truncate(bitcoinAddress) }}
+            </span>
+            <CopyButton class="ml-1" x-small :value="bitcoinAddress" />
+          </div>
+          <p class="path-text">{{ $t('navigation.hdPath') }}: m/{{ bitcoinDerivationPurpose }}'/0'/0'/0/{{ bitcoinAddressIndex }}</p>
+          <p class="info-text">{{ bitcoinAddressTypeDescription }}</p>
+        </v-list-item-content>
+      </v-list-item>
+    </v-card-title>
+
+    <!-- Cardano Wallet UI (Original) -->
+    <v-card-title v-else class="py-0 transparent">
       <v-tabs
         v-model="tab"
         centered
@@ -50,7 +71,112 @@
       </v-tabs-items>
     </v-card-title>
     <v-card-text class="px-3 pb-3">
-      <v-expansion-panels v-model="expandedPanels" multiple class="accordion-container">
+      <!-- Bitcoin Controls -->
+      <v-expansion-panels v-if="isBitcoinWallet" v-model="bitcoinExpandedPanels" multiple class="accordion-container">
+        <!-- Address Type Selector -->
+        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+          <v-expansion-panel-header>
+            <div class="header-container">
+              <div class="icon-container">
+                <v-icon color="#333741">mdi-cog-outline</v-icon>
+              </div>
+              <h3>{{ $t('receive.addressType') }}</h3>
+            </div>
+          </v-expansion-panel-header>
+          <v-expansion-panel-content class="content-container">
+            <v-card flat class="transparent">
+              <v-card-text class="px-0 pt-2">
+                <v-select
+                  v-model="bitcoinAddressType"
+                  :items="bitcoinAddressTypeOptions"
+                  outlined
+                  dense
+                  hide-details
+                  @change="updateBitcoinAddress"
+                ></v-select>
+              </v-card-text>
+            </v-card>
+          </v-expansion-panel-content>
+        </v-expansion-panel>
+
+        <!-- Address Navigation -->
+        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+          <v-expansion-panel-header>
+            <div class="header-container">
+              <div class="icon-container">
+                <v-icon color="#333741">mdi-arrow-left-right</v-icon>
+              </div>
+              <h3>{{ $t('receive.addressIndex') }}: {{ bitcoinAddressIndex }}</h3>
+            </div>
+          </v-expansion-panel-header>
+          <v-expansion-panel-content class="content-container">
+            <v-card flat class="transparent">
+              <v-card-text class="px-0 pt-2">
+                <div class="d-flex align-center justify-space-between">
+                  <v-btn
+                    outlined
+                    small
+                    @click="previousBitcoinAddress"
+                    :disabled="bitcoinAddressIndex === 0"
+                  >
+                    <v-icon left>mdi-chevron-left</v-icon>
+                    {{ $t('common.previous') }}
+                  </v-btn>
+                  <v-btn outlined small @click="nextBitcoinAddress">
+                    {{ $t('common.next') }}
+                    <v-icon right>mdi-chevron-right</v-icon>
+                  </v-btn>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-expansion-panel-content>
+        </v-expansion-panel>
+
+        <!-- Optional Amount/Label -->
+        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+          <v-expansion-panel-header>
+            <div class="header-container">
+              <div class="icon-container">
+                <v-icon color="#333741">mdi-tag-outline</v-icon>
+              </div>
+              <h3>{{ $t('receive.specifyAmount') }} ({{ $t('common.optional') }})</h3>
+            </div>
+          </v-expansion-panel-header>
+          <v-expansion-panel-content class="content-container">
+            <v-card flat class="transparent">
+              <v-card-text class="px-0 pt-2">
+                <v-text-field
+                  v-model="bitcoinAmount"
+                  :label="$t('receive.amount') + ' (BTC)'"
+                  type="number"
+                  step="0.00000001"
+                  outlined
+                  dense
+                  hide-details
+                  @input="updateBitcoinQrCode"
+                >
+                  <template v-slot:append>
+                    <span class="text-caption">BTC</span>
+                  </template>
+                </v-text-field>
+                <v-text-field
+                  v-model="bitcoinLabel"
+                  :label="$t('receive.label')"
+                  outlined
+                  dense
+                  counter="50"
+                  maxlength="50"
+                  class="mt-2"
+                  @input="updateBitcoinQrCode"
+                ></v-text-field>
+              </v-card-text>
+            </v-card>
+          </v-expansion-panel-content>
+        </v-expansion-panel>
+      </v-expansion-panels>
+
+      <!-- Cardano Used Addresses (Original) -->
+      <v-expansion-panels v-else v-model="expandedPanels" multiple class="accordion-container">
         <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
           <v-expansion-panel-header>
             <div class="header-container">
@@ -140,15 +266,29 @@ const emit = defineEmits(['close']);
 
 const { loggedWallet, keys } = toRefs(walletStore);
 
+// Check if Bitcoin wallet
+const isBitcoinWallet = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.BITCOIN;
+});
+
+// Cardano state
 const showInternal = ref<boolean>(false);
 const expandedPanels = ref<number[]>([]);
-
-// current tab index
 const tab = ref(0);
 
-// refs for the QR code container elements
+// Bitcoin state
+const bitcoinExpandedPanels = ref<number[]>([]);
+const bitcoinAddressType = ref('segwit');
+const bitcoinAddressIndex = ref(0);
+const bitcoinAddress = ref('');
+const bitcoinAmount = ref('');
+const bitcoinLabel = ref('');
+const btcQrContainer = ref<HTMLElement | null>(null);
+let btcQrCode: QRCodeStyling | null = null;
+
+// refs for the QR code container elements (Cardano)
 const qrContainers = [ref<HTMLElement | null>(null), ref<HTMLElement | null>(null), ref<HTMLElement | null>(null), ref<HTMLElement | null>(null)];
-// hold QRCodeStyling instances
+// hold QRCodeStyling instances (Cardano)
 const qrcodes: (QRCodeStyling | null)[] = [null, null, null];
 let copyButtonRefs = {};
 
@@ -236,6 +376,151 @@ const isApex = computed(() => {
     loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
+// Bitcoin computed properties
+const bitcoinAddressTypeOptions = computed(() => [
+  {
+    text: `${t('receive.segwit')} (bc1q...) - ${t('receive.recommended')}`,
+    value: 'segwit',
+  },
+  {
+    text: `${t('receive.legacy')} (1...)`,
+    value: 'legacy',
+  },
+  {
+    text: `${t('receive.taproot')} (bc1p...)`,
+    value: 'taproot',
+  },
+]);
+
+const bitcoinAddressTypeLabel = computed(() => {
+  switch (bitcoinAddressType.value) {
+    case 'segwit':
+      return `${t('receive.segwit')} ${t('wallet.address')}`;
+    case 'legacy':
+      return `${t('receive.legacy')} ${t('wallet.address')}`;
+    case 'taproot':
+      return `${t('receive.taproot')} ${t('wallet.address')}`;
+    default:
+      return t('wallet.address');
+  }
+});
+
+const bitcoinAddressTypeDescription = computed(() => {
+  switch (bitcoinAddressType.value) {
+    case 'segwit':
+      return t('receive.segwitDescription');
+    case 'legacy':
+      return t('receive.legacyDescription');
+    case 'taproot':
+      return t('receive.taprootDescription');
+    default:
+      return '';
+  }
+});
+
+const bitcoinDerivationPurpose = computed(() => {
+  switch (bitcoinAddressType.value) {
+    case 'legacy':
+      return 44;
+    case 'segwit':
+      return 84;
+    case 'taproot':
+      return 86;
+    default:
+      return 84;
+  }
+});
+
+// Bitcoin functions
+async function deriveBitcoinAddress(): Promise<void> {
+  if (!loggedWallet.value || !loggedWallet.value.publicKey) {
+    console.error('No logged wallet or public key');
+    return;
+  }
+
+  try {
+    const { deriveBitcoinAddress: deriveAddress } = await import('@/chains/bitcoin/bitcoinKeyManager');
+    const address = deriveAddress(
+      loggedWallet.value.publicKey, // xpub
+      loggedWallet.value.network,
+      bitcoinAddressType.value,
+      0, // External chain (receive addresses)
+      bitcoinAddressIndex.value
+    );
+
+    bitcoinAddress.value = address;
+    console.log(`Derived ${bitcoinAddressType.value} address:`, address);
+  } catch (error) {
+    console.error('Failed to derive Bitcoin address:', error);
+    bitcoinAddress.value = 'Error deriving address';
+  }
+}
+
+function generateBitcoinUri(): string {
+  let uri = `bitcoin:${bitcoinAddress.value}`;
+  const params: string[] = [];
+
+  const amount = parseFloat(bitcoinAmount.value);
+  if (!isNaN(amount) && amount > 0) {
+    params.push(`amount=${amount.toFixed(8)}`);
+  }
+
+  if (bitcoinLabel.value) {
+    params.push(`label=${encodeURIComponent(bitcoinLabel.value)}`);
+  }
+
+  if (params.length > 0) {
+    uri += '?' + params.join('&');
+  }
+
+  return uri;
+}
+
+function updateBitcoinQrCode(): void {
+  if (!btcQrContainer.value) return;
+
+  const uri = generateBitcoinUri();
+
+  if (btcQrCode) {
+    btcQrCode.update({ data: uri });
+  } else {
+    btcQrCode = new QRCodeStyling({
+      width: 160,
+      height: 160,
+      type: 'svg',
+      data: uri,
+      image: assets.geroLogo,
+      margin: 2,
+      qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
+      imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
+      backgroundOptions: { color: '#ffffff' },
+      cornersSquareOptions: { type: 'extra-rounded' },
+      cornersDotOptions: { type: 'dot' }
+    });
+
+    btcQrContainer.value.innerHTML = '';
+    btcQrCode.append(btcQrContainer.value);
+  }
+}
+
+async function updateBitcoinAddress(): Promise<void> {
+  await deriveBitcoinAddress();
+  await nextTick();
+  updateBitcoinQrCode();
+}
+
+function previousBitcoinAddress(): void {
+  if (bitcoinAddressIndex.value > 0) {
+    bitcoinAddressIndex.value--;
+    updateBitcoinAddress();
+  }
+}
+
+function nextBitcoinAddress(): void {
+  bitcoinAddressIndex.value++;
+  updateBitcoinAddress();
+}
+
 // whenever the dialog opens, initialize or update all QR codes
 watch(
   () => props.isOpen,
@@ -243,33 +528,46 @@ watch(
     if (!open) return;
     await nextTick();
 
-    tabs.value.forEach((tabItem, i) => {
-      // create QR instance if missing
-      if (!qrcodes[i]) {
-        qrcodes[i] = new QRCodeStyling({
-          width: 160,
-          height: 160,
-          type: 'svg',
-          data: tabItem.value,
-          image: isApex.value ? assets.geroLogoApex : assets.geroLogo,
-          margin: 2,
-          qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
-          imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
-          backgroundOptions: { color: '#ffffff' },
-          cornersSquareOptions: { type: 'extra-rounded' },
-          cornersDotOptions: { type: 'dot' }
-        });
-      } else {
-        qrcodes[i]!.update({ data: tabItem.value });
-      }
+    if (isBitcoinWallet.value) {
+      // Bitcoin wallet - initialize Bitcoin address and QR code
+      bitcoinAddressType.value = loggedWallet.value?.addressType || 'segwit';
+      bitcoinAddressIndex.value = 0;
+      bitcoinAmount.value = '';
+      bitcoinLabel.value = '';
 
-      // append into the container
-      const el = qrContainers[i].value;
-      if (el) {
-        el.innerHTML = '';
-        qrcodes[i]!.append(el);
-      }
-    });
+      await deriveBitcoinAddress();
+      await nextTick();
+      updateBitcoinQrCode();
+    } else {
+      // Cardano wallet - original logic
+      tabs.value.forEach((tabItem, i) => {
+        // create QR instance if missing
+        if (!qrcodes[i]) {
+          qrcodes[i] = new QRCodeStyling({
+            width: 160,
+            height: 160,
+            type: 'svg',
+            data: tabItem.value,
+            image: isApex.value ? assets.geroLogoApex : assets.geroLogo,
+            margin: 2,
+            qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
+            imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
+            backgroundOptions: { color: '#ffffff' },
+            cornersSquareOptions: { type: 'extra-rounded' },
+            cornersDotOptions: { type: 'dot' }
+          });
+        } else {
+          qrcodes[i]!.update({ data: tabItem.value });
+        }
+
+        // append into the container
+        const el = qrContainers[i].value;
+        if (el) {
+          el.innerHTML = '';
+          qrcodes[i]!.append(el);
+        }
+      });
+    }
   },
   { immediate: true },
 );

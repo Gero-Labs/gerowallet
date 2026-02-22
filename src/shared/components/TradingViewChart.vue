@@ -33,6 +33,8 @@ interface Props {
   theme?: 'light' | 'dark';
   enableRealtime?: boolean;
   realtimeData?: any;
+  pricePrecision?: number;
+  priceMinMove?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -41,7 +43,9 @@ const props = withDefaults(defineProps<Props>(), {
   height: '200px',
   theme: 'dark',
   enableRealtime: false,
-  realtimeData: undefined
+  realtimeData: undefined,
+  pricePrecision: 4,
+  priceMinMove: 0.0001,
 });
 
 // Define emit with proper function signature
@@ -144,8 +148,8 @@ const initChart = async () => {
         wickDownColor: '#FF5252',
         priceFormat: {
           type: 'price' as const,
-          precision: 4,
-          minMove: 0.0001,
+          precision: props.pricePrecision,
+          minMove: props.priceMinMove,
         },
         title: props.symbol,
       };

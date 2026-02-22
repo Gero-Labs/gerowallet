@@ -22,6 +22,7 @@ const greenSvg = isServiceWorker ? '' : assetsModule.greenSvg;
 const purpleSvg = isServiceWorker ? '' : assetsModule.purpleSvg;
 const pinkSvg = isServiceWorker ? '' : assetsModule.pinkSvg;
 const orangeSvg = isServiceWorker ? '' : assetsModule.orangeSvg;
+const yellowSvg = isServiceWorker ? '' : assetsModule.yellowSvg;
 const blueSvg = isServiceWorker ? '' : assetsModule.blueSvg;
 const greySvg = isServiceWorker ? '' : assetsModule.greySvg;
 const errorImage = isServiceWorker ? '' : assetsModule.errorImage;
@@ -54,6 +55,8 @@ export function resolveIcon(icon: string): string {
     case 'green':
     case 'teal':
       return greenSvg;
+    case 'yellow':
+      return yellowSvg;
     case 'purple':
     case 'deep-purple':
       return purpleSvg;
