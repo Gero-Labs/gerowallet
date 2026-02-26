@@ -240,6 +240,7 @@ const totpCode = ref('');
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
 const configLoaded = ref(false);
+const configLoadError = ref(false);
 const errorMessage = ref('');
 const tooltip = ref<any>({
   enabled: false,
@@ -376,6 +377,7 @@ async function loadSecurityConfig() {
     webAuthnCredentialId.value = null;
     pinLength.value = 6;
     configLoaded.value = true; // Allow interaction even on error (fallback to password)
+    configLoadError.value = true;
   }
 }
 
@@ -452,7 +454,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
       // (avoids crypto polyfill differences between browser and service worker)
       // Uses hash cached during loadSecurityConfig() to avoid duplicate DB read
       if (!cachedLockPasswordHash.value) {
-        showError(vmProxy.$t('security.lockPasswordNotConfigured'));
+        showError(vmProxy.$t(configLoadError.value ? 'security.unlockFailed' : 'security.lockPasswordNotConfigured'));
         return;
       }
       const { verifyPin } = await import('@/shared/utils/security');
@@ -543,7 +545,9 @@ function resetForm() {
   errorMessage.value = '';
   show2FA.value = false;
   configLoaded.value = false;
+  configLoadError.value = false;
   cachedLockPasswordHash.value = null;
+  preLoginEncryptionMethod.value = null;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 
