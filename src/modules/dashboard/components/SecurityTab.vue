@@ -623,18 +623,22 @@ async function verifyCurrentMethod() {
       const isPrfWallet = wallet?.encryptionMethod === 'prf';
       if (isPrfWallet) {
         // PRF wallet: verify against lockPasswordHash (same pattern as PIN verification)
-        const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
-        if (!lockPasswordHashConfig?.value) {
-          tooltip.value.text = t('security.lockPasswordNotConfigured');
-          enableToolTip();
-          return;
-        } else {
+        try {
+          const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+          if (!lockPasswordHashConfig?.value) {
+            tooltip.value.text = t('security.lockPasswordNotConfigured');
+            enableToolTip();
+            return;
+          }
           const { verifyPin } = await import('@/shared/utils/security');
           isValid = await verifyPin(verificationInput.value, lockPasswordHashConfig.value);
           if (!isValid) {
             tooltip.value.text = t('security.wrongLockPassword');
             enableToolTip();
           }
+        } catch (error) {
+          console.error('Error verifying lock password:', error);
+          isValid = false;
         }
       } else {
         // Normal wallet: verify spending password via background

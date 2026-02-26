@@ -111,7 +111,7 @@
                 <v-text-field
                   ref="passwordInputRef"
                   v-model="password"
-                  :label="isPrfWallet ? $t('security.lockPassword') : $t('security.spendingPassword')"
+                  :label="configLoaded ? (isPrfWallet ? $t('security.lockPassword') : $t('security.spendingPassword')) : $t('wallet.password')"
                   :type="show ? 'text' : 'password'"
                   :rules="[rules.required()]"
                   outlined
@@ -281,6 +281,7 @@ const unlockDescription = computed(() => {
   } else if (unlockMethod.value === 'pattern') {
     return vmProxy.$t('security.drawPatternToUnlock');
   } else {
+    if (!configLoaded.value) return '';
     return isPrfWallet.value
       ? vmProxy.$t('security.useLockPasswordToUnlock')
       : vmProxy.$t('security.useSpendingPasswordToUnlock');
