@@ -627,6 +627,7 @@ async function verifyCurrentMethod() {
         if (!lockPasswordHashConfig?.value) {
           tooltip.value.text = t('security.lockPasswordNotConfigured');
           enableToolTip();
+          return;
         } else {
           const { verifyPin } = await import('@/shared/utils/security');
           isValid = await verifyPin(verificationInput.value, lockPasswordHashConfig.value);

@@ -238,6 +238,7 @@ const totpCode = ref('');
 
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
+const configLoaded = ref(false);
 const errorMessage = ref('');
 const tooltip = ref<any>({
   enabled: false,
@@ -261,7 +262,7 @@ const isPrfWallet = computed(() => {
 });
 
 const canUnlock = computed(() => {
-  if (unlocking.value) return false;
+  if (unlocking.value || !configLoaded.value) return false;
 
   if (unlockMethod.value === 'pin') {
     return pinCode.value.length >= 4;
@@ -357,6 +358,8 @@ async function loadSecurityConfig() {
 
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
     // that works alongside PIN, password, or pattern
+
+    configLoaded.value = true;
   } catch (error) {
     console.error('Error loading security config:', error);
     unlockMethod.value = null;
@@ -364,6 +367,7 @@ async function loadSecurityConfig() {
     passKeyEnabled.value = false;
     webAuthnCredentialId.value = null;
     pinLength.value = 6;
+    configLoaded.value = true; // Allow interaction even on error (fallback to password)
   }
 }
 
@@ -538,6 +542,7 @@ function resetForm() {
   totpCode.value = '';
   errorMessage.value = '';
   show2FA.value = false;
+  configLoaded.value = false;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 

@@ -585,7 +585,10 @@ export class WalletManager {
     // - Lock password: @noble/hashes PBKDF2 produces different results in service worker vs browser
     //   context due to crypto polyfill mismatches (Buffer handling in separate Vite bundles)
     // Trust boundary: these signals arrive via chrome.runtime messaging (sendToBackgroundFromOptions),
-    // which is same-origin extension-only — not reachable from web page content scripts.
+    // which is same-origin extension-only. The background handler (addToOptions) only accepts messages
+    // from the extension's options/popup pages, not from content scripts or injected page scripts.
+    // DApp connection relay in background.ts uses a separate message handler (addToPopup) that does
+    // not route to this unlock flow.
     if (unlockCredential === 'passkey-authenticated' || unlockCredential === 'lockpassword-verified') {
       unlockValid = true;
     } else if (unlockMethod === 'password') {
