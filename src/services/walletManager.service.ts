@@ -579,8 +579,12 @@ export class WalletManager {
     let unlockValid = false;
 
     // Check for browser-verified credentials first (PassKey, PRF lock password)
+    // These signal strings indicate verification already happened in the browser UI context.
+    // Background cannot independently re-verify because:
+    // - PassKey: WebAuthn requires user activation (popup), not available in service worker
+    // - Lock password: @noble/hashes PBKDF2 produces different results in service worker vs browser
+    //   context due to crypto polyfill mismatches (Buffer handling in separate Vite bundles)
     if (unlockCredential === 'passkey-authenticated' || unlockCredential === 'lockpassword-verified') {
-      // Verification already handled in browser UI context
       unlockValid = true;
     } else if (unlockMethod === 'password') {
       // Determine if this is a PRF wallet (works for both post-login and pre-login)

@@ -1363,7 +1363,7 @@ export default {
   'security.lockPasswordSetupFailed': 'Sperrpasswort konnte nicht festgelegt werden',
   'security.lockPasswordSetupSuccess': 'Sperrpasswort erfolgreich festgelegt',
   'security.wrongLockPassword': 'Falsches Sperrpasswort',
-  'security.confirmPassword': 'Passwort bestätigen',
+  'security.lockPasswordNotConfigured': 'Sperrpasswort nicht eingerichtet. Bitte richten Sie zuerst ein Sperrpasswort ein.',
   'security.lockSettings': 'Wallet-Sperre & PassKey',
   'security.lockSettingsDescription': 'Wallet-Sicherheitseinstellungen konfigurieren',
   'security.logoutInstead': 'Stattdessen abmelden',

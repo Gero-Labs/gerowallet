@@ -49,8 +49,8 @@
                 </template>
                 <!-- Normal wallets: Use spending password for unlock -->
                 <template v-else>
-                  <v-list-item-title>{{ $t('security.lockPassword') }}</v-list-item-title>
-                  <v-list-item-subtitle>{{ $t('security.useLockPasswordToUnlock') }}</v-list-item-subtitle>
+                  <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
                 </template>
               </v-list-item-content>
               <v-list-item-icon v-if="selectedUnlockMethod === 'password'" style="align-self: center;">

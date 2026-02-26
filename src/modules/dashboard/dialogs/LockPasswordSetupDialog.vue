@@ -42,7 +42,7 @@
               <v-text-field
                 ref="confirmPasswordInputRef"
                 v-model="confirmPassword"
-                :label="$t('security.confirmPassword')"
+                :label="$t('security.confirmLockPassword')"
                 :type="showConfirmPassword ? 'text' : 'password'"
                 :append-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
                 @click:append="showConfirmPassword = !showConfirmPassword"
