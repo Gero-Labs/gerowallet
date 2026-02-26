@@ -431,14 +431,16 @@ async function handleUnlock(passKeyAuthenticated = false) {
         const db = await getDb(walletId);
         const configTable = db.table('config');
         const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
-        if (lockPasswordHashConfig?.value) {
-          const { verifyPin } = await import('@/shared/utils/security');
-          const isValid = await verifyPin(password.value, lockPasswordHashConfig.value);
-          if (!isValid) {
-            showError(vmProxy.$t('security.wrongLockPassword'));
-            password.value = '';
-            return;
-          }
+        if (!lockPasswordHashConfig?.value) {
+          showError(vmProxy.$t('security.lockPasswordNotConfigured'));
+          return;
+        }
+        const { verifyPin } = await import('@/shared/utils/security');
+        const isValid = await verifyPin(password.value, lockPasswordHashConfig.value);
+        if (!isValid) {
+          showError(vmProxy.$t('security.wrongLockPassword'));
+          password.value = '';
+          return;
         }
       }
       // Verification passed — signal background (same pattern as passkey-authenticated)
