@@ -228,6 +228,7 @@ const passKeyEnabled = ref(false);
 const webAuthnCredentialId = ref<string | null>(null);
 const passKeyAutoTriggerUnlock = ref(false);
 const preLoginEncryptionMethod = ref<string | null>(null);
+const cachedLockPasswordHash = ref<string | null>(null);
 
 const pinCode = ref('');
 const pinLength = ref(4);
@@ -342,6 +343,12 @@ async function loadSecurityConfig() {
     pinLength.value = pinLengthConfig?.value || 6;
     passKeyAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
 
+    // Pre-cache lock password hash for PRF wallets (avoids duplicate DB read in handleUnlock)
+    if (unlockMethodConfig?.value === 'password') {
+      const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+      cachedLockPasswordHash.value = lockPasswordHashConfig?.value || null;
+    }
+
     // Check for PRF wallets: credential ID stored in wallet record, not config
     const wallet = walletStore.loggedWallet;
     const isPrfWallet = wallet?.encryptionMethod === 'prf';
@@ -442,21 +449,13 @@ async function handleUnlock(passKeyAuthenticated = false) {
     } else if (unlockMethod.value === 'password' && isPrfWallet.value) {
       // PRF wallet lock password: verify locally in browser context
       // (avoids crypto polyfill differences between browser and service worker)
-      const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
-      if (!walletId) {
-        showError(vmProxy.$t('security.unlockFailed'));
-        return;
-      }
-      const { getDb } = await import('@/db/wallet-db');
-      const db = await getDb(walletId);
-      const configTable = db.table('config');
-      const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
-      if (!lockPasswordHashConfig?.value) {
+      // Uses hash cached during loadSecurityConfig() to avoid duplicate DB read
+      if (!cachedLockPasswordHash.value) {
         showError(vmProxy.$t('security.lockPasswordNotConfigured'));
         return;
       }
       const { verifyPin } = await import('@/shared/utils/security');
-      const isValid = await verifyPin(password.value, lockPasswordHashConfig.value);
+      const isValid = await verifyPin(password.value, cachedLockPasswordHash.value);
       if (!isValid) {
         showError(vmProxy.$t('security.wrongLockPassword'));
         password.value = '';
@@ -543,6 +542,7 @@ function resetForm() {
   errorMessage.value = '';
   show2FA.value = false;
   configLoaded.value = false;
+  cachedLockPasswordHash.value = null;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 

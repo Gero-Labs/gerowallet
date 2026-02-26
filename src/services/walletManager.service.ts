@@ -589,9 +589,16 @@ export class WalletManager {
     // from the extension's options/popup pages, not from content scripts or injected page scripts.
     // DApp connection relay in background.ts uses a separate message handler (addToPopup) that does
     // not route to this unlock flow.
-    if (unlockCredential === 'passkey-authenticated' || unlockCredential === 'lockpassword-verified') {
+    const browserVerified =
+      (unlockCredential === 'passkey-authenticated') ||
+      (unlockCredential === 'lockpassword-verified' && unlockMethod === 'password');
+    if (browserVerified) {
       unlockValid = true;
     } else if (unlockMethod === 'password') {
+      // This branch only handles normal (non-PRF) wallets.
+      // PRF wallets always arrive as 'lockpassword-verified' (browser-verified above).
+      // Note: PRF wallet creation always sets passwordUnlockEnabled: false, so no PRF wallet
+      // has a prfSpendingPassword field — the old verification path was removed as unreachable.
       if (useWalletBg) {
         // NORMAL WALLET - Post-login: use walletBg instance
         if (!this.walletBg || !walletStore.loggedWallet) {
