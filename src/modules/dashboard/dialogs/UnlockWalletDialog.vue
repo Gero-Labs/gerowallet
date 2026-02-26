@@ -227,6 +227,7 @@ const show2FA = ref(false);
 const passKeyEnabled = ref(false);
 const webAuthnCredentialId = ref<string | null>(null);
 const passKeyAutoTriggerUnlock = ref(false);
+const preLoginEncryptionMethod = ref<string | null>(null);
 
 const pinCode = ref('');
 const pinLength = ref(4);
@@ -252,7 +253,11 @@ const passwordInputRef = ref<any>(null);
 
 // Computed properties
 const isPrfWallet = computed(() => {
-  return walletStore.loggedWallet?.encryptionMethod === 'prf';
+  if (walletStore.loggedWallet) {
+    return walletStore.loggedWallet.encryptionMethod === 'prf';
+  }
+  // Pre-login: use encryption method resolved from wallet record
+  return preLoginEncryptionMethod.value === 'prf';
 });
 
 const canUnlock = computed(() => {
@@ -310,6 +315,14 @@ async function loadSecurityConfig() {
     // Use pre-login walletId if provided, otherwise use logged wallet
     const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
     if (!walletId) return;
+
+    // Resolve encryption method for pre-login PRF detection
+    if (props.preLoginWalletId) {
+      const { getAllWallets } = await import('@/db/gero-db');
+      const walletsMap = await getAllWallets();
+      const walletRecord = walletsMap[walletId];
+      preLoginEncryptionMethod.value = walletRecord?.encryptionMethod || null;
+    }
 
     const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(walletId);
