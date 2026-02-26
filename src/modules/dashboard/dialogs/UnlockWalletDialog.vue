@@ -426,22 +426,24 @@ async function handleUnlock(passKeyAuthenticated = false) {
       // PRF wallet lock password: verify locally in browser context
       // (avoids crypto polyfill differences between browser and service worker)
       const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
-      if (walletId) {
-        const { getDb } = await import('@/db/wallet-db');
-        const db = await getDb(walletId);
-        const configTable = db.table('config');
-        const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
-        if (!lockPasswordHashConfig?.value) {
-          showError(vmProxy.$t('security.lockPasswordNotConfigured'));
-          return;
-        }
-        const { verifyPin } = await import('@/shared/utils/security');
-        const isValid = await verifyPin(password.value, lockPasswordHashConfig.value);
-        if (!isValid) {
-          showError(vmProxy.$t('security.wrongLockPassword'));
-          password.value = '';
-          return;
-        }
+      if (!walletId) {
+        showError(vmProxy.$t('security.unlockFailed'));
+        return;
+      }
+      const { getDb } = await import('@/db/wallet-db');
+      const db = await getDb(walletId);
+      const configTable = db.table('config');
+      const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+      if (!lockPasswordHashConfig?.value) {
+        showError(vmProxy.$t('security.lockPasswordNotConfigured'));
+        return;
+      }
+      const { verifyPin } = await import('@/shared/utils/security');
+      const isValid = await verifyPin(password.value, lockPasswordHashConfig.value);
+      if (!isValid) {
+        showError(vmProxy.$t('security.wrongLockPassword'));
+        password.value = '';
+        return;
       }
       // Verification passed — signal background (same pattern as passkey-authenticated)
       unlockCredential = 'lockpassword-verified';
@@ -478,8 +480,9 @@ async function handleUnlock(passKeyAuthenticated = false) {
         showError(vmProxy.$t('security.incorrectPattern'));
         pattern.value = [];  // Clear pattern
       } else {
-        // Password unlock
-        showError(isPrfWallet.value ? vmProxy.$t('security.wrongLockPassword') : vmProxy.$t('wallet.wrongSpendingPassword'));
+        // Password unlock — for PRF wallets, lock password was already verified locally
+        // so a background failure means something else went wrong (DB error, wallet load, etc.)
+        showError(isPrfWallet.value ? vmProxy.$t('security.unlockFailed') : vmProxy.$t('wallet.wrongSpendingPassword'));
         password.value = '';  // Clear password input
       }
     }
