@@ -111,7 +111,7 @@
                 <v-text-field
                   ref="passwordInputRef"
                   v-model="password"
-                  :label="$t('security.spendingPassword')"
+                  :label="isPrfWallet ? $t('security.lockPassword') : $t('security.spendingPassword')"
                   :type="show ? 'text' : 'password'"
                   :rules="[rules.required()]"
                   outlined
@@ -251,6 +251,10 @@ const pinInputRef = ref<any>(null);
 const passwordInputRef = ref<any>(null);
 
 // Computed properties
+const isPrfWallet = computed(() => {
+  return walletStore.loggedWallet?.encryptionMethod === 'prf';
+});
+
 const canUnlock = computed(() => {
   if (unlocking.value) return false;
 
@@ -270,7 +274,9 @@ const unlockDescription = computed(() => {
   } else if (unlockMethod.value === 'pattern') {
     return vmProxy.$t('security.drawPatternToUnlock');
   } else {
-    return vmProxy.$t('security.useSpendingPasswordToUnlock');
+    return isPrfWallet.value
+      ? vmProxy.$t('security.useLockPasswordToUnlock')
+      : vmProxy.$t('security.useSpendingPasswordToUnlock');
   }
 });
 
@@ -416,8 +422,29 @@ async function handleUnlock(passKeyAuthenticated = false) {
       unlockCredential = pinCode.value;
     } else if (unlockMethod.value === 'pattern') {
       unlockCredential = pattern.value;
+    } else if (unlockMethod.value === 'password' && isPrfWallet.value) {
+      // PRF wallet lock password: verify locally in browser context
+      // (avoids crypto polyfill differences between browser and service worker)
+      const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
+      if (walletId) {
+        const { getDb } = await import('@/db/wallet-db');
+        const db = await getDb(walletId);
+        const configTable = db.table('config');
+        const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+        if (lockPasswordHashConfig?.value) {
+          const { verifyPin } = await import('@/shared/utils/security');
+          const isValid = await verifyPin(password.value, lockPasswordHashConfig.value);
+          if (!isValid) {
+            showError(vmProxy.$t('security.wrongLockPassword'));
+            password.value = '';
+            return;
+          }
+        }
+      }
+      // Verification passed — signal background (same pattern as passkey-authenticated)
+      unlockCredential = 'lockpassword-verified';
     } else {
-      // Fallback to password
+      // Fallback to spending password (normal wallets)
       unlockCredential = password.value;
     }
 
@@ -450,7 +477,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
         pattern.value = [];  // Clear pattern
       } else {
         // Password unlock
-        showError(vmProxy.$t('wallet.wrongSpendingPassword'));
+        showError(isPrfWallet.value ? vmProxy.$t('security.wrongLockPassword') : vmProxy.$t('wallet.wrongSpendingPassword'));
         password.value = '';  // Clear password input
       }
     }

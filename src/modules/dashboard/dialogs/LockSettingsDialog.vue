@@ -42,12 +42,12 @@
                 <v-icon>mdi-form-textbox-password</v-icon>
               </v-list-item-avatar>
               <v-list-item-content>
-                <!-- Normal wallets: Use spending password for unlock -->
-                <template v-if="isNormalWallet">
-                  <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
-                  <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
-                </template>
                 <!-- PRF wallets: Separate password for UI locking only -->
+                <template v-if="isPrfWallet">
+                  <v-list-item-title>{{ $t('security.lockPassword') }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ $t('security.useLockPasswordToUnlock') }}</v-list-item-subtitle>
+                </template>
+                <!-- Normal wallets: Use spending password for unlock -->
                 <template v-else>
                   <v-list-item-title>{{ $t('security.lockPassword') }}</v-list-item-title>
                   <v-list-item-subtitle>{{ $t('security.useLockPasswordToUnlock') }}</v-list-item-subtitle>

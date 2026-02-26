@@ -620,18 +620,33 @@ async function verifyCurrentMethod() {
         enableToolTip();
       }
     } else if (unlockMethod.value === 'password') {
-      try {
-        const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-          method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-          data: { password: verificationInput.value }
-        }) as BackgroundResponse<VerifyPasswordResponse>;
-        isValid = passwordVerification.data.success;
+      const isPrfWallet = wallet?.encryptionMethod === 'prf';
+      if (isPrfWallet) {
+        // PRF wallet: verify against lockPasswordHash (same pattern as PIN verification)
+        const { verifyPin } = await import('@/shared/utils/security');
+        const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+        if (lockPasswordHashConfig?.value) {
+          isValid = await verifyPin(verificationInput.value, lockPasswordHashConfig.value);
+        }
         if (!isValid) {
-          tooltip.value.text = t('wallet.wrongSpendingPassword');
+          tooltip.value.text = t('security.wrongLockPassword');
           enableToolTip();
         }
-      } catch (error) {
-        isValid = false;
+      } else {
+        // Normal wallet: verify spending password via background
+        try {
+          const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+            method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+            data: { password: verificationInput.value }
+          }) as BackgroundResponse<VerifyPasswordResponse>;
+          isValid = passwordVerification.data.success;
+          if (!isValid) {
+            tooltip.value.text = t('wallet.wrongSpendingPassword');
+            enableToolTip();
+          }
+        } catch (error) {
+          isValid = false;
+        }
       }
     }
     if (isValid) {
