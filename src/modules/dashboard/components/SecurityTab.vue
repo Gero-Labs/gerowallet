@@ -79,7 +79,7 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
-      <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal" @click="changePasswordDialog = true">
+      <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet" @click="changePasswordDialog = true">
         <v-list-item-avatar class="my-0">
           <v-icon>
             mdi-shield-key-outline
@@ -118,11 +118,16 @@
         <v-list-item-content class="py-0">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">
-              {{ $t('security.lockSettings') }}
+              {{ isPrfWallet ? $t('security.lockSettingsOnly') : $t('security.lockSettings') }}
             </h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • PassKey: {{ passKeyText }}
+            <template v-if="isPrfWallet">
+              {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }}
+            </template>
+            <template v-else>
+              {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • PassKey: {{ passKeyText }}
+            </template>
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-icon class="my-0" style="align-self: center">
@@ -424,6 +429,8 @@ const getUnlockMethodTitle = (method: string | null) => {
       return ''
   }
 };
+
+const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
 
 const canBackup = computed(() => {
   return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();

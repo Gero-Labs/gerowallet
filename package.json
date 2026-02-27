@@ -1,7 +1,7 @@
 {
   "name": "gero-wallet",
   "displayName": "Gero Dashboard",
-  "version": "2.6.2",
+  "version": "2.6.3",
   "private": true,
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "scripts": {

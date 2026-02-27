@@ -2,7 +2,7 @@
   <BaseDialog
     :is-open="value"
     :title="t('security.lockPassword')"
-    :subtitle="t('security.setLockPasswordSubtitle')"
+    :subtitle="t('security.useLockPasswordToUnlock')"
     :width="500"
     :min-height="340"
     persistent
