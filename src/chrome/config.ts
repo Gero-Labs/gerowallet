@@ -68,14 +68,32 @@ export const NETWORKD_ID_NUMBER = {
   preprod: 0,
 };
 
+export const BITCOIN_METHOD = {
+  enable: 'bitcoin_enable',
+  isEnabled: 'bitcoin_isEnabled',
+  getAccounts: 'bitcoin_getAccounts',
+  getPublicKey: 'bitcoin_getPublicKey',
+  getNetwork: 'bitcoin_getNetwork',
+  getBalance: 'bitcoin_getBalance',
+  getUtxos: 'bitcoin_getUtxos',
+  signPsbt: 'bitcoin_signPsbt',
+  signPsbts: 'bitcoin_signPsbts',
+  signMessage: 'bitcoin_signMessage',
+  pushTx: 'bitcoin_pushTx',
+  pushPsbt: 'bitcoin_pushPsbt',
+};
+
 export const POPUP = {
   main: 'mainPopup',
   signTx: 'sign-tx',
   dappConnect: 'dapp-connect',
   dappSignData: 'dapp-sign',
+  bitcoinSignPsbt: 'sign-bitcoin-psbt',
+  bitcoinSignMessage: 'sign-bitcoin-message',
   login: 'plogin',
   warning:'warning',
   passKeyAuth: 'passkey-auth',
+  wcSessionProposal: 'wc-session-proposal',
 };
 
 export const POPUP_WINDOW = {

@@ -19,29 +19,26 @@
               <v-card
                 flat
                 class="transparent d-flex row fill-height no-gutters"
-                style="min-height: 380px"
               >
                 <v-card-text class="px-0 pb-0 justify-space-around no-gutters">
 
-                  <!-- Network Selector -->
-                  <div class="mb-3">
-                    <div class="text-caption grey--text text--lighten-1 mb-2 text-uppercase" style="letter-spacing: 0.08em;">{{ $t('common.selectNetwork') }}</div>
-                    <div class="network-chips-row">
-                      <div
-                        v-for="net in allNetworks"
-                        :key="net.blockchain + net.network"
-                        class="network-chip-item"
-                        :class="{ 'network-chip-item--selected': isNetworkSelected(net) }"
-                        @click="selectNetwork(net)"
-                      >
-                        <v-avatar size="18" class="mr-1">
-                          <v-img :src="net.icon" contain></v-img>
-                        </v-avatar>
-                        <span class="text-caption">{{ net.title }}</span>
-                      </div>
+                  <!-- Network Selection -->
+                  <div class="step-section-label mb-2">{{ $t('common.selectNetwork') }}</div>
+                  <div class="network-grid mb-4">
+                    <div
+                      v-for="net in allNetworks"
+                      :key="net.blockchain + net.network"
+                      class="network-tile"
+                      :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                      @click="selectNetwork(net)"
+                    >
+                      <v-avatar size="22" class="network-tile__icon">
+                        <v-img :src="net.icon" contain></v-img>
+                      </v-avatar>
+                      <span class="network-tile__label">{{ net.title }}</span>
                     </div>
                   </div>
-                  <v-divider class="mb-3" style="border-color: rgba(255, 255, 255, 0.12);" />
+                  <v-divider class="mb-4" style="border-color: rgba(255, 255, 255, 0.08);" />
 
                   <v-row no-gutters class="pb-2">
                     <strong style="align-content: center; color: white">{{ $t('welcome.chooseRecoveryPhraseLength') }}</strong>
@@ -453,12 +450,16 @@ const prfFormValid = ref(false);
 const allNetworks = networks.networks;
 const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
 
+const onNetworkChange = (net: NetworkInfo) => {
+  newWallet.icon = networks.resolveIconColor(net.blockchain, net.network);
+};
+
 const isNetworkSelected = (net: NetworkInfo) =>
   localNetwork.value?.blockchain === net.blockchain && localNetwork.value?.network === net.network;
 
 const selectNetwork = (net: NetworkInfo) => {
   localNetwork.value = net;
-  newWallet.icon = networks.resolveIconColor(net.blockchain, net.network);
+  onNetworkChange(net);
 };
 
 // Reactive data
@@ -820,13 +821,14 @@ onUnmounted(() => {
 }
 
 ::v-deep .v-stepper__content {
-  min-height: 380px;
-  transition: min-height 0.3s ease;
+  height: 520px;
+  overflow-y: auto;
   padding: 0 16px;
 }
 
 ::v-deep .v-stepper__wrapper {
-  transition: height 0.3s ease;
+  height: 520px !important;
+  overflow-y: auto;
 }
 
 // Action buttons
@@ -868,42 +870,70 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 600px) {
-  ::v-deep .v-stepper__content {
-    min-height: auto;
-  }
+.step-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
 }
 
-// Network chip selector
-.network-chips-row {
+.network-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.network-tile {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.network-chip-item {
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  padding: 5px 10px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
+  justify-content: center;
+  padding: 10px 8px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  min-height: 62px;
+  gap: 5px;
   user-select: none;
 
   &:hover {
-    border-color: rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
   }
 
-  &--selected {
-    border-color: var(--v-primary-base);
-    background: rgba(45, 240, 247, 0.1);
-    color: white;
+  &--active {
+    border-color: rgba(45, 240, 247, 0.55);
+    background: rgba(45, 240, 247, 0.06);
+    box-shadow: 0 0 14px rgba(45, 240, 247, 0.07);
+  }
+
+  &__label {
+    font-size: 10.5px;
     font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    line-height: 1.3;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &--active &__label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+@media (max-width: 600px) {
+  ::v-deep .v-stepper__content {
+    height: auto;
+    min-height: 380px;
+  }
+  ::v-deep .v-stepper__wrapper {
+    height: auto !important;
   }
 }
 </style>

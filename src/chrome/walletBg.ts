@@ -1258,6 +1258,192 @@ export class WalletBg {
     };
   }
 
+  /**
+   * Get the compressed public key (33 bytes hex) for the active Bitcoin receiving address.
+   * Used by bitcoin_getPublicKey DApp API.
+   */
+  async getBitcoinPublicKey(): Promise<string> {
+    const { HDKey } = await import('@scure/bip32');
+    const accountNode = HDKey.fromExtendedKey(this.publicKey);
+    const childNode = accountNode.derive('m/0/0');
+    if (!childNode.publicKey) throw new Error('Failed to derive Bitcoin public key');
+    return Buffer.from(childNode.publicKey).toString('hex');
+  }
+
+  /**
+   * Sign a PSBT for a DApp request (Unisat-compatible bitcoin_signPsbt / bitcoin_signPsbts).
+   *
+   * @param psbtHex   - PSBT as hex or base64 string
+   * @param options   - { autoFinalized?: boolean } — if false, returns signed PSBT hex instead of tx hex
+   * @param password  - Spending password (password wallets)
+   * @param prfSecret - Raw PRF output bytes (PRF wallets)
+   * @returns         - Signed PSBT hex, or finalized tx hex when autoFinalized !== false
+   */
+  async signBitcoinDappPsbt(
+    psbtHex: string,
+    options?: { autoFinalized?: boolean; toSignInputs?: any[] },
+    password?: string,
+    prfSecret?: Uint8Array
+  ): Promise<string> {
+    const { signPsbtWithMnemonic } = await import('@/chains/bitcoin/bitcoinSigner');
+    const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const { decrypt } = await import('@/shared/utils/crypto');
+
+    // Decrypt mnemonic
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.id.toString()
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    const bitcoin = await import('bitcoinjs-lib');
+    const bitcoinNetwork = getBitcoinNetwork(this.network);
+
+    let psbt: any;
+    try {
+      psbt = bitcoin.Psbt.fromHex(psbtHex, { network: bitcoinNetwork });
+    } catch {
+      psbt = bitcoin.Psbt.fromBase64(psbtHex, { network: bitcoinNetwork });
+    }
+
+    const signedPsbt = signPsbtWithMnemonic(psbt, mnemonic, this.network, this.addressType, 0);
+
+    if (options?.autoFinalized !== false) {
+      signedPsbt.finalizeAllInputs();
+      return signedPsbt.extractTransaction().toHex();
+    }
+    return signedPsbt.toHex();
+  }
+
+  /**
+   * Sign a message for a DApp (Unisat-compatible bitcoin_signMessage).
+   *
+   * @param message   - UTF-8 message string
+   * @param type      - 'ecdsa' (default) or 'bip322-simple'
+   * @param password  - Spending password (password wallets)
+   * @param prfSecret - Raw PRF output bytes (PRF wallets)
+   * @returns         - Base64-encoded signature
+   */
+  async signBitcoinDappMessage(
+    message: string,
+    type: 'ecdsa' | 'bip322-simple' = 'ecdsa',
+    password?: string,
+    prfSecret?: Uint8Array
+  ): Promise<string> {
+    const { decrypt } = await import('@/shared/utils/crypto');
+    const { deriveBitcoinRootKey, getDerivationPurpose, BitcoinCoinType, BitcoinTestnetCoinType } =
+      await import('@/chains/bitcoin/bitcoinKeyManager');
+
+    // Decrypt mnemonic
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId!, this.id.toString()
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    // Derive signing key (first receiving address: m/purpose'/coinType'/0'/0/0)
+    const rootKey = deriveBitcoinRootKey(mnemonic);
+    const purpose = getDerivationPurpose(this.addressType || 'segwit');
+    const coinType = this.network.toLowerCase() === 'mainnet' ? BitcoinCoinType : BitcoinTestnetCoinType;
+    const signingKey = rootKey.derive(`m/${purpose}'/${coinType}'/0'/0/0`);
+    if (!signingKey.privateKey || !signingKey.publicKey) throw new Error('Failed to derive signing key');
+
+    const privKey = Buffer.from(signingKey.privateKey);
+    const pubKey = Buffer.from(signingKey.publicKey);
+
+    if (type === 'bip322-simple') {
+      return this._signBip322Simple(message, privKey, pubKey);
+    }
+
+    // ECDSA: Bitcoin message signing with magic prefix
+    return this._signEcdsaMessage(message, privKey);
+  }
+
+  private async _signEcdsaMessage(message: string, privKey: Buffer): Promise<string> {
+    const ecc = await import('tiny-secp256k1');
+    const { sha256 } = await import('@noble/hashes/sha2');
+
+    const MAGIC = Buffer.from('\x18Bitcoin Signed Message:\n', 'binary');
+    const msgBuf = Buffer.from(message, 'utf8');
+    const varint = Buffer.allocUnsafe(1);
+    varint.writeUInt8(msgBuf.length);
+    const prefixed = Buffer.concat([MAGIC, varint, msgBuf]);
+    const msgHash = sha256(sha256(prefixed));
+
+    const { signature, recoveryId } = ecc.signRecoverable(msgHash, privKey);
+    const prefix = 27 + 4 + recoveryId; // 27+4 for compressed key
+    return Buffer.concat([Buffer.from([prefix]), Buffer.from(signature)]).toString('base64');
+  }
+
+  private async _signBip322Simple(message: string, privKey: Buffer, pubKey: Buffer): Promise<string> {
+    const bitcoin = await import('bitcoinjs-lib');
+    const ecc = await import('tiny-secp256k1');
+    const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const { sha256 } = await import('@noble/hashes/sha2');
+
+    const bitcoinNetwork = getBitcoinNetwork(this.network);
+
+    // BIP-322: tagged hash of the message
+    const tag = Buffer.from('BIP0322-signed-message', 'utf8');
+    const tagHash = sha256(tag);
+    const msgHash = Buffer.from(sha256(Buffer.concat([tagHash, tagHash, Buffer.from(message, 'utf8')])));
+
+    // P2WPKH scriptPubKey for signing key
+    const hash160 = bitcoin.crypto.hash160(pubKey);
+    const scriptPubKey = Buffer.concat([Buffer.from([0x00, 0x14]), hash160]);
+
+    // Build virtual to_spend tx to compute its txid
+    const toSpendTx = new bitcoin.Transaction();
+    toSpendTx.version = 0;
+    toSpendTx.addInput(Buffer.alloc(32, 0), 0xffffffff, 0,
+      bitcoin.script.compile([bitcoin.opcodes['OP_0'], msgHash]));
+    toSpendTx.addOutput(scriptPubKey, 0);
+    const toSpendHash = toSpendTx.getHash();
+
+    // Build to_sign PSBT spending to_spend
+    const psbt = new bitcoin.Psbt({ network: bitcoinNetwork });
+    (psbt as any).setVersion(0);
+    psbt.addInput({
+      hash: toSpendHash,
+      index: 0,
+      sequence: 0,
+      witnessUtxo: { script: scriptPubKey, value: 0 },
+    });
+    psbt.addOutput({ script: bitcoin.script.compile([bitcoin.opcodes['OP_RETURN']]), value: 0 });
+
+    psbt.signInput(0, {
+      publicKey: pubKey,
+      sign: (hash: Buffer) => Buffer.from(ecc.sign(hash, privKey)),
+    });
+    psbt.finalizeAllInputs();
+
+    // Extract witness and serialize as varint-length-prefixed bytes → base64
+    const witness = psbt.extractTransaction().ins[0].witness;
+    const varInt = (n: number) => {
+      if (n < 0xfd) return Buffer.from([n]);
+      const b = Buffer.allocUnsafe(3); b[0] = 0xfd; b.writeUInt16LE(n, 1); return b;
+    };
+    const parts: Buffer[] = [varInt(witness.length)];
+    for (const item of witness) parts.push(varInt(item.length), item);
+    return Buffer.concat(parts).toString('base64');
+  }
+
   async verifySpendingPassword(password: string): Promise<boolean> {
     if (this.encryptionMethod === 'prf') {
       // ============================================================================

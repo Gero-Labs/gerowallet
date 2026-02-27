@@ -118,6 +118,7 @@ import keySvg from '@/assets/svg/key.svg';
 import keyGeroSvg from '@/assets/svg/keyGero.svg';
 import keyApexSvg from '@/assets/svg/keyApex.svg';
 import pairSvg from '@/assets/svg/pair.svg';
+import pairGeroSvg from '@/assets/svg/pairGero.svg';
 import pairApexSvg from '@/assets/svg/pairApex.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
@@ -129,7 +130,7 @@ import walletGeroApex from '@/assets/svg/walletGeroApex.svg'
 import debitCardBgImage from '@/assets/debitcardbg.png'
 import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
 import cashbackImage from '@/assets/cashback.png'
-import debitCardImage from '@/assets/front_card_no_mcx2.png' // Updated to new card design
+import debitCardImage from '@/assets/front_card_no_mcx2.png'
 import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
 import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/front_card_no_mcx2.png'
@@ -373,6 +374,7 @@ export default {
   keyApexSvg,
   pairSvg,
   pairApexSvg,
+  pairGeroSvg,
   cardanoSvg,
   clarityLogo,
   questionMark,

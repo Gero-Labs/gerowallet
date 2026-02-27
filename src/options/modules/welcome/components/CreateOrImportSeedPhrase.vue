@@ -101,7 +101,7 @@ const pairSvg = computed(() => {
   if (props.network?.blockchain?.includes('Apex')) {
     return assets.pairApexSvg
   }
-  return assets.pairSvg
+  return assets.pairGeroSvg
 })
 
 computed(() => {

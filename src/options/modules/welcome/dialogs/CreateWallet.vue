@@ -21,97 +21,107 @@
             <v-card flat class="transparent d-flex justify-center">
               <v-form ref="nameForm" v-model="nameValid" style="max-width: 540px; width: 100%;">
 
-                <!-- Network Selector -->
-                <div class="mb-4">
-                  <div class="text-caption grey--text text--lighten-1 mb-2 text-uppercase" style="letter-spacing: 0.08em;">{{ $t('common.selectNetwork') }}</div>
-                  <div class="network-chips-row">
-                    <div
-                      v-for="net in allNetworks"
-                      :key="net.blockchain + net.network"
-                      class="network-chip-item"
-                      :class="{ 'network-chip-item--selected': isNetworkSelected(net) }"
-                      @click="selectNetwork(net)"
-                    >
-                      <v-avatar size="18" class="mr-1">
-                        <v-img :src="net.icon" contain></v-img>
-                      </v-avatar>
-                      <span class="text-caption">{{ net.title }}</span>
-                    </div>
+                <!-- Network — Mainnets -->
+                <div class="step-section-label mb-2">{{ $t('common.selectNetwork') }}</div>
+                <div class="network-grid mb-3">
+                  <div
+                    v-for="net in mainnetNetworks"
+                    :key="net.blockchain + net.network"
+                    class="network-tile"
+                    :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                    @click="selectNetwork(net)"
+                  >
+                    <v-avatar size="22" class="network-tile__icon">
+                      <v-img :src="net.icon" contain></v-img>
+                    </v-avatar>
+                    <span class="network-tile__label">{{ net.title }}</span>
                   </div>
                 </div>
-                <v-divider class="mb-4" style="border-color: rgba(255, 255, 255, 0.12);" />
+
+                <!-- Testnets — collapsed by default -->
+                <div class="testnet-toggle mb-4" @click="showTestnets = !showTestnets">
+                  <v-icon size="12" class="mr-1" style="color: inherit;">{{ showTestnets ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+                  <span>{{ $t('welcome.developerNetworks') }}</span>
+                  <v-chip v-if="isTestnetSelected" x-small color="warning" class="ml-2" style="height: 14px; font-size: 9px;">{{ localNetwork.currencyTicker }}</v-chip>
+                </div>
+                <div v-if="showTestnets" class="network-grid mb-4">
+                  <div
+                    v-for="net in testnetNetworks"
+                    :key="net.blockchain + net.network"
+                    class="network-tile network-tile--testnet"
+                    :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                    @click="selectNetwork(net)"
+                  >
+                    <v-avatar size="16" class="network-tile__icon">
+                      <v-img :src="net.icon" contain></v-img>
+                    </v-avatar>
+                    <span class="network-tile__label">{{ net.title }}</span>
+                  </div>
+                </div>
+
+                <v-divider class="mb-4" style="border-color: rgba(255, 255, 255, 0.08);" />
 
                 <!-- Wallet Name -->
-                <h2 class="text-left white--text mb-3">{{ $t('welcome.setUpWalletName') }}</h2>
-
+                <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
                 <v-text-field
                   v-model="newWallet.name"
                   dense
                   filled
                   autofocus
-                  :label="$t('welcome.walletName')"
                   :placeholder="$t('welcome.walletNamePlaceholder')"
                   :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                 />
 
-                <!-- Security Method (only when PRF is available) -->
+                <!-- Security Method — side-by-side compact tiles -->
                 <template v-if="prfSupported">
-                  <v-divider class="my-5" style="border-color: rgba(255, 255, 255, 0.12);" />
+                  <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
+                  <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
+                  <div class="security-row">
 
-                  <!-- PassKey card -->
-                  <SecurityMethodCard
-                    :title="t('welcome.passKeyMethod')"
-                    icon="mdi-shield-key"
-                    :benefits="[
-                      t('welcome.passKeyBenefit1'),
-                      t('welcome.passKeyBenefit2'),
-                      t('welcome.passKeyBenefitKeysSecure')
-                    ]"
-                    :learn-more-content="t('welcome.passKeyLearnMoreFull')"
-                    :selected="selectedSecurityMethod === 'prf'"
-                    :recommended="true"
-                    @select="selectedSecurityMethod = 'prf'"
-                  />
+                    <!-- PassKey tile -->
+                    <div
+                      class="security-tile"
+                      :class="{ 'security-tile--active': selectedSecurityMethod === 'prf' }"
+                      @click="selectedSecurityMethod = 'prf'"
+                    >
+                      <div class="security-tile__head">
+                        <v-icon size="15" color="primary">mdi-shield-key</v-icon>
+                        <span class="security-tile__name">{{ $t('welcome.passKeyMethod') }}</span>
+                        <v-tooltip bottom max-width="260" content-class="custom-tooltip">
+                          <template v-slot:activator="{ on }">
+                            <v-icon x-small class="ml-auto" color="grey lighten-1" v-on="on" @click.stop>mdi-information-outline</v-icon>
+                          </template>
+                          <span class="text-body-2">{{ $t('welcome.passKeyLearnMoreFull') }}</span>
+                        </v-tooltip>
+                      </div>
+                      <div class="d-flex align-center mt-1">
+                        <v-chip color="primary" x-small class="mr-1">{{ $t('welcome.recommended') }}</v-chip>
+                      </div>
+                      <span class="security-tile__sub mt-1">{{ $t('welcome.passKeyBenefit2') }}</span>
+                    </div>
 
-                  <!-- Password card (minimal) -->
-                  <v-card
-                    flat
-                    :class="[
-                      'method-card mt-3',
-                      { 'method-card--selected': selectedSecurityMethod === 'password' }
-                    ]"
-                    style="background-color: #00000080;"
-                    @click="selectedSecurityMethod = 'password'"
-                  >
-                    <v-list-item class="px-4 py-2" style="background: transparent;">
-                      <v-avatar color="grey darken-1" size="24" class="mr-3 my-0 align-self-center">
-                        <v-icon dark small>mdi-key-variant</v-icon>
-                      </v-avatar>
-                      <v-list-item-content class="py-0">
-                        <v-list-item-title class="text-subtitle-1 white--text font-weight-medium">
-                          {{ $t('welcome.passwordMethod') }}
-                        </v-list-item-title>
-                        <v-list-item-subtitle class="text-body-2">
-                          {{ $t('welcome.passwordMethodDesc') }}
-                        </v-list-item-subtitle>
-                      </v-list-item-content>
-                      <v-icon v-if="selectedSecurityMethod === 'password'" color="primary" class="ml-2 align-self-center">mdi-check-circle</v-icon>
-                    </v-list-item>
-                  </v-card>
+                    <!-- Password tile -->
+                    <div
+                      class="security-tile"
+                      :class="{ 'security-tile--active': selectedSecurityMethod === 'password' }"
+                      @click="selectedSecurityMethod = 'password'"
+                    >
+                      <div class="security-tile__head">
+                        <v-icon size="15" color="grey lighten-1">mdi-key-variant</v-icon>
+                        <span class="security-tile__name">{{ $t('welcome.passwordMethod') }}</span>
+                      </div>
+                      <span class="security-tile__sub mt-2">{{ $t('welcome.passwordMethodDesc') }}</span>
+                    </div>
+
+                  </div>
                 </template>
 
-                <!-- PRF not supported alert -->
-                <v-alert
-                  v-else
-                  color="warning"
-                  icon="mdi-alert-outline"
-                  dense
-                  outlined
-                  border="left"
-                  class="mt-4"
-                >
-                  {{ $t('welcome.prfNotSupported') }}
-                </v-alert>
+                <!-- PRF not supported — compact inline notice -->
+                <div v-else class="prf-notice mt-3">
+                  <v-icon x-small color="warning" class="mr-1 flex-shrink-0">mdi-alert-outline</v-icon>
+                  <span>{{ $t('welcome.prfNotSupported') }}</span>
+                </div>
+
               </v-form>
             </v-card>
           </v-stepper-content>
@@ -329,7 +339,6 @@ import rules from "@/utils/rules";
 import { Theme } from "@/models/types";
 import assets from '@/utils/assets';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import SecurityMethodCard from '@/shared/components/SecurityMethodCard.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -355,6 +364,11 @@ const router = vmProxy?.$router;
 // Network selection
 const allNetworks = networks.networks;
 const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
+
+const mainnetNetworks = computed(() => allNetworks.filter(n => n.network === 'Mainnet'));
+const testnetNetworks = computed(() => allNetworks.filter(n => n.network !== 'Mainnet'));
+const isTestnetSelected = computed(() => localNetwork.value?.network !== 'Mainnet');
+const showTestnets = ref(props.network?.network !== 'Mainnet' && props.network != null);
 
 const isNetworkSelected = (net: NetworkInfo) =>
   localNetwork.value?.blockchain === net.blockchain && localNetwork.value?.network === net.network;
@@ -631,13 +645,14 @@ const resetDialog = () => {
 }
 
 ::v-deep .v-stepper__content {
-  min-height: 380px;
-  transition: min-height 0.3s ease;
+  height: 480px;
+  overflow-y: auto;
   padding: 0 16px;
 }
 
 ::v-deep .v-stepper__wrapper {
-  transition: height 0.3s ease;
+  height: 480px !important;
+  overflow-y: auto;
 }
 
 // Action buttons
@@ -645,22 +660,6 @@ const resetDialog = () => {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(0, 0, 0, 0.2);
   min-height: 68px;
-}
-
-// Minimal password card
-.method-card {
-  border: 2px solid transparent;
-  border-radius: 12px !important;
-  cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-
-  &:hover {
-    transform: translateY(-2px);
-  }
-
-  &--selected {
-    border-color: var(--v-primary-base);
-  }
 }
 
 // Remove checkbox hover highlight
@@ -681,40 +680,164 @@ const resetDialog = () => {
 
 @media (max-width: 600px) {
   ::v-deep .v-stepper__content {
-    min-height: auto;
+    height: auto;
+    min-height: 380px;
+  }
+  ::v-deep .v-stepper__wrapper {
+    height: auto !important;
   }
 }
 
-// Network chip selector
-.network-chips-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+// ─── Section labels ───────────────────────────────────────────────────────────
+.step-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255, 255, 255);
 }
 
-.network-chip-item {
+// ─── Testnet toggle ───────────────────────────────────────────────────────────
+.testnet-toggle {
   display: inline-flex;
   align-items: center;
-  padding: 5px 10px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.25);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  user-select: none;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+// ─── Network grid ─────────────────────────────────────────────────────────────
+.network-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.network-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  min-height: 62px;
+  gap: 5px;
   user-select: none;
 
   &:hover {
-    border-color: rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
   }
 
-  &--selected {
-    border-color: var(--v-primary-base);
-    background: rgba(var(--v-primary-base), 0.15);
-    color: white;
-    font-weight: 500;
+  &--active {
+    border-color: rgba(45, 240, 247, 0.55);
+    background: rgba(45, 240, 247, 0.06);
+    box-shadow: 0 0 14px rgba(45, 240, 247, 0.07);
   }
+
+  // Testnet variant
+  &--testnet {
+    min-height: 46px;
+    padding: 7px 8px 6px;
+  }
+
+  &__label {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    line-height: 1.3;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &--active &__label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+// ─── Security method row ──────────────────────────────────────────────────────
+.security-row {
+  display: flex;
+  gap: 8px;
+}
+
+.security-tile {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &--active {
+    border-color: rgba(45, 240, 247, 0.55);
+    background: rgba(45, 240, 247, 0.06);
+    box-shadow: 0 0 14px rgba(45, 240, 247, 0.07);
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  &__name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__sub {
+    display: block;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.3);
+    line-height: 1.35;
+  }
+
+  &--active &__name {
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  &--active &__sub {
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+// ─── PRF notice (compact inline) ──────────────────────────────────────────────
+.prf-notice {
+  display: flex;
+  align-items: flex-start;
+  font-size: 11px;
+  color: rgba(255, 196, 0, 0.65);
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 196, 0, 0.18);
+  background: rgba(255, 196, 0, 0.04);
 }
 </style>

@@ -32,6 +32,9 @@ const Ordinals = () => import('@/modules/ordinals/Ordinals.vue');
 const ThorchainSwap = () => import('@/modules/thorchain/ThorchainSwap.vue');
 const MempoolExplorer = () => import('@/modules/mempool/MempoolExplorer.vue');
 const LightningLnurl = () => import('@/modules/lightning/LightningLnurl.vue');
+const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue');
+const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
+const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -139,6 +142,33 @@ const routes = [
     path: '/sign-tx',
     name: 'sign-tx',
     component: SignTx,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/sign-bitcoin-psbt',
+    name: 'sign-bitcoin-psbt',
+    component: BitcoinSignPsbt,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/sign-bitcoin-message',
+    name: 'sign-bitcoin-message',
+    component: BitcoinSignMessage,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/wc-session-proposal',
+    name: 'wc-session-proposal',
+    component: WCSessionProposal,
     meta: {
       layout: PopupLayout,
       requiresAuth: true,

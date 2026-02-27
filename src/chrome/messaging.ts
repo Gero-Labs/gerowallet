@@ -1,4 +1,4 @@
-import { APIError, METHOD, SENDER, TARGET } from './config';
+import { APIError, BITCOIN_METHOD, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
 
 interface Message {
@@ -309,6 +309,18 @@ export const Messaging = {
   sendToPopupInternal: function (tabIdd: number, request: Message) {
     return new Promise((resolve, _reject) => {
       chrome.runtime.onConnect.addListener(function connectionHandler(port) {
+        // Only handle connections from popup (not side panel)
+        if (port.name !== 'internal-background-popup-communication') return;
+
+        let resolved = false;
+        function cleanup() {
+          if (!resolved) {
+            resolved = true;
+            chrome.runtime.onConnect.removeListener(connectionHandler);
+            port.onMessage.removeListener(messageHandler);
+          }
+        }
+
         function messageHandler(response: any) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
@@ -318,22 +330,31 @@ export const Messaging = {
             port.postMessage(requestCopy);
           }
           if (response.method === METHOD.returnData) {
+            cleanup();
             resolve(response);
           }
           chrome.tabs.onRemoved.addListener(function tabsHandler(tabId) {
             if (tabIdd !== tabId) return;
+            cleanup();
             resolve({
               target: TARGET,
               sender: SENDER.extension,
               error: APIError.Refused,
             });
-            if (chrome?.runtime) {
-              chrome.runtime.onConnect.removeListener(connectionHandler);
-            }
-            port.onMessage.removeListener(messageHandler);
             chrome.tabs.onRemoved.removeListener(tabsHandler);
           });
         }
+
+        // Resolve with Refused if the popup port disconnects without returning data
+        port.onDisconnect.addListener(() => {
+          cleanup();
+          resolve({
+            target: TARGET,
+            sender: SENDER.extension,
+            error: APIError.Refused,
+          });
+        });
+
         port.onMessage.addListener(messageHandler);
       });
     });
@@ -443,7 +464,9 @@ export const Messaging = {
       // only allow enable function, before checking for whitelisted
       if (
         request.method === METHOD.enable ||
-        request.method === METHOD.isEnabled
+        request.method === METHOD.isEnabled ||
+        request.method === BITCOIN_METHOD.enable ||
+        request.method === BITCOIN_METHOD.isEnabled
       ) {
         Messaging.sendToBackground({
           ...request,
