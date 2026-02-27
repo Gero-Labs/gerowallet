@@ -83,7 +83,6 @@ import { BrowserQRCodeReader } from '@zxing/browser';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from '@/utils/rules';
-import { IScannerControls } from '@zxing/browser/esm/common/IScannerControls';
 
 interface Props {
   isOpen: boolean;
@@ -100,7 +99,7 @@ const status = ref<'accessing' | 'no-webcam' | 'permission-needed' | 'error' | '
 const invalidQR = ref(false);
 
 let codeReader: BrowserQRCodeReader | null = null;
-let scanControls: IScannerControls = null;
+let scanControls: { stop(): void } | null = null;
 let invalidTimer: ReturnType<typeof setTimeout> | null = null;
 
 function initReader() {
@@ -132,21 +131,17 @@ async function startCamera() {
     return;
   }
 
+  // Check permission state without acquiring a stream (avoids double-prompt)
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    stream.getTracks().forEach(t => t.stop());
-  } catch (err: any) {
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+    const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    if (perm.state === 'denied') {
       status.value = 'permission-needed';
-    } else if (err.name === 'NotFoundError') {
-      status.value = 'no-webcam';
-    } else {
-      status.value = 'error';
+      return;
     }
-    return;
+  } catch {
+    // Permissions API not available; proceed — decodeFromVideoDevice will handle it
   }
 
-  await new Promise(r => setTimeout(r, 300));
   status.value = 'ready';
   startScanning();
 }
@@ -168,9 +163,15 @@ async function startScanning() {
         }
       }
     );
-  } catch (err) {
+  } catch (err: any) {
     console.error('[QRScanner] failed to start:', err);
-    status.value = 'error';
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      status.value = 'permission-needed';
+    } else if (err.name === 'NotFoundError') {
+      status.value = 'no-webcam';
+    } else {
+      status.value = 'error';
+    }
   }
 }
 
@@ -272,7 +273,6 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: cover;
   display: block;
-  transform: rotateY(180deg);
 }
 
 .scanner-overlay {

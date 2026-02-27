@@ -404,7 +404,7 @@ const pinLength = ref<number>(6);
 const webAuthnCredentialId = ref<string | null>(null);
 
 // Template refs for verification inputs
-const verificationPinInput = ref<any>(null);
+const verificationPinInput = ref(null);
 const verificationPasswordInput = ref<any>(null);
 
 const backup = computed(() => config.value?.backup || false);
@@ -627,8 +627,7 @@ async function verifyCurrentMethod() {
         enableToolTip();
       }
     } else if (unlockMethod.value === 'password') {
-      const isPrfWallet = wallet?.encryptionMethod === 'prf';
-      if (isPrfWallet) {
+      if (isPrfWallet.value) {
         // PRF wallet: verify against lockPasswordHash (same pattern as PIN verification)
         try {
           const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
