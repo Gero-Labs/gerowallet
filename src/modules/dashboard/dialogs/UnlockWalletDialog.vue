@@ -353,9 +353,9 @@ async function loadSecurityConfig() {
 
     // Check for PRF wallets: credential ID stored in wallet record, not config
     const wallet = walletStore.loggedWallet;
-    const isPrfWallet = wallet?.encryptionMethod === 'prf';
+    const walletIsPrf = wallet?.encryptionMethod === 'prf';
 
-    if (isPrfWallet && wallet?.webAuthnCredentialId) {
+    if (walletIsPrf && wallet?.webAuthnCredentialId) {
       // PRF wallet: Use credential from wallet record
       webAuthnCredentialId.value = wallet.webAuthnCredentialId;
       // PRF wallets can always use PassKey for unlock

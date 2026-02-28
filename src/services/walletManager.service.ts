@@ -591,6 +591,9 @@ export class WalletManager {
     // not route to this unlock flow.
     // Defense-in-depth: lockpassword-verified requires encryptionMethod === 'prf' to prevent
     // a normal wallet from bypassing spending password verification if this signal is sent by mistake.
+    // If encryptionMethod lookup fails (DB error → undefined), browserVerified is false and the code
+    // falls through to the normal password branch, which safely fails when trying to decrypt with
+    // the literal string 'lockpassword-verified' as a spending password.
     // Cache walletsMap for reuse in the pre-login password path below (avoids duplicate DB read).
     let cachedWalletsMap: Record<number, any> | null = null;
     let encryptionMethod = walletStore.loggedWallet?.encryptionMethod;
