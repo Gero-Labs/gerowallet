@@ -318,7 +318,10 @@ async function loadSecurityConfig() {
   try {
     // Use pre-login walletId if provided, otherwise use logged wallet
     const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
-    if (!walletId) return;
+    if (!walletId) {
+      configLoaded.value = true; // Allow interaction (fallback to password)
+      return;
+    }
 
     // Resolve encryption method for pre-login PRF detection
     if (props.preLoginWalletId) {

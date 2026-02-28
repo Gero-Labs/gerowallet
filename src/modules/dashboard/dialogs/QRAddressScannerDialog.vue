@@ -98,6 +98,7 @@ const invalidQR = ref(false);
 let codeReader: BrowserQRCodeReader | null = null;
 let scanControls: { stop(): void } | null = null;
 let invalidTimer: ReturnType<typeof setTimeout> | null = null;
+let starting = false;
 
 function initReader() {
   const hints = new Map();
@@ -109,40 +110,46 @@ function initReader() {
 }
 
 async function startCamera() {
-  cleanup(); // Release any orphaned streams from a previous attempt
-  initReader(); // Create fresh reader after cleanup (cleanup nulls codeReader)
-  status.value = 'accessing';
-  invalidQR.value = false;
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-    status.value = 'no-webcam';
-    return;
-  }
-
+  if (starting) return; // Guard against rapid clicks
+  starting = true;
   try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    if (!devices.some(d => d.kind === 'videoinput')) {
+    cleanup(); // Release any orphaned streams from a previous attempt
+    initReader(); // Create fresh reader after cleanup (cleanup nulls codeReader)
+    status.value = 'accessing';
+    invalidQR.value = false;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
       status.value = 'no-webcam';
       return;
     }
-  } catch {
-    status.value = 'error';
-    return;
-  }
 
-  // Check permission state without acquiring a stream (avoids double-prompt)
-  try {
-    const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
-    if (perm.state === 'denied') {
-      status.value = 'permission-needed';
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (!devices.some(d => d.kind === 'videoinput')) {
+        status.value = 'no-webcam';
+        return;
+      }
+    } catch {
+      status.value = 'error';
       return;
     }
-  } catch {
-    // Permissions API not available; proceed — decodeFromVideoDevice will handle it
-  }
 
-  // Status stays 'accessing' (overlay covers video) until camera stream attaches in startScanning
-  await startScanning();
+    // Check permission state without acquiring a stream (avoids double-prompt)
+    try {
+      const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
+      if (perm.state === 'denied') {
+        status.value = 'permission-needed';
+        return;
+      }
+    } catch {
+      // Permissions API not available; proceed — decodeFromVideoDevice will handle it
+    }
+
+    // Status stays 'accessing' (overlay covers video) until camera stream attaches in startScanning
+    await startScanning();
+  } finally {
+    starting = false;
+  }
 }
 
 async function startScanning() {
