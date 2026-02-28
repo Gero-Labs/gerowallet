@@ -11,43 +11,40 @@
   >
     <v-card-text class="pa-4">
       <div class="scanner-container">
-        <!-- Accessing Camera -->
-        <div v-if="status === 'accessing'" class="scanner-status">
-          <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
-          <p class="mt-4 text-center white--text">{{ t('wallet.accessingCamera') }}</p>
-        </div>
-
-        <!-- No Webcam -->
-        <div v-else-if="status === 'no-webcam'" class="scanner-status">
-          <v-icon size="48" color="error">mdi-camera-off</v-icon>
-          <p class="mt-4 text-center white--text">{{ t('wallet.noCameraFound') }}</p>
-        </div>
-
-        <!-- Permission Needed -->
-        <div v-else-if="status === 'permission-needed'" class="scanner-status">
-          <v-icon size="48" color="warning">mdi-camera-lock</v-icon>
-          <p class="mt-4 text-center white--text">{{ t('wallet.pleaseAllowCameraAccess') }}</p>
-          <v-btn color="primary" @click="requestPermission" class="mt-4">
-            {{ t('wallet.grantPermission') }}
-          </v-btn>
-        </div>
-
-        <!-- Error -->
-        <div v-else-if="status === 'error'" class="scanner-status">
-          <v-icon size="48" color="error">mdi-alert-circle</v-icon>
-          <p class="mt-4 text-center white--text">{{ t('wallet.unableToAccessCamera') }}</p>
-        </div>
-
-        <!-- Camera Feed -->
-        <div v-show="status === 'ready'" class="scanner-viewport">
+        <!-- Camera feed (always in DOM so decodeFromVideoDevice can attach the stream) -->
+        <div class="scanner-viewport">
           <video ref="videoEl" class="scanner-video"></video>
-          <div class="scanner-overlay">
+          <div v-if="status === 'ready'" class="scanner-overlay">
             <div class="viewfinder">
               <span class="corner top-left"></span>
               <span class="corner top-right"></span>
               <span class="corner bottom-left"></span>
               <span class="corner bottom-right"></span>
             </div>
+          </div>
+
+          <!-- Status overlays (on top of video with dark background) -->
+          <div v-if="status === 'accessing'" class="scanner-status">
+            <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
+            <p class="mt-4 text-center white--text">{{ t('wallet.accessingCamera') }}</p>
+          </div>
+
+          <div v-else-if="status === 'no-webcam'" class="scanner-status">
+            <v-icon size="48" color="error">mdi-camera-off</v-icon>
+            <p class="mt-4 text-center white--text">{{ t('wallet.noCameraFound') }}</p>
+          </div>
+
+          <div v-else-if="status === 'permission-needed'" class="scanner-status">
+            <v-icon size="48" color="warning">mdi-camera-lock</v-icon>
+            <p class="mt-4 text-center white--text">{{ t('wallet.pleaseAllowCameraAccess') }}</p>
+            <v-btn color="primary" @click="requestPermission" class="mt-4">
+              {{ t('wallet.grantPermission') }}
+            </v-btn>
+          </div>
+
+          <div v-else-if="status === 'error'" class="scanner-status">
+            <v-icon size="48" color="error">mdi-alert-circle</v-icon>
+            <p class="mt-4 text-center white--text">{{ t('wallet.unableToAccessCamera') }}</p>
           </div>
         </div>
 
@@ -113,6 +110,7 @@ function initReader() {
 
 async function startCamera() {
   cleanup(); // Release any orphaned streams from a previous attempt
+  initReader(); // Create fresh reader after cleanup (cleanup nulls codeReader)
   status.value = 'accessing';
   invalidQR.value = false;
 
@@ -143,8 +141,8 @@ async function startCamera() {
     // Permissions API not available; proceed — decodeFromVideoDevice will handle it
   }
 
-  status.value = 'ready';
-  startScanning();
+  // Status stays 'accessing' (overlay covers video) until camera stream attaches in startScanning
+  await startScanning();
 }
 
 async function startScanning() {
@@ -164,6 +162,8 @@ async function startScanning() {
         }
       }
     );
+    // Camera stream attached — remove the status overlay to reveal the feed
+    status.value = 'ready';
   } catch (err: any) {
     console.error('[QRScanner] failed to start:', err);
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -228,12 +228,22 @@ function handleClose() {
   emit('close');
 }
 
+// Wait for dialog slot content to render (Vuetify v-dialog lazy-renders during open transition)
+function waitForVideoEl(timeout = 500): Promise<void> {
+  return new Promise((resolve) => {
+    if (videoEl.value) { resolve(); return; }
+    const interval = setInterval(() => {
+      if (videoEl.value) { clearInterval(interval); resolve(); }
+    }, 30);
+    setTimeout(() => { clearInterval(interval); resolve(); }, timeout);
+  });
+}
+
 // Start camera when dialog opens, stop when it closes
-watch(() => props.isOpen, (open) => {
+watch(() => props.isOpen, async (open) => {
   if (open) {
-    initReader();
-    // Small delay to let dialog DOM render the video element
-    setTimeout(() => startCamera(), 100);
+    await waitForVideoEl();
+    await startCamera();
   } else {
     cleanup();
     status.value = 'accessing';
@@ -254,20 +264,23 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-.scanner-status {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
 .scanner-viewport {
   position: relative;
   border-radius: 8px;
   overflow: hidden;
   background: #000;
   height: 340px;
+}
+
+.scanner-status {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #000;
 }
 
 .scanner-video {

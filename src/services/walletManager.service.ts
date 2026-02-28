@@ -591,11 +591,13 @@ export class WalletManager {
     // not route to this unlock flow.
     // Defense-in-depth: lockpassword-verified requires encryptionMethod === 'prf' to prevent
     // a normal wallet from bypassing spending password verification if this signal is sent by mistake.
+    // Cache walletsMap for reuse in the pre-login password path below (avoids duplicate DB read).
+    let cachedWalletsMap: Record<number, any> | null = null;
     let encryptionMethod = walletStore.loggedWallet?.encryptionMethod;
     if (!encryptionMethod) {
       const { getAllWallets } = await import('@/db/gero-db');
-      const wallets = await getAllWallets();
-      encryptionMethod = wallets[walletId]?.encryptionMethod;
+      cachedWalletsMap = await getAllWallets();
+      encryptionMethod = cachedWalletsMap[walletId]?.encryptionMethod;
     }
     const browserVerified =
       (unlockCredential === 'passkey-authenticated') ||
@@ -627,10 +629,12 @@ export class WalletManager {
         // IMPORTANT: verifySpendingPassword is now async (supports PRF)
         unlockValid = await this.walletBg.verifySpendingPassword(unlockCredential as string);
       } else {
-        // NORMAL WALLET - Pre-login: load wallet from database
-        const { getAllWallets } = await import('@/db/gero-db');
-        const walletsMap = await getAllWallets();
-        const wallet = walletsMap[walletId];
+        // NORMAL WALLET - Pre-login: load wallet from database (reuse cached map if available)
+        if (!cachedWalletsMap) {
+          const { getAllWallets } = await import('@/db/gero-db');
+          cachedWalletsMap = await getAllWallets();
+        }
+        const wallet = cachedWalletsMap[walletId];
 
         if (!wallet || wallet.type !== WalletType.Normal) {
           throw new Error('Password unlock is only supported for Normal wallets');
