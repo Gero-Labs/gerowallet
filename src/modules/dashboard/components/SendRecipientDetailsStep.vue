@@ -244,6 +244,7 @@ import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
 import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
+import { debugLog } from '@/utils/debug';
 
 interface Props {
   sendData: any;
@@ -301,7 +302,7 @@ const onQRScan = (address: string) => {
 }
 
 const saveContact = () => {
-  console.log('save contact')
+  debugLog('save contact')
   contact.value = { address: '', img: undefined, name: '' }
   let name
   const address = paymentAddress.value
@@ -351,7 +352,7 @@ const resolveAdaHandle = debounce(async function(val) {
     }
     loading.value = true
     adaHandleApi.resolve(val.replace('$','')).then(async res => {
-      console.log(res)
+      console.debug(res)
       if (res.status === 200 && res.data?.resolved_addresses?.ada) {
         asset.value = {
           name: res.data.name,
@@ -372,7 +373,7 @@ const resolveAdaHandle = debounce(async function(val) {
   }, 1000);
 
 watch(contact, (val) => {
-  console.log('contact', val)
+  console.debug('contact', val)
   if (!val.address) return
   if (contacts.value[val.address] == null || contacts.value[val.address].name != val.name) {
     contacts.value[val.address] = val

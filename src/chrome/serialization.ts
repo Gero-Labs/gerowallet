@@ -1003,22 +1003,26 @@ export async function signDataCip8(
   // Build COSE_Sign1: create builder and extract Sig_structure for signing
   const { builder, sigStrucBytes } = createBuilderWithSigStructure(addressBytes, payload);
 
-  // Sign the Sig_structure (not the raw payload) — this is what CIP-8 requires
-  const signResult = await keyAgent.signBlob(derivationPath, sigStrucBytes);
+  let coseSign1: any = null;
+  try {
+    // Sign the Sig_structure (not the raw payload) — this is what CIP-8 requires
+    const signResult = await keyAgent.signBlob(derivationPath, sigStrucBytes);
 
-  // Finalize COSE_Sign1 with the Ed25519 signature
-  const signatureRaw = Buffer.from(signResult.signature, 'hex');
-  const coseSign1 = builder.build(signatureRaw);
-  const signatureHex = Buffer.from(coseSign1.to_bytes()).toString('hex');
-  safeFreeCSLObject(builder);
-  safeFreeCSLObject(coseSign1);
+    // Finalize COSE_Sign1 with the Ed25519 signature
+    const signatureRaw = Buffer.from(signResult.signature, 'hex');
+    coseSign1 = builder.build(signatureRaw);
+    const signatureHex = Buffer.from(coseSign1.to_bytes()).toString('hex');
 
-  // Build COSE_Key
-  const keyHex = createCoseKeyHex(addressBytes, signResult.publicKey);
+    // Build COSE_Key
+    const keyHex = createCoseKeyHex(addressBytes, signResult.publicKey);
 
-  // Return in CIP-30 DataSignature format (COSE-encoded)
-  return {
-    signature: signatureHex,
-    key: keyHex
-  };
+    // Return in CIP-30 DataSignature format (COSE-encoded)
+    return {
+      signature: signatureHex,
+      key: keyHex
+    };
+  } finally {
+    safeFreeCSLObject(builder);
+    if (coseSign1) safeFreeCSLObject(coseSign1);
+  }
 }

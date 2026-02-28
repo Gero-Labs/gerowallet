@@ -112,6 +112,7 @@ function initReader() {
 }
 
 async function startCamera() {
+  cleanup(); // Release any orphaned streams from a previous attempt
   status.value = 'accessing';
   invalidQR.value = false;
 
@@ -215,6 +216,7 @@ function cleanup() {
     try { scanControls.stop(); } catch {}
     scanControls = null;
   }
+  codeReader = null;
   if (invalidTimer) {
     clearTimeout(invalidTimer);
     invalidTimer = null;

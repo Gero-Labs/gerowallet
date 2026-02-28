@@ -589,9 +589,17 @@ export class WalletManager {
     // from the extension's options/popup pages, not from content scripts or injected page scripts.
     // DApp connection relay in background.ts uses a separate message handler (addToPopup) that does
     // not route to this unlock flow.
+    // Defense-in-depth: lockpassword-verified requires encryptionMethod === 'prf' to prevent
+    // a normal wallet from bypassing spending password verification if this signal is sent by mistake.
+    let encryptionMethod = walletStore.loggedWallet?.encryptionMethod;
+    if (!encryptionMethod) {
+      const { getAllWallets } = await import('@/db/gero-db');
+      const wallets = await getAllWallets();
+      encryptionMethod = wallets[walletId]?.encryptionMethod;
+    }
     const browserVerified =
       (unlockCredential === 'passkey-authenticated') ||
-      (unlockCredential === 'lockpassword-verified' && unlockMethod === 'password');
+      (unlockCredential === 'lockpassword-verified' && unlockMethod === 'password' && encryptionMethod === 'prf');
     if (browserVerified) {
       unlockValid = true;
     } else if (unlockMethod === 'password') {
