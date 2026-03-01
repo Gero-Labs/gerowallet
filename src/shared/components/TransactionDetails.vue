@@ -385,26 +385,24 @@
                         </v-list-item-avatar>
                         <v-list-item-content>
                           <v-list-item-title>
-                            {{ currentDRep?.metadata?.meta_json?.body?.givenName }}
+                            {{ currentDRep?.metadata?.meta_json?.body?.givenName || currentDRep?.drep_id || getDRepCip129(certificate.dRep) }}
                           </v-list-item-title>
-                          <v-list-item-subtitle v-if="currentDRep?.metadata?.meta_json?.body?.givenName">
+                          <v-list-item-subtitle v-if="getDRepCip105(certificate.dRep)">
                             <a href="https://cips.cardano.org/cip/CIP-0105" target="_blank">CIP-105</a>:
-                            {{ ` ${filters.truncate(currentDRep?.metadata?.meta_json?.body?.cip105)}` }}
+                            {{ ` ${filters.truncate(getDRepCip105(certificate.dRep))}` }}
                             <CopyButton
-                              v-if="currentDRep?.metadata?.meta_json?.body?.cip105"
                               x-small
                               class="ml-1"
-                              :value="currentDRep?.metadata?.meta_json?.body?.cip105"
+                              :value="getDRepCip105(certificate.dRep)"
                             />
                           </v-list-item-subtitle>
-                          <v-list-item-subtitle v-if="currentDRep?.metadata?.meta_json?.body?.givenName">
+                          <v-list-item-subtitle v-if="getDRepCip105(certificate.dRep)">
                             <a href="https://cips.cardano.org/cip/CIP-0129" target="_blank">CIP-129</a>:
-                            {{ ` ${filters.truncate(currentDRep?.metadata?.meta_json?.body?.cip129)}` }}
+                            {{ ` ${filters.truncate(getDRepCip129(certificate.dRep))}` }}
                             <CopyButton
-                              v-if="currentDRep?.metadata?.meta_json?.body?.cip129"
                               x-small
                               class="ml-1"
-                              :value="currentDRep?.metadata?.meta_json?.body?.cip129"
+                              :value="getDRepCip129(certificate.dRep)"
                             />
                           </v-list-item-subtitle>
                         </v-list-item-content>
@@ -780,7 +778,33 @@ import stakingStoreActions from '@/stores/stakingStore';
 import blockchainApi from '@/api/blockchain-api';
 import { Blockchain, Network } from '@/models/types';
 
+/** Koios API UTXO amount entry */
+interface TxAmount {
+  unit: string;
+  quantity: number;
+}
+
+/** Koios API UTXO input/output (different shape from Cardano.TxIn) */
+interface TxIO {
+  tx_hash?: string;
+  output_index?: number;
+  address?: string;
+  amount: TxAmount[];
+}
+
+/** Koios API asset entry */
+interface TxAsset {
+  unit: string;
+  policy_id: string;
+  quantity: number;
+  name?: string;
+  img?: string;
+  metadata?: { decimals?: number };
+}
+
 interface Props {
+  // Hybrid object: Koios API fields at root + Cardano.TxBody/Witness from SDK deserialization
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   transactionInfo: any;
 }
 
@@ -791,39 +815,40 @@ const { loggedWallet } = toRefs(walletStore);
 const { currentDRep } = toRefs(governanceStoreActions.state);
 const { currentPool } = toRefs(stakingStoreActions.state);
 
-const residue = ref<any[]>([]);
-const panels = ref<any[]>([]);
+const residue = ref<ReturnType<typeof resolveAsset>[]>([]);
+const panels = ref<number[]>([]);
 const isExpanded = ref<boolean>(false);
 const isReportDialogOpen = ref<boolean>(false);
-const currentPoolMeta = ref<any>('');
+const currentPoolMeta = ref<{ url_png_icon_64x64?: string } | null>(null);
 
 const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
     loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
-function findLovelace(io: { unit: string; quantity: number }[]) {
-  const tok = io.find(t => t.unit === 'lovelace');
-  return tok ? tok.quantity : 0;
+function findLovelace(io: TxAmount[]) {
+  const token = io.find(item => item.unit === 'lovelace');
+  return token ? token.quantity : 0;
 }
 
-const getRedeemer = (redeemer: Cardano.Redeemer): Serialization.Redeemer => {
+const getRedeemer = (redeemer: Cardano.Redeemer): Serialization.Redeemer | null => {
   try {
     return Serialization.Redeemer.fromCore(redeemer);
-  } catch (e) {
-    return null
+  } catch {
+    return null;
   }
 };
 
-const getRedeemerDataJson = (redeemerData: Cardano.PlutusData) => {
+const getRedeemerDataJson = (redeemerData: Cardano.PlutusData): string => {
   return JSON.stringify(
     redeemerData,
     (_key, value) => {
       if (value instanceof Map) {
-        return Array.from(value.entries()).reduce((obj, [key, value]) => {
-          obj[key] = value;
-          return obj;
-        }, {});
+        const obj: Record<string, string> = {};
+        for (const [k, v] of value.entries()) {
+          obj[k] = v;
+        }
+        return obj;
       } else if (typeof value === 'bigint') {
         return value.toString();
       } else {
@@ -834,10 +859,8 @@ const getRedeemerDataJson = (redeemerData: Cardano.PlutusData) => {
   );
 };
 
-const getScripts = (scripts: Cardano.Script[]) => {
-  return scripts?.map(script => {
-    return Serialization.Script.fromCore(script);
-  });
+const getScripts = (scripts: Cardano.Script[]): Serialization.Script[] | undefined => {
+  return scripts?.map(script => Serialization.Script.fromCore(script));
 };
 
 const getScriptDataBytes = (script: Cardano.Script) => {
@@ -859,22 +882,23 @@ const scriptType = (scriptLanguage: number) => {
   }
 };
 
-const getAssetName = (unit: string, checkAscii: boolean) => {
-  const assetNameHex = Cardano.AssetId.getAssetName(Cardano.AssetId(unit));
-  const policyId = Cardano.AssetId.getPolicyId(Cardano.AssetId(unit));
+const getAssetName = (unit: string, checkAscii: boolean): string => {
+  const assetId = Cardano.AssetId(unit);
+  const assetNameHex = Cardano.AssetId.getAssetName(assetId);
   try {
     return Cardano.AssetName.toUTF8(assetNameHex, true);
-  } catch (e) {
+  } catch {
     const ascii = /^[ -~\t\n\r]+$/;
     const assetName = Buffer.from(assetNameHex, 'hex').toString('ascii');
     if (checkAscii && !ascii.test(assetName)) {
+      const policyId = Cardano.AssetId.getPolicyId(assetId);
       return filters.truncate(Cardano.AssetFingerprint.fromParts(policyId, assetNameHex));
     }
     return assetName;
   }
 };
 
-const getCredentialType = (type: Cardano.CredentialType) => {
+const getCredentialType = (type: Cardano.CredentialType): string | null => {
   switch (type) {
     case Cardano.CredentialType.KeyHash:
       return 'Key Hash';
@@ -885,28 +909,41 @@ const getCredentialType = (type: Cardano.CredentialType) => {
   }
 };
 
-const getDRepCip129 = (drep: Cardano.DelegateRepresentative) => {
+const getDRepCredential = (drep: Cardano.DelegateRepresentative): Cardano.Credential | null => {
+  if ('__typename' in drep) return null; // AlwaysAbstain / AlwaysNoConfidence
+
   const drepS: Serialization.DRep = Serialization.DRep.fromCore(drep);
   switch (drepS.kind()) {
     case Serialization.DRepKind.KeyHash:
-      return Cardano.DRepID.cip129FromCredential({
-        type: Cardano.CredentialType.KeyHash,
-        hash: Hash28ByteBase16(drepS.toKeyHash()),
-      });
+      return { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(drepS.toKeyHash()) };
     case Serialization.DRepKind.ScriptHash:
-      return Cardano.DRepID.cip129FromCredential({
-        type: Cardano.CredentialType.ScriptHash,
-        hash: drepS.toScriptHash(),
-      });
+      return { type: Cardano.CredentialType.ScriptHash, hash: drepS.toScriptHash() };
     default:
-      return 'N/A';
+      return null;
   }
 };
 
-const txIOAssets = (io: any) => {
+const getDRepCip105 = (drep: Cardano.DelegateRepresentative): string => {
+  const credential = getDRepCredential(drep);
+  return credential ? Cardano.DRepID.cip105FromCredential(credential) : '';
+};
+
+const getDRepCip129 = (drep: Cardano.DelegateRepresentative): string => {
+  const credential = getDRepCredential(drep);
+  if (!credential) {
+    if ('__typename' in drep) {
+      if (drep.__typename === 'AlwaysAbstain') return 'Always Abstain';
+      if (drep.__typename === 'AlwaysNoConfidence') return 'Always No Confidence';
+    }
+    return 'N/A';
+  }
+  return Cardano.DRepID.cip129FromCredential(credential);
+};
+
+const txIOAssets = (io: TxIO) => {
   return io.amount
-    .filter((token: any) => token.unit !== 'lovelace')
-    .map((asset: any) => {
+    .filter((token: TxAmount) => token.unit !== 'lovelace')
+    .map((asset: TxAmount) => {
       let resolvedAsset = txAssets.value[asset.unit];
       if (!resolvedAsset) {
         resolvedAsset = resolveAsset(asset);
@@ -916,7 +953,7 @@ const txIOAssets = (io: any) => {
     });
 };
 
-const getAssetChip = (asset: any) => {
+const getAssetChip = (asset: { quantity: number; name: string; metadata?: { decimals?: number } }) => {
   return filters.toCurrency(
     asset.quantity,
     false,
@@ -928,36 +965,38 @@ const getAssetChip = (asset: any) => {
   );
 };
 
-const getMint = (transactionInfo: any) => {
+const getMint = (transactionInfo: { body?: { mint?: Cardano.TokenMap } }) => {
   if (transactionInfo.body?.mint) {
-    const mintArray = []
-    Object.entries(transactionInfo.body.mint).forEach(([unit, quantity]) => {
-      const assetId = Cardano.AssetId(unit)
-      mintArray.push({
+    return Array.from(transactionInfo.body.mint.entries()).map(([assetId, quantity]) => {
+      const policyId = Cardano.AssetId.getPolicyId(assetId);
+      const assetNameHex = Cardano.AssetId.getAssetName(assetId);
+      const resolved = txAssets.value[assetId];
+      return {
         assetId,
-        assetName: getAssetName(unit, true),
-        policyId: Cardano.AssetId.getPolicyId(assetId),
-        fingerprint: Cardano.AssetFingerprint.fromParts(Cardano.AssetId.getPolicyId(assetId), Cardano.AssetId.getAssetName(assetId)),
-        quantity: quantity,
-      })
+        assetName: getAssetName(assetId, true),
+        policyId,
+        fingerprint: Cardano.AssetFingerprint.fromParts(policyId, assetNameHex),
+        quantity,
+        decimals: resolved?.metadata?.decimals as number | undefined,
+      };
     });
-    return mintArray;
   }
   return null;
-}
+};
 
-const getMetadata = (transactionInfo: any) => {
-  if (!transactionInfo?.cbor) {
+const getMetadata = (txInfo: { cbor?: string }): string | null => {
+  if (!txInfo?.cbor) {
     return null;
   }
   return JSON.stringify(
-    Serialization.Transaction.fromCbor(transactionInfo.cbor).auxiliaryData()?.metadata()?.toCore(),
+    Serialization.Transaction.fromCbor(Serialization.TxCBOR(txInfo.cbor)).auxiliaryData()?.metadata()?.toCore(),
     (_key, value) => {
       if (value instanceof Map) {
-        return Array.from(value.entries()).reduce((obj, [key, value]) => {
-          obj[key] = value;
-          return obj;
-        }, {});
+        const obj: Record<string, string> = {};
+        for (const [k, v] of value.entries()) {
+          obj[k] = v;
+        }
+        return obj;
       } else if (typeof value === 'bigint') {
         return value.toString();
       } else {
@@ -971,18 +1010,17 @@ const getMetadata = (transactionInfo: any) => {
 const txAssets = computed(() => {
   if (props.transactionInfo) {
     // Guard against missing asset arrays (pending transactions may not have these fields yet)
-    const receivedAssets = props.transactionInfo['receivedAssets'] || [];
-    const sentAssets = props.transactionInfo['sentAssets'] || [];
+    const received = props.transactionInfo['receivedAssets'] || [];
+    const sent = props.transactionInfo['sentAssets'] || [];
 
-    return [...receivedAssets, ...sentAssets]
-      .filter((asset: any) => asset.policy_id !== '')
-      .reduce((map: Record<string, any>, asset: any) => {
+    return [...received, ...sent]
+      .filter((asset: TxAsset) => asset.policy_id !== '')
+      .reduce((map: Record<string, ReturnType<typeof resolveAsset>>, asset: TxAsset) => {
         map[asset.unit] = resolveAsset(asset);
         return map;
       }, {});
-  } else {
-    return {};
   }
+  return {};
 });
 
 const receivedAssets = computed(() => {
@@ -992,15 +1030,15 @@ const receivedAssets = computed(() => {
   }
 
   const assts = props.transactionInfo['assets']
-    .filter((asset: any) => asset.policy_id !== '')
-    .map((asset: any) => {
+    .filter((asset: TxAsset) => asset.policy_id !== '')
+    .map((asset: TxAsset) => {
       const res = structuredClone(txAssets.value[asset.unit]);
       if (res) {
         res.quantity = asset.quantity;
       }
       return res;
     })
-    .filter((asset: any) => asset);
+    .filter(Boolean);
   const asstsResolved = !isExpanded.value ? assts.slice(0, 2) : assts;
   residue.value = assts.slice(2);
   return asstsResolved;
@@ -1090,32 +1128,30 @@ const shrink = () => {
   isExpanded.value = false;
 };
 
-const resolvePoolMeta = async (poolId: string) => {
-  if (poolId) {
-    const pool = await blockchainApi.getPoolById(poolId, loggedWallet.value?.chain, loggedWallet.value?.network)
-    if (pool) {
-      currentPoolMeta.value = JSON.parse(pool.pool_extended_info)?.info;
-    } else {
-      currentPoolMeta.value = '';
-    }
+const resolvePoolMeta = async (poolId: string | undefined) => {
+  if (!poolId) return;
+  const pool = await blockchainApi.getPoolById(poolId, loggedWallet.value?.chain, loggedWallet.value?.network);
+  if (pool?.pool_extended_info) {
+    currentPoolMeta.value = JSON.parse(pool.pool_extended_info)?.info ?? null;
+  } else {
+    currentPoolMeta.value = null;
   }
-  return currentPoolMeta.value;
 };
 watch(
   () => props.transactionInfo,
   async () => {
     const value = props.transactionInfo;
-    console.log(value)
     if (!value) return;
-    const dRep = value.body?.certificates?.find((certificate: any) => certificate.dRep)?.dRep;
-    const poolId = value.body?.certificates?.find((certificate: any) => certificate.poolId)?.poolId;
-    resolvePoolMeta(poolId);
-    if (dRep) {
-      const drepId = getDRepCip129(dRep);
-      await governanceStoreActions.loadDRepById(loggedWallet.value, drepId.toString());
+    const certificates: Cardano.Certificate[] = value.body?.certificates ?? [];
+    const dRepCert = certificates.find((cert): cert is Cardano.VoteDelegationCertificate => 'dRep' in cert);
+    const poolCert = certificates.find((cert): cert is Cardano.StakeDelegationCertificate => 'poolId' in cert);
+    await resolvePoolMeta(poolCert?.poolId);
+    if (dRepCert) {
+      const drepId = getDRepCip129(dRepCert.dRep);
+      await governanceStoreActions.loadDRepById(loggedWallet.value, drepId);
     }
-    if (poolId) {
-      await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
+    if (poolCert) {
+      await stakingStoreActions.loadPoolById(loggedWallet.value, poolCert.poolId);
     }
   },
   { immediate: true }
