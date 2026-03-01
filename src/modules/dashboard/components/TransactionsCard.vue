@@ -279,7 +279,8 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import { useDebounceFn } from '@vueuse/core';
+import debounce from 'lodash/debounce';
+import { StoredTransaction, CardanoTx, isCardanoTx } from '@/models/transaction.types';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -312,7 +313,7 @@ const activityHeaders = computed(() => [
   { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: 110 },
 ]);
 
-const transactionInfo = ref<any>(null);
+const transactionInfo = ref<StoredTransaction | null>(null);
 const sortBy = ref<string>('tx_timestamp');
 const sortDesc = ref<boolean>(true);
 
@@ -320,9 +321,8 @@ const sortDesc = ref<boolean>(true);
 const searchInput = ref<string>('');
 const debouncedSearch = ref<string>('');
 
-// Debounce function to update debouncedSearch after user stops typing using VueUse
-// VueUse's useDebounceFn returns a function with a cancel() method
-const debouncedUpdateSearch = useDebounceFn((value: string) => {
+// Debounce function to update debouncedSearch after user stops typing
+const debouncedUpdateSearch = debounce((value: string) => {
   debouncedSearch.value = value;
 }, 300); // 300ms debounce delay
 
@@ -331,16 +331,23 @@ watch(searchInput, (newValue) => {
   debouncedUpdateSearch(newValue);
 });
 
+// Cancel pending debounce on unmount to prevent state mutation after teardown
+onUnmounted(() => debouncedUpdateSearch.cancel());
+
 // Computed search property for v-model binding
+// Note: Vuetify clearable sets value to null, so we coerce to empty string
 const search = computed({
   get: () => searchInput.value,
   set: (value: string) => {
-    searchInput.value = value;
+    searchInput.value = value || '';
   },
 });
 
+// Version counter to detect and cancel stale async loads (prevents race conditions when typing fast)
+const loadVersion = ref(0);
+
 // Infinite scroll variables
-const displayedTransactions = ref<any[]>([]);
+const displayedTransactions = ref<StoredTransaction[]>([]);
 const currentIndex = ref<number>(0);
 const isLoadingMore = ref<boolean>(false);
 const hasReachedEnd = ref<boolean>(false);
@@ -362,11 +369,11 @@ const itemsPerBatch = computed(() => {
   return state.value === '/transactions' ? 20 : 10;
 });
 
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy as { $route: { path: string } };
 const state = computed(() => vmProxy.$route.path);
 
-const transactions = computed<any[]>(() => {
-  const filtered = txs.value.filter((tx: any) => {
+const transactions = computed<StoredTransaction[]>(() => {
+  const filtered = (txs.value as StoredTransaction[]).filter((tx) => {
     if (debouncedSearch.value) {
       const searchLower = debouncedSearch.value.toLowerCase();
 
@@ -374,42 +381,45 @@ const transactions = computed<any[]>(() => {
       const matchesId = tx.id.toLowerCase().includes(searchLower);
 
       // Check assets
-      const matchesAsset = tx.assets.some((asset: any) => {
-        const assetInfo = assets.value[asset.unit] as any;
+      const matchesAsset = tx.assets.some((asset) => {
+        const assetInfo = assets.value[asset.unit];
         return (
           assetInfo?.metadata?.name?.toLowerCase().includes(searchLower) ||
           assetInfo?.metadata?.ticker?.toLowerCase().includes(searchLower)
         );
       });
 
-      // Check DEX/platform chips
-      const matchesChip =
-        ('minswap'.includes(searchLower) && isMinswap(tx)) ||
-        ('wingriders'.includes(searchLower) && isWingRiders(tx)) ||
-        ('muesliswap'.includes(searchLower) && isMuesliSwap(tx)) ||
-        ('vyfi'.includes(searchLower) && isVyFi(tx)) ||
-        ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
-        ('splash'.includes(searchLower) && isSplash(tx)) ||
-        ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
-        ('strike'.includes(searchLower) && isStrike(tx)) ||
-        ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
+      // Check tags/chips and certificates (CardanoTx-specific fields)
+      let matchesChip = false;
+      if (isCardanoTx(tx)) {
+        matchesChip =
+          ('minswap'.includes(searchLower) && isMinswap(tx)) ||
+          ('wingriders'.includes(searchLower) && isWingRiders(tx)) ||
+          ('muesliswap'.includes(searchLower) && isMuesliSwap(tx)) ||
+          ('vyfi'.includes(searchLower) && isVyFi(tx)) ||
+          ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
+          ('splash'.includes(searchLower) && isSplash(tx)) ||
+          ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
+          ('strike'.includes(searchLower) && isStrike(tx)) ||
+          ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
+          ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
+          ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
+          (tx.body.certificates?.some((cert) => cert.__typename.toLowerCase().includes(searchLower)) ?? false);
+      }
+
+      // Checks that work for all transaction types
+      matchesChip = matchesChip ||
         ('cashback'.includes(searchLower) && isCashback(tx)) ||
         ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
-        ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
-        ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
-        ('pending'.includes(searchLower) && tx.pending) ||
-        tx.body?.certificates?.some((cert: any) => {
-          const certType = cert.__typename;
-          return certType.toLowerCase().includes(searchLower);
-        });
+        ('pending'.includes(searchLower) && tx.pending);
 
       // Check contact name
-      const contactName: string[] = getContactName(tx);
-      const matchesContact = contactName && contactName.find(name => name.toLowerCase() == searchLower);
+      const contactName = getContactName(tx);
+      const matchesContact = contactName && contactName.find(name => name.toLowerCase() === searchLower);
 
       return matchesId || matchesAsset || matchesChip || matchesContact;
     }
-    return tx;
+    return true;
   });
 
   // Sort by timestamp descending (most recent first)
@@ -420,8 +430,8 @@ const transactions = computed<any[]>(() => {
 const transactionStatuses = ref<Record<string, string>>({});
 
 // Preload statuses for displayed transactions
-const preloadTransactionStatuses = async (transactions: any[]): Promise<void> => {
-  const promises = transactions.map(async item => {
+const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Promise<void> => {
+  const promises = transactions.map(async (item) => {
     const txId = item.id;
 
     // Skip if already loaded
@@ -430,9 +440,9 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
     }
 
     // Load status with pool data
-    const statuses = [];
+    const statuses: string[] = [];
 
-    if (item.body?.certificates?.length > 0) {
+    if (isCardanoTx(item) && item.body.certificates?.length) {
       for (const certificate of item.body.certificates) {
         const status = await processCertificate(certificate, true);
         if (status) statuses.push(status);
@@ -448,7 +458,7 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
 };
 
 // Get transaction status (reactive)
-const getTransactionStatus = (item: any): string => {
+const getTransactionStatus = (item: StoredTransaction): string => {
   // Check if transaction is pending for too long (> 1 hour) - show as "Failed Transaction"
   if (isPendingTooLong(item)) {
     return t('transactions.failedTransaction');
@@ -509,15 +519,15 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
 };
 
 // Add fund transfer status if applicable
-const addFundTransferStatus = (item: any, statuses: string[]): void => {
+const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): void => {
   // Skip if transaction has certificates (delegation, registration, etc.)
-  if (item.body?.certificates && item.body.certificates.length > 0) {
+  if (isCardanoTx(item) && item.body.certificates && item.body.certificates.length > 0) {
     return;
   }
   const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
   const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
-  const hasReceivedTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity > 0);
-  const hasSentTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity < 0);
+  const hasReceivedTokens = item.assets?.some((asset) => asset.unit !== 'lovelace' && asset.quantity > 0);
+  const hasSentTokens = item.assets?.some((asset) => asset.unit !== 'lovelace' && asset.quantity < 0);
 
   // Build smart status message
   if (hasReceivedFunds && hasReceivedTokens) {
@@ -540,10 +550,10 @@ const addFundTransferStatus = (item: any, statuses: string[]): void => {
 };
 
 // Build basic transaction status without pool API data
-const buildBasicStatus = (item: any): string => {
-  const statuses = [];
+const buildBasicStatus = (item: StoredTransaction): string => {
+  const statuses: string[] = [];
 
-  if (item.body?.certificates?.length > 0) {
+  if (isCardanoTx(item) && item.body.certificates?.length) {
     item.body.certificates.forEach((certificate: Cardano.Certificate) => {
       const status = getCertificateBaseStatus(certificate.__typename);
       if (status) statuses.push(status);
@@ -570,14 +580,17 @@ const getPoolByIdFromApi = async (poolId: string) => {
 const loadMoreTransactions = async () => {
   if (isLoadingMore.value || hasReachedEnd.value) return;
 
+  const version = loadVersion.value;
   isLoadingMore.value = true;
 
   if (props.isFullList) {
     // Simulate loading delay for better UX
     await new Promise(resolve => setTimeout(resolve, 300));
+    // Bail out if a new search/reset happened during the delay
+    if (version !== loadVersion.value) return;
   }
 
-  let newTransactions: any[];
+  let newTransactions: StoredTransaction[];
 
   if (props.isFullList) {
     // Infinite scroll mode
@@ -607,6 +620,8 @@ const loadMoreTransactions = async () => {
   // Preload statuses for new transactions and wait for completion
   if (newTransactions.length > 0) {
     await preloadTransactionStatuses(newTransactions);
+    // Bail out if a new search/reset happened during preload
+    if (version !== loadVersion.value) return;
   }
 
   isLoadingMore.value = false;
@@ -614,6 +629,10 @@ const loadMoreTransactions = async () => {
 
 // Reset infinite scroll when search changes
 const resetInfiniteScroll = async () => {
+  // Increment version to invalidate any in-progress loadMoreTransactions calls
+  loadVersion.value++;
+  isLoadingMore.value = false;
+
   displayedTransactions.value = [];
   currentIndex.value = 0;
   hasReachedEnd.value = false;
@@ -738,7 +757,7 @@ const setupScrollFallback = () => {
   }
 };
 
-const handleOnTransactionsRowClick = row => {
+const handleOnTransactionsRowClick = (row: StoredTransaction) => {
   transactionInfo.value = row;
   emit('row-click', row);
 };
@@ -747,15 +766,16 @@ const handleTransactionModalClose = () => {
   transactionInfo.value = null;
 };
 
-const isWithdrawal = item => {
+const isWithdrawal = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   return (
-    item.body?.withdrawals?.length > 0 &&
+    item.body.withdrawals?.length > 0 &&
     loggedWallet.value?.stakeAddress &&
-    item.body.withdrawals.some(withdrawal => withdrawal.stakeAddress === loggedWallet.value.stakeAddress)
-  );
+    item.body.withdrawals.some((withdrawal) => withdrawal.stakeAddress === loggedWallet.value.stakeAddress)
+  ) ?? false;
 };
 
-const getContactName = (item): string[] => {
+const getContactName = (item: StoredTransaction): string[] | null => {
   const contactsResult = new Set<string>();
   // Check if contacts are available (contacts is an object, not an array)
   if (!contacts.value || !item.utxo) {
@@ -764,7 +784,7 @@ const getContactName = (item): string[] => {
 
   // Create a map of contact addresses to names
   const contactMap = new Map<string, string>();
-  Object.values(contacts.value).forEach((contact: any) => {
+  Object.values(contacts.value).forEach((contact: { address?: string; name?: string }) => {
     if (contact.address && contact.name) {
       contactMap.set(contact.address, contact.name);
     }
@@ -778,21 +798,23 @@ const getContactName = (item): string[] => {
   // Check inputs for contact addresses
   for (const input of item.utxo.inputs || []) {
     if (contactMap.has(input.address)) {
-      contactsResult.add(contactMap.get(input.address))
+      contactsResult.add(contactMap.get(input.address)!);
     }
   }
 
-  // Check outputs for contact addresses
-  for (const output of item.body?.outputs || []) {
-    if (contactMap.has(output.address)) {
-      contactsResult.add(contactMap.get(output.address))
+  // Check outputs for contact addresses (CardanoTx only)
+  if (isCardanoTx(item)) {
+    for (const output of item.body.outputs || []) {
+      if (contactMap.has(output.address)) {
+        contactsResult.add(contactMap.get(output.address)!);
+      }
     }
   }
 
   return Array.from(contactsResult);
 };
 
-const isInternalTransfer = item => {
+const isInternalTransfer = (item: StoredTransaction): boolean => {
   // Check if keys are available
   if (!keys.value || !item.utxo) {
     return false;
@@ -825,46 +847,48 @@ const isInternalTransfer = item => {
   }
 
   // Check all input addresses
-  const allInputsInternal = item.utxo.inputs?.every((input: any) => walletAddresses.has(input.address));
+  const allInputsInternal = item.utxo.inputs?.every((input) => walletAddresses.has(input.address));
 
-  // Check all output addresses
-  const allOutputsInternal = item.body?.outputs?.every((output: any) => walletAddresses.has(output.address));
+  // Check all output addresses (CardanoTx only)
+  const allOutputsInternal = isCardanoTx(item)
+    ? item.body.outputs?.every((output) => walletAddresses.has(output.address))
+    : true;
 
   // Transaction is internal if ALL inputs AND ALL outputs belong to this wallet
   return allInputsInternal && allOutputsInternal;
 };
 
-const isStrike = item => {
+const isStrike = (item: CardanoTx): boolean => {
   // Strike Finance perpetual trading transactions
   const STRIKE_SCRIPT_HASH = 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5';
   const STRIKE_CONTRACT_ADDRESS = 'addr1wytzw530pgjxm4wxsxj5ufp23cxacrvzmytpjnlcgq6t7vsgz25ef';
 
   // Check for Strike contract address (primary indicator of platform interaction)
   const hasStrikeAddress =
-    item.utxo?.inputs?.some((input: any) => input.address === STRIKE_CONTRACT_ADDRESS) ||
-    item.body?.outputs?.some((output: any) => output.address === STRIKE_CONTRACT_ADDRESS);
+    item.utxo?.inputs?.some((input) => input.address === STRIKE_CONTRACT_ADDRESS) ||
+    item.body.outputs?.some((output) => output.address === STRIKE_CONTRACT_ADDRESS);
 
   // Check for Strike script hash in witness (indicates contract execution)
   const hasStrikeScript = item.witness?.scripts?.some(
-    script => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
+    (script) => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
   );
 
   // Only tag as Strike if there's actual platform interaction, not just position NFT transfers
-  return hasStrikeAddress || hasStrikeScript;
+  return hasStrikeAddress || hasStrikeScript || false;
 };
 
-const isDexHunter = item => {
+const isDexHunter = (item: CardanoTx): boolean => {
   // Check for DexHunter order contract address (primary indicator)
   const DEXHUNTER_ORDER_ADDRESS =
     'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
   const hasDexHunterOrderAddress =
-    item.utxo?.inputs?.some((input: any) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
-    item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_ORDER_ADDRESS);
+    item.utxo?.inputs?.some((input) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
+    item.body.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS);
 
   // Check for DexHunter fee address (indicates completed trade)
   const DEXHUNTER_FEE_ADDRESS =
     'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
-  const hasDexHunterFeeAddress = item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_FEE_ADDRESS);
+  const hasDexHunterFeeAddress = item.body.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS);
 
   // Check metadata for DexHunter Trade message (indicates trade execution)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
@@ -872,10 +896,10 @@ const isDexHunter = item => {
     msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter')) : false;
 
   // Only tag as DexHunter if there's actual platform interaction
-  return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata;
+  return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata || false;
 };
 
-const isMinswap = item => {
+const isMinswap = (item: CardanoTx): boolean => {
   // Minswap V1 addresses
   const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
   const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
@@ -888,13 +912,13 @@ const isMinswap = item => {
   // Check for Minswap order contract addresses (indicates DEX interaction)
   const hasMinswapOrderAddress =
     item.utxo?.inputs?.some(
-      (input: any) =>
+      (input) =>
         input.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
         input.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
         input.address === MINSWAP_V2_ORDER_ADDRESS
     ) ||
-    item.body?.outputs?.some(
-      (output: any) =>
+    item.body.outputs?.some(
+      (output) =>
         output.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
         output.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
         output.address === MINSWAP_V2_ORDER_ADDRESS
@@ -905,20 +929,20 @@ const isMinswap = item => {
   const hasMinswapMetadata = msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Minswap')) : false;
 
   // Check for Minswap pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMinswapInOutputDatum = item.body?.outputs?.some((output: any) =>
-    output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  const hasMinswapInOutputDatum = (item.body.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>)?.some(
+    (output) => output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
   );
 
   // Check for Minswap pool NFT policy in witness datums (indicates pool interaction)
-  const hasMinswapInWitnessDatum = item.witness?.datums?.some((datum: any) =>
-    datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  const hasMinswapInWitnessDatum = (item.witness?.datums as Array<{ cbor?: string }> | undefined)?.some(
+    (datum) => datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
   );
 
   // Only tag as Minswap if there's actual DEX interaction, not just LP token transfers
-  return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum;
+  return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || false;
 };
 
-const isJpgStore = item => {
+const isJpgStore = (item: CardanoTx): boolean => {
   // Check for jpg.store marketplace script address
   const JPGSTORE_SCRIPT_ADDRESS =
     'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
@@ -929,8 +953,8 @@ const isJpgStore = item => {
 
   const hasJpgStoreAddress =
     item.utxo?.inputs?.some(
-      (input: any) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
-    ) || item.body?.outputs?.some((output: any) => output.address === JPGSTORE_SCRIPT_ADDRESS);
+      (input) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
+    ) || item.body.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS);
 
   // Check for jpg.store auxiliary data structure (fields 0-10, 30)
   const hasJpgStoreMetadata =
@@ -949,12 +973,12 @@ const isJpgStore = item => {
       item.auxiliaryData.blob[30]);
 
   // Check for datum hash (indicating a marketplace listing)
-  const hasDatumHash = item.body?.outputs?.some((output: any) => output.datumHash);
+  const hasDatumHash = item.body.outputs?.some((output) => output.datumHash);
 
-  return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash);
+  return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash) || false;
 };
 
-const isWingRiders = item => {
+const isWingRiders = (item: CardanoTx): boolean => {
   // WingRiders V1 order address
   const WINGRIDERS_V1_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
 
@@ -964,40 +988,43 @@ const isWingRiders = item => {
   // Check for WingRiders order contract addresses (indicates DEX interaction)
   const hasWingRidersOrderAddress =
     item.utxo?.inputs?.some(
-      (input: any) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
+      (input) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
     ) ||
-    item.body?.outputs?.some(
-      (output: any) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
+    item.body.outputs?.some(
+      (output) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
     );
 
   // Check for WingRiders V1 pool validity asset policy in datum CBOR (indicates pool interaction)
+  const enrichedOutputs = item.body.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
+  const enrichedDatums = item.witness?.datums as Array<{ cbor?: string }> | undefined;
+
   const hasWingRidersV1InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
     );
 
   // Check for WingRiders V2 pool validity asset policy in datum CBOR (indicates pool interaction)
   const hasWingRidersV2InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
     );
 
-  return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum;
+  return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum || false;
 };
 
-const isVyFi = item => {
+const isVyFi = (item: CardanoTx): boolean => {
   // Check for VyFi metadata message (indicates platform interaction)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
   return typeof msg === 'string' && msg.includes('VyFi');
 };
 
-const isSundaeSwap = item => {
+const isSundaeSwap = (item: CardanoTx): boolean => {
   // SundaeSwap V1 addresses
   const SUNDAESWAP_V1_ORDER_ADDRESS = 'addr1wxaptpmxcxawvr3pzlhgnpmzz3ql43n2tc8mn3av5kx0yzs09tqh8';
   const SUNDAESWAP_V1_POOL_ADDRESS = 'addr1w9qzpelu9hn45pefc0xr4ac4kdxeswq7pndul2vuj59u8tqaxdznu';
@@ -1009,21 +1036,21 @@ const isSundaeSwap = item => {
   // Check for SundaeSwap contract addresses (indicates DEX interaction)
   return (
     item.utxo?.inputs?.some(
-      (input: any) =>
+      (input) =>
         input.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
         input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
         input.address === SUNDAESWAP_V3_POOL_ADDRESS
     ) ||
-    item.body?.outputs?.some(
-      (output: any) =>
+    item.body.outputs?.some(
+      (output) =>
         output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
         output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
         output.address === SUNDAESWAP_V3_POOL_ADDRESS
     )
-  );
+  ) ?? false;
 };
 
-const isSplash = item => {
+const isSplash = (item: CardanoTx): boolean => {
   // Splash DEX batcher key (primary indicator)
   const SPLASH_BATCHER_KEY = '5cb2c968e5d1c7197a6ce7615967310a375545d9bc65063a964335b2';
 
@@ -1031,52 +1058,57 @@ const isSplash = item => {
   const SPLASH_ORDER_SCRIPT_HASH = '464eeee89f05aff787d40045af2a40a83fd96c513197d32fbc54ff02';
 
   // Check for Splash batcher key in required signatures (indicates DEX interaction)
-  const hasSplashBatcherKey = item.body?.requiredExtraSignatures?.some((sig: any) => sig === SPLASH_BATCHER_KEY);
+  const hasSplashBatcherKey = item.body.requiredExtraSignatures?.some((sig) => sig === SPLASH_BATCHER_KEY);
 
   // Check for Splash order script in witness scripts
-  const hasSplashScript = item.witness?.scripts?.some((script: any) => script?.hash === SPLASH_ORDER_SCRIPT_HASH);
+  const hasSplashScript = item.witness?.scripts?.some(
+    (script) => Serialization.Script.fromCore(script).hash() === SPLASH_ORDER_SCRIPT_HASH
+  );
 
-  return hasSplashBatcherKey || hasSplashScript;
+  return hasSplashBatcherKey || hasSplashScript || false;
 };
 
-const isMuesliSwap = item => {
+const isMuesliSwap = (item: CardanoTx): boolean => {
   // MuesliSwap order address
   const MUESLISWAP_ORDER_ADDRESS =
     'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
 
   // Check for MuesliSwap order contract address (indicates DEX interaction)
   const hasMuesliSwapOrderAddress =
-    item.utxo?.inputs?.some((input: any) => input.address === MUESLISWAP_ORDER_ADDRESS) ||
-    item.body?.outputs?.some((output: any) => output.address === MUESLISWAP_ORDER_ADDRESS);
+    item.utxo?.inputs?.some((input) => input.address === MUESLISWAP_ORDER_ADDRESS) ||
+    item.body.outputs?.some((output) => output.address === MUESLISWAP_ORDER_ADDRESS);
+
+  const enrichedOutputs = item.body.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
+  const enrichedDatums = item.witness?.datums as Array<{ cbor?: string }> | undefined;
 
   // Check for MuesliSwap V1 pool NFT policy in datum CBOR (indicates pool interaction)
   const hasMuesliSwapV1InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
     );
 
   // Check for MuesliSwap V2 pool NFT policy in datum CBOR (indicates pool interaction)
   const hasMuesliSwapV2InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
     );
 
   // Check for MuesliSwap factory token in assets (indicates pool interaction)
-  const hasMuesliSwapFactoryToken = item.assets?.some((asset: any) =>
+  const hasMuesliSwapFactoryToken = item.assets?.some((asset) =>
     asset.unit?.includes('de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f4d7565736c69537761705f414d4d')
   );
 
-  return hasMuesliSwapOrderAddress || hasMuesliSwapV1InDatum || hasMuesliSwapV2InDatum || hasMuesliSwapFactoryToken;
+  return hasMuesliSwapOrderAddress || hasMuesliSwapV1InDatum || hasMuesliSwapV2InDatum || hasMuesliSwapFactoryToken || false;
 };
 
-const isCashback = item => {
-  return !!item.utxo?.inputs?.some(input =>
+const isCashback = (item: StoredTransaction): boolean => {
+  return !!item.utxo?.inputs?.some((input) =>
     [
       'DdzFFzCqrhtBatWqyFge4w6M6VLgNUwRHiXTAg3xfQCUdTcjJxSrPHVZJBsQprUEc5pRhgMWQaGciTssoZVwrSKmG1fneZ1AeCtLgs5Y',
       'addr1qxj7hjwxkxlf2tyahw5fchm2w5tjm5xcedqywyd9gjh8hhpq3lssfl2enmaypvwdyfmpcvzkpdtlpa8ur332rnc0ksyq7eq6sd',
@@ -1084,11 +1116,11 @@ const isCashback = item => {
   );
 };
 
-const isStakeRegistration = item => {
+const isStakeRegistration = (item: CardanoTx): boolean => {
   return (
-    item.body?.certificates?.length > 0 &&
-    item.body.certificates.some(
-      certificate =>
+    (item.body.certificates?.length ?? 0) > 0 &&
+    item.body.certificates!.some(
+      (certificate) =>
         certificate.__typename === Cardano.CertificateType.StakeRegistration ||
         certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
         certificate.__typename === Cardano.CertificateType.Registration
@@ -1096,19 +1128,19 @@ const isStakeRegistration = item => {
   );
 };
 
-const isStakeDeRegistration = item => {
+const isStakeDeRegistration = (item: CardanoTx): boolean => {
   return (
-    item.body?.certificates?.length > 0 &&
-    item.body.certificates.some(
-      certificate =>
+    (item.body.certificates?.length ?? 0) > 0 &&
+    item.body.certificates!.some(
+      (certificate) =>
         certificate.__typename === Cardano.CertificateType.Unregistration ||
         certificate.__typename === Cardano.CertificateType.StakeDeregistration
     )
   );
 };
 
-const getColor = item => {
-  if (item.status === 'Pending') {
+const getColor = (item: StoredTransaction): string => {
+  if (item.pending) {
     return '#FEC84B';
   } else if (item.ada > 0) {
     return '#47cd89';
@@ -1118,8 +1150,8 @@ const getColor = item => {
   return '';
 };
 
-const getRowClass = item => {
-  if (props.selectedTransaction && props.selectedTransaction['id'] === item['id']) {
+const getRowClass = (item: StoredTransaction): string => {
+  if (props.selectedTransaction && props.selectedTransaction['id'] === item.id) {
     return 'selected-transaction';
   }
   return '';
@@ -1133,7 +1165,7 @@ const handlePageChange = async (page: number) => {
 };
 
 // Check if transaction has been pending for more than 1 hour
-const isPendingTooLong = (item: any): boolean => {
+const isPendingTooLong = (item: StoredTransaction): boolean => {
   if (!item.pending) return false;
 
   const currentTime = Date.now() / 1000; // Current time in seconds
@@ -1144,20 +1176,20 @@ const isPendingTooLong = (item: any): boolean => {
 };
 
 // Remove pending transaction
-const handleRemovePendingTransaction = async (item: any) => {
+const handleRemovePendingTransaction = async (item: StoredTransaction) => {
   try {
     const { Messaging } = await import('@/chrome/messaging');
     const { MessageTypes } = await import('@/models/MessageTypes');
 
-    const response: any = await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.REMOVE_PENDING_TRANSACTION,
       data: { txId: item.id }
-    });
+    }) as { data: { success: boolean; error?: string } };
 
     if (response.data?.success) {
       console.log('Pending transaction removed successfully');
     } else {
-      console.error('Failed to remove pending transaction:', response.data?.error || response.error);
+      console.error('Failed to remove pending transaction:', response.data?.error);
     }
   } catch (error) {
     console.error('Error removing pending transaction:', error);
