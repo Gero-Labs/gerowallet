@@ -855,7 +855,7 @@ const getRedeemerDataJson = (redeemerData: Cardano.PlutusData): string => {
     redeemerData,
     (_key, value) => {
       if (value instanceof Map) {
-        const obj: Record<string, string> = {};
+        const obj: Record<string, unknown> = {};
         for (const [k, v] of value.entries()) {
           obj[k] = v;
         }
@@ -1004,7 +1004,7 @@ const getMetadata = (txInfo: { cbor?: string }): string | null => {
     Serialization.Transaction.fromCbor(Serialization.TxCBOR(txInfo.cbor)).auxiliaryData()?.metadata()?.toCore(),
     (_key, value) => {
       if (value instanceof Map) {
-        const obj: Record<string, string> = {};
+        const obj: Record<string, unknown> = {};
         for (const [k, v] of value.entries()) {
           obj[k] = v;
         }
@@ -1158,7 +1158,8 @@ const resolveTxDRep = async (drep: Cardano.DelegateRepresentative) => {
       await db['dreps'].put({ ...fetched, drep_id: drepId });
     }
     return fetched ?? null;
-  } catch {
+  } catch (e) {
+    console.warn('[TransactionDetails] resolveTxDRep failed:', e);
     return null;
   }
 };
