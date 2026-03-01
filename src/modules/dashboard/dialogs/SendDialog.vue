@@ -154,6 +154,7 @@ import { BackgroundResponse, Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
+import { debugLog } from '@/utils/debug';
 
 interface Props {
   isOpen: boolean;
@@ -311,7 +312,7 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
   // Proactive network data sync: If tip or epochParams are missing, trigger a fast REST sync
   // This prevents race condition when user tries to send immediately after login
   if (!tip.value || !epochParams.value) {
-    console.log('⏳ Network data not available, triggering sync...');
+    debugLog('⏳ Network data not available, triggering sync...');
     txValid.value = false;
 
     try {
@@ -321,7 +322,7 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
       }) as BackgroundResponse<{ success: boolean; error?: string }>;
 
       if (response.data.success) {
-        console.log('✅ Network data synced successfully');
+        debugLog('✅ Network data synced successfully');
         // Wait a moment for the store to be updated via messaging
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -362,7 +363,7 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
   const collectiblesArray = Object.values(sendData.value.selectedCollectibles);
   if (collectiblesArray.length > 0) {
     collectiblesArray.forEach(collectible => {
-      assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
+      assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity || 0));
     });
   }
 
@@ -392,9 +393,9 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
     // Don't reset minAda here - it's set by the watch based on selected NFTs
     sendData.value.adaShortage = 0;
     txValid.value = true;
-    console.log('Built transaction:', tx.value);
+    debugLog('Built transaction:', tx.value);
   } catch (e) {
-    console.log(e);
+    debugLog(e);
     throw e;
   }
 }
@@ -425,20 +426,20 @@ function updateRecipientAddress(address: string) {
 }
 
 function selectCollectible(collectible: Collectible & { unit: string }) {
-  console.log('selectCollectible called:', collectible.name);
+  debugLog('selectCollectible called:', collectible.name);
   if (collectible.name && sendData.value.selectedCollectibles[collectible.name]) {
     const { [collectible.name]: _, ...rest } = sendData.value.selectedCollectibles;
     sendData.value.selectedCollectibles = rest;
-    console.log('Removed collectible:', collectible.name);
+    debugLog('Removed collectible:', collectible.name);
   } else if (collectible.name) {
     sendData.value.selectedCollectibles = {
       ...sendData.value.selectedCollectibles,
       [collectible.name]: collectible
     };
-    console.log('Added collectible:', collectible.name);
+    debugLog('Added collectible:', collectible.name);
   }
-  console.log('Current selectedCollectibles:', sendData.value.selectedCollectibles);
-  console.log('Object.values:', Object.values(sendData.value.selectedCollectibles));
+  debugLog('Current selectedCollectibles:', sendData.value.selectedCollectibles);
+  debugLog('Object.values:', Object.values(sendData.value.selectedCollectibles));
 }
 
 async function setMax(index: number) {
@@ -469,7 +470,7 @@ async function setMax(index: number) {
   let coarseAmount = BigInt(0);
 
   // Phase 1: Coarse search with 1 ADA steps
-  console.log('Phase 1: Coarse search with 1 ADA steps...');
+  debugLog('Phase 1: Coarse search with 1 ADA steps...');
   while (buffer <= MAX_BUFFER) {
     const attemptAmount = totalBalance - buffer;
 
@@ -487,7 +488,7 @@ async function setMax(index: number) {
       await buildTx(sendTokensCopy);
       // Success! Found a working amount
       coarseAmount = attemptAmount;
-      console.log(`✓ Coarse MAX found: ${Number(attemptAmount) / 1000000} ADA (buffer: ${Number(buffer) / 1000000} ADA)`);
+      debugLog(`✓ Coarse MAX found: ${Number(attemptAmount) / 1000000} ADA (buffer: ${Number(buffer) / 1000000} ADA)`);
       break;
     } catch (e) {
       // Failed - try 1 ADA less
@@ -496,13 +497,13 @@ async function setMax(index: number) {
   }
 
   if (coarseAmount === BigInt(0)) {
-    console.log('Could not find working amount in coarse search');
+    debugLog('Could not find working amount in coarse search');
     isCalculatingMax.value = false;
     return;
   }
 
   // Phase 2: Binary search fine-tuning (try to add up to 1 ADA back)
-  console.log('Phase 2: Binary search fine-tuning...');
+  debugLog('Phase 2: Binary search fine-tuning...');
   let low = coarseAmount;
   let high = coarseAmount + ADA_STEP;
   if (high > totalBalance) {
@@ -525,22 +526,15 @@ async function setMax(index: number) {
       // Success! Try higher
       finalAmount = mid;
       low = mid;
-      console.log(`✓ Binary search: ${Number(mid) / 1000000} ADA works (range: ${Number(high - low)} lovelace)`);
+      debugLog(`✓ Binary search: ${Number(mid) / 1000000} ADA works (range: ${Number(high - low)} lovelace)`);
     } catch (e) {
       // Failed - try lower
       high = mid;
-      console.log(`✗ Binary search: ${Number(mid) / 1000000} ADA failed (range: ${Number(high - low)} lovelace)`);
+      debugLog(`✗ Binary search: ${Number(mid) / 1000000} ADA failed (range: ${Number(high - low)} lovelace)`);
     }
   }
 
-  console.log(`✓ Final MAX found: ${Number(finalAmount) / 1000000} ADA (added ${Number(finalAmount - coarseAmount)} lovelace to coarse result)`);
-
-
-  console.log('MAX ADA calculation completed:', {
-    totalBalance: totalBalance.toString(),
-    finalAmount: finalAmount.toString(),
-    finalAmountADA: Number(finalAmount) / 1000000
-  });
+  debugLog(`✓ Final MAX found: ${Number(finalAmount) / 1000000} ADA (added ${Number(finalAmount - coarseAmount)} lovelace to coarse result)`);
 
   // Update the quantity and then immediately re-enable the watch
   // The watch will run once with the final amount
@@ -562,7 +556,7 @@ async function tryBuildMaxTx(tokens: (Token & { balance?: string | number })[], 
     await buildTx(tokens)
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
-    console.log('tryBuildMaxTx error:', errorMessage);
+    debugLog('tryBuildMaxTx error:', errorMessage);
 
     if (errorMessage.includes('Insufficient input in transaction.')) {
       const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
@@ -586,7 +580,7 @@ async function tryBuildMaxTx(tokens: (Token & { balance?: string | number })[], 
       const currentQty = Number(tokens[index].quantity);
       const reducedQty = currentQty * 0.95; // Reduce by 5%
       sendData.value.selectedTokens[index].quantity = `${reducedQty.toFixed(6)}`;
-      console.log('UTxO Fully Depleted - reduced amount to:', reducedQty);
+      debugLog('UTxO Fully Depleted - reduced amount to:', reducedQty);
     } else {
       console.error('Unhandled error in tryBuildMaxTx:', e);
     }
@@ -625,7 +619,7 @@ watch(() => ({
 
     if (hasNonNativeAssets && epochParams.value && val.recipientAddress) {
       try {
-        console.log('Calculating minAda for assets:', {
+        debugLog('Calculating minAda for assets:', {
           collectibles: collectiblesArray.length,
           tokens: val.selectedTokens.filter(t => t?.unit).length
         });
@@ -635,26 +629,25 @@ watch(() => ({
 
         // Add collectibles to assets map
         collectiblesArray.forEach((collectible) => {
-          console.log('Adding collectible:', collectible.unit, collectible.toSendQuantity);
+          debugLog('Adding collectible:', collectible.unit, collectible.toSendQuantity);
           assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity || 0));
         });
 
         // Add tokens (non-ADA) to assets map
         // Only add tokens that are NOT the native currency (ADA/tADA)
-        const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
         val.selectedTokens.forEach(token => {
           if (token?.unit && token.ticker !== nativeTicker) { // Skip ADA/native currency
             const quantity = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
             if (quantity > 0) {
-              console.log('Adding token:', token.unit, quantity);
+              debugLog('Adding token:', token.unit, quantity);
               assetsMap.set(token.unit as Cardano.AssetId, BigInt(quantity));
             }
           }
         });
 
-        console.log('Assets map size:', assetsMap.size);
-        console.log('Recipient address:', val.recipientAddress);
-        console.log('coinsPerUtxoByte:', epochParams.value.coinsPerUtxoByte);
+        debugLog('Assets map size:', assetsMap.size);
+        debugLog('Recipient address:', val.recipientAddress);
+        debugLog('coinsPerUtxoByte:', epochParams.value.coinsPerUtxoByte);
 
         // Create a mock output with all assets to calculate min ADA
         const mockOutput: Cardano.TxOut = {
@@ -665,7 +658,7 @@ watch(() => ({
           }
         };
 
-        console.log('Mock output created with assets:', assetsMap.size);
+        debugLog('Mock output created with assets:', assetsMap.size);
 
         // Use the actual protocol function to calculate minimum ADA
         const minAdaLovelace = BrowserTxConstruction.minAdaRequired(
@@ -674,7 +667,7 @@ watch(() => ({
         );
 
         sendData.value.minAda = Number(minAdaLovelace) / 1000000;
-        console.log('Calculated minAda for all assets (accurate):', sendData.value.minAda, 'ADA');
+        debugLog('Calculated minAda for all assets (accurate):', sendData.value.minAda, 'ADA');
       } catch (error) {
         console.error('Error calculating minAda:', error);
         console.error('Error stack:', error instanceof Error ? error.stack : error);
@@ -689,31 +682,31 @@ watch(() => ({
   } catch(e) {
     console.error('Build tx error:', e)
     const errorMessage = e instanceof Error ? e.message : String(e);
-    console.log('Error message:', errorMessage);
+    debugLog('Error message:', errorMessage);
 
     if (errorMessage.includes('less than the minimum UTXO value') || errorMessage.includes('OutputTooSmallUTxO')) {
       const match = errorMessage.match(/minimum UTXO value (\d+)/);
       const number = match ? parseInt(match[1], 10) : null;
       if (number) {
         const errorMinAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""));
-        console.log('Transaction builder reported minAda:', errorMinAda, 'but we calculated:', sendData.value.minAda);
+        debugLog('Transaction builder reported minAda:', errorMinAda, 'but we calculated:', sendData.value.minAda);
         // Only update if the error value is higher (more conservative)
         if (errorMinAda > sendData.value.minAda) {
           sendData.value.minAda = errorMinAda;
-          console.log('Updated minAda from error to:', sendData.value.minAda);
+          debugLog('Updated minAda from error to:', sendData.value.minAda);
         }
       }
     } else if (errorMessage.includes('Insufficient input in transaction.')) {
       const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
       const number = parseInt(match[2], 10) - parseInt(match[1], 10)
       sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-      console.log('Set adaShortage to:', sendData.value.adaShortage);
+      debugLog('Set adaShortage to:', sendData.value.adaShortage);
     } else if (errorMessage.includes('UTxO Fully Depleted')) {
       // This can happen when trying to send all ADA - just mark as invalid, user needs to reduce amount
-      console.log('UTxO Fully Depleted - cannot build transaction with current amount');
+      debugLog('UTxO Fully Depleted - cannot build transaction with current amount');
     } else if (errorMessage.includes('Maximum Input Count Exceeded')) {
       // Wallet has too many small UTXOs - user needs to reduce the amount
-      console.log('Maximum Input Count Exceeded - wallet has too many small UTXOs, reduce amount');
+      debugLog('Maximum Input Count Exceeded - wallet has too many small UTXOs, reduce amount');
     }
     txValid.value = false
   }
