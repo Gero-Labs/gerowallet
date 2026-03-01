@@ -827,7 +827,8 @@ const isApex = computed(() => {
     loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
-// Pre-compute DRep IDs per certificate to avoid repeated serialization in template
+// Pre-compute DRep IDs per certificate to avoid repeated serialization in template.
+// Indices align with the unfiltered certificates v-for in the template (transactionInfo.body.certificates).
 const drepIds = computed(() => {
   const certificates: Cardano.Certificate[] = props.transactionInfo?.body?.certificates ?? [];
   return certificates.map((cert) => {
@@ -870,7 +871,7 @@ const getRedeemerDataJson = (redeemerData: Cardano.PlutusData): string => {
   );
 };
 
-const getScripts = (scripts: Cardano.Script[]): Serialization.Script[] | undefined => {
+const getScripts = (scripts: Cardano.Script[] | undefined): Serialization.Script[] | undefined => {
   return scripts?.map(script => Serialization.Script.fromCore(script));
 };
 
