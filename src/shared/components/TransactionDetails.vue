@@ -1150,13 +1150,11 @@ const resolveTxDRep = async (drep: Cardano.DelegateRepresentative) => {
 
   try {
     const db = await getBlockchainDb(wallet.chain, wallet.network);
-    if (db) {
-      const cached = await db['dreps'].get(drepId);
-      if (cached) return cached;
-    }
+    const cached = await db['dreps'].get(drepId);
+    if (cached) return cached;
 
     const fetched = await blockchainApi.getDRepById(drepId, wallet.chain, wallet.network);
-    if (fetched && db) {
+    if (fetched) {
       await db['dreps'].put({ ...fetched, drep_id: drepId });
     }
     return fetched ?? null;
@@ -1179,18 +1177,17 @@ watch(
   async () => {
     const value = props.transactionInfo;
     if (!value) return;
+    txDRep.value = null;
+    currentPoolMeta.value = null;
     const certificates: Cardano.Certificate[] = value.body?.certificates ?? [];
     const dRepCert = certificates.find((cert): cert is Cardano.VoteDelegationCertificate => 'dRep' in cert);
     const poolCert = certificates.find((cert): cert is Cardano.StakeDelegationCertificate => 'poolId' in cert);
-    await resolvePoolMeta(poolCert?.poolId);
-    if (dRepCert) {
-      txDRep.value = await resolveTxDRep(dRepCert.dRep);
-    } else {
-      txDRep.value = null;
-    }
-    if (poolCert) {
-      await stakingStoreActions.loadPoolById(loggedWallet.value, poolCert.poolId);
-    }
+    const [, resolvedDRep] = await Promise.all([
+      resolvePoolMeta(poolCert?.poolId),
+      dRepCert ? resolveTxDRep(dRepCert.dRep) : Promise.resolve(null),
+      poolCert ? stakingStoreActions.loadPoolById(loggedWallet.value, poolCert.poolId) : Promise.resolve(),
+    ]);
+    txDRep.value = resolvedDRep;
   },
   { immediate: true }
 );
