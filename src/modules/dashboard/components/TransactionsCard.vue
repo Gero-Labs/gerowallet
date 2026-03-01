@@ -331,6 +331,9 @@ watch(searchInput, (newValue) => {
   debouncedUpdateSearch(newValue);
 });
 
+// Cancel pending debounce on unmount to prevent state mutation after teardown
+onUnmounted(() => debouncedUpdateSearch.cancel());
+
 // Computed search property for v-model binding
 // Note: Vuetify clearable sets value to null, so we coerce to empty string
 const search = computed({
@@ -412,7 +415,7 @@ const transactions = computed<StoredTransaction[]>(() => {
 
       // Check contact name
       const contactName = getContactName(tx);
-      const matchesContact = contactName && contactName.find(name => name.toLowerCase() == searchLower);
+      const matchesContact = contactName && contactName.find(name => name.toLowerCase() === searchLower);
 
       return matchesId || matchesAsset || matchesChip || matchesContact;
     }
@@ -1058,8 +1061,8 @@ const isSplash = (item: CardanoTx): boolean => {
   const hasSplashBatcherKey = item.body.requiredExtraSignatures?.some((sig) => sig === SPLASH_BATCHER_KEY);
 
   // Check for Splash order script in witness scripts
-  const hasSplashScript = (item.witness?.scripts as Array<{ hash?: string }> | undefined)?.some(
-    (script) => script?.hash === SPLASH_ORDER_SCRIPT_HASH
+  const hasSplashScript = item.witness?.scripts?.some(
+    (script) => Serialization.Script.fromCore(script).hash() === SPLASH_ORDER_SCRIPT_HASH
   );
 
   return hasSplashBatcherKey || hasSplashScript || false;
