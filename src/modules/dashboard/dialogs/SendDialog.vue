@@ -5,7 +5,7 @@
     :title="t('wallet.quickSend')"
     :loading="txSignLoading"
     :min-height="0"
-    :subtitle="t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
+    :subtitle="t('wallet.quickSendSubtitle', { currency: nativeTicker })"
     :persistent="false"
     :img="assets.sendSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
@@ -168,6 +168,8 @@ const { t } = useTranslation();
 const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
+const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
 const currentStep = ref<number>(1);
 const sendData = ref<{
   selectedTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
@@ -246,7 +248,7 @@ const tokens = computed(() => {
       }
     })
     tokens.sort((a,_b) => {
-      if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+      if (a.ticker === nativeTicker.value) {
         return -1
       }
       return 0;
@@ -289,8 +291,7 @@ const resetData = () => {
   currentStep.value = 1;
   tx.value = undefined
   txValid.value = false
-  const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
-  const foundAsset = tokens.value.find(token => token.ticker === currencyTicker)
+  const foundAsset = tokens.value.find(token => token.ticker === nativeTicker.value)
   if (foundAsset) {
     foundAsset.verified = true
   }
@@ -351,7 +352,7 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
     sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
       const quantity = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
 
-      if (token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)) {
+      if (token.ticker === nativeTicker.value) {
         coinsAmount = quantity;
       } else {
         assetsMap.set(token.unit as Cardano.AssetId, quantity);
@@ -448,10 +449,9 @@ async function setMax(index: number) {
 
   const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
   const selectedToken = sendTokensCopy[index];
-  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network);
 
   // For non-ADA tokens, just use the full balance
-  if (selectedToken.ticker !== nativeTicker) {
+  if (selectedToken.ticker !== nativeTicker.value) {
     if (selectedToken.decimals) {
       selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
     } else {
@@ -569,7 +569,7 @@ async function tryBuildMaxTx(tokens: (Token & { balance?: string | number })[], 
       const match = errorMessage.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
       if (match) {
         const adaMinBalance = match[2]
-        const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network))
+        const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === nativeTicker.value)
         if (nativeToken) {
           nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
           sendData.value.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
@@ -614,9 +614,8 @@ watch(() => ({
 
     // Calculate minimum ADA required for any assets (tokens or NFTs) if selected
     // Only count non-native assets (exclude ADA/tADA)
-    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
     const hasNonNativeAssets = collectiblesArray.length > 0 ||
-      val.selectedTokens.some(token => token?.unit && token.ticker !== nativeTicker);
+      val.selectedTokens.some(token => token?.unit && token.ticker !== nativeTicker.value);
 
     if (hasNonNativeAssets && epochParams.value && val.recipientAddress) {
       try {
@@ -637,7 +636,7 @@ watch(() => ({
         // Add tokens (non-ADA) to assets map
         // Only add tokens that are NOT the native currency (ADA/tADA)
         val.selectedTokens.forEach(token => {
-          if (token?.unit && token.ticker !== nativeTicker) { // Skip ADA/native currency
+          if (token?.unit && token.ticker !== nativeTicker.value) { // Skip ADA/native currency
             const quantity = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
             if (quantity > 0) {
               debugLog('Adding token:', token.unit, quantity);
@@ -717,8 +716,7 @@ watch(() => ({
 
 onMounted(() => {
   if (resolvedAssets.value) {
-    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
-    const adaAssetFound = (Object.values(resolvedAssets.value) as (Token & { metadata: { ticker: string } })[]).find(asset => asset.metadata.ticker === nativeTicker);
+    const adaAssetFound = (Object.values(resolvedAssets.value) as (Token & { metadata: { ticker: string } })[]).find(asset => asset.metadata.ticker === nativeTicker.value);
     if (adaAssetFound) {
       sendData.value.selectedTokens = [adaAssetFound];
     }
