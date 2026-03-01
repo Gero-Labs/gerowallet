@@ -3,7 +3,7 @@
     :isOpen="isOpen"
     @close="emit('close')"
     :title="t('wallet.quickSend')"
-    :loading="txSubmitLoading"
+    :loading="txSignLoading"
     :min-height="0"
     :subtitle="t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
@@ -53,7 +53,7 @@
           ></AssetsToSendStep>
         </v-stepper-content>
         <v-stepper-content step="3">
-          <SummaryStep ref="summary" :sendData="sendData" :tx-data="tx" @next="signAndSubmitTx" @prev="prevStep"></SummaryStep>
+          <SummaryStep ref="summaryRef" :sendData="sendData" :tx-data="tx" @next="handleSign" @prev="prevStep"></SummaryStep>
         </v-stepper-content>
       </CustomStepper>
 
@@ -69,56 +69,31 @@
       />
     </v-card-text>
     <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
-      <div class="" v-if="currentStep === 3">
-        <!-- PRF Wallet: PassKey Button or Submit Button -->
-        <div v-if="loggedWallet?.type === WalletType.Normal && isPrfWallet">
-          <!-- Before signing: PassKey button -->
-          <PassKeyAuthButton
-            v-if="!txWitnesses"
-            :disabled="txSubmitLoading"
-            @success="handlePassKeyAuthSuccess"
-            @error="handlePassKeyAuthError"
-            style="width: 295px"
-            class="mb-2"
-          />
-          <!-- After signing: Submit button -->
-          <v-btn
-            v-else
-            class="continue-button"
-            @click="nextStep"
-            :disabled="txSubmitLoading"
-            :loading="txSubmitLoading"
-            style="width: 295px"
-          >
-            {{ $t('common.confirm') }}
-          </v-btn>
-        </div>
-
-        <!-- Password Wallet: Password Field -->
-        <PassKeyPasswordField
-          ref="passwordField"
-          v-else-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet"
-          :value="spendingPassword"
-          @input="spendingPassword = $event"
-          outlined
-          dense
-          hide-details
-          :rules="[rules.required()]"
-          :disabled="txSubmitLoading"
-          required
-          @enter="nextStep"
-          @passkey-autofill-success="handlePassKeySuccess"
-          @passkey-autofill-error="handlePassKeyError"
-          style="width: 295px"
-          class="mb-2"
+      <!-- Transaction Authentication Section (step 3 only) -->
+      <div v-if="currentStep === 3">
+        <TransactionAuthSection
+          :wallet-type="loggedWallet?.type"
+          :is-prf-wallet="isPrfWallet"
+          :is-signed="isSubmit"
+          :loading="txSignLoading"
+          :password="spendingPassword"
+          @update:password="spendingPassword = $event"
+          :password-label="t('wallet.spendingPassword')"
+          :submit-text="t('common.confirm')"
+          :show-bt-toggle="isBTSupported"
+          :is-b-t="isBT"
+          @update:isBT="isBT = $event"
+          :usb-text="t('dashboard.usb')"
+          :bluetooth-text="t('dashboard.bluetooth')"
+          @passkey-success="handlePassKeyAuthSuccess"
+          @passkey-error="handlePassKeyAuthError"
+          @autofill-success="handlePassKeySuccess"
+          @autofill-error="handlePassKeyError"
+          @submit="nextStep"
+          @password-field-ref="setPasswordFieldRef"
+          button-style="width: 295px; margin-bottom: 1px;"
+          button-class="mb-2"
         />
-
-        <!-- Hardware Wallets: USB/Bluetooth Toggle -->
-        <div v-else-if="loggedWallet?.btSupported" class="pb-4" style="align-content: center;">
-          <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch :text-left="t('dashboard.usb')" icon-left="mdi-usb" :text-right="t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
-          </v-card-subtitle>
-        </div>
       </div>
       <div>
         <v-btn
@@ -126,53 +101,58 @@
           @click="prevStep"
           v-if="currentStep > 1"
           class="mr-2"
-          :disabled="txSubmitLoading"
+          :disabled="txSignLoading"
         >
           <v-icon small class="mr-1">mdi-arrow-left</v-icon>Back
         </v-btn>
-        <!-- Hide action button for PRF wallets on step 3 (handled above) -->
+        <!-- Steps 1-2: Continue button -->
         <v-btn
-          v-if="currentStep !== 3 || !isPrfWallet"
+          v-if="currentStep !== 3"
           class="continue-button"
           @click="nextStep"
-          :disabled="!isValid || txSubmitLoading"
-          :loading="txSubmitLoading"
-        >{{ currentStep === 3 ? (txAutoSubmit ? $t('wallet.signAndConfirm') : (!txWitnesses ? $t('wallet.sign') : $t('common.confirm'))) : $t('common.continue') + ' ' }}
-          <v-icon style="color: black!important;" small v-if="currentStep !==3" class="ml-1">mdi-arrow-right</v-icon>
+          :disabled="!isValid || txSignLoading"
+          :loading="txSignLoading"
+        >{{ $t('common.continue') + ' ' }}
+          <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+        </v-btn>
+        <!-- Step 3: Sign/Confirm button for non-PRF wallets -->
+        <v-btn
+          v-else-if="!isPrfWallet"
+          class="continue-button"
+          @click="nextStep"
+          :disabled="!isValid || txSignLoading"
+          :loading="txSignLoading"
+        >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
         </v-btn>
       </div>
     </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { toRefs, ref, computed, getCurrentInstance, watch, onMounted } from 'vue';
+import { toRefs, ref, computed, watch, onMounted } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
+import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
-import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
+import { Token, Collectible } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
-import snackbar from '@/plugins/snackbar';
-import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { isPaymentAddress } from '@/chrome/serialization';
-import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
-import { serializeCardanoJsSdkTx, BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
+import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
+import { BackgroundResponse, Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import ledgerUtils from '@/shared/utils/ledger';
+import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
-import { UR } from '@keystonehq/keystone-sdk';
 
 interface Props {
   isOpen: boolean;
@@ -183,11 +163,18 @@ const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
 
-const { loggedWallet, utxos, tokens: resolvedAssets, keys, config } = toRefs(walletStore)
+const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
 const currentStep = ref<number>(1);
-const sendData = ref<any>({
+const sendData = ref<{
+  selectedTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
+  selectedCollectibles: Record<string, Collectible & { unit: string }>;
+  recipientAddress: string;
+  selectedWallet: Record<string, string | number>;
+  minAda: number;
+  adaShortage: number;
+}>({
   selectedTokens: [],
   selectedCollectibles: {},
   recipientAddress: '',
@@ -196,10 +183,7 @@ const sendData = ref<any>({
   adaShortage: 0
 });
 const txValid = ref<boolean>(false);
-const spendingPassword = ref<string>('');
-const passwordField = ref<any>(null);
-const privateKeyBytes = ref<Uint8Array | null>(null); // For PRF wallet authentication
-const steps = ref<any[]>([
+const steps = ref([
   {
     name: 'recipientDetails',
     label: t('wallet.recipientDetails'),
@@ -214,32 +198,38 @@ const steps = ref<any[]>([
   },
 ]);
 const tx = ref<Cardano.Tx | undefined>(undefined);
-const txCbor = ref<string>('');
-const txWitnesses = ref<string>('');
-const isSubmit = ref<boolean>(false);
-const txSubmitLoading = ref<boolean>(false);
-const show1 = ref<boolean>(false);
-const isBT = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
-const overlay = ref<boolean>(false);
-const keystoneScan = ref<boolean>(false);
-const isInit = ref<boolean>(false);
-const keystoneType = ref<string>('');
-const keystoneCbor = ref<string>('');
-const keystoneUseHash = ref(false);
 
-const txAutoSubmit = computed(() => {
-  return config.value?.txAutoSubmit;
-});
-
-const isPrfWallet = computed(() => {
-  return loggedWallet.value?.encryptionMethod === 'prf' ||
-         (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
+// Transaction signing composable (handles sign, submit, password, hardware wallets, Keystone)
+const {
+  loading: txSignLoading,
+  spendingPassword,
+  isSubmit,
+  isBT,
+  isPrfWallet,
+  isBTSupported,
+  handleSign,
+  resetState,
+  handlePassKeySuccess,
+  handlePassKeyError,
+  handlePassKeyAuthSuccess,
+  handlePassKeyAuthError,
+  setPasswordFieldRef,
+  overlay,
+  keystoneType,
+  keystoneCbor,
+  onKeystoneScan,
+  onKeystoneError,
+  onKeystoneProgress,
+} = useTransactionSigning({
+  tx,
+  successMessageKey: 'wallet.txSubmittedSuccess',
+  onClose: () => emit('close'),
 });
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
-    const tokens = Object.values(resolvedAssets.value).map((token: any) => {
+    const tokens = (Object.values(resolvedAssets.value) as (Token & { metadata: { name: string; ticker: string; decimals: number }; img: string })[]).map(token => {
       return {
         ...token,
         name: token.metadata.name,
@@ -273,42 +263,29 @@ const isValid = computed(() => {
     if (!txValid.value) {
       return false;
     }
-    const hasZeroQuantity = (items) => {
+    const hasZeroQuantity = (items: Token[] | Record<string, Collectible & { unit: string }>) => {
       // Handle both arrays and objects
       const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-      return itemsArray.some(item => Number(item.quantity) === 0 || Number(item.toSendQuantity) === 0);
+      return itemsArray.some((item: { quantity?: string | number; toSendQuantity?: number }) => Number(item.quantity) === 0 || Number(item.toSendQuantity) === 0);
     };
     return !(hasZeroQuantity(sendData.value.selectedTokens) || hasZeroQuantity(sendData.value.selectedCollectibles));
   }
   if (currentStep.value === 3) {
+    if (isSubmit.value) return true; // Already signed, just need confirm click
     if (loggedWallet.value?.type === WalletType.Normal) {
-      // PRF wallet: Check for authenticated privateKeyBytes
-      if (isPrfWallet.value) {
-        return !!privateKeyBytes.value;
-      }
-      // Password wallet: Check for password
+      if (isPrfWallet.value) return true; // PRF handled by TransactionAuthSection
       return !!spendingPassword.value;
-    } else {
-      return true
     }
+    return true; // Hardware wallets always valid
   }
   return false;
 });
 
 const resetData = () => {
-  show1.value = false
-  keystoneScan.value = false
-  isInit.value = false
-  overlay.value = false
-  spendingPassword.value = ''
-  privateKeyBytes.value = null // Clear PRF authentication
+  resetState(); // Reset composable state (password, signing, loading, etc.)
   currentStep.value = 1;
-  txSubmitLoading.value = false
   tx.value = undefined
-  txCbor.value = ''
-  txWitnesses.value = ''
-  isSubmit.value = false
-  txValid.value = false  // Reset tx validation state
+  txValid.value = false
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
   const foundAsset = tokens.value.find(token => token.ticker === currencyTicker)
   if (foundAsset) {
@@ -324,296 +301,7 @@ const resetData = () => {
   };
 }
 
-const onKeystoneScan = async (ur: UR) => {
-  try {
-    // Parse the signature from Keystone
-    const signature = parseSignature(ur);
-
-    // Validate signature structure
-    if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-      throw new Error(t('wallet.invalidKeystoneSignature'));
-    }
-
-    // Get witness set from signature (already a hex string)
-    txWitnesses.value = signature.witnessSet;
-
-    // Close overlay
-    overlay.value = false;
-    keystoneScan.value = false;
-
-    // Submit if txAutoSubmit is enabled
-    if (txAutoSubmit.value) {
-      await submitTx();
-    } else {
-      isSubmit.value = true;
-    }
-  } catch (error) {
-    console.error('[Keystone] Error processing QR code:', error);
-    snackbar.setError(error instanceof Error ? error.message : t('wallet.keystoneQRScanError'));
-    overlay.value = false;
-    keystoneScan.value = false;
-  }
-}
-
-const onKeystoneError = (error: string) => {
-  console.error('[Keystone] Scanner error:', error);
-  snackbar.setError(error || t('wallet.keystoneScanError'));
-}
-
-const onKeystoneProgress = (progress: number) => {
-  console.log('[Keystone] Scanner progress:', progress);
-  // Progress updates handled silently
-}
-
-const handlePassKeySuccess = () => {
-  setTimeout(() => {
-    nextStep();
-  }, 300); // Small delay for UX feedback
-}
-
-const handlePassKeyError = (error: string) => {
-  console.error('PassKey autofill error in SendDialog:', error);
-  snackbar.setError(error || t('security.passKeyAuthFailed'));
-}
-
-const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
-  privateKeyBytes.value = pkBytes;
-  // Automatically proceed to sign after successful authentication
-  setTimeout(() => {
-    nextStep();
-  }, 300);
-}
-
-const handlePassKeyAuthError = (error: Error) => {
-  console.error('PassKey authentication error:', error);
-  snackbar.setError(error.message || t('security.passKeyAuthFailed'));
-  privateKeyBytes.value = null;
-}
-
-const signTx = async (): Promise<boolean> => {
-  txSubmitLoading.value = true;
-  try {
-    // Serialize the Cardano.Tx to CBOR for Chrome messaging
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-
-    // Prepare signing data
-    const signingData: any = {
-      txCbor: txCbor.value,
-      partialSign: false,
-      password: spendingPassword.value,
-      accountIndex: 0,
-      utxos: utxos.value,
-      addresses: keys.value,
-      mergeWitnesses: false,
-    };
-
-    // For PRF wallets, pass the already-decrypted privateKeyBytes
-    if (isPrfWallet.value && privateKeyBytes.value) {
-      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
-    }
-
-    // Sign the transaction via a background message
-    const witnessResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: signingData
-    }) as { data: { witnesses?: any; error?: string } };
-    if (witnessResult.data.error) {
-      throw new Error(witnessResult.data.error);
-    }
-    txWitnesses.value = witnessResult.data.witnesses;
-    return true;
-  } catch (e) {
-    console.error('Error signing send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
-    return false;
-  } finally {
-    txSubmitLoading.value = false;
-  }
-};
-
-const submitTx = async () => {
-  try {
-    txSubmitLoading.value = true;
-    const submitResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor: txCbor.value,
-        witnessHex: txWitnesses.value,
-        utxos: utxos.value
-      }
-    }) as { data: { txId?: string; error?: string } };
-
-    if (submitResult.data.error) {
-      throw new Error(submitResult.data.error);
-    }
-
-    snackbar.fireSuccess(t('wallet.txSubmittedSuccess', { txId: submitResult.data.txId }));
-    emit('close');
-  } catch (e) {
-    console.error('Error submitting send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
-  } finally {
-    txSubmitLoading.value = false;
-    isSubmit.value = false;
-  }
-};
-
-const signLedgerTx = async () => {
-  txSubmitLoading.value = true;
-  try {
-    if (!tx.value) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
-      tx.value,
-      keys.value,
-      utxos.value,
-      !isBT.value, // isUsb flag (inverted from isBT)
-      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
-    );
-    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-      signatures,
-    })
-    txWitnesses.value = transactionWitnessSet.toCbor();
-
-    // Submit the transaction if txAutoSubmit is enabled
-    if (txAutoSubmit.value) {
-      await submitTx();
-    }
-  } catch (e) {
-    ledgerUtils.ledgerErrorHandling(e);
-  } finally {
-    txSubmitLoading.value = false;
-  }
-};
-
-const signTrezorTx = async () => {
-  txSubmitLoading.value = true;
-  try {
-    if (!tx.value) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
-
-    // Serialize transaction to CBOR hex for Chrome messaging (BigInt/Map not serializable)
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-
-    // Send serialized transaction to background for Trezor signing
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.TREZOR,
-      data: {
-        method: 'signTx',
-        txCbor: txCbor.value
-      },
-    }) as BackgroundResponse<SignTxResponse>;
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Trezor signing failed');
-    }
-
-    // Get signatures from Trezor response (comes as array from Chrome messaging)
-    // Convert array back to Map (cast via unknown to satisfy TypeScript)
-    const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
-    const signatures: Cardano.Signatures = new Map(signaturesArray);
-
-    // Create witness set from signatures
-    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-      signatures,
-    })
-    console.log('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
-    txWitnesses.value = transactionWitnessSet.toCbor();
-
-    // Submit the transaction if txAutoSubmit is enabled
-    if (txAutoSubmit.value) {
-      await submitTx();
-    }
-  } catch (e) {
-    // Trezor-specific error handling
-    if (e instanceof Error) {
-      if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
-        snackbar.setError(t('wallet.trezorTransactionCancelled'));
-      } else if (e.message.toLowerCase().includes('device')) {
-        snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
-      } else {
-        snackbar.setError(e.message);
-      }
-    } else {
-      snackbar.setError(t('errors.unknownError'));
-    }
-  } finally {
-    txSubmitLoading.value = false;
-  }
-};
-
-async function signAndSubmitTx() {
-  if (loggedWallet.value?.type === WalletType.Normal) {
-    // PRF Wallet: Use privateKeyBytes from PassKey authentication
-    if (isPrfWallet.value) {
-      if (!privateKeyBytes.value) {
-        snackbar.setError(t('security.passKeyAuthRequired'));
-        return;
-      }
-      // privateKeyBytes already authenticated, proceed with signing
-      const isValid: boolean = await signTx();
-      if (!isValid) {
-        return;
-      }
-      // Submit if txAutoSubmit is enabled
-      if (txAutoSubmit.value) {
-        await submitTx();
-      }
-    } else {
-      // Password Wallet: Verify password first
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as BackgroundResponse<VerifyPasswordResponse>;
-
-      if (!passwordVerification.data.success) {
-        passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
-        return;
-      }
-      const isValid: boolean = await signTx();
-      if (!isValid) {
-        return;
-      }
-      // Submit if txAutoSubmit is enabled
-      if (txAutoSubmit.value) {
-        await submitTx();
-      }
-    }
-  } else if (loggedWallet.value?.type === WalletType.Keystone) {
-    // Keystone Hardware Wallet Signing
-    if (!tx.value) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
-
-    // Serialize transaction to CBOR
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-
-    // Convert Cardano.Tx to Serialization.Transaction for Keystone
-    const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
-
-    // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
-    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
-
-    // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
-    keystoneType.value = signRequestResponse.ur.type;
-    keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
-    keystoneUseHash.value = signRequestResponse.useHash;
-
-    // Show overlay with animated QR code
-    overlay.value = true;
-    keystoneScan.value = false;
-  } else if (loggedWallet.value?.type === WalletType.Ledger) {
-    // Ledger Hardware Wallet Signing
-    await signLedgerTx();
-  } else if (loggedWallet.value?.type === WalletType.Trezor) {
-    await signTrezorTx();
-  }
-}
-
-async function buildTx(sendTokens) {
+async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
   if (!sendData.value.recipientAddress || !isPaymentAddress(sendData.value.recipientAddress)) {
     return
   }
@@ -709,23 +397,17 @@ async function buildTx(sendTokens) {
   }
 }
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const summaryRef = ref<InstanceType<typeof SummaryStep>>();
 
-function nextStep() {
+async function nextStep() {
   if (currentStep.value <= steps.value.length) {
     if (currentStep.value === 1) {
       currentStep.value++;
     } else if (currentStep.value === 2) {
-      vmProxy.$refs.summary.scanTx(tx.value);
+      summaryRef.value?.scanTx(tx.value);
       currentStep.value++;
     } else if (currentStep.value === 3) {
-      // If txAutoSubmit is false and we have witnesses, just confirm (submit)
-      if (!txAutoSubmit.value && txWitnesses.value) {
-        submitTx();
-      } else {
-        // Otherwise sign (and auto-submit if enabled)
-        signAndSubmitTx();
-      }
+      await handleSign();
     }
   }
 }
@@ -736,24 +418,28 @@ function prevStep() {
   }
 }
 
-function updateRecipientAddress(address) {
+function updateRecipientAddress(address: string) {
   sendData.value.recipientAddress = address;
 }
 
-function selectCollectible(collectible) {
+function selectCollectible(collectible: Collectible & { unit: string }) {
   console.log('selectCollectible called:', collectible.name);
-  if (sendData.value.selectedCollectibles[collectible.name]) {
-    vmProxy.$delete(sendData.value.selectedCollectibles, collectible.name);
+  if (collectible.name && sendData.value.selectedCollectibles[collectible.name]) {
+    const { [collectible.name]: _, ...rest } = sendData.value.selectedCollectibles;
+    sendData.value.selectedCollectibles = rest;
     console.log('Removed collectible:', collectible.name);
-  } else {
-    vmProxy.$set(sendData.value.selectedCollectibles, collectible.name, collectible);
+  } else if (collectible.name) {
+    sendData.value.selectedCollectibles = {
+      ...sendData.value.selectedCollectibles,
+      [collectible.name]: collectible
+    };
     console.log('Added collectible:', collectible.name);
   }
   console.log('Current selectedCollectibles:', sendData.value.selectedCollectibles);
   console.log('Object.values:', Object.values(sendData.value.selectedCollectibles));
 }
 
-async function setMax(index) {
+async function setMax(index: number) {
   isCalculatingMax.value = true; // Disable watch while calculating max
 
   const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
@@ -869,11 +555,11 @@ async function setMax(index) {
   isCalculatingMax.value = false;
 }
 
-async function tryBuildMaxTx(tokens, index) {
+async function tryBuildMaxTx(tokens: (Token & { balance?: string | number })[], index: number) {
   try {
     await buildTx(tokens)
-  } catch (e: any) {
-    const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
     console.log('tryBuildMaxTx error:', errorMessage);
 
     if (errorMessage.includes('Insufficient input in transaction.')) {
@@ -946,9 +632,9 @@ watch(() => ({
         const assetsMap = new Map<Cardano.AssetId, bigint>();
 
         // Add collectibles to assets map
-        collectiblesArray.forEach((collectible: any) => {
+        collectiblesArray.forEach((collectible) => {
           console.log('Adding collectible:', collectible.unit, collectible.toSendQuantity);
-          assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
+          assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity || 0));
         });
 
         // Add tokens (non-ADA) to assets map
@@ -998,9 +684,9 @@ watch(() => ({
 
     await buildTx(val.selectedTokens)
     txValid.value = true
-  } catch(e: any) {
+  } catch(e) {
     console.error('Build tx error:', e)
-    const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
+    const errorMessage = e instanceof Error ? e.message : String(e);
     console.log('Error message:', errorMessage);
 
     if (errorMessage.includes('less than the minimum UTXO value') || errorMessage.includes('OutputTooSmallUTxO')) {
@@ -1034,7 +720,7 @@ watch(() => ({
 onMounted(() => {
   if (resolvedAssets.value) {
     const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
-    const adaAssetFound = Object.values(resolvedAssets.value).find((asset: any) => asset.metadata.ticker === nativeTicker);
+    const adaAssetFound = (Object.values(resolvedAssets.value) as (Token & { metadata: { ticker: string } })[]).find(asset => asset.metadata.ticker === nativeTicker);
     if (adaAssetFound) {
       sendData.value.selectedTokens = [adaAssetFound];
     }
