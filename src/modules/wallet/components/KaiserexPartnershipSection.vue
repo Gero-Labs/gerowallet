@@ -11,14 +11,6 @@
     </div>
 
     <div class="trust-grid">
-      <!-- Regulatory Compliance -->
-      <div class="trust-card">
-        <h4 class="trust-title">{{ t('card.licensedRegulated') }}</h4>
-        <p class="trust-description">
-          {{ t('card.licensedRegulatedDesc') }}
-        </p>
-      </div>
-
       <!-- Industry Experience -->
       <div class="trust-card">
         <h4 class="trust-title">{{ t('card.yearsExperience') }}</h4>

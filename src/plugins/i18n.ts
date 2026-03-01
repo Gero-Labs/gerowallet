@@ -3,23 +3,10 @@ import VueI18n from 'vue-i18n';
 import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
 
-// Vuetify locales - import all available
+// Vuetify locales — only import supported languages (us, de)
 import {
-  cs as vuetifyCz,
   de as vuetifyDe,
-  el as vuetifyGr,
   en as vuetifyEn,
-  es as vuetifyEs,
-  fr as vuetifyFr,
-  he as vuetifyHe,
-  it as vuetifyIt,
-  ja as vuetifyJa,
-  nl as vuetifyNl,
-  pt as vuetifyPt,
-  ru as vuetifyRu,
-  th as vuetifyTh,
-  tr as vuetifyTr,
-  zhHans as vuetifyCn,
 } from 'vuetify/src/locale';
 
 // Only load US English by default (other languages lazy-loaded on demand)
@@ -35,30 +22,10 @@ const wrapWithVuetify = (translations: any, vuetifyLocale: any, rtl = false, loc
   ...translations,
 });
 
-// Vuetify locale mapping (all 22 languages from languages.ts)
+// Vuetify locale mapping — only supported languages
 const vuetifyLocales: Record<string, any> = {
-  cn: vuetifyCn, // Chinese
-  cz: vuetifyCz, // Czech - FIXED
-  de: vuetifyDe, // German
-  es: vuetifyEs, // Spanish
-  fr: vuetifyFr, // French
-  gb: vuetifyEn, // English (GB)
-  gr: vuetifyGr, // Greek
-  he: vuetifyHe, // Hebrew
-  hr: vuetifyEn, // Croatian - fallback to English
-  id: vuetifyEn, // Indonesian - fallback to English
-  in: vuetifyEn, // Hindi - fallback to English
-  it: vuetifyIt, // Italian
-  jp: vuetifyJa, // Japanese
-  nl: vuetifyNl, // Dutch
-  pk: vuetifyEn, // Urdu - fallback to English
-  pt: vuetifyPt, // Portuguese
-  ru: vuetifyRu, // Russian
-  th: vuetifyTh, // Thai
-  tr: vuetifyTr, // Turkish
-  tz: vuetifyEn, // Swahili - fallback to English
-  us: vuetifyEn, // English (US)
-  vn: vuetifyEn, // Vietnamese - fallback to English
+  de: vuetifyDe,
+  us: vuetifyEn,
 };
 
 // Initial messages with only US English
@@ -75,7 +42,7 @@ async function loadLanguage(lang: string): Promise<void> {
   try {
     const translations = await import(`@/plugins/i18n/${lang}.ts`);
     const vuetifyLocale = vuetifyLocales[lang] || vuetifyEn;
-    const isRTL = lang === 'he' || lang === 'pk'; // Hebrew and Urdu are RTL
+    const isRTL = false; // No RTL languages currently supported
 
     messages[lang] = wrapWithVuetify(translations.default, vuetifyLocale, isRTL, getLocaleCode(lang));
 
@@ -93,28 +60,8 @@ async function loadLanguage(lang: string): Promise<void> {
  */
 function getLocaleCode(lang: string): string {
   const localeCodes: Record<string, string> = {
-    cn: 'zh-CN',
-    cz: 'cs-CZ',
     de: 'de-DE',
-    es: 'es-ES',
-    fr: 'fr-FR',
-    gb: 'en-GB',
-    gr: 'el-GR',
-    he: 'he-IL',
-    hr: 'hr-HR',
-    id: 'id-ID',
-    in: 'hi-IN',
-    it: 'it-IT',
-    jp: 'ja-JP',
-    nl: 'nl-NL',
-    pk: 'ur-PK',
-    pt: 'pt-PT',
-    ru: 'ru-RU',
-    th: 'th-TH',
-    tr: 'tr-TR',
-    tz: 'sw-TZ',
     us: 'en-US',
-    vn: 'vi-VN',
   };
   return localeCodes[lang] || 'en-US';
 }

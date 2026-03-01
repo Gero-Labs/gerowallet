@@ -250,14 +250,14 @@ Three console.log statements were logging entire request objects that contained 
 
 The codebase implements industry-standard cryptographic practices:
 
-| Practice | Implementation | Status |
-|----------|----------------|--------|
-| Private Key Encryption | ChaCha20-Poly1305 AEAD with PBKDF2-HMAC-SHA512 | **Secure** |
-| Key Derivation | PBKDF2 with 100,000 iterations for PIN/patterns | **Secure** |
+| Practice                      | Implementation                                       | Status     |
+|-------------------------------|------------------------------------------------------|------------|
+| Private Key Encryption        | ChaCha20-Poly1305 AEAD with PBKDF2-HMAC-SHA512       | **Secure** |
+| Key Derivation                | PBKDF2 with 100,000 iterations for PIN/patterns      | **Secure** |
 | Key Derivation (private keys) | PBKDF2 with 19,162 iterations (CSL/EMIP3 compatible) | **Secure** |
-| Random Generation | `crypto.getRandomValues()` for salts/nonces | **Secure** |
-| PIN Verification | Constant-time comparison (timing attack resistant) | **Secure** |
-| WebAuthn/PassKey | Platform authenticator with device-bound keys | **Secure** |
+| Random Generation             | `crypto.getRandomValues()` for salts/nonces          | **Secure** |
+| PIN Verification              | Constant-time comparison (timing attack resistant)   | **Secure** |
+| WebAuthn/PassKey              | Platform authenticator with device-bound keys        | **Secure** |
 
 **Files:** `src/shared/utils/crypto.ts`, `src/shared/utils/security.ts`
 

@@ -684,16 +684,36 @@ export function toUTxO(utxo: UTxO): Serialization.TransactionUnspentOutput {
 }
 
 /**
- * Detect a type of hex encoded addr and convert to PaymentAddress or RewardAddress.
+ * Detect address format and convert to PaymentAddress or RewardAddress.
+ * Handles bech32 (addr1…, stake1…), hex-encoded raw bytes (CIP-30 spec), and DRepKeyHash.
  *
- * @param addr when hex encoded, it can be a PaymentAddress, RewardAddress or DRepKeyHash
- * @returns PaymentAddress | RewardAddress DRepKeyHash is converted to a type 6 address
+ * @param addr bech32 address, hex-encoded address bytes, or DRepKeyHash
+ * @returns PaymentAddress | RewardAddress (DRepKeyHash is converted to a type 6 address)
  */
 export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAccount | string): Cardano.PaymentAddress | Cardano.RewardAccount {
+  // 1. Try bech32 (addr1…, stake1…)
   try {
     return Cardano.isRewardAccount(addr) ? Cardano.RewardAccount(addr) : Cardano.PaymentAddress(addr);
   } catch {
-    // Try to parse as drep key hash
+    // Not bech32 — continue
+  }
+
+  // 2. Try hex-encoded address bytes (CIP-30 spec format)
+  try {
+    const addressBytes = Buffer.from(addr, 'hex');
+    const cardanoAddr = Cardano.Address.fromBytes(addressBytes);
+    const bech32Addr = cardanoAddr.toBech32();
+    const addrType = cardanoAddr.getType();
+    if (addrType === Cardano.AddressType.RewardKey || addrType === Cardano.AddressType.RewardScript) {
+      return bech32Addr as unknown as Cardano.RewardAccount;
+    }
+    return bech32Addr as unknown as Cardano.PaymentAddress;
+  } catch {
+    // Not hex address — continue
+  }
+
+  // 3. Try DRep key hash
+  try {
     const drepKeyHash = Ed25519KeyHashHex(addr);
     const drepId = Cardano.DRepID.cip129FromCredential({
       hash: Hash28ByteBase16(drepKeyHash),
@@ -704,6 +724,8 @@ export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAcco
       throw DataSignError.AddressNotPK;
     }
     return drepAddr.toBech32();
+  } catch {
+    throw DataSignError.AddressNotPK;
   }
 }
 
@@ -917,11 +939,15 @@ export interface KeyAgent {
  * Implements CIP-30 signData specification without using @cardano-sdk/key-management
  * This avoids the problematic cip8 import that blocks Chrome event listeners
  *
+ * Returns proper COSE_Sign1 + COSE_Key structures as required by CIP-30:
+ *   signature: cbor<COSE_Sign1>
+ *   key:       cbor<COSE_Key>
+ *
  * @param keyAgent - Object with derivePublicKey and signBlob methods
  * @param knownAddresses - List of known addresses for the wallet
  * @param signWith - Address to sign with (payment or reward address)
  * @param payload - Hex payload to sign
- * @returns DataSignature with signature and key
+ * @returns DataSignature with COSE-encoded signature and key
  */
 export async function signDataCip8(
   keyAgent: KeyAgent,
@@ -967,12 +993,36 @@ export async function signDataCip8(
     index: matchingAddress.index
   };
 
-  // Sign the payload with the appropriate key
-  const signResult = await keyAgent.signBlob(derivationPath, payload);
+  // Convert address to raw bytes for COSE headers
+  const addressBytes = Cardano.Address.fromBech32(signWith).toBytes();
 
-  // Return in CIP-30 DataSignature format
-  return {
-    signature: signResult.signature,
-    key: signResult.publicKey
-  };
+  // Dynamic import to avoid WASM loading issues at module init time
+  const { createBuilderWithSigStructure, createCoseKeyHex, safeFreeCSLObject } =
+    await import('@/shared/utils/converter');
+
+  // Build COSE_Sign1: create builder and extract Sig_structure for signing
+  const { builder, sigStrucBytes } = createBuilderWithSigStructure(addressBytes, payload);
+
+  let coseSign1: any = null;
+  try {
+    // Sign the Sig_structure (not the raw payload) — this is what CIP-8 requires
+    const signResult = await keyAgent.signBlob(derivationPath, sigStrucBytes);
+
+    // Finalize COSE_Sign1 with the Ed25519 signature
+    const signatureRaw = Buffer.from(signResult.signature, 'hex');
+    coseSign1 = builder.build(signatureRaw);
+    const signatureHex = Buffer.from(coseSign1.to_bytes()).toString('hex');
+
+    // Build COSE_Key
+    const keyHex = createCoseKeyHex(addressBytes, signResult.publicKey);
+
+    // Return in CIP-30 DataSignature format (COSE-encoded)
+    return {
+      signature: signatureHex,
+      key: keyHex
+    };
+  } finally {
+    safeFreeCSLObject(builder);
+    if (coseSign1) safeFreeCSLObject(coseSign1);
+  }
 }

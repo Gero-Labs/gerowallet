@@ -17,7 +17,7 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 
 ## Overview
 
-**Gero Dashboard** (v2.6.2) is a feature-rich, non-custodial Cardano wallet browser extension that provides comprehensive blockchain management with enterprise-grade security, DeFi integrations, and seamless Web3 connectivity.
+**Gero Dashboard** (v2.6.3) is a feature-rich, non-custodial Cardano wallet browser extension that provides comprehensive blockchain management with enterprise-grade security, DeFi integrations, and seamless Web3 connectivity.
 
 ### Key Features
 
