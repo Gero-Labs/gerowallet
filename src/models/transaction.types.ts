@@ -33,7 +33,7 @@ interface TxUtxo {
   outputs: UtxoOutput[];
 }
 
-interface TxAsset {
+export interface TxAsset {
   unit: string;
   policy_id: string;
   asset_name: string;
