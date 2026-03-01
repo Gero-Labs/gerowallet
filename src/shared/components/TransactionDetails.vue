@@ -369,8 +369,8 @@
                     <td class="text-left grey--text">DRep</td>
                     <td class="text-left">
                       <v-list-item class="px-0">
-                        <v-list-item-avatar v-if="currentDRep?.metadata?.meta_json?.body?.image?.contentUrl">
-                          <v-img :src="currentDRep?.metadata?.meta_json?.body?.image?.contentUrl">
+                        <v-list-item-avatar v-if="txDRep?.metadata?.meta_json?.body?.image?.contentUrl">
+                          <v-img :src="txDRep?.metadata?.meta_json?.body?.image?.contentUrl">
                             <template v-slot:placeholder>
                               <v-row class="fill-height ma-0" align="center" justify="center">
                                 <v-progress-circular
@@ -385,24 +385,24 @@
                         </v-list-item-avatar>
                         <v-list-item-content>
                           <v-list-item-title>
-                            {{ currentDRep?.metadata?.meta_json?.body?.givenName || currentDRep?.drep_id || getDRepCip129(certificate.dRep) }}
+                            {{ txDRep?.metadata?.meta_json?.body?.givenName || txDRep?.drep_id || drepIds[index].cip129 }}
                           </v-list-item-title>
-                          <v-list-item-subtitle v-if="getDRepCip105(certificate.dRep)">
+                          <v-list-item-subtitle v-if="drepIds[index].cip105">
                             <a href="https://cips.cardano.org/cip/CIP-0105" target="_blank">CIP-105</a>:
-                            {{ ` ${filters.truncate(getDRepCip105(certificate.dRep))}` }}
+                            {{ ` ${filters.truncate(drepIds[index].cip105)}` }}
                             <CopyButton
                               x-small
                               class="ml-1"
-                              :value="getDRepCip105(certificate.dRep)"
+                              :value="drepIds[index].cip105"
                             />
                           </v-list-item-subtitle>
-                          <v-list-item-subtitle v-if="getDRepCip105(certificate.dRep)">
+                          <v-list-item-subtitle v-if="drepIds[index].cip105">
                             <a href="https://cips.cardano.org/cip/CIP-0129" target="_blank">CIP-129</a>:
-                            {{ ` ${filters.truncate(getDRepCip129(certificate.dRep))}` }}
+                            {{ ` ${filters.truncate(drepIds[index].cip129)}` }}
                             <CopyButton
                               x-small
                               class="ml-1"
-                              :value="getDRepCip129(certificate.dRep)"
+                              :value="drepIds[index].cip129"
                             />
                           </v-list-item-subtitle>
                         </v-list-item-content>
@@ -772,10 +772,10 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Buffer } from 'buffer';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
-import governanceStoreActions from '@/stores/governanceStore';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import stakingStoreActions from '@/stores/stakingStore';
 import blockchainApi from '@/api/blockchain-api';
+import { getBlockchainDb } from '@/db';
 import { Blockchain, Network } from '@/models/types';
 
 /** Koios API UTXO amount entry */
@@ -812,7 +812,6 @@ const props = defineProps<Props>();
 
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
-const { currentDRep } = toRefs(governanceStoreActions.state);
 const { currentPool } = toRefs(stakingStoreActions.state);
 
 const residue = ref<ReturnType<typeof resolveAsset>[]>([]);
@@ -820,10 +819,22 @@ const panels = ref<number[]>([]);
 const isExpanded = ref<boolean>(false);
 const isReportDialogOpen = ref<boolean>(false);
 const currentPoolMeta = ref<{ url_png_icon_64x64?: string } | null>(null);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const txDRep = ref<any>(null);
 
 const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
     loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
+
+// Pre-compute DRep IDs per certificate to avoid repeated serialization in template
+const drepIds = computed(() => {
+  const certificates: Cardano.Certificate[] = props.transactionInfo?.body?.certificates ?? [];
+  return certificates.map((cert) => {
+    if (!('dRep' in cert)) return { cip105: '', cip129: '' };
+    const drep = (cert as Cardano.VoteDelegationCertificate).dRep;
+    return { cip105: getDRepCip105(drep), cip129: getDRepCip129(drep) };
+  });
 });
 
 function findLovelace(io: TxAmount[]) {
@@ -931,9 +942,10 @@ const getDRepCip105 = (drep: Cardano.DelegateRepresentative): string => {
 const getDRepCip129 = (drep: Cardano.DelegateRepresentative): string => {
   const credential = getDRepCredential(drep);
   if (!credential) {
+    // credential is null for sentinel types (AlwaysAbstain/AlwaysNoConfidence) or unrecognized DRep kinds
     if ('__typename' in drep) {
-      if (drep.__typename === 'AlwaysAbstain') return 'Always Abstain';
-      if (drep.__typename === 'AlwaysNoConfidence') return 'Always No Confidence';
+      if (drep.__typename === 'AlwaysAbstain') return t('governance.alwaysAbstain');
+      if (drep.__typename === 'AlwaysNoConfidence') return t('governance.alwaysNoConfidence');
     }
     return 'N/A';
   }
@@ -1128,6 +1140,31 @@ const shrink = () => {
   isExpanded.value = false;
 };
 
+const resolveTxDRep = async (drep: Cardano.DelegateRepresentative) => {
+  const credential = getDRepCredential(drep);
+  if (!credential) return null; // Sentinel type (AlwaysAbstain/AlwaysNoConfidence)
+
+  const drepId = Cardano.DRepID.cip129FromCredential(credential);
+  const wallet = loggedWallet.value;
+  if (!wallet) return null;
+
+  try {
+    const db = await getBlockchainDb(wallet.chain, wallet.network);
+    if (db) {
+      const cached = await db['dreps'].get(drepId);
+      if (cached) return cached;
+    }
+
+    const fetched = await blockchainApi.getDRepById(drepId, wallet.chain, wallet.network);
+    if (fetched && db) {
+      await db['dreps'].put({ ...fetched, drep_id: drepId });
+    }
+    return fetched ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const resolvePoolMeta = async (poolId: string | undefined) => {
   if (!poolId) return;
   const pool = await blockchainApi.getPoolById(poolId, loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -1147,11 +1184,9 @@ watch(
     const poolCert = certificates.find((cert): cert is Cardano.StakeDelegationCertificate => 'poolId' in cert);
     await resolvePoolMeta(poolCert?.poolId);
     if (dRepCert) {
-      const credential = getDRepCredential(dRepCert.dRep);
-      if (credential) {
-        const drepId = Cardano.DRepID.cip129FromCredential(credential);
-        await governanceStoreActions.loadDRepById(loggedWallet.value, drepId);
-      }
+      txDRep.value = await resolveTxDRep(dRepCert.dRep);
+    } else {
+      txDRep.value = null;
     }
     if (poolCert) {
       await stakingStoreActions.loadPoolById(loggedWallet.value, poolCert.poolId);
