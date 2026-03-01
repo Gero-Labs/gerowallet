@@ -410,6 +410,7 @@ async function nextStep() {
       summaryRef.value?.scanTx(tx.value);
       currentStep.value++;
     } else if (currentStep.value === 3) {
+      if (!isValid.value) return; // Guard Enter-key path against empty password
       await handleSign();
     }
   }
@@ -698,9 +699,11 @@ watch(() => ({
       }
     } else if (errorMessage.includes('Insufficient input in transaction.')) {
       const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-      const number = parseInt(match[2], 10) - parseInt(match[1], 10)
-      sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-      debugLog('Set adaShortage to:', sendData.value.adaShortage);
+      if (match) {
+        const number = parseInt(match[2], 10) - parseInt(match[1], 10)
+        sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
+        debugLog('Set adaShortage to:', sendData.value.adaShortage);
+      }
     } else if (errorMessage.includes('UTxO Fully Depleted')) {
       // This can happen when trying to send all ADA - just mark as invalid, user needs to reduce amount
       debugLog('UTxO Fully Depleted - cannot build transaction with current amount');
