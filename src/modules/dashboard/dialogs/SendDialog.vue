@@ -79,6 +79,7 @@
           :password="spendingPassword"
           @update:password="spendingPassword = $event"
           :password-label="t('wallet.spendingPassword')"
+          :password-rules="passwordRules"
           :submit-text="t('common.confirm')"
           :show-bt-toggle="isBTSupported"
           :is-b-t="isBT"
@@ -103,7 +104,7 @@
           class="mr-2"
           :disabled="txSignLoading"
         >
-          <v-icon small class="mr-1">mdi-arrow-left</v-icon>Back
+          <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
         </v-btn>
         <!-- Steps 1-2: Continue button -->
         <v-btn
@@ -208,6 +209,7 @@ const {
   isBT,
   isPrfWallet,
   isBTSupported,
+  passwordRules,
   handleSign,
   resetState,
   handlePassKeySuccess,
