@@ -141,7 +141,7 @@ import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import rules from '@/utils/rules';
-import { WalletType } from '@/models/types';
+import { WalletType, Wallet } from '@/models/types';
 import { Token, Collectible } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
@@ -173,7 +173,7 @@ const sendData = ref<{
   selectedTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
   selectedCollectibles: Record<string, Collectible & { unit: string }>;
   recipientAddress: string;
-  selectedWallet: Record<string, string | number>;
+  selectedWallet: Wallet | Record<string, never>;
   minAda: number;
   adaShortage: number;
 }>({
