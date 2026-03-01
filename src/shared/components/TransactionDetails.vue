@@ -973,7 +973,7 @@ const getMint = (transactionInfo: { body?: { mint?: Cardano.TokenMap } }) => {
       const resolved = txAssets.value[assetId];
       return {
         assetId,
-        assetName: getAssetName(assetId, true),
+        assetName: getAssetName(assetId as string, true),
         policyId,
         fingerprint: Cardano.AssetFingerprint.fromParts(policyId, assetNameHex),
         quantity,
@@ -1147,8 +1147,11 @@ watch(
     const poolCert = certificates.find((cert): cert is Cardano.StakeDelegationCertificate => 'poolId' in cert);
     await resolvePoolMeta(poolCert?.poolId);
     if (dRepCert) {
-      const drepId = getDRepCip129(dRepCert.dRep);
-      await governanceStoreActions.loadDRepById(loggedWallet.value, drepId);
+      const credential = getDRepCredential(dRepCert.dRep);
+      if (credential) {
+        const drepId = Cardano.DRepID.cip129FromCredential(credential);
+        await governanceStoreActions.loadDRepById(loggedWallet.value, drepId);
+      }
     }
     if (poolCert) {
       await stakingStoreActions.loadPoolById(loggedWallet.value, poolCert.poolId);
