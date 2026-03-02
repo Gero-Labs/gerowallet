@@ -12,7 +12,7 @@
   >
     <!-- Empty wallet state -->
     <template v-if="isWalletEmpty">
-      <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;">
+      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
         <div class="empty-wallet-state">
           <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
           <div class="empty-wallet-title text-h6 mb-2">
@@ -61,7 +61,7 @@
           </v-stepper-header>
         </v-stepper>
       </v-card-title>
-      <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
+      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
         <CustomStepper :currentStep="currentStep" :steps="steps">
           <v-stepper-content step="1">
             <SendRecipientDetailsStep
@@ -296,6 +296,7 @@ const tokens = computed(() => {
   return []
 })
 
+// walletStore.collections is typed as {} but at runtime each value is { items: Array, name: string, ... }
 const collectiblesCount = computed(() => {
   const collections = resolvedCollections.value;
   if (!collections || Object.keys(collections).length === 0) return 0;
@@ -775,6 +776,18 @@ onMounted(() => {
 })
 </script>
 <style scoped>
+.send-dialog-content {
+  z-index: 1;
+  min-height: 0;
+  height: 490px;
+  align-content: center;
+}
+
+/* Compensate for missing stepper header and card-actions to keep dialog height consistent */
+.send-dialog-content--empty {
+  height: 590px;
+}
+
 .empty-wallet-state {
   display: flex;
   flex-direction: column;
