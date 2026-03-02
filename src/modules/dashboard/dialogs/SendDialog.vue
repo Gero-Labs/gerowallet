@@ -93,66 +93,66 @@
           @progress="onKeystoneProgress"
         />
       </v-card-text>
+      <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <!-- Transaction Authentication Section (step 3 only) -->
+        <div v-if="currentStep === 3">
+          <TransactionAuthSection
+            :wallet-type="loggedWallet?.type"
+            :is-prf-wallet="isPrfWallet"
+            :is-signed="isSubmit"
+            :loading="txSignLoading"
+            :password="spendingPassword"
+            @update:password="spendingPassword = $event"
+            :password-label="t('wallet.spendingPassword')"
+            :password-rules="passwordRules"
+            :submit-text="t('common.confirm')"
+            :show-bt-toggle="isBTSupported"
+            :is-b-t="isBT"
+            @update:isBT="isBT = $event"
+            :usb-text="t('dashboard.usb')"
+            :bluetooth-text="t('dashboard.bluetooth')"
+            @passkey-success="handlePassKeyAuthSuccess"
+            @passkey-error="handlePassKeyAuthError"
+            @autofill-success="handlePassKeySuccess"
+            @autofill-error="handlePassKeyError"
+            @submit="nextStep"
+            @password-field-ref="setPasswordFieldRef"
+            button-style="width: 295px; margin-bottom: 1px;"
+            button-class="mb-2"
+          />
+        </div>
+        <div>
+          <v-btn
+            text
+            @click="prevStep"
+            v-if="currentStep > 1"
+            class="mr-2"
+            :disabled="txSignLoading"
+          >
+            <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
+          </v-btn>
+          <!-- Steps 1-2: Continue button -->
+          <v-btn
+            v-if="currentStep !== 3"
+            class="continue-button"
+            @click="nextStep"
+            :disabled="!isValid || txSignLoading"
+            :loading="txSignLoading"
+          >{{ $t('common.continue') + ' ' }}
+            <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+          </v-btn>
+          <!-- Step 3: Sign/Confirm button for non-PRF wallets -->
+          <v-btn
+            v-else-if="!isPrfWallet"
+            class="continue-button"
+            @click="nextStep"
+            :disabled="!isValid || txSignLoading"
+            :loading="txSignLoading"
+          >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
+          </v-btn>
+        </div>
+      </v-card-actions>
     </template>
-    <v-card-actions v-if="!isWalletEmpty" class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
-      <!-- Transaction Authentication Section (step 3 only) -->
-      <div v-if="currentStep === 3">
-        <TransactionAuthSection
-          :wallet-type="loggedWallet?.type"
-          :is-prf-wallet="isPrfWallet"
-          :is-signed="isSubmit"
-          :loading="txSignLoading"
-          :password="spendingPassword"
-          @update:password="spendingPassword = $event"
-          :password-label="t('wallet.spendingPassword')"
-          :password-rules="passwordRules"
-          :submit-text="t('common.confirm')"
-          :show-bt-toggle="isBTSupported"
-          :is-b-t="isBT"
-          @update:isBT="isBT = $event"
-          :usb-text="t('dashboard.usb')"
-          :bluetooth-text="t('dashboard.bluetooth')"
-          @passkey-success="handlePassKeyAuthSuccess"
-          @passkey-error="handlePassKeyAuthError"
-          @autofill-success="handlePassKeySuccess"
-          @autofill-error="handlePassKeyError"
-          @submit="nextStep"
-          @password-field-ref="setPasswordFieldRef"
-          button-style="width: 295px; margin-bottom: 1px;"
-          button-class="mb-2"
-        />
-      </div>
-      <div>
-        <v-btn
-          text
-          @click="prevStep"
-          v-if="currentStep > 1"
-          class="mr-2"
-          :disabled="txSignLoading"
-        >
-          <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
-        </v-btn>
-        <!-- Steps 1-2: Continue button -->
-        <v-btn
-          v-if="currentStep !== 3"
-          class="continue-button"
-          @click="nextStep"
-          :disabled="!isValid || txSignLoading"
-          :loading="txSignLoading"
-        >{{ $t('common.continue') + ' ' }}
-          <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
-        </v-btn>
-        <!-- Step 3: Sign/Confirm button for non-PRF wallets -->
-        <v-btn
-          v-else-if="!isPrfWallet"
-          class="continue-button"
-          @click="nextStep"
-          :disabled="!isValid || txSignLoading"
-          :loading="txSignLoading"
-        >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
-        </v-btn>
-      </div>
-    </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
@@ -298,10 +298,7 @@ const tokens = computed(() => {
 
 // walletStore.collections is typed as {} but at runtime each key is a policy ID
 // with value { items: Array, name: string, ... }
-const hasCollectibles = computed(() => {
-  const collections = resolvedCollections.value;
-  return !!collections && Object.keys(collections).length > 0;
-});
+const hasCollectibles = computed(() => Object.keys(resolvedCollections.value).length > 0);
 
 const isWalletEmpty = computed(() => {
   // Don't show empty state until wallet is fully initialised and data has loaded
