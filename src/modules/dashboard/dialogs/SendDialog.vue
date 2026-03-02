@@ -15,10 +15,10 @@
       <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;">
         <div class="empty-wallet-state">
           <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
-          <div class="text-h6 mb-2" style="color: rgba(255, 255, 255, 0.7)">
+          <div class="empty-wallet-title text-h6 mb-2">
             {{ $t('wallet.emptyWalletSendTitle') }}
           </div>
-          <div class="text-body-2 mb-6" style="color: rgba(255, 255, 255, 0.4); max-width: 300px; margin: 0 auto;">
+          <div class="empty-wallet-description text-body-2 mb-6">
             {{ $t('wallet.emptyWalletSendDescription', { currency: nativeTicker }) }}
           </div>
           <v-btn
@@ -182,6 +182,7 @@ import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
+import { loadingState } from '@/stores/loading';
 
 interface Props {
   isOpen: boolean;
@@ -192,7 +193,7 @@ const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
 
-const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
+const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolvedCollections } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
 const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
@@ -293,7 +294,16 @@ const tokens = computed(() => {
   return []
 })
 
-const isWalletEmpty = computed(() => tokens.value.length === 0);
+const collectiblesCount = computed(() => {
+  if (!resolvedCollections.value) return 0;
+  return Object.values(resolvedCollections.value).reduce((count: number, col: any) => count + (col.items?.length || 0), 0);
+});
+
+const isWalletEmpty = computed(() => {
+  // Don't show empty state while wallet is still loading/syncing
+  if (loadingState.loading || !loadingState.connected) return false;
+  return tokens.value.length === 0 && collectiblesCount.value === 0;
+});
 
 const isValid = computed(() => {
   if (currentStep.value === 1) {
@@ -301,10 +311,6 @@ const isValid = computed(() => {
     return fn(sendData.value.recipientAddress) !== 'Invalid Payment Address'
   }
   if (currentStep.value === 2) {
-    // Disable continue when wallet is empty (no tokens and no collectibles selected)
-    if (tokens.value.length === 0 && Object.keys(sendData.value.selectedCollectibles).length === 0) {
-      return false;
-    }
     if (!txValid.value) {
       return false;
     }
@@ -771,6 +777,16 @@ onMounted(() => {
   justify-content: center;
   height: 100%;
   text-align: center;
+}
+
+.empty-wallet-title {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.empty-wallet-description {
+  color: rgba(255, 255, 255, 0.4);
+  max-width: 300px;
+  margin: 0 auto;
 }
 
 .titles {
