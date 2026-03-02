@@ -257,7 +257,7 @@ const closeDelete = () => {
 
 const save = async () => {
   const addressChanged = editedAddress.value && editedAddress.value !== editedItem.value.address;
-  const existingHandle = contacts.value[editedAddress.value || editedItem.value.address]?.handle;
+  const existingHandle = editedAddress.value ? contacts.value[editedAddress.value]?.handle : undefined;
 
   // Preserve handle only if address unchanged or updated via handle re-resolve; clear if manually changed
   const handle = (!addressChanged || handleAddressApplied.value) ? (existingHandle || undefined) : undefined;

@@ -454,7 +454,7 @@ const resolveAdaHandle = debounce(async function(val) {
   }, 1000);
 
 watch(contact, async (val) => {
-  console.debug('contact', val)
+  debugLog('contact', val)
   if (!val.address) return
   const existing = contacts.value[val.address]
   if (existing == null || existing.name != val.name || existing.handle != val.handle) {
