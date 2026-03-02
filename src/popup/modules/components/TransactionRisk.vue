@@ -29,7 +29,7 @@
       <div id="risk-label" v-else>{{ label }}</div>
     </div>
     <div id="risk-powered">
-      <span>{{ $t('security.poweredBy') }}</span>
+      <span>{{ $t('common.poweredBy') }}</span>
       <a href="https://cardanoshield.com/" target="_blank">
         <img :alt="t('common.cardanoShield')" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
       </a>

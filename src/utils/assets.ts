@@ -140,6 +140,7 @@ import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
 import mediumSvg from '@/assets/svg/medium.svg'
 import adLabsLogo from '@/assets/svg/ad-labs_black.svg'
 import adLabsLogoWhite from '@/assets/svg/ad-labs_white.svg'
+import dexHunterLogo from '@/assets/svg/dexhunter.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -385,7 +386,8 @@ export default {
   geroDashboardXmas,
   mediumSvg,
   adLabsLogo,
-  adLabsLogoWhite
+  adLabsLogoWhite,
+  dexHunterLogo,
 }
 
 export {

@@ -86,12 +86,42 @@
               <span style="font-size: 11px">{{ pairPrice }}</span>
             </v-btn>
             <v-spacer></v-spacer>
+            <v-tooltip v-if="estimation.total_output > 0" bottom max-width="240" content-class="custom-tooltip">
+              <template v-slot:activator="{ on, attrs }">
+                <span v-bind="attrs" v-on="on" style="font-size: 11px; color: #88919e; cursor: pointer; display: flex; align-items: center">
+                  <v-icon x-small color="#88919e" class="mr-1">mdi-information-outline</v-icon>
+                  {{ $t('swap.fees') }}
+                </span>
+              </template>
+              <div style="font-size: 12px">
+                <div v-if="estimation.batcher_fee > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.batcherFee') }}</span>
+                  <span>{{ formattedBatcherFee }} ADA</span>
+                </div>
+                <div v-if="estimation.partner_fee > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.partnerFee') }}</span>
+                  <span>{{ formattedPartnerFee }} ADA</span>
+                </div>
+                <div v-if="estimation.deposits > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.deposits') }}</span>
+                  <span>{{ formattedDeposits }} ADA</span>
+                </div>
+                <div v-if="calculateWeightedPriceImpact > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.priceImpact') }}</span>
+                  <span :style="{ color: priceImpactColor }">{{ calculateWeightedPriceImpact.toFixed(2) }}%</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.minReceive') }}</span>
+                  <span>{{ formattedMinReceive }} {{ selectedTokenB.ticker }}</span>
+                </div>
+              </div>
+            </v-tooltip>
             <v-btn
               text
               plain
               x-small
               color="primary"
-              class="px-0 no-opacity"
+              class="px-0 no-opacity ml-2"
               :ripple="false"
               @click="swapOverviewToggle = true"
               style="letter-spacing: normal"
@@ -193,9 +223,6 @@
               </div>
             </v-card-text>
           </v-card>
-          <div class="text-left" v-else>
-            <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
-          </div>
         </v-card-text>
         <SwapOverviewOverlay
           ref="swap"
@@ -210,7 +237,7 @@
         />
       </div>
     </v-card-text>
-    <v-card-actions class="px-3 pt-2 pb-3" style="justify-content: center">
+    <v-card-actions class="px-3 pt-2 pb-1" style="justify-content: center; flex-wrap: wrap">
       <v-btn
         max-width="420"
         style="color: black !important; width: 100%; border-radius: 10px"
@@ -223,6 +250,13 @@
           poolError ? $t('swap.poolNotFound') : swapButtonText
         }}</span>
       </v-btn>
+      <div style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 10px; color: #88919e; padding-top: 4px">
+        <span>{{ $t('common.poweredBy') }}</span>
+        <v-avatar size="14" tile>
+          <v-img :src="assets.dexHunterLogo" contain />
+        </v-avatar>
+        <span style="font-weight: 600; color: #b0b8c4">DexHunter</span>
+      </div>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
   </v-card>
@@ -249,6 +283,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { debugLog } from '@/utils/debug';
+import assets from '@/utils/assets';
 
 const emit = defineEmits(['onSwap']);
 
@@ -310,7 +345,7 @@ const intervalId = ref<any>(0);
 const loading = ref<boolean>(false);
 const swapOverviewToggle = ref<boolean>(false);
 const pairPriceToggle = ref<boolean>(false);
-const blacklisted_dexes = ref<any[]>([]);
+const blacklisted_dexes = ref([]);
 const search = ref(DexHunterStore.searchTokens);
 const poolError = ref<boolean>(false);
 const limit = ref<string>('0.0000000');
@@ -479,6 +514,29 @@ const pairPrice = computed(() => {
   }
 });
 
+const formattedBatcherFee = computed(() => {
+  return filters.toCurrency(estimation.value.batcher_fee || 0, false, 2, '', '', false, 0);
+});
+
+const formattedPartnerFee = computed(() => {
+  return filters.toCurrency(estimation.value.partner_fee || 0, false, 2, '', '', false, 0);
+});
+
+const formattedDeposits = computed(() => {
+  return filters.toCurrency(estimation.value.deposits || 0, false, 2, '', '', false, 0);
+});
+
+const formattedMinReceive = computed(() => {
+  return filters.toCurrency(estimation.value.total_output || 0, false, 2, '', '', false, 0);
+});
+
+const priceImpactColor = computed(() => {
+  const impact = calculateWeightedPriceImpact.value;
+  if (impact >= 10) return '#FDA29B';
+  if (impact >= 3) return '#FEC84B';
+  return '#75E0A7';
+});
+
 watch(
   () => selectedTokenA.value?.ticker,
   async (newVal, oldVal) => {
@@ -569,6 +627,8 @@ const tokenAQuantityChange = val => {
 const debouncedEstimateTokenA = debounce(val => {
   if (!val || val === 0 || swapType.value === 'limit') {
     selectedTokenB.value.quantity = '0';
+    estimation.value = { net_price_reverse: 0, total_output: 0, deposits: 0, batcher_fee: 0, partner_fee: 0 };
+    splits.value = undefined;
   } else {
     estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, val, true);
   }
@@ -639,6 +699,7 @@ const estimate = (token_in: string, token_out: string, amount_in, update) => {
         total_output_without_slippage.value = data.total_output_without_slippage;
         splits.value = data.splits;
         estimation.value = data;
+        debugLog('[Swap] Estimation fees:', { batcher_fee: data.batcher_fee, partner_fee: data.partner_fee, deposits: data.deposits, total_output: data.total_output });
         if (swapType.value !== 'limit') {
           selectedTokenB.value.quantity = filters.toCurrency(
             total_output_without_slippage.value,
