@@ -10,65 +10,91 @@
     :img="assets.sendSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
-    <v-card-title style="display: block;" class="py-0">
-      <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
-        <v-stepper-header>
-          <template v-for="(item, index) in steps">
-            <div
-              class="custom-step"
-              :key="item.name"
-              :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
-            >
-              <div class="icon-container">
-                <v-icon
-                  class="step-icon"
-                  :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
-                  size="20"
-                >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
-                </v-icon
-                >
-              </div>
-              <span class="step-label">{{ item.label }}</span>
-            </div>
-            <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
-                 v-if="index < steps.length - 1"></div>
-          </template>
-        </v-stepper-header>
-      </v-stepper>
-    </v-card-title>
-    <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
-      <CustomStepper :currentStep="currentStep" :steps="steps">
-        <v-stepper-content step="1">
-          <SendRecipientDetailsStep
-            :sendData="sendData"
-            @updateRecipientAddress="updateRecipientAddress"
-          ></SendRecipientDetailsStep>
-        </v-stepper-content>
-        <v-stepper-content step="2">
-          <AssetsToSendStep
-            v-model="sendData"
-            @select="selectCollectible"
-            :tokens="tokens"
-            @setMax="setMax"
-          ></AssetsToSendStep>
-        </v-stepper-content>
-        <v-stepper-content step="3">
-          <SummaryStep ref="summaryRef" :sendData="sendData" :tx-data="tx" @next="handleSign" @prev="prevStep"></SummaryStep>
-        </v-stepper-content>
-      </CustomStepper>
+    <!-- Empty wallet state -->
+    <template v-if="isWalletEmpty">
+      <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;">
+        <div class="empty-wallet-state">
+          <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
+          <div class="text-h6 mb-2" style="color: rgba(255, 255, 255, 0.7)">
+            {{ $t('wallet.emptyWalletSendTitle') }}
+          </div>
+          <div class="text-body-2 mb-6" style="color: rgba(255, 255, 255, 0.4); max-width: 300px; margin: 0 auto;">
+            {{ $t('wallet.emptyWalletSendDescription', { currency: nativeTicker }) }}
+          </div>
+          <v-btn
+            outlined
+            color="#00DFF3"
+            @click="openReceiveDialog"
+          >
+            <v-icon small class="mr-1">mdi-qrcode</v-icon>
+            {{ $t('wallet.emptyWalletReceive', { currency: nativeTicker }) }}
+          </v-btn>
+        </div>
+      </v-card-text>
+    </template>
 
-      <!-- Keystone Sign Dialog -->
-      <KeystoneSignDialog
-        :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
-        :keystoneType="keystoneType"
-        :keystoneCbor="keystoneCbor"
-        @close="overlay = false"
-        @scan="onKeystoneScan"
-        @error="onKeystoneError"
-        @progress="onKeystoneProgress"
-      />
-    </v-card-text>
-    <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+    <!-- Normal send flow -->
+    <template v-else>
+      <v-card-title style="display: block;" class="py-0">
+        <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
+          <v-stepper-header>
+            <template v-for="(item, index) in steps">
+              <div
+                class="custom-step"
+                :key="item.name"
+                :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
+              >
+                <div class="icon-container">
+                  <v-icon
+                    class="step-icon"
+                    :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                    size="20"
+                  >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
+                  </v-icon
+                  >
+                </div>
+                <span class="step-label">{{ item.label }}</span>
+              </div>
+              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
+                   v-if="index < steps.length - 1"></div>
+            </template>
+          </v-stepper-header>
+        </v-stepper>
+      </v-card-title>
+      <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
+        <CustomStepper :currentStep="currentStep" :steps="steps">
+          <v-stepper-content step="1">
+            <SendRecipientDetailsStep
+              :sendData="sendData"
+              @updateRecipientAddress="updateRecipientAddress"
+            ></SendRecipientDetailsStep>
+          </v-stepper-content>
+          <v-stepper-content step="2">
+            <AssetsToSendStep
+              v-model="sendData"
+              @select="selectCollectible"
+              :tokens="tokens"
+              @setMax="setMax"
+            ></AssetsToSendStep>
+          </v-stepper-content>
+          <v-stepper-content step="3">
+            <SummaryStep ref="summaryRef" :sendData="sendData" :tx-data="tx" @next="handleSign" @prev="prevStep"></SummaryStep>
+          </v-stepper-content>
+        </CustomStepper>
+
+        <!-- Keystone Sign Dialog -->
+        <KeystoneSignDialog
+          :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
+          :keystoneType="keystoneType"
+          :keystoneCbor="keystoneCbor"
+          @close="overlay = false"
+          @scan="onKeystoneScan"
+          @error="onKeystoneError"
+          @progress="onKeystoneProgress"
+        />
+      </v-card-text>
+    </template>
+    <v-card-actions v-if="!isWalletEmpty" class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <!-- Transaction Authentication Section (step 3 only) -->
       <div v-if="currentStep === 3">
         <TransactionAuthSection
@@ -155,6 +181,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 
 interface Props {
   isOpen: boolean;
@@ -169,6 +196,13 @@ const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore
 const { tip, epochParams } = toRefs(networkStore)
 
 const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+const { openReceiveDialog: switchToReceive } = useQuickActionDialogs();
+
+function openReceiveDialog() {
+  emit('close');
+  switchToReceive();
+}
 
 const currentStep = ref<number>(1);
 const sendData = ref<{
@@ -259,12 +293,18 @@ const tokens = computed(() => {
   return []
 })
 
+const isWalletEmpty = computed(() => tokens.value.length === 0);
+
 const isValid = computed(() => {
   if (currentStep.value === 1) {
     const fn = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
     return fn(sendData.value.recipientAddress) !== 'Invalid Payment Address'
   }
   if (currentStep.value === 2) {
+    // Disable continue when wallet is empty (no tokens and no collectibles selected)
+    if (tokens.value.length === 0 && Object.keys(sendData.value.selectedCollectibles).length === 0) {
+      return false;
+    }
     if (!txValid.value) {
       return false;
     }
@@ -296,7 +336,7 @@ const resetData = () => {
     foundAsset.verified = true
   }
   sendData.value = {
-    selectedTokens: [foundAsset],
+    selectedTokens: foundAsset ? [foundAsset] : [],
     selectedCollectibles: {},
     recipientAddress: '',
     selectedWallet: loggedWallet.value,
@@ -349,7 +389,7 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
   let coinsAmount = BigInt(0);
 
   if (sendTokens.length > 0) {
-    sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
+    sendTokens.filter(token => token && (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
       const quantity = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
 
       if (token.ticker === nativeTicker.value) {
@@ -724,6 +764,15 @@ onMounted(() => {
 })
 </script>
 <style scoped>
+.empty-wallet-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
 .titles {
   align-items: center;
   text-align: center;
