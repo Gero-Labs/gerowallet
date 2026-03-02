@@ -34,7 +34,7 @@ import TransactionDetails from '@/shared/components/TransactionDetails.vue';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 const route = vmProxy.$route;
 
 const isReportDialogOpen = ref(false);

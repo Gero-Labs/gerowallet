@@ -133,10 +133,11 @@ export async function setWalletConfiguration(id: number, key: string, value) {
 
 export async function addOrUpdateContact(id: number, contact, address?: string) {
   const db: Dexie = await getDb(id);
+  const data = { address: contact.address, name: contact.name, handle: contact.handle || null };
   if (address) {
-    db.table('contacts').update(address, {address: contact.address, name: contact.name})
+    db.table('contacts').update(address, data);
   } else {
-    db.table('contacts').put({address: contact.address, name: contact.name})
+    db.table('contacts').put(data);
   }
 }
 

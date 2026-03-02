@@ -9,14 +9,14 @@ export const geroDBSchema = {
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 };
 
-export const walletDBVersion: number = 9;
+export const walletDBVersion: number = 10;
 
 export const walletDBSchema = {
   config: 'key, value',
   sync: '++id, hash, height, slot, time, epoch, epoch_slot',
   account: '++id, walletId',
   addresses: 'address',
-  contacts: 'address, name',
+  contacts: 'address, name, handle',
   rewards: 'epoch, amount, pool_id, type',
   transactions: 'id',
   connected_dapps: '++id, domain, time',
