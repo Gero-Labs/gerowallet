@@ -739,7 +739,7 @@ const handleCancelLogin = () => {
 };
 
 const openTerms = () => {
-  window.open('https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true', '_blank');
+  window.open('https://gerowallet.io/legal/terms/', '_blank');
 };
 
 const resetDialog = () => {
