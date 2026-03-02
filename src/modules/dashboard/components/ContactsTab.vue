@@ -40,6 +40,9 @@
                 <div style="font-size: 11px; opacity: 0.8">
                   {{ $t('wallet.contactCurrentAddress') }}: {{ filters.shortenStringWithEllipsis(handleWarning.newAddress, 20) }}
                 </div>
+                <v-btn x-small color="warning" class="mt-2" @click="applyFreshAddress">
+                  {{ $t('wallet.contactUpdateAddress') }}
+                </v-btn>
               </v-alert>
               <div style="display: flex; align-items: flex-start; gap: 12px">
                 <v-avatar v-if="handleImg || resolving" size="106" rounded style="border-radius: 8px; border: 1px #444 solid; flex-shrink: 0">
@@ -169,7 +172,7 @@ const formTitle = computed(() => {
 
 const formIcon = computed(() => {
   return editedAddress.value === null ? 'mdi-account-plus' : 'mdi-account-edit';
-})
+});
 
 // Watchers
 watch(dialog, (val) => {
@@ -200,12 +203,16 @@ const editItem = async (item: Contact) => {
         const freshAddress = res.data.resolved_addresses.ada;
         if (freshAddress !== item.address) {
           handleWarning.value = { show: true, handle: contact.handle, oldAddress: item.address, newAddress: freshAddress };
-          editedItem.value.address = freshAddress;
         }
       }
     } catch { /* silent - keep stored address */
     } finally { resolving.value = false; }
   }
+};
+
+const applyFreshAddress = () => {
+  editedItem.value.address = handleWarning.value.newAddress;
+  handleWarning.value.show = false;
 };
 
 const deleteItem = (item: Contact) => {

@@ -286,6 +286,7 @@ const recipientAddress = ref<string>('');
 const resolved = ref<boolean>(undefined);
 const loading = ref<boolean>(false);
 const contactsMenu = ref<boolean>(false);
+let selectContactCounter = 0;
 const saveContactMenu = ref<boolean>(false);
 const qrScanDialog = ref<boolean>(false);
 const asset = ref(undefined);
@@ -314,11 +315,13 @@ const contactsHeaders = ref([
 const selectContact = async (item) => {
   contactsMenu.value = false;
   handleMismatch.value.show = false;
+  const currentSelection = ++selectContactCounter;
 
   if (item.handle && loggedWallet.value.network === Network.MAINNET && loggedWallet.value.chain === Blockchain.CARDANO) {
     loading.value = true;
     try {
       const res = await adaHandleApi.resolve(item.handle.replace('$', ''));
+      if (currentSelection !== selectContactCounter) return; // stale response
       if (res.status === 200 && res.data?.resolved_addresses?.ada) {
         const freshAddress = res.data.resolved_addresses.ada;
         asset.value = { name: res.data.name, img: assets.resolveIcon(res.data.image) };
@@ -338,11 +341,12 @@ const selectContact = async (item) => {
         emit('updateRecipientAddress', item.address);
       }
     } catch {
+      if (currentSelection !== selectContactCounter) return;
       paymentAddress.value = item.address;
       recipientAddress.value = item.address;
       emit('updateRecipientAddress', item.address);
     } finally {
-      loading.value = false;
+      if (currentSelection === selectContactCounter) loading.value = false;
     }
   } else {
     recipientAddress.value = item.address;

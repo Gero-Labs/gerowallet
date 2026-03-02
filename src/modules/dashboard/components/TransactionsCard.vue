@@ -114,7 +114,7 @@
                     style="margin-left: 1px; margin-bottom: 1px"
                     >{{ $t('common.internal') }}</v-chip
                   >
-                  <template v-if="getContactName(item)?.length > 0" v-for="(contact, index) in getContactName(item)">
+                  <template v-for="(contact, index) in (getContactName(item) || [])">
                     <v-chip
                       v-if="contact.isHandle"
                       outlined
@@ -794,7 +794,7 @@ const getContactName = (item: StoredTransaction): { label: string; isHandle: boo
 
   // Create a map of contact addresses to display info
   const contactMap = new Map<string, { label: string; isHandle: boolean }>();
-  Object.values(contacts.value).forEach((contact: any) => {
+  Object.values(contacts.value).forEach((contact) => {
     if (contact.address && contact.name) {
       contactMap.set(contact.address, {
         label: contact.handle || contact.name,
