@@ -7,7 +7,7 @@
             {{ $t('cashback.title') }}
           </v-card-title>
           <v-card-subtitle class="justify-center text-center py-0" style="font-size: 10px">
-            {{ $t('cashback.poweredBy') }} <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
+            {{ $t('common.poweredBy') }} <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
             <v-img class="bring-web3-logo" max-height="36" height="36" width="40" :src="assets.bringWhite" contain :alt="$t('cashback.bringLogo')" />
           </v-btn>
           </v-card-subtitle>

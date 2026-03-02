@@ -2,7 +2,7 @@
   <v-card class="transparent" flat style="min-height: calc(100vh - 128px)">
     <v-card-title class="justify-center text-center pb-0 text-h3"> {{ $t('governance.geroDAO') }} </v-card-title>
     <v-card-subtitle class="justify-center text-center" style="display: inline-flex; width: 100%">
-      {{ $t('governance.poweredBy') }}
+      {{ $t('common.poweredBy') }}
       <v-img
         class="ml-1"
         :src="assets.clarityLogo"
@@ -48,7 +48,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { onMounted, ref } from 'vue';
 import assets from '@/utils/assets';
 
@@ -56,8 +55,6 @@ import TreasuryTab from './Tabs/TreasuryTab.vue';
 import MembersTab from './Tabs/MembersTab.vue';
 import GovernanceTab from './Tabs/GovernanceTab.vue';
 
-
-const { t } = useTranslation();
 const tab = ref(0);
 
 onMounted(() => {});
