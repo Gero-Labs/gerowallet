@@ -156,7 +156,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { toRefs, ref, computed, watch, onMounted } from 'vue';
+import { toRefs, ref, computed, watch, onMounted, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -200,9 +200,10 @@ const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.
 
 const { openReceiveDialog: switchToReceive } = useQuickActionDialogs();
 
-function openReceiveDialog() {
+async function openReceiveDialog() {
   // Close send dialog first so receive dialog opens into a clean state without overlap
   emit('close');
+  await nextTick();
   switchToReceive();
 }
 
@@ -297,7 +298,7 @@ const tokens = computed(() => {
 
 const collectiblesCount = computed(() => {
   const collections = resolvedCollections.value;
-  if (Object.keys(collections).length === 0) return 0;
+  if (!collections || Object.keys(collections).length === 0) return 0;
   return Object.values(collections).reduce(
     (count: number, col: { items?: unknown[] }) => count + (col.items?.length || 0), 0
   );
