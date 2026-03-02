@@ -9,7 +9,7 @@
       text
       :ripple="false"
       class="footer-btn"
-      href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true"
+      href="https://gerowallet.io/legal/terms/"
       target="_blank"
     >
       {{ $t('welcome.termsOfService') }}

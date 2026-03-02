@@ -10,127 +10,153 @@
     :img="assets.sendSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
-    <v-card-title style="display: block;" class="py-0">
-      <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
-        <v-stepper-header>
-          <template v-for="(item, index) in steps">
-            <div
-              class="custom-step"
-              :key="item.name"
-              :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
-            >
-              <div class="icon-container">
-                <v-icon
-                  class="step-icon"
-                  :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
-                  size="20"
-                >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
-                </v-icon
-                >
-              </div>
-              <span class="step-label">{{ item.label }}</span>
-            </div>
-            <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
-                 v-if="index < steps.length - 1"></div>
-          </template>
-        </v-stepper-header>
-      </v-stepper>
-    </v-card-title>
-    <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
-      <CustomStepper :currentStep="currentStep" :steps="steps">
-        <v-stepper-content step="1">
-          <SendRecipientDetailsStep
-            :sendData="sendData"
-            @updateRecipientAddress="updateRecipientAddress"
-          ></SendRecipientDetailsStep>
-        </v-stepper-content>
-        <v-stepper-content step="2">
-          <AssetsToSendStep
-            v-model="sendData"
-            @select="selectCollectible"
-            :tokens="tokens"
-            @setMax="setMax"
-          ></AssetsToSendStep>
-        </v-stepper-content>
-        <v-stepper-content step="3">
-          <SummaryStep ref="summaryRef" :sendData="sendData" :tx-data="tx" @next="handleSign" @prev="prevStep"></SummaryStep>
-        </v-stepper-content>
-      </CustomStepper>
+    <!-- Empty wallet state -->
+    <template v-if="isWalletEmpty">
+      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
+        <div class="empty-wallet-state">
+          <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
+          <div class="empty-wallet-title text-h6 mb-2">
+            {{ $t('wallet.emptyWalletSendTitle') }}
+          </div>
+          <div class="empty-wallet-description text-body-2 mb-6">
+            {{ $t('wallet.emptyWalletSendDescription', { currency: nativeTicker }) }}
+          </div>
+          <v-btn
+            outlined
+            color="#00DFF3"
+            @click="openReceiveDialog"
+          >
+            <v-icon small class="mr-1">mdi-qrcode</v-icon>
+            {{ $t('wallet.emptyWalletReceive', { currency: nativeTicker }) }}
+          </v-btn>
+        </div>
+      </v-card-text>
+    </template>
 
-      <!-- Keystone Sign Dialog -->
-      <KeystoneSignDialog
-        :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
-        :keystoneType="keystoneType"
-        :keystoneCbor="keystoneCbor"
-        @close="overlay = false"
-        @scan="onKeystoneScan"
-        @error="onKeystoneError"
-        @progress="onKeystoneProgress"
-      />
-    </v-card-text>
-    <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
-      <!-- Transaction Authentication Section (step 3 only) -->
-      <div v-if="currentStep === 3">
-        <TransactionAuthSection
-          :wallet-type="loggedWallet?.type"
-          :is-prf-wallet="isPrfWallet"
-          :is-signed="isSubmit"
-          :loading="txSignLoading"
-          :password="spendingPassword"
-          @update:password="spendingPassword = $event"
-          :password-label="t('wallet.spendingPassword')"
-          :password-rules="passwordRules"
-          :submit-text="t('common.confirm')"
-          :show-bt-toggle="isBTSupported"
-          :is-b-t="isBT"
-          @update:isBT="isBT = $event"
-          :usb-text="t('dashboard.usb')"
-          :bluetooth-text="t('dashboard.bluetooth')"
-          @passkey-success="handlePassKeyAuthSuccess"
-          @passkey-error="handlePassKeyAuthError"
-          @autofill-success="handlePassKeySuccess"
-          @autofill-error="handlePassKeyError"
-          @submit="nextStep"
-          @password-field-ref="setPasswordFieldRef"
-          button-style="width: 295px; margin-bottom: 1px;"
-          button-class="mb-2"
+    <!-- Normal send flow -->
+    <template v-else>
+      <v-card-title style="display: block;" class="py-0">
+        <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
+          <v-stepper-header>
+            <template v-for="(item, index) in steps">
+              <div
+                class="custom-step"
+                :key="item.name"
+                :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
+              >
+                <div class="icon-container">
+                  <v-icon
+                    class="step-icon"
+                    :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                    size="20"
+                  >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
+                  </v-icon
+                  >
+                </div>
+                <span class="step-label">{{ item.label }}</span>
+              </div>
+              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
+                   v-if="index < steps.length - 1"></div>
+            </template>
+          </v-stepper-header>
+        </v-stepper>
+      </v-card-title>
+      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
+        <CustomStepper :currentStep="currentStep" :steps="steps">
+          <v-stepper-content step="1">
+            <SendRecipientDetailsStep
+              :sendData="sendData"
+              @updateRecipientAddress="updateRecipientAddress"
+            ></SendRecipientDetailsStep>
+          </v-stepper-content>
+          <v-stepper-content step="2">
+            <AssetsToSendStep
+              v-model="sendData"
+              @select="selectCollectible"
+              :tokens="tokens"
+              @setMax="setMax"
+            ></AssetsToSendStep>
+          </v-stepper-content>
+          <v-stepper-content step="3">
+            <SummaryStep ref="summaryRef" :sendData="sendData" :tx-data="tx" @next="handleSign" @prev="prevStep"></SummaryStep>
+          </v-stepper-content>
+        </CustomStepper>
+
+        <!-- Keystone Sign Dialog -->
+        <KeystoneSignDialog
+          :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
+          :keystoneType="keystoneType"
+          :keystoneCbor="keystoneCbor"
+          @close="overlay = false"
+          @scan="onKeystoneScan"
+          @error="onKeystoneError"
+          @progress="onKeystoneProgress"
         />
-      </div>
-      <div>
-        <v-btn
-          text
-          @click="prevStep"
-          v-if="currentStep > 1"
-          class="mr-2"
-          :disabled="txSignLoading"
-        >
-          <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
-        </v-btn>
-        <!-- Steps 1-2: Continue button -->
-        <v-btn
-          v-if="currentStep !== 3"
-          class="continue-button"
-          @click="nextStep"
-          :disabled="!isValid || txSignLoading"
-          :loading="txSignLoading"
-        >{{ $t('common.continue') + ' ' }}
-          <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
-        </v-btn>
-        <!-- Step 3: Sign/Confirm button for non-PRF wallets -->
-        <v-btn
-          v-else-if="!isPrfWallet"
-          class="continue-button"
-          @click="nextStep"
-          :disabled="!isValid || txSignLoading"
-          :loading="txSignLoading"
-        >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
-        </v-btn>
-      </div>
-    </v-card-actions>
+      </v-card-text>
+      <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <!-- Transaction Authentication Section (step 3 only) -->
+        <div v-if="currentStep === 3">
+          <TransactionAuthSection
+            :wallet-type="loggedWallet?.type"
+            :is-prf-wallet="isPrfWallet"
+            :is-signed="isSubmit"
+            :loading="txSignLoading"
+            :password="spendingPassword"
+            @update:password="spendingPassword = $event"
+            :password-label="t('wallet.spendingPassword')"
+            :password-rules="passwordRules"
+            :submit-text="t('common.confirm')"
+            :show-bt-toggle="isBTSupported"
+            :is-b-t="isBT"
+            @update:isBT="isBT = $event"
+            :usb-text="t('dashboard.usb')"
+            :bluetooth-text="t('dashboard.bluetooth')"
+            @passkey-success="handlePassKeyAuthSuccess"
+            @passkey-error="handlePassKeyAuthError"
+            @autofill-success="handlePassKeySuccess"
+            @autofill-error="handlePassKeyError"
+            @submit="nextStep"
+            @password-field-ref="setPasswordFieldRef"
+            button-style="width: 295px; margin-bottom: 1px;"
+            button-class="mb-2"
+          />
+        </div>
+        <div>
+          <v-btn
+            text
+            @click="prevStep"
+            v-if="currentStep > 1"
+            class="mr-2"
+            :disabled="txSignLoading"
+          >
+            <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
+          </v-btn>
+          <!-- Steps 1-2: Continue button -->
+          <v-btn
+            v-if="currentStep !== 3"
+            class="continue-button"
+            @click="nextStep"
+            :disabled="!isValid || txSignLoading"
+            :loading="txSignLoading"
+          >{{ $t('common.continue') + ' ' }}
+            <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+          </v-btn>
+          <!-- Step 3: Sign/Confirm button for non-PRF wallets -->
+          <v-btn
+            v-else-if="!isPrfWallet"
+            class="continue-button"
+            @click="nextStep"
+            :disabled="!isValid || txSignLoading"
+            :loading="txSignLoading"
+          >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
+          </v-btn>
+        </div>
+      </v-card-actions>
+    </template>
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { toRefs, ref, computed, watch, onMounted } from 'vue';
+import { toRefs, ref, computed, watch, onMounted, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -155,6 +181,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
+import { loadingState } from '@/stores/loading';
 
 interface Props {
   isOpen: boolean;
@@ -165,10 +193,19 @@ const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
 
-const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
+const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolvedCollections } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
 const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+const { openReceiveDialog: switchToReceive } = useQuickActionDialogs();
+
+async function openReceiveDialog() {
+  // Close send dialog first so receive dialog opens into a clean state without overlap
+  emit('close');
+  await nextTick();
+  switchToReceive();
+}
 
 const currentStep = ref<number>(1);
 const sendData = ref<{
@@ -259,6 +296,17 @@ const tokens = computed(() => {
   return []
 })
 
+// walletStore.collections is typed as {} but at runtime each key is a policy ID
+// with value { items: Array, name: string, ... }
+const hasCollectibles = computed(() => Object.keys(resolvedCollections.value).length > 0);
+
+const isWalletEmpty = computed(() => {
+  // Don't show empty state until wallet is fully initialised and data has loaded
+  if (!loggedWallet.value) return false;
+  if (loadingState.loading || loadingState.isSyncing || loadingState.loadingTxs) return false;
+  return tokens.value.length === 0 && !hasCollectibles.value;
+});
+
 const isValid = computed(() => {
   if (currentStep.value === 1) {
     const fn = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -296,7 +344,7 @@ const resetData = () => {
     foundAsset.verified = true
   }
   sendData.value = {
-    selectedTokens: [foundAsset],
+    selectedTokens: foundAsset ? [foundAsset] : [],
     selectedCollectibles: {},
     recipientAddress: '',
     selectedWallet: loggedWallet.value,
@@ -349,7 +397,7 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
   let coinsAmount = BigInt(0);
 
   if (sendTokens.length > 0) {
-    sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
+    sendTokens.filter(token => token && (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
       const quantity = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
 
       if (token.ticker === nativeTicker.value) {
@@ -724,6 +772,37 @@ onMounted(() => {
 })
 </script>
 <style scoped>
+.send-dialog-content {
+  z-index: 1;
+  min-height: 0;
+  height: 490px;
+  align-content: center;
+}
+
+/* 490px content + ~52px stepper header + ~48px card-actions = ~590px total */
+.send-dialog-content--empty {
+  height: 590px;
+}
+
+.empty-wallet-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.empty-wallet-title {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.empty-wallet-description {
+  color: rgba(255, 255, 255, 0.4);
+  max-width: 300px;
+  margin: 0 auto;
+}
+
 .titles {
   align-items: center;
   text-align: center;
