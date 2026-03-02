@@ -393,13 +393,13 @@ const saveContact = () => {
   }
 }
 
-const updateContactAddress = () => {
+const updateContactAddress = async () => {
   const mismatch = handleMismatch.value;
   delete contacts.value[mismatch.savedAddress];
-  removeContact(loggedWallet.value.id, mismatch.savedAddress);
+  await removeContact(loggedWallet.value.id, mismatch.savedAddress);
   const updated = { name: mismatch.contactName, address: mismatch.freshAddress, handle: mismatch.handle };
   contacts.value[mismatch.freshAddress] = updated;
-  addOrUpdateContact(loggedWallet.value.id, updated);
+  await addOrUpdateContact(loggedWallet.value.id, updated);
   handleMismatch.value.show = false;
 };
 
@@ -414,14 +414,14 @@ const resolveAddress = (val) => {
   }
 }
 
-const removeCont = (item) => {
+const removeCont = async (item) => {
   if (item && item.address) {
     delete contacts.value[item.address]
-    removeContact(loggedWallet.value.id, item.address)
+    await removeContact(loggedWallet.value.id, item.address)
     contactsMenu.value = false
   } else {
     delete contacts.value[contact.value.address]
-    removeContact(loggedWallet.value.id, contact.value.address)
+    await removeContact(loggedWallet.value.id, contact.value.address)
     saveContactMenu.value = false
   }
 }
@@ -453,13 +453,13 @@ const resolveAdaHandle = debounce(async function(val) {
     })
   }, 1000);
 
-watch(contact, (val) => {
+watch(contact, async (val) => {
   console.debug('contact', val)
   if (!val.address) return
   const existing = contacts.value[val.address]
   if (existing == null || existing.name != val.name || existing.handle != val.handle) {
     contacts.value[val.address] = val
-    addOrUpdateContact(loggedWallet.value.id, val)
+    await addOrUpdateContact(loggedWallet.value.id, val)
   }
 }, { deep: true })
 
@@ -477,7 +477,7 @@ watch(() => props.sendData.recipientAddress, async (newAddress) => {
     // Clean up any empty-address contact that may have been saved
     if (contacts.value && contacts.value[''] != null) {
       delete contacts.value['']
-      removeContact(loggedWallet.value.id, '')
+      await removeContact(loggedWallet.value.id, '')
     }
 
     // Reset validation only (not form values — avoids clearing the wallet Select)

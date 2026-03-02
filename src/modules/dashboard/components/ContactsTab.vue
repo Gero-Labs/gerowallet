@@ -227,11 +227,11 @@ const deleteItem = (item: Contact) => {
   dialogDelete.value = true;
 };
 
-const deleteItemConfirm = () => {
+const deleteItemConfirm = async () => {
   if (editedAddress.value) {
     // Remove contact directly from store and database
     delete contacts.value[editedAddress.value];
-    removeContact(loggedWallet.value.id, editedAddress.value);
+    await removeContact(loggedWallet.value.id, editedAddress.value);
   }
   closeDelete();
 };
@@ -255,7 +255,7 @@ const closeDelete = () => {
   });
 };
 
-const save = () => {
+const save = async () => {
   const addressChanged = editedAddress.value && editedAddress.value !== editedItem.value.address;
   const existingHandle = contacts.value[editedAddress.value || editedItem.value.address]?.handle;
 
@@ -265,7 +265,7 @@ const save = () => {
   // If editing existing contact and address changed, remove old entry
   if (addressChanged) {
     delete contacts.value[editedAddress.value];
-    removeContact(loggedWallet.value.id, editedAddress.value);
+    await removeContact(loggedWallet.value.id, editedAddress.value);
   }
 
   const contactData = {
@@ -275,7 +275,7 @@ const save = () => {
   };
 
   contacts.value[editedItem.value.address] = contactData;
-  addOrUpdateContact(loggedWallet.value.id, contactData);
+  await addOrUpdateContact(loggedWallet.value.id, contactData);
   close();
 };
 </script>
