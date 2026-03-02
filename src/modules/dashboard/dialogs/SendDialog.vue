@@ -296,7 +296,7 @@ const tokens = computed(() => {
   return []
 })
 
-// walletStore.collections is typed as {} but at runtime each key is a policy ID
+// walletStore.collections is typed as {}, but at runtime each key is a policy ID
 // with value { items: Array, name: string, ... }
 const hasCollectibles = computed(() => Object.keys(resolvedCollections.value).length > 0);
 
@@ -586,7 +586,7 @@ async function setMax(index: number) {
   debugLog(`✓ Final MAX found: ${Number(finalAmount) / 1000000} ADA (added ${Number(finalAmount - coarseAmount)} lovelace to coarse result)`);
 
   // Update the quantity and then immediately re-enable the watch
-  // The watch will run once with the final amount
+  // will run once with the final amount
   // Convert to string to match CurrencyTextField prop type
   if (selectedToken.decimals) {
     sendData.value.selectedTokens[index].quantity = filters.toCurrency(Number(finalAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",","");

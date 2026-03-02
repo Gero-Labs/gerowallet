@@ -114,16 +114,26 @@
                     style="margin-left: 1px; margin-bottom: 1px"
                     >{{ $t('common.internal') }}</v-chip
                   >
-                  <v-chip
-                    v-if="getContactName(item)?.length > 0"
-                    v-for="(contact, index) in getContactName(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#FF9800"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    :key="index"
-                  ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contact }}</v-chip>
+                  <template v-for="(contact, index) in (getContactName(item) || [])">
+                    <v-chip
+                      v-if="contact.isHandle"
+                      outlined
+                      class="px-1"
+                      x-small
+                      color="white"
+                      style="margin-left: 1px; margin-bottom: 1px"
+                      :key="'h-' + index"
+                    ><span style="color: #0fd25b; font-weight: 600">$</span>{{ contact.label.replace(/^\$/, '') }}</v-chip>
+                    <v-chip
+                      v-else
+                      outlined
+                      class="px-1"
+                      x-small
+                      color="#FF9800"
+                      style="margin-left: 1px; margin-bottom: 1px"
+                      :key="'c-' + index"
+                    ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contact.label }}</v-chip>
+                  </template>
                   <v-chip
                     v-if="isStrike(item)"
                     outlined
@@ -415,7 +425,7 @@ const transactions = computed<StoredTransaction[]>(() => {
 
       // Check contact name
       const contactName = getContactName(tx);
-      const matchesContact = contactName && contactName.find(name => name.toLowerCase() === searchLower);
+      const matchesContact = contactName && contactName.find(c => c.label.toLowerCase() === searchLower);
 
       return matchesId || matchesAsset || matchesChip || matchesContact;
     }
@@ -775,18 +785,21 @@ const isWithdrawal = (item: StoredTransaction): boolean => {
   ) ?? false;
 };
 
-const getContactName = (item: StoredTransaction): string[] | null => {
-  const contactsResult = new Set<string>();
+const getContactName = (item: StoredTransaction): { label: string; isHandle: boolean }[] | null => {
+  const contactsResult = new Map<string, { label: string; isHandle: boolean }>();
   // Check if contacts are available (contacts is an object, not an array)
   if (!contacts.value || !item.utxo) {
     return null;
   }
 
-  // Create a map of contact addresses to names
-  const contactMap = new Map<string, string>();
-  Object.values(contacts.value).forEach((contact: { address?: string; name?: string }) => {
+  // Create a map of contact addresses to display info
+  const contactMap = new Map<string, { label: string; isHandle: boolean }>();
+  Object.values(contacts.value).forEach((contact) => {
     if (contact.address && contact.name) {
-      contactMap.set(contact.address, contact.name);
+      contactMap.set(contact.address, {
+        label: contact.handle || contact.name,
+        isHandle: !!contact.handle,
+      });
     }
   });
 
@@ -798,7 +811,8 @@ const getContactName = (item: StoredTransaction): string[] | null => {
   // Check inputs for contact addresses
   for (const input of item.utxo.inputs || []) {
     if (contactMap.has(input.address)) {
-      contactsResult.add(contactMap.get(input.address)!);
+      const info = contactMap.get(input.address)!;
+      contactsResult.set(info.label, info);
     }
   }
 
@@ -806,12 +820,13 @@ const getContactName = (item: StoredTransaction): string[] | null => {
   if (isCardanoTx(item)) {
     for (const output of item.body.outputs || []) {
       if (contactMap.has(output.address)) {
-        contactsResult.add(contactMap.get(output.address)!);
+        const info = contactMap.get(output.address)!;
+        contactsResult.set(info.label, info);
       }
     }
   }
 
-  return Array.from(contactsResult);
+  return Array.from(contactsResult.values());
 };
 
 const isInternalTransfer = (item: StoredTransaction): boolean => {

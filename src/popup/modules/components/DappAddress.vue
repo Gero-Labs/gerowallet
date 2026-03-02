@@ -33,13 +33,21 @@
               <CopyButton v-if="address" :value="address" :title="filters.truncate(address)" x-small></CopyButton>
               <div style="place-self: center;">
                 <v-chip
-                  v-if="!!getContactName"
+                  v-if="contactInfo && contactInfo.isHandle"
+                  outlined
+                  class="px-1 mr-1"
+                  x-small
+                  color="white"
+                  style="margin-left: 1px; margin-bottom: 1px"
+                ><span style="color: #0fd25b; font-weight: 600">$</span>{{ contactInfo.label.replace(/^\$/, '') }}</v-chip>
+                <v-chip
+                  v-else-if="contactInfo"
                   outlined
                   class="px-1 mr-1"
                   x-small
                   color="#FF9800"
                   style="margin-left: 1px; margin-bottom: 1px"
-                ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ getContactName }}</v-chip>
+                ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contactInfo.label }}</v-chip>
                 <v-chip outlined x-small v-if="isScriptAddress">Script</v-chip>
               </div>
             </v-list-item-title>
@@ -78,16 +86,19 @@ const props = defineProps({
 });
 
 const contactMap = computed(() => {
-  const contactMap = new Map<string, string>();
+  const map = new Map<string, { label: string; isHandle: boolean }>();
   Object.values(contacts.value).forEach((contact: any) => {
     if (contact.address && contact.name) {
-      contactMap.set(contact.address, contact.name);
+      map.set(contact.address, {
+        label: contact.handle || contact.name,
+        isHandle: !!contact.handle,
+      });
     }
   });
-  return contactMap;
+  return map;
 })
 
-const getContactName = computed(() => {
+const contactInfo = computed(() => {
   return contactMap.value.get(props.address);
 });
 

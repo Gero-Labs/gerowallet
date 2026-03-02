@@ -30,7 +30,7 @@
     </div>
     <div id="risk-powered">
       <span>{{ $t('common.poweredBy') }}</span>
-      <a href="https://cardanoshield.com/" target="_blank">
+      <a class="cardano-shield-logo" href="https://cardanoshield.com/" target="_blank">
         <img :alt="t('common.cardanoShield')" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
       </a>
     </div>
@@ -190,5 +190,14 @@ const label = computed(() => {
   to {
     transform: rotate(360deg);
   }
+}
+.cardano-shield-logo {
+  margin-bottom: 2px;
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.cardano-shield-logo:hover {
+  opacity: 1;
 }
 </style>
