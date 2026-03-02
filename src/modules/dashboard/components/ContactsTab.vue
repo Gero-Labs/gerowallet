@@ -22,7 +22,7 @@
           >
             {{ $t('common.addContact') }}
           </v-btn>
-          <BaseDialog :isOpen="dialog" @close="close" :title="formTitle" :subtitle="editedAddress && contacts[editedAddress]?.handle ? contacts[editedAddress].handle : ''" :icon="formIcon" :width="500" :height="400" :min-height="300" :persistent="false">
+          <BaseDialog :isOpen="dialog" @close="close" :title="formTitle" :subtitle="editedAddress && contacts[editedAddress]?.handle ? contacts[editedAddress].handle : ''" :icon="formIcon" :width="500" :height="400" :min-height="300" :persistent="false" :loading="resolving">
             <v-form ref="form" v-model="valid" class="px-3">
               <v-alert
                 v-if="handleWarning.show"
@@ -90,7 +90,7 @@
           </BaseDialog>
           <BaseDialog :isOpen="dialogDelete" @close="closeDelete" :title="t('wallet.deleteContact')" icon="mdi-account-remove" :width="500" :min-height="150" :persistent="false">
             <div class="text-center py-3" style="z-index: 9999">
-              <h2 >{{t('common.areYouSureDelete')}}</h2>
+              <h2>{{ $t('common.areYouSureDelete') }}</h2>
             </div>
             <v-card-actions class="px-3">
               <v-spacer></v-spacer>
@@ -133,6 +133,7 @@ import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
 import adaHandleApi from '@/api/ada-handle.api';
 import assets from '@/utils/assets';
 import { Blockchain, Contact, Network } from '@/models/types';
+import { isPaymentAddress } from '@/chrome/serialization';
 
 // Get reactive store properties
 const { loggedWallet, contacts } = toRefs(walletStore);
@@ -163,6 +164,7 @@ const defaultItem: Contact = {
 
 const resolving = ref(false);
 const handleImg = ref<string | undefined>(undefined);
+const handleAddressApplied = ref(false);
 const handleWarning = ref({ show: false, handle: '', oldAddress: '', newAddress: '' });
 
 // Computed properties (contacts are now directly from store)
@@ -178,6 +180,8 @@ const formIcon = computed(() => {
 watch(dialog, (val) => {
   if (val) {
     nextTick(() => form.value?.resetValidation());
+  } else {
+    close();
   }
 });
 
@@ -190,6 +194,7 @@ const editItem = async (item: Contact) => {
   editedAddress.value = item.address;
   editedItem.value = { ...contacts.value[item.address] };
   handleWarning.value = { show: false, handle: '', oldAddress: '', newAddress: '' };
+  handleAddressApplied.value = false;
   handleImg.value = undefined;
   dialog.value = true;
 
@@ -201,7 +206,7 @@ const editItem = async (item: Contact) => {
       if (res.status === 200 && res.data?.resolved_addresses?.ada) {
         handleImg.value = res.data.image ? assets.resolveIcon(res.data.image) : undefined;
         const freshAddress = res.data.resolved_addresses.ada;
-        if (freshAddress !== item.address) {
+        if (isPaymentAddress(freshAddress) && freshAddress !== item.address) {
           handleWarning.value = { show: true, handle: contact.handle, oldAddress: item.address, newAddress: freshAddress };
         }
       }
@@ -212,6 +217,7 @@ const editItem = async (item: Contact) => {
 
 const applyFreshAddress = () => {
   editedItem.value.address = handleWarning.value.newAddress;
+  handleAddressApplied.value = true;
   handleWarning.value.show = false;
 };
 
@@ -234,6 +240,7 @@ const close = () => {
   dialog.value = false;
   handleWarning.value = { show: false, handle: '', oldAddress: '', newAddress: '' };
   handleImg.value = undefined;
+  handleAddressApplied.value = false;
   nextTick(() => {
     editedItem.value = { ...defaultItem };
     editedAddress.value = null;
@@ -249,12 +256,14 @@ const closeDelete = () => {
 };
 
 const save = () => {
-  // Capture handle before removing old entry
-  const existingContact = contacts.value[editedAddress.value || editedItem.value.address];
-  const handle = existingContact?.handle || undefined;
+  const addressChanged = editedAddress.value && editedAddress.value !== editedItem.value.address;
+  const existingHandle = contacts.value[editedAddress.value || editedItem.value.address]?.handle;
+
+  // Preserve handle only if address unchanged or updated via handle re-resolve; clear if manually changed
+  const handle = (!addressChanged || handleAddressApplied.value) ? (existingHandle || undefined) : undefined;
 
   // If editing existing contact and address changed, remove old entry
-  if (editedAddress.value && editedAddress.value !== editedItem.value.address) {
+  if (addressChanged) {
     delete contacts.value[editedAddress.value];
     removeContact(loggedWallet.value.id, editedAddress.value);
   }

@@ -50,7 +50,7 @@
         </v-list-item>
       </v-card-title>
       <slot></slot>
-      <v-progress-linear v-show="loading" :indeterminate="loading" width="3" style="position: absolute; top: 0; left: 0; z-index: 999;"/>
+      <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 999;"/>
       <v-btn icon @click="$emit('close')" class="close-button" :disabled="loading">
         <v-icon color="#cecfd2">mdi-window-close</v-icon>
       </v-btn>

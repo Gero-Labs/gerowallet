@@ -269,6 +269,7 @@ import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import { debugLog } from '@/utils/debug';
+import { isPaymentAddress } from '@/chrome/serialization';
 
 interface Props {
   sendData: SendData;
@@ -324,6 +325,13 @@ const selectContact = async (item) => {
       if (currentSelection !== selectContactCounter) return; // stale response
       if (res.status === 200 && res.data?.resolved_addresses?.ada) {
         const freshAddress = res.data.resolved_addresses.ada;
+        if (!isPaymentAddress(freshAddress)) {
+          // Invalid address from API — fall back to stored
+          paymentAddress.value = item.address;
+          recipientAddress.value = item.address;
+          emit('updateRecipientAddress', item.address);
+          return;
+        }
         asset.value = { name: res.data.name, img: assets.resolveIcon(res.data.image) };
         resolved.value = true;
         recipientAddress.value = item.handle;
