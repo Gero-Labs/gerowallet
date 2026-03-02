@@ -296,19 +296,18 @@ const tokens = computed(() => {
   return []
 })
 
-// walletStore.collections is typed as {} but at runtime each value is { items: Array, name: string, ... }
-const collectiblesCount = computed(() => {
+// walletStore.collections is typed as {} but at runtime each key is a policy ID
+// with value { items: Array, name: string, ... }
+const hasCollectibles = computed(() => {
   const collections = resolvedCollections.value;
-  if (!collections || Object.keys(collections).length === 0) return 0;
-  return Object.values(collections).reduce(
-    (count: number, col: { items?: unknown[] }) => count + (col.items?.length || 0), 0
-  );
+  return !!collections && Object.keys(collections).length > 0;
 });
 
 const isWalletEmpty = computed(() => {
-  // Don't show empty state while wallet data is still loading
-  if (loadingState.loading || loadingState.isSyncing) return false;
-  return tokens.value.length === 0 && collectiblesCount.value === 0;
+  // Don't show empty state until wallet is fully initialised and data has loaded
+  if (!loggedWallet.value) return false;
+  if (loadingState.loading || loadingState.isSyncing || loadingState.loadingTxs) return false;
+  return tokens.value.length === 0 && !hasCollectibles.value;
 });
 
 const isValid = computed(() => {
@@ -783,7 +782,7 @@ onMounted(() => {
   align-content: center;
 }
 
-/* Compensate for missing stepper header and card-actions to keep dialog height consistent */
+/* 490px content + ~52px stepper header + ~48px card-actions = ~590px total */
 .send-dialog-content--empty {
   height: 590px;
 }
