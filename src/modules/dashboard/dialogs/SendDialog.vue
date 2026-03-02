@@ -201,6 +201,7 @@ const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.
 const { openReceiveDialog: switchToReceive } = useQuickActionDialogs();
 
 function openReceiveDialog() {
+  // Close send dialog first so receive dialog opens into a clean state without overlap
   emit('close');
   switchToReceive();
 }
@@ -295,13 +296,16 @@ const tokens = computed(() => {
 })
 
 const collectiblesCount = computed(() => {
-  if (!resolvedCollections.value) return 0;
-  return Object.values(resolvedCollections.value).reduce((count: number, col: any) => count + (col.items?.length || 0), 0);
+  const collections = resolvedCollections.value;
+  if (Object.keys(collections).length === 0) return 0;
+  return Object.values(collections).reduce(
+    (count: number, col: { items?: unknown[] }) => count + (col.items?.length || 0), 0
+  );
 });
 
 const isWalletEmpty = computed(() => {
-  // Don't show empty state while wallet is still loading/syncing
-  if (loadingState.loading || !loadingState.connected) return false;
+  // Don't show empty state while wallet data is still loading
+  if (loadingState.loading || loadingState.isSyncing) return false;
   return tokens.value.length === 0 && collectiblesCount.value === 0;
 });
 
