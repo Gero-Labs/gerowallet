@@ -110,8 +110,8 @@
             <v-row class="mt-4" v-show="!isLoading">
               <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in deals" :key="retailer.id">
                 <v-card class="pa-4 fill-height" flat style="background-color: #161B26!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
-                  <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.img">
-                    <v-img :src="retailer.img" contain style="margin: auto;" eager>
+                  <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.iconPath && !imageErrors[retailer.id]">
+                    <v-img :src="retailer.img" contain style="margin: auto;" eager @error="onImageError(retailer.id)">
                       <template v-slot:placeholder>
                         <v-row
                             class="fill-height ma-0"
@@ -125,6 +125,9 @@
                         </v-row>
                       </template>
                     </v-img>
+                  </v-avatar>
+                  <v-avatar v-else color="#333741" size="80">
+                    <span class="retailer-initials">{{ getInitials(retailer.name) }}</span>
                   </v-avatar>
                   <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
                   <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">
@@ -195,6 +198,20 @@ const retailerTermsBasePath = ref(null);
 const totalItems = ref(null);
 const supported = ref(true);
 const searchTerm = ref<string>('');
+const imageErrors = ref<Record<string, boolean>>({});
+
+const onImageError = (retailerId: string) => {
+  imageErrors.value = { ...imageErrors.value, [retailerId]: true };
+};
+
+const getInitials = (name: string): string => {
+  if (!name) return '??';
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+};
 
 const selectedCategory = computed(() => {
   return categories.value.items[selectedCategoryIndex.value];
@@ -473,6 +490,13 @@ onMounted(async () => {
 
 .theme--dark.v-chip--active:hover::before, .theme--dark.v-chip--active::before {
    opacity: 0;
+}
+
+.retailer-initials {
+  font-size: 24px;
+  font-weight: 600;
+  color: #A3A3A3;
+  user-select: none;
 }
 
 .bring-web3-logo {
