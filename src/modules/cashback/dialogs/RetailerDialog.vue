@@ -56,6 +56,7 @@ import axios from 'axios';
 import networks from '@/utils/networks';
 import cashbackApi from '@/api/cashback-api';
 import { walletStore } from '@/stores/walletStore';
+import { getInitials } from '@/shared/utils/formatters';
 
 const props = defineProps({
   isOpen: {
@@ -82,15 +83,6 @@ const fileContent = ref<string | null>(null);
 const loading = ref(true);
 const disabled = ref(true);
 const retailerImageError = ref(false);
-
-const getInitials = (name: string): string => {
-  if (!name) return '??';
-  const words = name.trim().split(/\s+/);
-  if (words.length >= 2) {
-    return (words[0][0] + words[1][0]).toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
-};
 
 const startShopping = () => {
   if (retailerUrl.value) {

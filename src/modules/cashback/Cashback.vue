@@ -171,6 +171,7 @@ import { bringStore } from '@/stores/bringStore';
 import cashbackApi from '@/api/cashback-api';
 import assets from '@/utils/assets';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { getInitials } from '@/shared/utils/formatters';
 
 const { bringCache } = toRefs(bringStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
@@ -202,15 +203,6 @@ const imageErrors = ref<Record<string, boolean>>({});
 
 const onImageError = (retailerId: string) => {
   imageErrors.value = { ...imageErrors.value, [retailerId]: true };
-};
-
-const getInitials = (name: string): string => {
-  if (!name) return '??';
-  const words = name.trim().split(/\s+/);
-  if (words.length >= 2) {
-    return (words[0][0] + words[1][0]).toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
 };
 
 const selectedCategory = computed(() => {
@@ -252,6 +244,7 @@ watch(isIntersecting, async (val) => {
 
 watch(model, async (val: string) => {
   isLoading.value = true;
+  imageErrors.value = {};
   if (val) {
     selectedCategoryIndex.value = null;
     const retailersData = await cashbackApi.retailers(null, val);
@@ -265,6 +258,7 @@ watch(model, async (val: string) => {
 
 watch(selectedCategory, async () => {
   model.value = "";
+  imageErrors.value = {};
   if (selectedCategory.value) {
     const retailersData = await cashbackApi.retailers(selectedCategory.value.id);
     retailers.value = retailersData.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailersData.retailerIconBasePath+item.iconPath+retailersData.iconQueryParam} }), {});
