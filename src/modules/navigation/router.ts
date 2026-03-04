@@ -29,6 +29,7 @@ const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import networks from '@/utils/networks';
 
 const routes = [
   {
@@ -263,6 +264,14 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
     return next({ path: redirectTo });
+  }
+
+  // Check chain/network feature support for restricted routes
+  if (isLoggedIn && to.name === 'cashback') {
+    const { chain, network } = WalletStore.state.loggedWallet;
+    if (!networks.resolveCashbackSupport(chain, network)) {
+      return next({ path: '/' });
+    }
   }
 
   // Check if the route is under maintenance

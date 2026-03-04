@@ -789,7 +789,7 @@ export default {
   'dashboard.spendingPasswordChanged': 'Ausgabepasswort erfolgreich geändert.',
   'dashboard.stakeWithGero': 'Mit Gero staken',
   'dashboard.stakeYourAssets': 'Staken Sie Ihr {assetType}',
-  'dashboard.stakingRewards': 'Staking-Belohnungen',
+  'dashboard.stakingRewards': 'Staking',
   'dashboard.stakingRewardsTip': 'Beim Staking erhalten Sie etwa alle 5 Tage Belohnungen.',
   'dashboard.startSmallAmountTip': 'Beginnen Sie mit einem kleinen Betrag, um die Wallet kennenzulernen.',
   'dashboard.summary': 'Zusammenfassung',
