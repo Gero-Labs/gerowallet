@@ -29,6 +29,7 @@ const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import networks from '@/utils/networks';
 
 const routes = [
   {
@@ -263,6 +264,25 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
     return next({ path: redirectTo });
+  }
+
+  // Check chain/network feature support for restricted routes
+  // Note: Some routes (e.g. 'card') are also checked by isRouteUnderMaintenance below.
+  // These are intentionally dual-gated: network support (here) vs. feature flag/maintenance (below).
+  if (isLoggedIn) {
+    const { chain, network } = WalletStore.state.loggedWallet;
+    const routeNetworkGuards: Record<string, (c: string, n: string) => boolean> = {
+      cashback: (c, n) => networks.resolveCashbackSupport(c, n),
+      governance: (c, n) => networks.resolveGovernanceSupport(c, n),
+      staking: (c, n) => networks.resolveStakingSupport(c, n),
+      market: (c, n) => networks.resolveSwapSupport(c, n),
+      transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
+      card: (c, n) => networks.resolveGeroCardSupport(c, n),
+    };
+    const guard = routeNetworkGuards[to.name];
+    if (guard && !guard(chain, network)) {
+      return next({ path: '/' });
+    }
   }
 
   // Check if the route is under maintenance

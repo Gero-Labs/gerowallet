@@ -787,7 +787,7 @@ export default {
   'dashboard.spendingPasswordChanged': 'Spending password successfully changed.',
   'dashboard.stakeWithGero': 'Stake with Gero',
   'dashboard.stakeYourAssets': 'Stake Your {assetType}',
-  'dashboard.stakingRewards': 'Staking Rewards',
+  'dashboard.stakingRewards': 'Staking',
   'dashboard.stakingRewardsTip': 'Staking earns you rewards approximately every 5 days',
   'dashboard.startSmallAmountTip': 'Start with a small amount to get familiar with the wallet',
   'dashboard.summary': 'Summary',
