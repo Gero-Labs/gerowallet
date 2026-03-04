@@ -267,6 +267,8 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   }
 
   // Check chain/network feature support for restricted routes
+  // Note: Some routes (e.g. 'card') are also checked by isRouteUnderMaintenance below.
+  // These are intentionally dual-gated: network support (here) vs. feature flag/maintenance (below).
   if (isLoggedIn) {
     const { chain, network } = WalletStore.state.loggedWallet;
     const routeNetworkGuards: Record<string, (c: string, n: string) => boolean> = {
