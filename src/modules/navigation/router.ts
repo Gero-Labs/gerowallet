@@ -267,9 +267,18 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   }
 
   // Check chain/network feature support for restricted routes
-  if (isLoggedIn && to.name === 'cashback') {
+  if (isLoggedIn) {
     const { chain, network } = WalletStore.state.loggedWallet;
-    if (!networks.resolveCashbackSupport(chain, network)) {
+    const routeNetworkGuards: Record<string, (c: string, n: string) => boolean> = {
+      cashback: (c, n) => networks.resolveCashbackSupport(c, n),
+      governance: (c, n) => networks.resolveGovernanceSupport(c, n),
+      staking: (c, n) => networks.resolveStakingSupport(c, n),
+      market: (c, n) => networks.resolveSwapSupport(c, n),
+      transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
+      card: (c, n) => networks.resolveGeroCardSupport(c, n),
+    };
+    const guard = routeNetworkGuards[to.name];
+    if (guard && !guard(chain, network)) {
       return next({ path: '/' });
     }
   }
