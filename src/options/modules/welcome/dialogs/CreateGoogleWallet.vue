@@ -101,7 +101,7 @@
             color="primary"
             v-model="newWallet.recoverPasswordChecked"
             :rules="[rules.required()]"
-            :label="`${$t('welcome.iHaveReadTerms')} ${$t('welcome.termsOfService')}.`"
+            :label="`${$t('welcome.iHaveReadTerms')} ${$t('navigation.termsOfService')}.`"
             required
             hide-details
             :disabled="activationInProgress"
