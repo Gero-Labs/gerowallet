@@ -149,23 +149,24 @@ async function checkPermissions() {
     // Permission granted, stop the test stream
     stream.getTracks().forEach(track => track.stop());
 
-    if (!mounted.value) return;
+    if (!mounted.value) return false;
 
     // Wait a bit before starting the actual scanner
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    if (!mounted.value) return;
+    if (!mounted.value) return false;
 
     cameraStatus.value = CameraStatus.READY;
     startScanning();
+    return true;
   } catch (error) {
     console.error('Camera permission error:', error);
-    if (!mounted.value) return;
+    if (!mounted.value) return false;
 
     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
       cameraStatus.value = CameraStatus.PERMISSION_NEEDED;
       emit('videoLoaded', false, 'NO_WEBCAM_ACCESS');
-      throw error; // Re-throw so callers can handle denied state
+      return false;
     } else if (error.name === 'NotFoundError') {
       cameraStatus.value = CameraStatus.NO_WEBCAM;
       emit('videoLoaded', false, 'NO_WEBCAM_FOUND');
@@ -173,13 +174,13 @@ async function checkPermissions() {
       cameraStatus.value = CameraStatus.UNKNOWN_ERROR;
       emit('videoLoaded', false);
     }
+    return false;
   }
 }
 
 function getBrowserSettingsScheme() {
-  if (navigator.brave?.isBrave) return 'brave';
+  if (typeof navigator.brave !== 'undefined') return 'brave';
   if (navigator.userAgent.includes('Edg/')) return 'edge';
-  if (navigator.userAgent.includes('OPR/')) return 'opera';
   return 'chrome';
 }
 
@@ -194,14 +195,13 @@ function openBrowserCameraSettings() {
 async function openCameraPermissionSettings() {
   // Try requesting permission again (works if user dismissed rather than explicitly denied)
   cameraStatus.value = CameraStatus.ACCESSING_CAMERA;
-  try {
-    await checkPermissions();
-  } catch (error) {
-    console.warn('[AnimatedQRScanner] Camera permission denied after retry:', error);
-    if (!mounted.value) return;
+  const granted = await checkPermissions();
+  if (granted || !mounted.value) return;
+
+  if (cameraStatus.value === CameraStatus.PERMISSION_NEEDED) {
     // Permission is truly blocked - open browser site settings for this extension
+    console.warn('[AnimatedQRScanner] Camera permission denied after retry, opening browser settings');
     openBrowserCameraSettings();
-    cameraStatus.value = CameraStatus.PERMISSION_NEEDED;
     permissionDenied.value = true;
   }
 }
