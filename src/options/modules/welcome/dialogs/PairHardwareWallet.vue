@@ -305,7 +305,7 @@
                     <template v-slot:label>
                       <div>
                         {{ $t('welcome.agreeToTerms') }}
-                        <a @click.stop href="https://gerowallet.io/legal/terms/" target="_blank">{{ $t('welcome.termsOfService') }}</a>.
+                        <a @click.stop href="https://gerowallet.io/legal/terms/" target="_blank">{{ $t('navigation.termsOfService') }}</a>.
                       </div>
                     </template>
                   </v-checkbox>

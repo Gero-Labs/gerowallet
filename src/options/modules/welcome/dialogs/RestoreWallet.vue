@@ -215,7 +215,7 @@
                       <template v-slot:label>
                         <span class="text-body-2">
                           {{ $t('welcome.iHaveReadTerms') }}
-                          <a class="terms-link" @click.stop="openTerms">{{ $t('welcome.termsOfService') }}</a>.
+                          <a class="terms-link" @click.stop="openTerms">{{ $t('navigation.termsOfService') }}</a>.
                         </span>
                       </template>
                     </v-checkbox>
@@ -295,7 +295,7 @@
                       <template v-slot:label>
                         <span class="text-body-2">
                           {{ $t('welcome.iHaveReadTerms') }}
-                          <a class="terms-link" @click.stop="openTerms">{{ $t('welcome.termsOfService') }}</a>.
+                          <a class="terms-link" @click.stop="openTerms">{{ $t('navigation.termsOfService') }}</a>.
                         </span>
                       </template>
                     </v-checkbox>

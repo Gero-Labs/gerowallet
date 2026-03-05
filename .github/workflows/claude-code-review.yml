@@ -3,61 +3,58 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Skip Claude review for Dependabot PRs until authentication is resolved
     if: github.event.pull_request.user.login != 'dependabot[bot]'
 
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
-      - name: Check Claude Code OAuth Token
-        run: |
-          if [ -z "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" ]; then
-            echo "ERROR: CLAUDE_CODE_OAUTH_TOKEN secret is not configured"
-            echo "Please add the Claude Code OAuth token to repository secrets"
-            exit 1
-          else
-            echo "Claude Code OAuth token is configured"
-          fi
-
       - name: Run Claude Code Review
-        id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            You are reviewing a Cardano blockchain wallet Chrome extension (Manifest V3, Vue 2.7 + TypeScript).
+            Read CLAUDE.md first for project conventions and architecture.
 
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            Review this PR focusing on:
 
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
+            **Bugs & Correctness**
+            - Race conditions (especially in cross-context messaging, store sync, async operations)
+            - Unhandled promise rejections or missing error handling
+            - Incorrect Chrome extension context usage (background vs browser vs popup)
+            - State management issues (stale data, missing reactivity)
 
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+            **Security** (this is a financial wallet — security is critical)
+            - Private key / mnemonic exposure in logs, storage, or messaging
+            - XSS, injection, or unsafe data handling
+            - Unsafe Chrome messaging patterns
+            - Missing input validation at system boundaries
 
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
+            **Performance**
+            - Blocking operations on login or UI thread
+            - Unnecessary re-renders or redundant API calls
+            - Missing lazy loading for heavy components
+
+            **Code Quality**
+            - i18n: All user-facing text must use $t() with keys in both us.ts and de.ts
+            - Dead code, unused imports, or duplicate logic
+            - Consistent patterns with existing codebase (stores, messaging, database access)
+
+            **Guidelines**
+            - Be specific: reference file paths and line numbers
+            - Separate issues by severity: bugs > security > performance > style
+            - Don't nitpick formatting or suggest changes unrelated to the PR's intent
+            - If the PR is solid, say so briefly — don't manufacture issues

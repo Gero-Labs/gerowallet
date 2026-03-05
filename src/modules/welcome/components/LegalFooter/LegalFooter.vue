@@ -1,7 +1,14 @@
 <template>
   <div class="footer-legal">
-    <GButton color="white" text :ripple="false" class="footer-btn" @click="handlePrivacyClick">
-      {{ $t('welcome.privacyPolicy') }}
+    <GButton
+      color="white"
+      text
+      :ripple="false"
+      class="footer-btn"
+      href="https://gerowallet.io/legal/privacy/"
+      target="_blank"
+    >
+      {{ $t('navigation.privacyPolicy') }}
     </GButton>
     <v-divider vertical></v-divider>
     <GButton
@@ -12,7 +19,7 @@
       href="https://gerowallet.io/legal/terms/"
       target="_blank"
     >
-      {{ $t('welcome.termsOfService') }}
+      {{ $t('navigation.termsOfService') }}
     </GButton>
     <v-divider vertical></v-divider>
     <GButton color="white" text :ripple="false" class="footer-btn" @click="changeLogDialog = true">
@@ -20,25 +27,18 @@
     </GButton>
 
     <!-- Dialogs -->
-    <PrivacyPolicyDialog :isOpen="privacyPolicyDialog" @close="privacyPolicyDialog = false" :persistent="false" />
     <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
   </div>
 </template>
 <script setup lang="ts">
 import { ref } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
-import PrivacyPolicyDialog from '@/options/modules/navigation/dialogs/PrivacyPolicyDialog.vue';
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue';
 
-const privacyPolicyDialog = ref(false);
 const changeLogDialog = ref(false);
 
 //@ts-ignore
 const version = ref<string>(APP_VERSION);
-
-const handlePrivacyClick = () => {
-  privacyPolicyDialog.value = true;
-};
 </script>
 <style lang="css" scoped>
 .footer-legal {
