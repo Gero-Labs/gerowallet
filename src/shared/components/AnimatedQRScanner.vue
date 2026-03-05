@@ -10,10 +10,12 @@
         <v-icon large color="error">mdi-camera-off</v-icon>
         <p class="mt-4">{{ $t('wallet.noWebcamFound') }}</p>
       </div>
-      <div v-else-if="cameraStatus === CameraStatus.PERMISSION_NEEDED" class="status-message error">
-        <v-icon large color="warning">mdi-camera-lock</v-icon>
-        <p class="mt-4">{{ $t('wallet.cameraPermissionNeeded') }}</p>
-        <v-btn color="primary" @click="requestPermission" class="mt-4">
+      <div v-else-if="cameraStatus === CameraStatus.PERMISSION_NEEDED" class="status-message permission-needed">
+        <v-icon large color="primary">mdi-camera-lock</v-icon>
+        <p class="mt-4 permission-text">{{ $t('wallet.cameraPermissionNeeded') }}</p>
+        <p v-if="permissionDenied" class="mt-1 permission-hint">{{ $t('wallet.cameraPermissionDeniedHint') }}</p>
+        <p v-else class="mt-1 permission-hint">{{ $t('wallet.cameraPermissionHint') }}</p>
+        <v-btn v-if="!permissionDenied" color="primary" @click="openCameraPermissionSettings" class="mt-4">
           {{ $t('wallet.grantPermission') }}
         </v-btn>
       </div>
@@ -96,6 +98,7 @@ const scanControls = ref(null);
 const mounted = ref(false);
 const permissionChecker = ref(null);
 const canplayListener = ref(null);
+const permissionDenied = ref(false);
 
 // Methods
 function initializeScanner() {
@@ -175,6 +178,31 @@ async function checkPermissions() {
 async function requestPermission() {
   cameraStatus.value = CameraStatus.ACCESSING_CAMERA;
   checkPermissions();
+}
+
+async function openCameraPermissionSettings() {
+  // First try requesting permission again (works if user dismissed rather than explicitly denied)
+  cameraStatus.value = CameraStatus.ACCESSING_CAMERA;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    stream.getTracks().forEach(track => track.stop());
+    if (!mounted.value) return;
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (!mounted.value) return;
+    cameraStatus.value = CameraStatus.READY;
+    startScanning();
+  } catch {
+    if (!mounted.value) return;
+    // Permission is truly blocked - open browser camera settings
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+      const isBrave = navigator.userAgent.includes('Brave');
+      const scheme = isBrave ? 'brave' : 'chrome';
+      const extensionUrl = chrome.runtime.getURL('');
+      chrome.tabs.create({ url: `${scheme}://settings/content/siteDetails?site=${encodeURIComponent(extensionUrl)}` });
+    }
+    cameraStatus.value = CameraStatus.PERMISSION_NEEDED;
+    permissionDenied.value = true;
+  }
 }
 
 async function startScanning() {
@@ -284,6 +312,7 @@ function reset() {
   isDone.value = false;
   progress.value = 0;
   canPlay.value = false;
+  permissionDenied.value = false;
   cameraStatus.value = CameraStatus.ACCESSING_CAMERA;
   cleanup();
   checkEnvironment();
@@ -338,6 +367,21 @@ defineExpose({
 
 .status-message.error {
   color: #ff5252;
+}
+
+.status-message.permission-needed {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.status-message.permission-needed .permission-text {
+  color: rgba(255, 255, 255, 0.87);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.status-message.permission-needed .permission-hint {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
 }
 
 video {
