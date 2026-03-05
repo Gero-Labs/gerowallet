@@ -15,8 +15,8 @@
         <p class="mt-4 permission-text">{{ $t('wallet.cameraPermissionNeeded') }}</p>
         <p v-if="permissionDenied" class="mt-1 permission-hint">{{ $t('wallet.cameraPermissionDeniedHint') }}</p>
         <p v-else class="mt-1 permission-hint">{{ $t('wallet.cameraPermissionHint') }}</p>
-        <v-btn v-if="!permissionDenied" color="primary" @click="openCameraPermissionSettings" class="mt-4">
-          {{ $t('wallet.grantPermission') }}
+        <v-btn color="primary" @click="openCameraPermissionSettings" class="mt-4">
+          {{ permissionDenied ? $t('wallet.tryAgain') : $t('wallet.grantPermission') }}
         </v-btn>
       </div>
       <div v-else-if="cameraStatus === CameraStatus.UNKNOWN_ERROR" class="status-message error">
@@ -165,6 +165,7 @@ async function checkPermissions() {
     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
       cameraStatus.value = CameraStatus.PERMISSION_NEEDED;
       emit('videoLoaded', false, 'NO_WEBCAM_ACCESS');
+      throw error; // Re-throw so callers can handle denied state
     } else if (error.name === 'NotFoundError') {
       cameraStatus.value = CameraStatus.NO_WEBCAM;
       emit('videoLoaded', false, 'NO_WEBCAM_FOUND');
@@ -175,31 +176,31 @@ async function checkPermissions() {
   }
 }
 
-async function requestPermission() {
-  cameraStatus.value = CameraStatus.ACCESSING_CAMERA;
-  checkPermissions();
+function getBrowserSettingsScheme() {
+  if (navigator.brave?.isBrave) return 'brave';
+  if (navigator.userAgent.includes('Edg/')) return 'edge';
+  if (navigator.userAgent.includes('OPR/')) return 'opera';
+  return 'chrome';
+}
+
+function openBrowserCameraSettings() {
+  if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+    const scheme = getBrowserSettingsScheme();
+    const extensionUrl = chrome.runtime.getURL('');
+    chrome.tabs.create({ url: `${scheme}://settings/content/siteDetails?site=${encodeURIComponent(extensionUrl)}` });
+  }
 }
 
 async function openCameraPermissionSettings() {
-  // First try requesting permission again (works if user dismissed rather than explicitly denied)
+  // Try requesting permission again (works if user dismissed rather than explicitly denied)
   cameraStatus.value = CameraStatus.ACCESSING_CAMERA;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    stream.getTracks().forEach(track => track.stop());
+    await checkPermissions();
+  } catch (error) {
+    console.warn('[AnimatedQRScanner] Camera permission denied after retry:', error);
     if (!mounted.value) return;
-    await new Promise(resolve => setTimeout(resolve, 500));
-    if (!mounted.value) return;
-    cameraStatus.value = CameraStatus.READY;
-    startScanning();
-  } catch {
-    if (!mounted.value) return;
-    // Permission is truly blocked - open browser camera settings
-    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-      const isBrave = navigator.userAgent.includes('Brave');
-      const scheme = isBrave ? 'brave' : 'chrome';
-      const extensionUrl = chrome.runtime.getURL('');
-      chrome.tabs.create({ url: `${scheme}://settings/content/siteDetails?site=${encodeURIComponent(extensionUrl)}` });
-    }
+    // Permission is truly blocked - open browser site settings for this extension
+    openBrowserCameraSettings();
     cameraStatus.value = CameraStatus.PERMISSION_NEEDED;
     permissionDenied.value = true;
   }
