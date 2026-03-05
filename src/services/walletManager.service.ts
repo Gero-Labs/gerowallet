@@ -2,7 +2,7 @@ import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
-import { Blockchain, Network, WalletType, Tip } from '@/models/types';
+import { Blockchain, Network, WalletType, Tip, Wallet } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
 import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
@@ -595,7 +595,7 @@ export class WalletManager {
     // falls through to the normal password branch, which safely fails when trying to decrypt with
     // the literal string 'lockpassword-verified' as a spending password.
     // Cache walletsMap for reuse in the pre-login password path below (avoids duplicate DB read).
-    let cachedWalletsMap: Record<number, any> | null = null;
+    let cachedWalletsMap: Record<number, Wallet> | null = null;
     let encryptionMethod = walletStore.loggedWallet?.encryptionMethod;
     if (!encryptionMethod) {
       const { getAllWallets } = await import('@/db/gero-db');
@@ -608,11 +608,16 @@ export class WalletManager {
     if (browserVerified) {
       unlockValid = true;
     } else if (unlockMethod === 'password') {
-      // This branch only handles normal (non-PRF) wallets.
-      // PRF wallets always arrive as 'lockpassword-verified' (browser-verified above).
-      // Note: PRF wallet creation always sets passwordUnlockEnabled: false, so no PRF wallet
-      // has a prfSpendingPassword field — the old verification path was removed as unreachable.
-      if (useWalletBg) {
+      if (encryptionMethod === 'prf') {
+        // PRF wallet: verify against lockPasswordHash in DB (defense-in-depth).
+        // Normally PRF wallets arrive as 'lockpassword-verified' (browser-verified above),
+        // but this branch catches edge cases where the browser failed to detect PRF status.
+        const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+        if (!lockPasswordHashConfig?.value) {
+          throw new Error('Lock password not configured for PRF wallet');
+        }
+        unlockValid = await verifyPin(unlockCredential as string, lockPasswordHashConfig.value);
+      } else if (useWalletBg) {
         // NORMAL WALLET - Post-login: use walletBg instance
         if (!this.walletBg || !walletStore.loggedWallet) {
           throw new Error('Wallet instance not available for password verification');
@@ -629,7 +634,6 @@ export class WalletManager {
           throw new Error('Encrypted private key not found or password not provided');
         }
 
-        // IMPORTANT: verifySpendingPassword is now async (supports PRF)
         unlockValid = await this.walletBg.verifySpendingPassword(unlockCredential as string);
       } else {
         // NORMAL WALLET - Pre-login: load wallet from database (reuse cached map if available)
@@ -643,7 +647,6 @@ export class WalletManager {
           throw new Error('Password unlock is only supported for Normal wallets');
         }
 
-        // PASSWORD WALLET - Pre-login unlock (existing logic)
         const encryptedPrivateKey = wallet.encryptedPrivateKey;
         if (!encryptedPrivateKey || !unlockCredential) {
           throw new Error('Encrypted private key not found or password not provided');
