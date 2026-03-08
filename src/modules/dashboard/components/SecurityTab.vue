@@ -79,7 +79,7 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
-      <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal" @click="changePasswordDialog = true">
+      <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet" @click="changePasswordDialog = true">
         <v-list-item-avatar class="my-0">
           <v-icon>
             mdi-shield-key-outline
@@ -118,11 +118,16 @@
         <v-list-item-content class="py-0">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">
-              {{ $t('security.lockSettings') }}
+              {{ isPrfWallet ? $t('security.lockSettingsOnly') : $t('security.lockSettings') }}
             </h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • PassKey: {{ passKeyText }}
+            <template v-if="isPrfWallet">
+              {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }}
+            </template>
+            <template v-else>
+              {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • PassKey: {{ passKeyText }}
+            </template>
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-icon class="my-0" style="align-self: center">
@@ -399,7 +404,7 @@ const pinLength = ref<number>(6);
 const webAuthnCredentialId = ref<string | null>(null);
 
 // Template refs for verification inputs
-const verificationPinInput = ref<any>(null);
+const verificationPinInput = ref(null);
 const verificationPasswordInput = ref<any>(null);
 
 const backup = computed(() => config.value?.backup || false);
@@ -424,6 +429,8 @@ const getUnlockMethodTitle = (method: string | null) => {
       return ''
   }
 };
+
+const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
 
 const canBackup = computed(() => {
   return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
@@ -620,18 +627,40 @@ async function verifyCurrentMethod() {
         enableToolTip();
       }
     } else if (unlockMethod.value === 'password') {
-      try {
-        const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-          method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-          data: { password: verificationInput.value }
-        }) as BackgroundResponse<VerifyPasswordResponse>;
-        isValid = passwordVerification.data.success;
-        if (!isValid) {
-          tooltip.value.text = t('wallet.wrongSpendingPassword');
-          enableToolTip();
+      if (isPrfWallet.value) {
+        // PRF wallet: verify against lockPasswordHash (same pattern as PIN verification)
+        try {
+          const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+          if (!lockPasswordHashConfig?.value) {
+            tooltip.value.text = t('security.lockPasswordNotConfigured');
+            enableToolTip();
+            return;
+          }
+          const { verifyPin } = await import('@/shared/utils/security');
+          isValid = await verifyPin(verificationInput.value, lockPasswordHashConfig.value);
+          if (!isValid) {
+            tooltip.value.text = t('security.wrongLockPassword');
+            enableToolTip();
+          }
+        } catch (error) {
+          console.error('Error verifying lock password:', error);
+          isValid = false;
         }
-      } catch (error) {
-        isValid = false;
+      } else {
+        // Normal wallet: verify spending password via background
+        try {
+          const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+            method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+            data: { password: verificationInput.value }
+          }) as BackgroundResponse<VerifyPasswordResponse>;
+          isValid = passwordVerification.data.success;
+          if (!isValid) {
+            tooltip.value.text = t('wallet.wrongSpendingPassword');
+            enableToolTip();
+          }
+        } catch (error) {
+          isValid = false;
+        }
       }
     }
     if (isValid) {
