@@ -111,7 +111,7 @@
                 <v-text-field
                   ref="passwordInputRef"
                   v-model="password"
-                  :label="$t('security.spendingPassword')"
+                  :label="configLoaded ? (isPrfWallet ? $t('security.lockPassword') : $t('security.spendingPassword')) : $t('wallet.password')"
                   :type="show ? 'text' : 'password'"
                   :rules="[rules.required()]"
                   outlined
@@ -227,6 +227,8 @@ const show2FA = ref(false);
 const passKeyEnabled = ref(false);
 const webAuthnCredentialId = ref<string | null>(null);
 const passKeyAutoTriggerUnlock = ref(false);
+const preLoginEncryptionMethod = ref<string | null>(null);
+const cachedLockPasswordHash = ref<string | null>(null);
 
 const pinCode = ref('');
 const pinLength = ref(4);
@@ -237,6 +239,8 @@ const totpCode = ref('');
 
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
+const configLoaded = ref(false);
+const configLoadError = ref(false);
 const errorMessage = ref('');
 const tooltip = ref<any>({
   enabled: false,
@@ -251,8 +255,16 @@ const pinInputRef = ref<any>(null);
 const passwordInputRef = ref<any>(null);
 
 // Computed properties
+const isPrfWallet = computed(() => {
+  if (walletStore.loggedWallet) {
+    return walletStore.loggedWallet.encryptionMethod === 'prf';
+  }
+  // Pre-login: use encryption method resolved from wallet record
+  return preLoginEncryptionMethod.value === 'prf';
+});
+
 const canUnlock = computed(() => {
-  if (unlocking.value) return false;
+  if (unlocking.value || !configLoaded.value) return false;
 
   if (unlockMethod.value === 'pin') {
     return pinCode.value.length >= 4;
@@ -270,7 +282,10 @@ const unlockDescription = computed(() => {
   } else if (unlockMethod.value === 'pattern') {
     return vmProxy.$t('security.drawPatternToUnlock');
   } else {
-    return vmProxy.$t('security.useSpendingPasswordToUnlock');
+    if (!configLoaded.value) return '';
+    return isPrfWallet.value
+      ? vmProxy.$t('security.useLockPasswordToUnlock')
+      : vmProxy.$t('security.useSpendingPasswordToUnlock');
   }
 });
 
@@ -303,7 +318,18 @@ async function loadSecurityConfig() {
   try {
     // Use pre-login walletId if provided, otherwise use logged wallet
     const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
-    if (!walletId) return;
+    if (!walletId) {
+      configLoaded.value = true; // Allow interaction (fallback to password)
+      return;
+    }
+
+    // Resolve encryption method for pre-login PRF detection
+    if (props.preLoginWalletId) {
+      const { getAllWallets } = await import('@/db/gero-db');
+      const walletsMap = await getAllWallets();
+      const walletRecord = walletsMap[walletId];
+      preLoginEncryptionMethod.value = walletRecord?.encryptionMethod || null;
+    }
 
     const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(walletId);
@@ -322,11 +348,17 @@ async function loadSecurityConfig() {
     pinLength.value = pinLengthConfig?.value || 6;
     passKeyAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
 
+    // Pre-cache lock password hash for PRF wallets (avoids duplicate DB read in handleUnlock)
+    if (unlockMethodConfig?.value === 'password') {
+      const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+      cachedLockPasswordHash.value = lockPasswordHashConfig?.value || null;
+    }
+
     // Check for PRF wallets: credential ID stored in wallet record, not config
     const wallet = walletStore.loggedWallet;
-    const isPrfWallet = wallet?.encryptionMethod === 'prf';
+    const walletIsPrf = wallet?.encryptionMethod === 'prf';
 
-    if (isPrfWallet && wallet?.webAuthnCredentialId) {
+    if (walletIsPrf && wallet?.webAuthnCredentialId) {
       // PRF wallet: Use credential from wallet record
       webAuthnCredentialId.value = wallet.webAuthnCredentialId;
       // PRF wallets can always use PassKey for unlock
@@ -338,6 +370,8 @@ async function loadSecurityConfig() {
 
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
     // that works alongside PIN, password, or pattern
+
+    configLoaded.value = true;
   } catch (error) {
     console.error('Error loading security config:', error);
     unlockMethod.value = null;
@@ -345,6 +379,8 @@ async function loadSecurityConfig() {
     passKeyEnabled.value = false;
     webAuthnCredentialId.value = null;
     pinLength.value = 6;
+    configLoaded.value = true; // Allow interaction even on error (fallback to password)
+    configLoadError.value = true;
   }
 }
 
@@ -416,8 +452,25 @@ async function handleUnlock(passKeyAuthenticated = false) {
       unlockCredential = pinCode.value;
     } else if (unlockMethod.value === 'pattern') {
       unlockCredential = pattern.value;
+    } else if (unlockMethod.value === 'password' && isPrfWallet.value) {
+      // PRF wallet lock password: verify locally in browser context
+      // (avoids crypto polyfill differences between browser and service worker)
+      // Uses hash cached during loadSecurityConfig() to avoid duplicate DB read
+      if (!cachedLockPasswordHash.value) {
+        showError(vmProxy.$t(configLoadError.value ? 'security.unlockFailed' : 'security.lockPasswordNotConfigured'));
+        return;
+      }
+      const { verifyPin } = await import('@/shared/utils/security');
+      const isValid = await verifyPin(password.value, cachedLockPasswordHash.value);
+      if (!isValid) {
+        showError(vmProxy.$t('security.wrongLockPassword'));
+        password.value = '';
+        return;
+      }
+      // Verification passed — signal background (same pattern as passkey-authenticated)
+      unlockCredential = 'lockpassword-verified';
     } else {
-      // Fallback to password
+      // Fallback to spending password (normal wallets)
       unlockCredential = password.value;
     }
 
@@ -449,8 +502,9 @@ async function handleUnlock(passKeyAuthenticated = false) {
         showError(vmProxy.$t('security.incorrectPattern'));
         pattern.value = [];  // Clear pattern
       } else {
-        // Password unlock
-        showError(vmProxy.$t('wallet.wrongSpendingPassword'));
+        // Password unlock — for PRF wallets, lock password was already verified locally
+        // so a background failure means something else went wrong (DB error, wallet load, etc.)
+        showError(isPrfWallet.value ? vmProxy.$t('security.unlockFailed') : vmProxy.$t('wallet.wrongSpendingPassword'));
         password.value = '';  // Clear password input
       }
     }
@@ -493,6 +547,10 @@ function resetForm() {
   totpCode.value = '';
   errorMessage.value = '';
   show2FA.value = false;
+  configLoaded.value = false;
+  configLoadError.value = false;
+  cachedLockPasswordHash.value = null;
+  preLoginEncryptionMethod.value = null;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 

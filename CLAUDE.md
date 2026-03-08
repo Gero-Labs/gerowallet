@@ -846,8 +846,9 @@ const hasSpendingPassword = !!wallet?.prfSpendingPasswordHash;
   const { t } = useTranslation();
   const message = computed(() => t('errors.insufficientBalance'));
   ```
-- **Translation files**: Located in `src/locales/` (e.g., `en.json`, `es.json`)
-- **Adding new translations**: Add keys to all language files to maintain consistency
+- **Translation files**: Located in `src/plugins/i18n/` (e.g., `us.ts`, `de.ts`)
+- **Supported languages**: English (`us.ts`) and German (`de.ts`) are fully supported. **When adding or updating i18n keys in `us.ts`, always add the corresponding German translation in `de.ts`.**
+- **Adding new translations**: Add keys to both `us.ts` and `de.ts` at minimum. Other locale files will fall back to English.
 
 ### 7. **Vuetify Components Best Practices**
 - **v-select: Always use `attach` prop** - Prevents menu from having absolute positioning issues when scrolling
