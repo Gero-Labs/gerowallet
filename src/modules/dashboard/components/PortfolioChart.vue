@@ -25,6 +25,28 @@
         </div>
       </div>
 
+      <!-- P&L Summary -->
+      <div v-if="totalRealizedPnl != null || totalUnrealizedPnl != null" class="d-flex align-center px-4 pb-2" style="gap: 16px">
+        <div class="pnl-item">
+          <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
+          <span
+            class="text-body-2 font-weight-medium"
+            :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+          >
+            {{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} ₳
+          </span>
+        </div>
+        <div class="pnl-item">
+          <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
+          <span
+            class="text-body-2 font-weight-medium"
+            :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+          >
+            {{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} ₳
+          </span>
+        </div>
+      </div>
+
       <!-- Chart Controls -->
       <div class="chart-controls-section">
         <!-- Empty left side for spacing -->
@@ -211,6 +233,14 @@ const props = defineProps({
   adaOnlyValueEur: {
     type: Number,
     default: 0,
+  },
+  totalRealizedPnl: {
+    type: Number,
+    default: null,
+  },
+  totalUnrealizedPnl: {
+    type: Number,
+    default: null,
   },
 });
 
@@ -513,6 +543,12 @@ const convertStringToCurrencyType = (currencyString: string): CurrencyType | nul
 };
 
 // Format numbers with K, M, B abbreviations for Y-axis
+const formatPnl = (value: number): string => {
+  if (Math.abs(value) >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+  if (Math.abs(value) >= 1e3) return (value / 1e3).toFixed(1) + 'K';
+  return value.toFixed(2);
+};
+
 const formatAxisNumber = (value: number, currency: string = ''): string => {
   const absValue = Math.abs(value);
   let formattedValue: string;
@@ -1256,6 +1292,12 @@ onMounted(() => {
   width: 100%;
   height: 184px;
   position: relative;
+}
+
+.pnl-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* Portfolio Value Display */

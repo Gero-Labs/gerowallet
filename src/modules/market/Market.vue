@@ -104,6 +104,7 @@ import { ref, computed, watch, toRefs, onMounted, onBeforeUnmount } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
+import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { walletStore } from '@/stores/walletStore';
 import MarketStatBar from '@/modules/market/components/MarketStatBar.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
@@ -122,6 +123,7 @@ const {
   searchTokens,
 } = useMarketData();
 const { watchlist, isWatched, watchlistCount } = useWatchlist();
+const { fetchPnl, getTokenPnl } = useWalletPnl();
 const { tokens: userTokens } = toRefs(walletStore);
 
 // UI state
@@ -155,14 +157,22 @@ const myHoldings = computed(() => {
     .map(tok => {
       const unit = tok.unit;
       const held = holdings[unit];
+      const pnl = getTokenPnl(unit);
+      const result: MarketToken = { ...tok };
+
       if (held) {
-        return {
-          ...tok,
-          balance: held.quantity ? Number(held.quantity) / Math.pow(10, held.decimals || 0) : 0,
-          value: held.quantity ? (Number(held.quantity) / Math.pow(10, held.decimals || 0)) * tok.price : 0,
-        };
+        result.balance = held.quantity ? Number(held.quantity) / Math.pow(10, held.decimals || 0) : 0;
+        result.value = result.balance ? result.balance * tok.price : 0;
       }
-      return tok;
+
+      if (pnl) {
+        result.avgCostBasis = pnl.avgCostBasisAda;
+        result.totalPnl = pnl.realizedPnlAda + pnl.unrealizedPnlAda;
+        result.realizedPnl = pnl.realizedPnlAda;
+        result.unrealizedPnl = pnl.unrealizedPnlAda;
+      }
+
+      return result;
     });
 });
 
@@ -225,7 +235,10 @@ function handleOutsideClick(e: MouseEvent) {
   panelOpen.value = false;
 }
 
-onMounted(() => document.addEventListener('click', handleOutsideClick));
+onMounted(() => {
+  document.addEventListener('click', handleOutsideClick);
+  fetchPnl();
+});
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick);
   if (searchDebounce) clearTimeout(searchDebounce);
