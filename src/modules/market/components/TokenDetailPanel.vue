@@ -80,27 +80,80 @@
         />
       </div>
 
-      <!-- Stats Section -->
+      <!-- Sub-tabs (below chart) -->
       <div class="px-4 pb-2">
-        <v-simple-table dense class="transparent stats-table">
-          <tbody>
-            <tr v-for="stat in stats" :key="stat.label">
-              <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">
-                <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-                  <template v-slot:activator="{ on, attrs }">
-                    <span v-bind="attrs" v-on="on">{{ stat.label }}</span>
-                  </template>
-                  <span>{{ stat.tooltip }}</span>
-                </v-tooltip>
-              </td>
-              <td class="text-right" style="font-size: 12px; padding: 4px 8px">
-                <component :is="stat.component" v-if="stat.component" v-bind="stat.componentProps" />
-                <span v-else>{{ stat.value }}</span>
-              </td>
-            </tr>
-          </tbody>
-        </v-simple-table>
+        <v-tabs v-model="activeSubTab" dense background-color="transparent" height="28" class="detail-sub-tabs">
+          <v-tab>{{ $t('market.overview') }}</v-tab>
+          <v-tab>{{ $t('market.trading') }}</v-tab>
+        </v-tabs>
       </div>
+
+      <!-- Overview tab content -->
+      <template v-if="activeSubTab === 0">
+        <!-- P&L Section (if user holds this token) -->
+        <div v-if="tokenPnl" class="px-4 pb-2">
+          <v-simple-table dense class="transparent stats-table">
+            <tbody>
+              <tr>
+                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.avgCostBasis') }}</td>
+                <td class="text-right" style="font-size: 12px; padding: 4px 8px">{{ tokenPnl.avgCostBasisAda.toFixed(tokenPnl.avgCostBasisAda < 1 ? 6 : 2) }} ₳</td>
+              </tr>
+              <tr>
+                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.unrealizedPnlDetail') }}</td>
+                <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.unrealizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                  {{ tokenPnl.unrealizedPnlAda >= 0 ? '+' : '' }}{{ tokenPnl.unrealizedPnlAda.toFixed(2) }} ₳
+                </td>
+              </tr>
+              <tr>
+                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.realizedPnlDetail') }}</td>
+                <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.realizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                  {{ tokenPnl.realizedPnlAda >= 0 ? '+' : '' }}{{ tokenPnl.realizedPnlAda.toFixed(2) }} ₳
+                </td>
+              </tr>
+              <tr>
+                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px; font-weight: 600">{{ $t('market.totalPnlDetail') }}</td>
+                <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', fontWeight: '600', color: totalPnl >= 0 ? '#47CD89' : '#F97066' }">
+                  {{ totalPnl >= 0 ? '+' : '' }}{{ totalPnl.toFixed(2) }} ₳
+                </td>
+              </tr>
+            </tbody>
+          </v-simple-table>
+        </div>
+
+        <!-- Stats Section -->
+        <div class="px-4 pb-2">
+          <v-simple-table dense class="transparent stats-table">
+            <tbody>
+              <tr v-for="stat in stats" :key="stat.label">
+                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">
+                  <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
+                    <template v-slot:activator="{ on, attrs }">
+                      <span v-bind="attrs" v-on="on">{{ stat.label }}</span>
+                    </template>
+                    <span>{{ stat.tooltip }}</span>
+                  </v-tooltip>
+                </td>
+                <td class="text-right" style="font-size: 12px; padding: 4px 8px">
+                  <component :is="stat.component" v-if="stat.component" v-bind="stat.componentProps" />
+                  <span v-else>{{ stat.value }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </v-simple-table>
+        </div>
+      </template>
+
+      <!-- Trading tab content -->
+      <template v-if="activeSubTab === 1">
+        <div class="px-4 pb-2" style="display: flex; flex-direction: column; gap: 12px">
+          <DepthChart
+            v-if="tokenPolicyId && tokenAssetName"
+            :policy-id="tokenPolicyId"
+            :asset-name="tokenAssetName"
+          />
+          <CrossDexPrices :asset-id="token.unit" />
+        </div>
+      </template>
 
       <!-- Actions -->
       <div class="px-4 pb-4 pt-2">
@@ -128,12 +181,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, markRaw } from 'vue';
+import { ref, computed, watch, markRaw, type Ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
-import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
+import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
 import TechnicalAnalysisChart from './TechnicalAnalysisChart.vue';
 import TokenRiskBadge from './TokenRiskBadge.vue';
+import DepthChart from './DepthChart.vue';
+import CrossDexPrices from './CrossDexPrices.vue';
+import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 
 const props = defineProps<{
   token: MarketToken;
@@ -147,16 +203,30 @@ defineEmits<{
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
 const { getTokenCandles } = useMarketData();
+const { getTokenPnl } = useWalletPnl();
 
 const selectedTimeframe = ref('1h');
+const activeSubTab = ref(0);
+
+const tokenPnl = computed(() => getTokenPnl(props.token.unit));
+const totalPnl = computed(() => {
+  const p = tokenPnl.value;
+  return p ? p.realizedPnlAda + p.unrealizedPnlAda : 0;
+});
+
+const tokenPolicyId = computed(() => {
+  if (props.token.unit === 'lovelace') return '';
+  return props.token.unit.substring(0, 56);
+});
+const tokenAssetName = computed(() => {
+  if (props.token.unit === 'lovelace') return '';
+  return props.token.unit.substring(56);
+});
 const activeIndicators = ref<string[]>(['vol']);
 
 const timeframeOptions = [
-  { value: '1m', label: '1m' },
-  { value: '5m', label: '5m' },
   { value: '15m', label: '15m' },
   { value: '1h', label: '1H' },
-  { value: '4h', label: '4H' },
   { value: '1d', label: '1D' },
   { value: '1w', label: '1W' },
 ];
@@ -186,9 +256,19 @@ const chartHeight = computed(() => {
   return height + 'px';
 });
 
-const candles = computed(() => {
-  return getTokenCandles(props.token.unit, selectedTimeframe.value);
-});
+const candles: Ref<CandlestickDataPoint[]> = ref([]);
+
+let candleRequestId = 0;
+async function loadCandles() {
+  const requestId = ++candleRequestId;
+  const result = await getTokenCandles(props.token.unit, selectedTimeframe.value);
+  if (requestId === candleRequestId) {
+    candles.value = result;
+  }
+}
+
+// Load candles on setup
+loadCandles();
 
 const stats = computed(() => {
   const tok = props.token;
@@ -240,9 +320,15 @@ function openExplorer() {
   window.open(`https://cardanoscan.io/token/${fingerprint}`, '_blank', 'noopener,noreferrer');
 }
 
-// Reset timeframe when token changes
+// Reset timeframe and reload candles when token changes
 watch(() => props.token, () => {
   selectedTimeframe.value = '1h';
+  loadCandles();
+});
+
+// Reload candles when timeframe changes
+watch(selectedTimeframe, () => {
+  loadCandles();
 });
 </script>
 
@@ -338,5 +424,17 @@ watch(() => props.token, () => {
 
 .stats-table >>> tr:last-child td {
   border-bottom: none !important;
+}
+
+.detail-sub-tabs >>> .v-tab {
+  text-transform: none !important;
+  font-size: 12px;
+  min-width: unset;
+  padding: 0 10px;
+  letter-spacing: 0;
+}
+
+.detail-sub-tabs >>> .v-tabs-slider {
+  height: 2px;
 }
 </style>

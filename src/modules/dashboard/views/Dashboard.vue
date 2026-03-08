@@ -45,6 +45,8 @@
                     :loading="portfolioLoading"
                     :progressive-loading="true"
                     :first-loaded-currency="firstLoadedCurrency"
+                    :total-realized-pnl="pnlSummary?.totalRealizedPnlAda ?? null"
+                    :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
                     @refresh="refreshPortfolioChart"
                   />
                 </v-card-text>
@@ -190,6 +192,7 @@ import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
@@ -202,6 +205,8 @@ const { t } = useTranslation();
 const instance = getCurrentInstance();
 
 const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
+const { pnlSummary, fetchPnl } = useWalletPnl();
+fetchPnl();
 
 // Store refs
 const { loggedWallet, transactions, account, utxos, collateral } = toRefs(walletStore);

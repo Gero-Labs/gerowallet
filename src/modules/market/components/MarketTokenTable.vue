@@ -154,6 +154,36 @@
       <span style="font-size: 12px">{{ item.value ? '$' + formatCompact(item.value) : '—' }}</span>
     </template>
 
+    <!-- Avg Cost column -->
+    <template v-slot:[`item.avgCostBasis`]="{ item }">
+      <span style="font-size: 12px">
+        {{ item.avgCostBasis != null ? item.avgCostBasis.toFixed(item.avgCostBasis < 1 ? 4 : 2) + ' ₳' : '—' }}
+      </span>
+    </template>
+
+    <!-- Total P&L column -->
+    <template v-slot:[`item.totalPnl`]="{ item }">
+      <v-tooltip top :open-delay="300" content-class="custom-tooltip" v-if="item.totalPnl != null">
+        <template v-slot:activator="{ on, attrs }">
+          <span
+            v-bind="attrs"
+            v-on="on"
+            :style="{ color: pnlColor(item.totalPnl), fontSize: '12px', fontWeight: '500' }"
+          >
+            <v-avatar tile size="10" class="mr-1">
+              <v-img :src="changeIcon(item.totalPnl)" alt="pnl" />
+            </v-avatar>
+            {{ item.totalPnl >= 0 ? '+' : '' }}{{ formatCompact(item.totalPnl) }} ₳
+          </span>
+        </template>
+        <div>
+          <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? (item.unrealizedPnl >= 0 ? '+' : '') + item.unrealizedPnl.toFixed(2) + ' ₳' : '—' }}</div>
+          <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? (item.realizedPnl >= 0 ? '+' : '') + item.realizedPnl.toFixed(2) + ' ₳' : '—' }}</div>
+        </div>
+      </v-tooltip>
+      <span v-else style="font-size: 12px">—</span>
+    </template>
+
     <!-- Watchlist column -->
     <template v-slot:[`item.watchlist`]="{ item }">
       <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
@@ -225,6 +255,24 @@
         {{ $t('market.change7dTooltip') }}
       </v-tooltip>
     </template>
+
+    <template v-slot:[`header.avgCostBasis`]="{ header }">
+      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+        </template>
+        {{ $t('market.avgCostTooltip') }}
+      </v-tooltip>
+    </template>
+
+    <template v-slot:[`header.totalPnl`]="{ header }">
+      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+        </template>
+        {{ $t('market.totalPnlTooltip') }}
+      </v-tooltip>
+    </template>
   </v-data-table>
 </template>
 
@@ -273,6 +321,8 @@ const baseHeaders = computed(() => {
     headers.push(
       { text: t('market.balance'), value: 'balance', sortable: true, width: '80px' },
       { text: t('market.value'), value: 'value', sortable: true, width: '80px' },
+      { text: t('market.avgCost'), value: 'avgCostBasis', sortable: true, width: '80px', class: 'hidden-md-and-down' },
+      { text: t('market.totalPnl'), value: 'totalPnl', sortable: true, width: '90px' },
     );
   }
 
@@ -336,6 +386,11 @@ function changeColor(change: number): string {
 function changeIcon(change: number): string {
   if (change === 0) return assets.arrowRightSvg;
   return change > 0 ? assets.trendUpSvg : assets.trendDownSvg;
+}
+
+function pnlColor(pnl: number): string {
+  if (pnl === 0) return '#A3A3A3';
+  return pnl > 0 ? '#47CD89' : '#F97066';
 }
 </script>
 
