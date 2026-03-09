@@ -797,7 +797,7 @@ onBeforeUnmount(() => {
   right: 0;
   height: 110px;
   width: 100%;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .pnl-item {
