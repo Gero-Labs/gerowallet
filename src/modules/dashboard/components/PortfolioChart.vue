@@ -352,10 +352,6 @@ const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
-const primaryColor = computed(() => {
-  return isApex.value ? '#dc753e' : '#00c7f3';
-});
-
 const shortenAddress = computed(() => {
   return loggedWallet.value?.baseAddress ? filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
 });
@@ -689,7 +685,11 @@ watch(
 
     if (hasAnyChartData.value) {
       if (chart && areaSeries) {
-        updateChartData();
+        try {
+          updateChartData();
+        } catch (error) {
+          console.error('PortfolioChart: Failed to update chart data:', error);
+        }
       } else {
         // Chart not initialized yet, try now
         nextTick(() => initChart());
@@ -701,7 +701,11 @@ watch(
 
 // Watch currency changes
 watch(selectedCurrency, () => {
-  updateChartData();
+  try {
+    updateChartData();
+  } catch (error) {
+    console.error('PortfolioChart: Failed to update chart on currency change:', error);
+  }
 });
 
 // Watch wallet changes
@@ -715,10 +719,14 @@ watch(
 
       if (hasAnyChartData.value) {
         nextTick(() => {
-          if (chart) {
-            updateChartData();
-          } else {
-            initChart();
+          try {
+            if (chart) {
+              updateChartData();
+            } else {
+              initChart();
+            }
+          } catch (error) {
+            console.error('PortfolioChart: Failed to update chart on wallet change:', error);
           }
         });
       }
@@ -735,10 +743,14 @@ watch(
 
     if (oldVal && !newVal && hasAnyChartData.value) {
       nextTick(() => {
-        if (!chart) {
-          initChart();
-        } else {
-          updateChartData();
+        try {
+          if (!chart) {
+            initChart();
+          } else {
+            updateChartData();
+          }
+        } catch (error) {
+          console.error('PortfolioChart: Failed to update chart on loading change:', error);
         }
       });
     }
@@ -804,16 +816,17 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  pointer-events: auto;
 }
 
-/* Portfolio Value Display */
+/* Portfolio Value Display — transparent to chart interaction */
 .portfolio-value-display {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   z-index: 10;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .portfolio-header {
@@ -853,6 +866,7 @@ onBeforeUnmount(() => {
 
 .portfolio-amount.clickable {
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .portfolio-amount.clickable:hover {
@@ -870,6 +884,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  pointer-events: auto;
 }
 
 /* Chart Controls Section */
@@ -883,6 +898,7 @@ onBeforeUnmount(() => {
   align-items: center;
   z-index: 10;
   gap: 12px;
+  pointer-events: auto;
 }
 
 /* Right side controls group */
