@@ -1,8 +1,46 @@
 import { getDb } from '@/db/wallet-db';
-import tapToolsApi from '@/api/tap-tools-api';
+import marketApi from '@/api/market-api';
+import type { WalletSnapshot } from '@/api/market-api';
 import { walletStore } from '@/stores/walletStore';
 import { getTimeframeBasedOnExpiry } from '@/shared/utils/timeframe';
 import { debugLog } from '@/utils/debug';
+
+/**
+ * Map UI timeframe to Market API resolution parameter
+ */
+function getResolutionForTimeframe(timeframe: string): string {
+  switch (timeframe) {
+    case '24h': return '1H';
+    case '7d': return '4H';
+    case '30d':
+    case '1y':
+    case 'all':
+    default: return '1D';
+  }
+}
+
+/**
+ * Transform WalletSnapshot array to PortfolioDataPoint array for a specific currency
+ */
+function snapshotsToDataPoints(
+  snapshots: WalletSnapshot[],
+  currency: 'ADA' | 'USD' | 'EUR',
+  usdToEurRate: number = 1
+): PortfolioDataPoint[] {
+  return snapshots
+    .filter(s => s.timestamp > 0)
+    .map(s => {
+      const timestamp = s.timestamp * 1000; // API returns seconds, we store milliseconds
+      let value: number;
+      switch (currency) {
+        case 'ADA': value = s.totalValueAda; break;
+        case 'USD': value = s.totalValueUsd; break;
+        case 'EUR': value = s.totalValueUsd * usdToEurRate; break;
+      }
+      return [timestamp, value] as PortfolioDataPoint;
+    })
+    .sort((a, b) => a[0] - b[0]);
+}
 
 // TypeScript types for portfolio data points
 export type PortfolioDataPoint = [timestamp: number, value: number];
@@ -501,13 +539,14 @@ export class PortfolioCacheService {
 
     // Load from API with a determined timeframe
     try {
-      const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, timeframe);
-
-      // Use all available data for better chart quality
-      const limitedData = data;
-
-      // Simple conversion to array format
-      const newData = limitedData.map((item: any) => [item.time * 1000, item.value]);
+      const stakeAddress = walletStore.loggedWallet?.stakeAddress;
+      if (!stakeAddress) {
+        console.warn('No stake address available for portfolio data');
+        return [];
+      }
+      const resolution = getResolutionForTimeframe(timeframe);
+      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+      const newData = snapshotsToDataPoints(snapshots, currency);
 
       // Get existing data before removing cache entry
       let existingData: any[] = [];
@@ -577,19 +616,22 @@ export class PortfolioCacheService {
       if (!portfolioTable) {
         debugLog('portfolio_charts table not available, skipping cache load');
         // For old users without the table, just load fresh data
-        const currenciesToLoad = ['ADA', 'USD', 'EUR'] as const;
-        const loadPromises = currenciesToLoad.map(async currency => {
-          try {
-            const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, '1y');
-            return data.map((item: any) => [item.time * 1000, item.value]);
-          } catch (error) {
-            console.error(`Error loading ${currency} portfolio data:`, error);
-            return [];
-          }
-        });
-
-        const [adaData, usdData, eurData] = await Promise.all(loadPromises);
-        return { adaData, usdData, eurData };
+        const stakeAddress = walletStore.loggedWallet?.stakeAddress;
+        if (!stakeAddress) {
+          console.warn('No stake address available for portfolio data');
+          return { adaData: [], usdData: [], eurData: [] };
+        }
+        try {
+          const resolution = getResolutionForTimeframe('1y');
+          const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+          const adaData = snapshotsToDataPoints(snapshots, 'ADA');
+          const usdData = snapshotsToDataPoints(snapshots, 'USD');
+          const eurData = snapshotsToDataPoints(snapshots, 'EUR');
+          return { adaData, usdData, eurData };
+        } catch (error) {
+          console.error('Error loading portfolio data from market API:', error);
+          return { adaData: [], usdData: [], eurData: [] };
+        }
       }
 
       // Load cache data in parallel for better performance
@@ -628,12 +670,19 @@ export class PortfolioCacheService {
       // Load missing data in parallel for better performance
       if (currenciesToLoad.length > 0) {
         try {
+          const stakeAddress = walletStore.loggedWallet?.stakeAddress;
+          if (!stakeAddress) {
+            console.warn('No stake address available for portfolio data');
+            return { adaData: [], usdData: [], eurData: [] };
+          }
+
+          // Single API call returns both ADA and USD values
+          const resolution = getResolutionForTimeframe('1y');
+          const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+
           const loadPromises = currenciesToLoad.map(async currency => {
             try {
-              const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, '1y');
-
-              // Simple conversion to array format
-              const processedData = data.map((item: any) => [item.time * 1000, item.value]);
+              const processedData = snapshotsToDataPoints(snapshots, currency);
 
               // Save to cache
               await this.saveToCache(address, currency, processedData);
@@ -860,10 +909,14 @@ export class PortfolioCacheService {
       }
 
       // Load from API with determined timeframe
-      const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, timeframe);
-
-      // Simple conversion to array format
-      const newData = data.map((item: any) => [item.time * 1000, item.value]);
+      const stakeAddress = walletStore.loggedWallet?.stakeAddress;
+      if (!stakeAddress) {
+        console.warn('No stake address available for portfolio data');
+        return [];
+      }
+      const resolution = getResolutionForTimeframe(timeframe);
+      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+      const newData = snapshotsToDataPoints(snapshots, currency);
 
       // Professional data merging: preserve existing + add new (already sorted)
       const mergedData = this.mergePortfolioData(existingData, newData);
