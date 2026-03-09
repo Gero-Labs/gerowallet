@@ -77,9 +77,13 @@ export interface WalletPnlToken {
 
 export interface WalletPnlSummary {
   stakeAddress: string;
+  totalPnlAda: number;
   totalRealizedPnlAda: number;
   totalUnrealizedPnlAda: number;
   tokens: WalletPnlToken[];
+  truncated?: boolean;
+  totalTransactions?: number;
+  processedTransactions?: number;
 }
 
 export interface WalletSnapshot {
@@ -134,6 +138,28 @@ export interface AssetPrice {
 export interface LatestPricesResponse {
   date: string;
   assets: AssetPrice[];
+}
+
+export interface NftCollectionStats {
+  policyId: string;
+  floorPriceLovelace: number;
+  lastSalePriceLovelace: number;
+  totalVolumeLovelace: number;
+  saleCount: number;
+  updatedAt: string;
+}
+
+export interface NftSale {
+  policyId: string;
+  assetName: string;
+  priceLovelace: number;
+  sellerAddress: string;
+  buyerAddress: string;
+  marketplace: string;
+  txHash: string;
+  outputIndex: number;
+  slot: number;
+  blockTime: string;
 }
 
 // ── API Methods ─────────────────────────────────────────────────────────────────
@@ -235,6 +261,33 @@ export default {
 
   async getTopPoolsByTvl(limit: number = 20): Promise<LiquidityPool[]> {
     const { data } = await axiosInstance.get('/api/v1/dex/pools/top-tvl', { params: { limit } });
+    return data;
+  },
+
+  // ── NFT Service ──────────────────────────────────────────────────────────────
+
+  async getNftCollections(sort: string = 'volume', limit: number = 50): Promise<NftCollectionStats[]> {
+    const { data } = await axiosInstance.get('/api/v1/nft/collections', { params: { sort, limit } });
+    return data;
+  },
+
+  async getNftCollectionStats(policyId: string): Promise<NftCollectionStats> {
+    const { data } = await axiosInstance.get(`/api/v1/nft/collection/${policyId}`);
+    return data;
+  },
+
+  async getNftCollectionSales(policyId: string, limit: number = 20): Promise<NftSale[]> {
+    const { data } = await axiosInstance.get(`/api/v1/nft/collection/${policyId}/sales`, { params: { limit } });
+    return data;
+  },
+
+  async getNftFloorPrice(policyId: string): Promise<{ floorPriceLovelace: number }> {
+    const { data } = await axiosInstance.get(`/api/v1/nft/collection/${policyId}/floor`);
+    return data;
+  },
+
+  async getNftAssetPrice(policyId: string, assetName: string): Promise<{ priceLovelace: number }> {
+    const { data } = await axiosInstance.get(`/api/v1/nft/asset/${policyId}/${assetName}/price`);
     return data;
   },
 };
