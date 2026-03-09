@@ -1,4 +1,5 @@
 import { PortfolioCacheService, PortfolioDataPoint } from '@/db/portfolio-cache';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 // Note: computed, ref are auto-imported globally by unplugin-auto-import
 
@@ -18,6 +19,11 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     cacheTimeMs,
     enableCache,
   });
+
+  // Get EUR conversion rate for snapshot transformation
+  const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
+  // Ensure rate is loaded
+  loadExchangeRate();
 
   // Loading states
   const loadingAda = ref(false);
