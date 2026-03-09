@@ -60,40 +60,8 @@
               </v-card-text>
             </v-card>
 
-            <!-- Holdings Table -->
-            <v-card flat class="liquid-glass holdings-table-card">
-              <div class="d-flex align-center flex-wrap px-3 pt-2" style="gap: 8px">
-                <v-text-field
-                  v-model="holdingsSearch"
-                  :placeholder="$t('market.searchPlaceholder')"
-                  prepend-inner-icon="mdi-magnify"
-                  solo-inverted
-                  dense
-                  flat
-                  hide-details
-                  clearable
-                  class="search-field"
-                  style="max-width: 240px"
-                />
-                <v-spacer />
-                <v-chip
-                  small
-                  filter
-                  outlined
-                  :input-value="verifiedOnly"
-                  @click="verifiedOnly = !verifiedOnly"
-                >
-                  {{ $t('market.verifiedOnly') }}
-                </v-chip>
-              </div>
-              <MarketTokenTable
-                :tokens="filteredHoldings"
-                :show-holdings-columns="true"
-                :loading="marketLoading"
-                @token-click="openToken"
-                @swap-token="openSwap"
-              />
-            </v-card>
+            <!-- Token Holdings with Allocation Bars + Collectibles -->
+            <TokenAllocationTable />
 
             <!-- Staking Widget (collapsible) -->
             <v-expansion-panels
@@ -196,7 +164,7 @@
           </div>
 
           <!-- ========== NFTs TAB ========== -->
-          <div v-show="activeTab === nftTabIndex && hasNfts" class="tab-content">
+          <div v-show="activeTab === 2 && hasNfts" class="tab-content">
             <NftCollectionTable />
           </div>
 
@@ -240,6 +208,7 @@ import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateC
 import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
+import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
 import MarketStatBar from '@/modules/market/components/MarketStatBar.vue';
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
@@ -264,12 +233,12 @@ const {
 } = useMarketData();
 const { isWatched, watchlistCount } = useWatchlist();
 const { pnlSummary, fetchPnl, getTokenPnl } = useWalletPnl();
-const { hasNfts } = useNftMarketData();
+const { hasNfts: hasNftMarketData, fetchUserNftCollections } = useNftMarketData();
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
-const { loggedWallet, transactions, account, utxos, collateral, tokens: userTokens } = toRefs(walletStore);
+const { loggedWallet, transactions, account, utxos, collateral, collections } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 
@@ -295,9 +264,7 @@ const {
 
 const activeTab = ref(0);
 const marketSubTab = ref(0);
-const holdingsSearch = ref('');
 const marketSearch = ref('');
-const verifiedOnly = ref(false);
 const marketVerifiedOnly = ref(false);
 const hideScam = ref(false);
 const selectedToken = ref<MarketToken | null>(null);
@@ -306,13 +273,6 @@ const swapDialogOpen = ref(false);
 const currentTimestamp = ref(Date.now());
 
 // ── Debounced search ──────────────────────────────────────────────────────────
-
-let holdingsDebounce: ReturnType<typeof setTimeout> | null = null;
-const debouncedHoldingsSearch = ref('');
-watch(holdingsSearch, (val) => {
-  if (holdingsDebounce) clearTimeout(holdingsDebounce);
-  holdingsDebounce = setTimeout(() => { debouncedHoldingsSearch.value = val || ''; }, 300);
-});
 
 let marketDebounce: ReturnType<typeof setTimeout> | null = null;
 const debouncedMarketSearch = ref('');
@@ -339,6 +299,11 @@ const isStakingEnabled = computed(() => {
 
 const hasStaking = computed(() => {
   return !!(account.value?.controlled_amount && account.value?.pool_id);
+});
+
+// NFTs: check wallet collections (synced from chain), not just market API
+const hasNfts = computed(() => {
+  return Object.keys(collections.value || {}).length > 0;
 });
 
 // ── Computed: Portfolio values (ported from Dashboard.vue) ────────────────────
@@ -439,45 +404,6 @@ const currentPortfolioValues = computed(() => {
   return { ada: computedValues.value.totalValue, usd: totalValueUsd, eur: totalValueUsd * usdToEurRate.value };
 });
 
-// ── Computed: Holdings tab tokens ─────────────────────────────────────────────
-
-const myHoldings = computed(() => {
-  const holdings = userTokens.value || {};
-  return allTokens.value
-    .filter(tok => {
-      if (tok.unit === 'lovelace') return true;
-      return !!holdings[tok.unit];
-    })
-    .map(tok => {
-      const held = holdings[tok.unit];
-      const pnl = getTokenPnl(tok.unit);
-      const result: MarketToken = { ...tok };
-      if (held) {
-        result.balance = held.quantity ? Number(held.quantity) / Math.pow(10, held.decimals || 0) : 0;
-        result.value = result.balance ? result.balance * tok.price : 0;
-      }
-      if (pnl) {
-        result.avgCostBasis = pnl.avgCostBasisAda;
-        result.totalPnl = pnl.realizedPnlAda + pnl.unrealizedPnlAda;
-        result.realizedPnl = pnl.realizedPnlAda;
-        result.unrealizedPnl = pnl.unrealizedPnlAda;
-      }
-      return result;
-    });
-});
-
-const filteredHoldings = computed(() => {
-  let result = myHoldings.value;
-  if (debouncedHoldingsSearch.value) {
-    const q = debouncedHoldingsSearch.value.toLowerCase();
-    result = result.filter(tok => tok.name.toLowerCase().includes(q) || tok.ticker.toLowerCase().includes(q));
-  }
-  if (verifiedOnly.value) {
-    result = result.filter(tok => tok.verified);
-  }
-  return result;
-});
-
 // ── Computed: Market tab tokens ───────────────────────────────────────────────
 
 const watchlistedTokens = computed(() => allTokens.value.filter(tok => isWatched(tok.unit)));
@@ -511,10 +437,6 @@ const marketFilteredTokens = computed(() => {
   }
   return result;
 });
-
-// ── Computed: NFT tab index ───────────────────────────────────────────────────
-
-const nftTabIndex = computed(() => hasNfts.value ? 2 : -1);
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
@@ -583,6 +505,7 @@ onMounted(() => {
   document.addEventListener('click', handleOutsideClick);
   loadExchangeRate();
   fetchPnl();
+  fetchUserNftCollections();
 
   // Auto-refresh market data every 30s when visible
   refreshInterval = setInterval(() => {
@@ -594,7 +517,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick);
-  if (holdingsDebounce) clearTimeout(holdingsDebounce);
   if (marketDebounce) clearTimeout(marketDebounce);
   if (refreshInterval) clearInterval(refreshInterval);
 });
@@ -683,41 +605,6 @@ watch(
   background: radial-gradient(ellipse, rgba(0, 199, 243, 0.06) 0%, transparent 70%);
   pointer-events: none;
   z-index: -1;
-}
-
-/* ── Holdings table card ─────────────────────────────────────────────────────── */
-
-.holdings-table-card ::v-deep .v-data-table {
-  background: transparent;
-}
-
-.holdings-table-card ::v-deep .v-data-table-header th {
-  background: rgba(10, 14, 20, 0.8);
-  backdrop-filter: blur(10px);
-  color: rgba(255, 255, 255, 0.5) !important;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 11px;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
-}
-
-.holdings-table-card ::v-deep tbody tr {
-  transition: background 0.15s ease;
-}
-
-.holdings-table-card ::v-deep tbody tr:hover {
-  background: rgba(0, 199, 243, 0.04);
-}
-
-.holdings-table-card ::v-deep tbody tr td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
-}
-
-.holdings-table-card ::v-deep td.text-right {
-  font-family: 'Roboto Mono', monospace;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
 }
 
 /* ── Market sub-tabs ─────────────────────────────────────────────────────────── */
