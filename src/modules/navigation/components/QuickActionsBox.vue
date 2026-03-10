@@ -117,26 +117,6 @@
         </v-btn>
       </div>
 
-      <div class="action-button-wrapper">
-        <v-tooltip bottom :open-delay="400">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              ref="searchButton"
-              class="expandable-button search-button search-breathe"
-              color="#82B4FF1A"
-              height="28"
-              v-bind="attrs"
-              v-on="on"
-              @click="openGlobalSearch"
-              :style="getButtonGlowStyle('search')"
-            >
-              <v-icon size="14" style="filter: none;">mdi-magnify</v-icon>
-              <span class="button-text">{{ $t('common.search') }}</span>
-            </v-btn>
-          </template>
-          <span>{{ $t('search.globalPlaceholder') }} (Ctrl+K)</span>
-        </v-tooltip>
-      </div>
     </div>
     <ReceiveDialog :isOpen="quickActionState.activeDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
     <SwapDialog
@@ -162,10 +142,8 @@ import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { priceStore } from '@/stores/priceStore';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
-import { useGlobalSearch } from '@/shared/composables/useGlobalSearch';
 
 const { loggedWallet } = toRefs(walletStore);
-const { open: openGlobalSearch } = useGlobalSearch();
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const { state: quickActionState, openDialog, closeDialog } = useQuickActionDialogs();
@@ -187,7 +165,6 @@ const sendButton = ref(null);
 const receiveButton = ref(null);
 const swapButton = ref(null);
 const perpetualsButton = ref(null);
-const searchButton = ref(null);
 
 const isBuyDisabled = computed(() => {
   if (loggedWallet.value) {
@@ -243,7 +220,7 @@ const handleMouseLeave = () => {
 const updateButtonGlows = () => {
   if (!mousePosition.value) return;
 
-  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals', 'search'];
+  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals'];
   const newGlows: Record<string, any> = {};
 
   buttons.forEach(buttonType => {
@@ -300,8 +277,7 @@ const getButtonGlowStyle = (buttonType: string) => {
     send: '#00DFF3',
     receive: '#75E0A7',
     swap: '#FDA29B',
-    perpetuals: '#B794F4',
-    search: '#82B4FF'
+    perpetuals: '#B794F4'
   };
 
   const color = colors[buttonType];
@@ -450,28 +426,6 @@ const getButtonGlowStyle = (buttonType: string) => {
 
 .perpetuals-button .button-text {
   color: #B794F4;
-}
-
-.search-button {
-  background: rgba(130, 180, 255, 0.12) !important;
-  border: 0.5px solid rgba(130, 180, 255, 0.4) !important;
-}
-
-.search-button .button-text {
-  color: #82B4FF;
-}
-
-.search-button .v-icon {
-  color: #82B4FF !important;
-}
-
-/* Gentle breathing glow animation */
-.search-breathe {
-  animation: search-breathe 3s ease-in-out infinite;
-}
-@keyframes search-breathe {
-  0%, 100% { box-shadow: 0 0 4px rgba(130, 180, 255, 0.2), inset 0 0 1px rgba(255, 255, 255, 0.3); }
-  50% { box-shadow: 0 0 14px rgba(130, 180, 255, 0.45), inset 0 0 1px rgba(255, 255, 255, 0.3); }
 }
 
 /* Right corner ribbon "Off" badge */
