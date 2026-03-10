@@ -251,7 +251,7 @@ export function useGlobalSearch() {
               title: r.name,
               subtitle: 'Cashback Store',
               icon: iconBase + r.iconPath + iconQuery || 'mdi-shopping',
-              route: `/cashback?store=${r.id}`,
+              route: `/cashback?store=${r.name}`,
               data: r,
             });
           }

@@ -461,7 +461,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount } from 'vue';
+import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount, getCurrentInstance } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useDelegation } from '@/shared/composables/useDelegation';
 import debounce from 'lodash/debounce';
@@ -476,6 +476,7 @@ import filters from '@/shared/utils/filters';
 import { setWalletConfiguration } from '@/db/wallet-db';
 
 const { t } = useTranslation();
+const instance = getCurrentInstance();
 
 const { config, loggedWallet, account } = toRefs(walletStore);
 
@@ -629,6 +630,12 @@ const poolExtendedInfo = (pool: any) => {
 onMounted(() => {
   // Load initial paginated pools data
   reloadWithFilters();
+
+  // Handle ?pool=<id> deep-link from Global Search — pre-fill search
+  const poolQuery = instance?.proxy?.$route?.query?.pool;
+  if (poolQuery && typeof poolQuery === 'string') {
+    searchInput.value = poolQuery;
+  }
 });
 
 onBeforeUnmount(() => {
