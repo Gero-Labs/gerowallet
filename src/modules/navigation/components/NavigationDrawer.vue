@@ -292,7 +292,7 @@ const items = computed((): NavigationItemUnion[] => {
       underMaintenance: !isBlogEnabledByFeatureFlag.value,
     },
     { header: t('navigation.financialHub'), enabled: true },
-    { title: t('navigation.market'), icon: assts.market, link: '/market', enabled: true, new: true },
+    { title: t('navigation.market'), icon: assts.market, link: '/?view=all', enabled: true },
     { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
