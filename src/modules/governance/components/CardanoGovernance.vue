@@ -288,12 +288,13 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, toRefs, onMounted, onUnmounted, watch, getCurrentInstance } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 
 const { t } = useTranslation();
+const instance = getCurrentInstance();
 import governanceStoreActions from '@/stores/governanceStore';
 import networks from '@/utils/networks';
 import DRepDelegateDialog from '@/modules/governance/dialogs/DRepDelegateDialog.vue';
@@ -696,6 +697,11 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
 });
 
 onMounted(async () => {
+  // Handle ?drep=<id> deep-link from Global Search — pre-fill search
+  const drepQuery = instance?.proxy?.$route?.query?.drep;
+  if (drepQuery && typeof drepQuery === 'string') {
+    search.value = drepQuery;
+  }
   await loadDRepsPaginated(1);
 });
 

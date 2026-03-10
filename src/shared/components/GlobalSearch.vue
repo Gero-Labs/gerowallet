@@ -172,13 +172,13 @@ function navigateTo(result: SearchResult) {
       router.push({ path: '/transactions', query: { tx: result.id } }).catch(() => {});
       break;
     case 'pool':
-      router.push({ path: '/staking', query: { pool: result.id } }).catch(() => {});
+      router.push({ path: '/staking', query: { pool: result.data?.ticker || result.data?.name || result.id } }).catch(() => {});
       break;
     case 'drep':
-      router.push({ path: '/governance', query: { drep: result.id } }).catch(() => {});
+      router.push({ path: '/governance', query: { drep: result.data?.name || result.id } }).catch(() => {});
       break;
     case 'retailer':
-      router.push({ path: '/cashback', query: { store: result.id } }).catch(() => {});
+      router.push({ path: '/cashback', query: { store: result.title } }).catch(() => {});
       break;
     case 'contact':
       router.push({ path: '/', query: { view: 'holdings' } }).catch(() => {});
