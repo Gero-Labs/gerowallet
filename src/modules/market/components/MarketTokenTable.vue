@@ -6,10 +6,12 @@
     :items="paginatedTokens"
     :sort-by.sync="sortBy"
     :sort-desc.sync="sortDesc"
+    :custom-sort="customSort"
     :items-per-page="-1"
     hide-default-footer
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :loading="loading"
+    :item-class="rowClass"
     @click:row="handleRowClick"
   >
     <!-- Pagination -->
@@ -70,6 +72,15 @@
                 :alt="item.riskRating"
               />
             </v-avatar>
+            <v-chip
+              v-if="showOwnedBadge && ownedUnits.has(item.unit)"
+              x-small label
+              color="primary"
+              class="ml-1"
+              style="height: 16px; font-size: 9px; padding: 0 4px;"
+            >
+              {{ $t('market.owned') }}
+            </v-chip>
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
             {{ item.name }}
@@ -154,21 +165,43 @@
       <span style="font-size: 12px">{{ item.value ? '$' + formatCompact(item.value) : '—' }}</span>
     </template>
 
+    <!-- Allocation column (progress bar) -->
+    <template v-slot:[`item.allocation`]="{ item }">
+      <v-progress-linear
+        v-if="item.allocation"
+        class="allocation-bar"
+        height="14"
+        :value="totalAllocation > 0 ? (item.allocation / totalAllocation) * 100 : 0"
+        color="primary"
+        background-color="rgba(255,255,255,0.06)"
+        rounded
+      >
+        <template v-slot:default="{ value }">
+          <strong class="allocation-label">{{ value.toFixed(1) }}%</strong>
+        </template>
+      </v-progress-linear>
+      <span v-else style="font-size: 12px">—</span>
+    </template>
+
     <!-- Avg Cost column -->
     <template v-slot:[`item.avgCostBasis`]="{ item }">
-      <span style="font-size: 12px">
+      <span v-if="item.isNative" style="font-size: 12px">—</span>
+      <span v-else-if="pnlLoading && item.avgCostBasis == null" class="pnl-skeleton"></span>
+      <span v-else style="font-size: 12px">
         {{ item.avgCostBasis != null ? item.avgCostBasis.toFixed(item.avgCostBasis < 1 ? 4 : 2) + ' ₳' : '—' }}
       </span>
     </template>
 
     <!-- Total P&L column -->
     <template v-slot:[`item.totalPnl`]="{ item }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip" v-if="item.totalPnl != null">
+      <span v-if="item.isNative" style="font-size: 12px">—</span>
+      <span v-else-if="pnlLoading && item.totalPnl == null" class="pnl-skeleton"></span>
+      <v-tooltip v-else-if="item.totalPnl != null" top :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span
             v-bind="attrs"
             v-on="on"
-            :style="{ color: pnlColor(item.totalPnl), fontSize: '12px', fontWeight: '500' }"
+            :style="{ color: pnlColor(item.totalPnl), fontSize: '12px', fontWeight: '500', whiteSpace: 'nowrap' }"
           >
             <v-avatar tile size="10" class="mr-1">
               <v-img :src="changeIcon(item.totalPnl)" alt="pnl" />
@@ -282,14 +315,30 @@ import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
+import { walletStore } from '@/stores/walletStore';
 
 const props = withDefaults(defineProps<{
   tokens: MarketToken[];
   showHoldingsColumns?: boolean;
+  showOwnedBadge?: boolean;
   loading?: boolean;
+  pnlLoading?: boolean;
 }>(), {
   showHoldingsColumns: false,
+  showOwnedBadge: false,
   loading: false,
+  pnlLoading: false,
+});
+
+const ownedUnits = computed(() => {
+  if (!props.showOwnedBadge) return new Set<string>();
+  const tokens = walletStore.tokens || {};
+  return new Set(
+    Object.keys(tokens).filter(unit => {
+      const t = tokens[unit];
+      return t && (t.quantity > 0 || (t.amount && BigInt(t.amount) > 0n));
+    })
+  );
 });
 
 const emit = defineEmits<{
@@ -300,7 +349,7 @@ const emit = defineEmits<{
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
 
-const sortBy = ref('mcap');
+const sortBy = ref(props.showHoldingsColumns ? 'allocation' : 'mcap');
 const sortDesc = ref(true);
 const currentPage = ref(1);
 const itemsPerPage = 25;
@@ -321,6 +370,7 @@ const baseHeaders = computed(() => {
     headers.push(
       { text: t('market.balance'), value: 'balance', sortable: true, width: '80px' },
       { text: t('market.value'), value: 'value', sortable: true, width: '80px' },
+      { text: t('common.allocation'), value: 'allocation', sortable: true, width: '110px', class: 'hidden-sm-and-down' },
       { text: t('market.avgCost'), value: 'avgCostBasis', sortable: true, width: '80px', class: 'hidden-md-and-down' },
       { text: t('market.totalPnl'), value: 'totalPnl', sortable: true, width: '90px' },
     );
@@ -341,11 +391,25 @@ watch(() => props.tokens, () => {
   currentPage.value = 1;
 });
 
-const totalPages = computed(() => Math.ceil(props.tokens.length / itemsPerPage));
+// Switch default sort when toggling between holdings and market views
+watch(() => props.showHoldingsColumns, (isHoldings) => {
+  sortBy.value = isHoldings ? 'allocation' : 'mcap';
+  sortDesc.value = true;
+});
+
+const totalAllocation = computed(() => {
+  return props.tokens.reduce((sum, t) => sum + (t.allocation || 0), 0);
+});
+
+const sortedTokens = computed(() => {
+  return customSort([...props.tokens], [sortBy.value], [sortDesc.value]);
+});
+
+const totalPages = computed(() => Math.ceil(sortedTokens.value.length / itemsPerPage));
 
 const paginatedTokens = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
-  return props.tokens.slice(start, start + itemsPerPage);
+  return sortedTokens.value.slice(start, start + itemsPerPage);
 });
 
 function handleRowClick(item: MarketToken) {
@@ -392,6 +456,33 @@ function pnlColor(pnl: number): string {
   if (pnl === 0) return '#A3A3A3';
   return pnl > 0 ? '#47CD89' : '#F97066';
 }
+
+function rowClass(item: MarketToken): string {
+  return item.isNative ? 'native-token-row' : '';
+}
+
+// Pin native token (ADA) to the top regardless of sort column
+function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: boolean[]): MarketToken[] {
+  const sortKey = sortByArr[0];
+  const desc = sortDescArr[0];
+
+  // Separate native from rest
+  const native = items.filter(i => i.isNative);
+  const rest = [...items.filter(i => !i.isNative)];
+
+  if (sortKey) {
+    rest.sort((a: any, b: any) => {
+      const va = a[sortKey] ?? 0;
+      const vb = b[sortKey] ?? 0;
+      if (typeof va === 'string') {
+        return desc ? vb.localeCompare(va) : va.localeCompare(vb);
+      }
+      return desc ? vb - va : va - vb;
+    });
+  }
+
+  return [...native, ...rest];
+}
 </script>
 
 <style scoped>
@@ -419,6 +510,19 @@ function pnlColor(pnl: number): string {
   padding-bottom: 4px !important;
 }
 
+/* Allocation progress bar */
+.allocation-bar {
+  border-radius: 10px;
+  min-width: 60px;
+  max-width: 100px;
+}
+
+.allocation-label {
+  font-size: 8px;
+  color: white;
+  font-family: 'Roboto Mono', monospace;
+}
+
 /* Hide columns responsively via class */
 @media (max-width: 1264px) {
   .market-token-table >>> .hidden-md-and-down {
@@ -430,5 +534,31 @@ function pnlColor(pnl: number): string {
   .market-token-table >>> .hidden-sm-and-down {
     display: none !important;
   }
+}
+
+/* Native token (ADA) — subtle highlight */
+.market-token-table >>> .native-token-row {
+  background: rgba(0, 199, 243, 0.04) !important;
+  border-left: 2px solid rgba(0, 199, 243, 0.3);
+}
+
+.market-token-table >>> .native-token-row:hover {
+  background: rgba(0, 199, 243, 0.07) !important;
+}
+
+/* P&L loading skeleton shimmer */
+.pnl-skeleton {
+  display: inline-block;
+  width: 50px;
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: pnlShimmer 1.5s infinite;
+}
+
+@keyframes pnlShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 </style>
