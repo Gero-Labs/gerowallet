@@ -112,6 +112,16 @@
                     </div>
                   </v-tooltip>
 
+                  <!-- Global Search -->
+                  <v-tooltip bottom :open-delay="400">
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-btn class="toolbar-icon-btn" icon v-bind="attrs" v-on="on" @click="openGlobalSearch">
+                        <v-icon size="20">mdi-magnify</v-icon>
+                      </v-btn>
+                    </template>
+                    <span>{{ t('search.globalPlaceholder') }} (Ctrl+K)</span>
+                  </v-tooltip>
+
                   <!-- Notifications Menu (preserved from current version) -->
                   <v-menu
                     offset-y
@@ -211,13 +221,15 @@
       />
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
+
+      <GlobalSearch />
     </v-app>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, getCurrentInstance, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
 import Player from '@/modules/media-player/Player.vue';
@@ -242,6 +254,8 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 import networks from '@/utils/networks';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
+import GlobalSearch from '@/shared/components/GlobalSearch.vue';
+import { useGlobalSearch } from '@/shared/composables/useGlobalSearch';
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -258,6 +272,9 @@ const { price } = toRefs(networkStore);
 
 // Load exchange rate immediately
 loadExchangeRate();
+
+// Global search
+const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
 
 // GERO token unit
 const GERO_UNIT = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f';
@@ -484,6 +501,13 @@ onMounted(async () => {
     },
     { timeout: 2000 }
   );
+
+  // Global search keyboard shortcut (Ctrl+K / Cmd+K)
+  document.addEventListener('keydown', handleSearchKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleSearchKeydown);
 });
 </script>
 
