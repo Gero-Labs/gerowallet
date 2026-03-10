@@ -115,7 +115,7 @@
                   <!-- Global Search -->
                   <v-tooltip bottom :open-delay="400">
                     <template v-slot:activator="{ on, attrs }">
-                      <v-btn class="toolbar-icon-btn" icon v-bind="attrs" v-on="on" @click="openGlobalSearch">
+                      <v-btn class="toolbar-icon-btn search-glow-btn" icon v-bind="attrs" v-on="on" @click="openGlobalSearch">
                         <v-icon size="20">mdi-magnify</v-icon>
                       </v-btn>
                     </template>
@@ -704,6 +704,18 @@ div.v-toolbar__content {
 
 .toolbar-icon-btn .v-icon {
   color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Gentle breathing glow on the search button */
+.search-glow-btn {
+  animation: search-breathe 3s ease-in-out infinite;
+}
+.search-glow-btn .v-icon {
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+@keyframes search-breathe {
+  0%, 100% { box-shadow: 0 0 4px rgba(130, 180, 255, 0.25); }
+  50% { box-shadow: 0 0 12px rgba(130, 180, 255, 0.55); }
 }
 .liquid-glass-card,
 .v-card.liquid-glass-card {

@@ -2265,11 +2265,15 @@ export default {
   'portfolio.expandChart': 'Diagramm erweitern',
 
   // Global Search
-  'search.globalPlaceholder': 'Tokens, Transaktionen, Pools suchen...',
+  'search.globalPlaceholder': 'Tokens, Pools, DReps, Transaktionen suchen...',
   'search.tokens': 'Tokens',
   'search.transactions': 'Transaktionen',
   'search.stakePools': 'Stake Pools',
+  'search.dreps': 'DReps',
   'search.cashbackStores': 'Cashback-Shops',
+  'search.nftCollections': 'NFT-Sammlungen',
+  'search.contacts': 'Kontakte',
   'search.noResults': 'Keine Ergebnisse gefunden',
+  'search.searching': 'Suche läuft...',
   'search.pressEsc': 'Drücke Esc zum Schließen',
 }
