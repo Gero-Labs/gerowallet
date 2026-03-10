@@ -1,5 +1,5 @@
 <template>
-  <div class="portfolio-chart-root" style="position: relative; z-index: 1; align-content: center; height: 212px">
+  <div class="portfolio-chart-root" :class="{ 'portfolio-chart-minified': isMinified }" style="position: relative; z-index: 1; align-content: center;" :style="{ height: isMinified ? 'auto' : '260px', minHeight: isMinified ? 'auto' : undefined }">
     <div v-if="isReadyToRender" class="portfolio-value-display">
       <div class="portfolio-header">
         <div class="portfolio-balance-section">
@@ -25,26 +25,51 @@
         </div>
       </div>
 
-      <!-- P&L Summary -->
-      <div v-if="totalRealizedPnl != null || totalUnrealizedPnl != null" class="d-flex align-center px-4 pb-2" style="gap: 16px">
-        <div class="pnl-item">
-          <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
-          <span
-            class="text-body-2 font-weight-medium"
-            :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
-          >
-            {{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
-          </span>
-        </div>
-        <div class="pnl-item">
-          <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
-          <span
-            class="text-body-2 font-weight-medium"
-            :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
-          >
-            {{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
-          </span>
-        </div>
+      <!-- P&L Summary — always visible with loading/empty states -->
+      <div class="pnl-row">
+        <!-- Loading state -->
+        <template v-if="pnlLoading">
+          <div class="pnl-chip pnl-loading">
+            <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
+            <span class="pnl-skeleton"></span>
+          </div>
+          <div class="pnl-chip pnl-loading">
+            <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
+            <span class="pnl-skeleton"></span>
+          </div>
+        </template>
+        <!-- Data state -->
+        <template v-else-if="totalRealizedPnl != null || totalUnrealizedPnl != null">
+          <div class="pnl-chip">
+            <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
+            <span
+              class="pnl-value"
+              :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+            >
+              {{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
+            </span>
+          </div>
+          <div class="pnl-chip">
+            <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
+            <span
+              class="pnl-value"
+              :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+            >
+              {{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
+            </span>
+          </div>
+        </template>
+        <!-- Empty state (loaded but no data) -->
+        <template v-else>
+          <div class="pnl-chip">
+            <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
+            <span class="pnl-value" style="opacity: 0.35">—</span>
+          </div>
+          <div class="pnl-chip">
+            <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
+            <span class="pnl-value" style="opacity: 0.35">—</span>
+          </div>
+        </template>
       </div>
 
       <!-- Chart Controls -->
@@ -55,7 +80,7 @@
         <!-- Right side controls group -->
         <div class="right-controls-group">
           <!-- Timeframe Pills -->
-          <div class="timeframe-pills">
+          <div v-show="!isMinified" class="timeframe-pills">
             <button
               v-for="tabItem in timeframeTabs"
               :key="tabItem.value"
@@ -67,8 +92,25 @@
             </button>
           </div>
 
+          <!-- Minify/Expand Toggle -->
+          <v-tooltip bottom>
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn
+                icon
+                x-small
+                class="ml-1"
+                v-bind="attrs"
+                v-on="on"
+                @click="toggleMinified"
+              >
+                <v-icon small>{{ isMinified ? 'mdi-arrow-expand' : 'mdi-arrow-collapse' }}</v-icon>
+              </v-btn>
+            </template>
+            <span>{{ isMinified ? $t('portfolio.expandChart') : $t('portfolio.minifyChart') }}</span>
+          </v-tooltip>
+
           <!-- Chart Options Menu -->
-          <v-menu offset-y left>
+          <v-menu v-show="!isMinified" offset-y left>
             <template v-slot:activator="{ on, attrs }">
               <v-btn
                 icon
@@ -116,7 +158,7 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="globalLoading" class="loading-container">
+    <div v-if="globalLoading && !isMinified" class="loading-container">
       <v-progress-circular indeterminate color="primary" :size="50" :width="4"></v-progress-circular>
       <div class="loading-text">{{ $t('dashboard.loadingChart') }}</div>
     </div>
@@ -124,12 +166,18 @@
     <!-- Lightweight Charts Container -->
     <div
       ref="chartContainerRef"
-      v-show="isReadyToRender"
+      v-show="isReadyToRender && !isMinified"
       class="lw-chart-container"
     ></div>
 
+    <!-- Crosshair Tooltip (positioned via direct DOM for zero-lag tracking) -->
+    <div ref="tooltipRef" v-show="!isMinified" class="chart-tooltip" style="display: none;">
+      <div class="tooltip-date"></div>
+      <div class="tooltip-value"></div>
+    </div>
+
     <!-- Empty State -->
-    <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center" class="text-center">
+    <v-card-text v-if="!hasAnyChartData && !globalLoading && !isMinified" style="font-size: 20px; align-content: center" class="text-center">
       <v-avatar size="24">
         <v-img :src="assets.walletSvg" :alt="$t('common.wallet')"></v-img>
       </v-avatar>
@@ -225,6 +273,18 @@ const props = defineProps({
     type: String,
     default: null,
   },
+  adaOnlyChartData: {
+    type: Array,
+    default: () => [],
+  },
+  adaOnlyChartDataUsd: {
+    type: Array,
+    default: () => [],
+  },
+  adaOnlyChartDataEur: {
+    type: Array,
+    default: () => [],
+  },
   adaOnlyValueAda: {
     type: Number,
     default: 0,
@@ -245,11 +305,16 @@ const props = defineProps({
     type: Number,
     default: null,
   },
+  pnlLoading: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Define emits
 const emit = defineEmits<{
   (e: 'refresh'): void;
+  (e: 'update:minified', value: boolean): void;
 }>();
 
 // Refs
@@ -258,11 +323,44 @@ const isRefreshing = ref(false);
 const portfolioMode = ref<'full' | 'ada-only'>('full');
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA);
 const selectedTimeframe = ref('WEEK');
+const isMinified = ref(localStorage.getItem('chartMinified') === 'true');
+
+// --- Minify toggle ---
+const toggleMinified = () => {
+  isMinified.value = !isMinified.value;
+  try {
+    localStorage.setItem('chartMinified', String(isMinified.value));
+  } catch {
+    // Silently fail
+  }
+  emit('update:minified', isMinified.value);
+
+  // When expanding, reinitialize the chart after DOM updates
+  if (!isMinified.value && hasAnyChartData.value) {
+    nextTick(() => {
+      setTimeout(() => {
+        if (chart) {
+          chart.applyOptions({
+            width: chartContainerRef.value?.clientWidth || 0,
+            height: chartContainerRef.value?.clientHeight || 0,
+          });
+          chart.timeScale().fitContent();
+        } else {
+          initChart();
+        }
+      }, 50);
+    });
+  }
+};
 
 // Chart instances
 let chart: IChartApi | null = null;
 let areaSeries: ISeriesApi<'Area'> | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let animationFrameId: number | null = null;
+
+// Tooltip DOM ref (direct manipulation for zero-lag tracking)
+const tooltipRef = ref<HTMLElement | null>(null);
 
 // Timeframe tabs (ordered as displayed)
 const timeframeTabs: TimeframeTab[] = [
@@ -396,14 +494,15 @@ const currentCurrencyConfig = computed(() => {
 });
 
 const activeChartData = computed(() => {
+  const isAdaOnly = portfolioMode.value === 'ada-only';
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
-      return props.chartDataUsd || [];
+      return (isAdaOnly ? props.adaOnlyChartDataUsd : props.chartDataUsd) || [];
     case CurrencyType.EUR:
-      return props.chartDataEur || [];
+      return (isAdaOnly ? props.adaOnlyChartDataEur : props.chartDataEur) || [];
     case CurrencyType.ADA:
     default:
-      return props.chartData || [];
+      return (isAdaOnly ? props.adaOnlyChartData : props.chartData) || [];
   }
 });
 
@@ -550,47 +649,66 @@ const initChart = () => {
         horzLines: { visible: false },
       },
       rightPriceScale: {
-        visible: false,
+        visible: true,
         borderVisible: false,
+        scaleMargins: { top: 0.25, bottom: 0.25 },
+        entireTextOnly: false,
+        ticksVisible: true,
+        textColor: 'rgba(255, 255, 255, 0.35)',
+        minimumWidth: 60,
       },
       timeScale: {
-        visible: false,
+        visible: true,
         borderVisible: false,
+        fixLeftEdge: true,
+        fixRightEdge: true,
       },
       crosshair: {
-        mode: 0, // CrosshairMode.Normal
+        mode: 1, // CrosshairMode.Magnet — snaps to nearest point but follows mouse smoothly
         vertLine: {
-          color: 'rgba(255, 255, 255, 0.2)',
+          color: 'rgba(255, 255, 255, 0.15)',
           width: 1,
           style: 2, // LineStyle.Dashed
           labelVisible: false,
         },
         horzLine: {
-          color: 'rgba(255, 255, 255, 0.2)',
+          color: 'rgba(255, 255, 255, 0.15)',
           width: 1,
           style: 2,
-          labelVisible: false,
+          labelVisible: true,
+          labelBackgroundColor: 'rgba(30, 34, 45, 0.9)',
         },
       },
-      handleScroll: false,
-      handleScale: false,
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
     });
 
     if (!chart) return;
 
     // Create area series with default (up) colors; will be updated in updateChartData
     areaSeries = chart.addSeries(AreaSeries, {
-      lineColor: '#47CD89',
+      lineColor: '#00c7f3',
       lineWidth: 2,
-      topColor: 'rgba(71, 205, 137, 0.3)',
-      bottomColor: 'rgba(71, 205, 137, 0)',
+      lineType: 2, // Curved (spline interpolation)
+      topColor: 'rgba(0, 199, 243, 0.3)',
+      bottomColor: 'rgba(0, 199, 243, 0)',
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 4,
       crosshairMarkerBorderColor: '#ffffff',
       crosshairMarkerBorderWidth: 2,
-      crosshairMarkerBackgroundColor: '#47CD89',
+      crosshairMarkerBackgroundColor: '#00c7f3',
       priceLineVisible: false,
       lastValueVisible: false,
+      priceFormat: {
+        type: 'custom',
+        formatter: (price: number) => {
+          if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
+          if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
+          if (price >= 1) return price.toFixed(0);
+          return price.toFixed(2);
+        },
+        minMove: 1,
+      },
     });
 
     // Set up resize observer
@@ -606,6 +724,59 @@ const initChart = () => {
       resizeObserver.observe(chartContainerRef.value);
     }
 
+    // Subscribe to crosshair move for tooltip — direct DOM for instant tracking
+    chart.subscribeCrosshairMove((param: any) => {
+      const el = tooltipRef.value;
+      if (!el) return;
+
+      if (!param.time || !param.seriesData || param.seriesData.size === 0) {
+        el.style.display = 'none';
+        return;
+      }
+
+      const data = param.seriesData.get(areaSeries);
+      if (!data || data.value === undefined) {
+        el.style.display = 'none';
+        return;
+      }
+
+      // Format date
+      const timestamp = typeof param.time === 'number' ? param.time * 1000 : 0;
+      if (timestamp > 0) {
+        const date = new Date(timestamp);
+        const dateStr = date.toLocaleDateString(undefined, {
+          month: 'short', day: 'numeric', year: 'numeric',
+        }) + ' ' + date.toLocaleTimeString(undefined, {
+          hour: '2-digit', minute: '2-digit',
+        });
+        el.children[0].textContent = dateStr;
+      }
+
+      // Format value
+      const val = data.value as number;
+      const formattedVal = val >= 1000
+        ? val.toLocaleString(undefined, { maximumFractionDigits: 0 })
+        : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      el.children[1].textContent = currentCurrencyConfig.value.symbol + formattedVal;
+
+      // Position via transform3d (GPU composited, no layout thrash)
+      if (param.point && chartContainerRef.value) {
+        const containerRect = chartContainerRef.value.getBoundingClientRect();
+        const rootEl = chartContainerRef.value.closest('.portfolio-chart-root') as HTMLElement;
+        if (rootEl) {
+          const rootRect = rootEl.getBoundingClientRect();
+          const x = param.point.x + (containerRect.left - rootRect.left);
+          const y = param.point.y + (containerRect.top - rootRect.top);
+          const tooltipWidth = 160;
+          const tx = x + 12 + tooltipWidth > rootRect.width ? x - tooltipWidth - 12 : x + 12;
+          const ty = Math.max(0, y - 20);
+          el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+        }
+      }
+
+      el.style.display = '';
+    });
+
     // Populate with data
     updateChartData();
 
@@ -614,8 +785,14 @@ const initChart = () => {
   }
 };
 
-const updateChartData = () => {
+const updateChartData = (animate = true) => {
   if (!areaSeries || !chart) return;
+
+  // Cancel any running animation
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
 
   const rawData = activeChartData.value;
   const chartData = transformData(rawData);
@@ -625,24 +802,25 @@ const updateChartData = () => {
     return;
   }
 
-  // Determine trend and apply colors
-  const trend = getTrendDirection(chartData);
-  const lineColor = trend === 'up' ? '#47CD89' : '#F97066';
-  const topColor = trend === 'up' ? 'rgba(71, 205, 137, 0.3)' : 'rgba(249, 112, 102, 0.3)';
-  const bottomColor = trend === 'up' ? 'rgba(71, 205, 137, 0)' : 'rgba(249, 112, 102, 0)';
-
+  // Always use Gero brand teal for the chart
   areaSeries.applyOptions({
-    lineColor,
-    topColor,
-    bottomColor,
-    crosshairMarkerBackgroundColor: lineColor,
+    lineColor: '#00c7f3',
+    topColor: 'rgba(0, 199, 243, 0.3)',
+    bottomColor: 'rgba(0, 199, 243, 0)',
+    crosshairMarkerBackgroundColor: '#00c7f3',
   });
 
   areaSeries.setData(chartData);
   chart.timeScale().fitContent();
+  chart.priceScale('right').applyOptions({ autoScale: true });
 };
 
 const destroyChart = () => {
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+  if (tooltipRef.value) tooltipRef.value.style.display = 'none';
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
@@ -807,16 +985,51 @@ onBeforeUnmount(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 110px;
+  height: 165px;
   width: 100%;
+  pointer-events: auto;
+  animation: chartFadeIn 0.4s ease-out;
+}
+
+@keyframes chartFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pnl-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
   pointer-events: auto;
 }
 
-.pnl-item {
+.pnl-chip {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  pointer-events: auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.pnl-value {
+  font-family: 'Roboto Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pnl-skeleton {
+  display: inline-block;
+  width: 60px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 75%);
+  background-size: 200% 100%;
+  animation: pnlShimmer 1.5s infinite;
+}
+
+@keyframes pnlShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* Portfolio Value Display — transparent to chart interaction */
@@ -892,7 +1105,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0;
   left: 16px;
-  right: 16px;
+  right: 56px; /* Clear space for chart y-axis labels */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -952,17 +1165,8 @@ onBeforeUnmount(() => {
   }
 
   .chart-controls-section {
-    position: relative;
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-end;
     left: 0;
-    right: 0;
-  }
-
-  .right-controls-group {
-    flex-direction: column;
-    gap: 6px;
+    right: 80px; /* Extra clearance for y-axis when chart is full-width */
   }
 
   .portfolio-amount {
@@ -985,6 +1189,19 @@ onBeforeUnmount(() => {
     padding: 3px 7px;
     font-size: 9px;
   }
+}
+
+/* Minified state */
+.portfolio-chart-minified .portfolio-value-display {
+  position: relative;
+}
+
+.portfolio-chart-minified .chart-controls-section {
+  position: relative;
+  left: auto;
+  right: auto;
+  padding: 0 16px;
+  justify-content: flex-end;
 }
 
 /* Refresh animation */
@@ -1026,5 +1243,36 @@ onBeforeUnmount(() => {
   50% {
     opacity: 1;
   }
+}
+
+/* Crosshair Tooltip — positioned via transform3d for GPU compositing */
+.chart-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  background: rgba(20, 24, 32, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  pointer-events: none;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  will-change: transform;
+}
+
+.tooltip-date {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 3px;
+  letter-spacing: 0.02em;
+}
+
+.tooltip-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
 }
 </style>
