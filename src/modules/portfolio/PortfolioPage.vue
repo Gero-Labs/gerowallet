@@ -77,7 +77,7 @@
                 small
                 :color="activeView === chip.value ? 'primary' : undefined"
                 :outlined="activeView !== chip.value"
-                @click="activeView = chip.value"
+                @click="setActiveView(chip.value)"
                 class="flex-shrink-0"
                 style="cursor: pointer"
               >
@@ -298,6 +298,17 @@ const {
 
 type ViewMode = 'holdings' | 'collectibles' | 'all' | 'trending' | 'gainers' | 'losers' | 'new' | 'watchlist';
 const activeView = ref<ViewMode>('holdings');
+
+function setActiveView(view: ViewMode) {
+  activeView.value = view;
+  // Sync to URL for shareable links and back/forward navigation
+  const router = instance?.proxy?.$router;
+  const currentView = instance?.proxy?.$route?.query?.view;
+  if (router && currentView !== view) {
+    router.replace({ query: { view } }).catch(() => {});
+  }
+}
+
 const searchQuery = ref('');
 const verifiedOnly = ref(false);
 const hideScam = ref(true);
@@ -579,6 +590,10 @@ const displayedTokens = computed(() => {
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
+      break;
+    case 'collectibles':
+      // Collectibles use NftCollectionTable, not MarketTokenTable
+      tokens = [];
       break;
     default:
       tokens = myHoldings.value;
