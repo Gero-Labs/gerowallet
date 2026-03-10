@@ -17,6 +17,7 @@ export interface SearchResult {
   icon?: string;
   route?: string;
   data?: any; // Original object for navigation handlers
+  _score?: number; // Relevance score for sorting (higher = better match)
 }
 
 // Module-level state (singleton pattern — shared across components)
@@ -80,6 +81,20 @@ export function useGlobalSearch() {
     else open();
   }
 
+  // ── Scoring helper ────────────────────────────────────────────────────────
+  // Returns a relevance score: exact match > starts-with > contains
+  function scoreMatch(text: string | undefined, query: string): number {
+    if (!text) return 0;
+    const t = text.toLowerCase();
+    if (t === query) return 100;           // exact match
+    if (t.startsWith(query)) return 80;    // starts with query
+    const words = t.split(/[\s\-_]+/);
+    if (words.some(w => w === query)) return 70;  // exact word match
+    if (words.some(w => w.startsWith(query))) return 60; // word starts with
+    if (t.includes(query)) return 30;      // substring
+    return 0;
+  }
+
   // ── In-memory search (instant) ──────────────────────────────────────────────
 
   function searchLocal(q: string): SearchResult[] {
@@ -101,6 +116,7 @@ export function useGlobalSearch() {
         subtitle: t.name || '',
         icon: t.img || '',
         data: t,
+        _score: Math.max(scoreMatch(t.ticker, lower), scoreMatch(t.name, lower)),
       }));
     found.push(...tokenMatches);
 
@@ -118,6 +134,7 @@ export function useGlobalSearch() {
           subtitle: tx.type || 'Transaction',
           icon: 'mdi-swap-horizontal',
           route: `/transactions?tx=${tx.id}`,
+          _score: scoreMatch(tx.id, lower),
         }));
       found.push(...txMatches);
     }
@@ -136,6 +153,7 @@ export function useGlobalSearch() {
         subtitle: `${c.quantity} NFT${c.quantity !== 1 ? 's' : ''}`,
         icon: c.img || 'mdi-image-multiple',
         data: c,
+        _score: scoreMatch(c.name, lower),
       }));
     found.push(...nftMatches);
 
@@ -155,6 +173,7 @@ export function useGlobalSearch() {
         subtitle: address.slice(0, 20) + '...',
         icon: contact.img || 'mdi-account',
         data: contact,
+        _score: scoreMatch(contact.name, lower),
       }));
     found.push(...contactMatches);
 
@@ -177,6 +196,7 @@ export function useGlobalSearch() {
             icon: 'mdi-server',
             route: `/staking?pool=${p.pool_id_bech32 || p.poolId}`,
             data: p,
+            _score: Math.max(scoreMatch(p.ticker, lower), scoreMatch(p.name, lower)),
           }));
         found.push(...poolMatches);
       }
@@ -202,6 +222,7 @@ export function useGlobalSearch() {
             icon: 'mdi-vote',
             route: `/governance?drep=${d.drep_id}`,
             data: d,
+            _score: scoreMatch(d.name, lower),
           }));
         found.push(...drepMatches);
       }
@@ -209,9 +230,21 @@ export function useGlobalSearch() {
       // governanceStore not available
     }
 
-    // 7. Settings — match against keywords index
+    // 7. Settings — match against keywords index (high priority for exact keyword matches)
     const settingMatches = SETTINGS_INDEX
-      .filter(s => s.keywords.some(kw => kw.includes(lower)) || s.title.toLowerCase().includes(lower))
+      .map(s => {
+        // Score: exact keyword match = 100, keyword starts with = 90, keyword contains = 50, title match = 40
+        let best = 0;
+        for (const kw of s.keywords) {
+          if (kw === lower) { best = Math.max(best, 100); break; }
+          if (kw.startsWith(lower)) best = Math.max(best, 90);
+          else if (kw.includes(lower)) best = Math.max(best, 50);
+        }
+        best = Math.max(best, scoreMatch(s.title, lower));
+        return { ...s, _score: best };
+      })
+      .filter(s => s._score > 0)
+      .sort((a, b) => b._score - a._score)
       .slice(0, 5)
       .map(s => ({
         type: 'setting' as const,
@@ -220,6 +253,7 @@ export function useGlobalSearch() {
         subtitle: `Settings → ${s.subtitle}`,
         icon: s.icon,
         data: { tab: s.tab, highlight: s.title },
+        _score: s._score,
       }));
     found.push(...settingMatches);
 

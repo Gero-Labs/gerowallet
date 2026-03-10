@@ -102,30 +102,27 @@ const vmProxy = getCurrentInstance()?.proxy as any;
 const searchInput = ref<any>(null);
 const selectedIndex = ref(0);
 
-// Category display order
-const categoryOrder: SearchResultType[] = ['token', 'nft', 'transaction', 'pool', 'drep', 'retailer', 'contact', 'setting'];
+// All category types for grouping labels
+const allTypes: SearchResultType[] = ['setting', 'token', 'nft', 'transaction', 'pool', 'drep', 'retailer', 'contact'];
 
-// Flat list with indices for keyboard navigation
+// Flat list sorted by relevance score, with indices for keyboard navigation
 const flatResults = computed(() => {
-  const flat: (SearchResult & { _flatIdx: number })[] = [];
-  let idx = 0;
-  for (const type of categoryOrder) {
-    for (const r of results.value.filter(r => r.type === type)) {
-      flat.push({ ...r, _flatIdx: idx++ });
-    }
-  }
-  return flat;
+  const sorted = [...results.value].sort((a, b) => (b._score || 0) - (a._score || 0));
+  return sorted.map((r, idx) => ({ ...r, _flatIdx: idx }));
 });
 
-// Group results by type (maintaining order)
+// Group results by type, ordered by highest-scoring item in each group
 const groupedResults = computed(() => {
-  const groups: { type: SearchResultType; items: (SearchResult & { _flatIdx: number })[] }[] = [];
-  for (const type of categoryOrder) {
+  const groups: { type: SearchResultType; topScore: number; items: (SearchResult & { _flatIdx: number })[] }[] = [];
+  for (const type of allTypes) {
     const items = flatResults.value.filter(r => r.type === type);
     if (items.length > 0) {
-      groups.push({ type, items });
+      const topScore = Math.max(...items.map(r => r._score || 0));
+      groups.push({ type, topScore, items });
     }
   }
+  // Sort groups: highest-scoring group first
+  groups.sort((a, b) => b.topScore - a.topScore);
   return groups;
 });
 
