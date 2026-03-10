@@ -58,7 +58,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import BaseDialog             from '@/shared/dialogs/BaseDialog.vue'
 import ContactsTab            from '@/modules/dashboard/components/ContactsTab.vue'
 import CollateralTab          from '@/modules/dashboard/components/CollateralTab.vue'
@@ -72,7 +72,7 @@ import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotificatio
 const { t } = useTranslation();
 
 // Props & Emitting
-defineProps<{ isOpen: boolean }>()
+const props = defineProps<{ isOpen: boolean; initialTab?: string }>()
 defineEmits<{ (e: 'close'): void }>()
 
 // Derive whether we've ever loaded a backup setting
@@ -104,6 +104,17 @@ const tabs = computed(() => [
   { label: t('settings.security'), value: 'security', disabled: false, badge: shouldBackup.value || hasNewSecurityFeatures.value },
   { label: t('settings.advanced'), value: 'advanced', disabled: false },
 ])
+
+// Jump to a specific tab when initialTab prop changes or dialog opens
+watch(
+  () => props.isOpen,
+  (open) => {
+    if (open && props.initialTab) {
+      const idx = tabs.value.findIndex(t => t.value === props.initialTab);
+      if (idx >= 0) tab.value = idx as any;
+    }
+  }
+);
 
 // Handle loading events from AdvancedSettingsTab
 function loadingChange(val: boolean) {

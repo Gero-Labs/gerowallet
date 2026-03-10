@@ -7,7 +7,7 @@ import { useNftMarketData } from '@/modules/market/composables/useNftMarketData'
 import blockchainApi from '@/api/blockchain-api';
 import cashbackApi from '@/api/cashback-api';
 
-export type SearchResultType = 'token' | 'transaction' | 'nft' | 'pool' | 'drep' | 'retailer' | 'contact';
+export type SearchResultType = 'token' | 'transaction' | 'nft' | 'pool' | 'drep' | 'retailer' | 'contact' | 'setting';
 
 export interface SearchResult {
   type: SearchResultType;
@@ -24,6 +24,40 @@ const isOpen = ref(false);
 const query = ref('');
 const results = ref<SearchResult[]>([]);
 const searching = ref(false);
+
+// Settings navigation — ContentLayout watches this to open SettingsDialog
+export const settingsNavRequest = ref<{ tab: string; highlight?: string } | null>(null);
+
+// Searchable settings index: [keywords, tab value, display title, icon]
+const SETTINGS_INDEX: { keywords: string[]; tab: string; title: string; subtitle: string; icon: string }[] = [
+  // Profile
+  { keywords: ['wallet name', 'rename wallet', 'edit name'], tab: 'profile', title: 'Wallet Name', subtitle: 'Profile', icon: 'mdi-pencil' },
+  { keywords: ['profile picture', 'avatar', 'wallet picture', 'photo'], tab: 'profile', title: 'Wallet Profile Picture', subtitle: 'Profile', icon: 'mdi-account-circle' },
+  { keywords: ['currency', 'usd', 'eur', 'dollar', 'euro', 'currency preference'], tab: 'profile', title: 'Currency Preference', subtitle: 'Profile', icon: 'mdi-currency-usd' },
+  { keywords: ['language', 'german', 'english', 'deutsch', 'display language', 'sprache'], tab: 'profile', title: 'Display Language', subtitle: 'Profile', icon: 'mdi-translate' },
+  { keywords: ['region'], tab: 'profile', title: 'Region', subtitle: 'Profile', icon: 'mdi-map-marker' },
+  { keywords: ['welcome guide', 'onboarding', 'tutorial'], tab: 'profile', title: 'Welcome Guide', subtitle: 'Profile', icon: 'mdi-book-open-variant' },
+  // Collateral
+  { keywords: ['collateral', 'set collateral', '5 ada'], tab: 'collateral', title: 'Collateral', subtitle: 'Collateral', icon: 'mdi-shield-lock' },
+  // Contacts
+  { keywords: ['contacts', 'address book', 'add contact', 'saved addresses'], tab: 'contacts', title: 'Contacts', subtitle: 'Contacts', icon: 'mdi-contacts' },
+  // Connected DApps
+  { keywords: ['dapps', 'connected dapps', 'connected sites', 'remove dapp', 'disconnect dapp'], tab: 'connectedDapps', title: 'Connected DApps', subtitle: 'Connected DApps', icon: 'mdi-application-brackets' },
+  // Security
+  { keywords: ['public key', 'extended public key', 'ed25519', 'xpub'], tab: 'security', title: 'Extended Public Key', subtitle: 'Security', icon: 'mdi-key' },
+  { keywords: ['recovery phrase', 'seed phrase', 'mnemonic', 'backup', 'back up'], tab: 'security', title: 'Recovery Phrase', subtitle: 'Security', icon: 'mdi-shield-key' },
+  { keywords: ['spending password', 'change password', 'spending security'], tab: 'security', title: 'Spending Security', subtitle: 'Security', icon: 'mdi-lock' },
+  { keywords: ['lock settings', 'auto lock', 'auto-lock', 'unlock method', 'pin', 'pattern'], tab: 'security', title: 'Lock Settings', subtitle: 'Security', icon: 'mdi-lock-clock' },
+  { keywords: ['passkey', 'biometric', 'webauthn', 'fingerprint', 'face id'], tab: 'security', title: 'PassKey', subtitle: 'Security', icon: 'mdi-fingerprint' },
+  { keywords: ['website protection', 'malicious', 'cardano shield', 'phishing'], tab: 'security', title: 'Website Protection', subtitle: 'Security', icon: 'mdi-shield-check' },
+  { keywords: ['two factor', '2fa', 'two-factor', 'authenticator'], tab: 'security', title: 'Two-Factor Authentication', subtitle: 'Security', icon: 'mdi-two-factor-authentication' },
+  // Advanced
+  { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn'], tab: 'advanced', title: 'Shop & Earn Popups', subtitle: 'Advanced', icon: 'mdi-shopping' },
+  { keywords: ['auto submit', 'tx auto submit', 'transaction auto'], tab: 'advanced', title: 'TX Auto Submit', subtitle: 'Advanced', icon: 'mdi-send-check' },
+  { keywords: ['popup', 'sidepanel', 'side panel', 'display mode', 'prompt'], tab: 'advanced', title: 'Prompt Display Mode', subtitle: 'Advanced', icon: 'mdi-monitor' },
+  { keywords: ['resync', 're-sync', 'sync wallet', 'refresh'], tab: 'advanced', title: 'Re-Sync Wallet', subtitle: 'Advanced', icon: 'mdi-sync' },
+  { keywords: ['delete wallet', 'remove wallet', 'danger'], tab: 'advanced', title: 'Delete Wallet', subtitle: 'Advanced', icon: 'mdi-delete' },
+];
 
 export function useGlobalSearch() {
   const { allTokens } = useMarketData();
@@ -174,6 +208,20 @@ export function useGlobalSearch() {
     } catch {
       // governanceStore not available
     }
+
+    // 7. Settings — match against keywords index
+    const settingMatches = SETTINGS_INDEX
+      .filter(s => s.keywords.some(kw => kw.includes(lower)) || s.title.toLowerCase().includes(lower))
+      .slice(0, 5)
+      .map(s => ({
+        type: 'setting' as const,
+        id: `setting-${s.tab}-${s.title}`,
+        title: s.title,
+        subtitle: `Settings → ${s.subtitle}`,
+        icon: s.icon,
+        data: { tab: s.tab, highlight: s.title },
+      }));
+    found.push(...settingMatches);
 
     return found;
   }

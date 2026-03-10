@@ -182,7 +182,7 @@
                     </v-alert>
                   </v-col>
                 </v-row>
-                <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" @close="closeDialog" />
+                <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" :initial-tab="settingsInitialTab" @close="closeDialog(); settingsInitialTab = undefined" />
                 <v-sheet class="transparent pt-2">
                   <keep-alive>
                     <router-view
@@ -239,7 +239,7 @@ import { musicStore } from '@/stores/musicStore';
 import networks from '@/utils/networks';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import GlobalSearch from '@/shared/components/GlobalSearch.vue';
-import { useGlobalSearch } from '@/shared/composables/useGlobalSearch';
+import { useGlobalSearch, settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -258,6 +258,16 @@ const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
+const settingsInitialTab = ref<string | undefined>(undefined);
+
+// Watch for settings navigation requests from Global Search
+watch(settingsNavRequest, (req) => {
+  if (req) {
+    settingsInitialTab.value = req.tab;
+    currentDialog.value = dialogs.SETTINGS;
+    settingsNavRequest.value = null;
+  }
+});
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);

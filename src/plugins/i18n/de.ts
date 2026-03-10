@@ -2273,6 +2273,7 @@ export default {
   'search.cashbackStores': 'Cashback-Shops',
   'search.nftCollections': 'NFT-Sammlungen',
   'search.contacts': 'Kontakte',
+  'search.settings': 'Einstellungen',
   'search.noResults': 'Keine Ergebnisse gefunden',
   'search.searching': 'Suche läuft...',
   'search.pressEsc': 'Drücke Esc zum Schließen',
