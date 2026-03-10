@@ -2280,12 +2280,16 @@ export default {
   'portfolio.expandChart': 'Expand chart',
 
   // Global Search
-  'search.globalPlaceholder': 'Search tokens, transactions, pools...',
+  'search.globalPlaceholder': 'Search tokens, pools, DReps, transactions...',
   'search.tokens': 'Tokens',
   'search.transactions': 'Transactions',
   'search.stakePools': 'Stake Pools',
+  'search.dreps': 'DReps',
   'search.cashbackStores': 'Cashback Stores',
+  'search.nftCollections': 'NFT Collections',
+  'search.contacts': 'Contacts',
   'search.noResults': 'No results found',
+  'search.searching': 'Searching...',
   'search.pressEsc': 'Press Esc to close',
 
   // Errors - General

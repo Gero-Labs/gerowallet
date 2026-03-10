@@ -31,81 +31,52 @@
 
       <!-- Results -->
       <div class="global-search-results" v-if="query.length >= 2">
+        <!-- Searching indicator -->
+        <div v-if="searching && flatResults.length === 0" class="text-center py-4 grey--text text--lighten-1">
+          <v-progress-circular indeterminate size="20" width="2" class="mr-2" />
+          {{ t('search.searching') }}
+        </div>
+
         <!-- No results -->
-        <div v-if="results.length === 0" class="text-center py-6 grey--text text--lighten-1">
+        <div v-else-if="flatResults.length === 0 && !searching" class="text-center py-6 grey--text text--lighten-1">
           {{ t('search.noResults') }}
         </div>
 
         <!-- Grouped results -->
         <template v-else>
-          <!-- Tokens -->
-          <div v-if="tokenResults.length > 0">
-            <div class="global-search-category-header">{{ t('search.tokens') }}</div>
-            <v-list dense class="transparent pa-0">
-              <v-list-item
-                v-for="(result, idx) in tokenResults"
-                :key="result.id"
-                :class="{ 'global-search-item-active': selectedIndex === getGlobalIndex('token', idx) }"
-                class="global-search-item"
-                @click="navigateTo(result)"
-                @mouseenter="selectedIndex = getGlobalIndex('token', idx)"
-              >
-                <v-list-item-avatar size="28" class="mr-2">
-                  <v-img v-if="result.icon && !result.icon.startsWith('mdi-')" :src="result.icon" />
-                  <v-icon v-else small>{{ result.icon || 'mdi-circle' }}</v-icon>
-                </v-list-item-avatar>
-                <v-list-item-content>
-                  <v-list-item-title class="text-body-2">{{ result.title }}</v-list-item-title>
-                  <v-list-item-subtitle class="text-caption">{{ result.subtitle }}</v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </v-list>
-          </div>
+          <template v-for="group in groupedResults">
+            <div :key="group.type + '-header'" v-if="group.items.length > 0">
+              <div class="global-search-category-header">{{ groupLabel(group.type) }}</div>
+              <v-list dense class="transparent pa-0">
+                <v-list-item
+                  v-for="result in group.items"
+                  :key="result.id"
+                  :class="{ 'global-search-item-active': selectedIndex === result._flatIdx }"
+                  class="global-search-item"
+                  @click="navigateTo(result)"
+                  @mouseenter="selectedIndex = result._flatIdx"
+                >
+                  <v-list-item-avatar size="28" class="mr-2">
+                    <v-img v-if="result.icon && !result.icon.startsWith('mdi-')" :src="result.icon" />
+                    <v-icon v-else small>{{ result.icon || 'mdi-circle' }}</v-icon>
+                  </v-list-item-avatar>
+                  <v-list-item-content>
+                    <v-list-item-title class="text-body-2" :class="{ 'monospace': result.type === 'transaction' }">
+                      {{ result.title }}
+                    </v-list-item-title>
+                    <v-list-item-subtitle class="text-caption">{{ result.subtitle }}</v-list-item-subtitle>
+                  </v-list-item-content>
+                  <v-list-item-action class="ma-0">
+                    <v-icon x-small color="grey lighten-1">mdi-chevron-right</v-icon>
+                  </v-list-item-action>
+                </v-list-item>
+              </v-list>
+            </div>
+          </template>
 
-          <!-- Transactions -->
-          <div v-if="transactionResults.length > 0">
-            <div class="global-search-category-header">{{ t('search.transactions') }}</div>
-            <v-list dense class="transparent pa-0">
-              <v-list-item
-                v-for="(result, idx) in transactionResults"
-                :key="result.id"
-                :class="{ 'global-search-item-active': selectedIndex === getGlobalIndex('transaction', idx) }"
-                class="global-search-item"
-                @click="navigateTo(result)"
-                @mouseenter="selectedIndex = getGlobalIndex('transaction', idx)"
-              >
-                <v-list-item-avatar size="28" class="mr-2">
-                  <v-icon small>{{ result.icon }}</v-icon>
-                </v-list-item-avatar>
-                <v-list-item-content>
-                  <v-list-item-title class="text-body-2 monospace">{{ result.title }}</v-list-item-title>
-                  <v-list-item-subtitle class="text-caption">{{ result.subtitle }}</v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </v-list>
-          </div>
-
-          <!-- Stake Pools -->
-          <div v-if="poolResults.length > 0">
-            <div class="global-search-category-header">{{ t('search.stakePools') }}</div>
-            <v-list dense class="transparent pa-0">
-              <v-list-item
-                v-for="(result, idx) in poolResults"
-                :key="result.id"
-                :class="{ 'global-search-item-active': selectedIndex === getGlobalIndex('pool', idx) }"
-                class="global-search-item"
-                @click="navigateTo(result)"
-                @mouseenter="selectedIndex = getGlobalIndex('pool', idx)"
-              >
-                <v-list-item-avatar size="28" class="mr-2">
-                  <v-icon small>{{ result.icon }}</v-icon>
-                </v-list-item-avatar>
-                <v-list-item-content>
-                  <v-list-item-title class="text-body-2">{{ result.title }}</v-list-item-title>
-                  <v-list-item-subtitle class="text-caption">{{ result.subtitle }}</v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </v-list>
+          <!-- Loading more from API -->
+          <div v-if="searching" class="text-center py-2">
+            <v-progress-circular indeterminate size="16" width="2" color="grey" />
           </div>
         </template>
       </div>
@@ -121,34 +92,54 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, getCurrentInstance } from 'vue';
-import { useGlobalSearch, type SearchResult } from '@/shared/composables/useGlobalSearch';
+import { useGlobalSearch, type SearchResult, type SearchResultType } from '@/shared/composables/useGlobalSearch';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
-const { isOpen, query, results, close } = useGlobalSearch();
+const { isOpen, query, results, searching, close } = useGlobalSearch();
 
 const vmProxy = getCurrentInstance()?.proxy as any;
 const searchInput = ref<any>(null);
 const selectedIndex = ref(0);
 
-// Filtered results by type
-const tokenResults = computed(() => results.value.filter(r => r.type === 'token'));
-const transactionResults = computed(() => results.value.filter(r => r.type === 'transaction'));
-const poolResults = computed(() => results.value.filter(r => r.type === 'pool'));
+// Category display order
+const categoryOrder: SearchResultType[] = ['token', 'nft', 'transaction', 'pool', 'drep', 'retailer', 'contact'];
 
-// Flat list for keyboard navigation
-const flatResults = computed(() => [
-  ...tokenResults.value,
-  ...transactionResults.value,
-  ...poolResults.value,
-]);
+// Flat list with indices for keyboard navigation
+const flatResults = computed(() => {
+  const flat: (SearchResult & { _flatIdx: number })[] = [];
+  let idx = 0;
+  for (const type of categoryOrder) {
+    for (const r of results.value.filter(r => r.type === type)) {
+      flat.push({ ...r, _flatIdx: idx++ });
+    }
+  }
+  return flat;
+});
 
-// Get global index for a result by type and local index
-function getGlobalIndex(type: string, localIdx: number): number {
-  let offset = 0;
-  if (type === 'transaction') offset = tokenResults.value.length;
-  if (type === 'pool') offset = tokenResults.value.length + transactionResults.value.length;
-  return offset + localIdx;
+// Group results by type (maintaining order)
+const groupedResults = computed(() => {
+  const groups: { type: SearchResultType; items: (SearchResult & { _flatIdx: number })[] }[] = [];
+  for (const type of categoryOrder) {
+    const items = flatResults.value.filter(r => r.type === type);
+    if (items.length > 0) {
+      groups.push({ type, items });
+    }
+  }
+  return groups;
+});
+
+function groupLabel(type: SearchResultType): string {
+  const labels: Record<SearchResultType, string> = {
+    token: t('search.tokens'),
+    transaction: t('search.transactions'),
+    nft: t('search.nftCollections'),
+    pool: t('search.stakePools'),
+    drep: t('search.dreps'),
+    retailer: t('search.cashbackStores'),
+    contact: t('search.contacts'),
+  };
+  return labels[type] || type;
 }
 
 function moveSelection(delta: number) {
@@ -165,12 +156,38 @@ function selectCurrent() {
 }
 
 function navigateTo(result: SearchResult) {
-  if (result.route && vmProxy?.$router) {
-    vmProxy.$router.push(result.route).catch(() => {
-      // Navigation duplicate or cancelled — ignore
-    });
-  }
   close();
+
+  const router = vmProxy?.$router;
+  if (!router) return;
+
+  switch (result.type) {
+    case 'token':
+      router.push({ path: '/', query: { view: 'all', token: result.id } }).catch(() => {});
+      break;
+    case 'nft':
+      router.push({ path: '/', query: { view: 'collectibles', nft: result.id } }).catch(() => {});
+      break;
+    case 'transaction':
+      router.push({ path: '/transactions', query: { tx: result.id } }).catch(() => {});
+      break;
+    case 'pool':
+      router.push({ path: '/staking', query: { pool: result.id } }).catch(() => {});
+      break;
+    case 'drep':
+      router.push({ path: '/governance', query: { drep: result.id } }).catch(() => {});
+      break;
+    case 'retailer':
+      router.push({ path: '/cashback', query: { store: result.id } }).catch(() => {});
+      break;
+    case 'contact':
+      router.push({ path: '/', query: { view: 'holdings' } }).catch(() => {});
+      break;
+    default:
+      if (result.route) {
+        router.push(result.route).catch(() => {});
+      }
+  }
 }
 
 // Reset selection when results change
