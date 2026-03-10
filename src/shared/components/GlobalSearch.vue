@@ -92,7 +92,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, getCurrentInstance } from 'vue';
-import { useGlobalSearch, type SearchResult, type SearchResultType } from '@/shared/composables/useGlobalSearch';
+import { useGlobalSearch, settingsNavRequest, type SearchResult, type SearchResultType } from '@/shared/composables/useGlobalSearch';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -103,7 +103,7 @@ const searchInput = ref<any>(null);
 const selectedIndex = ref(0);
 
 // Category display order
-const categoryOrder: SearchResultType[] = ['token', 'nft', 'transaction', 'pool', 'drep', 'retailer', 'contact'];
+const categoryOrder: SearchResultType[] = ['token', 'nft', 'transaction', 'pool', 'drep', 'retailer', 'contact', 'setting'];
 
 // Flat list with indices for keyboard navigation
 const flatResults = computed(() => {
@@ -138,6 +138,7 @@ function groupLabel(type: SearchResultType): string {
     drep: t('search.dreps'),
     retailer: t('search.cashbackStores'),
     contact: t('search.contacts'),
+    setting: t('search.settings'),
   };
   return labels[type] || type;
 }
@@ -182,6 +183,9 @@ function navigateTo(result: SearchResult) {
       break;
     case 'contact':
       router.push({ path: '/', query: { view: 'holdings' } }).catch(() => {});
+      break;
+    case 'setting':
+      settingsNavRequest.value = { tab: result.data?.tab, highlight: result.data?.highlight };
       break;
     default:
       if (result.route) {
