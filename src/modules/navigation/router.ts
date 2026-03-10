@@ -51,7 +51,7 @@ const routes = [
   },
   {
     path: '/market',
-    redirect: '/?tab=market',
+    redirect: '/?view=all',
   },
   {
     path: '/swap',
