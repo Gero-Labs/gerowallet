@@ -40,14 +40,12 @@
                 <v-app-bar flat color="transparent" style="max-height: 55px">
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
 
-                  <!-- TOKEN TICKER -->
-                  <PriceTicker
-                    :primary-color="primaryColor"
-                    :token-name="tokenName"
-                    :price-in-ada="geroPriceInAda"
-                    :price-in-usd="geroPriceInUsd"
-                    :price-in-eur="geroPriceInEur"
-                  ></PriceTicker>
+                  <!-- Global Search Field -->
+                  <div class="nav-search-field" @click="openGlobalSearch">
+                    <v-icon size="16" color="#82B4FF" class="nav-search-icon">mdi-magnify</v-icon>
+                    <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
+                    <span class="nav-search-shortcut">Ctrl+K</span>
+                  </div>
 
                   <v-spacer />
 
@@ -238,10 +236,6 @@ import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
-import { priceStore } from '@/stores/priceStore';
-import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 import networks from '@/utils/networks';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import GlobalSearch from '@/shared/components/GlobalSearch.vue';
@@ -254,67 +248,11 @@ const currentPage = computed(() => vmProxy.$route);
 const { isSyncing, connected, connecting } = toRefs(loadingState);
 const { loggedWallet, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
-const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
-const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
-const { price } = toRefs(networkStore);
-
-// Load exchange rate immediately
-loadExchangeRate();
 
 // Global search
 const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
-
-// GERO token unit
-const GERO_UNIT = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f';
-
-// Reactive GERO price fallback (used when token not in dexHunterTokens)
-const geroFallbackPrice = ref<number>(0);
-
-const geroPriceInAda = computed(() => {
-  // For Apex, we show the native token price (AP3X = 1, like ADA = 1 for Cardano)
-  if (isApex.value) {
-    return 1;
-  }
-
-  // For Cardano, show GERO token price in ADA
-  const geroToken = dexHunterTokens.value[GERO_UNIT];
-  if (geroToken?.price && geroToken.price > 0) {
-    return Number(geroToken.price);
-  }
-
-  // Fallback: Use separately fetched price if token not in wallet
-  if (geroFallbackPrice.value > 0) {
-    return geroFallbackPrice.value;
-  }
-
-  return 0;
-});
-
-const geroPriceInUsd = computed(() => {
-  // For Apex, AP3X price in USD is same as ADA price (1:1 peg assumption or oracle price)
-  if (isApex.value) {
-    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
-    return Number(adaPriceUsd.toFixed(6));
-  }
-
-  // For Cardano, calculate GERO token price in USD
-  const priceInAda = geroPriceInAda.value;
-  if (priceInAda === 0) return 0;
-
-  // Get ADA/USD price
-  const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
-  return Number((priceInAda * adaPriceUsd).toFixed(6));
-});
-
-const geroPriceInEur = computed(() => {
-  const priceInUsd = geroPriceInUsd.value;
-  if (priceInUsd === 0) return 0;
-
-  // Convert USD to EUR
-  return Number((priceInUsd * usdToEurRate.value).toFixed(6));
-});
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
@@ -323,14 +261,6 @@ const backupWalletDialog = ref(false);
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
-
-const tokenName = computed(() => {
-  if (isApex.value) {
-    // Use the currency ticker from network configuration
-    return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) || 'AP3X';
-  }
-  return 'GERO';
-});
 
 const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
@@ -431,30 +361,6 @@ watch(
   { immediate: true }
 );
 
-// Fetch GERO price even if user doesn't own the token
-const fetchGeroPrice = async () => {
-  try {
-    // Only fetch for Cardano chains
-    if (isApex.value) return;
-
-    // Check if GERO is already loaded
-    const geroToken = dexHunterTokens.value[GERO_UNIT];
-    if (geroToken?.price && geroToken.price > 0) {
-      return; // Already have the price
-    }
-
-    // Import dexHunterApi directly to fetch price in browser context
-    const dexHunterApi = await import('@/api/dexhunter-api');
-    const res = await dexHunterApi.default.mCap(GERO_UNIT);
-
-    if (res.status === 200 && res.data?.price) {
-      geroFallbackPrice.value = Number(res.data.price);
-    }
-  } catch (error) {
-    console.warn('Failed to fetch GERO price for ticker:', error);
-  }
-};
-
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
   const currentChain = loggedWallet.value?.chain;
@@ -480,9 +386,6 @@ const preloadBackgroundImage = () => {
 onMounted(async () => {
   // Ensure colors are set on mount
   updateThemeColors();
-
-  // Fetch GERO price for ticker (non-blocking)
-  fetchGeroPrice();
 
   // Preload background image after critical content
   requestIdleCallback(
@@ -684,6 +587,47 @@ div.v-toolbar__content {
 .v-dialog__content--active {
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
+}
+
+/* Search field in top nav bar */
+.nav-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(130, 180, 255, 0.08);
+  border: 1px solid rgba(130, 180, 255, 0.25);
+  cursor: pointer;
+  min-width: 180px;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  animation: nav-search-breathe 3s ease-in-out infinite;
+}
+.nav-search-field:hover {
+  background: rgba(130, 180, 255, 0.14);
+  border-color: rgba(130, 180, 255, 0.45);
+}
+.nav-search-placeholder {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-search-shortcut {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'Roboto Mono', monospace;
+  letter-spacing: 0.3px;
+}
+@keyframes nav-search-breathe {
+  0%, 100% { box-shadow: 0 0 4px rgba(130, 180, 255, 0.15); }
+  50% { box-shadow: 0 0 14px rgba(130, 180, 255, 0.35); }
 }
 
 .toolbar-icon-btn {
