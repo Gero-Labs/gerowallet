@@ -755,6 +755,28 @@ watch(
   },
   { immediate: true }
 );
+
+// Handle /?token=<unit> deep-link (e.g. from Global Search)
+watch(
+  () => instance?.proxy?.$route?.query?.token,
+  (unit) => {
+    if (unit && typeof unit === 'string') {
+      openTokenByUnit(unit);
+    }
+  },
+  { immediate: true }
+);
+
+// Handle /?nft=<policyId> deep-link
+watch(
+  () => instance?.proxy?.$route?.query?.nft,
+  (policyId) => {
+    if (policyId && typeof policyId === 'string') {
+      openNftCollection(policyId);
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>
