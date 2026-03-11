@@ -486,7 +486,10 @@ function formatCompact(value: number): string {
 
 function openExplorer() {
   const fingerprint = props.token.fingerprint;
-  window.open(`https://cardanoscan.io/token/${fingerprint}`, '_blank', 'noopener,noreferrer');
+  const url = isApex.value
+    ? `https://apexscan.org/en/token/${fingerprint}`
+    : `https://cardanoscan.io/token/${fingerprint}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 // Reset timeframe and reload candles when token changes

@@ -1,4 +1,4 @@
-import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef, type WatchStopHandle } from 'vue';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { xerberusStore } from '@/stores/xerberusStore';
@@ -345,20 +345,24 @@ function getTokenByUnit(unit: string): MarketToken | undefined {
 
 // --- Cleanup ---
 
+let chainWatcherStop: WatchStopHandle | null = null;
+let coinGeckoWatcherStop: WatchStopHandle | null = null;
+
 function cleanup(): void {
   if (refreshInterval) {
     clearInterval(refreshInterval);
     refreshInterval = null;
   }
+  if (chainWatcherStop) {
+    chainWatcherStop();
+    chainWatcherStop = null;
+  }
+  if (coinGeckoWatcherStop) {
+    coinGeckoWatcherStop();
+    coinGeckoWatcherStop = null;
+  }
   initialized = false;
-  chainWatcherRegistered = false;
-  coinGeckoWatcherRegistered = false;
 }
-
-// --- Re-fetch when wallet changes (e.g. Cardano ↔ Apex switch) ---
-
-let chainWatcherRegistered = false;
-let coinGeckoWatcherRegistered = false;
 
 // --- Composable ---
 
@@ -373,17 +377,15 @@ export function useMarketData() {
   }
 
   // Watch for wallet chain changes — re-fetch data when switching wallets
-  if (!chainWatcherRegistered) {
-    chainWatcherRegistered = true;
-    watch(() => walletStore.loggedWallet?.chain, () => {
+  if (!chainWatcherStop) {
+    chainWatcherStop = watch(() => walletStore.loggedWallet?.chain, () => {
       fetchAllTokens();
     });
   }
 
   // Watch for CoinGecko cache updates — Apex wallets depend on this data arriving async
-  if (!coinGeckoWatcherRegistered) {
-    coinGeckoWatcherRegistered = true;
-    watch(() => coinGeckoStore.cache, () => {
+  if (!coinGeckoWatcherStop) {
+    coinGeckoWatcherStop = watch(() => coinGeckoStore.cache, () => {
       const chain = walletStore.loggedWallet?.chain;
       const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
       if (isApex) fetchAllTokens();
