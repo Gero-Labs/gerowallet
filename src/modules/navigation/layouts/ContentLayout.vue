@@ -25,7 +25,7 @@
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
-                    <span v-html="$t('navigation.betaVersionNotice')"></span>
+                    {{ $t('navigation.betaVersionNoticePrefix') }} <strong>{{ $t('navigation.betaVersionNoticeBold') }}</strong>{{ $t('navigation.betaVersionNoticeSuffix') }}
                     <a
                       style="color: black; font-weight: 700"
                       href="https://chromewebstore.google.com/detail/gero-dashboard/bgpipimickeadkjlklgciifhnalhdjhe?hl=en-US&utm_source=ext_sidebar"
@@ -37,19 +37,32 @@
                 </v-col>
               </v-row>
               <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
-                <v-app-bar flat color="transparent" style="max-height: 55px">
+                <v-app-bar ref="navBarRef" flat color="transparent" style="max-height: 55px">
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
 
                   <!-- Global Search Field -->
-                  <div class="nav-search-field" @click="openGlobalSearch">
-                    <v-icon size="16" color="#82B4FF" class="nav-search-icon">mdi-magnify</v-icon>
-                    <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
-                    <span class="nav-search-shortcut">Ctrl+K</span>
-                  </div>
+                  <v-tooltip bottom :disabled="!compactNav">
+                    <template v-slot:activator="{ on, attrs }">
+                      <div
+                        ref="searchFieldRef"
+                        :class="['nav-search-field', { 'nav-search-compact': compactNav }]"
+                        @click="openGlobalSearch"
+                        v-bind="attrs"
+                        v-on="on"
+                      >
+                        <v-icon size="16" color="#82B4FF" class="nav-search-icon">mdi-magnify</v-icon>
+                        <template v-if="!compactNav">
+                          <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
+                          <span class="nav-search-shortcut">Ctrl+K</span>
+                        </template>
+                      </div>
+                    </template>
+                    <span>{{ t('search.globalPlaceholder') }} (Ctrl+K)</span>
+                  </v-tooltip>
 
                   <v-spacer />
 
-                  <QuickActionsBox />
+                  <QuickActionsBox :compact="compactNav" />
 
                   <v-spacer />
 
@@ -65,7 +78,8 @@
                   >
                     <template v-slot:activator="{ on, attrs }">
                       <div
-                        style="display: flex; align-items: center; gap: 4px; min-width: 60px"
+                        style="display: flex; align-items: center; gap: 4px"
+                        :style="{ minWidth: compactNav ? '20px' : '60px' }"
                         v-bind="attrs"
                         v-on="on"
                       >
@@ -77,8 +91,9 @@
                           {{ connected ? 'mdi-lan-connect' : connecting ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                         </v-icon>
 
-                        <!-- Small epoch progress bar -->
+                        <!-- Small epoch progress bar (hidden in compact mode) -->
                         <v-progress-linear
+                          v-if="!compactNav"
                           class="epoch-progress-liquid-glass"
                           height="8"
                           :buffer-value="epochSlotPercentage"
@@ -256,6 +271,12 @@ const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobal
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
+
+// Compact nav mode — collapse labels to icons when toolbar is narrow
+const compactNav = ref(false);
+const navBarRef = ref<any>(null);
+const searchFieldRef = ref<HTMLElement | null>(null);
+let navBarObserver: ResizeObserver | null = null;
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
 const settingsInitialTab = ref<string | undefined>(undefined);
@@ -407,10 +428,25 @@ onMounted(async () => {
 
   // Global search keyboard shortcut (Ctrl+K / Cmd+K)
   document.addEventListener('keydown', handleSearchKeydown);
+
+  // Detect when the absolutely-centered QuickActionsBox clashes with
+  // the search field or right-side icons. Uses overlap detection with
+  // estimated expanded sizes to avoid oscillation.
+  const barEl = navBarRef.value?.$el as HTMLElement | undefined;
+  if (barEl) {
+    // Known expanded element widths (measured from DOM):
+    // - Search field: ~180px, Buttons with labels: ~560px, Right icons: ~170px, Gaps: ~40px
+    const EXPANDED_CONTENT_WIDTH = 850;
+    navBarObserver = new ResizeObserver(([entry]) => {
+      compactNav.value = entry.contentRect.width < EXPANDED_CONTENT_WIDTH;
+    });
+    navBarObserver.observe(barEl);
+  }
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleSearchKeydown);
+  navBarObserver?.disconnect();
 });
 </script>
 
@@ -634,6 +670,11 @@ div.v-toolbar__content {
   padding: 1px 5px;
   font-family: 'Roboto Mono', monospace;
   letter-spacing: 0.3px;
+}
+.nav-search-compact {
+  min-width: unset !important;
+  padding: 5px 8px !important;
+  border-radius: 6px !important;
 }
 @keyframes nav-search-breathe {
   0%, 100% { box-shadow: 0 0 4px rgba(130, 180, 255, 0.15); }

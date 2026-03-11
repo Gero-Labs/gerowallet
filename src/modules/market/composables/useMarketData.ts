@@ -1,4 +1,4 @@
-import { ref, computed, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, onUnmounted, getCurrentInstance, type Ref, type ComputedRef } from 'vue';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { xerberusStore } from '@/stores/xerberusStore';
@@ -11,6 +11,7 @@ export interface MarketToken {
   verified: boolean;
   price: number;
   priceAda: number;
+  priceEur: number;
   change1h: number;
   change24h: number;
   change7d: number;
@@ -23,10 +24,12 @@ export interface MarketToken {
   isNew: boolean;
   policyLocked: boolean;
   fingerprint: string;
+  decimals: number;
   description?: string;
   // Populated when cross-referencing with wallet holdings
   balance?: number;
   value?: number;
+  allocation?: number;
   // Additional fields from API
   organicVolume24h?: number;
   dex?: string;
@@ -34,6 +37,7 @@ export interface MarketToken {
   totalPnl?: number | null;
   realizedPnl?: number | null;
   unrealizedPnl?: number | null;
+  isNative?: boolean;
 }
 
 export interface CandlestickDataPoint {
@@ -47,6 +51,7 @@ export interface CandlestickDataPoint {
 
 export interface AdaMarketData {
   priceUsd: number;
+  priceEur: number;
   priceChange24h: number;
   marketCap: number;
   volume24h: number;
@@ -61,6 +66,7 @@ const error: Ref<string | null> = ref(null);
 
 let initialized = false;
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
+let consumerCount = 0;
 
 // --- Helper: enrich API data with store data (DexHunter as fallback) ---
 
@@ -86,20 +92,22 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
     verified: apiToken.verified ?? dhToken?.verified ?? false,
     price: apiToken.priceUsd,
     priceAda: apiToken.priceAda,
+    priceEur: apiToken.priceEur ?? 0,
     change1h: apiToken.priceChange1h ?? 0,
     change24h: apiToken.priceChange24h ?? 0,
     change7d: apiToken.priceChange7d ?? 0,
-    volume24h: apiToken.volume24h || 0,
+    volume24h: apiToken.volume24h ?? 0,
     mcap: apiToken.marketCap ?? dhToken?.mcap ?? 0,
-    tvl: apiToken.tvl || null,
+    tvl: apiToken.tvl ?? null,
     liquidity: apiToken.liquidity ?? 0,
     holders: apiToken.holders ?? dhToken?.holders ?? 0,
     riskRating: xerberusRisk?.risk || null,
     isNew: apiToken.isNew ?? false,
-    policyLocked: true,
+    policyLocked: true, // TODO: get from API — hardcoded until backend provides minting policy status
     fingerprint,
-    organicVolume24h: apiToken.organicVolume24h || 0,
-    dex: apiToken.dex || undefined,
+    decimals: apiToken.decimals ?? dhToken?.decimals ?? 0,
+    organicVolume24h: apiToken.organicVolume24h ?? 0,
+    dex: apiToken.dex ?? undefined,
   };
 }
 
@@ -127,11 +135,12 @@ async function fetchAllTokens(): Promise<void> {
       verified: true,
       price: adaPrice.priceUsd,
       priceAda: 1,
+      priceEur: adaPrice.priceEur ?? 0,
       change1h: 0,
-      change24h: adaPrice.priceChange24h || 0,
+      change24h: adaPrice.priceChange24h ?? 0,
       change7d: 0,
-      volume24h: adaPrice.volume24h || 0,
-      mcap: adaPrice.marketCap || 0,
+      volume24h: adaPrice.volume24h ?? 0,
+      mcap: adaPrice.marketCap ?? 0,
       tvl: null,
       liquidity: 0,
       holders: 0,
@@ -139,6 +148,7 @@ async function fetchAllTokens(): Promise<void> {
       isNew: false,
       policyLocked: true,
       fingerprint: '',
+      decimals: 6,
     };
 
     // Remove any existing lovelace entry, then prepend ADA
@@ -148,6 +158,7 @@ async function fetchAllTokens(): Promise<void> {
     // Set adaData ref
     adaData.value = {
       priceUsd: adaPrice.priceUsd,
+      priceEur: adaPrice.priceEur || 0,
       priceChange24h: adaPrice.priceChange24h || 0,
       marketCap: adaPrice.marketCap || 0,
       volume24h: adaPrice.volume24h || 0,
@@ -162,22 +173,129 @@ async function fetchAllTokens(): Promise<void> {
 
 // --- Candles (async) ---
 
-async function getTokenCandles(unit: string, timeframe: string): Promise<CandlestickDataPoint[]> {
-  try {
-    const assetId = unit === 'lovelace' ? 'lovelace' : unit;
-    const candles: CandleResponse[] = await marketApi.getCandles(assetId, timeframe);
-    return candles.map(c => ({
-      time: c.time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-      volume: c.volume,
-    }));
-  } catch {
-    console.warn(`Market: Failed to fetch candles for ${unit} (${timeframe})`);
-    return [];
+/** Lookback durations per timeframe */
+const TIMEFRAME_LOOKBACK: Record<string, number> = {
+  '15m': 2 * 86400_000,
+  '1h': 7 * 86400_000,
+  '1d': 90 * 86400_000,
+  '1w': 365 * 86400_000,
+};
+
+/** Bucket size in seconds per timeframe (for grouping price history into candles) */
+const TIMEFRAME_BUCKET: Record<string, number> = {
+  '15m': 15 * 60,
+  '1h': 3600,
+  '1d': 86400,
+  '1w': 7 * 86400,
+};
+
+/**
+ * Build OHLCV candles from raw price history snapshots.
+ * Groups data points into time buckets matching the requested timeframe.
+ * @param priceField - which price field to use ('priceAda' or 'priceUsd')
+ */
+function buildCandlesFromHistory(
+  history: { priceAda: number; priceUsd: number; volume: number; timestamp: string }[],
+  timeframe: string,
+  priceField: 'priceAda' | 'priceUsd' = 'priceAda',
+): CandlestickDataPoint[] {
+  const bucketSize = TIMEFRAME_BUCKET[timeframe] || 3600;
+  const buckets = new Map<number, { open: number; high: number; low: number; close: number; volume: number; firstTime: number; lastTime: number }>();
+
+  for (const h of history) {
+    const price = h[priceField];
+    if (!price || price <= 0) continue;
+    const ts = Math.floor(new Date(h.timestamp).getTime() / 1000);
+    const bucketKey = Math.floor(ts / bucketSize) * bucketSize;
+    const existing = buckets.get(bucketKey);
+
+    if (!existing) {
+      buckets.set(bucketKey, {
+        open: price,
+        high: price,
+        low: price,
+        close: price,
+        volume: h.volume || 0,
+        firstTime: ts,
+        lastTime: ts,
+      });
+    } else {
+      if (ts < existing.firstTime) {
+        existing.open = price;
+        existing.firstTime = ts;
+      }
+      if (ts > existing.lastTime) {
+        existing.close = price;
+        existing.lastTime = ts;
+      }
+      if (price > existing.high) existing.high = price;
+      if (price < existing.low) existing.low = price;
+      existing.volume += h.volume || 0;
+    }
   }
+
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([time, b]) => ({
+      time,
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+      volume: b.volume,
+    }));
+}
+
+/** Map frontend timeframe values to backend resolution format (1D/1W are uppercase) */
+const RESOLUTION_MAP: Record<string, string> = {
+  '15m': '15m',
+  '1h': '1h',
+  '1d': '1D',
+  '1w': '1W',
+};
+
+async function getTokenCandles(unit: string, timeframe: string, currency?: string): Promise<CandlestickDataPoint[]> {
+  const assetId = unit === 'lovelace' ? 'lovelace' : unit;
+  const resolution = RESOLUTION_MAP[timeframe] || timeframe;
+  const to = Math.floor(Date.now() / 1000).toString();
+
+  // Try candle endpoint first (from=0 fetches all available data, matching chart.html)
+  try {
+    const candles: CandleResponse[] = await marketApi.getCandles(assetId, resolution, '0', to, currency);
+    if (candles.length > 0) {
+      return candles
+        .filter(c => c.open != null && c.close != null)
+        .map(c => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+    }
+  } catch {
+    // Candle endpoint failed — fall through to price history
+  }
+
+  // Fallback: build candles from price history snapshots
+  try {
+    const lookback = TIMEFRAME_LOOKBACK[timeframe] || 7 * 86400_000;
+    const now = new Date();
+    const from = new Date(now.getTime() - lookback).toISOString();
+    const toIso = now.toISOString();
+    const history = await marketApi.getPriceHistory(assetId, from, toIso);
+    if (history.length > 0) {
+      // Use priceUsd for USD/EUR, priceAda for ADA (EUR uses USD as base — no native EUR in history)
+      const priceField = currency === 'ada' ? 'priceAda' : 'priceUsd';
+      console.debug(`📊 Built ${history.length} price points into candles for ${assetId} (${timeframe}, ${currency || 'ada'})`);
+      return buildCandlesFromHistory(history, timeframe, priceField);
+    }
+  } catch (err) {
+    console.warn(`Market: Failed to fetch price history for ${unit} (${timeframe})`, err);
+  }
+
+  return [];
 }
 
 // --- Search & lookup ---
@@ -212,6 +330,17 @@ export function useMarketData() {
     initialized = true;
     fetchAllTokens();
     refreshInterval = setInterval(fetchAllTokens, 60_000);
+  }
+
+  // Track consumers to cleanup interval when no components are using it
+  consumerCount++;
+  if (getCurrentInstance()) {
+    onUnmounted(() => {
+      consumerCount--;
+      if (consumerCount <= 0) {
+        cleanup();
+      }
+    });
   }
 
   const trendingTokens: ComputedRef<MarketToken[]> = computed(() =>

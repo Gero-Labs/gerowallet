@@ -26,6 +26,29 @@ const query = ref('');
 const results = ref<SearchResult[]>([]);
 const searching = ref(false);
 
+// Cached retailer names for local search (loaded once, avoids API spam)
+let retailerCache: { name: string; id: string; icon: string }[] = [];
+let retailerCacheLoaded = false;
+let searchWatcherRegistered = false;
+
+async function loadRetailerCache() {
+  if (retailerCacheLoaded) return;
+  try {
+    const res = await cashbackApi.retailers(null, undefined, 0);
+    const items = res?.items || [];
+    const iconBase = res?.retailerIconBasePath || '';
+    const iconQuery = res?.iconQueryParam || '';
+    retailerCache = items.map((r: any) => ({
+      name: r.name,
+      id: r.id,
+      icon: (iconBase && r.iconPath) ? (iconBase + r.iconPath + iconQuery) : 'mdi-shopping',
+    }));
+    retailerCacheLoaded = true;
+  } catch {
+    // Silently fail — will retry next time search opens
+  }
+}
+
 // Settings navigation — ContentLayout watches this to open SettingsDialog
 export const settingsNavRequest = ref<{ tab: string; highlight?: string } | null>(null);
 
@@ -68,6 +91,8 @@ export function useGlobalSearch() {
     isOpen.value = true;
     query.value = '';
     results.value = [];
+    // Lazy-load retailer cache on first open
+    if (!retailerCacheLoaded) loadRetailerCache();
   }
 
   function close() {
@@ -79,6 +104,15 @@ export function useGlobalSearch() {
   function toggle() {
     if (isOpen.value) close();
     else open();
+  }
+
+  // ── DRep display name helper ─────────────────────────────────────────────
+  function getDRepName(d: any): string {
+    const givenName = d.metadata?.meta_json?.body?.givenName;
+    if (givenName) {
+      return givenName['@value'] || givenName;
+    }
+    return d.name || '';
   }
 
   // ── Scoring helper ────────────────────────────────────────────────────────
@@ -209,21 +243,25 @@ export function useGlobalSearch() {
       const dreps = governanceStore.dreps || [];
       if (dreps.length > 0) {
         const drepMatches = dreps
-          .filter((d: any) =>
-            d.name?.toLowerCase().includes(lower) ||
-            (lower.length >= 8 && d.drep_id?.toLowerCase().includes(lower))
-          )
+          .filter((d: any) => {
+            const name = getDRepName(d);
+            return name?.toLowerCase().includes(lower) ||
+              (lower.length >= 8 && d.drep_id?.toLowerCase().includes(lower));
+          })
           .slice(0, 5)
-          .map((d: any) => ({
-            type: 'drep' as const,
-            id: d.drep_id,
-            title: d.name || d.drep_id?.slice(0, 20) + '...',
-            subtitle: 'DRep',
-            icon: 'mdi-vote',
-            route: `/governance?drep=${d.drep_id}`,
-            data: d,
-            _score: scoreMatch(d.name, lower),
-          }));
+          .map((d: any) => {
+            const name = getDRepName(d);
+            return {
+              type: 'drep' as const,
+              id: d.drep_id,
+              title: name || d.drep_id?.slice(0, 20) + '...',
+              subtitle: 'DRep',
+              icon: 'mdi-vote',
+              route: `/governance?drep=${d.drep_id}`,
+              data: d,
+              _score: scoreMatch(name, lower),
+            };
+          });
         found.push(...drepMatches);
       }
     } catch {
@@ -257,6 +295,25 @@ export function useGlobalSearch() {
       }));
     found.push(...settingMatches);
 
+    // 8. Cashback retailers — from cached store list (no API calls)
+    if (retailerCache.length > 0) {
+      const retailerMatches = retailerCache
+        .map(r => ({ ...r, _score: scoreMatch(r.name, lower) }))
+        .filter(r => r._score > 0)
+        .sort((a, b) => b._score - a._score)
+        .slice(0, 5)
+        .map(r => ({
+          type: 'retailer' as const,
+          id: r.id,
+          title: r.name,
+          subtitle: 'Cashback Store',
+          icon: r.icon,
+          route: `/cashback?store=${r.name}`,
+          _score: r._score,
+        }));
+      found.push(...retailerMatches);
+    }
+
     return found;
   }
 
@@ -275,66 +332,43 @@ export function useGlobalSearch() {
     // Run API searches in parallel
     const apiSearches = [];
 
-    // Stake pools (if not already loaded in memory)
-    if (!stakingStore.pools?.length) {
-      apiSearches.push(
-        blockchainApi.getPoolsPaginated({ search: q, page: 1, pageSize: 5 }, chain, network)
-          .then((res: any) => {
-            const items = res?.items || [];
-            for (const p of items) {
-              found.push({
-                type: 'pool',
-                id: p.pool_id_bech32 || p.poolId,
-                title: p.ticker ? `[${p.ticker}] ${p.name}` : p.name || p.pool_id_bech32,
-                subtitle: 'Stake Pool',
-                icon: 'mdi-server',
-                route: `/staking?pool=${p.pool_id_bech32 || p.poolId}`,
-                data: p,
-              });
-            }
-          })
-          .catch(() => {})
-      );
-    }
-
-    // DReps (if not already loaded in memory)
-    if (!governanceStore.dreps?.length) {
-      apiSearches.push(
-        blockchainApi.getDRepsPaginated({ search: q, page: 1, pageSize: 5 }, chain, network)
-          .then((res: any) => {
-            const items = res?.items || [];
-            for (const d of items) {
-              found.push({
-                type: 'drep',
-                id: d.drep_id,
-                title: d.name || d.drep_id?.slice(0, 20) + '...',
-                subtitle: 'DRep',
-                icon: 'mdi-vote',
-                route: `/governance?drep=${d.drep_id}`,
-                data: d,
-              });
-            }
-          })
-          .catch(() => {})
-      );
-    }
-
-    // Cashback retailers
+    // Stake pools — always search via API (in-memory pools may be incomplete)
     apiSearches.push(
-      cashbackApi.retailers(null, q)
+      blockchainApi.getPoolsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
         .then((res: any) => {
           const items = res?.items || [];
-          const iconBase = res?.retailerIconBasePath || '';
-          const iconQuery = res?.iconQueryParam || '';
-          for (const r of items.slice(0, 5)) {
+          for (const p of items) {
             found.push({
-              type: 'retailer',
-              id: r.id,
-              title: r.name,
-              subtitle: 'Cashback Store',
-              icon: iconBase + r.iconPath + iconQuery || 'mdi-shopping',
-              route: `/cashback?store=${r.name}`,
-              data: r,
+              type: 'pool',
+              id: p.pool_id_bech32 || p.poolId,
+              title: p.ticker ? `[${p.ticker}] ${p.name}` : p.name || p.pool_id_bech32,
+              subtitle: 'Stake Pool',
+              icon: 'mdi-server',
+              route: `/staking?pool=${p.pool_id_bech32 || p.poolId}`,
+              data: p,
+              _score: Math.max(scoreMatch(p.ticker, q.toLowerCase()), scoreMatch(p.name, q.toLowerCase())),
+            });
+          }
+        })
+        .catch(() => {})
+    );
+
+    // DReps — always search via API (in-memory dreps are only the current governance page)
+    apiSearches.push(
+      blockchainApi.getDRepsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
+        .then((res: any) => {
+          const items = res?.items || [];
+          for (const d of items) {
+            const name = getDRepName(d);
+            found.push({
+              type: 'drep',
+              id: d.drep_id,
+              title: name || d.drep_id?.slice(0, 20) + '...',
+              subtitle: 'DRep',
+              icon: 'mdi-vote',
+              route: `/governance?drep=${d.drep_id}`,
+              data: d,
+              _score: scoreMatch(name, q.toLowerCase()),
             });
           }
         })
@@ -347,7 +381,11 @@ export function useGlobalSearch() {
 
   // ── Combined search ──────────────────────────────────────────────────────────
 
+  let searchGeneration = 0;
+
   async function search(q: string) {
+    const gen = ++searchGeneration;
+
     if (!q || q.length < 2) {
       results.value = [];
       searching.value = false;
@@ -363,27 +401,35 @@ export function useGlobalSearch() {
       searching.value = true;
       try {
         const remoteResults = await searchRemote(q);
-        // Merge — deduplicate by id
+        // Discard stale results if a newer search was triggered
+        if (gen !== searchGeneration) return;
+        // Merge — deduplicate by id, re-sort by relevance
         const existingIds = new Set(results.value.map(r => r.id));
         const newResults = remoteResults.filter(r => !existingIds.has(r.id));
         if (newResults.length > 0) {
-          results.value = [...results.value, ...newResults];
+          const merged = [...results.value, ...newResults];
+          merged.sort((a, b) => (b._score || 0) - (a._score || 0));
+          results.value = merged;
         }
       } catch {
         // API search failed, local results still visible
       } finally {
-        searching.value = false;
+        if (gen === searchGeneration) {
+          searching.value = false;
+        }
       }
     }
   }
 
-  // Debounced search on query change
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  watch(query, (val) => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    // Local results: fast (100ms), API results: slower (300ms handled inside search)
-    debounceTimer = setTimeout(() => search(val), 150);
-  });
+  // Debounced search on query change — register only once across all composable calls
+  if (!searchWatcherRegistered) {
+    searchWatcherRegistered = true;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    watch(query, (val) => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => search(val), 150);
+    });
+  }
 
   // Keyboard shortcut handler
   function handleKeydown(e: KeyboardEvent) {

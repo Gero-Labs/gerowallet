@@ -1,5 +1,5 @@
 <template>
-  <v-card flat class="liquid-glass-compact stat-bar mb-2" v-if="tokens.length">
+  <v-card flat class="liquid-glass-compact stat-bar mb-2" v-if="hottest.length && gainers.length && losers.length">
     <div class="stat-grid">
       <!-- Hottest column -->
       <div class="stat-col">

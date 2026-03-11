@@ -1,188 +1,206 @@
 <template>
-  <div class="portfolio-chart-root" :class="{ 'portfolio-chart-minified': isMinified }" style="position: relative; z-index: 1; align-content: center;" :style="{ height: isMinified ? 'auto' : '260px', minHeight: isMinified ? 'auto' : undefined }">
-    <div v-if="isReadyToRender" class="portfolio-value-display">
-      <div class="portfolio-header">
-        <div class="portfolio-balance-section">
+  <div class="portfolio-split-root">
+    <!-- Left Panel: Portfolio Metrics (30%) -->
+    <div class="portfolio-metrics-panel">
+      <div class="metrics-inner">
+        <!-- Header row: label + mode toggle + refresh -->
+        <div class="metrics-header-row">
           <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
-          <div class="portfolio-amount-row">
-            <div
-              class="portfolio-amount"
-              @click="toggleCurrency"
-              :class="{ clickable: availableCurrencies.length > 1 }"
-            >
-              <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
-              <OdometerCounter :value="Math.round(activePortfolioValue)" format="int" :duration="1000" :key="selectedCurrency" />
-            </div>
-            <div class="address-section" v-if="shortenAddress">
-              <CopyButton
-                :avatar="assets.walletSvg"
-                :title="shortenAddress"
-                :value="loggedWallet?.baseAddress || ''"
-                x-small
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- P&L Summary — always visible with loading/empty states -->
-      <div class="pnl-row">
-        <!-- Loading state -->
-        <template v-if="pnlLoading">
-          <div class="pnl-chip pnl-loading">
-            <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
-            <span class="pnl-skeleton"></span>
-          </div>
-          <div class="pnl-chip pnl-loading">
-            <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
-            <span class="pnl-skeleton"></span>
-          </div>
-        </template>
-        <!-- Data state -->
-        <template v-else-if="totalRealizedPnl != null || totalUnrealizedPnl != null">
-          <div class="pnl-chip">
-            <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
-            <span
-              class="pnl-value"
-              :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
-            >
-              {{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
-            </span>
-          </div>
-          <div class="pnl-chip">
-            <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
-            <span
-              class="pnl-value"
-              :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
-            >
-              {{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
-            </span>
-          </div>
-        </template>
-        <!-- Empty state (loaded but no data) -->
-        <template v-else>
-          <div class="pnl-chip">
-            <span class="text-caption text--secondary">{{ $t('market.unrealizedPnlDetail') }}</span>
-            <span class="pnl-value" style="opacity: 0.35">—</span>
-          </div>
-          <div class="pnl-chip">
-            <span class="text-caption text--secondary">{{ $t('market.realizedPnlDetail') }}</span>
-            <span class="pnl-value" style="opacity: 0.35">—</span>
-          </div>
-        </template>
-      </div>
-
-      <!-- Chart Controls -->
-      <div class="chart-controls-section">
-        <!-- Empty left side for spacing -->
-        <div></div>
-
-        <!-- Right side controls group -->
-        <div class="right-controls-group">
-          <!-- Timeframe Pills -->
-          <div v-show="!isMinified" class="timeframe-pills">
-            <button
-              v-for="tabItem in timeframeTabs"
-              :key="tabItem.value"
-              class="timeframe-pill"
-              :class="{ active: selectedTimeframe === tabItem.value }"
-              @click="handleTimeframeClick(tabItem)"
-            >
-              {{ tabItem.label }}
-            </button>
-          </div>
-
-          <!-- Minify/Expand Toggle -->
-          <v-tooltip bottom>
+          <v-spacer />
+          <v-menu v-if="!isApex" offset-y>
             <template v-slot:activator="{ on, attrs }">
-              <v-btn
-                icon
-                x-small
-                class="ml-1"
-                v-bind="attrs"
-                v-on="on"
-                @click="toggleMinified"
-              >
-                <v-icon small>{{ isMinified ? 'mdi-arrow-expand' : 'mdi-arrow-collapse' }}</v-icon>
-              </v-btn>
-            </template>
-            <span>{{ isMinified ? $t('portfolio.expandChart') : $t('portfolio.minifyChart') }}</span>
-          </v-tooltip>
-
-          <!-- Chart Options Menu -->
-          <v-menu v-show="!isMinified" offset-y left>
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn
-                icon
-                x-small
-                class="ml-2"
-                v-bind="attrs"
-                v-on="on"
-              >
-                <v-icon small>mdi-dots-vertical</v-icon>
+              <v-btn x-small text v-bind="attrs" v-on="on" class="mode-toggle-btn">
+                <v-icon x-small class="mr-1">{{ portfolioMode === 'full' ? 'mdi-chart-line' : 'mdi-circle' }}</v-icon>
+                {{ portfolioMode === 'full' ? $t('dashboard.fullPortfolio') : $t('dashboard.adaOnly') }}
               </v-btn>
             </template>
             <v-list dense>
-              <!-- Portfolio Mode Toggle (Cardano only) -->
-              <template v-if="!isApex">
-                <v-list-item @click="togglePortfolioMode">
-                  <v-list-item-icon class="mr-2">
-                    <v-icon small>{{ portfolioMode === 'full' ? 'mdi-chart-line' : 'mdi-circle' }}</v-icon>
-                  </v-list-item-icon>
-                  <v-list-item-content>
-                    <v-list-item-title>
-                      {{ portfolioMode === 'full' ? $t('dashboard.fullPortfolio') : $t('dashboard.adaOnly') }}
-                    </v-list-item-title>
-                    <v-list-item-subtitle style="font-size: 10px;">
-                      {{ portfolioMode === 'full' ? $t('dashboard.switchToAdaBalance') : $t('dashboard.switchToFullPortfolio') }}
-                    </v-list-item-subtitle>
-                  </v-list-item-content>
-                </v-list-item>
-
-                <v-divider></v-divider>
-              </template>
-
-              <!-- Refresh Button -->
-              <v-list-item @click="handleRefresh" :disabled="isRefreshing">
-                <v-list-item-icon class="mr-2">
-                  <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
-                </v-list-item-icon>
+              <v-list-item @click="togglePortfolioMode">
                 <v-list-item-content>
-                  <v-list-item-title>{{ $t('dashboard.refreshData') }}</v-list-item-title>
+                  <v-list-item-title style="font-size: 12px;">
+                    {{ portfolioMode === 'full' ? $t('dashboard.switchToAdaBalance') : $t('dashboard.switchToFullPortfolio') }}
+                  </v-list-item-title>
                 </v-list-item-content>
               </v-list-item>
             </v-list>
           </v-menu>
+          <v-btn icon x-small @click="handleRefresh" :disabled="isRefreshing">
+            <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
+          </v-btn>
+        </div>
+
+        <div
+          class="portfolio-amount"
+          @click="toggleCurrency"
+          :class="{ clickable: availableCurrencies.length > 1 }"
+        >
+          <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
+          <OdometerCounter v-if="isReadyToRender" :value="Math.round(activePortfolioValue)" format="int" :duration="1000" :key="selectedCurrency" />
+          <span v-else class="portfolio-amount-placeholder">—</span>
+        </div>
+
+        <div class="address-section" v-if="shortenAddress">
+          <CopyButton
+            :avatar="assets.walletSvg"
+            :title="shortenAddress"
+            :value="loggedWallet?.baseAddress || ''"
+            x-small
+          />
+        </div>
+
+        <v-divider class="my-1" style="opacity: 0.15" />
+
+        <!-- P&L Summary -->
+        <div class="pnl-column">
+          <!-- Loading state -->
+          <template v-if="pnlLoading">
+            <div class="pnl-item">
+              <span class="pnl-label">{{ $t('market.unrealizedPnlDetail') }}</span>
+              <span class="pnl-skeleton"></span>
+            </div>
+            <div class="pnl-item">
+              <span class="pnl-label">{{ $t('market.realizedPnlDetail') }}</span>
+              <span class="pnl-skeleton"></span>
+            </div>
+          </template>
+          <!-- Data state -->
+          <template v-else-if="totalRealizedPnl != null || totalUnrealizedPnl != null">
+            <div class="pnl-item">
+              <span class="pnl-label">{{ $t('market.unrealizedPnlDetail') }}</span>
+              <v-tooltip v-if="pnlIncomplete" bottom max-width="220">
+                <template v-slot:activator="{ on }">
+                  <span
+                    class="pnl-value"
+                    :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                    v-on="on"
+                  >
+                    ~{{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
+                  </span>
+                </template>
+                <span>{{ $t('market.pnlIncompleteHint') }}</span>
+              </v-tooltip>
+              <span
+                v-else
+                class="pnl-value"
+                :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+              >
+                {{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
+              </span>
+            </div>
+            <div class="pnl-item">
+              <span class="pnl-label">{{ $t('market.realizedPnlDetail') }}</span>
+              <v-tooltip v-if="pnlIncomplete" bottom max-width="220">
+                <template v-slot:activator="{ on }">
+                  <span
+                    class="pnl-value"
+                    :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                    v-on="on"
+                  >
+                    ~{{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
+                  </span>
+                </template>
+                <span>{{ $t('market.pnlIncompleteHint') }}</span>
+              </v-tooltip>
+              <span
+                v-else
+                class="pnl-value"
+                :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+              >
+                {{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
+              </span>
+            </div>
+          </template>
+          <!-- Empty state -->
+          <template v-else>
+            <div class="pnl-item">
+              <span class="pnl-label">{{ $t('market.unrealizedPnlDetail') }}</span>
+              <span class="pnl-value" style="opacity: 0.35">—</span>
+            </div>
+            <div class="pnl-item">
+              <span class="pnl-label">{{ $t('market.realizedPnlDetail') }}</span>
+              <span class="pnl-value" style="opacity: 0.35">—</span>
+            </div>
+          </template>
+        </div>
+
+        <v-divider class="my-1" style="opacity: 0.15" />
+
+        <!-- Staking Rewards -->
+        <div class="staking-rewards-section">
+          <template v-if="account && account.pool_id">
+            <div
+              class="pnl-item staking-reward-row"
+              :class="{ clickable: hasWithdrawableRewards }"
+              @click="hasWithdrawableRewards && $emit('withdraw-rewards')"
+            >
+              <span class="pnl-label">{{ $t('dashboard.stakingRewards') }}</span>
+              <span
+                class="pnl-value"
+                :style="{ color: hasWithdrawableRewards ? '#47CD89' : 'rgba(255,255,255,0.35)' }"
+              >
+                {{ hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' \u20B3' : '—' }}
+              </span>
+            </div>
+          </template>
+          <template v-else>
+            <div class="pnl-item">
+              <span class="pnl-label">{{ $t('dashboard.stakingRewards') }}</span>
+              <a class="stake-gero-link" @click.prevent="$emit('delegate-gero')">
+                {{ $t('dashboard.stakeWithGero') }}
+              </a>
+            </div>
+          </template>
         </div>
       </div>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="globalLoading && !isMinified" class="loading-container">
-      <v-progress-circular indeterminate color="primary" :size="50" :width="4"></v-progress-circular>
-      <div class="loading-text">{{ $t('dashboard.loadingChart') }}</div>
+    <!-- Right Panel: Chart (70%) -->
+    <div class="portfolio-chart-panel">
+      <!-- Chart Controls Bar -->
+      <div class="chart-controls-bar">
+        <div class="timeframe-pills">
+          <button
+            v-for="tabItem in timeframeTabs"
+            :key="tabItem.value"
+            class="timeframe-pill"
+            :class="{ active: selectedTimeframe === tabItem.value }"
+            @click="handleTimeframeClick(tabItem)"
+          >
+            {{ tabItem.label }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Chart Area -->
+      <div class="chart-area">
+        <!-- Loading State -->
+        <div v-if="globalLoading" class="loading-container">
+          <v-progress-circular indeterminate color="primary" :size="40" :width="3"></v-progress-circular>
+          <div class="loading-text">{{ $t('dashboard.loadingChart') }}</div>
+        </div>
+
+        <!-- Lightweight Charts Container -->
+        <div
+          ref="chartContainerRef"
+          v-show="isReadyToRender"
+          class="lw-chart-container"
+        ></div>
+
+        <!-- Crosshair Tooltip -->
+        <div ref="tooltipRef" class="chart-tooltip" style="display: none;">
+          <div class="tooltip-date"></div>
+          <div class="tooltip-value"></div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-if="!hasAnyChartData && !globalLoading" class="empty-state text-center">
+          <v-avatar size="24">
+            <v-img :src="assets.walletSvg" :alt="$t('common.wallet')"></v-img>
+          </v-avatar>
+          <span class="ml-2" style="color: rgba(255,255,255,0.5)">{{ $t('dashboard.noDataInWallet') }}</span>
+        </div>
+      </div>
     </div>
-
-    <!-- Lightweight Charts Container -->
-    <div
-      ref="chartContainerRef"
-      v-show="isReadyToRender && !isMinified"
-      class="lw-chart-container"
-    ></div>
-
-    <!-- Crosshair Tooltip (positioned via direct DOM for zero-lag tracking) -->
-    <div ref="tooltipRef" v-show="!isMinified" class="chart-tooltip" style="display: none;">
-      <div class="tooltip-date"></div>
-      <div class="tooltip-value"></div>
-    </div>
-
-    <!-- Empty State -->
-    <v-card-text v-if="!hasAnyChartData && !globalLoading && !isMinified" style="font-size: 20px; align-content: center" class="text-center">
-      <v-avatar size="24">
-        <v-img :src="assets.walletSvg" :alt="$t('common.wallet')"></v-img>
-      </v-avatar>
-      <span>{{ $t('dashboard.noDataInWallet') }}</span>
-    </v-card-text>
   </div>
 </template>
 
@@ -234,7 +252,7 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
   },
 };
 
-const { loggedWallet } = toRefs(walletStore);
+const { loggedWallet, account } = toRefs(walletStore);
 
 const props = defineProps({
   chartData: {
@@ -309,13 +327,29 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  pnlIncomplete: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Define emits
 const emit = defineEmits<{
   (e: 'refresh'): void;
-  (e: 'update:minified', value: boolean): void;
+  (e: 'timeframe-change', timeframe: string): void;
+  (e: 'withdraw-rewards'): void;
+  (e: 'delegate-gero'): void;
 }>();
+
+// Staking rewards
+const hasWithdrawableRewards = computed(() => {
+  return account.value && Number(account.value.withdrawable_amount) > 0;
+});
+
+const formatRewards = (lovelace: string | number) => {
+  const ada = Number(lovelace) / 1_000_000;
+  return ada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 // Refs
 const chartContainerRef = ref<HTMLElement | null>(null);
@@ -323,40 +357,12 @@ const isRefreshing = ref(false);
 const portfolioMode = ref<'full' | 'ada-only'>('full');
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA);
 const selectedTimeframe = ref('WEEK');
-const isMinified = ref(localStorage.getItem('chartMinified') === 'true');
-
-// --- Minify toggle ---
-const toggleMinified = () => {
-  isMinified.value = !isMinified.value;
-  try {
-    localStorage.setItem('chartMinified', String(isMinified.value));
-  } catch {
-    // Silently fail
-  }
-  emit('update:minified', isMinified.value);
-
-  // When expanding, reinitialize the chart after DOM updates
-  if (!isMinified.value && hasAnyChartData.value) {
-    nextTick(() => {
-      setTimeout(() => {
-        if (chart) {
-          chart.applyOptions({
-            width: chartContainerRef.value?.clientWidth || 0,
-            height: chartContainerRef.value?.clientHeight || 0,
-          });
-          chart.timeScale().fitContent();
-        } else {
-          initChart();
-        }
-      }, 50);
-    });
-  }
-};
 
 // Chart instances
 let chart: IChartApi | null = null;
 let areaSeries: ISeriesApi<'Area'> | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let initRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let animationFrameId: number | null = null;
 
 // Tooltip DOM ref (direct manipulation for zero-lag tracking)
@@ -379,6 +385,7 @@ const timeframeCutoffs: Record<string, number> = {
   QUARTER: 90 * 24 * 60 * 60 * 1000,
   YEAR: 365 * 24 * 60 * 60 * 1000,
 };
+
 
 // --- Portfolio mode persistence ---
 
@@ -470,14 +477,15 @@ const firstAvailableCurrency = computed(() => {
 });
 
 const globalLoading = computed(() => {
+  // Only show loading spinner when there's no data to show yet
   if (props.progressiveLoading) {
-    return props.loading || !hasAnyChartData.value;
+    return !hasAnyChartData.value;
   }
-  return props.loading;
+  return props.loading && !hasAnyChartData.value;
 });
 
 const isReadyToRender = computed(() => {
-  return hasAnyChartData.value && !globalLoading.value;
+  return hasAnyChartData.value;
 });
 
 const nativeCurrencySymbol = computed(() => {
@@ -584,16 +592,55 @@ const transformData = (rawData: any[]): AreaData<Time>[] => {
   const cutoff = timeframeCutoffs[selectedTimeframe.value];
   const cutoffTime = cutoff ? now - cutoff : 0;
 
-  // Use a Map to deduplicate by time (keep last value for duplicate timestamps)
-  const timeMap = new Map<number, number>();
-
+  // Parse and sort all valid points
+  const allPoints: { ts: number; val: number }[] = [];
   for (const point of rawData) {
     if (!Array.isArray(point) || point.length < 2) continue;
     const [ts, val] = point;
     if (typeof ts !== 'number' || typeof val !== 'number' || isNaN(ts) || isNaN(val)) continue;
-    if (cutoffTime > 0 && ts < cutoffTime) continue;
-    const timeSec = Math.floor(ts / 1000);
-    timeMap.set(timeSec, val);
+    allPoints.push({ ts, val });
+  }
+  allPoints.sort((a, b) => a.ts - b.ts);
+  if (allPoints.length === 0) return [];
+
+  // Deduplicate by second-level timestamp (keep last value per second)
+  const timeMap = new Map<number, number>();
+
+  if (cutoffTime > 0) {
+    // Find the last data point before the cutoff as the window-start anchor
+    let anchorVal: number | null = null;
+    for (const p of allPoints) {
+      if (p.ts < cutoffTime) {
+        anchorVal = p.val;
+      } else {
+        break;
+      }
+    }
+
+    // Place anchor at the window edge so the chart starts there
+    if (anchorVal !== null) {
+      timeMap.set(Math.floor(cutoffTime / 1000), anchorVal);
+    }
+
+    // Include all actual data points within the window
+    for (const p of allPoints) {
+      if (p.ts < cutoffTime) continue;
+      timeMap.set(Math.floor(p.ts / 1000), p.val);
+    }
+  } else {
+    // No cutoff — include all points
+    for (const p of allPoints) {
+      timeMap.set(Math.floor(p.ts / 1000), p.val);
+    }
+  }
+
+  // Add current portfolio value at "now" so chart extends to the present
+  // (the parent passes the live value via activePortfolioValue)
+  const nowSec = Math.floor(now / 1000);
+  if (timeMap.size > 0 && !timeMap.has(nowSec)) {
+    // Use the last data point's value as the endpoint
+    const lastVal = allPoints[allPoints.length - 1].val;
+    timeMap.set(nowSec, lastVal);
   }
 
   // Convert to sorted array
@@ -627,7 +674,7 @@ const initChart = () => {
 
   if (containerWidth === 0 || containerHeight === 0) {
     // Retry after layout reflow
-    setTimeout(() => initChart(), 100);
+    initRetryTimer = setTimeout(() => initChart(), 100);
     return;
   }
 
@@ -761,14 +808,14 @@ const initChart = () => {
 
       // Position via transform3d (GPU composited, no layout thrash)
       if (param.point && chartContainerRef.value) {
-        const containerRect = chartContainerRef.value.getBoundingClientRect();
-        const rootEl = chartContainerRef.value.closest('.portfolio-chart-root') as HTMLElement;
-        if (rootEl) {
-          const rootRect = rootEl.getBoundingClientRect();
-          const x = param.point.x + (containerRect.left - rootRect.left);
-          const y = param.point.y + (containerRect.top - rootRect.top);
+        const chartArea = chartContainerRef.value.closest('.chart-area') as HTMLElement;
+        if (chartArea) {
+          const areaRect = chartArea.getBoundingClientRect();
+          const containerRect = chartContainerRef.value.getBoundingClientRect();
+          const x = param.point.x + (containerRect.left - areaRect.left);
+          const y = param.point.y + (containerRect.top - areaRect.top);
           const tooltipWidth = 160;
-          const tx = x + 12 + tooltipWidth > rootRect.width ? x - tooltipWidth - 12 : x + 12;
+          const tx = x + 12 + tooltipWidth > areaRect.width ? x - tooltipWidth - 12 : x + 12;
           const ty = Math.max(0, y - 20);
           el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
         }
@@ -838,10 +885,22 @@ const destroyChart = () => {
 
 // --- Timeframe handling ---
 
+// Map UI timeframe values to API timeframe strings
+const uiToApiTimeframe: Record<string, string> = {
+  DAY: '24h',
+  WEEK: '7d',
+  MONTH: '30d',
+  QUARTER: '90d',
+  YEAR: '1y',
+};
+
 const handleTimeframeClick = (tabItem: TimeframeTab) => {
   selectedTimeframe.value = tabItem.value;
   saveTimeframeSetting(tabItem.value);
   updateChartData();
+  // Notify parent to fetch data at appropriate resolution for the selected timeframe
+  const apiTimeframe = uiToApiTimeframe[tabItem.value] || '1y';
+  emit('timeframe-change', apiTimeframe);
 };
 
 // --- Watchers ---
@@ -974,40 +1033,112 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (initRetryTimer) { clearTimeout(initRetryTimer); initRetryTimer = null; }
   destroyChart();
 });
 </script>
 
 <style scoped>
-/* Chart container positioned at the bottom of the 212px block */
-.lw-chart-container {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 165px;
-  width: 100%;
-  pointer-events: auto;
-  animation: chartFadeIn 0.4s ease-out;
-}
+/* ── Split Layout ─────────────────────────────────────────────────────────────── */
 
-@keyframes chartFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.pnl-row {
+.portfolio-split-root {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 16px;
-  pointer-events: auto;
-}
-
-.pnl-chip {
-  display: flex;
-  align-items: center;
   gap: 6px;
+  height: 100%;
+}
+
+/* ── Metrics Panel (Left 30%) ─────────────────────────────────────────────────── */
+
+.portfolio-metrics-panel {
+  flex: 0 0 30%;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.metrics-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.metrics-header-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.portfolio-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.portfolio-amount {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.1em;
+  transition: opacity 0.2s ease;
+  margin-bottom: 4px;
+}
+
+.portfolio-amount.clickable {
+  cursor: pointer;
+}
+
+.portfolio-amount.clickable:hover {
+  opacity: 0.8;
+}
+
+.portfolio-amount-placeholder {
+  opacity: 0.3;
+}
+
+.currency-symbol {
+  font-weight: 600;
+  margin-right: 0.1em;
+  line-height: 1;
+  display: inline-block;
+}
+
+.address-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+/* P&L items stacked vertically */
+.pnl-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pnl-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.pnl-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
 }
 
 .pnl-value {
@@ -1015,6 +1146,7 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .pnl-skeleton {
@@ -1032,93 +1164,63 @@ onBeforeUnmount(() => {
   100% { background-position: -200% 0; }
 }
 
-/* Portfolio Value Display — transparent to chart interaction */
-.portfolio-value-display {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
-  pointer-events: none;
+.staking-reward-row.clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s ease;
 }
 
-.portfolio-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 0 16px;
+.staking-reward-row.clickable:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.portfolio-balance-section {
+.stake-gero-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--v-primary-base, #47CD89);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.stake-gero-link:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.mode-toggle-btn {
+  font-size: 10px !important;
+  letter-spacing: 0.02em;
+  text-transform: none !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  padding: 0 6px !important;
+}
+
+/* ── Chart Panel (Right 70%) ──────────────────────────────────────────────────── */
+
+.portfolio-chart-panel {
+  flex: 1 1 0%;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  position: relative;
+  overflow: hidden;
 }
 
-.portfolio-label {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 4px;
-}
-
-.portfolio-amount-row {
+.chart-controls-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.portfolio-amount {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #ffffff;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.1em;
-  transition: opacity 0.2s ease;
-}
-
-.portfolio-amount.clickable {
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.portfolio-amount.clickable:hover {
-  opacity: 0.8;
-}
-
-.currency-symbol {
-  font-weight: 600;
-  margin-right: 0.1em;
-  line-height: 1;
-  display: inline-block;
-}
-
-.address-section {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  pointer-events: auto;
-}
-
-/* Chart Controls Section */
-.chart-controls-section {
-  position: absolute;
-  top: 0;
-  left: 16px;
-  right: 56px; /* Clear space for chart y-axis labels */
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  padding: 6px 10px;
+  gap: 6px;
   z-index: 10;
-  gap: 12px;
-  pointer-events: auto;
-}
-
-/* Right side controls group */
-.right-controls-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* Timeframe Pills */
@@ -1157,65 +1259,28 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.12);
 }
 
-/* Responsive adjustments */
-@media (max-width: 960px) {
-  .portfolio-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .chart-controls-section {
-    left: 0;
-    right: 80px; /* Extra clearance for y-axis when chart is full-width */
-  }
-
-  .portfolio-amount {
-    font-size: 1.25rem;
-  }
-}
-
-@media (max-width: 600px) {
-  .portfolio-amount-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .portfolio-amount {
-    font-size: 1.125rem;
-  }
-
-  .timeframe-pill {
-    padding: 3px 7px;
-    font-size: 9px;
-  }
-}
-
-/* Minified state */
-.portfolio-chart-minified .portfolio-value-display {
+/* Chart area fills remaining space */
+.chart-area {
+  flex: 1;
   position: relative;
+  min-height: 80px;
 }
 
-.portfolio-chart-minified .chart-controls-section {
-  position: relative;
-  left: auto;
-  right: auto;
-  padding: 0 16px;
-  justify-content: flex-end;
+.lw-chart-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+  animation: chartFadeIn 0.4s ease-out;
 }
 
-/* Refresh animation */
-.rotating {
-  animation: rotate 1s linear infinite;
-}
-
-@keyframes rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+@keyframes chartFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Loading State */
@@ -1224,28 +1289,32 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 60px 20px;
-  min-height: 200px;
+  gap: 10px;
+  position: absolute;
+  inset: 0;
 }
 
 .loading-text {
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.5);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
-/* Crosshair Tooltip — positioned via transform3d for GPU compositing */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  inset: 0;
+}
+
+/* Crosshair Tooltip */
 .chart-tooltip {
   position: absolute;
   top: 0;
@@ -1274,5 +1343,49 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: #ffffff;
   font-variant-numeric: tabular-nums;
+}
+
+/* Refresh animation */
+.rotating {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .portfolio-split-root {
+    flex-direction: column;
+    height: auto;
+    min-height: auto;
+  }
+
+  .portfolio-metrics-panel {
+    flex: none;
+  }
+
+  .portfolio-chart-panel {
+    flex: none;
+    height: 180px;
+  }
+
+  .portfolio-amount {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .portfolio-amount {
+    font-size: 1.125rem;
+  }
+
+  .timeframe-pill {
+    padding: 3px 7px;
+    font-size: 9px;
+  }
 }
 </style>

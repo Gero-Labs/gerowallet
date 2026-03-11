@@ -39,9 +39,10 @@
             :loading="portfolioLoading"
             :progressive-loading="true"
             :first-loaded-currency="firstLoadedCurrency"
-            :total-realized-pnl="pnlSummary?.totalRealizedPnlAda ?? null"
-            :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
-            :pnl-loading="pnlLoading"
+            :total-realized-pnl="isMainnetCardano ? (pnlSummary?.totalRealizedPnlAda ?? null) : null"
+            :total-unrealized-pnl="isMainnetCardano ? (pnlSummary?.totalUnrealizedPnlAda ?? null) : null"
+            :pnl-incomplete="isMainnetCardano && (pnlSummary?.tokens?.some(t => t.costBasisComplete === false) ?? false)"
+            :pnl-loading="isMainnetCardano && pnlLoading"
             @refresh="refreshPortfolioChart"
             @timeframe-change="handleChartTimeframeChange"
             @withdraw-rewards="handleWithdrawRewards"
@@ -180,10 +181,9 @@
               :tokens="displayedTokens"
               :show-holdings-columns="activeView === 'holdings'"
               :show-owned-badge="activeView !== 'holdings'"
-              :loading="marketLoading"
-              :pnl-loading="pnlLoading"
+              :loading="isMainnetCardano && marketLoading"
+              :pnl-loading="isMainnetCardano && pnlLoading"
               @token-click="openToken"
-              @swap-token="openSwap"
             />
 
             <!-- Collectibles: Table view (default) -->
@@ -291,8 +291,8 @@ const columnOptions: { key: ColumnKey; label: string }[] = [
   { key: 'mcap', label: t('market.marketCap') },
   { key: 'volume24h', label: t('market.volume24h') },
   { key: 'tvl', label: t('market.tvl') },
-  { key: 'holders', label: t('market.holders') },
   { key: 'risk', label: t('market.risk') },
+  { key: 'allocation', label: t('common.allocation') },
 ];
 
 const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
@@ -325,7 +325,11 @@ const {
 
 // ── UI State ──────────────────────────────────────────────────────────────────
 
-type ViewMode = 'holdings' | 'collectibles' | 'all' | 'trending' | 'gainers' | 'losers' | 'new' | 'watchlist';
+const isMainnetCardano = computed(() =>
+  loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
+);
+
+type ViewMode = 'holdings' | 'collectibles' | 'all' | 'trending' | 'gainers' | 'losers' | 'watchlist';
 const activeView = ref<ViewMode>('holdings');
 
 // Compact chip mode — collapse labels to icons when space is tight
@@ -344,7 +348,7 @@ function setActiveView(view: ViewMode) {
 }
 
 const searchQuery = ref('');
-const verifiedOnly = ref(false);
+const verifiedOnly = ref(true);
 const hideScam = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
 const nftDialogData = ref<any>(null);
@@ -538,8 +542,8 @@ const myHoldings = computed<MarketToken[]>(() => {
 
     const value = quantity * priceUsd;
 
-    // P&L data from wallet P&L composable (not applicable for native ADA)
-    const pnl = isNativeToken ? null : getTokenPnl(unit);
+    // P&L data from wallet P&L composable (mainnet Cardano only, not applicable for native ADA)
+    const pnl = (isMainnetCardano.value && !isNativeToken) ? getTokenPnl(unit) : null;
 
     holdings.push({
       unit,
@@ -585,16 +589,23 @@ const myHoldings = computed<MarketToken[]>(() => {
 
 // ── Computed: Filter chips ─────────────────────────────────────────────────────
 
-const filterChips = computed(() => [
-  { value: 'holdings' as ViewMode, label: t('portfolio.myHoldings'), icon: 'mdi-wallet' },
-  { value: 'collectibles' as ViewMode, label: t('portfolio.collectibles'), icon: 'mdi-image-multiple' },
-  { value: 'all' as ViewMode, label: t('portfolio.all'), icon: 'mdi-view-list' },
-  { value: 'trending' as ViewMode, label: t('portfolio.trending'), icon: 'mdi-fire' },
-  { value: 'gainers' as ViewMode, label: t('portfolio.gainers'), icon: 'mdi-trending-up' },
-  { value: 'losers' as ViewMode, label: t('portfolio.losers'), icon: 'mdi-trending-down' },
-  { value: 'new' as ViewMode, label: t('portfolio.newTokens'), icon: 'mdi-new-box' },
-  { value: 'watchlist' as ViewMode, label: t('portfolio.watchlist'), icon: 'mdi-star' },
-]);
+const filterChips = computed(() => {
+  const chips = [
+    { value: 'holdings' as ViewMode, label: t('portfolio.myHoldings'), icon: 'mdi-wallet' },
+    { value: 'collectibles' as ViewMode, label: t('portfolio.collectibles'), icon: 'mdi-image-multiple' },
+  ];
+  // Market tabs only available on Cardano Mainnet
+  if (isMainnetCardano.value) {
+    chips.push(
+      { value: 'all' as ViewMode, label: t('portfolio.all'), icon: 'mdi-view-list' },
+      { value: 'trending' as ViewMode, label: t('portfolio.trending'), icon: 'mdi-fire' },
+      { value: 'gainers' as ViewMode, label: t('portfolio.gainers'), icon: 'mdi-trending-up' },
+      { value: 'losers' as ViewMode, label: t('portfolio.losers'), icon: 'mdi-trending-down' },
+      { value: 'watchlist' as ViewMode, label: t('portfolio.watchlist'), icon: 'mdi-star' },
+    );
+  }
+  return chips;
+});
 
 const watchlistedTokens = computed(() => allTokens.value.filter(tok => isWatched(tok.unit)));
 
@@ -618,9 +629,6 @@ const displayedTokens = computed(() => {
       break;
     case 'losers':
       tokens = topLosers.value;
-      break;
-    case 'new':
-      tokens = newTokens.value;
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
@@ -767,7 +775,9 @@ async function handleChartTimeframeChange(timeframe: string) {
 onMounted(() => {
   document.addEventListener('click', handleOutsideClick);
   loadExchangeRate();
-  fetchPnl();
+  if (isMainnetCardano.value) {
+    fetchPnl();
+  }
 
   // Watch chip bar width to toggle compact mode
   if (chipBarRef.value) {
@@ -828,11 +838,14 @@ watch(
   { immediate: true }
 );
 
+// Cardano unit/policyId validation — only hex characters, reasonable length
+const CARDANO_ID_RE = /^[0-9a-f]{1,120}$/i;
+
 // Handle /?token=<unit> deep-link (e.g. from Global Search)
 watch(
   () => instance?.proxy?.$route?.query?.token,
   (unit) => {
-    if (unit && typeof unit === 'string') {
+    if (unit && typeof unit === 'string' && CARDANO_ID_RE.test(unit)) {
       openTokenByUnit(unit);
     }
   },
@@ -843,7 +856,7 @@ watch(
 watch(
   () => instance?.proxy?.$route?.query?.nft,
   (policyId) => {
-    if (policyId && typeof policyId === 'string') {
+    if (policyId && typeof policyId === 'string' && CARDANO_ID_RE.test(policyId)) {
       openNftCollection(policyId);
     }
   },
