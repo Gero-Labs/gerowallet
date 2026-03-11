@@ -40,13 +40,13 @@
         <div class="stat-item">
           <span class="stat-dot buy-dot"></span>
           <span class="stat-label">{{ $t('market.buy') }}</span>
-          <span class="stat-value">{{ formatCompact(buyVolume) }} ₳</span>
+          <span class="stat-value">{{ formatCompact(buyVolume) }} {{ currencySymbol }}</span>
           <span class="stat-count">({{ buyCount }})</span>
         </div>
         <div class="stat-item">
           <span class="stat-dot sell-dot"></span>
           <span class="stat-label">{{ $t('market.sell') }}</span>
-          <span class="stat-value">{{ formatCompact(sellVolume) }} ₳</span>
+          <span class="stat-value">{{ formatCompact(sellVolume) }} {{ currencySymbol }}</span>
           <span class="stat-count">({{ sellCount }})</span>
         </div>
       </div>
@@ -58,6 +58,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import marketApi, { type SwapHistory } from '@/api/market-api';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+
+const { currencySymbol } = useNativeCurrency();
 
 const props = defineProps<{
   policyId: string;

@@ -12,8 +12,8 @@
     <!-- Pool info bar -->
     <div v-if="poolInfo" class="ob-pool-info mb-2">
       <span class="pool-name">{{ formatDexName(poolInfo.dex) }}</span>
-      <span class="pool-price">{{ formatOBPrice(poolInfo.currentPrice) }} ₳</span>
-      <span class="pool-tvl">TVL: {{ formatCompact(poolInfo.tvlAda) }} ₳</span>
+      <span class="pool-price">{{ formatOBPrice(poolInfo.currentPrice) }} {{ currencySymbol }}</span>
+      <span class="pool-tvl">TVL: {{ formatCompact(poolInfo.tvlAda) }} {{ currencySymbol }}</span>
     </div>
 
     <div v-if="loading" class="d-flex justify-center py-4">
@@ -28,9 +28,9 @@
     <template v-else>
       <!-- Column headers -->
       <div class="ob-header">
-        <span>{{ $t('market.price') }} (₳)</span>
-        <span class="text-right">{{ $t('market.size') }} (₳)</span>
-        <span class="text-right">{{ $t('market.total') }} (₳)</span>
+        <span>{{ $t('market.price') }} ({{ currencySymbol }})</span>
+        <span class="text-right">{{ $t('market.size') }} ({{ currencySymbol }})</span>
+        <span class="text-right">{{ $t('market.total') }} ({{ currencySymbol }})</span>
       </div>
 
       <!-- Asks (sell side) — highest ask at top, lowest ask near spread -->
@@ -49,7 +49,7 @@
 
       <!-- Spread -->
       <div class="ob-spread">
-        {{ $t('market.spread') }}&nbsp;&nbsp;{{ formatOBPrice(spread) }} ₳&nbsp;&nbsp;({{ spreadPercent }}%)
+        {{ $t('market.spread') }}&nbsp;&nbsp;{{ formatOBPrice(spread) }} {{ currencySymbol }}&nbsp;&nbsp;({{ spreadPercent }}%)
       </div>
 
       <!-- Bids (buy side) — highest bid near spread, lowest bid at bottom -->
@@ -73,8 +73,10 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import marketApi, { type OrderBook } from '@/api/market-api';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 
 const { t } = useTranslation();
+const { currencySymbol } = useNativeCurrency();
 
 const LOVELACE = 1_000_000;
 const MAX_ROWS = 15;

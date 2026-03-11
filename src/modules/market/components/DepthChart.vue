@@ -22,6 +22,9 @@
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { createChart, AreaSeries, type IChartApi, type SolidColor } from 'lightweight-charts';
 import marketApi, { type OrderBook } from '@/api/market-api';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+
+const { currencySymbol } = useNativeCurrency();
 
 const LOVELACE = 1_000_000;
 
@@ -135,7 +138,7 @@ function renderChart() {
     timeScale: { visible: false },
     crosshair: { mode: 0 },
     localization: {
-      priceFormatter: (price: number) => formatCompact(price) + ' ₳',
+      priceFormatter: (price: number) => formatCompact(price) + ' ' + currencySymbol.value,
     },
   });
 

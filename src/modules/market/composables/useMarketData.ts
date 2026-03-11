@@ -2,6 +2,8 @@ import { ref, computed, onUnmounted, getCurrentInstance, type Ref, type Computed
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { xerberusStore } from '@/stores/xerberusStore';
+import { walletStore } from '@/stores/walletStore';
+import networks from '@/utils/networks';
 
 export interface MarketToken {
   unit: string;
@@ -126,11 +128,13 @@ async function fetchAllTokens(): Promise<void> {
     // Map API tokens through enrichment (backend already aggregates per token)
     const tokens: MarketToken[] = allPrices.map(tp => enrichWithStores(tp));
 
-    // Build ADA token at position 0
+    // Build native token (ADA / AP3X) at position 0
+    const nativeName = networks.resolveCurrencyName(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || 'Cardano';
+    const nativeTicker = networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || 'ADA';
     const adaToken: MarketToken = {
       unit: 'lovelace',
-      name: 'Cardano',
-      ticker: 'ADA',
+      name: nativeName,
+      ticker: nativeTicker,
       img: '',
       verified: true,
       price: adaPrice.priceUsd,

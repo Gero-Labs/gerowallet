@@ -31,7 +31,7 @@
       <div class="d-flex align-center justify-space-between mb-1">
         <span class="text-caption text--secondary">{{ $t('market.amount') }}</span>
         <span class="text-caption text--secondary">
-          Bal: {{ formattedBalance }} {{ mode === 'buy' ? 'ADA' : tokenTicker }}
+          Bal: {{ formattedBalance }} {{ mode === 'buy' ? currencyTicker : tokenTicker }}
         </span>
       </div>
       <v-slider
@@ -54,7 +54,7 @@
           :placeholder="$t('market.enterAmount')"
           @input="onAmountInput"
         />
-        <span class="text-caption" style="opacity: 0.5">{{ mode === 'buy' ? 'ADA' : tokenTicker }}</span>
+        <span class="text-caption" style="opacity: 0.5">{{ mode === 'buy' ? currencyTicker : tokenTicker }}</span>
         <div class="d-flex" style="gap: 2px">
           <v-btn x-small text class="percent-btn" @click="setPercent(25)">25%</v-btn>
           <v-btn x-small text class="percent-btn" @click="setPercent(50)">50%</v-btn>
@@ -71,7 +71,7 @@
       </div>
       <div v-else-if="estimatedOutput > 0" class="text-caption">
         <span class="text--secondary">{{ $t('market.youReceive') }} ~</span>
-        <span class="font-weight-medium">{{ formatOutput(estimatedOutput) }} {{ mode === 'buy' ? tokenTicker : 'ADA' }}</span>
+        <span class="font-weight-medium">{{ formatOutput(estimatedOutput) }} {{ mode === 'buy' ? tokenTicker : currencyTicker }}</span>
       </div>
       <div v-else class="text-caption text--secondary" style="opacity: 0.4">
         {{ $t('market.enterAmount') }}
@@ -98,6 +98,7 @@
 import { ref, computed, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import dexHunterApi from '@/api/dexhunter-api';
 import DexHunterStore from '@/stores/dexHunterStore';
 import { Messaging } from '@/chrome/messaging';
@@ -117,6 +118,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useTranslation();
+const { currencyTicker } = useNativeCurrency();
 
 const mode = ref<'buy' | 'sell'>('buy');
 const slippage = ref(3);
