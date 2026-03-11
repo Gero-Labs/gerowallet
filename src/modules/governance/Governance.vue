@@ -5,10 +5,10 @@
         <v-card class="transparent" flat>
           <v-tabs v-model="tab" centered icons-and-text background-color="transparent">
             <v-tab>
-              {{ $t('governance.geroDAO') }}
+              {{ $t('governance.cardanoGovernance') }}
               <v-avatar size="24">
                 <v-img
-                  :src="assets.dao"
+                  :src="assets.cardanoSvg"
                   :style="
                     tab === 0
                       ? {
@@ -26,10 +26,10 @@
               </v-avatar>
             </v-tab>
             <v-tab>
-              {{ $t('governance.cardanoGovernance') }}
+              {{ $t('governance.geroDAO') }}
               <v-avatar size="24">
                 <v-img
-                  :src="assets.cardanoSvg"
+                  :src="assets.dao"
                   :style="
                     tab === 1
                       ? {
@@ -49,10 +49,10 @@
           </v-tabs>
           <v-tabs-items v-model="tab" class="transparent">
             <v-tab-item>
-              <DAO />
+              <CardanoGovernance />
             </v-tab-item>
             <v-tab-item>
-              <CardanoGovernance />
+              <DAO />
             </v-tab-item>
           </v-tabs-items>
         </v-card>
@@ -65,6 +65,6 @@ import assets from '@/utils/assets';
 import DAO from '@/modules/governance/components/DAO.vue';
 import CardanoGovernance from '@/modules/governance/components/CardanoGovernance.vue';
 
-const tab = ref(1);
+const tab = ref(0);
 </script>
 <style scoped></style>

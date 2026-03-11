@@ -3,10 +3,6 @@
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
-          <v-card-title class="justify-center text-center pb-8 text-h3"> {{ $t('governance.title') }} </v-card-title>
-          <v-card-subtitle class="justify-center text-center text-subtitle-1">
-            {{ $t('governance.subtitle') }}
-          </v-card-subtitle>
           <v-card-text>
             <v-row no-gutters>
               <!-- Left Column -->
@@ -97,6 +93,26 @@
                       </v-btn>
                     </div>
                   </v-card-text>
+                  <!-- CIP-0149: Compensation Status Banner -->
+                  <v-sheet
+                    v-if="currentCompensationBps && currentDRep && currentDRep.drep_id !== 'drep_always_abstain' && currentDRep.drep_id !== 'drep_always_no_confidence'"
+                    rounded="lg"
+                    color="#1a2332"
+                    class="pa-3 mt-3 d-flex align-center"
+                  >
+                    <v-icon small color="primary" class="mr-2">mdi-gift-outline</v-icon>
+                    <div>
+                      <span class="text-subtitle-2 white--text">
+                        {{ $t('governance.supportingDrep') }}
+                        <v-chip x-small color="primary" outlined class="ml-1">{{ compensationPercentDisplay }}</v-chip>
+                        {{ $t('governance.ofRewards') }}
+                      </span>
+                      <div class="text-caption text--secondary">
+                        {{ $t('governance.cip149') }}
+                      </div>
+                    </div>
+                  </v-sheet>
+
                   <v-alert
                     class="mt-4 mb-0 transparent"
                     border="left"
@@ -213,6 +229,7 @@
                       @update:items-per-page="onItemsPerPageChange"
                       no-data-text="No DReps found"
                       no-results-text="No DReps match your search"
+                      :item-class="(item) => isCurrentDRep(item.id) ? 'current-drep-row' : ''"
                     >
                       <template v-slot:[`item.name`]="{ item }">
                         <v-list-item dense class="px-0 drep-list-item" two-line>
@@ -222,6 +239,22 @@
                           <v-list-item-content class="pl-12">
                             <v-list-item-title class="drep-title">
                               <span class="font-16">{{ item.name }} </span>
+                              <v-chip
+                                v-if="isCurrentDRep(item.id)"
+                                x-small
+                                color="primary"
+                                class="ml-2"
+                                style="pointer-events: none"
+                              >
+                                <v-icon x-small left>mdi-check-circle</v-icon>
+                                {{ $t('governance.currentDelegation') }}
+                              </v-chip>
+                              <v-tooltip bottom v-if="currentCompensationBps && isCurrentDRep(item.id)">
+                                <template v-slot:activator="{ on, attrs }">
+                                  <v-icon x-small color="primary" v-bind="attrs" v-on="on" class="ml-1">mdi-gift-outline</v-icon>
+                                </template>
+                                <span>{{ $t('governance.youAreSupportingThisDrep', { percent: compensationPercentDisplay }) }}</span>
+                              </v-tooltip>
                               <template v-for="(link, index) in item.links">
                                 <v-btn
                                   icon
@@ -298,7 +331,7 @@ import governanceStoreActions from '@/stores/governanceStore';
 import networks from '@/utils/networks';
 import DRepDelegateDialog from '@/modules/governance/dialogs/DRepDelegateDialog.vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { buildCardanoTransaction, extractCip149Compensation } from '@/shared/utils/builder';
 import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
@@ -311,8 +344,14 @@ const { epochParams, tip } = toRefs(networkStore);
 
 // Governance store
 const { dreps: governanceDReps, loading: drepsLoading, paginationMeta } = toRefs(governanceStoreActions.state);
-const { currentDRep } = toRefs(governanceStoreActions.state);
+const { currentDRep, currentCompensationBps } = toRefs(governanceStoreActions.state);
 const { transactions: txs } = toRefs(walletStore);
+
+// CIP-0149: Compensation display
+const compensationPercentDisplay = computed(() => {
+  if (!currentCompensationBps.value) return '';
+  return (currentCompensationBps.value / 10).toFixed(1) + '%';
+});
 
 const currentDrepTxIsPending = computed(() => {
   const pendingTx = txs.value?.find(tx => tx.pending);
@@ -572,7 +611,14 @@ const delegate = async () => {
   delegateLoading.value = false;
 };
 
+const isCurrentDRep = (drepId: string) => {
+  return currentDRep.value && currentDRep.value.drep_id === drepId;
+};
+
 const drepDelegate = async (row: any) => {
+  // Don't allow re-delegating to the currently delegated DRep
+  if (isCurrentDRep(row.id)) return;
+
   selectedDRep.value = row;
 
   try {
@@ -697,6 +743,21 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
 
 onMounted(async () => {
   await loadDRepsPaginated(1);
+
+  // CIP-0149: Detect existing compensation from the latest vote delegation transaction
+  if (txs.value?.length > 0) {
+    const latestDelegationTx = txs.value
+      .filter(tx => !tx.pending && tx.body?.certificates?.some(
+        cert => cert.__typename === Cardano.CertificateType.VoteDelegation ||
+                cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation
+      ))
+      .sort((a, b) => (b.block_height || 0) - (a.block_height || 0))[0];
+
+    if (latestDelegationTx) {
+      const bps = extractCip149Compensation(latestDelegationTx.auxiliaryData);
+      governanceStoreActions.setCompensationBps(bps);
+    }
+  }
 });
 
 watch(
@@ -782,6 +843,15 @@ onUnmounted(() => {
 .dRepsTable {
   :is(tbody) {
     cursor: pointer;
+  }
+
+  .current-drep-row {
+    cursor: default !important;
+    opacity: 0.65;
+  }
+
+  .current-drep-row:hover {
+    background: transparent !important;
   }
 }
 </style>

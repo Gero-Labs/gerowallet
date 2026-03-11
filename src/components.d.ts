@@ -31,8 +31,10 @@ declare module 'vue' {
     VCol: typeof import('vuetify/lib')['VCol']
     VContainer: typeof import('vuetify/lib')['VContainer']
     VDataTable: typeof import('vuetify/lib')['VDataTable']
+    VDatePicker: typeof import('vuetify/lib')['VDatePicker']
     VDialog: typeof import('vuetify/lib')['VDialog']
     VDivider: typeof import('vuetify/lib')['VDivider']
+    VExpandTransition: typeof import('vuetify/lib')['VExpandTransition']
     VExpansionPanel: typeof import('vuetify/lib')['VExpansionPanel']
     VExpansionPanelContent: typeof import('vuetify/lib')['VExpansionPanelContent']
     VExpansionPanelHeader: typeof import('vuetify/lib')['VExpansionPanelHeader']
@@ -96,5 +98,7 @@ declare module 'vue' {
     VToolbarTitle: typeof import('vuetify/lib')['VToolbarTitle']
     VTooltip: typeof import('vuetify/lib')['VTooltip']
     VVirtualScroll: typeof import('vuetify/lib')['VVirtualScroll']
+    VWindow: typeof import('vuetify/lib')['VWindow']
+    VWindowItem: typeof import('vuetify/lib')['VWindowItem']
   }
 }
