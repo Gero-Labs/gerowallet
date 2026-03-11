@@ -34,8 +34,8 @@
             :portfolio-value-usd="currentPortfolioValues.usd"
             :portfolio-value-eur="currentPortfolioValues.eur"
             :ada-only-value-ada="adaBalance"
-            :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
-            :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+            :ada-only-value-usd="adaBalance * nativePriceUsd"
+            :ada-only-value-eur="adaBalance * nativePriceUsd * usdToEurRate"
             :loading="portfolioLoading"
             :progressive-loading="true"
             :first-loaded-currency="firstLoadedCurrency"
@@ -125,7 +125,7 @@
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0">
                     <v-badge
-                      :value="verifiedOnly || !hideScam || hasCustomColumns"
+                      :value="verifiedOnly || !hideScam || (!isApex && hasCustomColumns)"
                       dot
                       color="primary"
                       overlap
@@ -151,26 +151,28 @@
                     </v-list-item-action>
                     <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
                   </v-list-item>
-                  <v-divider class="my-1" />
-                  <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
-                  <v-list-item
-                    v-for="col in columnOptions"
-                    :key="col.key"
-                    @click="toggleColumn(col.key)"
-                  >
-                    <v-list-item-action class="mr-2">
-                      <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
-                        {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                      </v-icon>
-                    </v-list-item-action>
-                    <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
-                  </v-list-item>
-                  <v-divider class="my-1" />
-                  <v-list-item @click="resetToDefaults">
-                    <v-list-item-title style="font-size: 12px; color: #7c4dff;">
-                      {{ $t('market.resetColumns') }}
-                    </v-list-item-title>
-                  </v-list-item>
+                  <template v-if="!isApex">
+                    <v-divider class="my-1" />
+                    <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
+                    <v-list-item
+                      v-for="col in columnOptions"
+                      :key="col.key"
+                      @click="toggleColumn(col.key)"
+                    >
+                      <v-list-item-action class="mr-2">
+                        <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
+                          {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </v-list-item-action>
+                      <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                    </v-list-item>
+                    <v-divider class="my-1" />
+                    <v-list-item @click="resetToDefaults">
+                      <v-list-item-title style="font-size: 12px; color: #7c4dff;">
+                        {{ $t('market.resetColumns') }}
+                      </v-list-item-title>
+                    </v-list-item>
+                  </template>
                 </v-list>
               </v-menu>
             </div>
@@ -241,11 +243,13 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import { useDelegation } from '@/shared/composables/useDelegation';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { priceStore } from '@/stores/priceStore';
+import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain, Network } from '@/models/types';
 import { Cardano } from '@cardano-sdk/core';
 import { getBalance } from '@/chrome/serialization';
@@ -282,6 +286,7 @@ const {
 const { isWatched, watchlistCount } = useWatchlist();
 const { pnlSummary, pnlLoading, fetchPnl, getTokenPnl } = useWalletPnl();
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
+const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
 const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
 
 const columnOptions: { key: ColumnKey; label: string }[] = [
@@ -409,6 +414,12 @@ const collectiblesCount = computed(() => {
 
 // ── Computed: Portfolio values (ported from Dashboard.vue) ────────────────────
 
+const nativePriceUsd = computed(() => {
+  return isApex.value
+    ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
+    : (price.value?.lastPrice || 0);
+});
+
 const adaBalance = computed(() => {
   return Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
 });
@@ -464,7 +475,7 @@ const adaOnlyChartData = computed(() => {
     const balanceInAda = currentBalance / 1000000;
     const timestamp = tx.tx_timestamp * 1000;
     graphData.push([timestamp, balanceInAda]);
-    const balanceInUsd = balanceInAda * (price.value?.lastPrice || 0);
+    const balanceInUsd = balanceInAda * nativePriceUsd.value;
     usdData.push([timestamp, balanceInUsd]);
     eurData.push([timestamp, balanceInUsd * usdToEurRate.value]);
   });
@@ -475,14 +486,14 @@ const adaOnlyChartData = computed(() => {
     let currentTime = lastTxTimestamp + weekInMs;
     while (currentTime < now) {
       graphData.push([currentTime, lastBalance]);
-      const balanceUsd = lastBalance * (price.value?.lastPrice || 0);
+      const balanceUsd = lastBalance * nativePriceUsd.value;
       usdData.push([currentTime, balanceUsd]);
       eurData.push([currentTime, balanceUsd * usdToEurRate.value]);
       currentTime += weekInMs;
     }
   }
   graphData.push([now, lastBalance]);
-  const currentBalanceUsd = lastBalance * (price.value?.lastPrice || 0);
+  const currentBalanceUsd = lastBalance * nativePriceUsd.value;
   usdData.push([now, currentBalanceUsd]);
   eurData.push([now, currentBalanceUsd * usdToEurRate.value]);
   return { adaData: graphData, usdData, eurData };
@@ -504,7 +515,7 @@ const currentPortfolioValues = computed(() => {
       eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0) * usdToEurRate.value),
     };
   }
-  const totalValueUsd = computedValues.value.totalValue * (price.value?.lastPrice || 0);
+  const totalValueUsd = computedValues.value.totalValue * nativePriceUsd.value;
   return { ada: computedValues.value.totalValue, usd: totalValueUsd, eur: totalValueUsd * usdToEurRate.value };
 });
 
@@ -512,7 +523,9 @@ const currentPortfolioValues = computed(() => {
 
 const myHoldings = computed<MarketToken[]>(() => {
   const tokens = walletTokens.value || {};
-  const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  const adaPriceUsd = isApex.value
+    ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
+    : (priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0);
   const dhTokens = (dexHunterStore as any).dexHunterTokens || {};
   const holdings: MarketToken[] = [];
 
@@ -547,8 +560,8 @@ const myHoldings = computed<MarketToken[]>(() => {
 
     holdings.push({
       unit,
-      name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? 'Cardano' : unit),
-      ticker: marketToken?.ticker || token.metadata?.ticker || (isNativeToken ? 'ADA' : ''),
+      name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
+      ticker: marketToken?.ticker || token.metadata?.ticker || (isNativeToken ? nativeCurrencyTicker.value : ''),
       img: marketToken?.img || dhToken?.img || '',
       verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
       price: priceUsd,
@@ -577,10 +590,10 @@ const myHoldings = computed<MarketToken[]>(() => {
     });
   });
 
-  // Sort: ADA pinned to top, then by value descending
+  // Sort: native token pinned to top, then by value descending
   holdings.sort((a, b) => {
-    if (a.unit === 'lovelace' || a.ticker === 'ADA') return -1;
-    if (b.unit === 'lovelace' || b.ticker === 'ADA') return 1;
+    if (a.unit === 'lovelace' || a.isNative) return -1;
+    if (b.unit === 'lovelace' || b.isNative) return 1;
     return (b.value || 0) - (a.value || 0);
   });
 
@@ -672,6 +685,8 @@ const displayedTokens = computed(() => {
 let skipNextOutsideClose = false;
 
 function openToken(token: MarketToken) {
+  // No detail panel for Apex wallets — no Cardano DEX data available
+  if (isApex.value) return;
   selectedToken.value = token;
   panelOpen.value = true;
   skipNextOutsideClose = true;

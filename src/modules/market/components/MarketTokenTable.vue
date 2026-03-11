@@ -363,6 +363,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+import { Blockchain } from '@/models/types';
 
 const props = withDefaults(defineProps<{
   tokens: MarketToken[];
@@ -397,6 +398,14 @@ const { isWatched, toggleWatchlist } = useWatchlist();
 const { isColumnVisible } = useColumnPreferences();
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 const { currencySymbol: nativeSymbol } = useNativeCurrency();
+
+const isApex = computed(() => {
+  const chain = walletStore.loggedWallet?.chain;
+  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
+});
+
+// Apex wallets: fixed columns from CoinGecko (no column picker, no per-token market API)
+const APEX_ALLOWED_COLUMNS = ['rank', 'name', 'price', 'change24h', 'volume24h', 'mcap', 'balance', 'value', 'watchlist'];
 
 const sortBy = ref(props.showHoldingsColumns ? 'allocation' : 'mcap');
 const sortDesc = ref(true);
@@ -444,6 +453,8 @@ const HOLDINGS_COLUMNS = ['balance', 'value', 'avgCostBasis', 'totalPnl'];
 
 const activeHeaders = computed(() => {
   return baseHeaders.value.filter(header => {
+    // Apex wallets: fixed set of columns from CoinGecko, no column preferences
+    if (isApex.value) return APEX_ALLOWED_COLUMNS.includes(header.value);
     if (LOCKED_COLUMNS.includes(header.value)) return true;
     if (props.showHoldingsColumns && HOLDINGS_COLUMNS.includes(header.value)) return true;
     return isColumnVisible(header.value);

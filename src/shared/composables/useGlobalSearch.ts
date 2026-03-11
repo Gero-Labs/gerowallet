@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { stakingStore } from '@/stores/stakingStore';
 import { governanceStore } from '@/stores/governanceStore';
@@ -6,6 +6,7 @@ import { useMarketData, type MarketToken } from '@/modules/market/composables/us
 import { useNftMarketData } from '@/modules/market/composables/useNftMarketData';
 import blockchainApi from '@/api/blockchain-api';
 import cashbackApi from '@/api/cashback-api';
+import networks from '@/utils/networks';
 
 export type SearchResultType = 'token' | 'transaction' | 'nft' | 'pool' | 'drep' | 'retailer' | 'contact' | 'setting';
 
@@ -52,8 +53,11 @@ async function loadRetailerCache() {
 // Settings navigation — ContentLayout watches this to open SettingsDialog
 export const settingsNavRequest = ref<{ tab: string; highlight?: string } | null>(null);
 
-// Searchable settings index: [keywords, tab value, display title, icon]
-const SETTINGS_INDEX: { keywords: string[]; tab: string; title: string; subtitle: string; icon: string }[] = [
+// Searchable settings index with optional feature requirement
+// `requires`: if set, the setting only appears when the chain supports that feature
+type SettingsEntry = { keywords: string[]; tab: string; title: string; subtitle: string; icon: string; requires?: 'cashback' | 'governance' };
+
+const SETTINGS_INDEX: SettingsEntry[] = [
   // Profile
   { keywords: ['wallet name', 'rename wallet', 'edit name'], tab: 'profile', title: 'Wallet Name', subtitle: 'Profile', icon: 'mdi-pencil' },
   { keywords: ['profile picture', 'avatar', 'wallet picture', 'photo'], tab: 'profile', title: 'Wallet Profile Picture', subtitle: 'Profile', icon: 'mdi-account-circle' },
@@ -76,7 +80,7 @@ const SETTINGS_INDEX: { keywords: string[]; tab: string; title: string; subtitle
   { keywords: ['website protection', 'malicious', 'cardano shield', 'phishing'], tab: 'security', title: 'Website Protection', subtitle: 'Security', icon: 'mdi-shield-check' },
   { keywords: ['two factor', '2fa', 'two-factor', 'authenticator'], tab: 'security', title: 'Two-Factor Authentication', subtitle: 'Security', icon: 'mdi-two-factor-authentication' },
   // Advanced
-  { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn'], tab: 'advanced', title: 'Shop & Earn Popups', subtitle: 'Advanced', icon: 'mdi-shopping' },
+  { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn'], tab: 'advanced', title: 'Shop & Earn Popups', subtitle: 'Advanced', icon: 'mdi-shopping', requires: 'cashback' },
   { keywords: ['auto submit', 'tx auto submit', 'transaction auto'], tab: 'advanced', title: 'TX Auto Submit', subtitle: 'Advanced', icon: 'mdi-send-check' },
   { keywords: ['popup', 'sidepanel', 'side panel', 'display mode', 'prompt'], tab: 'advanced', title: 'Prompt Display Mode', subtitle: 'Advanced', icon: 'mdi-monitor' },
   { keywords: ['resync', 're-sync', 'sync wallet', 'refresh'], tab: 'advanced', title: 'Re-Sync Wallet', subtitle: 'Advanced', icon: 'mdi-sync' },
@@ -87,12 +91,18 @@ export function useGlobalSearch() {
   const { allTokens } = useMarketData();
   const { collections: nftCollections } = useNftMarketData();
 
+  // Resolve feature support for the active wallet's chain/network
+  const wallet = computed(() => walletStore.loggedWallet);
+  const hasCashback = computed(() => networks.resolveCashbackSupport(wallet.value?.chain, wallet.value?.network));
+  const hasGovernance = computed(() => networks.resolveGovernanceSupport(wallet.value?.chain, wallet.value?.network));
+  const hasStaking = computed(() => networks.resolveStakingSupport(wallet.value?.chain, wallet.value?.network));
+
   function open() {
     isOpen.value = true;
     query.value = '';
     results.value = [];
-    // Lazy-load retailer cache on first open
-    if (!retailerCacheLoaded) loadRetailerCache();
+    // Lazy-load retailer cache on first open (only if chain supports cashback)
+    if (!retailerCacheLoaded && hasCashback.value) loadRetailerCache();
   }
 
   function close() {
@@ -211,65 +221,76 @@ export function useGlobalSearch() {
       }));
     found.push(...contactMatches);
 
-    // 5. Stake pools — from in-memory store (may be empty if not loaded)
-    try {
-      const pools = stakingStore.pools || [];
-      if (pools.length > 0) {
-        const poolMatches = pools
-          .filter((p: any) =>
-            p.name?.toLowerCase().includes(lower) ||
-            p.ticker?.toLowerCase().includes(lower) ||
-            (lower.length >= 8 && p.pool_id_bech32?.toLowerCase().includes(lower))
-          )
-          .slice(0, 5)
-          .map((p: any) => ({
-            type: 'pool' as const,
-            id: p.pool_id_bech32 || p.poolId,
-            title: p.ticker ? `[${p.ticker}] ${p.name}` : p.name || p.pool_id_bech32,
-            subtitle: 'Stake Pool',
-            icon: 'mdi-server',
-            route: `/staking?pool=${p.pool_id_bech32 || p.poolId}`,
-            data: p,
-            _score: Math.max(scoreMatch(p.ticker, lower), scoreMatch(p.name, lower)),
-          }));
-        found.push(...poolMatches);
+    // 5. Stake pools — from in-memory store (only if chain supports staking)
+    if (hasStaking.value) {
+      try {
+        const pools = stakingStore.pools || [];
+        if (pools.length > 0) {
+          const poolMatches = pools
+            .filter((p: any) =>
+              p.name?.toLowerCase().includes(lower) ||
+              p.ticker?.toLowerCase().includes(lower) ||
+              (lower.length >= 8 && p.pool_id_bech32?.toLowerCase().includes(lower))
+            )
+            .slice(0, 5)
+            .map((p: any) => ({
+              type: 'pool' as const,
+              id: p.pool_id_bech32 || p.poolId,
+              title: p.ticker ? `[${p.ticker}] ${p.name}` : p.name || p.pool_id_bech32,
+              subtitle: 'Stake Pool',
+              icon: 'mdi-server',
+              route: `/staking?pool=${p.pool_id_bech32 || p.poolId}`,
+              data: p,
+              _score: Math.max(scoreMatch(p.ticker, lower), scoreMatch(p.name, lower)),
+            }));
+          found.push(...poolMatches);
+        }
+      } catch {
+        // stakingStore not available
       }
-    } catch {
-      // stakingStore not available
     }
 
-    // 6. DReps — from in-memory store (may be empty if not loaded)
-    try {
-      const dreps = governanceStore.dreps || [];
-      if (dreps.length > 0) {
-        const drepMatches = dreps
-          .filter((d: any) => {
-            const name = getDRepName(d);
-            return name?.toLowerCase().includes(lower) ||
-              (lower.length >= 8 && d.drep_id?.toLowerCase().includes(lower));
-          })
-          .slice(0, 5)
-          .map((d: any) => {
-            const name = getDRepName(d);
-            return {
-              type: 'drep' as const,
-              id: d.drep_id,
-              title: name || d.drep_id?.slice(0, 20) + '...',
-              subtitle: 'DRep',
-              icon: 'mdi-vote',
-              route: `/governance?drep=${d.drep_id}`,
-              data: d,
-              _score: scoreMatch(name, lower),
-            };
-          });
-        found.push(...drepMatches);
+    // 6. DReps — from in-memory store (only if chain supports governance)
+    if (hasGovernance.value) {
+      try {
+        const dreps = governanceStore.dreps || [];
+        if (dreps.length > 0) {
+          const drepMatches = dreps
+            .filter((d: any) => {
+              const name = getDRepName(d);
+              return name?.toLowerCase().includes(lower) ||
+                (lower.length >= 8 && d.drep_id?.toLowerCase().includes(lower));
+            })
+            .slice(0, 5)
+            .map((d: any) => {
+              const name = getDRepName(d);
+              return {
+                type: 'drep' as const,
+                id: d.drep_id,
+                title: name || d.drep_id?.slice(0, 20) + '...',
+                subtitle: 'DRep',
+                icon: 'mdi-vote',
+                route: `/governance?drep=${d.drep_id}`,
+                data: d,
+                _score: scoreMatch(name, lower),
+              };
+            });
+          found.push(...drepMatches);
+        }
+      } catch {
+        // governanceStore not available
       }
-    } catch {
-      // governanceStore not available
     }
 
-    // 7. Settings — match against keywords index (high priority for exact keyword matches)
+    // 7. Settings — match against keywords index, filtered by chain feature support
+    const featureSupported = (req?: string) => {
+      if (!req) return true;
+      if (req === 'cashback') return hasCashback.value;
+      if (req === 'governance') return hasGovernance.value;
+      return true;
+    };
     const settingMatches = SETTINGS_INDEX
+      .filter(s => featureSupported(s.requires))
       .map(s => {
         // Score: exact keyword match = 100, keyword starts with = 90, keyword contains = 50, title match = 40
         let best = 0;
@@ -295,8 +316,8 @@ export function useGlobalSearch() {
       }));
     found.push(...settingMatches);
 
-    // 8. Cashback retailers — from cached store list (no API calls)
-    if (retailerCache.length > 0) {
+    // 8. Cashback retailers — only if chain supports cashback
+    if (hasCashback.value && retailerCache.length > 0) {
       const retailerMatches = retailerCache
         .map(r => ({ ...r, _score: scoreMatch(r.name, lower) }))
         .filter(r => r._score > 0)
@@ -332,30 +353,33 @@ export function useGlobalSearch() {
     // Run API searches in parallel
     const apiSearches = [];
 
-    // Stake pools — always search via API (in-memory pools may be incomplete)
-    apiSearches.push(
-      blockchainApi.getPoolsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
-        .then((res: any) => {
-          const items = res?.items || [];
-          for (const p of items) {
-            found.push({
-              type: 'pool',
-              id: p.pool_id_bech32 || p.poolId,
-              title: p.ticker ? `[${p.ticker}] ${p.name}` : p.name || p.pool_id_bech32,
-              subtitle: 'Stake Pool',
-              icon: 'mdi-server',
-              route: `/staking?pool=${p.pool_id_bech32 || p.poolId}`,
-              data: p,
-              _score: Math.max(scoreMatch(p.ticker, q.toLowerCase()), scoreMatch(p.name, q.toLowerCase())),
-            });
-          }
-        })
-        .catch(() => {})
-    );
+    // Stake pools — only if chain supports staking
+    if (hasStaking.value) {
+      apiSearches.push(
+        blockchainApi.getPoolsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
+          .then((res: any) => {
+            const items = res?.items || [];
+            for (const p of items) {
+              found.push({
+                type: 'pool',
+                id: p.pool_id_bech32 || p.poolId,
+                title: p.ticker ? `[${p.ticker}] ${p.name}` : p.name || p.pool_id_bech32,
+                subtitle: 'Stake Pool',
+                icon: 'mdi-server',
+                route: `/staking?pool=${p.pool_id_bech32 || p.poolId}`,
+                data: p,
+                _score: Math.max(scoreMatch(p.ticker, q.toLowerCase()), scoreMatch(p.name, q.toLowerCase())),
+              });
+            }
+          })
+          .catch(() => {})
+      );
+    }
 
-    // DReps — always search via API (in-memory dreps are only the current governance page)
-    apiSearches.push(
-      blockchainApi.getDRepsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
+    // DReps — only if chain supports governance
+    if (hasGovernance.value) {
+      apiSearches.push(
+        blockchainApi.getDRepsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
         .then((res: any) => {
           const items = res?.items || [];
           for (const d of items) {
@@ -373,7 +397,8 @@ export function useGlobalSearch() {
           }
         })
         .catch(() => {})
-    );
+      );
+    }
 
     await Promise.allSettled(apiSearches);
     return found;
