@@ -2194,6 +2194,8 @@ export default {
   'market.tvl': 'TVL',
   'market.liquidity': 'Liquidität',
   'market.holders': 'Inhaber',
+  'market.columns': 'Spalten',
+  'market.resetColumns': 'Auf Standard zurücksetzen',
   'market.policy': 'Richtlinie',
   'market.verified': 'Verifiziert',
   'market.locked': 'Gesperrt',
@@ -2265,7 +2267,7 @@ export default {
   'portfolio.expandChart': 'Diagramm erweitern',
 
   // Global Search
-  'search.globalPlaceholder': 'Tokens, Pools, DReps, Transaktionen suchen...',
+  'search.globalPlaceholder': 'Globale Suche',
   'search.tokens': 'Tokens',
   'search.transactions': 'Transaktionen',
   'search.stakePools': 'Stake Pools',
