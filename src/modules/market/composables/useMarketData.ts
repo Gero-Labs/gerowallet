@@ -351,6 +351,8 @@ function cleanup(): void {
     refreshInterval = null;
   }
   initialized = false;
+  chainWatcherRegistered = false;
+  coinGeckoWatcherRegistered = false;
 }
 
 // --- Re-fetch when wallet changes (e.g. Cardano ↔ Apex switch) ---
@@ -365,7 +367,9 @@ export function useMarketData() {
   if (!initialized) {
     initialized = true;
     fetchAllTokens();
-    refreshInterval = setInterval(fetchAllTokens, 60_000);
+    refreshInterval = setInterval(() => {
+      if (!document.hidden) fetchAllTokens();
+    }, 60_000);
   }
 
   // Watch for wallet chain changes — re-fetch data when switching wallets

@@ -179,7 +179,7 @@ function navigateTo(result: SearchResult) {
       router.push({ path: '/cashback', query: { store: result.title } }).catch(() => {});
       break;
     case 'contact':
-      router.push({ path: '/', query: { view: 'holdings' } }).catch(() => {});
+      settingsNavRequest.value = { tab: 'contacts', highlight: result.title };
       break;
     case 'setting':
       settingsNavRequest.value = { tab: result.data?.tab, highlight: result.data?.highlight };
