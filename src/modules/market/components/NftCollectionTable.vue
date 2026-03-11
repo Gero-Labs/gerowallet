@@ -1,20 +1,13 @@
 <template>
-  <v-card flat class="liquid-glass-compact pa-3">
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between mb-2">
-      <span class="nft-title">{{ $t('portfolio.nfts') }}</span>
-      <span v-if="hasNfts" class="nft-floor-value">
-        {{ $t('portfolio.totalFloorValue') }}: {{ totalFloorValue.toFixed(2) }} &#8371;
-      </span>
-    </div>
+  <v-card flat class="transparent pa-0">
 
     <!-- Loading -->
-    <div v-if="loading" class="d-flex justify-center py-6">
+    <div v-if="loading && filteredCollections.length === 0" class="d-flex justify-center py-6">
       <v-progress-circular indeterminate size="28" color="primary" />
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="!hasNfts" class="text-center py-6" style="opacity: 0.5">
+    <div v-else-if="filteredCollections.length === 0" class="text-center py-6" style="opacity: 0.5">
       <v-icon large class="mb-2">mdi-image-off-outline</v-icon>
       <div>{{ $t('portfolio.noNftData') }}</div>
     </div>
@@ -25,16 +18,29 @@
       dense
       class="transparent nft-collection-table"
       :headers="headers"
-      :items="collections"
+      :items="filteredCollections"
       :items-per-page="-1"
       hide-default-footer
       :sort-by.sync="sortBy"
       :sort-desc.sync="sortDesc"
       :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+      @click:row="handleRowClick"
     >
-      <!-- Collection column -->
+      <!-- Rank column -->
+      <template v-slot:[`item.rank`]="{ index }">
+        <span class="mono-num" style="opacity: 0.4">{{ index + 1 }}</span>
+      </template>
+
+      <!-- Collection column (image + name) -->
       <template v-slot:[`item.policyId`]="{ item }">
-        <span class="collection-name">{{ item.name || truncatePolicyId(item.policyId) }}</span>
+        <div class="d-flex align-center">
+          <v-avatar size="28" class="mr-2" tile rounded>
+            <v-img v-if="item.img" :src="item.img" :alt="item.name" />
+            <v-icon v-else small>mdi-image-outline</v-icon>
+          </v-avatar>
+          <span class="collection-name">{{ item.name }}</span>
+          <v-chip v-if="item.isScam" x-small color="error" class="ml-1">SCAM</v-chip>
+        </div>
       </template>
 
       <!-- Held column -->
@@ -44,17 +50,26 @@
 
       <!-- Floor Price column -->
       <template v-slot:[`item.floorPriceLovelace`]="{ item }">
-        <span class="mono-num floor-price">{{ formatAda(item.floorPriceLovelace) }} &#8371;</span>
+        <span v-if="item.floorPriceLovelace != null" class="mono-num floor-price">
+          {{ formatAda(item.floorPriceLovelace) }} &#8371;
+        </span>
+        <span v-else class="mono-num" style="opacity: 0.4">—</span>
       </template>
 
       <!-- Volume column -->
       <template v-slot:[`item.totalVolumeLovelace`]="{ item }">
-        <span class="mono-num">{{ formatCompact(item.totalVolumeLovelace / 1_000_000) }} &#8371;</span>
+        <span v-if="item.totalVolumeLovelace != null" class="mono-num">
+          {{ formatCompact(item.totalVolumeLovelace / 1_000_000) }} &#8371;
+        </span>
+        <span v-else class="mono-num" style="opacity: 0.4">—</span>
       </template>
 
       <!-- Sales column -->
       <template v-slot:[`item.saleCount`]="{ item }">
-        <span class="mono-num">{{ item.saleCount.toLocaleString() }}</span>
+        <span v-if="item.saleCount != null" class="mono-num">
+          {{ item.saleCount.toLocaleString() }}
+        </span>
+        <span v-else class="mono-num" style="opacity: 0.4">—</span>
       </template>
 
       <!-- No data -->
@@ -69,17 +84,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useNftMarketData } from '@/modules/market/composables/useNftMarketData';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
-const { t } = useTranslation();
-const { collections, loading, hasNfts, totalFloorValue, fetchUserNftCollections } = useNftMarketData();
+const props = withDefaults(defineProps<{
+  hideScam?: boolean;
+}>(), {
+  hideScam: false,
+});
 
-const sortBy = ref('floorPriceLovelace');
+const emit = defineEmits<{
+  (e: 'collection-click', policyId: string): void;
+}>();
+
+const { t } = useTranslation();
+const { collections, loading, totalFloorValue, fetchUserNftCollections } = useNftMarketData();
+
+const filteredCollections = computed(() => {
+  if (!props.hideScam) return collections.value;
+  return collections.value.filter(c => !c.isScam);
+});
+
+const sortBy = ref('quantity');
 const sortDesc = ref(true);
 
 const headers = [
+  { text: '#', value: 'rank', sortable: false, width: '40px' },
   { text: t('portfolio.collection'), value: 'policyId', sortable: true },
   { text: t('portfolio.held'), value: 'quantity', sortable: true, width: '60px' },
   { text: t('portfolio.floorPrice'), value: 'floorPriceLovelace', sortable: true, width: '100px' },
@@ -91,9 +122,8 @@ onMounted(() => {
   fetchUserNftCollections();
 });
 
-function truncatePolicyId(policyId: string): string {
-  if (!policyId || policyId.length <= 16) return policyId;
-  return policyId.slice(0, 8) + '...' + policyId.slice(-8);
+function handleRowClick(item: any) {
+  emit('collection-click', item.policyId);
 }
 
 function formatAda(lovelace: number): string {
@@ -162,6 +192,10 @@ function formatCompact(value: number): string {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
   padding-top: 6px !important;
   padding-bottom: 6px !important;
+}
+
+.nft-collection-table ::v-deep tbody tr {
+  cursor: pointer;
 }
 
 .nft-collection-table ::v-deep tbody tr:hover {

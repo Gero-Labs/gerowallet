@@ -1,6 +1,6 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
 
-export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'volume24h' | 'mcap' | 'tvl' | 'holders' | 'risk';
+export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'volume24h' | 'mcap' | 'tvl' | 'holders' | 'risk' | 'allocation';
 
 export interface ColumnPreferences {
   change1h: boolean;
@@ -11,6 +11,7 @@ export interface ColumnPreferences {
   tvl: boolean;
   holders: boolean;
   risk: boolean;
+  allocation: boolean;
 }
 
 const STORAGE_KEY = 'gero_market_columns';
@@ -24,6 +25,7 @@ const DEFAULTS: ColumnPreferences = {
   tvl: false,
   holders: false,
   risk: false,
+  allocation: false,
 };
 
 function loadFromStorage(): ColumnPreferences {

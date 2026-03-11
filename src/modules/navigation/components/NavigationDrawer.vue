@@ -91,7 +91,7 @@
               x-small
               color="#FFD700"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
-            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> Maintenance</v-chip>
+            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
           </v-list-item-action>
           <v-list-item-action v-else-if="item.new">
             <v-chip
@@ -292,7 +292,6 @@ const items = computed((): NavigationItemUnion[] => {
       underMaintenance: !isBlogEnabledByFeatureFlag.value,
     },
     { header: t('navigation.financialHub'), enabled: true },
-    { title: t('navigation.market'), icon: assts.market, link: '/?view=all', enabled: true },
     { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
@@ -326,7 +325,6 @@ const items = computed((): NavigationItemUnion[] => {
 
 // Loading state for swap feature flag
 const loadingFFs = computed(() => {
-  console.log('loadingFFs:', featureFlagsStore.state);
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
 
@@ -336,7 +334,6 @@ const isGeroCardEnabledByFeatureFlag = computed(() => {
 });
 
 const isBlogEnabledByFeatureFlag = computed(() => {
-  console.log('isBlogEnabledByFeatureFlag:', featureFlagsStore.isBlogEnabled());
   return featureFlagsStore.isBlogEnabled();
 })
 
@@ -475,7 +472,6 @@ onMounted(() => {
 // Cleanup on unmount
 import { onUnmounted } from 'vue'
 import featureFlagsStore from '@/stores/featureFlagsStore';
-import { fa } from 'vuetify/src/locale';
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)
