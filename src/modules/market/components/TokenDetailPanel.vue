@@ -53,7 +53,7 @@
               class="currency-pill"
               :class="{ active: selectedCurrency === c }"
               @click="selectedCurrency = c"
-            >{{ c }}</span>
+            >{{ c === 'NATIVE' ? nativeTicker : c }}</span>
           </div>
         </div>
 
@@ -244,6 +244,7 @@ import BuySellVolume from './BuySellVolume.vue';
 import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{
@@ -259,9 +260,10 @@ const { isWatched, toggleWatchlist } = useWatchlist();
 const { getTokenCandles } = useMarketData();
 const { getTokenPnl } = useWalletPnl();
 const { usdToEurRate } = useCurrencyConverter();
+const { currencySymbol: nativeSymbol, currencyTicker: nativeTicker } = useNativeCurrency();
 
-type Currency = 'ADA' | 'USD' | 'EUR';
-const currencyOptions: Currency[] = ['ADA', 'USD', 'EUR'];
+type Currency = 'NATIVE' | 'USD' | 'EUR';
+const currencyOptions: Currency[] = ['NATIVE', 'USD', 'EUR'];
 const selectedCurrency = ref<Currency>('USD');
 
 // Currency conversion helpers
@@ -270,7 +272,7 @@ const adaUsdPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
 /** Convert a USD value to the selected currency */
 function convertUsd(usdValue: number): number {
   switch (selectedCurrency.value) {
-    case 'ADA': return adaUsdPrice.value > 0 ? usdValue / adaUsdPrice.value : 0;
+    case 'NATIVE': return adaUsdPrice.value > 0 ? usdValue / adaUsdPrice.value : 0;
     case 'EUR': return usdValue * (usdToEurRate.value || 1);
     case 'USD':
     default: return usdValue;
@@ -279,7 +281,7 @@ function convertUsd(usdValue: number): number {
 
 const currencySymbol = computed(() => {
   switch (selectedCurrency.value) {
-    case 'ADA': return '₳';
+    case 'NATIVE': return nativeSymbol.value;
     case 'EUR': return '\u20AC';
     case 'USD':
     default: return '$';
@@ -290,7 +292,7 @@ const currencySymbol = computed(() => {
 const displayPrice = computed(() => {
   const tok = props.token;
   switch (selectedCurrency.value) {
-    case 'ADA': return formatPrice(tok.priceAda, '₳');
+    case 'NATIVE': return formatPrice(tok.priceAda, nativeSymbol.value);
     case 'EUR': return formatPrice(tok.price * (usdToEurRate.value || 1), '\u20AC');
     case 'USD':
     default: return formatPrice(tok.price, '$');
@@ -300,9 +302,9 @@ const displayPrice = computed(() => {
 const secondaryPrice = computed(() => {
   const tok = props.token;
   switch (selectedCurrency.value) {
-    case 'ADA': return '$' + formatPriceRaw(tok.price);
-    case 'USD': return formatPriceRaw(tok.priceAda) + ' ₳';
-    case 'EUR': return formatPriceRaw(tok.priceAda) + ' ₳';
+    case 'NATIVE': return '$' + formatPriceRaw(tok.price);
+    case 'USD': return formatPriceRaw(tok.priceAda) + ' ' + nativeSymbol.value;
+    case 'EUR': return formatPriceRaw(tok.priceAda) + ' ' + nativeSymbol.value;
     default: return '';
   }
 });
@@ -363,6 +365,7 @@ const candlesLoading = ref(true);
 
 /** Map selected currency to the backend currency param (ada/usd/eur) */
 function candleCurrency(): string {
+  if (selectedCurrency.value === 'NATIVE') return 'ada';
   return selectedCurrency.value.toLowerCase();
 }
 
@@ -431,12 +434,12 @@ function copyPolicyId() {
   }
 }
 
-/** Convert an ADA value to the selected currency */
+/** Convert a native-token value to the selected currency */
 function convertAda(adaValue: number): number {
   switch (selectedCurrency.value) {
     case 'USD': return adaValue * adaUsdPrice.value;
     case 'EUR': return adaValue * adaUsdPrice.value * (usdToEurRate.value || 1);
-    case 'ADA':
+    case 'NATIVE':
     default: return adaValue;
   }
 }

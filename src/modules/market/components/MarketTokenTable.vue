@@ -102,7 +102,7 @@
             </v-tooltip>
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
-            {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} ₳
+            {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} {{ nativeSymbol }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -217,7 +217,7 @@
       <span v-if="item.isNative" style="font-size: 12px">—</span>
       <span v-else-if="pnlLoading && item.avgCostBasis == null" class="pnl-skeleton"></span>
       <span v-else style="font-size: 12px">
-        {{ item.avgCostBasis != null ? item.avgCostBasis.toFixed(item.avgCostBasis < 1 ? 4 : 2) + ' ₳' : '—' }}
+        {{ item.avgCostBasis != null ? item.avgCostBasis.toFixed(item.avgCostBasis < 1 ? 4 : 2) + ' ' + nativeSymbol : '—' }}
       </span>
     </template>
 
@@ -235,12 +235,12 @@
             <v-avatar tile size="10" class="mr-1">
               <v-img :src="changeIcon(item.totalPnl)" alt="pnl" />
             </v-avatar>
-            {{ item.totalPnl >= 0 ? '+' : '' }}{{ formatCompact(item.totalPnl) }} ₳
+            {{ item.totalPnl >= 0 ? '+' : '' }}{{ formatCompact(item.totalPnl) }} {{ nativeSymbol }}
           </span>
         </template>
         <div>
-          <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? (item.unrealizedPnl >= 0 ? '+' : '') + item.unrealizedPnl.toFixed(2) + ' ₳' : '—' }}</div>
-          <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? (item.realizedPnl >= 0 ? '+' : '') + item.realizedPnl.toFixed(2) + ' ₳' : '—' }}</div>
+          <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? (item.unrealizedPnl >= 0 ? '+' : '') + item.unrealizedPnl.toFixed(2) + ' ' + nativeSymbol : '—' }}</div>
+          <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? (item.realizedPnl >= 0 ? '+' : '') + item.realizedPnl.toFixed(2) + ' ' + nativeSymbol : '—' }}</div>
         </div>
       </v-tooltip>
       <span v-else style="font-size: 12px">—</span>
@@ -362,6 +362,7 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 
 const props = withDefaults(defineProps<{
   tokens: MarketToken[];
@@ -395,6 +396,7 @@ const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
 const { isColumnVisible } = useColumnPreferences();
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+const { currencySymbol: nativeSymbol } = useNativeCurrency();
 
 const sortBy = ref(props.showHoldingsColumns ? 'allocation' : 'mcap');
 const sortDesc = ref(true);

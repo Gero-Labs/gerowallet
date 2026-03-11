@@ -9,7 +9,7 @@
       <thead>
         <tr>
           <th style="font-size: 11px">DEX</th>
-          <th class="text-right" style="font-size: 11px">{{ $t('market.price') }} (ADA)</th>
+          <th class="text-right" style="font-size: 11px">{{ $t('market.price') }} ({{ currencyTicker }})</th>
           <th class="text-right" style="font-size: 11px">{{ $t('market.price') }} (USD)</th>
           <th class="text-right" style="font-size: 11px">TVL</th>
           <th class="text-right" style="font-size: 11px">{{ $t('market.volume24h') }}</th>
@@ -23,7 +23,7 @@
           </td>
           <td class="text-right" style="font-size: 12px">{{ formatPrice(p.priceAda) }}</td>
           <td class="text-right" style="font-size: 12px">${{ formatPrice(p.priceUsd) }}</td>
-          <td class="text-right" style="font-size: 12px">{{ formatCompact(p.liquidity || p.tvl || 0) }} ₳</td>
+          <td class="text-right" style="font-size: 12px">{{ formatCompact(p.liquidity || p.tvl || 0) }} {{ currencySymbol }}</td>
           <td class="text-right" style="font-size: 12px">${{ formatCompact(p.volume24h || 0) }}</td>
         </tr>
       </tbody>
@@ -36,8 +36,10 @@
 import { ref, watch, onMounted } from 'vue';
 import marketApi, { type TokenPriceResponse } from '@/api/market-api';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 
 const { t } = useTranslation();
+const { currencySymbol, currencyTicker } = useNativeCurrency();
 
 const props = defineProps<{ assetId: string }>();
 

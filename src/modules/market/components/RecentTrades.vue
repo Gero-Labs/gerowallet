@@ -48,8 +48,8 @@
       <div class="trades-header">
         <span>{{ $t('market.time') }}</span>
         <span>{{ $t('market.type') }}</span>
-        <span class="text-right">{{ $t('market.price') }} (₳)</span>
-        <span class="text-right">Vol (₳)</span>
+        <span class="text-right">{{ $t('market.price') }} ({{ currencySymbol }})</span>
+        <span class="text-right">Vol ({{ currencySymbol }})</span>
       </div>
       <div class="trades-body">
         <div
@@ -83,7 +83,10 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import marketApi, { type SwapHistory } from '@/api/market-api';
 import { walletStore } from '@/stores/walletStore';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import timeAgo from '@/plugins/time';
+
+const { currencySymbol } = useNativeCurrency();
 
 const props = defineProps<{
   policyId: string;
