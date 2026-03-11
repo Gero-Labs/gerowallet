@@ -169,7 +169,7 @@
 
     <!-- Holders column -->
     <template v-slot:[`item.holders`]="{ item }">
-      <span v-if="item.holders" style="font-size: 12px">{{ formatCompact(item.holders) }}</span>
+      <span v-if="item.holders != null" style="font-size: 12px">{{ formatCompact(item.holders) }}</span>
       <span v-else style="font-size: 12px; opacity: 0.4">—</span>
     </template>
 
