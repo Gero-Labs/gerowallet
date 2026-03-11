@@ -156,6 +156,35 @@
       </v-tooltip>
     </template>
 
+    <!-- TVL column -->
+    <template v-slot:[`item.tvl`]="{ item }">
+      <v-tooltip v-if="item.tvl != null" top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ getCurrencySymbol() }}{{ formatCompact(convertFiat(item.tvl)) }}</span>
+        </template>
+        {{ getCurrencySymbol() }}{{ convertFiat(item.tvl).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+      </v-tooltip>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
+    <!-- Holders column -->
+    <template v-slot:[`item.holders`]="{ item }">
+      <span v-if="item.holders" style="font-size: 12px">{{ formatCompact(item.holders) }}</span>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
+    <!-- Risk Rating column -->
+    <template v-slot:[`item.risk`]="{ item }">
+      <span
+        v-if="item.riskRating"
+        style="font-size: 12px; font-weight: 500"
+        :style="{ color: riskColor(item.riskRating) }"
+      >
+        {{ item.riskRating }}
+      </span>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
     <!-- Holdings columns (when showHoldingsColumns) -->
     <template v-slot:[`item.balance`]="{ item }">
       <span style="font-size: 12px">{{ item.balance ? formatCompact(item.balance) : '—' }}</span>
@@ -289,6 +318,33 @@
       </v-tooltip>
     </template>
 
+    <template v-slot:[`header.tvl`]="{ header }">
+      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+        </template>
+        {{ $t('market.tvlTooltip') }}
+      </v-tooltip>
+    </template>
+
+    <template v-slot:[`header.holders`]="{ header }">
+      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+        </template>
+        {{ $t('market.holdersTooltip') }}
+      </v-tooltip>
+    </template>
+
+    <template v-slot:[`header.risk`]="{ header }">
+      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
+        </template>
+        {{ $t('market.riskTooltip') }}
+      </v-tooltip>
+    </template>
+
     <template v-slot:[`header.avgCostBasis`]="{ header }">
       <v-tooltip top :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
@@ -313,6 +369,8 @@
 import { ref, computed, watch } from 'vue';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
+import { useColumnPreferences, type ColumnKey } from '@/modules/market/composables/useColumnPreferences';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
@@ -348,6 +406,8 @@ const emit = defineEmits<{
 
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
+const { isColumnVisible } = useColumnPreferences();
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 const sortBy = ref(props.showHoldingsColumns ? 'allocation' : 'mcap');
 const sortDesc = ref(true);
@@ -364,6 +424,9 @@ const baseHeaders = computed(() => {
     { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px', class: 'hidden-md-and-down' },
     { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px', class: 'hidden-sm-and-down' },
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
+    { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px', class: 'hidden-sm-and-down' },
+    { text: t('market.holders'), value: 'holders', sortable: true, width: '80px', class: 'hidden-md-and-down' },
+    { text: t('market.risk'), value: 'risk', sortable: true, width: '70px', class: 'hidden-md-and-down' },
   ];
 
   if (props.showHoldingsColumns) {
@@ -384,7 +447,18 @@ const baseHeaders = computed(() => {
   return headers;
 });
 
-const activeHeaders = baseHeaders;
+const LOCKED_COLUMNS = ['rank', 'name', 'price'];
+const ACTION_COLUMNS = ['watchlist', 'swap'];
+const HOLDINGS_COLUMNS = ['balance', 'value', 'allocation', 'avgCostBasis', 'totalPnl'];
+
+const activeHeaders = computed(() => {
+  return baseHeaders.value.filter(header => {
+    if (LOCKED_COLUMNS.includes(header.value)) return true;
+    if (ACTION_COLUMNS.includes(header.value)) return true;
+    if (props.showHoldingsColumns && HOLDINGS_COLUMNS.includes(header.value)) return true;
+    return isColumnVisible(header.value);
+  });
+});
 
 // Reset to page 1 when token list changes (tab switch, search filter, etc.)
 watch(() => props.tokens, () => {
@@ -457,23 +531,49 @@ function pnlColor(pnl: number): string {
   return pnl > 0 ? '#47CD89' : '#F97066';
 }
 
+function riskColor(rating: string): string {
+  if (['AAA', 'AA', 'A'].includes(rating)) return '#47CD89';
+  if (['BBB', 'BB', 'B'].includes(rating)) return '#FFC107';
+  if (['CCC', 'CC', 'C', 'D'].includes(rating)) return '#F97066';
+  return '#666';
+}
+
 function rowClass(item: MarketToken): string {
   return item.isNative ? 'native-token-row' : '';
 }
+
+// Risk rating sort weight: AAA (highest/safest) → D (lowest/riskiest)
+const RISK_WEIGHT: Record<string, number> = {
+  'AAA': 10, 'AA': 9, 'A': 8,
+  'BBB': 7, 'BB': 6, 'B': 5,
+  'CCC': 4, 'CC': 3, 'C': 2, 'D': 1,
+};
 
 // Pin native token (ADA) to the top regardless of sort column
 function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: boolean[]): MarketToken[] {
   const sortKey = sortByArr[0];
   const desc = sortDescArr[0];
 
-  // Separate native from rest
   const native = items.filter(i => i.isNative);
   const rest = [...items.filter(i => !i.isNative)];
 
   if (sortKey) {
+    // Remap header value to data field name where they differ
+    const effectiveSortKey = sortKey === 'risk' ? 'riskRating' : sortKey;
+
     rest.sort((a: any, b: any) => {
-      const va = a[sortKey] ?? 0;
-      const vb = b[sortKey] ?? 0;
+      const va = a[effectiveSortKey];
+      const vb = b[effectiveSortKey];
+      // Null/undefined always sort last regardless of direction
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      // Risk rating: use weight map for correct ordering (AAA > AA > A > BBB > ...)
+      if (effectiveSortKey === 'riskRating') {
+        const wa = RISK_WEIGHT[va] ?? 0;
+        const wb = RISK_WEIGHT[vb] ?? 0;
+        return desc ? wb - wa : wa - wb;
+      }
       if (typeof va === 'string') {
         return desc ? vb.localeCompare(va) : va.localeCompare(vb);
       }
