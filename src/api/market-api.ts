@@ -16,6 +16,7 @@ export interface TokenPriceResponse {
   assetNameAscii: string;
   priceAda: number;
   priceUsd: number;
+  priceEur: number;
   priceChange1h: number | null;
   priceChange24h: number | null;
   priceChange7d: number | null;
@@ -38,6 +39,7 @@ export interface TokenPriceResponse {
 
 export interface AdaPriceResponse {
   priceUsd: number;
+  priceEur: number;
   priceChange24h: number;
   marketCap: number;
   volume24h: number;
@@ -63,16 +65,19 @@ export interface CandleResponse {
   low: number;
   close: number;
   volume: number;
+  currency?: string;
 }
 
 export interface WalletPnlToken {
   unit: string;
   displayName: string;
   currentQuantity: number;
-  avgCostBasisAda: number;
+  avgCostBasisAda: number | null;
   currentPriceAda: number;
   realizedPnlAda: number;
   unrealizedPnlAda: number;
+  unknownCostQuantity?: number | null;
+  costBasisComplete?: boolean;
 }
 
 export interface WalletPnlSummary {
@@ -90,6 +95,7 @@ export interface WalletSnapshot {
   timestamp: number;
   totalValueAda: number;
   totalValueUsd: number;
+  totalValueEur: number;
   adaBalance: number;
   tokenValueAda: number;
   nftValueAda: number;
@@ -162,6 +168,15 @@ export interface NftSale {
   blockTime: string;
 }
 
+export interface SwapHistory {
+  txHash: string;
+  type: 'BUY' | 'SELL';
+  priceAda: number;
+  volumeAda: number;
+  dex: string;
+  blockTime: string;
+}
+
 // ── API Methods ─────────────────────────────────────────────────────────────────
 
 export default {
@@ -215,8 +230,8 @@ export default {
 
   // ── Price Service ───────────────────────────────────────────────────────────
 
-  async getCandles(assetId: string, resolution: string = '1h', from?: string, to?: string): Promise<CandleResponse[]> {
-    const { data } = await axiosInstance.get('/api/v1/prices/historical/candles', { params: { assetId, resolution, from, to } });
+  async getCandles(assetId: string, resolution: string = '1h', from?: string, to?: string, currency?: string): Promise<CandleResponse[]> {
+    const { data } = await axiosInstance.get('/api/v1/prices/historical/candles', { params: { assetId, resolution, from, to, currency } });
     return data;
   },
 
@@ -288,6 +303,12 @@ export default {
 
   async getNftAssetPrice(policyId: string, assetName: string): Promise<{ priceLovelace: number }> {
     const { data } = await axiosInstance.get(`/api/v1/nft/asset/${policyId}/${assetName}/price`);
+    return data;
+  },
+
+  // ── Swap History ──────────────────────────────────────────────────────────
+  async getTokenSwaps(policyId: string, assetName: string, limit: number = 20): Promise<SwapHistory[]> {
+    const { data } = await axiosInstance.get(`/api/v1/dex/swaps/token/${policyId}/${assetName}`, { params: { limit } });
     return data;
   },
 };

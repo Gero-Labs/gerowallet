@@ -16,6 +16,16 @@ async function fetchPnl() {
 
   try {
     const data = await marketApi.getWalletPnl(stakeAddress);
+
+    // Sort tokens by current value (most allocated first)
+    if (data?.tokens) {
+      data.tokens.sort((a, b) => {
+        const valA = Math.abs(a.currentQuantity * a.currentPriceAda);
+        const valB = Math.abs(b.currentQuantity * b.currentPriceAda);
+        return valB - valA;
+      });
+    }
+
     pnlSummary.value = data;
 
     // Build lookup by unit for fast access in table
