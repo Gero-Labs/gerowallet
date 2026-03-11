@@ -22,34 +22,33 @@
     <template v-else>
       <!-- Portfolio Chart (always visible) -->
       <v-row no-gutters class="hero-row">
-        <v-col cols="12" xl="9" lg="9" md="8" class="pa-2">
-          <v-card outlined class="liquid-glass portfolio-hero-card">
-            <v-card-text>
-              <PortfolioChart
-                :chart-data="computeChartData.adaData"
-                :chart-data-usd="computeChartData.usdData"
-                :chart-data-eur="computeChartData.eurData"
-                :ada-only-chart-data="adaOnlyChartData.adaData"
-                :ada-only-chart-data-usd="adaOnlyChartData.usdData"
-                :ada-only-chart-data-eur="adaOnlyChartData.eurData"
-                :portfolio-value-ada="currentPortfolioValues.ada"
-                :portfolio-value-usd="currentPortfolioValues.usd"
-                :portfolio-value-eur="currentPortfolioValues.eur"
-                :ada-only-value-ada="adaBalance"
-                :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
-                :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
-                :loading="portfolioLoading"
-                :progressive-loading="true"
-                :first-loaded-currency="firstLoadedCurrency"
-                :total-realized-pnl="pnlSummary?.totalRealizedPnlAda ?? null"
-                :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
-                :pnl-loading="pnlLoading"
-                @refresh="refreshPortfolioChart"
-              />
-            </v-card-text>
-          </v-card>
+        <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
+          <PortfolioChart
+            :chart-data="computeChartData.adaData"
+            :chart-data-usd="computeChartData.usdData"
+            :chart-data-eur="computeChartData.eurData"
+            :ada-only-chart-data="adaOnlyChartData.adaData"
+            :ada-only-chart-data-usd="adaOnlyChartData.usdData"
+            :ada-only-chart-data-eur="adaOnlyChartData.eurData"
+            :portfolio-value-ada="currentPortfolioValues.ada"
+            :portfolio-value-usd="currentPortfolioValues.usd"
+            :portfolio-value-eur="currentPortfolioValues.eur"
+            :ada-only-value-ada="adaBalance"
+            :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+            :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+            :loading="portfolioLoading"
+            :progressive-loading="true"
+            :first-loaded-currency="firstLoadedCurrency"
+            :total-realized-pnl="pnlSummary?.totalRealizedPnlAda ?? null"
+            :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
+            :pnl-loading="pnlLoading"
+            @refresh="refreshPortfolioChart"
+            @timeframe-change="handleChartTimeframeChange"
+            @withdraw-rewards="handleWithdrawRewards"
+            @delegate-gero="handleDelegateGero"
+          />
         </v-col>
-        <v-col xl="3" lg="3" md="4" class="pa-2 hidden-sm-and-down">
+        <v-col xl="3" lg="3" md="4" class="pa-2 hidden-sm-and-down hero-carousel-col">
           <div class="carousel-fixed-container">
             <FeatureCarousel
               :model-value="currentCarouselIndex"
@@ -69,33 +68,42 @@
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
           <v-card flat class="liquid-glass holdings-table-card">
-            <!-- Filter chip bar -->
-            <div class="filter-chip-bar d-flex align-center px-3 pt-2 pb-1" style="gap: 6px; overflow-x: auto">
-              <v-chip
-                v-for="chip in filterChips"
-                :key="chip.value"
-                small
-                :color="activeView === chip.value ? 'primary' : undefined"
-                :outlined="activeView !== chip.value"
-                @click="setActiveView(chip.value)"
-                class="flex-shrink-0"
-                style="cursor: pointer"
-              >
-                <v-icon v-if="chip.icon" x-small class="mr-1">{{ chip.icon }}</v-icon>
-                {{ chip.label }}
-                <NotificationDot
-                  v-if="chip.value === 'watchlist'"
-                  :show="watchlistCount > 0"
-                  :dot="false"
-                  :content="watchlistCount"
-                  color="primary"
-                  class="ml-1"
-                />
-              </v-chip>
-            </div>
+            <!-- Filter chips + search + filter menu — single row -->
+            <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
+              <!-- Category chips (scrollable, collapse to icons at small widths) -->
+              <div ref="chipBarRef" class="filter-chip-bar d-flex align-center" style="gap: 4px; overflow-x: auto; flex: 1; min-width: 0;">
+                <v-tooltip v-for="chip in filterChips" :key="chip.value" bottom :disabled="!compactChips">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-chip
+                      small
+                      :color="activeView === chip.value ? 'primary' : undefined"
+                      :outlined="activeView !== chip.value"
+                      @click="setActiveView(chip.value)"
+                      class="flex-shrink-0"
+                      style="cursor: pointer"
+                      v-bind="attrs"
+                      v-on="on"
+                    >
+                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }">{{ chip.icon }}</v-icon>
+                      <template v-if="!compactChips">{{ chip.label }}</template>
+                      <span v-if="chip.value === 'watchlist' && watchlistCount > 0" class="ml-1" style="font-size: 11px; opacity: 0.7;">({{ watchlistCount }})</span>
+                    </v-chip>
+                  </template>
+                  <span>{{ chip.label }}</span>
+                </v-tooltip>
+              </div>
 
-            <!-- Unified search + filter controls -->
-            <div class="d-flex align-center flex-wrap px-3 pt-1 pb-1" style="gap: 8px">
+              <!-- NFT view toggle (only in collectibles mode) -->
+              <div v-if="activeView === 'collectibles'" class="d-flex align-center flex-shrink-0" style="gap: 2px;">
+                <v-btn icon x-small :class="{ 'mode-active': nftViewMode === 'table' }" class="mode-btn" @click="nftViewMode = 'table'">
+                  <v-icon small>mdi-table</v-icon>
+                </v-btn>
+                <v-btn icon x-small :class="{ 'mode-active': nftViewMode === 'gallery' }" class="mode-btn" @click="nftViewMode = 'gallery'">
+                  <v-icon small>mdi-view-grid</v-icon>
+                </v-btn>
+              </div>
+
+              <!-- Search field -->
               <v-text-field
                 v-model="searchQuery"
                 :placeholder="activeView === 'collectibles'
@@ -107,68 +115,63 @@
                 flat
                 hide-details
                 clearable
-                class="search-field"
-                style="max-width: 220px"
+                class="search-field flex-shrink-0"
+                style="max-width: 180px"
               />
-              <v-spacer />
 
-              <v-chip
-                v-if="activeView !== 'collectibles'"
-                small
-                filter
-                outlined
-                :input-value="verifiedOnly"
-                @click="verifiedOnly = !verifiedOnly"
-                class="flex-shrink-0"
-              >
-                {{ $t('market.verifiedOnly') }}
-              </v-chip>
-              <v-chip
-                small
-                filter
-                outlined
-                :input-value="hideScam"
-                @click="hideScam = !hideScam"
-                class="flex-shrink-0"
-              >
-                {{ $t('market.hideScam') }}
-              </v-chip>
-
-              <!-- NFT table / gallery toggle (only when in collectibles mode) -->
-              <template v-if="activeView === 'collectibles'">
-                <div class="holdings-mode-toggle d-flex align-center ml-2" style="gap: 2px">
-                  <v-tooltip bottom>
-                    <template v-slot:activator="{ on }">
-                      <v-btn
-                        icon
-                        small
-                        :class="{ 'mode-active': nftViewMode === 'table' }"
-                        class="mode-btn"
-                        v-on="on"
-                        @click="nftViewMode = 'table'"
-                      >
-                        <v-icon small>mdi-table</v-icon>
-                      </v-btn>
-                    </template>
-                    <span>{{ $t('portfolio.tableView') }}</span>
-                  </v-tooltip>
-                  <v-tooltip bottom>
-                    <template v-slot:activator="{ on }">
-                      <v-btn
-                        icon
-                        small
-                        :class="{ 'mode-active': nftViewMode === 'gallery' }"
-                        class="mode-btn"
-                        v-on="on"
-                        @click="nftViewMode = 'gallery'"
-                      >
-                        <v-icon small>mdi-view-grid</v-icon>
-                      </v-btn>
-                    </template>
-                    <span>{{ $t('portfolio.galleryView') }}</span>
-                  </v-tooltip>
-                </div>
-              </template>
+              <!-- 3-dot filter menu -->
+              <v-menu offset-y left :close-on-content-click="false">
+                <template v-slot:activator="{ on, attrs }">
+                  <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0">
+                    <v-badge
+                      :value="verifiedOnly || !hideScam || hasCustomColumns"
+                      dot
+                      color="primary"
+                      overlap
+                    >
+                      <v-icon small>mdi-dots-vertical</v-icon>
+                    </v-badge>
+                  </v-btn>
+                </template>
+                <v-list dense class="filter-menu-list">
+                  <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
+                    <v-list-item-action class="mr-2">
+                      <v-icon small :color="verifiedOnly ? 'primary' : ''">
+                        {{ verifiedOnly ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                      </v-icon>
+                    </v-list-item-action>
+                    <v-list-item-title style="font-size: 13px;">{{ $t('market.verifiedOnly') }}</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item @click="hideScam = !hideScam">
+                    <v-list-item-action class="mr-2">
+                      <v-icon small :color="hideScam ? 'primary' : ''">
+                        {{ hideScam ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                      </v-icon>
+                    </v-list-item-action>
+                    <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
+                  </v-list-item>
+                  <v-divider class="my-1" />
+                  <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
+                  <v-list-item
+                    v-for="col in columnOptions"
+                    :key="col.key"
+                    @click="toggleColumn(col.key)"
+                  >
+                    <v-list-item-action class="mr-2">
+                      <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
+                        {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                      </v-icon>
+                    </v-list-item-action>
+                    <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                  </v-list-item>
+                  <v-divider class="my-1" />
+                  <v-list-item @click="resetToDefaults">
+                    <v-list-item-title style="font-size: 12px; color: #7c4dff;">
+                      {{ $t('market.resetColumns') }}
+                    </v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
             </div>
 
             <!-- Token table (all views except collectibles) -->
@@ -216,6 +219,12 @@
 
       <!-- Swap Dialog -->
       <SwapDialog :isOpen="swapDialogOpen" @close="swapDialogOpen = false; swapToken = null" :buy-token-unit="swapToken?.unit" />
+
+      <!-- Withdrawal Dialog -->
+      <WithdrawalDialog :isOpen="withdrawalDialog" :tx="withdrawalTxData" @close="closeWithdrawalDialog" />
+
+      <!-- Delegate Dialog -->
+      <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
     </template>
   </v-layout>
 </template>
@@ -227,8 +236,11 @@ import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialog
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
+import { useColumnPreferences, type ColumnKey } from '@/modules/market/composables/useColumnPreferences';
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useWithdrawal } from '@/shared/composables/useWithdrawal';
+import { useDelegation } from '@/shared/composables/useDelegation';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
@@ -249,7 +261,8 @@ import NftCollectionTable from '@/modules/market/components/NftCollectionTable.v
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
-import NotificationDot from '@/shared/components/NotificationDot.vue';
+import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
+import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import assets from '@/utils/assets';
 
 const { t } = useTranslation();
@@ -269,6 +282,21 @@ const {
 const { isWatched, watchlistCount } = useWatchlist();
 const { pnlSummary, pnlLoading, fetchPnl, getTokenPnl } = useWalletPnl();
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
+const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
+
+const columnOptions: { key: ColumnKey; label: string }[] = [
+  { key: 'change24h', label: t('market.change24h') },
+  { key: 'change1h', label: t('market.change1h') },
+  { key: 'change7d', label: t('market.change7d') },
+  { key: 'mcap', label: t('market.marketCap') },
+  { key: 'volume24h', label: t('market.volume24h') },
+  { key: 'tvl', label: t('market.tvl') },
+  { key: 'holders', label: t('market.holders') },
+  { key: 'risk', label: t('market.risk') },
+];
+
+const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
+const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGero, closeDelegateDialog } = useDelegation();
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
@@ -290,6 +318,7 @@ const {
   isLoading: portfolioLoading,
   loadDataProgressively,
   refreshPortfolioData,
+  loadForTimeframe,
   firstLoadedCurrency,
   latestPortfolioValues,
 } = portfolioComposable;
@@ -298,6 +327,11 @@ const {
 
 type ViewMode = 'holdings' | 'collectibles' | 'all' | 'trending' | 'gainers' | 'losers' | 'new' | 'watchlist';
 const activeView = ref<ViewMode>('holdings');
+
+// Compact chip mode — collapse labels to icons when space is tight
+const compactChips = ref(false);
+const chipBarRef = ref<HTMLElement | null>(null);
+let chipBarObserver: ResizeObserver | null = null;
 
 function setActiveView(view: ViewMode) {
   activeView.value = view;
@@ -463,7 +497,7 @@ const currentPortfolioValues = computed(() => {
     return {
       ada: latestPortfolioValues.value.ada !== null ? latestPortfolioValues.value.ada : computedValues.value.totalValue,
       usd: latestPortfolioValues.value.usd !== null ? latestPortfolioValues.value.usd : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
-      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
+      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0) * usdToEurRate.value),
     };
   }
   const totalValueUsd = computedValues.value.totalValue * (price.value?.lastPrice || 0);
@@ -554,7 +588,7 @@ const myHoldings = computed<MarketToken[]>(() => {
 const filterChips = computed(() => [
   { value: 'holdings' as ViewMode, label: t('portfolio.myHoldings'), icon: 'mdi-wallet' },
   { value: 'collectibles' as ViewMode, label: t('portfolio.collectibles'), icon: 'mdi-image-multiple' },
-  { value: 'all' as ViewMode, label: t('portfolio.all'), icon: '' },
+  { value: 'all' as ViewMode, label: t('portfolio.all'), icon: 'mdi-view-list' },
   { value: 'trending' as ViewMode, label: t('portfolio.trending'), icon: 'mdi-fire' },
   { value: 'gainers' as ViewMode, label: t('portfolio.gainers'), icon: 'mdi-trending-up' },
   { value: 'losers' as ViewMode, label: t('portfolio.losers'), icon: 'mdi-trending-down' },
@@ -699,17 +733,55 @@ async function refreshPortfolioChart() {
   }
 }
 
+// Track last fetched timeframe to avoid redundant API calls
+let lastFetchedTimeframe = '1y';
+
+function handleWithdrawRewards() {
+  withdrawRewards();
+}
+
+function handleDelegateGero() {
+  delegateToGero();
+}
+
+async function handleChartTimeframeChange(timeframe: string) {
+  const address = loggedWallet.value?.baseAddress;
+  if (!address || isApex.value) return;
+
+  // Don't re-fetch if we already have data at this resolution or coarser
+  // The resolution mapping: 24h→1H, 7d→4H, 30d→4H, 90d→1D, 1y→1D
+  // If we fetched at a fine resolution, coarser timeframes already have enough data
+  const resolutionRank: Record<string, number> = { '24h': 1, '7d': 2, '30d': 2, '90d': 3, '1y': 3, 'all': 3 };
+  const newRank = resolutionRank[timeframe] ?? 3;
+  const lastRank = resolutionRank[lastFetchedTimeframe] ?? 3;
+
+  // Only fetch if we need finer resolution than what we already have
+  if (newRank < lastRank) {
+    lastFetchedTimeframe = timeframe;
+    await loadForTimeframe(address, timeframe);
+  }
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 onMounted(() => {
   document.addEventListener('click', handleOutsideClick);
   loadExchangeRate();
   fetchPnl();
+
+  // Watch chip bar width to toggle compact mode
+  if (chipBarRef.value) {
+    chipBarObserver = new ResizeObserver(([entry]) => {
+      compactChips.value = entry.contentRect.width < 520;
+    });
+    chipBarObserver.observe(chipBarRef.value);
+  }
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick);
   if (searchDebounce) clearTimeout(searchDebounce);
+  chipBarObserver?.disconnect();
 });
 
 // ── Watchers ──────────────────────────────────────────────────────────────────
@@ -780,7 +852,11 @@ watch(
 </script>
 
 <style scoped>
-/* ── Filter chip bar ─────────────────────────────────────────────────────────── */
+/* ── Filter toolbar (single row: chips + search + menu) ──────────────────────── */
+
+.filter-toolbar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
 
 .filter-chip-bar {
   flex-wrap: nowrap;
@@ -808,10 +884,19 @@ watch(
   opacity: 0.8;
 }
 
-/* ── Carousel ──────────────────────────────────────────────────────────────── */
+/* ── Hero Row: Portfolio + Carousel same height ────────────────────────────── */
 
 .hero-row {
   align-items: stretch;
+}
+
+.hero-chart-col {
+  height: 210px;
+}
+
+.hero-carousel-col {
+  height: 210px;
+  overflow: hidden;
 }
 
 .carousel-fixed-container {
@@ -829,9 +914,8 @@ watch(
   height: 100%;
 }
 
-.carousel-fixed-container ::v-deep .carousel-text-top {
+.carousel-fixed-container ::v-deep .carousel-centered-layout {
   justify-content: center;
-  padding-top: 0;
 }
 
 .carousel-fixed-container ::v-deep .debit-card-container {
@@ -850,29 +934,7 @@ watch(
   padding: 12px;
 }
 
-/* ── Hero card ───────────────────────────────────────────────────────────────── */
-
-.portfolio-hero-card {
-  position: relative;
-  overflow: visible !important;
-  height: 100%;
-}
-
-.portfolio-hero-card > .v-card__text {
-  padding-bottom: 0;
-}
-
-.portfolio-hero-card::before {
-  content: '';
-  position: absolute;
-  top: -30px;
-  left: 12%;
-  right: 12%;
-  height: 60px;
-  background: radial-gradient(ellipse, rgba(0, 199, 243, 0.06) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: -1;
-}
+/* ── Hero row alignment ──────────────────────────────────────────────────────── */
 
 /* ── Holdings table card ──────────────────────────────────────────────────────── */
 
@@ -949,9 +1011,18 @@ watch(
 
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 
+@media (max-width: 960px) {
+  .hero-chart-col {
+    height: auto;
+  }
+}
+
 @media (max-width: 600px) {
   .filter-chip-bar .v-chip {
     font-size: 12px;
+  }
+  .search-field {
+    max-width: 140px !important;
   }
 }
 </style>
