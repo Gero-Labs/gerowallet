@@ -10,15 +10,15 @@ const rateLoaded = ref(false);
 const usdToAdaRate = ref<number>(1);
 
 export function useCurrencyConverter() {
-  const api = new Api(walletStore.loggedWallet, walletStore.loggedWallet.provider);
-
   const loadExchangeRate = async () => {
     if (loading.value || rateLoaded.value) return;
+    if (!walletStore.loggedWallet) return;
 
     loading.value = true;
     error.value = null;
 
     try {
+      const api = new Api(walletStore.loggedWallet, walletStore.loggedWallet.provider);
       const fiatRates = await api.fetchFiatRates();
       if (fiatRates?.ada) {
         usdToAdaRate.value = 1 / fiatRates.ada;
@@ -31,7 +31,7 @@ export function useCurrencyConverter() {
       }
     } catch (apiError) {
       error.value = 'Failed to load current exchange rate';
-      rateLoaded.value = true;
+      rateLoaded.value = false;
     } finally {
       loading.value = false;
     }

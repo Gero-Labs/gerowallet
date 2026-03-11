@@ -36,9 +36,8 @@ export default defineConfig({
         '**/tmp/**',
         '**/node_modules/**',
         '**/.git/**',
-        'D:\\DumpStack.log.tmp',
-        'D:\\DumpStack.log',
-        'D:\\*.tmp'
+        '**/DumpStack.log.tmp',
+        '**/DumpStack.log'
       ]
     }
   },

@@ -98,11 +98,11 @@
               <template v-slot:activator="{ on, attrs }">
                 <span v-bind="attrs" v-on="on">{{ formatPrice(item.price) }}</span>
               </template>
-              ${{ item.price.toFixed(8) }}
+              ${{ (item.price ?? 0).toFixed(8) }}
             </v-tooltip>
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
-            {{ item.priceAda.toFixed(item.priceAda < 1 ? 4 : 2) }} ₳
+            {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} ₳
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -142,7 +142,7 @@
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.volume24h) }}</span>
         </template>
-        ${{ item.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+        ${{ (item.volume24h ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
     </template>
 
@@ -152,7 +152,7 @@
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.mcap) }}</span>
         </template>
-        ${{ item.mcap.toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+        ${{ (item.mcap ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
     </template>
 
@@ -257,18 +257,6 @@
           </v-btn>
         </template>
         {{ isWatched(item.unit) ? $t('market.removeFromWatchlist') : $t('market.addToWatchlist') }}
-      </v-tooltip>
-    </template>
-
-    <!-- Swap column -->
-    <template v-slot:[`item.swap`]="{ item }">
-      <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn icon x-small v-bind="attrs" v-on="on" @click.stop="$emit('swap-token', item)">
-            <v-icon small>mdi-swap-horizontal</v-icon>
-          </v-btn>
-        </template>
-        {{ $t('market.swapToken') }}
       </v-tooltip>
     </template>
 
@@ -401,7 +389,6 @@ const ownedUnits = computed(() => {
 
 const emit = defineEmits<{
   (e: 'token-click', token: MarketToken): void;
-  (e: 'swap-token', token: MarketToken): void;
 }>();
 
 const { t } = useTranslation();
@@ -425,15 +412,19 @@ const baseHeaders = computed(() => {
     { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px', class: 'hidden-sm-and-down' },
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
     { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px', class: 'hidden-sm-and-down' },
-    { text: t('market.holders'), value: 'holders', sortable: true, width: '80px', class: 'hidden-md-and-down' },
+    ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px', class: 'hidden-md-and-down' }] : []),
     { text: t('market.risk'), value: 'risk', sortable: true, width: '70px', class: 'hidden-md-and-down' },
   ];
+
+  // Allocation is toggleable via column preferences (works in both market and holdings views)
+  headers.push(
+    { text: t('common.allocation'), value: 'allocation', sortable: true, width: '110px', class: 'hidden-sm-and-down' },
+  );
 
   if (props.showHoldingsColumns) {
     headers.push(
       { text: t('market.balance'), value: 'balance', sortable: true, width: '80px' },
       { text: t('market.value'), value: 'value', sortable: true, width: '80px' },
-      { text: t('common.allocation'), value: 'allocation', sortable: true, width: '110px', class: 'hidden-sm-and-down' },
       { text: t('market.avgCost'), value: 'avgCostBasis', sortable: true, width: '80px', class: 'hidden-md-and-down' },
       { text: t('market.totalPnl'), value: 'totalPnl', sortable: true, width: '90px' },
     );
@@ -441,20 +432,17 @@ const baseHeaders = computed(() => {
 
   headers.push(
     { text: '', value: 'watchlist', sortable: false, width: '36px' },
-    { text: '', value: 'swap', sortable: false, width: '36px' },
   );
 
   return headers;
 });
 
-const LOCKED_COLUMNS = ['rank', 'name', 'price'];
-const ACTION_COLUMNS = ['watchlist', 'swap'];
-const HOLDINGS_COLUMNS = ['balance', 'value', 'allocation', 'avgCostBasis', 'totalPnl'];
+const LOCKED_COLUMNS = ['rank', 'name', 'price', 'watchlist'];
+const HOLDINGS_COLUMNS = ['balance', 'value', 'avgCostBasis', 'totalPnl'];
 
 const activeHeaders = computed(() => {
   return baseHeaders.value.filter(header => {
     if (LOCKED_COLUMNS.includes(header.value)) return true;
-    if (ACTION_COLUMNS.includes(header.value)) return true;
     if (props.showHoldingsColumns && HOLDINGS_COLUMNS.includes(header.value)) return true;
     return isColumnVisible(header.value);
   });

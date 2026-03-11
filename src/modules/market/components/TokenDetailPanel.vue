@@ -19,162 +19,211 @@
           {{ isWatched(token.unit) ? 'mdi-star' : 'mdi-star-outline' }}
         </v-icon>
       </v-btn>
+      <v-btn icon small @click="openExplorer" class="mr-1">
+        <v-icon small>mdi-open-in-new</v-icon>
+      </v-btn>
       <v-btn icon small @click="$emit('close')">
         <v-icon>mdi-close</v-icon>
       </v-btn>
     </div>
 
-    <!-- Scrollable content -->
-    <div class="panel-scroll">
-      <!-- Price -->
-      <div class="px-4 pb-3">
-        <span class="text-h5 font-weight-bold">{{ formatPrice(token.price) }}</span>
-        <v-chip
-          x-small
-          :color="token.change24h >= 0 ? '#1b5e20' : '#b71c1c'"
-          :text-color="token.change24h >= 0 ? '#47CD89' : '#F97066'"
-          class="ml-2"
-        >
-          {{ token.change24h >= 0 ? '+' : '' }}{{ token.change24h.toFixed(2) }}%
-        </v-chip>
-        <div class="text--secondary text-caption mt-1">{{ token.priceAda.toFixed(token.priceAda < 1 ? 6 : 2) }} ₳</div>
-      </div>
+    <!-- Two-column layout -->
+    <div class="panel-columns">
+      <!-- ═══ LEFT COLUMN: Chart + Recent Trades ═══ -->
+      <div class="left-col">
+        <!-- Price + Currency Toggle -->
+        <div class="pb-3">
+          <div class="d-flex align-center" style="gap: 8px">
+            <span class="text-h5 font-weight-bold">{{ displayPrice }}</span>
+            <v-chip
+              x-small
+              :color="token.change24h >= 0 ? '#1b5e20' : '#b71c1c'"
+              :text-color="token.change24h >= 0 ? '#47CD89' : '#F97066'"
+            >
+              {{ token.change24h >= 0 ? '+' : '' }}{{ token.change24h.toFixed(2) }}%
+            </v-chip>
+          </div>
+          <div class="text--secondary text-caption mt-1">{{ secondaryPrice }}</div>
 
-      <!-- Chart Section -->
-      <div class="px-4 pb-2">
-        <!-- Timeframe + Indicators bar (above chart) -->
-        <div class="d-flex align-center mb-1" style="gap: 6px">
-          <div class="timeframe-bar">
+          <!-- Currency toggle pills -->
+          <div class="currency-pills mt-2">
             <span
-              v-for="tf in timeframeOptions"
-              :key="tf.value"
-              class="tf-btn"
-              :class="{ active: selectedTimeframe === tf.value }"
-              @click="selectedTimeframe = tf.value"
-            >{{ tf.label }}</span>
-          </div>
-
-          <v-spacer />
-
-          <!-- TA Indicator toggles -->
-          <div class="d-flex align-center" style="gap: 2px">
-            <v-tooltip bottom :open-delay="300" content-class="custom-tooltip" v-for="ind in indicatorOptions" :key="ind.value">
-              <template v-slot:activator="{ on, attrs }">
-                <span
-                  v-bind="attrs"
-                  v-on="on"
-                  class="ind-btn"
-                  :class="{ active: activeIndicators.includes(ind.value) }"
-                  @click="toggleIndicator(ind.value)"
-                >{{ ind.label }}</span>
-              </template>
-              <span>{{ $t(ind.tooltipKey) }}</span>
-            </v-tooltip>
+              v-for="c in currencyOptions"
+              :key="c"
+              class="currency-pill"
+              :class="{ active: selectedCurrency === c }"
+              @click="selectedCurrency = c"
+            >{{ c }}</span>
           </div>
         </div>
 
-        <TechnicalAnalysisChart
-          :candles="candles"
-          :height="chartHeight"
-          :indicators="activeIndicators"
-        />
-      </div>
+        <!-- Chart Section -->
+        <div class="pb-2">
+          <!-- Timeframe + Indicators bar -->
+          <div class="d-flex align-center mb-1" style="gap: 6px">
+            <div class="timeframe-bar">
+              <span
+                v-for="tf in timeframeOptions"
+                :key="tf.value"
+                class="tf-btn"
+                :class="{ active: selectedTimeframe === tf.value }"
+                @click="selectedTimeframe = tf.value"
+              >{{ tf.label }}</span>
+            </div>
 
-      <!-- Sub-tabs (below chart) -->
-      <div class="px-4 pb-2">
-        <v-tabs v-model="activeSubTab" dense background-color="transparent" height="28" class="detail-sub-tabs">
-          <v-tab>{{ $t('market.overview') }}</v-tab>
-          <v-tab>{{ $t('market.trading') }}</v-tab>
-        </v-tabs>
-      </div>
+            <v-spacer />
 
-      <!-- Overview tab content -->
-      <template v-if="activeSubTab === 0">
-        <!-- P&L Section (if user holds this token) -->
-        <div v-if="tokenPnl" class="px-4 pb-2">
-          <v-simple-table dense class="transparent stats-table">
-            <tbody>
-              <tr>
-                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.avgCostBasis') }}</td>
-                <td class="text-right" style="font-size: 12px; padding: 4px 8px">{{ tokenPnl.avgCostBasisAda.toFixed(tokenPnl.avgCostBasisAda < 1 ? 6 : 2) }} ₳</td>
-              </tr>
-              <tr>
-                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.unrealizedPnlDetail') }}</td>
-                <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.unrealizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
-                  {{ tokenPnl.unrealizedPnlAda >= 0 ? '+' : '' }}{{ tokenPnl.unrealizedPnlAda.toFixed(2) }} ₳
-                </td>
-              </tr>
-              <tr>
-                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.realizedPnlDetail') }}</td>
-                <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.realizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
-                  {{ tokenPnl.realizedPnlAda >= 0 ? '+' : '' }}{{ tokenPnl.realizedPnlAda.toFixed(2) }} ₳
-                </td>
-              </tr>
-              <tr>
-                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px; font-weight: 600">{{ $t('market.totalPnlDetail') }}</td>
-                <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', fontWeight: '600', color: totalPnl >= 0 ? '#47CD89' : '#F97066' }">
-                  {{ totalPnl >= 0 ? '+' : '' }}{{ totalPnl.toFixed(2) }} ₳
-                </td>
-              </tr>
-            </tbody>
-          </v-simple-table>
+            <!-- TA Indicator toggles -->
+            <div class="d-flex align-center" style="gap: 2px">
+              <v-tooltip bottom :open-delay="300" content-class="custom-tooltip" v-for="ind in indicatorOptions" :key="ind.value">
+                <template v-slot:activator="{ on, attrs }">
+                  <span
+                    v-bind="attrs"
+                    v-on="on"
+                    class="ind-btn"
+                    :class="{ active: activeIndicators.includes(ind.value) }"
+                    @click="toggleIndicator(ind.value)"
+                  >{{ ind.label }}</span>
+                </template>
+                <span>{{ $t(ind.tooltipKey) }}</span>
+              </v-tooltip>
+            </div>
+          </div>
+
+          <div v-if="!candlesLoading && convertedCandles.length === 0" class="chart-no-data d-flex align-center justify-center" :style="{ height: chartHeight }">
+            <div class="text-center">
+              <v-icon color="grey" size="32" class="mb-2">mdi-chart-line-variant</v-icon>
+              <div class="text--secondary text-caption">{{ $t('market.noChartData') }}</div>
+            </div>
+          </div>
+          <TechnicalAnalysisChart
+            v-else
+            :key="selectedCurrency"
+            :candles="convertedCandles"
+            :height="chartHeight"
+            :indicators="activeIndicators"
+          />
         </div>
 
-        <!-- Stats Section -->
-        <div class="px-4 pb-2">
-          <v-simple-table dense class="transparent stats-table">
-            <tbody>
-              <tr v-for="stat in stats" :key="stat.label">
-                <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">
-                  <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-                    <template v-slot:activator="{ on, attrs }">
-                      <span v-bind="attrs" v-on="on">{{ stat.label }}</span>
-                    </template>
-                    <span>{{ stat.tooltip }}</span>
-                  </v-tooltip>
-                </td>
-                <td class="text-right" style="font-size: 12px; padding: 4px 8px">
-                  <component :is="stat.component" v-if="stat.component" v-bind="stat.componentProps" />
-                  <span v-else>{{ stat.value }}</span>
-                </td>
-              </tr>
-            </tbody>
-          </v-simple-table>
-        </div>
-      </template>
-
-      <!-- Trading tab content -->
-      <template v-if="activeSubTab === 1">
-        <div class="px-4 pb-2" style="display: flex; flex-direction: column; gap: 12px">
-          <DepthChart
+        <!-- Buy vs Sell Volume -->
+        <div class="pt-2">
+          <BuySellVolume
             v-if="tokenPolicyId && tokenAssetName"
             :policy-id="tokenPolicyId"
             :asset-name="tokenAssetName"
           />
-          <CrossDexPrices :asset-id="token.unit" />
         </div>
-      </template>
 
-      <!-- Actions -->
-      <div class="px-4 pb-4 pt-2">
-        <v-btn
-          color="primary"
-          block
-          @click="$emit('swap', token)"
-          class="mb-2"
-        >
-          <v-icon small class="mr-2">mdi-swap-horizontal</v-icon>
-          {{ $t('market.swap') }}
-        </v-btn>
-        <v-btn
-          text
-          small
-          block
-          @click="openExplorer"
-        >
-          <v-icon x-small class="mr-1">mdi-open-in-new</v-icon>
-          {{ $t('market.viewOnExplorer') }}
-        </v-btn>
+        <!-- Recent Trades -->
+        <div class="pt-2">
+          <RecentTrades
+            v-if="tokenPolicyId && tokenAssetName"
+            :policy-id="tokenPolicyId"
+            :asset-name="tokenAssetName"
+          />
+        </div>
+      </div>
+
+      <!-- ═══ RIGHT COLUMN: Swap/Depth tabs + Token Info ═══ -->
+      <div class="right-col">
+        <!-- Right column tabs -->
+        <v-tabs v-model="rightTab" dense background-color="transparent" height="28" class="detail-sub-tabs mb-3">
+          <v-tab>{{ $t('market.swap') }}</v-tab>
+          <v-tab>{{ $t('market.depth') }}</v-tab>
+        </v-tabs>
+
+        <!-- Swap tab -->
+        <transition name="tab-fade" mode="out-in">
+        <div v-if="rightTab === 0" key="swap">
+          <!-- QuickSwap -->
+          <QuickSwap
+            v-if="token.unit !== 'lovelace'"
+            :token-unit="token.unit"
+            :token-ticker="token.ticker"
+            :token-decimals="token.decimals"
+            @swap-complete="onSwapComplete"
+          />
+          <div v-else class="text-center py-4 text--secondary text-caption">
+            {{ $t('market.na') }}
+          </div>
+
+          <!-- Token Info (compact grid) -->
+          <div class="token-info-grid mt-4">
+            <div class="info-item" v-for="stat in compactStats" :key="stat.label">
+              <span class="info-label">{{ stat.label }}</span>
+              <span class="info-value">
+                <component :is="stat.component" v-if="stat.component" v-bind="stat.componentProps" />
+                <template v-else>{{ stat.value }}</template>
+              </span>
+            </div>
+          </div>
+
+          <!-- Policy ID row -->
+          <div v-if="tokenPolicyId" class="policy-row mt-2">
+            <div class="d-flex align-center" style="gap: 4px">
+              <v-icon x-small :color="token.policyLocked ? '#47CD89' : '#F97066'">
+                {{ token.policyLocked ? 'mdi-lock' : 'mdi-lock-open-variant' }}
+              </v-icon>
+              <span class="info-label">{{ $t('market.policy') }}</span>
+              <span class="text-caption" :style="{ color: token.policyLocked ? '#47CD89' : '#F97066' }">
+                {{ token.policyLocked ? $t('market.locked') : $t('market.open') }}
+              </span>
+            </div>
+            <div class="policy-id text-caption text--secondary mt-1" :title="tokenPolicyId" @click="copyPolicyId">
+              {{ tokenPolicyId }}
+              <v-icon x-small class="ml-1" style="opacity: 0.4">mdi-content-copy</v-icon>
+            </div>
+          </div>
+
+          <!-- P&L Section (if user holds this token) -->
+          <div v-if="tokenPnl" class="pnl-section mt-3">
+            <span class="text-caption text--secondary font-weight-medium d-block mb-1">P&L</span>
+            <v-simple-table dense class="transparent stats-table">
+              <tbody>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.avgCostBasis') }}</td>
+                  <td class="text-right" style="font-size: 12px; padding: 4px 8px">{{ formatPnlValue(tokenPnl.avgCostBasisAda) }}</td>
+                </tr>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.unrealizedPnlDetail') }}</td>
+                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.unrealizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                    {{ formatPnlSigned(tokenPnl.unrealizedPnlAda) }}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.realizedPnlDetail') }}</td>
+                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.realizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                    {{ formatPnlSigned(tokenPnl.realizedPnlAda) }}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px; font-weight: 600">{{ $t('market.totalPnlDetail') }}</td>
+                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', fontWeight: '600', color: totalPnl >= 0 ? '#47CD89' : '#F97066' }">
+                    {{ formatPnlSigned(totalPnl) }}
+                  </td>
+                </tr>
+              </tbody>
+            </v-simple-table>
+          </div>
+        </div>
+
+        <!-- Depth tab -->
+        <div v-else-if="rightTab === 1" key="depth">
+          <div style="display: flex; flex-direction: column; gap: 12px">
+            <DepthChart
+              v-if="tokenPolicyId && tokenAssetName"
+              :policy-id="tokenPolicyId"
+              :asset-name="tokenAssetName"
+              style="max-height: 200px"
+            />
+            <OrderBookTable
+              v-if="tokenPolicyId && tokenAssetName"
+              :policy-id="tokenPolicyId"
+              :asset-name="tokenAssetName"
+            />
+          </div>
+        </div>
+        </transition>
       </div>
     </div>
   </v-card>
@@ -187,9 +236,15 @@ import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
 import TechnicalAnalysisChart from './TechnicalAnalysisChart.vue';
 import TokenRiskBadge from './TokenRiskBadge.vue';
+import OrderBookTable from './OrderBookTable.vue';
 import DepthChart from './DepthChart.vue';
-import CrossDexPrices from './CrossDexPrices.vue';
+import QuickSwap from './QuickSwap.vue';
+import RecentTrades from './RecentTrades.vue';
+import BuySellVolume from './BuySellVolume.vue';
 import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
+import { priceStore } from '@/stores/priceStore';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{
   token: MarketToken;
@@ -197,16 +252,63 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'close'): void;
-  (e: 'swap', token: MarketToken): void;
 }>();
 
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
 const { getTokenCandles } = useMarketData();
 const { getTokenPnl } = useWalletPnl();
+const { usdToEurRate } = useCurrencyConverter();
+
+type Currency = 'ADA' | 'USD' | 'EUR';
+const currencyOptions: Currency[] = ['ADA', 'USD', 'EUR'];
+const selectedCurrency = ref<Currency>('USD');
+
+// Currency conversion helpers
+const adaUsdPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
+
+/** Convert a USD value to the selected currency */
+function convertUsd(usdValue: number): number {
+  switch (selectedCurrency.value) {
+    case 'ADA': return adaUsdPrice.value > 0 ? usdValue / adaUsdPrice.value : 0;
+    case 'EUR': return usdValue * (usdToEurRate.value || 1);
+    case 'USD':
+    default: return usdValue;
+  }
+}
+
+const currencySymbol = computed(() => {
+  switch (selectedCurrency.value) {
+    case 'ADA': return '₳';
+    case 'EUR': return '\u20AC';
+    case 'USD':
+    default: return '$';
+  }
+});
+
+// Display prices based on selected currency
+const displayPrice = computed(() => {
+  const tok = props.token;
+  switch (selectedCurrency.value) {
+    case 'ADA': return formatPrice(tok.priceAda, '₳');
+    case 'EUR': return formatPrice(tok.price * (usdToEurRate.value || 1), '\u20AC');
+    case 'USD':
+    default: return formatPrice(tok.price, '$');
+  }
+});
+
+const secondaryPrice = computed(() => {
+  const tok = props.token;
+  switch (selectedCurrency.value) {
+    case 'ADA': return '$' + formatPriceRaw(tok.price);
+    case 'USD': return formatPriceRaw(tok.priceAda) + ' ₳';
+    case 'EUR': return formatPriceRaw(tok.priceAda) + ' ₳';
+    default: return '';
+  }
+});
 
 const selectedTimeframe = ref('1h');
-const activeSubTab = ref(0);
+const rightTab = ref(0);
 
 const tokenPnl = computed(() => getTokenPnl(props.token.unit));
 const totalPnl = computed(() => {
@@ -257,43 +359,58 @@ const chartHeight = computed(() => {
 });
 
 const candles: Ref<CandlestickDataPoint[]> = ref([]);
+const candlesLoading = ref(true);
+
+/** Map selected currency to the backend currency param (ada/usd/eur) */
+function candleCurrency(): string {
+  return selectedCurrency.value.toLowerCase();
+}
+
+// Backend returns candles already converted — just pass through
+const convertedCandles = computed(() => candles.value);
 
 let candleRequestId = 0;
 async function loadCandles() {
   const requestId = ++candleRequestId;
-  const result = await getTokenCandles(props.token.unit, selectedTimeframe.value);
-  if (requestId === candleRequestId) {
-    candles.value = result;
+  candlesLoading.value = true;
+
+  try {
+    const result = await getTokenCandles(
+      props.token.unit === 'lovelace' ? 'lovelace' : props.token.unit,
+      selectedTimeframe.value,
+      candleCurrency(),
+    );
+    if (requestId === candleRequestId) {
+      candles.value = result;
+    }
+  } finally {
+    if (requestId === candleRequestId) {
+      candlesLoading.value = false;
+    }
   }
 }
 
 // Load candles on setup
 loadCandles();
 
-const stats = computed(() => {
+// Compact stats for the right column grid (removed liquidity, kept essentials)
+const compactStats = computed(() => {
   const tok = props.token;
+  const sym = currencySymbol.value;
   return [
-    { label: t('market.marketCap'), value: '$' + formatCompact(tok.mcap), tooltip: t('market.mcapTooltip') },
-    { label: t('market.volume24h'), value: '$' + formatCompact(tok.volume24h), tooltip: t('market.volumeTooltip') },
-    { label: t('market.tvl'), value: tok.tvl ? '$' + formatCompact(tok.tvl) : t('market.na'), tooltip: t('market.tvlTooltip') },
-    { label: t('market.liquidity'), value: '$' + formatCompact(tok.liquidity), tooltip: t('market.liquidityTooltip') },
-    { label: t('market.holders'), value: tok.holders.toLocaleString(), tooltip: t('market.holdersTooltip') },
+    { label: t('market.marketCap'), value: sym + formatCompact(convertUsd(tok.mcap)) },
+    { label: t('market.volume24h'), value: sym + formatCompact(convertUsd(tok.volume24h)) },
+    { label: t('market.tvl'), value: tok.tvl ? sym + formatCompact(convertUsd(tok.tvl)) : t('market.na') },
+    { label: t('market.holders'), value: tok.holders != null ? tok.holders.toLocaleString() : t('market.na') },
     {
       label: t('market.risk'),
       value: tok.riskRating || t('market.na'),
-      tooltip: t('market.riskTooltip'),
       component: tok.riskRating ? markRaw(TokenRiskBadge) : undefined,
       componentProps: tok.riskRating ? { rating: tok.riskRating, size: 'small' } : undefined,
     },
     {
-      label: t('market.policy'),
-      value: tok.policyLocked ? '🔒 ' + t('market.locked') : '⚠️ ' + t('market.open'),
-      tooltip: tok.policyLocked ? t('market.policyLocked') : t('market.policyOpen'),
-    },
-    {
       label: t('market.verified'),
-      value: tok.verified ? '✓ ' + t('market.yes') : t('market.no'),
-      tooltip: t('market.verifiedTooltip'),
+      value: tok.verified ? '✓' : t('market.no'),
     },
   ];
 });
@@ -302,10 +419,49 @@ function toggleWatch(unit: string) {
   toggleWatchlist(unit);
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1) return '$' + price.toFixed(2);
-  if (price >= 0.01) return '$' + price.toFixed(4);
-  return '$' + price.toFixed(6);
+function onSwapComplete() {
+  // Could refresh token data or recent trades here
+}
+
+function copyPolicyId() {
+  if (tokenPolicyId.value) {
+    navigator.clipboard.writeText(tokenPolicyId.value)
+      .then(() => snackbar.fireSuccess(t('market.policyIdCopied')))
+      .catch(() => snackbar.fireError(t('market.copyFailed')));
+  }
+}
+
+/** Convert an ADA value to the selected currency */
+function convertAda(adaValue: number): number {
+  switch (selectedCurrency.value) {
+    case 'USD': return adaValue * adaUsdPrice.value;
+    case 'EUR': return adaValue * adaUsdPrice.value * (usdToEurRate.value || 1);
+    case 'ADA':
+    default: return adaValue;
+  }
+}
+
+function formatPnlValue(adaValue: number | null): string {
+  if (adaValue == null) return '—';
+  const converted = convertAda(adaValue);
+  const decimals = converted < 1 ? 6 : 2;
+  return currencySymbol.value + converted.toFixed(decimals);
+}
+
+function formatPnlSigned(adaValue: number): string {
+  const converted = convertAda(adaValue);
+  const sign = converted >= 0 ? '+' : '';
+  return sign + currencySymbol.value + converted.toFixed(2);
+}
+
+function formatPriceRaw(price: number): string {
+  if (price >= 1) return price.toFixed(2);
+  if (price >= 0.01) return price.toFixed(4);
+  return price.toFixed(6);
+}
+
+function formatPrice(price: number, symbol: string = '$'): string {
+  return symbol + formatPriceRaw(price);
 }
 
 function formatCompact(value: number): string {
@@ -323,11 +479,16 @@ function openExplorer() {
 // Reset timeframe and reload candles when token changes
 watch(() => props.token, () => {
   selectedTimeframe.value = '1h';
+  rightTab.value = 0;
   loadCandles();
 });
 
-// Reload candles when timeframe changes
+// Reload candles when timeframe or currency changes
 watch(selectedTimeframe, () => {
+  loadCandles();
+});
+
+watch(selectedCurrency, () => {
   loadCandles();
 });
 </script>
@@ -364,11 +525,29 @@ watch(selectedTimeframe, () => {
   }
 }
 
-.panel-scroll {
-  overflow-y: auto;
-  height: calc(100% - 72px);
+/* ═══ Two-column layout ═══ */
+.panel-columns {
+  display: flex;
+  height: calc(100% - 60px);
+  overflow: hidden;
 }
 
+.left-col {
+  flex: 6;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  scroll-behavior: smooth;
+}
+
+.right-col {
+  flex: 4;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  scroll-behavior: smooth;
+}
+
+/* ═══ Chart controls ═══ */
 .timeframe-bar {
   display: flex;
   align-items: center;
@@ -418,6 +597,62 @@ watch(selectedTimeframe, () => {
   background: rgba(144, 202, 249, 0.1);
 }
 
+/* ═══ Token info grid ═══ */
+.token-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.info-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.info-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.info-value {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ═══ Policy row ═══ */
+.policy-row {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+.policy-id {
+  font-size: 11px;
+  font-family: monospace;
+  word-break: break-all;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.policy-id:hover {
+  opacity: 1;
+}
+
+/* ═══ P&L / Stats ═══ */
+.pnl-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 12px;
+}
+
 .stats-table >>> td {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
@@ -426,15 +661,87 @@ watch(selectedTimeframe, () => {
   border-bottom: none !important;
 }
 
+/* ═══ Tab transitions ═══ */
+.tab-fade-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tab-fade-leave-active {
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.tab-fade-enter {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* ═══ Stagger fade-in for info grid items ═══ */
+.token-info-grid .info-item {
+  animation: infoFadeIn 0.25s ease both;
+}
+.token-info-grid .info-item:nth-child(1) { animation-delay: 0.03s; }
+.token-info-grid .info-item:nth-child(2) { animation-delay: 0.06s; }
+.token-info-grid .info-item:nth-child(3) { animation-delay: 0.09s; }
+.token-info-grid .info-item:nth-child(4) { animation-delay: 0.12s; }
+.token-info-grid .info-item:nth-child(5) { animation-delay: 0.15s; }
+.token-info-grid .info-item:nth-child(6) { animation-delay: 0.18s; }
+
+@keyframes infoFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══ Tabs ═══ */
 .detail-sub-tabs >>> .v-tab {
   text-transform: none !important;
   font-size: 12px;
   min-width: unset;
   padding: 0 10px;
   letter-spacing: 0;
+  transition: color 0.15s ease;
 }
 
 .detail-sub-tabs >>> .v-tabs-slider {
   height: 2px;
+  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══ Currency pills ═══ */
+.currency-pills {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 2px;
+  width: fit-content;
+}
+
+.currency-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.currency-pill:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.currency-pill.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chart-no-data {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
 }
 </style>

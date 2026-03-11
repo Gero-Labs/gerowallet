@@ -14,7 +14,7 @@
  */
 
 // Current app version - update this when releasing new features
-const APP_VERSION = '2.6.3';
+const APP_VERSION = '2.7.0';
 
 // Feature definitions - add new features here
 export interface FeatureDefinition {

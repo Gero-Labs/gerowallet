@@ -55,9 +55,12 @@ let macdSignalSeries: ISeriesApi<'Line'> | null = null;
 let macdHistogramSeries: ISeriesApi<'Histogram'> | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let initRetryCount = 0;
+let initRafId: number | null = null;
 const MAX_INIT_RETRIES = 10;
 
 function destroyChart() {
+  if (initRafId != null) { cancelAnimationFrame(initRafId); initRafId = null; }
+  initRetryCount = 0;
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
@@ -91,7 +94,7 @@ async function initChart() {
   if (containerWidth === 0 || containerHeight === 0) {
     if (initRetryCount < MAX_INIT_RETRIES) {
       initRetryCount++;
-      requestAnimationFrame(() => initChart());
+      initRafId = requestAnimationFrame(() => initChart());
     } else {
       console.warn('TechnicalAnalysisChart: Container not laid out after max retries');
       showFallback.value = true;

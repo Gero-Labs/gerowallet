@@ -1,51 +1,105 @@
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import marketApi, { type NftCollectionStats } from '@/api/market-api';
 import { walletStore } from '@/stores/walletStore';
 
-const collections = ref<(NftCollectionStats & { name?: string; image?: string; quantity?: number })[]>([]);
+export interface NftCollectionDisplay {
+  policyId: string;
+  name: string;
+  img: string;
+  quantity: number;
+  isScam: boolean;
+  // Market data (optional — may not be available from backend)
+  floorPriceLovelace: number | null;
+  totalVolumeLovelace: number | null;
+  saleCount: number | null;
+}
+
+const collections = ref<NftCollectionDisplay[]>([]);
 const loading = ref(false);
+let nftWatcherRegistered = false;
 
 export function useNftMarketData() {
   async function fetchUserNftCollections() {
     loading.value = true;
     try {
-      const tokens = walletStore.tokens || {};
-      // Group NFTs by policyId
-      const policyIds = new Set<string>();
-      Object.entries(tokens).forEach(([unit, token]: [string, any]) => {
-        if (unit !== 'lovelace' && token.quantity && Number(token.quantity) > 0) {
-          // NFTs typically have quantity=1 and no decimals
-          if ((!token.decimals || token.decimals === 0) && Number(token.quantity) <= 10) {
-            const policyId = unit.substring(0, 56);
-            policyIds.add(policyId);
-          }
-        }
-      });
+      // Start from walletStore.collections (populated by chain sync — always available)
+      const walletCollections = walletStore.collections || {};
+      const entries = Object.entries(walletCollections) as [string, any][];
 
-      if (policyIds.size === 0) {
+      if (entries.length === 0) {
         collections.value = [];
         return;
       }
 
-      // Fetch stats for each collection
-      const results = await Promise.allSettled(
-        Array.from(policyIds).map(async (policyId) => {
-          const stats = await marketApi.getNftCollectionStats(policyId);
-          // Count how many NFTs user holds from this collection
-          let quantity = 0;
-          Object.entries(tokens).forEach(([unit, token]: [string, any]) => {
-            if (unit.startsWith(policyId) && Number(token.quantity) > 0) {
-              quantity += Number(token.quantity);
-            }
-          });
-          return { ...stats, quantity };
-        })
-      );
+      // Build base list from wallet data (walletStore.collections already contains only NFTs)
+      const baseCollections: NftCollectionDisplay[] = entries
+        .map(([policyId, col]) => ({
+          policyId,
+          name: col.name || policyId.slice(0, 8) + '...',
+          img: col.img || '',
+          quantity: col.quantity || col.items?.length || 0,
+          isScam: col.isScam || false,
+          floorPriceLovelace: null,
+          totalVolumeLovelace: null,
+          saleCount: null,
+        }));
 
-      collections.value = results
-        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
-        .map(r => r.value)
-        .filter(c => c.floorPriceLovelace > 0 || c.saleCount > 0);
+      // Set immediately so the user sees their collections
+      collections.value = baseCollections;
+
+      // Enrich with market data from two sources:
+      // 1. Bulk top collections endpoint (covers popular collections)
+      // 2. Individual per-collection calls (fills gaps)
+      const statsMap = new Map<string, NftCollectionStats>();
+      const userPolicyIds = new Set(baseCollections.map(c => c.policyId));
+
+      // Source 1: Try bulk endpoint for top collections
+      try {
+        const topCollections = await marketApi.getNftCollections('volume', 200);
+        if (Array.isArray(topCollections)) {
+          for (const tc of topCollections) {
+            if (tc.policyId && userPolicyIds.has(tc.policyId)) {
+              statsMap.set(tc.policyId, tc);
+            }
+          }
+        }
+      } catch {
+        // Bulk endpoint not available — continue with individual calls
+      }
+
+      // Source 2: Fetch individually for collections not covered by bulk (batched to avoid API spam)
+      const missing = baseCollections.filter(c => !statsMap.has(c.policyId));
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+        const batch = missing.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map(async (col) => {
+            const stats = await marketApi.getNftCollectionStats(col.policyId);
+            return { policyId: col.policyId, stats };
+          })
+        );
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value.stats) {
+            statsMap.set(r.value.policyId, r.value.stats);
+          }
+        }
+      }
+
+      // Apply market data to collections
+      if (statsMap.size > 0) {
+        collections.value = baseCollections.map(col => {
+          const s = statsMap.get(col.policyId);
+          if (s) {
+            return {
+              ...col,
+              floorPriceLovelace: s.floorPriceLovelace ?? null,
+              totalVolumeLovelace: s.totalVolumeLovelace ?? null,
+              saleCount: s.saleCount ?? null,
+            };
+          }
+          return col;
+        });
+      }
     } catch (e) {
       console.warn('Failed to fetch NFT collection data:', e);
     } finally {
@@ -57,9 +111,18 @@ export function useNftMarketData() {
 
   const totalFloorValue = computed(() => {
     return collections.value.reduce((sum, c) => {
+      if (!c.floorPriceLovelace) return sum;
       return sum + (c.floorPriceLovelace * (c.quantity || 0)) / 1_000_000;
     }, 0);
   });
+
+  // Re-fetch when wallet collections change (e.g. wallet switch) — register only once
+  if (!nftWatcherRegistered) {
+    nftWatcherRegistered = true;
+    watch(() => walletStore.collections, () => {
+      fetchUserNftCollections();
+    });
+  }
 
   return {
     collections,

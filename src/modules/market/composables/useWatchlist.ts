@@ -21,12 +21,17 @@ function saveToStorage(list: string[]) {
 
 // Singleton state so all components share the same watchlist
 const watchlist: Ref<string[]> = ref(loadFromStorage());
+// Set for O(1) lookups — kept in sync with watchlist array
+const watchlistSet = ref<Set<string>>(new Set(watchlist.value));
 
-watch(watchlist, (val) => saveToStorage(val), { deep: true });
+watch(watchlist, (val) => {
+  watchlistSet.value = new Set(val);
+  saveToStorage(val);
+}, { deep: true });
 
 export function useWatchlist() {
   function isWatched(unit: string): boolean {
-    return watchlist.value.includes(unit);
+    return watchlistSet.value.has(unit);
   }
 
   function toggleWatchlist(unit: string) {
