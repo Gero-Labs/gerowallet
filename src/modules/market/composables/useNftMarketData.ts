@@ -67,8 +67,9 @@ export function useNftMarketData() {
         // Bulk endpoint not available — continue with individual calls
       }
 
-      // Source 2: Fetch individually for collections not covered by bulk (batched to avoid API spam)
-      const missing = baseCollections.filter(c => !statsMap.has(c.policyId));
+      // Source 2: Fetch individually for collections not covered by bulk (capped + batched to avoid API spam)
+      const MAX_INDIVIDUAL = 20;
+      const missing = baseCollections.filter(c => !statsMap.has(c.policyId)).slice(0, MAX_INDIVIDUAL);
       const BATCH_SIZE = 5;
       for (let i = 0; i < missing.length; i += BATCH_SIZE) {
         const batch = missing.slice(i, i + BATCH_SIZE);
