@@ -2209,6 +2209,8 @@ export default {
   'market.tvl': 'TVL',
   'market.liquidity': 'Liquidity',
   'market.holders': 'Holders',
+  'market.columns': 'Columns',
+  'market.resetColumns': 'Reset to default',
   'market.policy': 'Policy',
   'market.verified': 'Verified',
   'market.locked': 'Locked',
@@ -2280,7 +2282,7 @@ export default {
   'portfolio.expandChart': 'Expand chart',
 
   // Global Search
-  'search.globalPlaceholder': 'Search tokens, pools, DReps, transactions...',
+  'search.globalPlaceholder': 'Global Search',
   'search.tokens': 'Tokens',
   'search.transactions': 'Transactions',
   'search.stakePools': 'Stake Pools',
