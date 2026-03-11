@@ -1,8 +1,10 @@
-import { ref, computed, onUnmounted, getCurrentInstance, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef } from 'vue';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { xerberusStore } from '@/stores/xerberusStore';
 import { walletStore } from '@/stores/walletStore';
+import { coinGeckoStore } from '@/stores/coinGeckoStore';
+import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 
 export interface MarketToken {
@@ -120,31 +122,55 @@ async function fetchAllTokens(): Promise<void> {
   error.value = null;
 
   try {
-    const [allPrices, adaPrice] = await Promise.all([
-      marketApi.getAllPrices(),
-      marketApi.getAdaPrice(),
-    ]);
+    const chain = walletStore.loggedWallet?.chain;
+    const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
+
+    // For Apex wallets, use CoinGecko apex-4 data; for Cardano, use market API
+    let nativePrice: { priceUsd: number; priceEur: number; priceChange24h: number; marketCap: number; volume24h: number };
+
+    if (isApex) {
+      const apexData = coinGeckoStore.cache['apex-4'];
+      nativePrice = {
+        priceUsd: apexData?.usd ?? 0,
+        priceEur: apexData?.usd ?? 0, // CoinGecko only fetches USD; EUR not available
+        priceChange24h: apexData?.usd_24h_change ?? 0,
+        marketCap: apexData?.usd_market_cap ?? 0,
+        volume24h: apexData?.usd_24h_vol ?? 0,
+      };
+    } else {
+      const adaPrice = await marketApi.getAdaPrice();
+      nativePrice = {
+        priceUsd: adaPrice.priceUsd,
+        priceEur: adaPrice.priceEur ?? 0,
+        priceChange24h: adaPrice.priceChange24h ?? 0,
+        marketCap: adaPrice.marketCap ?? 0,
+        volume24h: adaPrice.volume24h ?? 0,
+      };
+    }
+
+    // Apex wallets don't have market API token listings — only show native token
+    const allPrices = isApex ? [] : await marketApi.getAllPrices();
 
     // Map API tokens through enrichment (backend already aggregates per token)
     const tokens: MarketToken[] = allPrices.map(tp => enrichWithStores(tp));
 
     // Build native token (ADA / AP3X) at position 0
-    const nativeName = networks.resolveCurrencyName(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || 'Cardano';
-    const nativeTicker = networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || 'ADA';
-    const adaToken: MarketToken = {
+    const nativeName = networks.resolveCurrencyName(chain, walletStore.loggedWallet?.network) || 'Cardano';
+    const nativeTicker = networks.resolveCurrencyTicker(chain, walletStore.loggedWallet?.network) || 'ADA';
+    const nativeToken: MarketToken = {
       unit: 'lovelace',
       name: nativeName,
       ticker: nativeTicker,
       img: '',
       verified: true,
-      price: adaPrice.priceUsd,
+      price: nativePrice.priceUsd,
       priceAda: 1,
-      priceEur: adaPrice.priceEur ?? 0,
+      priceEur: nativePrice.priceEur,
       change1h: 0,
-      change24h: adaPrice.priceChange24h ?? 0,
+      change24h: nativePrice.priceChange24h,
       change7d: 0,
-      volume24h: adaPrice.volume24h ?? 0,
-      mcap: adaPrice.marketCap ?? 0,
+      volume24h: nativePrice.volume24h,
+      mcap: nativePrice.marketCap,
       tvl: null,
       liquidity: 0,
       holders: 0,
@@ -153,19 +179,20 @@ async function fetchAllTokens(): Promise<void> {
       policyLocked: true,
       fingerprint: '',
       decimals: 6,
+      isNative: true,
     };
 
-    // Remove any existing lovelace entry, then prepend ADA
+    // Remove any existing lovelace entry, then prepend native token
     const filtered = tokens.filter(t => t.unit !== 'lovelace');
-    allTokens.value = [adaToken, ...filtered];
+    allTokens.value = [nativeToken, ...filtered];
 
-    // Set adaData ref
+    // Set adaData ref (used for native currency price display)
     adaData.value = {
-      priceUsd: adaPrice.priceUsd,
-      priceEur: adaPrice.priceEur || 0,
-      priceChange24h: adaPrice.priceChange24h || 0,
-      marketCap: adaPrice.marketCap || 0,
-      volume24h: adaPrice.volume24h || 0,
+      priceUsd: nativePrice.priceUsd,
+      priceEur: nativePrice.priceEur,
+      priceChange24h: nativePrice.priceChange24h,
+      marketCap: nativePrice.marketCap,
+      volume24h: nativePrice.volume24h,
     };
   } catch (e: any) {
     console.error('Market: Failed to fetch tokens', e);
@@ -326,6 +353,11 @@ function cleanup(): void {
   initialized = false;
 }
 
+// --- Re-fetch when wallet changes (e.g. Cardano ↔ Apex switch) ---
+
+let chainWatcherRegistered = false;
+let coinGeckoWatcherRegistered = false;
+
 // --- Composable ---
 
 export function useMarketData() {
@@ -334,6 +366,24 @@ export function useMarketData() {
     initialized = true;
     fetchAllTokens();
     refreshInterval = setInterval(fetchAllTokens, 60_000);
+  }
+
+  // Watch for wallet chain changes — re-fetch data when switching wallets
+  if (!chainWatcherRegistered) {
+    chainWatcherRegistered = true;
+    watch(() => walletStore.loggedWallet?.chain, () => {
+      fetchAllTokens();
+    });
+  }
+
+  // Watch for CoinGecko cache updates — Apex wallets depend on this data arriving async
+  if (!coinGeckoWatcherRegistered) {
+    coinGeckoWatcherRegistered = true;
+    watch(() => coinGeckoStore.cache, () => {
+      const chain = walletStore.loggedWallet?.chain;
+      const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
+      if (isApex) fetchAllTokens();
+    }, { deep: true });
   }
 
   // Track consumers to cleanup interval when no components are using it

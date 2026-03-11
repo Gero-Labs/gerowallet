@@ -334,7 +334,7 @@ const tokensList = computed(() => {
       if (token.name === 'Cardano') {
         coinGeckoCurrency = 'cardano';
       } else if (token.name === 'Apex Fusion') {
-        coinGeckoCurrency = 'apex-2';
+        coinGeckoCurrency = 'apex-4';
         token.price = convertFiat(price.value?.lastPrice || 0);
       }
       token.mcap = convertFiat(cache.value[coinGeckoCurrency]?.usd_market_cap);

@@ -105,8 +105,8 @@
           />
         </div>
 
-        <!-- Buy vs Sell Volume -->
-        <div class="pt-2">
+        <!-- Buy vs Sell Volume (Cardano DEX data only) -->
+        <div v-if="!isApex" class="pt-2">
           <BuySellVolume
             v-if="tokenPolicyId && tokenAssetName"
             :policy-id="tokenPolicyId"
@@ -114,8 +114,8 @@
           />
         </div>
 
-        <!-- Recent Trades -->
-        <div class="pt-2">
+        <!-- Recent Trades (Cardano DEX data only) -->
+        <div v-if="!isApex" class="pt-2">
           <RecentTrades
             v-if="tokenPolicyId && tokenAssetName"
             :policy-id="tokenPolicyId"
@@ -135,9 +135,9 @@
         <!-- Swap tab -->
         <transition name="tab-fade" mode="out-in">
         <div v-if="rightTab === 0" key="swap">
-          <!-- QuickSwap -->
+          <!-- QuickSwap (Cardano DEX only) -->
           <QuickSwap
-            v-if="token.unit !== 'lovelace'"
+            v-if="!isApex && token.unit !== 'lovelace'"
             :token-unit="token.unit"
             :token-ticker="token.ticker"
             :token-decimals="token.decimals"
@@ -207,9 +207,9 @@
           </div>
         </div>
 
-        <!-- Depth tab -->
+        <!-- Depth tab (Cardano DEX data only) -->
         <div v-else-if="rightTab === 1" key="depth">
-          <div style="display: flex; flex-direction: column; gap: 12px">
+          <div v-if="!isApex" style="display: flex; flex-direction: column; gap: 12px">
             <DepthChart
               v-if="tokenPolicyId && tokenAssetName"
               :policy-id="tokenPolicyId"
@@ -221,6 +221,9 @@
               :policy-id="tokenPolicyId"
               :asset-name="tokenAssetName"
             />
+          </div>
+          <div v-else class="text-center py-6 text--secondary text-caption">
+            {{ $t('market.na') }}
           </div>
         </div>
         </transition>
@@ -245,6 +248,8 @@ import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{
@@ -261,6 +266,11 @@ const { getTokenCandles } = useMarketData();
 const { getTokenPnl } = useWalletPnl();
 const { usdToEurRate } = useCurrencyConverter();
 const { currencySymbol: nativeSymbol, currencyTicker: nativeTicker } = useNativeCurrency();
+
+const isApex = computed(() => {
+  const chain = walletStore.loggedWallet?.chain;
+  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
+});
 
 type Currency = 'NATIVE' | 'USD' | 'EUR';
 const currencyOptions: Currency[] = ['NATIVE', 'USD', 'EUR'];
