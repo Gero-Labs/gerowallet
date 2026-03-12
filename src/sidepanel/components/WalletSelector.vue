@@ -27,7 +27,7 @@
 import { computed } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 
-const wallets = computed(() => geroStore.wallets || []);
+const wallets = computed(() => Object.values(geroStore.wallets || {}));
 
 defineEmits<{
   (e: 'select', wallet: any): void;

@@ -174,7 +174,7 @@ function formatAmount(amount: number): string {
 }
 
 function openFullDashboard() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html#/card') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/card') });
 }
 
 async function handleLogout() {

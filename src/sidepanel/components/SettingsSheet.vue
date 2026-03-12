@@ -32,7 +32,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 function openFullSettings() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
   emit('close');
 }
 

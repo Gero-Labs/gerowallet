@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 function openDashboard() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html#/welcome') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/welcome') });
 }
 </script>
 
