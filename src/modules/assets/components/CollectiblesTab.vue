@@ -60,7 +60,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch, onMounted, onUnmounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
@@ -81,14 +80,14 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 // Emits
-const emit = defineEmits(['rowClick']);
+defineEmits(['rowClick']);
 
 // Store references
 const { collections } = toRefs(walletStore);
 
 // Advanced Gallery Features
 const collectiblesPage = ref<number>(1);
-const dialogData = ref<any>(null);
+const dialogData = ref(null);
 const screenWidth = ref<number>(window.innerWidth);
 
 // Pagination settings

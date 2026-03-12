@@ -1,7 +1,7 @@
 import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/chrome/serialization';
-import { Asset, Cardano, Serialization, util } from '@cardano-sdk/core';
-import { HexBlob, isNotNil } from '@cardano-sdk/util';
+import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
+import { isNotNil } from '@cardano-sdk/util';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import DexHunterStore from '@/stores/dexHunterStore';
 import NetworkStore from '@/stores/networkStore';
@@ -416,9 +416,13 @@ export function resolveAsset(token: any): any {
       }
     } else if (asset_name) {
       try {
-        name = Cardano.AssetName.toUTF8(Cardano.AssetName(asset_name), true);
+        const decoded = Cardano.AssetName.toUTF8(Cardano.AssetName(asset_name), true);
+        // Check if UTF-8 decoding produced valid readable text (no replacement chars or control chars)
+        const hasInvalidChars = /[\uFFFD\u0000-\u001F]/.test(decoded) ||
+          decoded.split('').some(ch => ch.charCodeAt(0) > 127 && ch.charCodeAt(0) < 160);
+        name = hasInvalidChars ? asset_name.slice(0, 16) + '...' : decoded;
       } catch (e) {
-        name = String(util.hexToBytes(HexBlob(asset_name)));
+        name = asset_name.slice(0, 16) + '...';
       }
     }
   }
@@ -443,18 +447,31 @@ export function resolveAsset(token: any): any {
         } else if (Array.isArray(asset.onchain_metadata.image)) {
           img = resolveIcon(asset.onchain_metadata.image.join(''))
         }
-      } else if (asset.onchain_metadata['721'] && asset.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
-        const obj = asset.onchain_metadata['721'][asset.policy_id][name];
-        onchain_metadata = obj
-        if (obj.image) {
-          if (typeof obj.image == "string") {
-            img = resolveIcon(obj.image)
-          } else if (Array.isArray(obj.image)) {
-            img = resolveIcon(obj.image.join(''))
+      } else if (asset.onchain_metadata['721']) {
+        // CIP-25 v1/v2 compatible lookup:
+        // v1: policy_id as hex text, asset_name as UTF-8 text
+        // v2: policy_id and asset_name as raw bytes (Koios returns "0x"-prefixed hex keys)
+        const cip25 = asset.onchain_metadata['721'];
+        const pid = policy_id || asset.policy_id;
+        const policyMeta = cip25[pid] || cip25[`0x${pid}`];
+        if (policyMeta) {
+          const aName = asset_name || asset.asset_name;
+          const obj = policyMeta[name]             // CIP-25v1: UTF-8 decoded name
+                   || policyMeta[aName]             // CIP-25v2: hex-encoded asset_name
+                   || policyMeta[`0x${aName}`];     // CIP-25v2: Koios "0x"-prefixed hex
+          if (obj) {
+            onchain_metadata = obj
+            if (obj.image) {
+              if (typeof obj.image == "string") {
+                img = resolveIcon(obj.image)
+              } else if (Array.isArray(obj.image)) {
+                img = resolveIcon(obj.image.join(''))
+              }
+            }
+            if (obj.name) {
+              name = obj.name
+            }
           }
-        }
-        if (obj.name) {
-          name = obj.name
         }
       }
       if (asset.onchain_metadata?.files && !img) {
