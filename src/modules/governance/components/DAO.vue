@@ -368,7 +368,7 @@ import { computed, onMounted, reactive, ref, toRefs } from 'vue';
 import assets from '@/utils/assets';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import clarityApi, { type VotingPowerCalculation, type DaoDetails } from '@/api/clarity-api';
+import clarityApi, { type VotingPowerCalculation, type DaoDetails, type MembershipWorkflow } from '@/api/clarity-api';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
@@ -393,7 +393,7 @@ const sanitizeHtml = (html: string): string => {
         } else {
           // Strip event handlers and dangerous attributes
           for (const attr of Array.from(el.attributes)) {
-            if (attr.name.startsWith('on') || attr.name === 'style' || (attr.name === 'href' && attr.value.startsWith('javascript'))) {
+            if (attr.name.startsWith('on') || attr.name === 'style' || (attr.name === 'href' && attr.value.toLowerCase().startsWith('javascript'))) {
               el.removeAttribute(attr.name);
             }
           }
@@ -414,11 +414,11 @@ const daoDetailsData = ref<DaoDetails | null>(null);
 const members = ref<Record<string, number>>({});
 const votingPowerCalcs = ref<VotingPowerCalculation[]>([]);
 const userVotingPower = ref<number | null>(null);
-const membershipWorkflow = ref<any>(null);
+const membershipWorkflow = ref<MembershipWorkflow | null>(null);
 const isMember = ref(false);
 const joiningDao = ref(false);
 const joinDialog = ref(false);
-const expandedSections = reactive<Record<string, boolean>>({ about: false, mechanics: false, permissions: false, involved: false });
+const expandedSections = reactive({ about: false, mechanics: false, permissions: false, involved: false });
 
 // ── Computed ──
 const memberCount = computed(() => Object.keys(members.value).length);
@@ -603,7 +603,7 @@ const chartOptions = computed(() => {
 });
 
 // ── Helpers ──
-const toggleSection = (section: string): void => {
+const toggleSection = (section: keyof typeof expandedSections): void => {
   expandedSections[section] = !expandedSections[section];
 };
 

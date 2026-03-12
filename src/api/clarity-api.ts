@@ -46,6 +46,13 @@ export interface VotingPowerCalculation {
   timeBonusMultiplier: number;
 }
 
+export interface MembershipWorkflow {
+  autoApprove?: boolean;
+  minimumStake?: number;
+  welcomeMessage?: string;
+  description?: string;
+}
+
 export interface PollOption {
   id: string;
   name: string;
