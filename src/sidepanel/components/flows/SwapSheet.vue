@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="onSheetInput" :title="sheetTitle" height="92%" persistent>
+  <BottomSheet :value="value" @input="onSheetInput" :title="sheetTitle" height="75%" persistent>
     <div class="swap-sheet">
 
       <!-- ═══════ MAINTENANCE OVERLAY ═══════ -->
