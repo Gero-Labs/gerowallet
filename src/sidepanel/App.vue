@@ -50,7 +50,7 @@ import SettingsSheet from './components/SettingsSheet.vue';
 const showWalletSwitcher = ref(false);
 const showSettings = ref(false);
 
-const hasWallets = computed(() => (geroStore.wallets?.length || 0) > 0);
+const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
 const isLocked = computed(() => walletStore.isLocked);
 

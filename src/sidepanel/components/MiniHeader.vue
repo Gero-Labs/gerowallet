@@ -32,7 +32,7 @@ import { walletStore } from '@/stores/walletStore';
 const walletName = computed(() => walletStore.loggedWallet?.name || 'Wallet');
 
 function openFullDashboard() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
 }
 </script>
 
