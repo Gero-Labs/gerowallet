@@ -32,7 +32,9 @@ jobs:
 
             IMPORTANT: Focus ONLY on the files changed in this PR. Do NOT review the entire codebase.
             Use `git diff origin/development...HEAD` to see exactly what changed.
-            Post your review as a single comment on the PR.
+
+            After completing the review, you MUST post it as a PR comment using:
+            gh pr comment ${{ github.event.pull_request.number }} --body "<your review>"
 
             Review the PR changes focusing on:
 
