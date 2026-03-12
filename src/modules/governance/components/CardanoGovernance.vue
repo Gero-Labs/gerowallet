@@ -336,6 +336,7 @@ import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import { debugLog } from '@/utils/debug';
 
 const { truncate, toCurrency } = filters;
 
@@ -530,10 +531,10 @@ const delegate = async () => {
       dRep = {
         __typename: 'AlwaysNoConfidence',
       } as Cardano.AlwaysNoConfidence;
-    } else if (delegationModel.value === 'Gero DRep') {
+    } else if (delegationModel.value === String(t('governance.geroDRep'))) {
       delegateLoading.value = false;
       return; // TODO
-    } else if (delegationModel.value === 'Own Account') {
+    } else if (delegationModel.value === String(t('governance.ownAccount'))) {
       delegateLoading.value = false;
       return; // TODO
     } else {
@@ -575,10 +576,10 @@ const delegate = async () => {
         votes: 0,
         voting_power: 0,
       };
-    } else if (delegationModel.value === 'No Confidence') {
+    } else if (delegationModel.value === String(t('governance.noConfidence'))) {
       selectedDRep.value = {
         id: '',
-        name: 'No Confidence',
+        name: String(t('governance.noConfidence')),
         image: '',
         delegators: 0,
         votes: 0,
@@ -601,7 +602,7 @@ const delegate = async () => {
       }
     });
 
-    console.log('Vote delegation transaction built successfully');
+    debugLog('Vote delegation transaction built successfully');
     isDelegateDialogOpen.value = true;
   } catch (error) {
     console.error('Error building vote delegation transaction:', error);
@@ -631,7 +632,7 @@ const drepDelegate = async (row: any) => {
     };
 
     // Create DRep object from selected DRep data
-    console.log('selectedDRep', selectedDRep.value);
+    debugLog('selectedDRep', selectedDRep.value);
     const dRep = selectedDRep.value.has_script
       ? Serialization.DRep.newScriptHash(selectedDRep.value.hex)
       : Serialization.DRep.newKeyHash(selectedDRep.value.hex);

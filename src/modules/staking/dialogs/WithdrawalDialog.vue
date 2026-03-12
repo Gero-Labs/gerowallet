@@ -142,7 +142,7 @@
               class="mx-2"
               style="margin-bottom: 1px"
             >
-              Submit Transaction
+              {{ $t('staking.submitTransaction') }}
             </v-btn>
             <v-btn
               v-else-if="!isPrfWallet && !isSubmit"

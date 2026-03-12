@@ -254,7 +254,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['close', 'compensation-changed']);
+const emit = defineEmits(['close']);
 
 const { loggedWallet, account } = toRefs(walletStore);
 
@@ -300,7 +300,15 @@ const {
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'governance.drepDelegationTxSubmitted',
-  onClose: () => emit('close'),
+  onClose: () => {
+    // CIP-0149: Update governance store with compensation status only after successful submission
+    if (compensationEnabled.value && compensationBasisPoints.value > 0) {
+      governanceStoreActions.setCompensationBps(compensationBasisPoints.value);
+    } else {
+      governanceStoreActions.setCompensationBps(null);
+    }
+    emit('close');
+  },
 });
 
 const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
@@ -327,13 +335,14 @@ const compensationPercentDisplay = computed(() => {
 const estimatedEpochDonation = computed(() => {
   if (!compensationBasisPoints.value || !account.value?.controlled_amount) return 0;
   const balance = Number(account.value.controlled_amount);
-  const avgEpochRewardRate = 0.00069; // ~3.5% APY / ~73 epochs per year
+  const avgEpochRewardRate = 0.000479; // ~3.5% APY / ~73 epochs per year
   return Math.floor(balance * avgEpochRewardRate * (compensationBasisPoints.value / 1000));
 });
 
 // Show compensation section only for real DReps (not Abstain/No Confidence)
 const showCompensationSection = computed(() => {
-  return props.drep && props.drep.id && props.drep.name !== 'Abstain' && props.drep.name !== 'No Confidence';
+  return props.drep && props.drep.id &&
+    props.drep.id !== 'drep_always_abstain' && props.drep.id !== 'drep_always_no_confidence';
 });
 
 // Constants for template
@@ -400,12 +409,6 @@ const handlePassKeyError = (error: string) => {
 // Simplified signing function that uses the composable
 const signAndSubmitDelegationTx = async () => {
   await handleSign(form.value || undefined);
-  // CIP-0149: Update governance store with compensation status after successful delegation
-  if (compensationEnabled.value && compensationBasisPoints.value > 0) {
-    governanceStoreActions.setCompensationBps(compensationBasisPoints.value);
-  } else {
-    governanceStoreActions.setCompensationBps(null);
-  }
 };
 
 const fallbackImage = (e: any) => {

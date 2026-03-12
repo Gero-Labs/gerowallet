@@ -63,7 +63,8 @@ export function useWithdrawal() {
       if (comp && !comp.belowMinimum && !skipCompensation.value && governanceStore.currentDRep) {
         // Resolve DRep payment address from metadata
         const drepPaymentAddress = governanceStore.currentDRep?.metadata?.meta_json?.body?.paymentAddress;
-        if (drepPaymentAddress) {
+        // Validate address format before using (must be valid bech32 Cardano address)
+        if (drepPaymentAddress && (drepPaymentAddress.startsWith('addr1') || drepPaymentAddress.startsWith('addr_test1'))) {
           outputs.push({
             address: drepPaymentAddress as Cardano.PaymentAddress,
             value: { coins: BigInt(comp.donationLovelace) }
@@ -100,6 +101,7 @@ export function useWithdrawal() {
   const closeWithdrawalDialog = () => {
     withdrawalDialog.value = false;
     txData.value = null;
+    skipCompensation.value = false;
   };
 
   return {

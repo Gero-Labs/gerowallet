@@ -376,7 +376,39 @@ import { walletStore } from '@/stores/walletStore';
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 
+/** Sanitize HTML — whitelist safe tags only, strip everything else */
+const sanitizeHtml = (html: string): string => {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  const allowedTags = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'a', 'ul', 'ol', 'li', 'span', 'div']);
+  const walk = (node: Node) => {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as HTMLElement;
+        if (!allowedTags.has(el.tagName.toLowerCase())) {
+          // Replace disallowed element with its text content
+          const text = document.createTextNode(el.textContent || '');
+          node.replaceChild(text, child);
+        } else {
+          // Strip event handlers and dangerous attributes
+          for (const attr of Array.from(el.attributes)) {
+            if (attr.name.startsWith('on') || attr.name === 'style' || (attr.name === 'href' && attr.value.startsWith('javascript'))) {
+              el.removeAttribute(attr.name);
+            }
+          }
+          if (el.tagName === 'A') el.setAttribute('rel', 'noopener noreferrer');
+          walk(child);
+        }
+      }
+    }
+  };
+  walk(div);
+  return div.innerHTML;
+};
+
 // ── State ──
+const daoName = ref('Gero DAO');
 const daoDescription = ref(String(t('governance.geroDAODescription')));
 const daoDetailsData = ref<DaoDetails | null>(null);
 const members = ref<Record<string, number>>({});
@@ -421,9 +453,8 @@ const workflowInfo = computed(() => {
 const workflowWelcomeMessage = computed(() => {
   const wf = membershipWorkflow.value;
   if (!wf || typeof wf !== 'object') return '';
-  // Extract welcome message and sanitize basic HTML
   const raw = wf.welcomeMessage || wf.description || '';
-  return typeof raw === 'string' ? raw : '';
+  return typeof raw === 'string' ? sanitizeHtml(raw) : '';
 });
 
 const userVotingPowerDisplay = computed(() => {
@@ -633,7 +664,7 @@ onMounted(async () => {
       const data = res.data;
       daoDetailsData.value = data;
       if (data?.name) daoName.value = data.name;
-      if (data?.description) daoDescription.value = data.description;
+      if (data?.description) daoDescription.value = sanitizeHtml(data.description);
     }).catch(err => console.warn('DAO details:', err)),
 
     // 2. Members (getDaoMembers)
