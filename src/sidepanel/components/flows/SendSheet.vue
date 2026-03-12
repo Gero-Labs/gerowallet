@@ -294,8 +294,8 @@ function openDashboardSend() {
 }
 
 .mini-input >>> .v-input__slot {
-  background: #141414 !important;
-  border-color: #2a2a2a !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .mini-input >>> .v-text-field__slot input {
@@ -337,7 +337,7 @@ function openDashboardSend() {
 }
 
 .contact-item:hover {
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .contact-info {
@@ -345,7 +345,10 @@ function openDashboardSend() {
 }
 
 .review-section {
-  background: #141414;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 16px;
 }
@@ -355,7 +358,7 @@ function openDashboardSend() {
   justify-content: space-between;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .review-row:last-child {
