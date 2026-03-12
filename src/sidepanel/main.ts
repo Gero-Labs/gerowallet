@@ -10,6 +10,7 @@ import router from './router';
 import App from './App.vue';
 import { walletStore } from '@/stores/walletStore';
 import { activityTracker } from '@/services/activityTracker.service';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 Vue.config.productionTip = false;
 Vue.use(VueRouter);
@@ -33,6 +34,15 @@ chrome.storage.local.get(['walletStore', 'geroStore'], async ({ walletStore: sav
     router,
     render: h => h(App),
   }).$mount('#app');
+
+  // Initialize feature flags (non-blocking, same as options/main.ts)
+  //@ts-ignore
+  const ldClientId = import.meta.env.VITE_LD_CLIENT_SIDE_ID;
+  if (ldClientId) {
+    featureFlagsStore.initialize(ldClientId).catch(err =>
+      console.error('Failed to initialize feature flags:', err)
+    );
+  }
 
   // Activity tracker: start when logged in and unlocked
   const checkActivityTracker = () => {
