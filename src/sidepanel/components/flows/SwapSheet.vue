@@ -63,6 +63,11 @@
                 <v-icon x-small color="#47CD89">mdi-check-decagram</v-icon>
               </div>
             </div>
+            <v-icon
+              v-if="(selectingTokenSide === 'A' && token.unit === selectedTokenA.unit) ||
+                    (selectingTokenSide === 'B' && token.unit === selectedTokenB.unit)"
+              small color="#00c7f3" class="ml-2"
+            >mdi-check-circle</v-icon>
           </div>
           <div v-if="filteredTokenList.length === 0" class="text-caption grey--text text-center pa-4">
             {{ $t('miniGero.noTokensFound') }}
@@ -92,7 +97,19 @@
               {{ preset.label }}
             </v-btn>
           </div>
-          <div v-if="slippageRef === 'unlimited'" class="text-caption mt-2" style="color: #F97066">
+          <div class="d-flex align-center mt-2" style="gap: 8px">
+            <input
+              v-model="customSlippage"
+              type="text"
+              inputmode="decimal"
+              class="amount-input"
+              :placeholder="$t('miniGero.custom')"
+              style="width: 80px; font-size: 13px"
+              @input="onCustomSlippage"
+            />
+            <span class="text-caption grey--text">%</span>
+          </div>
+          <div v-if="slippageRef === 'unlimited' || (slippageRef !== 'auto' && Number(slippageRef) > 5)" class="text-caption mt-2" style="color: #F97066">
             {{ $t('miniGero.highSlippageWarning') }}
           </div>
         </div>
@@ -130,12 +147,14 @@
             <span class="detail-label">{{ $t('miniGero.youPay') }}</span>
             <span class="detail-value white--text font-weight-bold">
               {{ selectedTokenA.quantity }} {{ selectedTokenA.ticker }}
+              <div class="text-caption grey--text">${{ getUsdValue(selectedTokenA) }}</div>
             </span>
           </div>
           <div class="review-row">
             <span class="detail-label">{{ $t('miniGero.youReceive') }}</span>
             <span class="detail-value white--text font-weight-bold">
               {{ selectedTokenB.quantity }} {{ selectedTokenB.ticker }}
+              <div class="text-caption grey--text">${{ getUsdValue(selectedTokenB) }}</div>
             </span>
           </div>
           <div v-if="swapType === 'swap'" class="review-row">
@@ -151,6 +170,14 @@
           <div v-if="swapType === 'swap' && estimation.batcher_fee" class="review-row">
             <span class="detail-label">{{ $t('miniGero.networkFee') }}</span>
             <span class="detail-value">{{ (estimation.batcher_fee / 1_000_000).toFixed(2) }} ADA</span>
+          </div>
+          <div v-if="swapType === 'swap' && estimation.minReceive" class="review-row">
+            <span class="detail-label">{{ $t('miniGero.minReceived') }}</span>
+            <span class="detail-value">{{ estimation.minReceive }} {{ selectedTokenB.ticker }}</span>
+          </div>
+          <div class="review-row">
+            <span class="detail-label">{{ $t('miniGero.slippageTolerance') }}</span>
+            <span class="detail-value">{{ slippageDisplay }}</span>
           </div>
           <div v-if="swapType === 'limit'" class="review-row">
             <span class="detail-label">{{ $t('miniGero.targetPrice') }}</span>
@@ -414,6 +441,19 @@
             />
             <span class="text-caption white--text" style="width: 45px; text-align: end">{{ limitSplit }}/40</span>
           </div>
+          <div class="d-flex align-center mt-2" style="gap: 8px">
+            <span class="text-caption white--text">{{ $t('miniGero.expiresIn') }}</span>
+            <v-select
+              v-model="limitExpiry"
+              :items="expiryOptions"
+              item-text="label"
+              item-value="value"
+              dense outlined dark hide-details
+              class="mini-input"
+              style="max-width: 140px"
+              attach
+            />
+          </div>
         </div>
 
         <!-- Swap / Review button -->
@@ -483,6 +523,7 @@ const previousStep = ref<Step>('swap');
 // ── Swap state ──
 const swapType = ref<'swap' | 'limit'>('swap');
 const slippageRef = ref<string>('2');
+const customSlippage = ref('');
 const loading = ref(false);
 const estimating = ref(false);
 const submitting = ref(false);
@@ -511,6 +552,16 @@ const showKeystoneDialog = ref(false);
 const limit = ref<string>('0.0000000');
 const limitType = ref<'one' | 'split'>('one');
 const limitSplit = ref<number>(1);
+const limitExpiry = ref('86400');
+const expiryOptions = [
+  { label: '1h', value: '3600' },
+  { label: '4h', value: '14400' },
+  { label: '12h', value: '43200' },
+  { label: '24h', value: '86400' },
+  { label: '3d', value: '259200' },
+  { label: '7d', value: '604800' },
+  { label: '30d', value: '2592000' },
+];
 
 // ── Estimate data ──
 const price_ab = ref(0);
@@ -645,7 +696,8 @@ const filteredTokenList = computed(() => {
   if (!q) return availableTokens.value;
   return availableTokens.value.filter(t =>
     (t.ticker || '').toLowerCase().includes(q) ||
-    (t.name || '').toLowerCase().includes(q)
+    (t.name || '').toLowerCase().includes(q) ||
+    (t.unit || '').toLowerCase().includes(q)
   );
 });
 
@@ -922,10 +974,23 @@ function openTokenSelect(side: 'A' | 'B') {
 function onTokenSelected(token: any) {
   isUpdating.value = true;
   if (selectingTokenSide.value === 'A') {
-    selectedTokenA.value = { ...token, quantity: '0' };
+    if (selectedTokenB.value && token.unit === selectedTokenB.value.unit) {
+      const oldB = { ...selectedTokenB.value };
+      selectedTokenB.value = { ...selectedTokenA.value };
+      selectedTokenA.value = { ...oldB, quantity: '0' };
+    } else {
+      selectedTokenA.value = { ...token, quantity: '0' };
+    }
     tokenAInput.value = '';
   } else {
-    selectedTokenB.value = { ...token, quantity: '0' };
+    if (selectedTokenA.value && token.unit === selectedTokenA.value.unit) {
+      const oldA = { ...selectedTokenA.value };
+      selectedTokenA.value = { ...selectedTokenB.value, quantity: '0' };
+      selectedTokenB.value = { ...oldA };
+      tokenAInput.value = '';
+    } else {
+      selectedTokenB.value = { ...token, quantity: '0' };
+    }
   }
   step.value = previousStep.value;
   setTimeout(() => { isUpdating.value = false; }, 100);
@@ -935,6 +1000,14 @@ function onTokenSelected(token: any) {
 function openSettings() {
   previousStep.value = step.value as Step;
   step.value = 'settings';
+}
+
+function onCustomSlippage() {
+  const val = customSlippage.value.replace(/[^0-9.]/g, '');
+  customSlippage.value = val;
+  if (val && !isNaN(Number(val))) {
+    slippageRef.value = val;
+  }
 }
 
 function toggleDex(dex: string) {
@@ -975,7 +1048,7 @@ async function executeSwap() {
     }) as BackgroundResponse<VerifyPasswordResponse>;
 
     if (!pwResult.data.success) {
-      passwordError.value = 'Wrong spending password';
+      passwordError.value = t('miniGero.wrongPassword');
       return;
     }
 
@@ -1030,7 +1103,7 @@ async function executeSwap() {
     if (e?.response) {
       passwordError.value = `Error: ${e.response.status} - ${JSON.stringify(e.response.data)}`;
     } else {
-      passwordError.value = e?.message || 'Swap failed';
+      passwordError.value = e?.message || t('miniGero.swapFailedGeneric');
     }
   } finally {
     submitting.value = false;
@@ -1085,7 +1158,7 @@ async function onPassKeySuccess(pkBytes: Uint8Array) {
     await submitSwapTx(signRes.cbor);
   } catch (e: any) {
     console.error('[Swap] PRF sign error:', e);
-    passwordError.value = e?.message || 'Swap failed';
+    passwordError.value = e?.message || t('miniGero.swapFailedGeneric');
   } finally {
     submitting.value = false;
   }
@@ -1093,7 +1166,7 @@ async function onPassKeySuccess(pkBytes: Uint8Array) {
 
 function onPassKeyError(error: Error) {
   console.error('[Swap] PassKey error:', error);
-  passwordError.value = error.message || 'PassKey authentication failed';
+  passwordError.value = error.message || t('miniGero.passKeyAuthFailed');
 }
 
 // ── Ledger signing ──
@@ -1144,7 +1217,7 @@ async function signLedger() {
     await submitSwapTx(signRes.cbor);
   } catch (e: any) {
     ledgerUtils.ledgerErrorHandling(e);
-    passwordError.value = e?.message || 'Ledger signing failed';
+    passwordError.value = e?.message || t('miniGero.ledgerSignFailed');
   } finally {
     submitting.value = false;
   }
@@ -1184,7 +1257,7 @@ async function signTrezor() {
       data: { method: 'signTx', txCbor: swapTxCbor.value },
     }) as BackgroundResponse<SignTxResponse>;
 
-    if (!response.data.success) throw new Error(response.data.error || 'Trezor signing failed');
+    if (!response.data.success) throw new Error(response.data.error || t('miniGero.trezorSignFailed'));
 
     const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
     const signatures: Cardano.Signatures = new Map(signaturesArray);
@@ -1195,9 +1268,9 @@ async function signTrezor() {
     await submitSwapTx(signRes.cbor);
   } catch (e: any) {
     if (e?.message?.includes('Failure_ActionCancelled') || e?.message?.includes('cancelled')) {
-      passwordError.value = 'Transaction cancelled on Trezor';
+      passwordError.value = t('miniGero.trezorCancelled');
     } else {
-      passwordError.value = e?.message || 'Trezor signing failed';
+      passwordError.value = e?.message || t('miniGero.trezorSignFailed');
     }
   } finally {
     submitting.value = false;
@@ -1241,7 +1314,7 @@ async function signKeystone() {
     showKeystoneDialog.value = true;
   } catch (e: any) {
     console.error('[Swap] Keystone sign request error:', e);
-    passwordError.value = e?.message || 'Failed to create Keystone sign request';
+    passwordError.value = e?.message || t('miniGero.keystoneRequestFailed');
   }
 }
 
@@ -1249,7 +1322,7 @@ async function onKeystoneScan(ur: UR) {
   try {
     const signature = parseSignature(ur);
     if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-      throw new Error('Invalid Keystone signature');
+      throw new Error(t('miniGero.keystoneInvalidSig'));
     }
     showKeystoneDialog.value = false;
     submitting.value = true;
@@ -1258,7 +1331,7 @@ async function onKeystoneScan(ur: UR) {
     await submitSwapTx(signRes.cbor);
   } catch (e: any) {
     console.error('[Swap] Keystone QR error:', e);
-    passwordError.value = e?.message || 'Keystone QR scan error';
+    passwordError.value = e?.message || t('miniGero.keystoneScanError');
     showKeystoneDialog.value = false;
   } finally {
     submitting.value = false;
@@ -1267,7 +1340,7 @@ async function onKeystoneScan(ur: UR) {
 
 function onKeystoneError(error: string) {
   console.error('[Swap] Keystone scanner error:', error);
-  passwordError.value = error || 'Keystone scan error';
+  passwordError.value = error || t('miniGero.keystoneScannerError');
   showKeystoneDialog.value = false;
 }
 
@@ -1287,7 +1360,7 @@ async function submitSwapTx(cborHex: string) {
   txId.value = submitResult.data.txId || '';
   txSuccess.value = true;
   step.value = 'status';
-  snackbar.fireSuccess('Swap submitted!');
+  snackbar.fireSuccess(t('miniGero.swapSubmitted'));
   debugLog('[Swap] Transaction submitted:', txId.value);
 }
 
