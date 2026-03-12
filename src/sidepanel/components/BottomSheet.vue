@@ -72,7 +72,7 @@ function onBackdropClick() {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -80,17 +80,24 @@ function onBackdropClick() {
 
 .bottom-sheet-container {
   width: 100%;
-  background: rgba(15, 15, 15, 0.85);
-  backdrop-filter: blur(24px) saturate(1.8);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  background:
+    linear-gradient(180deg, rgba(19, 22, 27, 0.65) 0%, rgba(10, 12, 16, 0.75) 100%),
+    radial-gradient(ellipse at 30% 0%, rgba(45, 240, 247, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
   border-radius: 16px 16px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transform: translateY(0);
   transition: transform 0.3s ease-out;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 -12px 40px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset -1px 0 0 rgba(45, 240, 247, 0.06);
 }
 
 .bottom-sheet-enter {
@@ -120,7 +127,7 @@ function onBackdropClick() {
 .handle-bar {
   width: 36px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 2px;
 }
 
@@ -129,7 +136,8 @@ function onBackdropClick() {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .bottom-sheet-content {
