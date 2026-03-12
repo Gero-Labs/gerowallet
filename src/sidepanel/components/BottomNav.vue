@@ -1,0 +1,67 @@
+<template>
+  <nav class="bottom-nav">
+    <button
+      v-for="tab in navTabs"
+      :key="tab.route"
+      class="nav-tab"
+      :class="{ active: activeTab === tab.route, center: tab.center }"
+      @click="$router.push(tab.route)"
+    >
+      <v-icon :size="tab.center ? 28 : 22" :color="activeTab === tab.route ? '#00c7f3' : '#888'">
+        {{ activeTab === tab.route ? tab.activeIcon : tab.icon }}
+      </v-icon>
+    </button>
+  </nav>
+</template>
+
+<script setup lang="ts">
+import { useMiniNavigation } from '../composables/useMiniNavigation';
+
+const { navTabs, activeTab } = useMiniNavigation();
+</script>
+
+<style scoped>
+.bottom-nav {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  height: 56px;
+  background: #0f0f0f;
+  border-top: 1px solid #1e1e1e;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+
+.nav-tab:hover {
+  background: #1a1a1a;
+}
+
+.nav-tab.active {
+  background: rgba(0, 199, 243, 0.1);
+}
+
+.nav-tab.center {
+  width: 52px;
+  height: 52px;
+  background: #1a1a1a;
+  border-radius: 16px;
+  margin-top: -8px;
+}
+
+.nav-tab.center.active {
+  background: rgba(0, 199, 243, 0.15);
+}
+</style>

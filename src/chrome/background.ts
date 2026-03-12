@@ -108,11 +108,61 @@ export async function openSidebar(tabId: number, path: string) {
       path,
       enabled: true
   })
-  chrome.sidePanel.setPanelBehavior({
-    openPanelOnActionClick: false
-  })
   chrome.sidePanel.open({ tabId });
   return tabId;
+}
+
+// Mini-gero: open side panel on extension icon click
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+
+// Mini-gero DApp channel
+let miniGeroPort: chrome.runtime.Port | null = null;
+const pendingDAppRequests = new Map<string, (response: any) => void>();
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'mini-gero-dapp-channel') {
+    miniGeroPort = port;
+
+    port.onMessage.addListener((message) => {
+      if (message.type === 'dapp-response' && message.requestId) {
+        const resolver = pendingDAppRequests.get(message.requestId);
+        if (resolver) {
+          resolver(message);
+          pendingDAppRequests.delete(message.requestId);
+        }
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      miniGeroPort = null;
+      // Reject all pending requests
+      for (const [id, resolver] of pendingDAppRequests) {
+        resolver({ error: 'mini-gero disconnected' });
+        pendingDAppRequests.delete(id);
+      }
+    });
+  }
+});
+
+function sendToMiniGero(method: string, payload: any): Promise<any> {
+  if (!miniGeroPort) return Promise.reject(new Error('mini-gero not connected'));
+  return new Promise((resolve) => {
+    const requestId = crypto.randomUUID();
+    const timeout = setTimeout(() => {
+      pendingDAppRequests.delete(requestId);
+      resolve({ error: 'timeout' });
+    }, 300_000);
+    pendingDAppRequests.set(requestId, (response) => {
+      clearTimeout(timeout);
+      resolve(response);
+    });
+    miniGeroPort!.postMessage({
+      type: 'dapp-request',
+      method,
+      requestId,
+      payload,
+    });
+  });
 }
 
 const processedDomains: Set<string> = new Set<string>();
@@ -324,6 +374,20 @@ app.add(METHOD.enable, (request, sendResponse) => {
   }
   if (WalletStore.isWhitelisted(origin)) {
     return reply({ data: true });
+  }
+
+  // Mini-gero: route DApp requests to side panel if connected
+  if (miniGeroPort) {
+    sendToMiniGero('enable', { ...request.data, website: origin })
+      .then((response) => {
+        if (response.error) {
+          reply({ error: response.error });
+        } else {
+          reply({ data: response.data });
+        }
+      })
+      .catch((err: any) => reply({ error: err.message || APIError.InternalError }));
+    return;
   }
 
   if (typeof tabId !== 'number') {
@@ -670,6 +734,22 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
 });
 
 app.add(METHOD.signData, (request, sendResponse) => {
+  // Mini-gero: route to side panel if connected
+  if (miniGeroPort) {
+    sendToMiniGero('signData', { ...request.data, website: request.origin })
+      .then((response) => {
+        if (response.error) {
+          sendResponse({ id: request.id, error: response.error, target: TARGET, sender: SENDER.extension });
+        } else {
+          sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
+        }
+      })
+      .catch((err: any) => {
+        sendResponse({ id: request.id, error: err.message || APIError.InternalError, target: TARGET, sender: SENDER.extension });
+      });
+    return;
+  }
+
   let responsePromise: Promise<any>;
 
   if (WalletStore.state.config.useSidePanel) {
@@ -722,6 +802,21 @@ app.add(METHOD.signData, (request, sendResponse) => {
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
+  // Mini-gero: route to side panel if connected
+  if (miniGeroPort) {
+    try {
+      const response = await sendToMiniGero('signTx', { ...request.data, website: request.data?.origin || request.origin });
+      if (response.error) {
+        sendResponse({ id: request.id, error: response.error, target: TARGET, sender: SENDER.extension });
+      } else {
+        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
+      }
+    } catch (err: any) {
+      sendResponse({ id: request.id, error: err.message || APIError.InternalError, target: TARGET, sender: SENDER.extension });
+    }
+    return;
+  }
+
   // Create a deep copy of the request to prevent mutations from affecting subsequent sign attempts
   const requestCopy = JSON.parse(JSON.stringify(request));
 
