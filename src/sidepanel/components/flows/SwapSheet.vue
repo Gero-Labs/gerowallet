@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="onSheetInput" :title="sheetTitle" height="75%" persistent>
+  <BottomSheet :value="value" @input="onSheetInput" :title="sheetTitle" height="68%" persistent>
     <div class="swap-sheet">
 
       <!-- ═══════ MAINTENANCE OVERLAY ═══════ -->
@@ -445,7 +445,7 @@
 
         <!-- Swap / Review button -->
         <v-btn
-          block color="#00c7f3" class="black--text font-weight-bold mt-4"
+          block color="#00c7f3" class="black--text font-weight-bold swap-action-btn"
           :disabled="isSwapDisabled || loading || poolError"
           :loading="loading"
           @click="goToReview"
@@ -1447,7 +1447,13 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .swap-sheet {
-  padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.swap-action-btn {
+  margin-top: auto !important;
 }
 
 .glass-card {
