@@ -224,6 +224,7 @@ export default defineConfig(({ command }) => {
         treeshake: false, // Disable for faster builds
         input: {
           options: r('src/options/index.html'),
+          sidepanel: r('src/sidepanel/index.html'),
         },
         onwarn(warning, warn) {
           // Suppress window/window warnings - harmless artifacts from terser minification
