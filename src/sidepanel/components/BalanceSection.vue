@@ -35,8 +35,8 @@
 <script setup lang="ts">
 import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import { tapToolsStore } from '@/stores/tapToolsStore';
 import { priceStore } from '@/stores/priceStore';
+import { dexHunterStore } from '@/stores/dexHunterStore';
 import { getBalance } from '@/chrome/serialization';
 
 defineEmits<{
@@ -64,12 +64,22 @@ const priceChange = computed<number | null>(() => {
 });
 
 const totalPortfolioAda = computed(() => {
-  const portfolio = tapToolsStore.portfolio;
-  if (portfolio?.adaValue) {
-    return portfolio.adaValue;
+  const ada = adaBalance.value || 0;
+  // Sum token values using dexHunter prices (in ADA)
+  const tokens = walletStore.tokens;
+  if (!tokens) return ada;
+  let tokenValueAda = 0;
+  for (const token of Object.values(tokens) as any[]) {
+    if (token.policy_id === '') continue; // ADA already counted
+    const dexToken = dexHunterStore.dexHunterTokens[token.unit];
+    if (dexToken?.price) {
+      const decimals = token.metadata?.decimals ?? 0;
+      let amount = Number(token.quantity || 0);
+      if (decimals > 0) amount = amount / Math.pow(10, decimals);
+      tokenValueAda += amount * dexToken.price;
+    }
   }
-  // Fallback: just use ADA balance
-  return adaBalance.value || 0;
+  return ada + tokenValueAda;
 });
 
 const totalPortfolioUsd = computed(() => {
