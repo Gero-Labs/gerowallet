@@ -455,6 +455,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import dexHunterApi from '@/api/dexhunter-api';
 import ledgerUtils from '@/shared/utils/ledger';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
@@ -470,6 +471,7 @@ type Step = 'swap' | 'limit' | 'token-select' | 'settings' | 'review' | 'status'
 const props = defineProps<{ value: boolean }>();
 const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
 
+const { t } = useTranslation();
 const { loggedWallet, tokens: resolvedAssets, utxos, keys } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
@@ -589,12 +591,12 @@ const isPrfWallet = computed(() =>
 
 const sheetTitle = computed(() => {
   if (step.value === 'status') return '';
-  if (step.value === 'token-select') return 'Select Token';
-  if (step.value === 'settings') return 'Settings';
+  if (step.value === 'token-select') return t('miniGero.selectToken');
+  if (step.value === 'settings') return t('miniGero.swapSettings');
   if (step.value === 'review') {
-    return swapType.value === 'limit' ? 'Review Order' : 'Review Swap';
+    return swapType.value === 'limit' ? t('miniGero.reviewOrder') : t('miniGero.reviewSwap');
   }
-  return 'Swap';
+  return t('miniGero.swapTitle');
 });
 
 const nativeTokenComputed = computed(() => {
@@ -670,15 +672,15 @@ const isSwapDisabled = computed(() => {
 });
 
 const swapButtonText = computed(() => {
-  if (isInsufficientBalance.value) return 'Insufficient Balance';
-  if (poolError.value) return 'Pool Not Found';
+  if (isInsufficientBalance.value) return t('miniGero.insufficientBalance');
+  if (poolError.value) return t('swap.poolNotFound');
   if (swapType.value === 'limit') {
     if (limitType.value === 'one' || (limitType.value === 'split' && limitSplit.value === 1)) {
-      return 'Place Order';
+      return t('miniGero.placeLimitOrder');
     }
-    return `Place ${limitSplit.value} Orders`;
+    return t('miniGero.placeOrders').replace('{count}', String(limitSplit.value));
   }
-  return 'Review Swap';
+  return t('miniGero.reviewSwap');
 });
 
 const slippageDisplay = computed(() => {
