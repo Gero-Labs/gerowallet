@@ -589,8 +589,8 @@ const isPrfWallet = computed(() =>
 
 const sheetTitle = computed(() => {
   if (step.value === 'status') return '';
-  if (step.value === 'token-select') return String((window as any).$t?.('miniGero.selectToken') || 'Select Token');
-  if (step.value === 'settings') return String((window as any).$t?.('miniGero.swapSettings') || 'Settings');
+  if (step.value === 'token-select') return 'Select Token';
+  if (step.value === 'settings') return 'Settings';
   if (step.value === 'review') {
     return swapType.value === 'limit' ? 'Review Order' : 'Review Swap';
   }
