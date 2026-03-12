@@ -72,45 +72,60 @@ src/sidepanel/
 
 | Layer | Source | Notes |
 |-------|--------|-------|
-| Stores | `src/stores/*` | walletStore, cardStore, stakingStore, governanceStore, bringStore, priceStore, etc. |
+| Stores | `src/stores/*` | walletStore, card (`src/stores/modules/card.ts`), stakingStore, governanceStore, bringStore, priceStore, etc. |
 | Services | `src/services/*` | ably, sync, walletManager, storeMessaging, krakenWebSocket |
 | APIs | `src/api/*` | blockchain-api, dexhunter-api, tap-tools-api, cashback-api, crypto-api, etc. |
 | Database | `src/db/*` | gero-db, wallet-db, portfolio-cache |
-| Background | `src/chrome/*` | messaging, background communication, serialization |
+| Background | `src/chrome/*` | messaging (use `Messaging.sendToBackgroundFromOptions()` — sidepanel is an options-like context), background communication, serialization |
 | i18n | `src/plugins/i18n/*` | Translation strings (us.ts, de.ts) |
 | Utilities | `src/shared/utils/*` | crypto, builder, resolver, errorHandler |
 | Composables | `src/shared/composables/*` | Reusable composables where applicable |
 
 ### Build Configuration
 
-The Vite config (`vite.config.mts`) already builds `src/sidepanel/index.html` as a separate entry. No build changes needed beyond ensuring the side panel entry compiles correctly with mini-gero's new components.
+The current `vite.config.mts` only has `options: r('src/options/index.html')` as an input. **The sidepanel must be added as a build input:**
+
+```typescript
+// vite.config.mts — rollupOptions.input
+input: {
+  options: r('src/options/index.html'),
+  sidepanel: r('src/sidepanel/index.html'),  // ADD THIS
+},
+```
+
+The existing `src/sidepanel/main.ts` is a stub that imports the full dashboard router — it must be **rewritten entirely** with mini-gero's own app bootstrap, router, and root component.
 
 ### Manifest Changes
+
+Add the following to `extension/manifest.json` (do not replace existing `action` properties):
 
 ```json
 {
   "side_panel": {
     "default_path": "sidepanel/index.html"
-  },
-  "action": {
-    "default_popup": ""
   }
 }
 ```
 
-- Extension icon click opens the side panel (no popup)
-- `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` set in background.ts
+Remove `default_popup` from `action` if present (do not set it to empty string — omit it entirely).
+
+In `background.ts` initialization, set:
+```typescript
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+```
+
+**Note**: The existing `openSidebar()` function in `background.ts` (line ~111) sets `openPanelOnActionClick: false`. This must be reconciled — `openPanelOnActionClick: true` should be set once at startup, and `openSidebar()` should not override it. The `openSidebar()` function is used for DApp signing side panel flows and will be replaced by the DApp overlay system (see DApp Signing Overlay section).
 
 ---
 
 ## Mode Toggle
 
-A toggle button in the top navigation switches between mini and full mode:
+Mini-gero (side panel) is the **default experience** — clicking the extension icon opens it. The full dashboard is accessible via a toggle.
 
-- **Full dashboard header** (ContentLayout): Toggle button calls `chrome.sidePanel.open({ tabId })` to open mini-gero, optionally with a visual indicator that mini mode is available
-- **Mini-gero header** (MiniHeader): Toggle button calls `chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html') })` to open full dashboard
+- **Mini-gero header** (MiniHeader): "Full Mode" toggle button calls `chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html') })` to open the full dashboard in a new tab
+- **Full dashboard header** (ContentLayout): "Mini Mode" toggle button sends a message to background via `Messaging.sendToBackgroundFromOptions()`, which calls `chrome.sidePanel.open({ tabId })` on the appropriate tab. (The `chrome.sidePanel` API is only available in the background context, so the options page cannot call it directly.)
 
-Both modes share the same stores, so wallet state is always in sync. The user can have both open simultaneously if desired.
+Both modes can be open simultaneously — they share the same stores/services, so wallet state is always in sync. The toggle is a convenience for switching focus, not an exclusive mode switch.
 
 ---
 
@@ -135,6 +150,35 @@ Both modes share the same stores, so wallet state is always in sync. The user ca
 4 circular icon buttons: **Send**, **Receive**, **Swap**, **Perps**
 
 Each opens a full-screen bottom sheet with the respective flow.
+
+---
+
+## Wallet States (Lock, Login, Onboarding)
+
+Mini-gero must handle all wallet states before showing the main UI:
+
+### No Wallet Exists
+If no wallet is found in the database, mini-gero shows a simple screen with:
+- Gero logo
+- "Get Started" button → opens the full dashboard (`options/index.html`) for wallet creation/import
+- Mini-gero does NOT handle wallet creation — that's a complex multi-step flow best done in the full dashboard
+
+### Wallet Locked (Auto-Lock)
+If the wallet exists but is locked (auto-lock timeout, PIN/pattern/lock password required):
+- Mini-gero shows an inline unlock screen
+- Supports: PIN, pattern, lock password, PassKey (PRF wallets)
+- On successful unlock → loads the main UI
+- "Forgot?" link → opens full dashboard for recovery options
+
+### Wallet Selection (Multiple Wallets)
+If multiple wallets exist:
+- Show a wallet selector screen on first open (or after logout)
+- Simple list: wallet name, icon, truncated address
+- Tap to select and unlock
+- The MiniHeader shows the active wallet name — tapping it opens a wallet switcher bottom sheet
+
+### Logged In
+Normal state — show the main UI (Home page with bottom nav).
 
 ---
 
@@ -208,7 +252,7 @@ All triggered from the Home page quick actions row:
 ### Send
 Full-screen bottom sheet:
 1. Select token (from holdings list)
-2. Enter recipient address (manual input, contacts, QR scan)
+2. Enter recipient address (manual input, contacts, paste). **Note**: QR scanning via camera (`getUserMedia()`) may have restrictions in Chrome extension side panels — this needs validation. If unsupported, QR scan is omitted and users paste addresses or use contacts.
 3. Enter amount (with MAX button, fiat/crypto toggle)
 4. Review (fee estimate, total)
 5. Sign and submit
@@ -230,9 +274,14 @@ Bottom sheet with:
 Reuses: `dexHunterStore`, DEX Hunter API
 
 ### Perps (Perpetuals)
-Bottom sheet with perpetuals trading interface.
+**Deferred to v1.1** — the existing perpetuals UI (`PerpetualsDialog.vue`) is a 1100x734px dialog with TradingView chart, order book, and position management. This cannot fit in a 400px bottom sheet without a dedicated redesign.
 
-Reuses: existing perpetuals logic and API integration
+For v1, the Perps quick action button opens a bottom sheet with:
+- Summary of open positions (if any)
+- "Open Full Dashboard" button to access the full perps interface
+- This is a **read-only stub** — no trading in mini-gero v1
+
+The full perps redesign for 400px width is a separate design effort.
 
 ### Buy/Sell ADA
 Prominent button in the balance section. Opens Moonpay/Guardarian in an external browser tab (existing flow, unchanged).
@@ -262,21 +311,31 @@ A persistent `<DAppOverlay>` component mounts at the app root level in `App.vue`
 
 ### Background Script Changes
 
-`src/chrome/background.ts` needs to detect when mini-gero is the active side panel and route DApp requests to it via port messaging instead of opening a new popup or side panel. This requires:
+The current `background.ts` has a `useSidePanel` config flag that routes DApp requests to the options page acting as a side panel (via `openSidebar()`), or falls back to a popup window. **Mini-gero replaces this entire flow.**
 
-- A way for mini-gero to register itself with the background (port connection on mount)
-- Background checks for active mini-gero port before falling back to popup
-- Message format compatible with existing `InternalSidePanelController` pattern
+When mini-gero is active, it becomes the canonical DApp signing target. The changes:
+
+1. **Mini-gero registers with background on mount**: On app init, mini-gero opens a persistent port with a known name (e.g., `mini-gero-dapp-channel`). This tells background that a mini-gero instance is live.
+
+2. **Background routing priority changes**:
+   - If `mini-gero-dapp-channel` port is connected → send DApp request to mini-gero via that port (overlay handles it)
+   - If no mini-gero port → fall back to existing behavior (popup window for DApp signing)
+   - The `useSidePanel` config flag is **removed** — it's no longer needed since mini-gero IS the side panel
+
+3. **`openSidebar()` is no longer called for DApp signing** — mini-gero is already open. The function remains available for the mode toggle (opening the side panel from the full dashboard).
+
+4. **Message format**: Reuse the existing `InternalSidePanelController` message structure (`requestData` / `returnData` methods with `tabId` routing) so signing logic stays compatible.
+
+5. **The `METHOD.enable`, `METHOD.signTx`, `METHOD.signData` handlers** in background.ts are updated: check for mini-gero port first, then fall back to popup. The `openSidebar()` code paths for these methods are removed.
 
 ### Signing Components
 
-The existing signing components (`DappConnect.vue`, `DappSignData.vue`, `SignTx.vue`) contain the business logic. For mini-gero, we either:
-- Adapt them to render inside the bottom sheet (preferred — reuse logic)
-- Build thin wrapper components that import the signing logic but have mini-specific UI
+Mini-gero builds its own signing components for the bottom sheet overlay, extracting business logic from the existing popup components (`DappConnect.vue`, `DappSignData.vue`, `SignTx.vue`). The signing logic (transaction parsing, witness handling, risk assessment) lives in shared utilities — only the UI is rebuilt for 400px width.
 
-Hardware wallet signing (Ledger, Trezor, Keystone) flows remain unchanged — they use their own communication channels (WebUSB, WebBLE, QR codes) which work regardless of the UI container.
-
-PRF wallet signing opens a small popup for WebAuthn (existing pattern in `DappSignData.vue`) — this continues to work since it's a separate window.
+**Exceptions to the bottom sheet pattern:**
+- **Hardware wallet signing** (Ledger, Trezor, Keystone): flows remain unchanged — they use their own communication channels (WebUSB, WebBLE, QR codes) which work regardless of the UI container
+- **PRF wallet signing**: Opens a small popup for WebAuthn (existing pattern in `DappSignData.vue`) — this continues to work since it's a separate window
+- **KaiserEx OAuth** (Card page): Opens in an external window — not a bottom sheet
 
 ---
 
@@ -298,11 +357,11 @@ The implementation is split across 5 independent teammates, each owning separate
 
 | Teammate | Responsibility | Key Files |
 |----------|---------------|-----------|
-| **Shell** | App bootstrap, MiniLayout, BottomNav, MiniHeader, router, manifest changes, mode toggle, DApp overlay system | `src/sidepanel/` core, `App.vue`, `router.ts`, `layouts/`, `DAppOverlay.vue`, `BottomSheet.vue`, manifest.json, background.ts DApp routing |
+| **Shell** | App bootstrap, MiniLayout, BottomNav, MiniHeader, router, manifest changes, mode toggle, DApp overlay system, wallet states (lock screen, wallet selector, no-wallet screen), settings bottom sheet, Vite build config | `src/sidepanel/` core, `App.vue`, `router.ts`, `layouts/`, `DAppOverlay.vue`, `BottomSheet.vue`, manifest.json, background.ts DApp routing, vite.config.mts |
 | **Home** | HomePage, BalanceSection, QuickActions, FeaturedCarousel, TokenList, Buy/Sell button | `src/sidepanel/pages/HomePage.vue`, home-related components |
 | **Card** | CardPage — all 4 states adapted for 400px, bottom sheet wrappers for all card sub-flows (top-up, manage, order, KYC) | `src/sidepanel/pages/CardPage.vue`, card-related components |
-| **Staking** | StakingPage — stakepool + governance segmented toggle, status card, delegation flows, CashbackPage | `src/sidepanel/pages/StakingPage.vue`, `CashbackPage.vue`, staking/governance components |
-| **Flows** | Send/Receive/Swap/Perps bottom sheet flows, ActivityPage, DApp signing components (Connect, SignData, SignTx) adapted for overlay | `src/sidepanel/pages/ActivityPage.vue`, quick action flow components, signing overlay components |
+| **Staking** | StakingPage — stakepool + governance segmented toggle, status card, delegation flows | `src/sidepanel/pages/StakingPage.vue`, staking/governance components |
+| **Flows** | Send/Receive/Swap bottom sheet flows, ActivityPage, CashbackPage, Perps stub, DApp signing components (Connect, SignData, SignTx) adapted for overlay | `src/sidepanel/pages/ActivityPage.vue`, `CashbackPage.vue`, quick action flow components, signing overlay components |
 
 ### Dependency Order
 
@@ -319,10 +378,14 @@ The implementation is split across 5 independent teammates, each owning separate
 
 ---
 
-## Open Questions
+## Resolved Decisions
 
-1. **Wallet switching**: How should multi-wallet switching work in mini-gero? Avatar dropdown in header? Separate wallet selector page?
-2. **Settings**: Full settings page in mini-gero, or just essential settings (network, security) with "Open Full Settings" link?
-3. **Onboarding**: If no wallet exists, should mini-gero handle wallet creation/import, or redirect to the full dashboard?
-4. **Perpetuals UI**: How much of the perps trading interface fits in a bottom sheet at 400px? May need a dedicated flow design.
-5. **Featured carousel content**: What rotates in the carousel? Gero Card promo, cashback deals, new features, announcements?
+1. **Wallet switching**: Tapping wallet name in MiniHeader opens a wallet switcher bottom sheet (list of wallets, tap to switch). On first open with multiple wallets, show wallet selector screen.
+2. **Settings**: Mini-gero shows essential settings only (network selection, security/lock, theme) in a bottom sheet. "All Settings" link opens the full dashboard.
+3. **Onboarding**: Mini-gero does NOT handle wallet creation/import. Shows a "Get Started" screen that opens the full dashboard for onboarding.
+4. **Perpetuals**: Deferred to v1.1. v1 shows a read-only positions stub with link to full dashboard.
+
+## Open Questions (Non-Blocking)
+
+1. **Featured carousel content**: What rotates in the carousel? Gero Card promo, cashback deals, new features, announcements? (Can be decided during Home teammate's implementation — carousel component is generic.)
+2. **Card page empty state**: When the user hasn't registered for Gero Card, should the Card tab show a full marketing page or a simple CTA? (Can follow existing `OrderCardSection.vue` pattern adapted for 400px.)
