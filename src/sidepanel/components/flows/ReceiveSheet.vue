@@ -111,10 +111,12 @@ function copyAddress() {
 }
 
 .qr-wrapper {
-  background: #141414;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 16px;
   padding: 16px;
-  border: 1px solid #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .qr-wrapper canvas {
@@ -128,14 +130,16 @@ function copyAddress() {
 }
 
 .address-box {
-  background: #141414;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 12px;
   padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border: 1px solid #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: border-color 0.2s;
 }
 

@@ -52,7 +52,6 @@ watch(() => props.value, (val) => {
 });
 
 function close() {
-  if (props.persistent) return;
   leaving.value = true;
   setTimeout(() => {
     leaving.value = false;

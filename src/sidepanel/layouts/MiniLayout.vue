@@ -37,17 +37,17 @@ const cardanoBg = assets.cardanoBg;
 
 .mini-bg {
   position: absolute;
-  top: -40%;
+  top: -20%;
   left: 50%;
-  width: 120%;
-  height: 80%;
+  width: 140%;
+  height: 70%;
   z-index: 0;
   background-size: cover;
-  background-position: center;
+  background-position: center bottom;
   background-repeat: no-repeat;
-  transform: translateX(-50%) scaleY(-0.6) scaleX(-1);
+  transform: translateX(-50%) scaleY(-0.5) scaleX(-1);
   pointer-events: none;
-  filter: brightness(0.5);
+  filter: brightness(0.45);
   opacity: 0;
   transition: opacity 0.3s ease-in-out;
 }
