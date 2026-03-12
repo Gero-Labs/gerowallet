@@ -40,6 +40,60 @@ The Shell teammate delivers the app skeleton that all other teammates depend on.
 | `extension/manifest.json` | Modify | Add side_panel config |
 | `src/chrome/background.ts` | Modify (lines 102-116, DApp handlers) | Fix openSidebar, add mini-gero port detection, setPanelBehavior |
 
+### Task 1.0: Add i18n Translation Keys
+
+**Files:**
+- Modify: `src/plugins/i18n/us.ts`
+- Modify: `src/plugins/i18n/de.ts`
+
+Mini-gero introduces new translation keys not present in the existing i18n files. Add these keys to both English and German translation files **before** building any components.
+
+- [ ] **Step 1: Add English translations to us.ts**
+
+Add the following keys to the appropriate sections (or create new sections as needed):
+
+```typescript
+// In the 'welcome' section:
+welcome: 'Welcome to Gero',
+createOrImport: 'Create or import a wallet to get started',
+selectWallet: 'Select Wallet',
+walletLocked: 'Wallet Locked',
+enterPassword: 'Enter spending password',
+unlock: 'Unlock',
+forgotPassword: 'Forgot password?',
+getStarted: 'Get Started',
+
+// In the 'dapp' section (create if not exists):
+connectRequest: 'Connection Request',
+signDataRequest: 'Sign Data Request',
+signTxRequest: 'Sign Transaction',
+
+// In the 'common' section:
+reject: 'Reject',
+approve: 'Approve',
+sign: 'Sign',
+
+// In the 'settings' section:
+allSettings: 'All Settings',
+openFullDashboard: 'Open full dashboard',
+lockWallet: 'Lock Wallet',
+
+// In the 'dashboard' section:
+buySellAda: 'Buy / Sell ADA',
+perps: 'Perps',
+noTokens: 'No tokens yet',
+tokens: 'Tokens',
+```
+
+- [ ] **Step 2: Add corresponding German translations to de.ts**
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/plugins/i18n/us.ts src/plugins/i18n/de.ts
+git commit -m "feat(mini-gero): add i18n keys for mini-gero components"
+```
+
 ### Task 1.1: Build Configuration + Manifest
 
 **Files:**
@@ -477,7 +531,7 @@ git commit -m "feat(mini-gero): add BottomSheet component and composable"
 
 ```typescript
 import { computed } from 'vue';
-import { useRoute } from '@/shared/composables/useRouter';
+import { useRoute } from 'vue-router/composables';
 
 export interface NavTab {
   name: string;
@@ -497,12 +551,10 @@ export const navTabs: NavTab[] = [
 
 export function useMiniNavigation() {
   const route = useRoute();
-  const activeTab = computed(() => route.value.path);
+  const activeTab = computed(() => route.path);
   return { navTabs, activeTab };
 }
 ```
-
-Note: If `useRoute()` is not available as a composable in the existing codebase, use `getCurrentInstance()!.proxy.$route` instead (this is the Vue 2.7 pattern used elsewhere).
 
 - [ ] **Step 2: Create BottomNav.vue**
 
@@ -1013,9 +1065,24 @@ watch(() => geroStore.config?.locale, async (newLocale, oldLocale) => {
   }
 }, { immediate: true, deep: true });
 
-function onWalletSelect(wallet: any) {
-  // Trigger wallet login via background messaging
-  // Implementation depends on existing wallet login flow
+async function onWalletSelect(wallet: any) {
+  // Uses the existing LOGIN message handler in background.ts (line ~1593)
+  // Pattern from WalletsListLogin.vue — sends wallet object to walletManager.login()
+  const { Messaging } = await import('@/chrome/messaging');
+  const { MessageTypes } = await import('@/models/MessageTypes');
+
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    });
+    if (!response.data.success) {
+      console.error('Login failed:', response.data.error);
+    }
+    // walletStore reactivity will update hasActiveWallet → shows MiniLayout
+  } catch (e: any) {
+    console.error('Login error:', e);
+  }
 }
 
 function onWalletSwitch(wallet: any) {
@@ -1024,8 +1091,6 @@ function onWalletSwitch(wallet: any) {
 }
 </script>
 ```
-
-Note: `onWalletSelect` needs to call the existing wallet login flow via `Messaging.sendToBackgroundFromOptions()`. The exact message type depends on how `WalletsListLogin.vue` handles it in the full dashboard — look at `src/options/modules/welcome/components/WalletsListLogin.vue` for the pattern.
 
 - [ ] **Step 5: Commit**
 
@@ -1284,9 +1349,18 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 function sendToMiniGero(method: string, payload: any): Promise<any> {
+  if (!miniGeroPort) return Promise.reject(new Error('mini-gero not connected'));
   return new Promise((resolve) => {
     const requestId = crypto.randomUUID();
-    pendingDAppRequests.set(requestId, resolve);
+    // Timeout after 5 minutes (user may take time to review/sign)
+    const timeout = setTimeout(() => {
+      pendingDAppRequests.delete(requestId);
+      resolve({ error: 'timeout' });
+    }, 300_000);
+    pendingDAppRequests.set(requestId, (response) => {
+      clearTimeout(timeout);
+      resolve(response);
+    });
     miniGeroPort!.postMessage({
       type: 'dapp-request',
       method,
@@ -1303,10 +1377,15 @@ function sendToMiniGero(method: string, payload: any): Promise<any> {
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 ```
 
-**d) Update DApp method handlers** (`METHOD.enable`, `METHOD.signTx`, `METHOD.signData`): In each handler, add mini-gero port check before the existing popup/sidepanel logic:
+**d) Update DApp method handlers** — these are located at specific lines in `background.ts`:
+- `app.add(METHOD.enable, ...)` at **line 308**
+- `app.add(METHOD.signData, ...)` at **line 672**
+- `app.add(METHOD.signTx, ...)` at **line 724**
+
+In each handler, add the mini-gero port check **at the START** of the handler body, before the existing popup/sidepanel logic:
 
 ```typescript
-// Add at the START of each handler:
+// Add at the START of each handler (example for METHOD.enable at line 308):
 if (miniGeroPort) {
   try {
     const response = await sendToMiniGero('enable', request.data);
@@ -1315,15 +1394,17 @@ if (miniGeroPort) {
     } else {
       sendResponse({ id: request.id, data: response.data });
     }
-  } catch (e) {
+  } catch (e: any) {
     sendResponse({ id: request.id, data: { error: e.message } });
   }
   return true;
 }
-// ... existing popup/sidepanel fallback code follows
+// ... existing popup/sidepanel fallback code follows unchanged
 ```
 
-This is the most sensitive change — test thoroughly to ensure existing popup fallback still works when mini-gero is not active.
+Apply the same pattern to all three handlers (enable, signData, signTx), changing the method string accordingly.
+
+**IMPORTANT**: This is the most sensitive change — the existing popup fallback must still work when mini-gero is NOT active (miniGeroPort is null). Test both paths: with side panel open and with side panel closed.
 
 - [ ] **Step 4: Commit**
 
@@ -1370,6 +1451,9 @@ Essential settings only — network, theme, lock. "All Settings" opens full dash
 </template>
 
 <script setup lang="ts">
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 function openFullSettings() {
@@ -1377,9 +1461,13 @@ function openFullSettings() {
   emit('close');
 }
 
-function lockWallet() {
-  // Trigger wallet lock via existing mechanism
-  // walletStore.isLocked = true triggers App.vue state guard
+async function lockWallet() {
+  // Uses MessageTypes.LOCK (background.ts) to lock the wallet
+  // walletStore.isLocked reactivity triggers App.vue state guard → shows LockScreen
+  await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.LOCK,
+    data: {},
+  });
   emit('close');
 }
 </script>
@@ -1504,7 +1592,12 @@ function openBuySell() {
 </style>
 ```
 
-Note: The exact properties (`portfolioValue`, `portfolioChange`, `portfolioChangePercent`) need to be verified against the actual `walletStore` state. Look at `src/stores/walletStore.ts` and the dashboard's portfolio section for the correct computed values.
+**IMPORTANT**: The property names `portfolioValue`, `portfolioChange`, `portfolioChangePercent` shown above are **placeholders** — they do NOT exist on `walletStore`. Portfolio values are computed from:
+- `tapToolsStore.portfolio` — contains `adaValue`, `positionsFt`, `positionsNft`, `positionsLp`
+- `walletStore.utxos` + `walletStore.collateral` — for ADA balance fallback
+- `priceStore` — for ADA/USD conversion
+
+The Home agent MUST read `src/modules/dashboard/views/Dashboard.vue` (lines 216-330) to understand the actual portfolio calculation pattern, then replicate it. The `currentPortfolioValues` computed property in Dashboard.vue is the reference implementation.
 
 - [ ] **Step 2: Commit**
 
@@ -1646,10 +1739,12 @@ import { computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 
 const tokens = computed(() => {
-  // Get token holdings from walletStore
-  // The exact structure depends on how walletStore exposes token data
-  // Look at the dashboard's asset list for the pattern
-  return walletStore.assets || [];
+  // Token holdings come from tapToolsStore.portfolio.positionsFt, NOT walletStore.assets
+  // The Home agent MUST read src/modules/dashboard/views/Dashboard.vue and
+  // src/modules/assets/components/TokensTab.vue to understand the token list data model.
+  // walletStore.tokens contains raw policy-based token data,
+  // tapToolsStore.portfolio.positionsFt contains enriched token positions with prices.
+  return tapToolsStore.portfolio?.positionsFt || [];
 });
 
 function formatAmount(amount: number | string) {
@@ -1930,7 +2025,11 @@ Read: `src/modules/wallet/GeroCard.vue` and `src/composables/useWalletStatus.ts`
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
-import cardStore from '@/stores/modules/card';
+// card.ts has TWO exports:
+//   Named: `export const cardStore` — Vue.observable reactive state (walletStatus, accessToken, etc.)
+//   Default: `export default { methods... }` — helper methods (getSelectedCard, etc.)
+import { cardStore } from '@/stores/modules/card';
+import cardHelpers from '@/stores/modules/card';
 import CardAuthView from '../components/card/CardAuthView.vue';
 import CardNewView from '../components/card/CardNewView.vue';
 import CardPendingView from '../components/card/CardPendingView.vue';
@@ -1939,7 +2038,9 @@ import CardApprovedView from '../components/card/CardApprovedView.vue';
 const state = computed(() => cardStore.walletStatus?.currentState || 'loading');
 
 async function initialize() {
-  await cardStore.initialize();
+  // Card initialization — see initCardStore() in card.ts (line ~66)
+  // It checks auth tokens, calls KaiserEx API, sets walletStatus.currentState
+  // The Card agent MUST read card.ts to understand the full init flow
 }
 
 onMounted(() => {
@@ -1996,8 +2097,13 @@ The Staking teammate builds the combined stakepool + governance page. Depends on
 **Key reference files:**
 - `src/stores/stakingStore.ts` — Staking pools, delegation state
 - `src/stores/governanceStore.ts` — DRep state, voting power
-- `src/modules/staking/` — Existing staking UI components
-- `src/modules/governance/` — Existing governance UI components
+- `src/modules/staking/Staking.vue` — Main staking page (pool list, search, delegation status)
+- `src/modules/staking/dialogs/DelegateDialog.vue` — Delegation confirmation flow
+- `src/modules/staking/dialogs/WithdrawalDialog.vue` — Rewards withdrawal flow
+- `src/modules/staking/dialogs/UnstakeDialog.vue` — Unstake flow
+- `src/modules/governance/Governance.vue` — Main governance page
+- `src/modules/governance/components/CardanoGovernance.vue` — Cardano governance view
+- `src/modules/governance/dialogs/DRepDelegateDialog.vue` — DRep delegation flow
 - `src/shared/utils/builder.ts` — Transaction building for delegation
 
 ### Task 4.1: StakingPage with Segmented Toggle + Status Card
