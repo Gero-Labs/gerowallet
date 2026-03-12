@@ -1447,9 +1447,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .swap-sheet {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
+  padding-bottom: 16px;
 }
 
 .glass-card {
