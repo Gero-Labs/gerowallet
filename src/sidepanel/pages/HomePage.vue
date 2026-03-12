@@ -17,6 +17,12 @@
 
     <TokenList @select="handleTokenSelect" />
 
+    <!-- Flow sheets -->
+    <SendSheet v-model="showSend" />
+    <ReceiveSheet v-model="showReceive" />
+    <SwapSheet v-model="showSwap" />
+    <PerpsStubSheet v-model="showPerps" />
+
     <!-- Token Detail Bottom Sheet -->
     <BottomSheet
       :value="showTokenDetail"
@@ -73,7 +79,15 @@ import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
+import SendSheet from '../components/flows/SendSheet.vue';
+import ReceiveSheet from '../components/flows/ReceiveSheet.vue';
+import SwapSheet from '../components/flows/SwapSheet.vue';
+import PerpsStubSheet from '../components/flows/PerpsStubSheet.vue';
 
+const showSend = ref(false);
+const showReceive = ref(false);
+const showSwap = ref(false);
+const showPerps = ref(false);
 const showTokenDetail = ref(false);
 const selectedToken = ref<any>(null);
 
@@ -91,8 +105,20 @@ function handleBuySell() {
 }
 
 function handleAction(id: string) {
-  console.log('[MiniGero] Action:', id);
-  // Future: open respective action sheets (send, receive, swap, perps)
+  switch (id) {
+    case 'send':
+      showSend.value = true;
+      break;
+    case 'receive':
+      showReceive.value = true;
+      break;
+    case 'swap':
+      showSwap.value = true;
+      break;
+    case 'perps':
+      showPerps.value = true;
+      break;
+  }
 }
 
 function handleTokenSelect(token: any) {
