@@ -176,17 +176,19 @@ function onImgError(event: Event) {
   align-items: center;
   padding: 10px 16px;
   cursor: pointer;
-  transition: background 0.15s ease;
-  border-radius: 8px;
-  margin: 0 8px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  border-radius: 10px;
+  margin: 2px 8px;
+  border: 1px solid transparent;
 }
 
 .token-item:hover {
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .token-item:active {
-  background: #222;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .token-left {
@@ -199,7 +201,7 @@ function onImgError(event: Event) {
 
 .token-avatar {
   flex-shrink: 0;
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .token-info {

@@ -81,13 +81,17 @@ function onBackdropClick() {
 
 .bottom-sheet-container {
   width: 100%;
-  background: #1a1a1a;
+  background: rgba(15, 15, 15, 0.85);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
   border-radius: 16px 16px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transform: translateY(0);
   transition: transform 0.3s ease-out;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .bottom-sheet-enter {
@@ -117,7 +121,7 @@ function onBackdropClick() {
 .handle-bar {
   width: 36px;
   height: 4px;
-  background: #444;
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
 
@@ -126,7 +130,7 @@ function onBackdropClick() {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .bottom-sheet-content {
