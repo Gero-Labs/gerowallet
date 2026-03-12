@@ -43,9 +43,13 @@ function openFullDashboard() {
   align-items: center;
   padding: 8px 12px;
   height: 48px;
-  background: #0f0f0f;
-  border-bottom: 1px solid #1e1e1e;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .header-left {

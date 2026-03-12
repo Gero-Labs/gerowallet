@@ -26,10 +26,14 @@ const { navTabs, activeTab } = useMiniNavigation();
   justify-content: space-around;
   align-items: center;
   height: 56px;
-  background: #0f0f0f;
-  border-top: 1px solid #1e1e1e;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0 8px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .nav-tab {
@@ -46,7 +50,7 @@ const { navTabs, activeTab } = useMiniNavigation();
 }
 
 .nav-tab:hover {
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-tab.active {
@@ -56,7 +60,8 @@ const { navTabs, activeTab } = useMiniNavigation();
 .nav-tab.center {
   width: 52px;
   height: 52px;
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   margin-top: -8px;
 }

@@ -82,8 +82,12 @@ function handlePromoClick(promoId: string) {
 }
 
 .gero-card-promo {
-  background: linear-gradient(135deg, #0d2847 0%, #0a1e3a 50%, #112d4e 100%);
-  border: 1px solid #1a3a5c;
+  background:
+    linear-gradient(135deg, rgba(13, 40, 71, 0.7) 0%, rgba(10, 30, 58, 0.6) 50%, rgba(17, 45, 78, 0.7) 100%);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .promo-content {
