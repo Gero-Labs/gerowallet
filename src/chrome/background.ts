@@ -523,7 +523,7 @@ const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
 async function isWhitelisted(origin: string): Promise<boolean> {
   const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps || [];
-  if (whitelisted.find(el => origin.includes(el.domain))) return true;
+  if (whitelisted.find(el => el.domain && origin.includes(String(el.domain)))) return true;
 
   // Only check bringDomains for Cardano Mainnet
   const loggedWallet = WalletStore.state.loggedWallet;
