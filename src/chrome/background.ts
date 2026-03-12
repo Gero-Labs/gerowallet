@@ -2017,6 +2017,30 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
   return true; // Important: return true for async handlers
 });
 
+app.addToOptions(MessageTypes.OPEN_SIDE_PANEL, async (request, sendResponse) => {
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab?.id) {
+      await openSidebar(activeTab.id, 'sidepanel/index.html');
+    }
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    console.error('open side panel error', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    });
+  }
+});
+
 const openUI = async () => {
   await openDashboard();
 };

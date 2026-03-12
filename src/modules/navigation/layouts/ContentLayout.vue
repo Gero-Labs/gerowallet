@@ -158,6 +158,15 @@
                     </v-card>
                   </v-menu>
 
+                  <v-tooltip bottom>
+                    <template v-slot:activator="{ on }">
+                      <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
+                        <v-icon size="20">mdi-cellphone</v-icon>
+                      </v-btn>
+                    </template>
+                    <span>{{ t('miniGero.miniMode') }}</span>
+                  </v-tooltip>
+
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup || hasNewSettingsFeatures">
                       <v-avatar size="20">
@@ -364,6 +373,15 @@ function closeDialog() {
 function handleOpenBackupDialog() {
   console.log('Received backup dialog event from dashboard');
   backupWalletDialog.value = true;
+}
+
+async function openMiniMode() {
+  const { Messaging } = await import('@/chrome/messaging');
+  const { MessageTypes } = await import('@/models/MessageTypes');
+  await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.OPEN_SIDE_PANEL,
+    data: {},
+  });
 }
 
 // Theme management - update colors when a chain changes
