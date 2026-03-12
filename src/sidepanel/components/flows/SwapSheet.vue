@@ -441,19 +441,6 @@
             />
             <span class="text-caption white--text" style="width: 45px; text-align: end">{{ limitSplit }}/40</span>
           </div>
-          <div class="d-flex align-center mt-2" style="gap: 8px">
-            <span class="text-caption white--text">{{ $t('miniGero.expiresIn') }}</span>
-            <v-select
-              v-model="limitExpiry"
-              :items="expiryOptions"
-              item-text="label"
-              item-value="value"
-              dense outlined dark hide-details
-              class="mini-input"
-              style="max-width: 140px"
-              attach
-            />
-          </div>
         </div>
 
         <!-- Swap / Review button -->
@@ -552,17 +539,6 @@ const showKeystoneDialog = ref(false);
 const limit = ref<string>('0.0000000');
 const limitType = ref<'one' | 'split'>('one');
 const limitSplit = ref<number>(1);
-const limitExpiry = ref('86400');
-const expiryOptions = [
-  { label: '1h', value: '3600' },
-  { label: '4h', value: '14400' },
-  { label: '12h', value: '43200' },
-  { label: '24h', value: '86400' },
-  { label: '3d', value: '259200' },
-  { label: '7d', value: '604800' },
-  { label: '30d', value: '2592000' },
-];
-
 // ── Estimate data ──
 const price_ab = ref(0);
 const price_ba = ref(0);
@@ -678,12 +654,6 @@ const availableTokens = computed(() => {
         balance: found ? found.quantity : 0,
         decimals: token.metadata?.decimals ?? token.decimals ?? 6,
       };
-      if (found && selectedTokenB.value.unit === found.unit) {
-        selectedTokenB.value.balance = res.balance;
-      }
-      if (selectedTokenA.value?.ticker === nativeToken?.ticker) {
-        selectedTokenA.value.balance = nativeToken.balance;
-      }
       return res;
     })
     .sort((a, b) => b.balance - a.balance)
@@ -833,6 +803,22 @@ watch(() => props.value, (val) => {
     resetAll();
   }
 });
+
+// Sync token balances from resolved assets (outside computed to avoid side-effects)
+watch([resolvedAssets, dexHunterTokens], () => {
+  if (selectedTokenA.value?.unit === '' && selectedTokenA.value?.ticker) {
+    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+    if (selectedTokenA.value.ticker === nativeTicker) {
+      const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
+      const nativeAsset: any = assetsArray.find((t: any) => t.metadata?.ticker === nativeTicker);
+      if (nativeAsset) selectedTokenA.value.balance = nativeAsset.quantity;
+    }
+  }
+  if (selectedTokenB.value?.unit) {
+    const found: any = resolvedAssets.value?.[selectedTokenB.value.unit];
+    if (found) selectedTokenB.value.balance = found.quantity;
+  }
+}, { deep: false });
 
 // ── Estimate functions ──
 function doEstimate(token_in: string, token_out: string, amount_in: number, update: boolean) {
@@ -1100,13 +1086,11 @@ async function executeSwap() {
     await submitSwapTx(signRes.cbor);
   } catch (e: any) {
     console.error('[Swap] Error:', e);
-    if (e?.response) {
-      passwordError.value = `Error: ${e.response.status} - ${JSON.stringify(e.response.data)}`;
-    } else {
-      passwordError.value = e?.message || t('miniGero.swapFailedGeneric');
-    }
+    console.error('[Swap] API error:', e?.response?.status, e?.response?.data);
+    passwordError.value = e?.message || t('miniGero.swapFailedGeneric');
   } finally {
     submitting.value = false;
+    spendingPassword.value = '';
   }
 }
 
