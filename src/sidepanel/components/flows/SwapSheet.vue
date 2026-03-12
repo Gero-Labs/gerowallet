@@ -445,7 +445,7 @@
 
         <!-- Swap / Review button -->
         <v-btn
-          block color="#00c7f3" class="black--text font-weight-bold swap-action-btn"
+          block color="#00c7f3" class="black--text font-weight-bold mt-4"
           :disabled="isSwapDisabled || loading || poolError"
           :loading="loading"
           @click="goToReview"
@@ -1447,13 +1447,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .swap-sheet {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.swap-action-btn {
-  margin-top: auto !important;
 }
 
 .glass-card {
