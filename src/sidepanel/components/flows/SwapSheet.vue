@@ -1279,6 +1279,7 @@ async function signTrezor() {
 
 // ── Keystone signing ──
 async function signKeystone() {
+  submitting.value = true;
   passwordError.value = '';
 
   try {
@@ -1315,6 +1316,7 @@ async function signKeystone() {
   } catch (e: any) {
     console.error('[Swap] Keystone sign request error:', e);
     passwordError.value = e?.message || t('miniGero.keystoneRequestFailed');
+    submitting.value = false;
   }
 }
 
@@ -1403,6 +1405,7 @@ function onDone() {
   } else {
     step.value = 'swap';
     statusError.value = '';
+    swapTxCbor.value = '';
   }
 }
 
@@ -1454,6 +1457,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearPeriodicEstimate();
+  debouncedEstimateTokenA.cancel();
 });
 </script>
 
