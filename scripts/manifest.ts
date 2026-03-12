@@ -15,6 +15,9 @@ interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
     scopes: string[];
   };
   key?: string;
+  side_panel?: {
+    default_path: string;
+  };
 }
 
 //@ts-ignore
@@ -102,6 +105,9 @@ async function getManifest() {
         all_frames: true
       },
     ],
+    side_panel: {
+      default_path: 'sidepanel/index.html',
+    },
     content_security_policy: {
       extension_pages: isDev ?
         `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://*.zkfold.io https://dev.gerowallet.io https://guardarian.com/ https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably.net wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io wss://ws.kraken.com https://api.kraken.com https://www.googleapis.com https://api.handle.me/ https://media.bringweb3.io/ https://api.bringweb3.io/ https://market.gerowallet.io https://*.launchdarkly.com wss://*.launchdarkly.com http://localhost:* ws://localhost:* ws://127.0.0.1:* https://connect.trezor.io https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://*.moonpay.com https://connect.trezor.io/ https://www.kaiserex.com/ https://kaiserex.com/ https://forms.zohopublic.eu/; media-src https://dev.gerowallet.io http://localhost:* data:; object-src 'self'`
