@@ -349,7 +349,6 @@ export default {
   'card.accountCreated': 'Account created',
   'card.kycDocumentsSubmitted': 'KYC documents submitted',
   'card.verificationInProgress': 'Verification in progress',
-  'card.orderYourCard': 'Order your card',
   'card.checkStatus': 'Check Status',
   'card.cardHolder': 'Card Holder',
   'card.balance': 'Balance',

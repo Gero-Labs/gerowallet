@@ -418,7 +418,6 @@ export default {
   'card.accountCreated': 'Konto erstellt',
   'card.kycDocumentsSubmitted': 'KYC-Dokumente eingereicht',
   'card.verificationInProgress': 'Verifizierung läuft',
-  'card.orderYourCard': 'Karte bestellen',
   'card.checkStatus': 'Status prüfen',
   'card.cardHolder': 'Karteninhaber',
   'card.balance': 'Guthaben',
