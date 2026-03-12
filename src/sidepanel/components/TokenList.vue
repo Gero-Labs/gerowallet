@@ -1,26 +1,32 @@
 <template>
   <div class="token-list">
+    <!-- Header -->
+    <div class="token-header">
+      <span class="text-subtitle-2 white--text font-weight-bold">{{ $t('miniGero.tokens') }}</span>
+      <span class="text-caption grey--text">{{ filteredTokens.length }}</span>
+    </div>
+
     <!-- Token items -->
-    <template v-if="tokens.length > 0">
+    <template v-if="filteredTokens.length > 0">
       <div
-        v-for="token in tokens"
-        :key="token.unit || token.policy_id"
+        v-for="token in filteredTokens"
+        :key="token.unit"
         class="token-item"
         @click="handleSelect(token)"
       >
         <div class="token-left">
           <v-avatar size="36" class="token-avatar">
             <img
-              v-if="token.img"
-              :src="token.img"
-              :alt="token.ticker || token.name"
+              v-if="getTokenImg(token)"
+              :src="getTokenImg(token)"
+              :alt="getTokenName(token)"
               @error="onImgError($event)"
             />
             <v-icon v-else size="20" color="#888">mdi-circle-outline</v-icon>
           </v-avatar>
           <div class="token-info">
             <div class="token-name text-body-2 white--text text-truncate">
-              {{ token.ticker || token.name || 'Unknown' }}
+              {{ getTokenName(token) }}
               <v-icon
                 v-if="token.verified"
                 x-small
@@ -35,16 +41,16 @@
           </div>
         </div>
         <div class="token-right">
-          <div class="token-value text-body-2 white--text" v-if="token.price">
+          <div class="token-value text-body-2 white--text" v-if="getTokenPrice(token)">
             {{ formatFiatValue(token) }}
           </div>
           <div class="token-value text-body-2 grey--text" v-else>--</div>
           <div
-            v-if="token.change !== undefined && token.change !== null"
+            v-if="getTokenChange(token) !== null"
             class="token-change text-caption"
-            :class="token.change >= 0 ? 'green-text' : 'red-text'"
+            :class="getTokenChange(token) >= 0 ? 'green-text' : 'red-text'"
           >
-            {{ token.change >= 0 ? '+' : '' }}{{ token.change.toFixed(2) }}%
+            {{ getTokenChange(token) >= 0 ? '+' : '' }}{{ getTokenChange(token).toFixed(2) }}%
           </div>
         </div>
       </div>
@@ -54,9 +60,6 @@
     <div v-else class="empty-state">
       <v-icon size="40" color="#333">mdi-wallet-outline</v-icon>
       <div class="text-body-2 grey--text mt-2">{{ $t('miniGero.noTokens') }}</div>
-      <div class="text-caption grey--text mt-1" style="color: #555 !important">
-        {{ $t('miniGero.startAddingTokens') }}
-      </div>
     </div>
   </div>
 </template>
@@ -64,78 +67,69 @@
 <script setup lang="ts">
 import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import { tapToolsStore } from '@/stores/tapToolsStore';
 import { priceStore } from '@/stores/priceStore';
-import { getBalance } from '@/chrome/serialization';
+import { dexHunterStore } from '@/stores/dexHunterStore';
+import { resolveIcon } from '@/shared/utils/resolver';
 
 const emit = defineEmits<{
   (e: 'select', token: any): void;
 }>();
 
-const { utxos, collateral, tokens: rawTokens } = toRefs(walletStore);
+const { tokens: rawTokens } = toRefs(walletStore);
 
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
 
-const tokens = computed(() => {
-  const portfolio = tapToolsStore.portfolio;
-  const result: any[] = [];
+// Use walletStore.tokens (enriched with img, verified, isScam from resolver)
+// Filter out: native ADA (shown in BalanceSection), scam tokens, unverified tokens
+const filteredTokens = computed(() => {
+  if (!rawTokens.value) return [];
 
-  // Always show ADA as the first item
-  const adaBalance = getAdaBalance();
-  if (adaBalance > 0 || Object.keys(rawTokens.value || {}).length === 0) {
-    result.push({
-      unit: 'lovelace',
-      policy_id: '',
-      name: 'Cardano',
-      ticker: 'ADA',
-      img: 'https://assets.coingecko.com/coins/images/975/small/cardano.png',
-      quantity: adaBalance * 1_000_000, // Store in lovelace for consistency
-      price: adaPrice.value,
-      change: priceStore.adaUsd?.priceChangePercentage ?? null,
-      verified: true,
-      adaValue: adaBalance,
-      decimals: 6,
+  return Object.values(rawTokens.value)
+    .filter((token: any) => {
+      if (token.policy_id === '') return false;
+      if (token.isScam) return false;
+      if (!token.verified) return false;
+      return true;
+    })
+    .sort((a: any, b: any) => {
+      return getTokenFiatValue(b) - getTokenFiatValue(a);
     });
-  }
-
-  // Add FT positions from TapTools portfolio (enriched data with prices)
-  if (portfolio?.positionsFt && Array.isArray(portfolio.positionsFt)) {
-    portfolio.positionsFt.forEach((position: any) => {
-      result.push({
-        unit: position.unit || position.fingerprint,
-        policy_id: position.policyId || position.policy_id || '',
-        name: position.name || position.ticker || 'Unknown',
-        ticker: position.ticker || position.name || '',
-        img: position.img || position.logo || '',
-        quantity: position.quantity || position.balance || 0,
-        price: position.price ? position.price * adaPrice.value : null,
-        change: position.change24h ?? position.change ?? null,
-        verified: position.verified ?? false,
-        adaValue: position.adaValue || 0,
-        decimals: position.decimals ?? 0,
-      });
-    });
-  }
-
-  return result;
 });
 
-function getAdaBalance(): number {
-  if (!utxos.value || utxos.value.length === 0) return 0;
-  try {
-    const balance = getBalance(utxos.value, collateral.value);
-    return Number(balance.coin().toString()) / 1_000_000;
-  } catch {
-    return 0;
-  }
+function getTokenImg(token: any): string {
+  if (token.img) return token.img;
+  if (token.metadata?.logo) return resolveIcon(token.metadata.logo);
+  if (token.metadata?.image) return resolveIcon(token.metadata.image);
+  return '';
+}
+
+function getTokenName(token: any): string {
+  return token.metadata?.ticker || token.name || token.metadata?.name || 'Unknown';
+}
+
+function getTokenPrice(token: any): number {
+  const dexToken = dexHunterStore.dexHunterTokens[token.unit];
+  if (dexToken?.price) return dexToken.price * adaPrice.value;
+  return 0;
+}
+
+function getTokenChange(token: any): number | null {
+  return token.change ?? null;
+}
+
+function getTokenFiatValue(token: any): number {
+  const price = getTokenPrice(token);
+  if (!price) return 0;
+  const decimals = token.metadata?.decimals ?? 0;
+  let amount = Number(token.quantity || 0);
+  if (decimals > 0) amount = amount / Math.pow(10, decimals);
+  return amount * price;
 }
 
 function formatTokenAmount(token: any): string {
-  const decimals = token.decimals ?? 6;
-  let amount = Number(token.quantity);
-  if (decimals > 0) {
-    amount = amount / Math.pow(10, decimals);
-  }
+  const decimals = token.metadata?.decimals ?? 0;
+  let amount = Number(token.quantity || 0);
+  if (decimals > 0) amount = amount / Math.pow(10, decimals);
   if (amount === 0) return '0';
   if (amount < 0.001) return '<0.001';
   return amount.toLocaleString('en-US', {
@@ -145,13 +139,7 @@ function formatTokenAmount(token: any): string {
 }
 
 function formatFiatValue(token: any): string {
-  if (!token.price) return '--';
-  const decimals = token.decimals ?? 6;
-  let amount = Number(token.quantity);
-  if (decimals > 0) {
-    amount = amount / Math.pow(10, decimals);
-  }
-  const value = amount * token.price;
+  const value = getTokenFiatValue(token);
   if (value < 0.01) return '<$0.01';
   return '$' + value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
@@ -173,6 +161,13 @@ function onImgError(event: Event) {
 .token-list {
   display: flex;
   flex-direction: column;
+}
+
+.token-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px 8px;
 }
 
 .token-item {

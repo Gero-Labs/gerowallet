@@ -72,7 +72,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { tapToolsStore } from '@/stores/tapToolsStore';
 import { walletStore } from '@/stores/walletStore';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
@@ -92,11 +91,16 @@ const showTokenDetail = ref(false);
 const selectedToken = ref<any>(null);
 
 const tokenCount = computed(() => {
-  const portfolio = tapToolsStore.portfolio;
-  const ftCount = portfolio?.positionsFt?.length || 0;
-  const rawCount = Object.keys(walletStore.tokens || {}).length;
-  // +1 for ADA itself
-  return Math.max(ftCount, rawCount) + 1;
+  const tokens = walletStore.tokens;
+  if (!tokens) return 1; // ADA only
+  // Count verified, non-scam, non-ADA tokens + 1 for ADA
+  const ftCount = Object.values(tokens).filter((t: any) => {
+    if (t.policy_id === '') return false;
+    if (t.isScam) return false;
+    if (!t.verified) return false;
+    return true;
+  }).length;
+  return ftCount + 1; // +1 for ADA
 });
 
 function handleBuySell() {
