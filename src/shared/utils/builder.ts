@@ -16,6 +16,9 @@ import {
 import type { BuildTx } from '@cardano-sdk/tx-construction';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
 
+/** CIP-0149 metadata label for voluntary DRep compensation */
+export const CIP149_METADATA_LABEL = BigInt(3692);
+
 export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, outputAssets: Cardano.Value) {
   if (!inputAssets || !outputAssets) {
     return null;
@@ -79,7 +82,8 @@ export async function buildCardanoTransaction({
   changeAddress,
   tip,
   implicitCoin = BigInt(0),
-  walletContext
+  walletContext,
+  auxiliaryData
 }: {
   certificates?: Cardano.Certificate[];
   withdrawals?: Cardano.Withdrawal[];
@@ -94,6 +98,7 @@ export async function buildCardanoTransaction({
     stakeAddress: string;
     accountIndex: number;
   };
+  auxiliaryData?: Cardano.AuxiliaryData;
 }): Promise<Cardano.Tx> {
   // Check if we have epoch parameters
   if (!epochParams) {
@@ -227,11 +232,17 @@ export async function buildCardanoTransaction({
       txBody.withdrawals = withdrawals;
     }
 
+    // Compute auxiliaryDataHash if metadata is provided
+    if (auxiliaryData) {
+      txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
+    }
+
     // Return the complete transaction
     return {
       id: Cardano.TransactionId('0'.repeat(64)),
       body: txBody,
-      witness: { signatures: new Map() }
+      witness: { signatures: new Map() },
+      auxiliaryData
     };
   };
 
@@ -364,13 +375,49 @@ export async function buildCardanoTransaction({
     txBody.withdrawals = withdrawals;
   }
 
+  // Compute auxiliaryDataHash if metadata is provided
+  if (auxiliaryData) {
+    txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
+  }
+
   // Create a final transaction
   return {
     id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
     body: txBody,
     witness: {
       signatures: new Map()
-    }
+    },
+    auxiliaryData
   };
 }
 
+/**
+ * Build CIP-0149 auxiliary data for voluntary DRep compensation.
+ * @param donationBasisPoints - Donation percentage in thousandths (1 = 0.1%, 10 = 1%, 50 = 5%, 100 = 10%)
+ * @returns AuxiliaryData with metadata label 3692
+ */
+export function buildCip149AuxiliaryData(donationBasisPoints: number): Cardano.AuxiliaryData {
+  const metadataMap: Cardano.MetadatumMap = new Map();
+  metadataMap.set('donationBasisPoints', BigInt(donationBasisPoints));
+
+  const blob: Cardano.TxMetadata = new Map();
+  blob.set(CIP149_METADATA_LABEL, metadataMap);
+
+  return { blob };
+}
+
+/**
+ * Extract CIP-0149 donationBasisPoints from transaction auxiliary data.
+ * @returns The basis points value, or null if not present
+ */
+export function extractCip149Compensation(auxiliaryData?: Cardano.AuxiliaryData): number | null {
+  if (!auxiliaryData?.blob) return null;
+
+  const cip149Data = auxiliaryData.blob.get(CIP149_METADATA_LABEL);
+  if (!cip149Data || !(cip149Data instanceof Map)) return null;
+
+  const bps = cip149Data.get('donationBasisPoints');
+  if (bps === undefined || bps === null) return null;
+
+  return Number(bps);
+}

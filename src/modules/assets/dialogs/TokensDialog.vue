@@ -87,6 +87,7 @@ const handleClose = () => {
 
 watch(isDialogVisible, (val) => {
   if (val) {
+    console.log("tokensData", JSON.stringify(tokensData.value));
     pickedToken.value = null;
   }
 });

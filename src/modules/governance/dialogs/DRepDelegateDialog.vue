@@ -3,122 +3,152 @@
     :isOpen="isOpen"
     @close="$emit('close')"
     :title="t('governance.delegateToADRep')"
+    icon="mdi-vote-outline"
     :loading="loading"
-    :min-height="660"
-    :width="700"
+    :min-height="440"
+    :width="560"
     :subtitle="t('governance.delegatingYourCurrency', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
   >
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="drep">
-      <v-alert border="left" color="primary" type="info" prominent class="text-left">
-        <ul>
-          <li>{{ $t('governance.youCanOnlyDelegateToOneDRep') }}</li>
-          <li>{{ $t('governance.canSwitchDRepAnytime') }}</li>
-          <li>{{ $t('governance.canCancelDRepDelegation') }}</li>
-        </ul>
-      </v-alert>
-      <v-list-item three-line>
-        <v-list-item-content class="text-left">
-          <v-list-item-title class="text-h5 mb-1">
-            {{ `${drep.name}` }}
-          </v-list-item-title>
-          <v-list-item-subtitle v-if="drep"
-            >{{ truncate(drep.id) }}<CopyButton class="ml-1" v-if="drep.id" :value="drep.id" x-small></CopyButton
-          ></v-list-item-subtitle>
-          <v-list-item-subtitle v-if="drep.links">
-            <template v-for="(link, index) in drep.links">
-              <v-btn
-                icon
-                x-small
-                :key="index"
-                :href="link.uri"
-                target="_blank"
-                v-if="link.uri && typeof link.uri === 'string'"
-              >
-                <v-avatar
-                  tile
-                  size="14"
-                  v-if="String(link.uri).includes('https://x.com') || String(link.uri).includes('https://twitter.com')"
+    <v-card-text class="px-4 pt-2 pb-1" style="z-index: 1" v-if="drep">
+      <!-- DRep Info - Compact horizontal card -->
+      <v-card flat outlined class="rounded-lg pa-3 mb-3 drep-info-card">
+        <div class="d-flex align-start">
+          <v-avatar rounded size="48" v-if="drep.image" class="mr-3 flex-shrink-0">
+            <img :src="drep.image" alt="" @error="fallbackImage" />
+          </v-avatar>
+          <div class="flex-grow-1" style="min-width: 0">
+            <div class="d-flex align-center">
+              <span class="text-subtitle-1 white--text font-weight-bold text-truncate">{{ drep.name }}</span>
+              <template v-if="drep.links">
+                <v-btn
+                  icon
+                  x-small
+                  v-for="(link, index) in drep.links"
+                  :key="index"
+                  :href="link.uri"
+                  target="_blank"
+                  v-show="link.uri && typeof link.uri === 'string'"
+                  class="ml-1"
                 >
-                  <v-img :src="xLogo" alt="x"></v-img>
-                </v-avatar>
-                <v-avatar tile size="14" v-else-if="String(link.uri).includes('https://t.me')">
-                  <v-img :src="telegramLogo" alt="x"></v-img>
-                </v-avatar>
-                <v-icon v-else>
-                  {{ getIconByURI(link.uri) }}
-                </v-icon>
-              </v-btn>
-            </template>
-          </v-list-item-subtitle>
-        </v-list-item-content>
+                  <v-avatar tile size="12" v-if="String(link.uri).includes('https://x.com') || String(link.uri).includes('https://twitter.com')">
+                    <v-img :src="xLogo" alt="x"></v-img>
+                  </v-avatar>
+                  <v-avatar tile size="12" v-else-if="String(link.uri).includes('https://t.me')">
+                    <v-img :src="telegramLogo" alt="x"></v-img>
+                  </v-avatar>
+                  <v-icon x-small v-else>{{ getIconByURI(link.uri) }}</v-icon>
+                </v-btn>
+              </template>
+            </div>
+            <div class="text-caption text--secondary mt-1" v-if="drep.id">
+              {{ truncate(drep.id) }}<CopyButton class="ml-1" v-if="drep.id" :value="drep.id" x-small></CopyButton>
+            </div>
+            <!-- Inline stats row -->
+            <div class="d-flex mt-2" style="gap: 12px">
+              <div v-if="drep.delegators" class="drep-stat">
+                <span class="drep-stat-value">{{ drep.delegators }}</span>
+                <span class="drep-stat-label">{{ $t('governance.delegators') }}</span>
+              </div>
+              <div v-if="drep.votes" class="drep-stat">
+                <span class="drep-stat-value">{{ drep.votes }}</span>
+                <span class="drep-stat-label">{{ $t('governance.votes') }}</span>
+              </div>
+              <div v-if="drep.voting_power" class="drep-stat">
+                <span class="drep-stat-value">{{ toCurrency(drep.voting_power, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</span>
+                <span class="drep-stat-label">{{ $t('governance.votingPower') }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </v-card>
 
-        <v-list-item-avatar rounded size="80" v-if="drep.image">
-          <img :src="drep.image" alt="" @error="fallbackImage" />
-        </v-list-item-avatar>
-      </v-list-item>
-      <v-card-title class="pt-0" style="color: white" v-if="drep.delegators">{{ drep.delegators }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2" v-if="drep.delegators">{{ $t('governance.delegators') }}</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white" v-if="drep.votes">{{ drep.votes }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2" v-if="drep.votes">{{ $t('governance.votes') }}</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white" v-if="drep.voting_power">{{
-        toCurrency(
-          drep.voting_power,
-          false,
-          0,
-          networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
-        )
-      }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2" v-if="drep.voting_power">{{ $t('governance.votingPower') }}</v-card-subtitle>
+      <!-- CIP-0149: Voluntary DRep Compensation -->
+      <v-card v-if="showCompensationSection" flat class="liquid-glass rounded-lg pa-3 mb-2">
+        <div class="d-flex align-center justify-space-between">
+          <div class="d-flex align-center">
+            <v-icon small color="primary" class="mr-2">mdi-gift-outline</v-icon>
+            <span class="text-body-2 white--text font-weight-medium">{{ $t('governance.supportDrep') }}</span>
+          </div>
+          <v-switch
+            v-model="compensationEnabled"
+            color="primary"
+            hide-details
+            dense
+            class="mt-0 pt-0"
+          />
+        </div>
+        <v-expand-transition>
+          <div v-if="compensationEnabled">
+            <p class="text-caption text--secondary mt-1 mb-2">
+              {{ $t('governance.supportDrepDesc') }}
+            </p>
+            <v-chip-group
+              v-model="compensationPresetIndex"
+              mandatory
+              active-class="primary"
+              class="mb-1"
+            >
+              <v-chip small outlined pill :value="0">0.5%</v-chip>
+              <v-chip small outlined pill :value="1">1%</v-chip>
+              <v-chip small outlined pill :value="2">5%</v-chip>
+              <v-chip small outlined pill :value="3">10%</v-chip>
+              <v-chip small outlined pill :value="4">{{ $t('governance.customPercent') }}</v-chip>
+            </v-chip-group>
+            <v-slider
+              v-if="compensationPresetIndex === 4"
+              v-model="compensationCustomBps"
+              :min="1"
+              :max="100"
+              :step="1"
+              thumb-label="always"
+              color="primary"
+              track-color="grey darken-3"
+              class="mt-5 mb-0"
+            >
+              <template v-slot:thumb-label="{ value }">
+                {{ (value / 10).toFixed(1) }}%
+              </template>
+            </v-slider>
+            <div class="text-caption text--secondary mt-1" style="line-height: 1.3">
+              <v-icon x-small color="info" class="mr-1">mdi-information-outline</v-icon>
+              {{ $t('governance.estimatedEpochDonation', {
+                amount: toCurrency(estimatedEpochDonation, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)),
+                balance: toCurrency(account?.controlled_amount || '0', false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
+              }) }}
+            </div>
+          </div>
+        </v-expand-transition>
+      </v-card>
     </v-card-text>
-    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="drep && account" style="display: block">
+    <v-card-actions class="justify-center text-center pt-0 px-4" v-if="drep && account" style="display: block">
       <v-form ref="form" v-model="valid">
-        <v-row no-gutters>
+        <v-row no-gutters class="text-center mb-2">
           <v-col :cols="cols">
-            <h4>
-              {{ $t('staking.delegationAmt') }}
-              <v-btn x-small icon>
-                <v-icon small>mdi-information-outline</v-icon>
-              </v-btn>
-            </h4>
-            <h4>
-              <strong>{{
-                toCurrency(
-                  account.controlled_amount,
-                  false,
-                  0,
-                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
-                )
-              }}</strong>
-            </h4>
+            <div class="text-caption text--secondary">{{ $t('staking.delegationAmt') }}</div>
+            <div class="text-body-2 font-weight-bold white--text">{{
+              toCurrency(account.controlled_amount, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
+            }}</div>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
-            <h4>{{ $t('governance.depositFee') }}</h4>
-            <h4>
-              <strong>{{
-                toCurrency(
-                  depositFee,
-                  false,
-                  0,
-                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
-                )
-              }}</strong>
-            </h4>
+            <div class="text-caption text--secondary">{{ $t('governance.depositFee') }}</div>
+            <div class="text-body-2 font-weight-bold white--text">{{
+              toCurrency(depositFee, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
+            }}</div>
+          </v-col>
+          <v-col :cols="cols" v-if="compensationEnabled && compensationBasisPoints > 0">
+            <div class="text-caption text--secondary">{{ $t('governance.drepCompensation') }}</div>
+            <div class="text-body-2 mt-1">
+              <v-chip x-small color="primary" outlined>{{ compensationPercentDisplay }}</v-chip>
+            </div>
           </v-col>
           <v-col :cols="cols">
-            <h4>{{ $t('governance.txFee') }}</h4>
-            <h4>
-              <strong>{{
-                toCurrency(
-                  tx?.body?.fee?.toString() || '0',
-                  false,
-                  0,
-                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
-                )
-              }}</strong>
-            </h4>
+            <div class="text-caption text--secondary">{{ $t('governance.txFee') }}</div>
+            <div class="text-body-2 font-weight-bold white--text">{{
+              toCurrency(tx?.body?.fee?.toString() || '0', false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
+            }}</div>
           </v-col>
-          <v-col cols="12" class="pt-6" style="display: flex; justify-content: center">
+          <v-col cols="12" class="pt-4" style="display: flex; justify-content: center">
             <!-- Transaction Authentication Section -->
             <TransactionAuthSection
               :wallet-type="loggedWallet.type"
@@ -206,6 +236,8 @@ import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import { walletStore } from '@/stores/walletStore';
+import { buildCip149AuxiliaryData } from '@/shared/utils/builder';
+import governanceStoreActions from '@/stores/governanceStore';
 
 const props = defineProps({
   isOpen: {
@@ -226,8 +258,23 @@ const emit = defineEmits(['close']);
 
 const { loggedWallet, account } = toRefs(walletStore);
 
-// Use the transaction signing composable
-const txRef = computed(() => props.tx);
+// Use the transaction signing composable - inject CIP-0149 metadata when compensation is enabled
+const txRef = computed(() => {
+  if (!props.tx) return props.tx;
+  if (compensationEnabled.value && compensationBasisPoints.value > 0) {
+    const auxData = buildCip149AuxiliaryData(compensationBasisPoints.value);
+    const auxDataHash = Cardano.computeAuxiliaryDataHash(auxData);
+    return {
+      ...props.tx,
+      auxiliaryData: auxData,
+      body: {
+        ...props.tx.body,
+        auxiliaryDataHash: auxDataHash,
+      }
+    };
+  }
+  return props.tx;
+});
 const {
   loading,
   spendingPassword,
@@ -253,12 +300,50 @@ const {
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'governance.drepDelegationTxSubmitted',
-  onClose: () => emit('close'),
+  onClose: () => {
+    // CIP-0149: Update governance store with compensation status only after successful submission
+    if (compensationEnabled.value && compensationBasisPoints.value > 0) {
+      governanceStoreActions.setCompensationBps(compensationBasisPoints.value);
+    } else {
+      governanceStoreActions.setCompensationBps(null);
+    }
+    emit('close');
+  },
 });
 
 const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
 
 const { toCurrency, truncate } = filters;
+
+// CIP-0149: Compensation state
+const compensationEnabled = ref(false);
+const compensationPresetIndex = ref(2); // Default to 5% (index 2)
+const compensationCustomBps = ref(50); // Custom slider value in basis points
+
+const PRESET_BPS = [5, 10, 50, 100]; // 0.5%, 1%, 5%, 10%
+
+const compensationBasisPoints = computed(() => {
+  if (!compensationEnabled.value) return 0;
+  if (compensationPresetIndex.value === 4) return compensationCustomBps.value;
+  return PRESET_BPS[compensationPresetIndex.value] || 50;
+});
+
+const compensationPercentDisplay = computed(() => {
+  return (compensationBasisPoints.value / 10).toFixed(1) + '%';
+});
+
+const estimatedEpochDonation = computed(() => {
+  if (!compensationBasisPoints.value || !account.value?.controlled_amount) return 0;
+  const balance = Number(account.value.controlled_amount);
+  const avgEpochRewardRate = 0.000479; // ~3.5% APY / ~73 epochs per year
+  return Math.floor(balance * avgEpochRewardRate * (compensationBasisPoints.value / 1000));
+});
+
+// Show compensation section only for real DReps (not Abstain/No Confidence)
+const showCompensationSection = computed(() => {
+  return props.drep && props.drep.id &&
+    props.drep.id !== 'drep_always_abstain' && props.drep.id !== 'drep_always_no_confidence';
+});
 
 // Constants for template
 const xLogo = assets.xSvg;
@@ -291,11 +376,10 @@ const depositFee = computed(() => {
 });
 
 const cols = computed(() => {
-  if (depositFee.value > 0) {
-    return 4;
-  } else {
-    return 6;
-  }
+  let sections = 2; // Delegation amount + Tx fee
+  if (depositFee.value > 0) sections++;
+  if (compensationEnabled.value && compensationBasisPoints.value > 0) sections++;
+  return Math.floor(12 / sections);
 });
 
 const getIconByURI = (uri: string) => {
@@ -336,6 +420,9 @@ watch(
   val => {
     if (val) {
       resetState();
+      compensationEnabled.value = false;
+      compensationPresetIndex.value = 2; // Default 5%
+      compensationCustomBps.value = 50;
       if (form.value) {
         form.value.resetValidation();
       }
@@ -343,4 +430,28 @@ watch(
   }
 );
 </script>
-<style scoped></style>
+<style scoped>
+.drep-info-card {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.drep-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.drep-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  line-height: 1.2;
+}
+
+.drep-stat-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.3px;
+}
+</style>
