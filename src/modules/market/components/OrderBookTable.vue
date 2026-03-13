@@ -206,12 +206,7 @@ function formatSize(val: number): string {
   return val.toFixed(2);
 }
 
-function formatCompact(val: number): string {
-  if (val >= 1e9) return (val / 1e9).toFixed(1) + 'B';
-  if (val >= 1e6) return (val / 1e6).toFixed(1) + 'M';
-  if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K';
-  return val.toFixed(0);
-}
+import { formatCompact } from '@/modules/market/utils/formatters';
 
 function formatDexName(dex: string): string {
   return dex.replace(/_/g, ' ').replace(/V(\d)/g, ' v$1').replace(/\b\w/g, l => l.toUpperCase());

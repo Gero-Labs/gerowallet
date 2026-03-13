@@ -262,7 +262,7 @@ async function executeSwap() {
     if (!swapRes?.cbor) throw new Error('Failed to build swap transaction');
 
     // Sign transaction
-    const signaturesRes: any = await Messaging.sendToBackground({
+    const signaturesRes: any = await Messaging.sendToBackgroundFromOptions({
       method: METHOD.signTx,
       data: {
         tx: swapRes.cbor,
