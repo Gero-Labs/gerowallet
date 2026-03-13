@@ -30,6 +30,54 @@
         </ul>
       </v-alert>
     </v-card-text>
+
+    <!-- CIP-0149: DRep Compensation Breakdown -->
+    <v-card-text class="px-3 pt-0" v-if="compensationInfo && !compensationInfo.belowMinimum && !skipCompensation">
+      <v-card flat outlined class="rounded-lg pa-3" style="border-color: var(--v-primary-base) !important">
+        <div class="d-flex align-center mb-2">
+          <v-icon small color="primary" class="mr-2">mdi-gift-outline</v-icon>
+          <span class="text-subtitle-2 white--text font-weight-medium">{{ $t('governance.drepCompensation') }}</span>
+        </div>
+        <p class="text-caption text--secondary mb-3">
+          {{ $t('governance.compensationWithdrawDesc', {
+            drepName: currentDRepName,
+            percent: (compensationInfo.bps / 10).toFixed(1) + '%'
+          }) }}
+        </p>
+        <div class="d-flex justify-space-between text-caption mb-1">
+          <span>{{ $t('governance.rewardsBeingWithdrawn') }}</span>
+          <span>{{ toCurrency(withdrawals) }}</span>
+        </div>
+        <div class="d-flex justify-space-between text-caption mb-1 primary--text">
+          <span>{{ $t('governance.compensationAmount', { percent: (compensationInfo.bps / 10).toFixed(1) + '%' }) }}</span>
+          <span>−{{ toCurrency(compensationInfo.donationLovelace) }}</span>
+        </div>
+        <v-divider class="my-1"></v-divider>
+        <div class="d-flex justify-space-between text-subtitle-2 font-weight-bold mt-1">
+          <span>{{ $t('governance.youReceive') }}</span>
+          <span>{{ toCurrency(withdrawals - compensationInfo.donationLovelace) }}</span>
+        </div>
+        <v-checkbox
+          :input-value="skipCompensation"
+          @change="emit('update:skipCompensation', $event)"
+          :label="$t('governance.skipCompensationThisTime')"
+          dense
+          hide-details
+          class="mt-2 pt-0"
+        />
+      </v-card>
+    </v-card-text>
+
+    <!-- CIP-0149: Below minimum notice -->
+    <v-card-text class="px-3 pt-0" v-if="compensationInfo && compensationInfo.belowMinimum">
+      <v-alert type="info" dense text border="left" colored-border class="text-caption mb-0">
+        {{ $t('governance.compensationSkippedBelowMinimum', {
+          amount: toCurrency(compensationInfo.donationLovelace),
+          min: toCurrency(compensationInfo.minUtxo)
+        }) }}
+      </v-alert>
+    </v-card-text>
+
     <v-card-actions class="justify-center text-center pt-0" v-if="account && tx">
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
@@ -47,7 +95,7 @@
           </v-col>
           <v-col :cols="cols">
             <h4>{{ $t('common.total') }}</h4>
-            <h4><strong>{{ toCurrency(withdrawals-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
+            <h4><strong>{{ toCurrency(netWithdrawal) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" v-if="!account?.drep_id && loggedWallet?.chain === Blockchain.CARDANO">
             <v-btn color="primary" elevation="2" block to="/governance" class="mx-2">
@@ -94,7 +142,7 @@
               class="mx-2"
               style="margin-bottom: 1px"
             >
-              Submit Transaction
+              {{ $t('staking.submitTransaction') }}
             </v-btn>
             <v-btn
               v-else-if="!isPrfWallet && !isSubmit"
@@ -150,10 +198,18 @@ const props = defineProps({
     type: Object as () => Cardano.Tx,
     required: false,
     default: undefined,
-  }
+  },
+  compensationInfo: {
+    type: Object as () => { bps: number; donationLovelace: number; belowMinimum: boolean; minUtxo: number } | null,
+    default: null,
+  },
+  skipCompensation: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'update:skipCompensation']);
 
 const { toCurrency } = filters;
 
@@ -192,6 +248,9 @@ const {
 
 const form = ref(null);
 
+import { governanceStore } from '@/stores/governanceStore';
+import networks from '@/utils/networks';
+
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
   if (props.tx?.body?.withdrawals) {
@@ -202,6 +261,25 @@ const withdrawals = computed(() => {
     });
   }
   return withdrawalsAmount;
+});
+
+// CIP-0149: Net withdrawal after compensation
+const netWithdrawal = computed(() => {
+  const fee = Number(props.tx?.body?.fee?.toString() || '0');
+  const donation = (props.compensationInfo && !props.compensationInfo.belowMinimum && !props.skipCompensation)
+    ? props.compensationInfo.donationLovelace : 0;
+  return withdrawals.value - fee - donation;
+});
+
+// CIP-0149: Current DRep name for display
+const currentDRepName = computed(() => {
+  const drep = governanceStore.currentDRep;
+  if (!drep) return '';
+  if (drep.metadata?.meta_json?.body?.givenName) {
+    const name = drep.metadata.meta_json.body.givenName;
+    return name['@value'] || name;
+  }
+  return drep.drep_id || '';
 });
 
 const cols = computed(() => {
