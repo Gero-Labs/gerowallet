@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const axiosInstance = axios.create({
-  baseURL: import.meta.env['VITE_ADA_HANDLE_BASE_URL'],
+  baseURL: import.meta.env['VITE_BACKEND_URL'],
   timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
@@ -11,6 +11,6 @@ const axiosInstance = axios.create({
 
 export default {
   async resolve(handle: string) {
-    return axiosInstance.get(`/handles/${handle}`);
+    return axiosInstance.get(`/api/assets/handle`, { params: { handle } });
   }
 }

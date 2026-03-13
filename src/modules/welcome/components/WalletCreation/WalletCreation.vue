@@ -36,7 +36,7 @@
         <GoogleLogin :selected-network="selectedNetwork" />
 
         <div class="zkfold-credit">
-          <span>{{ $t('welcome.poweredBy') }}</span>
+          <span>{{ $t('common.poweredBy') }}</span>
           <v-img :src="zkFold" contain class="zkfold-logo"></v-img>
         </div>
       </div>
