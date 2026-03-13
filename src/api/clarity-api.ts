@@ -174,6 +174,6 @@ export default {
 
   // ── Workflows ──
   async getWorkflow(workflowId: string) {
-    return axiosInstance.get(`/api/clarity/workflows/getWorkflow/${workflowId}`);
+    return axiosInstance.get<MembershipWorkflow>(`/api/clarity/workflows/getWorkflow/${workflowId}`);
   },
 };

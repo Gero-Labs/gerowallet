@@ -393,7 +393,7 @@ const sanitizeHtml = (html: string): string => {
         } else {
           // Strip event handlers and dangerous attributes
           for (const attr of Array.from(el.attributes)) {
-            if (attr.name.startsWith('on') || attr.name === 'style' || (attr.name === 'href' && attr.value.toLowerCase().startsWith('javascript'))) {
+            if (attr.name.startsWith('on') || attr.name === 'style' || (attr.name === 'href' && (attr.value.toLowerCase().startsWith('javascript') || attr.value.toLowerCase().startsWith('data:')))) {
               el.removeAttribute(attr.name);
             }
           }
