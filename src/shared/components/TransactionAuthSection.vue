@@ -73,13 +73,13 @@ import PassKeyPasswordField from './PassKeyPasswordField.vue';
 import ToggleSwitch from './ToggleSwitch.vue';
 
 interface Props {
-  walletType: string;
+  walletType?: string;
   isPrfWallet: boolean;
   isSigned: boolean;
   loading: boolean;
   password?: string;
   passwordLabel?: string;
-  passwordRules?: any[];
+  passwordRules?: ((value: string) => boolean | string)[];
   submitText: string;
   submitColor?: string;
   submitElevation?: number;
@@ -117,7 +117,7 @@ defineEmits<{
   (e: 'submit'): void;
   (e: 'update:password', value: string): void;
   (e: 'update:isBT', value: boolean): void;
-  (e: 'password-field-ref', ref: any): void;
+  (e: 'password-field-ref', ref: InstanceType<typeof PassKeyPasswordField> | null): void;
 }>();
 
 const isPasswordWallet = computed(() =>

@@ -185,7 +185,7 @@
             <div class="mb-6">
               <h3 class="text-h6 white--text mb-3">{{ $t('navigation.legal') }}</h3>
               <v-list class="transparent">
-                <v-list-item href="https://www.gerowallet.io/terms" target="_blank">
+                <v-list-item href="https://gerowallet.io/legal/terms/" target="_blank">
                   <v-list-item-icon>
                     <v-icon>mdi-file-document-outline</v-icon>
                   </v-list-item-icon>
@@ -196,7 +196,7 @@
                     <v-icon>mdi-open-in-new</v-icon>
                   </v-list-item-icon>
                 </v-list-item>
-                <v-list-item href="https://www.gerowallet.io/privacy" target="_blank">
+                <v-list-item href="https://gerowallet.io/legal/privacy/" target="_blank">
                   <v-list-item-icon>
                     <v-icon>mdi-shield-check-outline</v-icon>
                   </v-list-item-icon>

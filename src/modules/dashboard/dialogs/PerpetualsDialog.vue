@@ -1241,7 +1241,7 @@
 
     <!-- Powered by Strike Finance Footer - positioned at dialog bottom -->
     <div class="d-flex align-center justify-center py-2 dialog-footer">
-      <span class="powered-by-text mr-2">{{ t('perpetuals.poweredBy') }}</span>
+      <span class="powered-by-text mr-2">{{ t('common.poweredBy') }}</span>
       <img
         src="https://app.strikefinance.org/logo.svg"
         :alt="t('perpetuals.strikeLogo').toString()"
