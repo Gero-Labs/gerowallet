@@ -20,6 +20,7 @@
               :close-on-click="valid"
               offset-y
               max-width="452"
+              transition="fade-transition"
             >
               <template v-slot:activator="{ on, attrs }">
                 <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="loading || !isValidAddress">
@@ -37,7 +38,7 @@
                   </v-list-item>
                 </v-btn>
               </template>
-              <v-card>
+              <v-card outlined style="background: #0c0e12 !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; border-radius: 16px !important; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;">
                 <v-card-title>
                   {{ $t('wallet.contactAdded') }}
                   <v-spacer></v-spacer>
@@ -111,6 +112,7 @@
               nudge-left="156"
               min-width="452"
               max-height="400"
+              transition="fade-transition"
             >
               <template v-slot:activator="{ on, attrs }">
                 <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" :disabled="contacts && Object.values(contacts)?.length === 0">
@@ -128,7 +130,7 @@
                   </v-list-item>
                 </v-btn>
               </template>
-              <v-card>
+              <v-card outlined style="background: #0c0e12 !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; border-radius: 16px !important; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;">
                 <v-card-title>
                   {{ $t('wallet.contacts') }}
                   <v-spacer></v-spacer>
@@ -203,6 +205,28 @@
             </v-textarea>
           </v-col>
           <v-col cols="12" style="color: #61646C; min-height: 96px; font-style: italic; align-content: center;" class="py-0">
+            <v-alert
+              v-if="handleMismatch.show"
+              type="warning"
+              dense
+              outlined
+              border="left"
+              class="mb-2"
+              style="font-size: 12px"
+              dismissible
+              @input="handleMismatch.show = false"
+            >
+              <strong>{{ handleMismatch.handle }}</strong> {{ $t('wallet.contactHandleAddressChanged') }}
+              <div style="font-size: 11px; margin-top: 4px; opacity: 0.8">
+                {{ $t('wallet.contactSavedAddress') }}: {{ filters.truncate(handleMismatch.savedAddress) }}
+              </div>
+              <div style="font-size: 11px; opacity: 0.8">
+                {{ $t('wallet.contactCurrentAddress') }}: {{ filters.truncate(handleMismatch.freshAddress) }}
+              </div>
+              <v-btn x-small color="warning" class="mt-2" @click="updateContactAddress">
+                {{ $t('wallet.contactUpdateAddress') }}
+              </v-btn>
+            </v-alert>
             <v-list-item v-if="resolved" class="px-0">
               <v-list-item-avatar v-if="asset.img" size="80" rounded>
                 <v-img :src="asset.img" contain>
@@ -235,7 +259,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch, nextTick } from 'vue';
 import Select from '@/shared/components/Select.vue';
 import rules from "@/utils/rules";
-import { Blockchain, Network } from '@/models/types';
+import { Blockchain, Network, SendData } from '@/models/types';
 import debounce from 'lodash/debounce';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import adaHandleApi from '@/api/ada-handle.api';
@@ -245,17 +269,16 @@ import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import { debugLog } from '@/utils/debug';
+import { isPaymentAddress } from '@/chrome/serialization';
 
 interface Props {
-  sendData: any;
+  sendData: SendData;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits(['updateRecipientAddress'])
 
 const { loggedWallet, contacts } = toRefs(walletStore)
-
-
 
 const form = ref(null);
 const valid = ref<boolean>(false);
@@ -264,14 +287,17 @@ const recipientAddress = ref<string>('');
 const resolved = ref<boolean>(undefined);
 const loading = ref<boolean>(false);
 const contactsMenu = ref<boolean>(false);
+let selectContactCounter = 0;
 const saveContactMenu = ref<boolean>(false);
 const qrScanDialog = ref<boolean>(false);
 const asset = ref(undefined);
-const contact = ref({
+const contact = ref<{ name: string; address: string; img?: string; handle?: string }>({
   name: '',
   address: '',
-  img: undefined
+  img: undefined,
+  handle: undefined
 });
+const handleMismatch = ref({ show: false, handle: '', savedAddress: '', freshAddress: '', contactName: '' });
 
 const { t } = useTranslation();
 
@@ -287,11 +313,54 @@ const contactsHeaders = ref([
   { text: '', align: 'right', sortable: false, value: 'actions' },
 ]);
 
-const selectContact = (item) => {
-  recipientAddress.value = item.address
-  paymentAddress.value = item.address
-  emit('updateRecipientAddress', recipientAddress.value)
-  contactsMenu.value = false
+const selectContact = async (item) => {
+  contactsMenu.value = false;
+  handleMismatch.value.show = false;
+  const currentSelection = ++selectContactCounter;
+
+  if (item.handle && loggedWallet.value.network === Network.MAINNET && loggedWallet.value.chain === Blockchain.CARDANO) {
+    loading.value = true;
+    try {
+      const res = await adaHandleApi.resolve(item.handle.replace('$', ''));
+      if (currentSelection !== selectContactCounter) return; // stale response
+      if (res.status === 200 && res.data?.resolved_addresses?.ada) {
+        const freshAddress = res.data.resolved_addresses.ada;
+        if (!isPaymentAddress(freshAddress)) {
+          // Invalid address from API — fall back to stored
+          paymentAddress.value = item.address;
+          recipientAddress.value = item.address;
+          emit('updateRecipientAddress', item.address);
+          return;
+        }
+        asset.value = { name: res.data.name, img: assets.resolveIcon(res.data.image) };
+        resolved.value = true;
+        recipientAddress.value = item.handle;
+
+        if (freshAddress !== item.address) {
+          handleMismatch.value = { show: true, handle: item.handle, savedAddress: item.address, freshAddress, contactName: item.name };
+          paymentAddress.value = freshAddress;
+        } else {
+          paymentAddress.value = item.address;
+        }
+        emit('updateRecipientAddress', paymentAddress.value);
+      } else {
+        paymentAddress.value = item.address;
+        recipientAddress.value = item.address;
+        emit('updateRecipientAddress', item.address);
+      }
+    } catch {
+      if (currentSelection !== selectContactCounter) return;
+      paymentAddress.value = item.address;
+      recipientAddress.value = item.address;
+      emit('updateRecipientAddress', item.address);
+    } finally {
+      if (currentSelection === selectContactCounter) loading.value = false;
+    }
+  } else {
+    recipientAddress.value = item.address;
+    paymentAddress.value = item.address;
+    emit('updateRecipientAddress', item.address);
+  }
 }
 
 const onQRScan = (address: string) => {
@@ -303,10 +372,11 @@ const onQRScan = (address: string) => {
 
 const saveContact = () => {
   debugLog('save contact')
-  contact.value = { address: '', img: undefined, name: '' }
+  contact.value = { address: '', img: undefined, name: '', handle: undefined }
   let name
   const address = paymentAddress.value
   const img = asset.value?.img
+  const handle = recipientAddress.value.startsWith('$') ? recipientAddress.value : undefined
   if (contacts.value[paymentAddress.value] == null) {
     name = ''
   } else {
@@ -318,9 +388,20 @@ const saveContact = () => {
   contact.value = {
     img,
     name,
-    address
+    address,
+    handle
   }
 }
+
+const updateContactAddress = async () => {
+  const mismatch = handleMismatch.value;
+  delete contacts.value[mismatch.savedAddress];
+  await removeContact(loggedWallet.value.id, mismatch.savedAddress);
+  const updated = { name: mismatch.contactName, address: mismatch.freshAddress, handle: mismatch.handle };
+  contacts.value[mismatch.freshAddress] = updated;
+  await addOrUpdateContact(loggedWallet.value.id, updated);
+  handleMismatch.value.show = false;
+};
 
 const resolveAddress = (val) => {
   const address = val || ''
@@ -333,14 +414,14 @@ const resolveAddress = (val) => {
   }
 }
 
-const removeCont = (item) => {
+const removeCont = async (item) => {
   if (item && item.address) {
     delete contacts.value[item.address]
-    removeContact(loggedWallet.value.id, item.address)
+    await removeContact(loggedWallet.value.id, item.address)
     contactsMenu.value = false
   } else {
     delete contacts.value[contact.value.address]
-    removeContact(loggedWallet.value.id, contact.value.address)
+    await removeContact(loggedWallet.value.id, contact.value.address)
     saveContactMenu.value = false
   }
 }
@@ -372,12 +453,13 @@ const resolveAdaHandle = debounce(async function(val) {
     })
   }, 1000);
 
-watch(contact, (val) => {
-  console.debug('contact', val)
+watch(contact, async (val) => {
+  debugLog('contact', val)
   if (!val.address) return
-  if (contacts.value[val.address] == null || contacts.value[val.address].name != val.name) {
+  const existing = contacts.value[val.address]
+  if (existing == null || existing.name != val.name || existing.handle != val.handle) {
     contacts.value[val.address] = val
-    addOrUpdateContact(loggedWallet.value.id, val)
+    await addOrUpdateContact(loggedWallet.value.id, val)
   }
 }, { deep: true })
 
@@ -395,7 +477,7 @@ watch(() => props.sendData.recipientAddress, async (newAddress) => {
     // Clean up any empty-address contact that may have been saved
     if (contacts.value && contacts.value[''] != null) {
       delete contacts.value['']
-      removeContact(loggedWallet.value.id, '')
+      await removeContact(loggedWallet.value.id, '')
     }
 
     // Reset validation only (not form values — avoids clearing the wallet Select)
@@ -405,7 +487,8 @@ watch(() => props.sendData.recipientAddress, async (newAddress) => {
     }
   }
   // When parent sets an address (e.g., from contact selection), sync it
-  else if (newAddress !== recipientAddress.value) {
+  // Don't overwrite recipientAddress if it holds a handle that resolved to this address
+  else if (newAddress !== recipientAddress.value && !recipientAddress.value.startsWith('$')) {
     recipientAddress.value = newAddress
     paymentAddress.value = newAddress
   }

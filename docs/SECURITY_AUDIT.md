@@ -308,10 +308,7 @@ The headers are simply ignored by browsers.
 
 #### HTTP Link in Privacy Policy
 
-One HTTP link found that should be HTTPS:
-- File: `src/options/modules/navigation/dialogs/PrivacyPolicyDialog.vue`
-- Link: `http://www.aboutads.info/choices/`
-- Recommendation: Update to HTTPS
+No HTTP links found. The inline privacy policy dialog has been removed in favor of linking to `https://gerowallet.io/legal/privacy/`.
 
 ---
 
