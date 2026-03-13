@@ -340,7 +340,10 @@
       </v-layout>
     </v-card-text>
     <UnstakeDialog :is-open="unstakeDialog" @close="closeUnstakeDialog" :tx="unstakeTxData"></UnstakeDialog>
-    <WithdrawalDialog :is-open="withdrawalDialog" @close="closeWithdrawalDialog" :tx="withdrawalTxData"></WithdrawalDialog>
+    <WithdrawalDialog :is-open="withdrawalDialog" @close="closeWithdrawalDialog" :tx="withdrawalTxData"
+      :compensation-info="compensationInfo" :skip-compensation="skipCompensation"
+      @update:skipCompensation="skipCompensation = $event"
+    ></WithdrawalDialog>
   </v-card>
 </template>
 <script setup lang="ts">
@@ -360,7 +363,7 @@ import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 
 // Use the unstake and withdrawal composables
 const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
-const { txData: withdrawalTxData, withdrawalDialog, withdraw, closeWithdrawalDialog } = useWithdrawal();
+const { txData: withdrawalTxData, withdrawalDialog, withdraw, closeWithdrawalDialog, skipCompensation, compensationInfo } = useWithdrawal();
 
 const { loggedWallet, rewards, account } = toRefs(walletStore);
 const { loadingTxs } = toRefs(loadingState);
