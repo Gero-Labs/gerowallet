@@ -1,3 +1,5 @@
+import { Collectible, Token } from '@/models/send-flow.types';
+
 const HARDENED = 2147483648;
 
 const WalletType = {
@@ -389,4 +391,19 @@ export interface PaginationParams {
   pledge_met?: boolean;
   sort_by?: string;
   sort_direction?: string;
+}
+
+export interface Contact {
+  name: string;
+  address: string;
+  handle?: string;
+}
+
+export interface SendData {
+  selectedTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
+  selectedCollectibles: Record<string, Collectible & { unit: string }>;
+  recipientAddress: string;
+  selectedWallet: Wallet | Record<string, never>;
+  minAda: number;
+  adaShortage: number;
 }

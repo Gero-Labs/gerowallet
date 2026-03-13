@@ -3,7 +3,6 @@ import realfiApi from '@/api/realfi-api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
-import { debugLog } from '@/utils/debug';
 
 export interface RealFiStore {
   tokens: {};
@@ -27,7 +26,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in realFiStore) {
-        (realFiStore as any)[key] = updates[key as keyof RealFiStore];
+        realFiStore[key] = updates[key as keyof RealFiStore];
       }
     });
   });
@@ -92,13 +91,6 @@ async function broadcastTokenPatch(unit: string, patch: { data: any[] }) {
 }
 
 export default {
-  setTokens(tokens: any) {
-    realFiStore.tokens = tokens;
-
-    // Broadcast from background context
-    broadcastFromBackground({ tokens });
-  },
-
   async updateTokenHistory(tokensUnits: string[]) {
     for (const unit of tokensUnits) {
       try {
@@ -111,7 +103,7 @@ export default {
         }
       } catch (e) {
         // RealFi API failures are expected for some tokens - silently skip
-        debugLog(`⚠️ RealFi: Historical data unavailable for ${unit}`);
+        // debugLog(`⚠️ RealFi: Historical data unavailable for ${unit}`);
       }
     }
   },
@@ -132,11 +124,6 @@ export default {
 
     Object.assign(realFiStore, resetState);
     broadcastFromBackground(resetState);
-  },
-
-  // Utility method to get token history
-  getTokenHistory(unit: string): any[] | undefined {
-    return realFiStore.tokens[unit];
   },
 
   // Utility method to check if token history exists
