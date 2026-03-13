@@ -11,8 +11,11 @@
   >
     <v-card-title class="pa-0">
       <v-list-item v-if="retailer" class="px-0">
-        <v-list-item-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="60" v-if="retailer.img">
-          <v-img :src="retailer.img" contain style="margin: auto;" eager></v-img>
+        <v-list-item-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="60" v-if="retailer.iconPath && !retailerImageError">
+          <v-img :src="retailer.img" contain style="margin: auto;" eager @error="retailerImageError = true"></v-img>
+        </v-list-item-avatar>
+        <v-list-item-avatar color="#333741" size="60" v-else>
+          <span class="retailer-initials">{{ getInitials(retailer.name) }}</span>
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title style="word-break: break-word; font-size: 24px">
@@ -53,6 +56,7 @@ import axios from 'axios';
 import networks from '@/utils/networks';
 import cashbackApi from '@/api/cashback-api';
 import { walletStore } from '@/stores/walletStore';
+import { getInitials } from '@/shared/utils/formatters';
 
 const props = defineProps({
   isOpen: {
@@ -78,6 +82,7 @@ const retailerUrl = ref<string | null>(null);
 const fileContent = ref<string | null>(null);
 const loading = ref(true);
 const disabled = ref(true);
+const retailerImageError = ref(false);
 
 const startShopping = () => {
   if (retailerUrl.value) {
@@ -130,6 +135,7 @@ watch(() => props.isOpen, async (val) => {
     retailerUrl.value = null;
     loading.value = true;
     disabled.value = true;
+    retailerImageError.value = false;
     const promises = [];
     promises.push(getContent());
     promises.push(activate());
@@ -139,6 +145,13 @@ watch(() => props.isOpen, async (val) => {
 });
 </script>
 <style scoped>
+
+.retailer-initials {
+  font-size: 20px;
+  font-weight: 600;
+  color: #A3A3A3;
+  user-select: none;
+}
 
 .card-text {
   width: 100%;

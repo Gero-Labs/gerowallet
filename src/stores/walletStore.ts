@@ -6,7 +6,7 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
 import LoadingState from '@/stores/loading';
 import priceService from '@/stores/priceStore';
-import { Keys } from '@/models/types';
+import { Contact, Keys } from '@/models/types';
 
 interface WhitelistedEntry {
   domain: string;
@@ -58,7 +58,7 @@ export interface WalletStore {
   fiatRates: {};
   fiatRatesIntervalId: any;
   rewards?: any[];
-  contacts?: any;
+  contacts?: Record<string, Contact>;
   connectedDapps?: any[];
 }
 

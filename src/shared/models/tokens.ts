@@ -1,4 +1,3 @@
-// Types
 export interface Token {
     decimals: number;
     ticker: string;
@@ -18,11 +17,6 @@ export interface CollectibleItem {
     isScam?: boolean;
 }
 
-export interface Collection {
-    name: string;
-    items: CollectibleItem[];
-}
-
 export interface Value {
     selectedTokens: Token[];
     selectedCollectibles: CollectibleItem[];
@@ -30,24 +24,7 @@ export interface Value {
     adaShortage?: number;
 }
 
-export interface Contact {
-    name: string;
-    address: string;
-    img?: string;
-}
-
 export interface Asset {
     name: string;
-    img?: string;
-}
-
-export interface SendData {
-    selectedWallet: any;
-    recipientAddress?: string;
-}
-
-export interface ContactItem {
-    name: string;
-    address: string;
     img?: string;
 }

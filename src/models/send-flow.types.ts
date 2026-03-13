@@ -33,12 +33,6 @@ export interface Collection {
   items: Collectible[];
 }
 
-export interface Contact {
-  name: string;
-  address: string;
-  avatar?: string;
-}
-
 export interface SendFlowData {
   selectedTokens: Token[];
   selectedCollectibles: Collectible[];
