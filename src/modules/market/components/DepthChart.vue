@@ -70,11 +70,7 @@ async function loadOrderBook() {
   }
 }
 
-function formatCompact(val: number): string {
-  if (val >= 1e6) return (val / 1e6).toFixed(1) + 'M';
-  if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K';
-  return val.toFixed(0);
-}
+import { formatCompact } from '@/modules/market/utils/formatters';
 
 function renderChart() {
   if (!chartEl.value || !orderBook.value) return;

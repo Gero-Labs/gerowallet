@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onUnmounted, getCurrentInstance, type WatchStopHandle } from 'vue';
 import marketApi, { type NftCollectionStats } from '@/api/market-api';
 import { walletStore } from '@/stores/walletStore';
 
@@ -17,6 +17,16 @@ export interface NftCollectionDisplay {
 const collections = ref<NftCollectionDisplay[]>([]);
 const loading = ref(false);
 let nftWatcherRegistered = false;
+let nftWatcherStop: WatchStopHandle | null = null;
+let consumerCount = 0;
+
+function cleanup(): void {
+  if (nftWatcherStop) {
+    nftWatcherStop();
+    nftWatcherStop = null;
+  }
+  nftWatcherRegistered = false;
+}
 
 export function useNftMarketData() {
   async function fetchUserNftCollections() {
@@ -120,8 +130,19 @@ export function useNftMarketData() {
   // Re-fetch when wallet collections change (e.g. wallet switch) — register only once
   if (!nftWatcherRegistered) {
     nftWatcherRegistered = true;
-    watch(() => walletStore.collections, () => {
+    nftWatcherStop = watch(() => walletStore.collections, () => {
       fetchUserNftCollections();
+    });
+  }
+
+  // Consumer counting for cleanup
+  consumerCount++;
+  if (getCurrentInstance()) {
+    onUnmounted(() => {
+      consumerCount--;
+      if (consumerCount <= 0) {
+        cleanup();
+      }
     });
   }
 

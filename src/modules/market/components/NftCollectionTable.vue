@@ -130,12 +130,7 @@ function formatAda(lovelace: number): string {
   return (lovelace / 1_000_000).toFixed(2);
 }
 
-function formatCompact(value: number): string {
-  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
-  if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
-  if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
-  return value.toFixed(value < 1 ? 2 : 0);
-}
+import { formatCompact } from '@/modules/market/utils/formatters';
 </script>
 
 <style scoped>

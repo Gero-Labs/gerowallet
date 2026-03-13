@@ -500,26 +500,7 @@ function handleImgError(e: Event) {
   if (target) target.style.display = 'none';
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1) return '$' + price.toFixed(2);
-  if (price >= 0.01) return '$' + price.toFixed(4);
-  return '$' + price.toFixed(6);
-}
-
-function formatCompact(value: number): string {
-  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
-  if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
-  if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
-  return value.toFixed(value < 1 ? 4 : 0);
-}
-
-function formatChange(change: number): string {
-  return Math.abs(change).toFixed(1) + '%';
-}
-
-function changeColor(change: number): string {
-  if (change === 0) return '#A3A3A3';
-  return change > 0 ? '#47CD89' : '#F97066';
+import { formatPrice, formatCompact, formatChange, changeColor } from '@/modules/market/utils/formatters';
 }
 
 function changeIcon(change: number): string {
