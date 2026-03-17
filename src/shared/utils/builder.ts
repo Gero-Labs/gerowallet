@@ -29,8 +29,8 @@ export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, out
   ]);
   const assetsArray = Array.from(allAssets)
     .map(assetId => {
-      const inValue: bigint = inputAssets.assets ? inputAssets.assets.get(assetId) : 0n;
-      const outValue: bigint = outputAssets.assets ? outputAssets.assets.get(assetId) : 0n;
+      const inValue: bigint = inputAssets.assets ? BigInt(inputAssets.assets.get(assetId) ?? 0) : 0n;
+      const outValue: bigint = outputAssets.assets ? BigInt(outputAssets.assets.get(assetId) ?? 0) : 0n;
       const difference: bigint = inValue - outValue;
       return {
         assetName: Cardano.AssetId(assetId),
@@ -42,7 +42,7 @@ export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, out
   const cardano = {
     assetName: 'cardano',
     policy: '',
-    quantity: inputAssets.coins - outputAssets.coins,
+    quantity: BigInt(inputAssets.coins) - BigInt(outputAssets.coins),
     id: 'cardano'
   }
   return [cardano, ...assetsArray]
