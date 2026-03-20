@@ -157,11 +157,12 @@ async function fetchAllTokens(): Promise<void> {
     // Build native token (ADA / AP3X) at position 0
     const nativeName = networks.resolveCurrencyName(chain, walletStore.loggedWallet?.network) || 'Cardano';
     const nativeTicker = networks.resolveCurrencyTicker(chain, walletStore.loggedWallet?.network) || 'ADA';
+    const nativeImg = networks.resolveCurrencyImage(chain, walletStore.loggedWallet?.network) || '';
     const nativeToken: MarketToken = {
       unit: 'lovelace',
       name: nativeName,
       ticker: nativeTicker,
-      img: '',
+      img: nativeImg,
       verified: true,
       price: nativePrice.priceUsd,
       priceAda: 1,

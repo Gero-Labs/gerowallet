@@ -104,76 +104,87 @@
                 </v-btn>
               </div>
 
-              <!-- Search field -->
-              <v-text-field
-                v-model="searchQuery"
-                :placeholder="activeView === 'collectibles'
-                  ? $t('assets.searchCollections')
-                  : $t('market.searchPlaceholder')"
-                prepend-inner-icon="mdi-magnify"
-                solo-inverted
-                dense
-                flat
-                hide-details
-                clearable
-                class="search-field flex-shrink-0"
-                style="max-width: 180px"
-              />
-
-              <!-- 3-dot filter menu -->
-              <v-menu offset-y left :close-on-content-click="false">
+              <!-- Unified filter menu (search + filters + columns) -->
+              <v-menu
+                v-model="filterMenuOpen"
+                offset-y
+                left
+                :close-on-content-click="false"
+                nudge-bottom="4"
+                content-class="filter-panel-menu"
+                eager
+                transition="none"
+              >
                 <template v-slot:activator="{ on, attrs }">
-                  <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0">
-                    <v-badge
-                      :value="verifiedOnly || !hideScam || (!isApex && hasCustomColumns)"
-                      dot
-                      color="primary"
-                      overlap
-                    >
-                      <v-icon small>mdi-dots-vertical</v-icon>
+                  <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0 filter-menu-btn">
+                    <v-badge :value="!!searchQuery || !verifiedOnly || !hideScam || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                      <v-icon small>mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
                 </template>
-                <v-list dense class="filter-menu-list">
-                  <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
-                    <v-list-item-action class="mr-2">
-                      <v-icon small :color="verifiedOnly ? 'primary' : ''">
-                        {{ verifiedOnly ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                      </v-icon>
-                    </v-list-item-action>
-                    <v-list-item-title style="font-size: 13px;">{{ $t('market.verifiedOnly') }}</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item @click="hideScam = !hideScam">
-                    <v-list-item-action class="mr-2">
-                      <v-icon small :color="hideScam ? 'primary' : ''">
-                        {{ hideScam ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                      </v-icon>
-                    </v-list-item-action>
-                    <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
-                  </v-list-item>
-                  <template v-if="!isApex">
-                    <v-divider class="my-1" />
-                    <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
-                    <v-list-item
-                      v-for="col in columnOptions"
-                      :key="col.key"
-                      @click="toggleColumn(col.key)"
-                    >
+                <v-card flat class="liquid-glass-dialog">
+                  <!-- Search -->
+                  <div class="px-3 pt-3 pb-1">
+                    <v-text-field
+                      ref="searchFieldRef"
+                      v-model="searchQuery"
+                      :placeholder="activeView === 'collectibles'
+                        ? $t('assets.searchCollections')
+                        : $t('market.searchPlaceholder')"
+                      prepend-inner-icon="mdi-magnify"
+                      dense
+                      flat
+                      hide-details
+                      clearable
+                      class="filter-panel-search"
+                    />
+                  </div>
+
+                  <!-- Filters -->
+                  <v-list dense class="transparent pa-0">
+                    <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
                       <v-list-item-action class="mr-2">
-                        <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
-                          {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        <v-icon small :color="verifiedOnly ? 'primary' : ''">
+                          {{ verifiedOnly ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
                         </v-icon>
                       </v-list-item-action>
-                      <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                      <v-list-item-title style="font-size: 13px;">{{ $t('market.verifiedOnly') }}</v-list-item-title>
                     </v-list-item>
-                    <v-divider class="my-1" />
-                    <v-list-item @click="resetToDefaults">
-                      <v-list-item-title style="font-size: 12px; color: #7c4dff;">
-                        {{ $t('market.resetColumns') }}
-                      </v-list-item-title>
+                    <v-list-item @click="hideScam = !hideScam">
+                      <v-list-item-action class="mr-2">
+                        <v-icon small :color="hideScam ? 'primary' : ''">
+                          {{ hideScam ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </v-list-item-action>
+                      <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
                     </v-list-item>
-                  </template>
-                </v-list>
+
+                    <!-- Column preferences (Cardano only) -->
+                    <template v-if="!isApex">
+                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                      <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
+                      <v-list-item
+                        v-for="col in columnOptions"
+                        :key="col.key"
+                        @click="toggleColumn(col.key)"
+                        dense
+                      >
+                        <v-list-item-action class="mr-2">
+                          <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
+                            {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                          </v-icon>
+                        </v-list-item-action>
+                        <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                      </v-list-item>
+                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                      <v-list-item dense @click="resetToDefaults">
+                        <v-list-item-title style="font-size: 12px; color: #7c4dff;">
+                          {{ $t('market.resetColumns') }}
+                        </v-list-item-title>
+                      </v-list-item>
+                    </template>
+                  </v-list>
+                </v-card>
               </v-menu>
             </div>
 
@@ -290,11 +301,11 @@ const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker }
 const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
 
 const columnOptions: { key: ColumnKey; label: string }[] = [
-  { key: 'change24h', label: t('market.change24h') },
   { key: 'change1h', label: t('market.change1h') },
+  { key: 'change24h', label: t('market.change24h') },
   { key: 'change7d', label: t('market.change7d') },
-  { key: 'mcap', label: t('market.marketCap') },
   { key: 'volume24h', label: t('market.volume24h') },
+  { key: 'mcap', label: t('market.marketCap') },
   { key: 'tvl', label: t('market.tvl') },
   { key: 'risk', label: t('market.risk') },
   { key: 'allocation', label: t('common.allocation') },
@@ -353,6 +364,8 @@ function setActiveView(view: ViewMode) {
 }
 
 const searchQuery = ref('');
+const filterMenuOpen = ref(false);
+const searchFieldRef = ref<HTMLElement | null>(null);
 const verifiedOnly = ref(true);
 const hideScam = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
@@ -376,6 +389,16 @@ const carouselItems = ref<CarouselItem[]>([
     cardImage: assets.debitCardImage,
     action: 'showDebitCardInfo',
     type: 'debit-card' as const,
+  },
+  {
+    id: 'ada-cashback',
+    title: t('cashback.adaCashback'),
+    subtitle: `${t('cashback.payOnlineReceiveCashback')} \n ${t('cashback.clickToSeeDeals')}`,
+    logoAlt: 'Gero Logo',
+    backgroundImage: assets.cashbackCarouselImage,
+    cardImage: assets.cashbackImage,
+    action: 'navigateToCashback',
+    type: 'ada-cashback' as const,
   },
 ]);
 
@@ -794,10 +817,25 @@ onMounted(() => {
     fetchPnl();
   }
 
-  // Watch chip bar width to toggle compact mode
+  // Watch chip bar width — go compact when content would overflow
   if (chipBarRef.value) {
+    // Capture the full (expanded) scroll width on mount before any compaction
+    let expandedScrollWidth = chipBarRef.value.scrollWidth;
+
     chipBarObserver = new ResizeObserver(([entry]) => {
-      compactChips.value = entry.contentRect.width < 520;
+      const availableWidth = entry.contentRect.width;
+      if (!compactChips.value) {
+        // Currently expanded — record the full content width and check overflow
+        expandedScrollWidth = chipBarRef.value?.scrollWidth ?? expandedScrollWidth;
+        if (expandedScrollWidth > availableWidth) {
+          compactChips.value = true;
+        }
+      } else {
+        // Currently compact — expand only if the cached full width fits
+        if (expandedScrollWidth <= availableWidth) {
+          compactChips.value = false;
+        }
+      }
     });
     chipBarObserver.observe(chipBarRef.value);
   }
@@ -1000,18 +1038,17 @@ watch(
   font-feature-settings: 'tnum' 1;
 }
 
-/* ── Search field ────────────────────────────────────────────────────────────── */
+/* ── Search popover ─────────────────────────────────────────────────────────── */
 
-.search-field ::v-deep .v-input__slot {
-  min-height: 32px !important;
-  font-size: 13px;
-  background: #000000 !important;
+/* ── Filter menu button ──────────────────────────────────────────────────────── */
+
+.filter-menu-btn {
+  transition: background 0.2s ease;
 }
 
-.search-field ::v-deep .v-input__prepend-inner {
-  margin-top: 4px !important;
+.filter-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
 }
-
 
 /* ── Token detail panel positioning ──────────────────────────────────────────── */
 
@@ -1049,8 +1086,60 @@ watch(
   .filter-chip-bar .v-chip {
     font-size: 12px;
   }
-  .search-field {
-    max-width: 140px !important;
-  }
+}
+</style>
+
+<style>
+/* Filter panel — rendered outside scoped component by v-menu */
+.filter-panel-menu {
+  border-radius: 12px !important;
+}
+
+.filter-panel {
+  min-width: 220px;
+  padding-bottom: 4px !important;
+  background:
+    linear-gradient(135deg, rgba(19, 22, 27, 0.75) 0%, rgba(19, 22, 27, 0.65) 100%),
+    radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%) !important;
+  background-color: transparent !important;
+  backdrop-filter: blur(24px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset -1px 0 0 rgba(45, 240, 247, 0.08) !important;
+  isolation: isolate !important;
+}
+
+.filter-panel-search .v-input__slot {
+  min-height: 34px !important;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-radius: 8px !important;
+  color: white !important;
+}
+
+.filter-panel-search .v-input__slot input {
+  color: white !important;
+  caret-color: white !important;
+}
+
+.filter-panel-search .v-input__slot input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.filter-panel-search .v-input__prepend-inner {
+  margin-top: 5px !important;
+}
+
+.filter-panel .v-list-item {
+  min-height: 36px !important;
+}
+
+.filter-panel .v-subheader {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 </style>
