@@ -4,6 +4,7 @@
     <div class="d-flex align-center pa-4 pb-2">
       <v-avatar size="36" class="mr-3">
         <img v-if="token.img" :src="token.img" :alt="token.ticker" />
+        <img v-else-if="chainLogo" :src="chainLogo" :alt="token.ticker" style="opacity: 0.5" />
         <v-icon v-else>mdi-circle-outline</v-icon>
       </v-avatar>
       <div class="flex-grow-1">
@@ -251,6 +252,11 @@ import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrenc
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
+import networks from '@/utils/networks';
+
+const chainLogo = computed(() =>
+  networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
+);
 
 const props = defineProps<{
   token: MarketToken;
