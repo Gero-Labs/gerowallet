@@ -29,6 +29,9 @@ jobs:
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Read,Glob,Grep,Agent"
           prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
             You are reviewing a pull request for a Cardano blockchain wallet Chrome extension (Manifest V3, Vue 2.7 + TypeScript).
             Read CLAUDE.md first for project conventions and architecture.
 
