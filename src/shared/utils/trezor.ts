@@ -993,18 +993,25 @@ export default {
     await this.init();
 
     try {
+      // Normalize address to bech32 for matching against wallet keys
+      // DApps may pass hex (CIP-30 spec) or bech32 — keys store bech32
+      let normalizedAddress = address;
+      if (!address.startsWith('addr') && !address.startsWith('stake')) {
+        try {
+          const addressBytes = Buffer.from(address, 'hex');
+          normalizedAddress = Cardano.Address.fromBytes(addressBytes).toBech32();
+        } catch {
+          // Keep original if conversion fails
+        }
+      }
+
       // Find the matching key from the wallet's known addresses
       // Check payment keys first
-      let matchingKey = keys.payment.find(key => {
-        // Address could be payment address or payment key hash
-        return key.address === address || key.address.includes(address);
-      });
+      let matchingKey = keys.payment.find(key => key.address === normalizedAddress);
 
       // If not found, check change keys
       if (!matchingKey) {
-        matchingKey = keys.change.find(key => {
-          return key.address === address || key.address.includes(address);
-        });
+        matchingKey = keys.change.find(key => key.address === normalizedAddress);
       }
 
       let derivationPath: string;

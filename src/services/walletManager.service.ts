@@ -2,7 +2,7 @@ import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
-import { Blockchain, Network, WalletType, Tip } from '@/models/types';
+import { Blockchain, Network, WalletType, Tip, Wallet } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
 import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
@@ -622,10 +622,47 @@ export class WalletManager {
     // Verify unlock credential based on method
     let unlockValid = false;
 
-    if (unlockMethod === 'password') {
-      // Spending password unlock method
-      if (useWalletBg) {
-        // Post-login: use walletBg instance
+    // Check for browser-verified credentials first (PassKey, PRF lock password).
+    // These signal strings indicate verification already happened in the browser UI context.
+    // Background cannot independently re-verify because:
+    // - PassKey: WebAuthn requires user activation (popup), not available in service worker
+    // - Lock password: @noble/hashes PBKDF2 produces different results in service worker vs browser
+    //   context due to crypto polyfill mismatches (Buffer handling in separate Vite bundles)
+    // Trust boundary: these signals arrive via chrome.runtime messaging (sendToBackgroundFromOptions),
+    // which is same-origin extension-only. The background handler (addToOptions) only accepts messages
+    // from the extension's options/popup pages, not from content scripts or injected page scripts.
+    // DApp connection relay in background.ts uses a separate message handler (addToPopup) that does
+    // not route to this unlock flow.
+    // Defense-in-depth: lockpassword-verified requires encryptionMethod === 'prf' to prevent
+    // a normal wallet from bypassing spending password verification if this signal is sent by mistake.
+    // If encryptionMethod lookup fails (DB error → undefined), browserVerified is false and the code
+    // falls through to the normal password branch, which safely fails when trying to decrypt with
+    // the literal string 'lockpassword-verified' as a spending password.
+    // Cache walletsMap for reuse in the pre-login password path below (avoids duplicate DB read).
+    let cachedWalletsMap: Record<number, Wallet> | null = null;
+    let encryptionMethod = walletStore.loggedWallet?.encryptionMethod;
+    if (!encryptionMethod) {
+      const { getAllWallets } = await import('@/db/gero-db');
+      cachedWalletsMap = await getAllWallets();
+      encryptionMethod = cachedWalletsMap[walletId]?.encryptionMethod;
+    }
+    const browserVerified =
+      (unlockCredential === 'passkey-authenticated') ||
+      (unlockCredential === 'lockpassword-verified' && unlockMethod === 'password' && encryptionMethod === 'prf');
+    if (browserVerified) {
+      unlockValid = true;
+    } else if (unlockMethod === 'password') {
+      if (encryptionMethod === 'prf') {
+        // PRF wallet: verify against lockPasswordHash in DB (defense-in-depth).
+        // Normally PRF wallets arrive as 'lockpassword-verified' (browser-verified above),
+        // but this branch catches edge cases where the browser failed to detect PRF status.
+        const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+        if (!lockPasswordHashConfig?.value) {
+          throw new Error('Lock password not configured for PRF wallet');
+        }
+        unlockValid = await verifyPin(unlockCredential as string, lockPasswordHashConfig.value);
+      } else if (useWalletBg) {
+        // NORMAL WALLET - Post-login: use walletBg instance
         if (!this.walletBg || !walletStore.loggedWallet) {
           throw new Error('Wallet instance not available for password verification');
         }
@@ -641,63 +678,34 @@ export class WalletManager {
           throw new Error('Encrypted private key not found or password not provided');
         }
 
-        // IMPORTANT: verifySpendingPassword is now async (supports PRF)
         unlockValid = await this.walletBg.verifySpendingPassword(unlockCredential as string);
       } else {
-        // Pre-login: load wallet from database
-        const { getAllWallets } = await import('@/db/gero-db');
-        const walletsMap = await getAllWallets();
-        const wallet = walletsMap[walletId];
+        // NORMAL WALLET - Pre-login: load wallet from database (reuse cached map if available)
+        if (!cachedWalletsMap) {
+          const { getAllWallets } = await import('@/db/gero-db');
+          cachedWalletsMap = await getAllWallets();
+        }
+        const wallet = cachedWalletsMap[walletId];
 
         if (!wallet || wallet.type !== WalletType.Normal) {
           throw new Error('Password unlock is only supported for Normal wallets');
         }
 
-        // Check wallet encryption method
-        if (wallet.encryptionMethod === 'prf') {
-          // PRF WALLET - Pre-login unlock
+        const encryptedPrivateKey = wallet.encryptedPrivateKey;
+        if (!encryptedPrivateKey || !unlockCredential) {
+          throw new Error('Encrypted private key not found or password not provided');
+        }
 
-          // For PRF wallets with optional password, verify the password hash
-          if (wallet.prfSpendingPassword) {
-            // PRF wallet with password unlock enabled
-            if (!unlockCredential) {
-              throw new Error('Password required for PRF wallet with password unlock');
-            }
-
-            // Verify password hash (PBKDF2-HMAC-SHA512)
-            const { verifySpendingPassword } = await import('@/shared/utils/webauthn-prf');
-            unlockValid = await verifySpendingPassword(
-              unlockCredential as string,
-              wallet.prfSpendingPassword
-            );
-          } else {
-            // PRF wallet without password (pure PRF mode)
-            // No password verification needed - PassKey auth already happened in UI
-            unlockValid = true;
-          }
-        } else {
-          // PASSWORD WALLET - Pre-login unlock (existing logic)
-          const encryptedPrivateKey = wallet.encryptedPrivateKey;
-          if (!encryptedPrivateKey || !unlockCredential) {
-            throw new Error('Encrypted private key not found or password not provided');
-          }
-
-          // Verify password by attempting to decrypt
-          try {
-            const { decrypt, decryptWithPassword } = await import('@/shared/utils/crypto');
-            const decrypted = decrypt(encryptedPrivateKey, unlockCredential as string);
-            decryptWithPassword(unlockCredential as string, JSON.parse(decrypted));
-            unlockValid = true;
-          } catch (error) {
-            unlockValid = false;
-          }
+        // Verify password by attempting to decrypt
+        try {
+          const { decrypt, decryptWithPassword } = await import('@/shared/utils/crypto');
+          const decrypted = decrypt(encryptedPrivateKey, unlockCredential as string);
+          decryptWithPassword(unlockCredential as string, JSON.parse(decrypted));
+          unlockValid = true;
+        } catch (error) {
+          unlockValid = false;
         }
       }
-    } else if (unlockCredential === 'passkey-authenticated') {
-      // Check if PassKey authentication was used (credential is a special string)
-      // PassKey verification handled by WebAuthn in the UI
-      // If we reach here, PassKey verification already passed
-      unlockValid = true;
     } else if (unlockMethod === 'pin') {
       // Check for new format (pinHash) or old format (encryptedPinHash)
       const pinHashConfig = await configTable.where({ key: 'pinHash' }).first();

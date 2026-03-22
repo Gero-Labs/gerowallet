@@ -2,6 +2,7 @@
   <BaseDialog
     :title="t('settings.spendingSecuritySettings')"
     :subtitle="t('settings.modifySpendingSecuritySettings')"
+    icon="mdi-shield-key-outline"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"

@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="t('security.lockSettings')"
+    :title="isPrfWallet ? t('security.lockSettingsOnly') : t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"
@@ -42,15 +42,15 @@
                 <v-icon>mdi-form-textbox-password</v-icon>
               </v-list-item-avatar>
               <v-list-item-content>
-                <!-- Normal wallets: Use spending password for unlock -->
-                <template v-if="isNormalWallet">
-                  <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
-                  <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
-                </template>
                 <!-- PRF wallets: Separate password for UI locking only -->
-                <template v-else>
+                <template v-if="isPrfWallet">
                   <v-list-item-title>{{ $t('security.lockPassword') }}</v-list-item-title>
                   <v-list-item-subtitle>{{ $t('security.useLockPasswordToUnlock') }}</v-list-item-subtitle>
+                </template>
+                <!-- Normal wallets: Use spending password for unlock -->
+                <template v-else>
+                  <v-list-item-title>{{ $t('security.spendingPassword') }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ $t('security.useSpendingPasswordToUnlock') }}</v-list-item-subtitle>
                 </template>
               </v-list-item-content>
               <v-list-item-icon v-if="selectedUnlockMethod === 'password'" style="align-self: center;">
@@ -133,10 +133,10 @@
         </v-card-text>
       </v-card>
 
-      <v-divider class="my-5 mx-1" />
+      <v-divider class="my-5 mx-1" v-if="!isPrfWallet" />
 
-      <!-- PassKey Section -->
-      <v-card class="transparent" flat>
+      <!-- PassKey Section (hidden for PRF wallets — PassKey is their core encryption) -->
+      <v-card class="transparent" flat v-if="!isPrfWallet">
         <v-card-title class="justify-center pt-0">
           <v-avatar size="18" class="mr-1">
             <v-img :src="assets.passKeySvg" contain style="filter: brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%);"></v-img>

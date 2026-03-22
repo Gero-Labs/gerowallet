@@ -13,6 +13,8 @@ export interface GovernanceStore {
   filters: {
     search: string;
   };
+  /** CIP-0149: Active compensation basis points (null = no compensation) */
+  currentCompensationBps: number | null;
 }
 
 export const governanceStore = Vue.observable<GovernanceStore>({
@@ -26,6 +28,7 @@ export const governanceStore = Vue.observable<GovernanceStore>({
   filters: {
     search: '',
   },
+  currentCompensationBps: null,
 });
 
 const governanceStoreActions = {
@@ -125,6 +128,11 @@ const governanceStoreActions = {
   clearCurrentDRep() {
     governanceStore.currentDRep = null;
     governanceStore.drepError = null;
+  },
+
+  /** CIP-0149: Set the current compensation basis points from delegation TX metadata */
+  setCompensationBps(bps: number | null) {
+    governanceStore.currentCompensationBps = bps;
   },
 
   state: governanceStore,

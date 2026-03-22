@@ -263,8 +263,8 @@
                     <template v-slot:label>
                       <span class="text-body-2">
                         {{ $t('welcome.agreeToTerms') }}
-                        <a class="terms-link" @click.stop href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true" target="_blank">{{ $t('welcome.termsOfService') }}</a>.
-                      </span>
+                        <a @click.stop href="https://gerowallet.io/legal/terms/" target="_blank">{{ $t('navigation.termsOfService') }}</a>.
+                      </div>
                     </template>
                   </v-checkbox>
                 </div>
@@ -374,7 +374,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits(['dialogChange']);
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 const router = vmProxy.$router;
 
 // Network selection
