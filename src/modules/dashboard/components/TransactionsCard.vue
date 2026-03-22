@@ -1,12 +1,45 @@
 <template>
-  <v-card outlined class="fill-height liquid-glass d-flex flex-column" :loading="loadingTxs">
-    <v-card-title class="pb-2 flex-grow-0">
-      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white"
-        >{{ $t('transactions.title') }}</router-link
-      >
+  <v-card
+    :class="['fill-height d-flex flex-column', isBitcoin ? 'tx-glass-card' : 'liquid-glass']"
+    :outlined="!isBitcoin"
+    :loading="loadingTxs"
+  >
+
+    <!-- Bitcoin header -->
+    <v-card-title v-if="isBitcoin" class="px-3 pt-3 pb-2 flex-grow-0 tx-card-title">
+      <div class="tx-icon-box">
+        <svg viewBox="0 0 20 20" fill="none" width="13" height="13">
+          <path d="M3 5h14M3 9h14M3 13h8M3 17h5" stroke="#F7931A" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="tx-heading-group ml-2">
+        <router-link v-if="!isFullList" to="/transactions" class="tx-heading-link">
+          {{ $t('transactions.title') }}
+        </router-link>
+        <span v-else class="tx-heading">{{ $t('transactions.title') }}</span>
+        <span class="tx-count">{{ transactions.length }} TXS</span>
+      </div>
+      <v-spacer />
+      <v-text-field
+        v-model="search"
+        dense
+        flat
+        solo
+        hide-details
+        :placeholder="$t('transactions.search')"
+        prepend-inner-icon="mdi-magnify"
+        clearable
+        class="top-level-search tx-search-field"
+      />
+    </v-card-title>
+
+    <!-- Cardano/Apex header (original) -->
+    <v-card-title v-else class="pb-2 flex-grow-0">
+      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white">
+        {{ $t('transactions.title') }}
+      </router-link>
       <span v-else>{{ $t('transactions.title') }}</span>
       <v-spacer />
-      <!-- Search box -->
       <v-text-field
         v-model="search"
         dense
@@ -256,7 +289,7 @@
     </v-card-text>
     <v-card-actions
       v-if="!props.isFullList && transactions.length > itemsPerPage"
-      class="pa-0 no-hover text-center justify-center"
+      :class="['pa-0 no-hover text-center justify-center', isBitcoin ? 'tx-pagination-bar' : '']"
     >
       <v-pagination
         v-model="currentPage"
@@ -267,11 +300,17 @@
         @input="handlePageChange"
       ></v-pagination>
     </v-card-actions>
+    <BitcoinTransactionDetailsDialog
+      v-if="transactionInfo && isBitcoin && state === '/' && !selectedTransaction"
+      :transactionInfo="transactionInfo"
+      @close="handleTransactionModalClose"
+    />
     <TransactionDetailsDialog
-      v-if="transactionInfo && state === '/' && !selectedTransaction"
+      v-if="transactionInfo && !isBitcoin && state === '/' && !selectedTransaction"
       :transactionInfo="transactionInfo"
       @close="handleTransactionModalClose"
     ></TransactionDetailsDialog>
+
   </v-card>
 </template>
 <script setup lang="ts">
@@ -280,11 +319,13 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
+import BitcoinTransactionDetailsDialog from '@/modules/dashboard/dialogs/BitcoinTransactionDetailsDialog.vue';
 import networks from '@/utils/networks';
 import time from '@/plugins/time';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Blockchain } from '@/models/types';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
@@ -313,6 +354,8 @@ const { transactions: txs, loggedWallet, keys, contacts } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
+
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
@@ -563,7 +606,23 @@ const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): voi
 const buildBasicStatus = (item: StoredTransaction): string => {
   const statuses: string[] = [];
 
-  if (isCardanoTx(item) && item.body.certificates?.length) {
+  // Bitcoin transaction status (simpler than Cardano)
+  if (item.type) {
+    // Bitcoin transaction with type field
+    switch (item.type) {
+      case 'receive':
+        return t('transactions.receivedFunds');
+      case 'send':
+        return t('transactions.sentFunds');
+      case 'self':
+        return t('transactions.selfTransfer');
+      default:
+        return t('transactions.transaction');
+    }
+  }
+
+  // Cardano transaction status (complex with certificates)
+  if (isCardanoTx(item) && item.body?.certificates?.length > 0) {
     item.body.certificates.forEach((certificate: Cardano.Certificate) => {
       const status = getCertificateBaseStatus(certificate.__typename);
       if (status) statuses.push(status);
@@ -1238,6 +1297,106 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
+/* ─── TX Liquid Glass Card ──────────────────────────────────── */
+.tx-glass-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.07) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 22px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.18),
+    0 16px 48px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.06) !important;
+  transition: box-shadow 0.3s ease !important;
+  overflow: hidden;
+}
+
+.tx-glass-card:hover {
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.22),
+    0 24px 60px rgba(0, 0, 0, 0.36),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ─── Card Title Header ─────────────────────────────────────── */
+.tx-card-title {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+
+.tx-icon-box {
+  width: 30px;
+  height: 30px;
+  background: rgba(247, 147, 26, 0.12);
+  border: 1px solid rgba(247, 147, 26, 0.2);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.tx-heading-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tx-heading,
+.tx-heading-link {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  text-decoration: none !important;
+  line-height: 1 !important;
+}
+
+.tx-heading-link:hover {
+  color: #F7931A !important;
+}
+
+.tx-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.52);
+  line-height: 1;
+}
+
+.tx-search-field {
+  max-width: 170px !important;
+}
+
+/* ─── Data Table Glass Overrides ────────────────────────────── */
+.tx-glass-card >>> .v-data-table__wrapper thead th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  color: rgba(255, 255, 255, 0.60) !important;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+}
+
+.tx-glass-card >>> .v-data-table__wrapper tbody td {
+  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ─── Pagination Bar ────────────────────────────────────────── */
+.tx-pagination-bar {
+  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  padding: 4px 0 !important;
+}
+
+/* ─── Existing Styles ───────────────────────────────────────── */
 .text-nowrap {
   text-wrap: nowrap;
 }
@@ -1352,7 +1511,7 @@ onUnmounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 /* Custom scrollbar styling for webkit browsers */
@@ -1365,12 +1524,12 @@ onUnmounted(() => {
 }
 
 .table-container::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(255, 255, 255, 0.15);
   border-radius: 3px;
 }
 
 .table-container::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.28);
 }
 
 /* Ensure table takes full width within container */

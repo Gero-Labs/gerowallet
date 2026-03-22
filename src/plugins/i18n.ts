@@ -1,7 +1,6 @@
 import Vue from 'vue';
 import VueI18n from 'vue-i18n';
-import { walletStore } from '@/stores/walletStore';
-import { geroStore } from '@/stores/geroStore';
+
 
 // Vuetify locales — only import supported languages (us, de)
 import {

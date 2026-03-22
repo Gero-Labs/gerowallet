@@ -330,9 +330,15 @@ export async function registerWebAuthnCredential(
       },
       timeout: 60000,
       attestation: 'none',
-      // Enable PRF extension for secure password encryption
+      // Enable PRF extension and probe with eval to ensure `enabled` is reliably reported.
+      // Some authenticators (Windows Hello, iCloud Keychain, cross-device passkeys) don't
+      // set `enabled: true` unless an actual evaluation is requested during registration.
       extensions: {
-        prf: {} // Request PRF support during registration
+        prf: {
+          eval: {
+            first: new TextEncoder().encode('gero-prf-probe-v1')
+          }
+        }
       }
     };
 
@@ -345,15 +351,18 @@ export async function registerWebAuthnCredential(
       throw new Error('Failed to create credential');
     }
 
-    // Check if PRF was enabled by the authenticator
+    // Check if PRF was enabled by the authenticator.
+    // Accept either `enabled: true` OR a non-null probe result — some authenticators
+    // return results without explicitly setting `enabled`.
     const extensionResults = credential.getClientExtensionResults();
     const prfResults = extensionResults?.prf;
-    const prfEnabled = prfResults?.enabled === true;
+    const prfEnabled = prfResults?.enabled === true || !!prfResults?.results?.first;
 
     debugLog('[WebAuthn] Registration extension results:', {
       hasExtensions: !!extensionResults,
       hasPrf: !!prfResults,
       prfEnabled: prfResults?.enabled,
+      hasProbeResult: !!prfResults?.results?.first,
       fullPrfResults: prfResults,
       allExtensions: extensionResults
     });

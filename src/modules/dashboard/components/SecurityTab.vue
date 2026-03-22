@@ -137,6 +137,32 @@
         </v-list-item-icon>
       </v-list-item>
 
+      <!-- Verify Address on Device (Hardware Wallets Only) -->
+      <v-list-item
+        v-if="isHardwareWallet && canVerifyAddress"
+        class="px-2 py-1"
+        @click="verifyAddressOnDevice"
+      >
+        <v-list-item-avatar class="my-0">
+          <v-icon>
+            mdi-shield-check
+          </v-icon>
+        </v-list-item-avatar>
+        <v-list-item-content class="py-0">
+          <v-list-item-title class="text-left">
+            <h3 style="color: white; font-size: 16px;">{{ $t('settings.verifyAddress') }}</h3>
+          </v-list-item-title>
+          <v-list-item-subtitle class="text-left">
+            {{ $t('settings.verifyAddressOnDevice') }}
+          </v-list-item-subtitle>
+        </v-list-item-content>
+        <v-list-item-icon class="my-0" style="align-self: center">
+          <v-icon large>
+            mdi-chevron-right
+          </v-icon>
+        </v-list-item-icon>
+      </v-list-item>
+
       <!-- Two-Factor Authentication - DISABLED FOR NOW (see 2FA_IMPLEMENTATION_PLAN.md) -->
       <template v-if="false">
         <v-list-item class="px-2 py-1" @click="twoFactorDialog = true">
@@ -492,6 +518,57 @@ const passKeyText = computed(() => {
 
   return features.join(', ');
 });
+
+// Hardware wallet address verification
+const isHardwareWallet = computed(() => {
+  return loggedWallet.value?.type === WalletType.Ledger ||
+         loggedWallet.value?.type === WalletType.Trezor ||
+         loggedWallet.value?.type === WalletType.Keystone;
+});
+
+const canVerifyAddress = computed(() => {
+  // Only Ledger and Trezor have screens to display addresses
+  // Keystone is air-gapped and doesn't support address verification via app
+  return (loggedWallet.value?.type === WalletType.Ledger ||
+          loggedWallet.value?.type === WalletType.Trezor) &&
+         loggedWallet.value?.chain === Blockchain.BITCOIN;
+});
+
+const verifyAddressOnDevice = async () => {
+  if (!loggedWallet.value || !canVerifyAddress.value) return;
+
+  try {
+    const addressType = loggedWallet.value.addressType || 'segwit';
+    const accountIndex = 0;
+    const addressIndex = 0;
+    const isChange = false;
+
+    if (loggedWallet.value.type === WalletType.Ledger) {
+      // Verify address on Ledger
+      const ledger = await import('@/shared/utils/ledger');
+      await ledger.default.verifyBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true);
+    } else if (loggedWallet.value.type === WalletType.Trezor) {
+      // Verify address on Trezor
+      const response: any = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data: {
+          method: 'verifyBitcoinAddress',
+          addressType,
+          accountIndex,
+          addressIndex,
+          isChange
+        },
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to verify address on Trezor');
+      }
+    }
+  } catch (error: any) {
+    console.error('Error verifying address:', error);
+    // Error handling is done in the hardware wallet utilities
+  }
+};
 
 // Load security config from wallet database
 async function loadSecurityConfig() {

@@ -74,6 +74,31 @@
         </v-col>
       </v-row>
 
+      <!-- Bitcoin wallet view -->
+      <template v-if="loggedWallet?.chain === Blockchain.BITCOIN">
+        <!-- Price history chart (full width) -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <BitcoinPriceChart />
+          </v-col>
+        </v-row>
+        <!-- Balance card + Mempool widget -->
+        <v-row no-gutters>
+          <v-col cols="12" xl="5" lg="5" md="6" sm="12" class="pa-2">
+            <BitcoinBalanceCard class="fill-height" />
+          </v-col>
+          <v-col cols="12" xl="7" lg="7" md="6" sm="12" class="pa-2">
+            <MempoolWidget class="fill-height" />
+          </v-col>
+        </v-row>
+        <!-- Bitcoin Ecosystem Hub -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <BitcoinEcosystemWidget />
+          </v-col>
+        </v-row>
+      </template>
+
       <!-- Separate chart row for non-Cardano wallets -->
       <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
         <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2" style="height: 210px;">
@@ -94,6 +119,33 @@
             @withdraw-rewards="handleWithdrawRewards"
             @delegate-gero="handleDelegateGero"
           />
+        </v-col>
+
+      <!-- Separate chart row for non-Cardano/non-Bitcoin wallets -->
+      <v-row no-gutters v-if="loggedWallet?.chain !== Blockchain.BITCOIN && (loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO)">
+        <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
+          <v-card
+            outlined
+            class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+          >
+            <v-card-text>
+              <PortfolioChart
+                :chart-data="computeChartData.adaData"
+                :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
+                :portfolio-value-ada="currentPortfolioValues.ada"
+                :portfolio-value-usd="currentPortfolioValues.usd"
+                :portfolio-value-eur="currentPortfolioValues.eur"
+                :ada-only-value-ada="adaBalance"
+                :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+                :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+                :loading="portfolioLoading"
+                :progressive-loading="true"
+                :first-loaded-currency="firstLoadedCurrency"
+                @refresh="refreshPortfolioChart"
+              />
+            </v-card-text>
+          </v-card>
         </v-col>
 
         <!-- Apex Carousel Card -->
@@ -132,15 +184,22 @@
         </v-col>
       </v-row>
 
-      <!-- Token Allocation Table Row -->
-      <v-row no-gutters>
+      <!-- Token Allocation Table Row (Cardano only) -->
+      <v-row no-gutters v-if="loggedWallet?.chain !== Blockchain.BITCOIN">
         <v-col cols="12" class="pa-2">
           <TokenAllocationTable />
         </v-col>
       </v-row>
 
-      <!-- Transactions and Staking Row + Swap Widget Column -->
-      <v-row no-gutters>
+      <!-- Transactions Row for Bitcoin (simplified) -->
+      <v-row no-gutters v-if="loggedWallet?.chain === Blockchain.BITCOIN">
+        <v-col cols="12" class="pa-2">
+          <TransactionsCard style="min-height: 426px"></TransactionsCard>
+        </v-col>
+      </v-row>
+
+      <!-- Transactions and Staking Row + Swap Widget Column (Cardano only) -->
+      <v-row no-gutters v-if="loggedWallet?.chain !== Blockchain.BITCOIN">
         <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
           <TransactionsCard style="min-height: 426px"></TransactionsCard>
         </v-col>
@@ -176,6 +235,10 @@ import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import EmptyStateHero from '../components/EmptyStateHero.vue';
+import BitcoinBalanceCard from '../components/BitcoinBalanceCard.vue';
+import BitcoinPriceChart from '../components/BitcoinPriceChart.vue';
+import MempoolWidget from '../components/MempoolWidget.vue';
+import BitcoinEcosystemWidget from '../components/BitcoinEcosystemWidget.vue';
 import { Blockchain, Network } from '@/models/types';
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
@@ -211,7 +274,7 @@ const { pnlSummary, fetchPnl } = useWalletPnl();
 fetchPnl();
 
 // Store refs
-const { loggedWallet, transactions, account, utxos, collateral } = toRefs(walletStore);
+const { loggedWallet, transactions, account, utxos, collateral, bitcoinBalance } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
@@ -267,7 +330,10 @@ const apexCarouselItems = ref<CarouselItem[]>([
 ]);
 
 const isStakingEnabled = computed(() => {
-  if (loggedWallet.value?.baseAddress) {
+  // Only parse address for Cardano-based chains
+  if (loggedWallet.value?.baseAddress &&
+      (loggedWallet.value?.chain === Blockchain.CARDANO ||
+       loggedWallet.value?.chain === Blockchain.APEX_PRIME)) {
     return (
       Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
     );
@@ -280,7 +346,26 @@ const isSwapEnabled = computed(() => {
 });
 
 // Empty state computed
-const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === '0');
+const isWalletEmpty = computed(() => {
+  // Debug logging
+  console.log('🔍 Dashboard Debug:', {
+    chain: loggedWallet.value?.chain,
+    isBitcoin: loggedWallet.value?.chain === Blockchain.BITCOIN,
+    bitcoinBalance: bitcoinBalance.value,
+    account: account.value?.controlled_amount,
+  });
+
+  // For Bitcoin wallets, never show empty state - always show balance card
+  // This allows users to receive Bitcoin even with 0 balance
+  if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
+    console.log('✅ Bitcoin wallet detected - showing balance card');
+    return false;
+  }
+  // For Cardano wallets, check account controlled amount
+  const isEmpty = !account.value || account.value?.controlled_amount === '0';
+  console.log('📊 Cardano wallet - isEmpty:', isEmpty);
+  return isEmpty;
+});
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
   // Access config directly from the reactive store for better reactivity

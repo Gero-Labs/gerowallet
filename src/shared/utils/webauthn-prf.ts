@@ -320,10 +320,12 @@ export async function registerWebAuthnCredentialWithPrf(
       throw new Error('Failed to create credential');
     }
 
-    // Check if PRF was enabled and evaluated with type safety
+    // Check if PRF was enabled and evaluated with type safety.
+    // Accept either `enabled: true` OR a non-null result — some authenticators
+    // return results without explicitly setting `enabled`.
     const extensionResults = credential.getClientExtensionResults();
     const prfResults = extensionResults?.prf as PrfExtensionResults | undefined;
-    const prfEnabled = prfResults?.enabled === true;
+    const prfEnabled = prfResults?.enabled === true || !!prfResults?.results?.first;
 
     debugLog('[PRF] Registration extension results:', {
       hasExtensions: !!extensionResults,
@@ -797,6 +799,63 @@ export async function decryptMnemonicWithPrf(
   } catch (error) {
     console.error('[PRF] Mnemonic decryption failed:', error);
     throw new Error('Failed to decrypt mnemonic - credential may have been re-registered');
+  }
+}
+
+/**
+ * Decrypt mnemonic using a pre-evaluated PRF output (no WebAuthn call).
+ *
+ * Use this when the raw PRF output has already been obtained in the frontend
+ * and needs to be used in the background to decrypt the mnemonic.
+ *
+ * @param encryptedMnemonic - Hex-encoded encrypted mnemonic
+ * @param prfOutput - Raw PRF output bytes from evaluatePrfForWallet
+ * @param credentialId - Base64-encoded credential ID (must match encryption)
+ * @param walletId - Wallet ID for key derivation (must match encryption)
+ * @returns Promise<string> - Decrypted BIP39 mnemonic phrase
+ */
+export async function decryptMnemonicWithPrfOutput(
+  encryptedMnemonic: string,
+  prfOutput: ArrayBuffer | Uint8Array,
+  credentialId: string,
+  walletId: string
+): Promise<string> {
+  debugLog('[PRF] Decrypting mnemonic with provided PRF output for wallet:', walletId);
+
+  const encryptedBytes = Buffer.from(encryptedMnemonic, 'hex');
+  const iv = encryptedBytes.subarray(0, 12);
+  const ciphertext = encryptedBytes.subarray(12);
+
+  const buffer = prfOutput instanceof Uint8Array
+    ? prfOutput.buffer.slice(prfOutput.byteOffset, prfOutput.byteOffset + prfOutput.byteLength)
+    : prfOutput;
+
+  const baseKey = await crypto.subtle.importKey('raw', buffer as ArrayBuffer, 'HKDF', false, ['deriveKey']);
+
+  const encryptionKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      salt: new Uint8Array(),
+      hash: 'SHA-512',
+      info: new TextEncoder().encode(`gero-wallet-mnemonic-encryption-v1:${walletId}`)
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(credentialId) },
+      encryptionKey,
+      ciphertext
+    );
+    debugLog('[PRF] ✅ Mnemonic decrypted with PRF output successfully');
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    console.error('[PRF] Mnemonic decryption with PRF output failed:', error);
+    throw new Error('Failed to decrypt mnemonic - PRF output may not match the one used for encryption');
   }
 }
 

@@ -3,9 +3,11 @@ import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
 import apex from '@/assets/img/apex.jpg';
+import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 
 export interface NetworkInfo {
   icon: string;
+  iconColor: string;  // Wallet icon color for this blockchain
   title: string;
   blockchain: string;
   network: string;
@@ -41,6 +43,12 @@ export interface NetworkInfo {
   perpetualsSupport: boolean;
   multiSigSupport: boolean,
   geroCardSupport: boolean;
+  goMiningSupport: boolean;
+  babylonSupport: boolean;
+  ordinalsSupport: boolean;
+  thorchainSupport: boolean;
+  mempoolSupport: boolean;
+  lightningSupport: boolean;
   networkParams: {
     networkMagic: number;
   }
@@ -49,6 +57,7 @@ export default {
   networks: [
     {
       icon: cardanoBlueLogo,
+      iconColor: 'blue',
       title: 'Cardano Mainnet',
       blockchain: Blockchain.CARDANO,
       network: Network.MAINNET,
@@ -84,12 +93,19 @@ export default {
       perpetualsSupport: true,
       multiSigSupport: false,
       geroCardSupport: true,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
       networkParams: {
         networkMagic: 764824073
       }
     },
     {
       icon: cardanoBlueLogo,
+      iconColor: 'blue',
       title: 'Cardano Preprod',
       blockchain: Blockchain.CARDANO,
       network: Network.PREPROD,
@@ -124,12 +140,19 @@ export default {
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
       networkParams: {
         networkMagic: 1
       }
     },
     {
       icon: apex,
+      iconColor: 'orange',
       title: 'Apex Prime Mainnet',
       blockchain: Blockchain.APEX_PRIME,
       network: Network.MAINNET,
@@ -165,12 +188,19 @@ export default {
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
       networkParams: {
         networkMagic: 764824073
       }
     },
     {
       icon: apex,
+      iconColor: 'orange',
       title: 'Apex Vector Testnet',
       blockchain: Blockchain.APEX_VECTOR,
       network: Network.TESTNET,
@@ -193,8 +223,112 @@ export default {
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
       networkParams: {
         networkMagic: 1
+      }
+    },
+    // Bitcoin Mainnet
+    {
+      icon: bitcoinLogo,
+      iconColor: 'yellow',
+      title: 'Bitcoin Mainnet',
+      blockchain: Blockchain.BITCOIN,
+      network: Network.MAINNET,
+      supportedHardware: true,
+      networkId: 0,
+      currencySymbol: '\u20BF',  // ₿ symbol
+      currencyTicker: 'BTC',
+      currencyName: 'Bitcoin',
+      currencyDescription: 'Bitcoin Native Currency',
+      currencyImage: bitcoinLogo,
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.BLOCKSTREAM,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: true,
+      swapSupport: false,
+      buySupport: true,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: true,
+      babylonSupport: true,
+      ordinalsSupport: true,
+      thorchainSupport: true,
+      mempoolSupport: true,
+      lightningSupport: true,
+      networkParams: {
+        networkMagic: 0xF9BEB4D9  // Bitcoin mainnet magic bytes
+      }
+    },
+    // Bitcoin Testnet
+    {
+      icon: bitcoinLogo,
+      iconColor: 'yellow',
+      title: 'Bitcoin Testnet',
+      blockchain: Blockchain.BITCOIN,
+      network: Network.TESTNET,
+      supportedHardware: true,
+      networkId: 1,
+      currencySymbol: 'tBTC',
+      currencyTicker: 'tBTC',
+      currencyName: 'Bitcoin Testnet',
+      currencyDescription: 'Bitcoin Test Network Currency',
+      currencyImage: bitcoinLogo,
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.BLOCKSTREAM,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: true,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: true,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: true,
+      lightningSupport: true,
+      networkParams: {
+        networkMagic: 0x0709110B  // Bitcoin testnet magic bytes
       }
     },
   ]  as NetworkInfo[],
@@ -267,6 +401,42 @@ export default {
     }
     return this.resolveNetwork(chain, network)?.geroCardSupport
   },
+  resolveGoMiningSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.goMiningSupport ?? false
+  },
+  resolveBabylonSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.babylonSupport ?? false
+  },
+  resolveOrdinalsSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.ordinalsSupport ?? false
+  },
+  resolveThorchainSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.thorchainSupport ?? false
+  },
+  resolveMempoolSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.mempoolSupport ?? false
+  },
+  resolveLightningSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.lightningSupport ?? false
+  },
   resolveDaoSupport(chain: string, network: string): boolean {
     if (!chain || !network) {
       return false
@@ -299,5 +469,8 @@ export default {
   },
   resolveNetworkMagic(chain: string, network: string): number {
     return this.resolveNetwork(chain, network)?.networkParams?.networkMagic || 0;
+  },
+  resolveIconColor(chain: string, network: string): string {
+    return this.resolveNetwork(chain, network)?.iconColor || 'green';
   },
 };

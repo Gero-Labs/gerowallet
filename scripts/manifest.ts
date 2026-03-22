@@ -18,6 +18,9 @@ interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
   side_panel?: {
     default_path: string;
   };
+  declarative_net_request?: {
+    rule_resources: { id: string; enabled: boolean; path: string }[];
+  };
 }
 
 //@ts-ignore
@@ -172,8 +175,14 @@ async function getManifest() {
       'notifications',
       'identity',
       'sidePanel',
-      'scripting'
+      'scripting',
+      'declarativeNetRequest',
     ],
+    declarative_net_request: {
+      rule_resources: [
+        { id: 'moonpay_iframe', enabled: true, path: 'public/dnr_rules.json' },
+      ],
+    },
     host_permissions: ['*://*/*'],
     web_accessible_resources: [
       {

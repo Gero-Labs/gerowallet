@@ -198,11 +198,14 @@ export class WalletManager {
         // OPTIMIZATION: Use REST sync on login to get tip immediately
         // This prevents "Cannot read properties of null (reading 'slot')" errors
         // when trying to send transactions before Ably sync completes
-        LoadingState.setText('Syncing wallet data...');
-        await this.walletBg.syncService.syncViaRest().catch(err => {
-          console.warn('REST sync failed during login (non-critical):', err);
-          // Fall back to regular Ably sync if REST fails
-        });
+        // Skip for Bitcoin wallets — the Gero backend has no BITCOIN chain enum
+        if (walletBg.chain !== Blockchain.BITCOIN) {
+          LoadingState.setText('Syncing wallet data...');
+          await this.walletBg.syncService.syncViaRest().catch(err => {
+            console.warn('REST sync failed during login (non-critical):', err);
+            // Fall back to regular Ably sync if REST fails
+          });
+        }
 
         LoadingState.setText('Wallet ready');
 
@@ -244,30 +247,53 @@ export class WalletManager {
     }
 
     LoadingState.setText('Loading blockchain data...');
-    walletBg.loadGenesis();
 
-    const promises2 = [];
-    promises2.push(
-      walletBg.loadAssets(),
-      walletBg.loadEpochParams()
-    );
-    if (networks.resolveStakingSupport(walletBg.chain, walletBg.network)) {
+    // Chain-specific initialization
+    if (walletBg.chain === Blockchain.BITCOIN) {
+      // Bitcoin wallet initialization
+      debugLog('🔶 Initializing Bitcoin wallet');
+      LoadingState.setText('Loading Bitcoin wallet...');
+
+      // Fetch Bitcoin UTXOs and update store
+      await walletBg.syncBitcoinWallet();
+
+      // Fetch Bitcoin transaction history
+      LoadingState.setText('Loading Bitcoin transactions...');
+      await walletBg.syncBitcoinTransactions();
+
+      // Load wallet-specific data
+      promises.push(
+        walletBg.loadConfig(),
+        walletBg.loadContacts(),
+        walletBg.loadConnectedDapps()
+      );
+    } else {
+      // Cardano wallet initialization (existing logic)
+      walletBg.loadGenesis();
+
+      const promises2 = [];
       promises2.push(
-        walletBg.loadRewards()
+        walletBg.loadAssets(),
+        walletBg.loadEpochParams()
+      );
+      if (networks.resolveStakingSupport(walletBg.chain, walletBg.network)) {
+        promises2.push(
+          walletBg.loadRewards()
+        );
+      }
+      await Promise.all(promises2);
+
+      LoadingState.setText('Loading wallet data...');
+
+      promises.push(
+        walletBg.startSync(),
+        walletBg.loadConfig(),
+        walletBg.loadAccount(),
+        walletBg.loadContacts(),
+        walletBg.loadConnectedDapps(),
+        walletBg.loadTransactions()
       );
     }
-    await Promise.all(promises2);
-
-    LoadingState.setText('Loading wallet data...');
-
-    promises.push(
-      walletBg.startSync(),
-      walletBg.loadConfig(),
-      walletBg.loadAccount(),
-      walletBg.loadContacts(),
-      walletBg.loadConnectedDapps(),
-      walletBg.loadTransactions()
-    );
 
     const chain: string = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network: string = Object.keys(Network).find(key => Network[key] === walletBg.network);
@@ -278,15 +304,17 @@ export class WalletManager {
       address = walletBg.stakeAddress;
     }
 
-    // Force close existing connection if any to ensure fresh authentication
-    ablyService.close();
+    // Skip Ably for Bitcoin wallets (Ably is Cardano-specific)
+    if (walletBg.chain !== Blockchain.BITCOIN) {
+      // Force close existing connection if any to ensure fresh authentication
+      ablyService.close();
 
-    ablyService.setAuthParams(chain, network, address);
-    ablyService.setApi(walletBg.api);
+      ablyService.setAuthParams(chain, network, address);
+      ablyService.setApi(walletBg.api);
 
-    // OPTIMIZATION: Connect to Ably completely in background - don't block login at all
-    // Ably will handle reconnection and message buffering automatically
-    (async () => {
+      // OPTIMIZATION: Connect to Ably completely in background - don't block login at all
+      // Ably will handle reconnection and message buffering automatically
+      (async () => {
       ablyService.connect();
 
       // Wait for connection to be established (non-blocking, happens in background)
@@ -371,13 +399,22 @@ export class WalletManager {
       } catch (error: unknown) {
         console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error['message'] || error);
       }
-    })(); // Execute immediately but don't await - fully non-blocking
+      })(); // Execute immediately but don't await - fully non-blocking
+    } else {
+      debugLog('⏭️ Skipping Ably connection for Bitcoin wallet');
+    }
 
     // Wait for all initialization promises to complete
     LoadingState.setText('Initializing wallet...');
     await Promise.all(promises);
 
     LoadingState.setText('Wallet initialization complete');
+
+    // Start periodic sync for Bitcoin wallets
+    if (walletBg.chain === Blockchain.BITCOIN) {
+      debugLog('🔄 Starting Bitcoin periodic sync...');
+      walletBg.startBitcoinPeriodicSync();
+    }
 
     // OPTIMIZATION: Load non-critical data in background after wallet is ready
     // This improves perceived performance by not blocking the login flow
@@ -390,7 +427,7 @@ export class WalletManager {
         // Re-resolve assets after DexHunter tokens are loaded to update verified status
         const utxos = walletStore.utxos;
         if (utxos && utxos.length > 0) {
-          walletBg.setAssets(utxos);
+          walletBg.setAssets(utxos as Cardano.Utxo[]);
         }
 
         DexHunterStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
@@ -462,6 +499,13 @@ export class WalletManager {
       try {
         if (this.walletBg) {
           this.walletBg.endSync();
+
+          // Stop Bitcoin periodic sync if it's a Bitcoin wallet
+          if (this.walletBg.chain === Blockchain.BITCOIN) {
+            this.walletBg.stopBitcoinPeriodicSync();
+            debugLog('Bitcoin periodic sync stopped during logout');
+          }
+
           debugLog('WalletBg sync intervals cleared during logout');
         }
       } catch (syncError) {

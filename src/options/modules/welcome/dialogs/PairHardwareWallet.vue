@@ -1,142 +1,95 @@
 <template>
-  <v-dialog
-    content-class="rounded-xxl dialogStyle darken"
-    v-model="dialogLocal"
+  <BaseDialog
+    :title="t('welcome.pairHardwareWallet')"
+    :title-info="t('welcome.hardwareWalletDescription')"
+    :subtitle="localNetwork ? localNetwork.title : ''"
+    :is-open="props.dialog"
+    @close="onClose"
     :persistent="persistent"
-    scrollable max-width="850"
+    :img="assets.pairSvg"
+    :min-height="0"
+    :width="600"
   >
-    <v-card
-      class="py-0 rounded-xxl transparent fill-height"
-    >
-      <v-stepper
-        v-model="step"
-        flat
-        style="background-color: transparent; height:100%"
-        non-linear
-      >
-        <v-stepper-header style="box-shadow: none">
-          <v-stepper-step
-            :complete="step > 1"
-            step="1"
-          >
-            {{ $t('welcome.type') }}
-          </v-stepper-step>
-          <v-divider></v-divider>
-          <v-stepper-step
-            :complete="step > 2"
-            step="2"
-          >
-            {{ $t('welcome.pairing') }}
-          </v-stepper-step>
-          <v-divider></v-divider>
-          <v-stepper-step step="3">
-            {{ $t('welcome.walletSetup') }}
-          </v-stepper-step>
-        </v-stepper-header>
-
+    <v-card-text class="px-0 py-2">
+      <v-stepper v-model="step" flat class="transparent">
         <v-stepper-items>
-          <v-stepper-content step="1" style="text-align: -webkit-center;" class="pt-0">
-            <v-form ref="form" v-model="valid" style="padding-top: 12px; padding-bottom: 12px">
-              <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
-                <v-card-text class="px-0 d-flex row justify-space-around mt-2">
-                  <v-row
-                    align="center"
-                    justify="center"
-                    no-gutters
-                  >
-                    <v-col>
-                      <v-card flat class="fill-height transparent">
-                        <v-alert
-                          color="primary"
-                          dense
-                          outlined
-                          type="info"
-                          prominent
-                          border="left"
-                        >
-                          {{ $t('welcome.hardwareWalletDescription') }}
-                        </v-alert>
-                        <v-card-title class="justify-center" style="font-weight: 700; word-break: break-word">
-                          {{ $t('welcome.hardwareWalletType') }}
-                        </v-card-title>
-                        <v-card-text class="text-center px-0">
-                          <v-item-group v-model="walletType" active-class="primary" class="pb-10">
-                            <v-row no-gutters>
-                              <v-col
-                                v-for="(item) in walletTypes"
-                                :key="item.name"
-                                cols="12"
-                                sm="4"
-                                xs="12"
-                                class="pa-1"
-                              >
-                                <v-item v-slot="{ active, toggle }" :value="item.name">
-                                  <v-hover>
-                                    <template v-slot:default="{ hover }">
-                                      <v-card
-                                        flat
-                                        height="150"
-                                        class="justify-center text-center pa-4 shadow"
-                                        :style="{ backgroundColor: '#00000080', alignContent: 'center' }"
-                                        @click="toggle"
-                                        :disabled="!item.enabled"
-                                      >
-                                        <div style="align-content: center;" >
-                                          <img
-                                            :src="item.icon"
-                                            style="margin: auto; width: 130px; height: 50px; filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);"
-                                            :alt="item.name"
-                                          />
-                                        </div>
-                                        <v-card-subtitle class="pt-1 pb-1">
-                                          {{ item.support }}
-                                        </v-card-subtitle>
-                                        <v-card-subtitle class="pa-0">
-                                          <v-chip color="red" small v-if="!item.enabled">{{ $t('welcome.soon') }}</v-chip>
-                                        </v-card-subtitle>
-                                        <v-scroll-y-transition>
-                                          <v-icon color="white" style="position: absolute; right: 10px; bottom: 10px;" v-if="active">
-                                            mdi-check-circle-outline
-                                          </v-icon>
-                                        </v-scroll-y-transition>
-                                        <v-overlay
-                                          v-if="hover"
-                                          absolute
-                                          color="#ffffff"
-                                        >
-                                        </v-overlay>
 
-                                      </v-card>
-                                    </template>
-                                  </v-hover>
-                                </v-item>
-                              </v-col>
-                            </v-row>
-                          </v-item-group>
-                        </v-card-text>
-                      </v-card>
-                    </v-col>
-                  </v-row>
-                </v-card-text>
-                <v-card-actions class="px-0 align-self-end" style="width: 100%">
-                  <v-spacer></v-spacer>
-                  <v-btn
-                    color="primary"
-                    @click="nextStep"
-                    elevation="0"
-                    :disabled="!valid"
+          <!-- ============================================ -->
+          <!-- STEP 1: Hardware wallet type selection       -->
+          <!-- ============================================ -->
+          <v-stepper-content step="1" class="pt-0">
+            <v-card flat class="transparent d-flex justify-center">
+              <div style="max-width: 540px; width: 100%">
+                <!-- Network — Mainnets -->
+                <div class="step-section-label mb-2">{{ $t('common.selectNetwork') }}</div>
+                <div class="network-grid mb-3">
+                  <div
+                    v-for="net in mainnetNetworks"
+                    :key="net.blockchain + net.network"
+                    class="network-tile"
+                    :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                    @click="selectNetwork(net)"
                   >
-                    {{ $t('welcome.continue') }}
-                  </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-form>
+                    <v-avatar size="22" class="network-tile__icon">
+                      <v-img :src="net.icon" contain></v-img>
+                    </v-avatar>
+                    <span class="network-tile__label">{{ net.title }}</span>
+                  </div>
+                </div>
+
+                <!-- Testnets — collapsed by default -->
+                <div class="testnet-toggle mb-4" @click="showTestnets = !showTestnets">
+                  <v-icon size="12" class="mr-1" style="color: inherit;">{{ showTestnets ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+                  <span>{{ $t('welcome.developerNetworks') }}</span>
+                  <v-chip v-if="isTestnetSelected" x-small color="warning" class="ml-2" style="height: 14px; font-size: 9px;">{{ localNetwork.currencyTicker }}</v-chip>
+                </div>
+                <div v-if="showTestnets" class="network-grid mb-4">
+                  <div
+                    v-for="net in testnetNetworks"
+                    :key="net.blockchain + net.network"
+                    class="network-tile network-tile--testnet"
+                    :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                    @click="selectNetwork(net)"
+                  >
+                    <v-avatar size="16" class="network-tile__icon">
+                      <v-img :src="net.icon" contain></v-img>
+                    </v-avatar>
+                    <span class="network-tile__label">{{ net.title }}</span>
+                  </div>
+                </div>
+
+                <div class="step-section-label mb-2 mt-4">{{ $t('welcome.hardwareWalletType') }}</div>
+                <div class="hw-grid">
+                  <div
+                    v-for="item in walletTypes"
+                    :key="item.name"
+                    class="hw-tile"
+                    :class="{
+                      'hw-tile--active': walletType === item.name,
+                      'hw-tile--disabled': !item.enabled
+                    }"
+                    @click="item.enabled && (walletType = item.name)"
+                  >
+                    <img
+                      :src="item.icon"
+                      class="hw-tile__logo"
+                      :alt="item.name"
+                    />
+                    <span class="hw-tile__label">{{ item.name }}</span>
+                    <v-chip v-if="!item.enabled" color="red" x-small style="height: 14px; font-size: 9px;">{{ $t('welcome.soon') }}</v-chip>
+                  </div>
+                </div>
+              </div>
+            </v-card>
           </v-stepper-content>
 
-          <v-stepper-content step="2" style="text-align: -webkit-center;" class="pt-0">
-            <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
-              <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
-                <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
+          <!-- ============================================ -->
+          <!-- STEP 2: Pairing instructions                 -->
+          <!-- ============================================ -->
+          <v-stepper-content step="2" class="pt-0">
+            <v-form ref="form2" v-model="valid2">
+              <v-card flat class="transparent d-flex justify-center">
+                <div style="max-width: 540px; width: 100%; text-align: -webkit-center;">
                   <img
                     v-if="walletType === WalletType.Ledger"
                     :src="assets.connectLedgerSvg"
@@ -151,7 +104,8 @@
                     v-if="walletType === WalletType.Keystone && !keystoneScan"
                     :src="assets.connectKeystoneSvg"
                     style="width: 230px; height: 126px"
-                    :alt="t('wallet.connectKeystone')">
+                    :alt="t('wallet.connectKeystone')"
+                  >
                   <v-alert
                     color="white"
                     dense
@@ -160,19 +114,21 @@
                     prominent
                     border="left"
                   >
-                    <b>{{ $t('welcome.instructions') }}</b>
                     <div v-if="walletType === WalletType.Ledger">
-                      <ul class="text-left" style="line-height: 1.5" >
+                      <ul class="text-left" style="line-height: 1.5">
                         <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
-                        <li>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
+                        <li v-if="isBitcoin">{{ $t('welcome.installBitcoinApp', { walletType }) }}</li>
+                        <li v-else>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
                         <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
-                        <li>{{ $t('welcome.openCardanoApp') }}</li>
+                        <li v-if="isBitcoin">{{ $t('welcome.openBitcoinApp') }}</li>
+                        <li v-else>{{ $t('welcome.openCardanoApp') }}</li>
                       </ul>
                     </div>
                     <div v-if="walletType === WalletType.Trezor">
-                      <ul class="text-left" style="line-height: 1.5" >
+                      <ul class="text-left" style="line-height: 1.5">
                         <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
-                        <li>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
+                        <li v-if="isBitcoin">{{ $t('welcome.installBitcoinApp', { walletType }) }}</li>
+                        <li v-else>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
                         <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
                       </ul>
                     </div>
@@ -191,7 +147,7 @@
                       </ul>
                     </div>
                   </v-alert>
-                  <div style="display: flex;" v-if="walletType === WalletType.Ledger">
+                  <div style="display: flex; justify-content: center;" v-if="walletType === WalletType.Ledger">
                     <ToggleSwitch
                       :text-left="t('dashboard.usb')"
                       icon-left="mdi-usb"
@@ -212,127 +168,133 @@
                       @progress="onKeystoneProgress"
                     />
                   </div>
-                </v-card-text>
-                <v-card-actions class="px-0 align-self-end" style="width: 100%">
-                  <v-spacer></v-spacer>
-                  <v-btn
-                    text
-                    @click="backToStepOne"
-                    elevation="0"
-                  >
-                    {{ $t('welcome.back') }}
-                  </v-btn>
-                  <v-btn
-                    color="primary"
-                    @click="walletCreationStep2"
-                    elevation="0"
-                  >
-                    {{ $t('welcome.continue') }}
-                  </v-btn>
-                </v-card-actions>
+                </div>
               </v-card>
             </v-form>
           </v-stepper-content>
-          <v-stepper-content step="3" style="text-align: -webkit-center;" class="pt-0">
+
+          <!-- ============================================ -->
+          <!-- STEP 3: Wallet setup summary                 -->
+          <!-- ============================================ -->
+          <v-stepper-content step="3" class="pt-0">
             <v-form ref="form3" v-model="valid3">
-              <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px" :disabled="creatingWalletLoader">
-                <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpWalletName') }}</h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.chooseNameToIdentify') }}
-                  </h3>
-                  <v-text-field
-                    style="width: 100%"
-                    v-model="newWallet.name"
-                    dense
-                    filled
-                    :label="$t('welcome.walletName')"
-                    :placeholder="$t('welcome.walletNamePlaceholder')"
-                    :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
-                    :disabled="creatingWalletLoader"
-                  ></v-text-field>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.walletIcon') }}</h2>
-                  <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details :disabled="creatingWalletLoader">
-                    <v-radio value="green">
-                      <template v-slot:label>
-                        <v-avatar size="32"  >
-                          <v-img :src="assets.greenSvg" cover></v-img>
+              <v-card flat class="transparent d-flex justify-center" :disabled="creatingWalletLoader">
+                <div style="max-width: 540px; width: 100%">
+                  <div class="text-center mb-3">
+                    <v-icon color="primary" size="28" class="mb-1">mdi-check-circle-outline</v-icon>
+                    <h3 class="white--text mb-1 text-h6">{{ $t('welcome.almostDone') }}</h3>
+                    <p class="grey--text text--lighten-1 mb-0">{{ $t('welcome.reviewYourChoices') }}</p>
+                  </div>
+
+                  <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
+                    <v-card-text class="pa-3">
+                      <div class="d-flex align-center mb-2">
+                        <v-avatar size="32" class="mr-2">
+                          <v-img :src="assets[`${newWallet.icon}Svg`]" cover></v-img>
                         </v-avatar>
-                      </template>
-                    </v-radio>
-                    <v-radio value="purple">
-                      <template v-slot:label>
-                        <v-avatar size="32" >
-                          <v-img :src="assets.purpleSvg" cover></v-img>
-                        </v-avatar>
-                      </template>
-                    </v-radio>
-                    <v-radio value="pink">
-                      <template v-slot:label>
-                        <v-avatar size="32" >
-                          <v-img :src="assets.pinkSvg" cover></v-img>
-                        </v-avatar>
-                      </template>
-                    </v-radio>
-                    <v-radio value="orange">
-                      <template v-slot:label>
-                        <v-avatar size="32" >
-                          <v-img :src="assets.orangeSvg" cover></v-img>
-                        </v-avatar>
-                      </template>
-                    </v-radio>
-                    <v-radio value="blue">
-                      <template v-slot:label>
-                        <v-avatar size="32" >
-                          <v-img :src="assets.blueSvg" cover></v-img>
-                        </v-avatar>
-                      </template>
-                    </v-radio>
-                    <v-radio value="grey">
-                      <template v-slot:label>
-                        <v-avatar size="32" >
-                          <v-img :src="assets.greySvg" cover></v-img>
-                        </v-avatar>
-                      </template>
-                    </v-radio>
-                  </v-radio-group>
+                        <div>
+                          <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
+                          <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ newWallet.name || $t('welcome.walletNamePlaceholder') }}</div>
+                        </div>
+                      </div>
+                      <v-divider class="my-2" style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+                      <v-row no-gutters>
+                        <v-col cols="6" class="pr-3">
+                          <div class="d-flex align-center">
+                            <v-icon color="primary" size="20" class="mr-2">mdi-shield-lock-outline</v-icon>
+                            <div>
+                              <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.type') }}</div>
+                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ walletType }}</div>
+                            </div>
+                          </div>
+                        </v-col>
+                        <v-divider vertical style="border-color: rgba(255, 255, 255, 0.12);"></v-divider>
+                        <v-col cols="6" class="pl-3">
+                          <div class="d-flex align-center">
+                            <v-avatar size="20" class="mr-2">
+                              <v-img :src="localNetwork ? localNetwork.icon : ''" contain></v-img>
+                            </v-avatar>
+                            <div>
+                              <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
+                              <div class="text-body-2 white--text font-weight-medium" style="line-height: 1.3;">{{ localNetwork ? localNetwork.title : '' }}</div>
+                            </div>
+                          </div>
+                        </v-col>
+                      </v-row>
+                    </v-card-text>
+                  </v-card>
+
                   <v-checkbox
-                    style="width: 100%"
                     class="mt-0 mb-2"
                     hide-details
                     v-model="newWallet.termsChecked"
                     :rules="[(newWallet.termsChecked)]"
+                    :disabled="creatingWalletLoader"
                   >
                     <template v-slot:label>
-                      <div>
+                      <span class="text-body-2">
                         {{ $t('welcome.agreeToTerms') }}
                         <a @click.stop href="https://gerowallet.io/legal/terms/" target="_blank">{{ $t('navigation.termsOfService') }}</a>.
-                      </div>
+                      </span>
                     </template>
                   </v-checkbox>
-                </v-card-text>
-                <v-card-actions class="px-0 align-self-end" style="width: 100%">
-                  <v-spacer></v-spacer>
-                  <v-btn
-                    :loading="creatingWalletLoader"
-                    color="primary"
-                    @click="walletCreationStep3"
-                    elevation="0"
-                    :disabled="!valid3 || creatingWalletLoader"
-                    class=""
-                  >
-                    {{ $t('welcome.continue') }}
-                  </v-btn>
-                </v-card-actions>
+                </div>
               </v-card>
             </v-form>
           </v-stepper-content>
+
         </v-stepper-items>
       </v-stepper>
-    </v-card>
+    </v-card-text>
+
+    <!-- Action buttons -->
+    <v-card-actions class="justify-space-between px-6 pb-4">
+      <!-- Step 1: Continue -->
+      <template v-if="step === 1">
+        <v-spacer></v-spacer>
+        <v-btn
+          color="primary"
+          :disabled="!valid"
+          @click="nextStep"
+          elevation="0"
+        >
+          {{ $t('welcome.continue') }}
+        </v-btn>
+      </template>
+
+      <!-- Step 2: Back + Continue -->
+      <template v-else-if="step === 2">
+        <v-btn text @click="backToStepOne" elevation="0">
+          {{ $t('welcome.back') }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          @click="walletCreationStep2"
+          elevation="0"
+        >
+          {{ $t('welcome.continue') }}
+        </v-btn>
+      </template>
+
+      <!-- Step 3: Create wallet -->
+      <template v-else>
+        <v-spacer></v-spacer>
+        <v-btn
+          :loading="creatingWalletLoader"
+          color="primary"
+          @click="walletCreationStep3"
+          elevation="0"
+          :disabled="!valid3 || creatingWalletLoader"
+        >
+          {{ $t('welcome.continue') }}
+        </v-btn>
+      </template>
+    </v-card-actions>
+
+    <!-- Hardware loading overlay -->
     <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
-        <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
-        </video>
+        <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;" />
         <v-progress-linear
           buffer-value="0"
           color="primary"
@@ -340,39 +302,41 @@
           stream
           value="0"
           style="color: cyan; width: 100px; text-align: center"
-        ></v-progress-linear>
-        <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text">
-        </v-card-title>
+        />
+        <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text" />
       </v-card>
     </v-overlay>
-  </v-dialog>
+  </BaseDialog>
 </template>
 <script setup lang="ts">
-import { computed, ref, getCurrentInstance, nextTick } from 'vue';
+import { computed, ref, watch, getCurrentInstance, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import rules from "@/utils/rules";
 import { Blockchain, coin_type, purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
-import { getKeystonePublicKeyUR } from '@/shared/utils/keystone';
+import { getKeystonePublicKeyUR, generateBitcoinSyncQR, parseBitcoinAccount } from '@/shared/utils/keystone';
 import { CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { NetworkInfo } from '@/utils/networks';
+import networks, { NetworkInfo } from '@/utils/networks';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { Bip32PublicKey } from '@cardano-sdk/crypto';
 import snackbar from '@/plugins/snackbar';
+import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { bech32 } from 'bech32';
+import { generateWalletName } from '@/shared/utils/walletNameGenerator';
+import { UR } from '@keystonehq/keystone-sdk';
 
 const { t } = useTranslation();
 
 interface Props {
   dialog: boolean;
-  network: NetworkInfo;
+  network?: NetworkInfo;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -383,10 +347,33 @@ const emit = defineEmits(['dialogChange']);
 const vmProxy = getCurrentInstance()!.proxy
 const router = vmProxy.$router;
 
+// Network selection
+const allNetworks = networks.networks;
+const mainnetNetworks = computed(() => allNetworks.filter(n => n.network === 'Mainnet'));
+const testnetNetworks = computed(() => allNetworks.filter(n => n.network !== 'Mainnet'));
+const isTestnetSelected = computed(() => localNetwork.value?.network !== 'Mainnet');
+const showTestnets = ref(props.network?.network !== 'Mainnet' && props.network != null);
+const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
+
+const onNetworkChange = (net: NetworkInfo) => {
+  newWallet.value.icon = networks.resolveIconColor(net.blockchain, net.network) || 'green';
+  updateVuetifyTheme(net.blockchain, true);
+};
+
+const isNetworkSelected = (net: NetworkInfo) =>
+  localNetwork.value?.blockchain === net.blockchain && localNetwork.value?.network === net.network;
+
+const selectNetwork = (net: NetworkInfo) => {
+  localNetwork.value = net;
+  onNetworkChange(net);
+};
+
+const isBitcoin = computed(() => localNetwork.value?.blockchain === Blockchain.BITCOIN);
+
 const step = ref(1);
 const newWallet = ref({
-  name: '',
-  icon: '',
+  name: generateWalletName(),
+  icon: props.network?.iconColor || networks.networks[0].iconColor || 'green',
   publicKey: '',
   termsChecked: false,
   keys: [],
@@ -447,16 +434,44 @@ const dialogLocal = computed({
   },
 });
 
-const onKeystoneScan = (ur: { type: string; cbor: string }) => {
+const onClose = () => {
+  emit('dialogChange', false);
+  resetDialog();
+};
+
+watch(() => localNetwork.value?.iconColor, (color) => {
+  newWallet.value.icon = color || 'green';
+}, { immediate: true });
+
+const onKeystoneScan = async (ur: { type: string; cbor: string }) => {
   try {
     console.log('[Keystone] QR code scanned:', ur);
-    // Convert hex CBOR string to Buffer
+
+    if (localNetwork.value?.blockchain === Blockchain.BITCOIN) {
+      // Bitcoin flow - parse crypto-hdkey UR
+
+      const bitcoinUR = UR.from(ur.cbor, 'hex');
+      const bitcoinAccount = parseBitcoinAccount(bitcoinUR);
+
+      newWallet.value.xfp = bitcoinAccount.xfp;
+      newWallet.value.publicKey = bitcoinAccount.xpub;
+      newWallet.value.keys = [{
+        publicKey: bitcoinAccount.publicKey,
+        chainCode: bitcoinAccount.chainCode,
+        path: bitcoinAccount.path
+      }];
+
+      snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
+      keystoneScan.value = false;
+      step.value = 3;
+      return;
+    }
+
+    // Cardano flow - parse crypto-multi-accounts UR
     const cborBuffer = Buffer.from(ur.cbor, 'hex');
-    // Parse CBOR directly using CryptoMultiAccounts
     const cryptoMultiAccounts = CryptoMultiAccounts.fromCBOR(cborBuffer);
     console.log('[Keystone] Parsed CryptoMultiAccounts:', cryptoMultiAccounts);
 
-    // Extract data using getter methods
     const device = cryptoMultiAccounts.getDevice();
     console.log('[Keystone] Device:', device);
     const version = cryptoMultiAccounts.getVersion();
@@ -464,7 +479,6 @@ const onKeystoneScan = (ur: { type: string; cbor: string }) => {
     const keys = cryptoMultiAccounts.getKeys();
     const masterFingerprint = cryptoMultiAccounts.getMasterFingerprint();
 
-    newWallet.value.name = device;
     newWallet.value.xfp = masterFingerprint.toString('hex');
     const firstKey = keys[0];
     const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(
@@ -505,7 +519,15 @@ const nextStep = () => {
         qrCodeRef.value.innerHTML = '';
     }
 
-    qrCode.value = new QRCodeStyling(getKeystonePublicKeyUR(purpose.hdwallet, 0));
+    // Generate QR code based on blockchain
+    let qrOptions;
+    if (localNetwork.value?.blockchain === Blockchain.CARDANO) {
+      qrOptions = getKeystonePublicKeyUR(purpose.hdwallet, 0);
+    } else if (localNetwork.value?.blockchain === Blockchain.BITCOIN) {
+      qrOptions = generateBitcoinSyncQR('segwit', 0);
+    }
+
+    qrCode.value = new QRCodeStyling(qrOptions);
     nextTick(() => {
       qrCode.value.append(qrCodeRef.value);
     });
@@ -525,22 +547,39 @@ const walletCreationStep2 = async () => {
     hardwareLoading.setLoading(true)
 
     try {
-      let path;
-      const index = 0
-      if (props.network.blockchain === Blockchain.CARDANO) {
-        path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
+      let coldWalletProps;
+      const index = 0;
+
+      if (localNetwork.value?.blockchain === Blockchain.CARDANO) {
+        // Cardano wallet
+        const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`;
+        coldWalletProps = await ledger.initLedger(isBluetooth.value, path);
+      } else if (localNetwork.value?.blockchain === Blockchain.BITCOIN) {
+        // Bitcoin wallet - use default SegWit address type
+        coldWalletProps = await ledger.initBitcoinLedger(isBluetooth.value, 'segwit', index, localNetwork.value.network);
+
+        // Format Bitcoin response to match expected structure
+        if (coldWalletProps) {
+          const { xpub, ...rest } = coldWalletProps;
+          // BIP44 coin type: 0 = mainnet, 1 = testnet
+          const coinType = localNetwork.value.network === 'Mainnet' ? 0 : 1;
+          coldWalletProps = {
+            ...rest,
+            hwPublicKey: xpub,
+            keys: [{ publicKey: xpub, chainCode: '', path: `m/84'/${coinType}'/0'` }]
+          };
+        }
       }
-      const coldWalletProps = await ledger.initLedger(isBluetooth.value, path)
-      const isConnected = !!coldWalletProps
+
+      const isConnected = !!coldWalletProps;
       if (isConnected) {
-        newWallet.value.name = coldWalletProps.productName
-        newWallet.value.publicKey = coldWalletProps.hwPublicKey
-        newWallet.value.keys = coldWalletProps.keys
-        newWallet.value.btSupported = coldWalletProps.btSupported
-        step.value = 3
+        newWallet.value.publicKey = coldWalletProps.hwPublicKey;
+        newWallet.value.keys = coldWalletProps.keys;
+        newWallet.value.btSupported = coldWalletProps.btSupported;
+        step.value = 3;
       }
     } catch (e) {
-      console.log(e)
+      console.log(e);
     }
   } else if (walletType.value === WalletType.Trezor) {
     persistent.value = true;
@@ -550,14 +589,13 @@ const walletCreationStep2 = async () => {
       hardwareLoading.setText(t('wallet.connectingToTrezor') as string);
       const response: any = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.TREZOR,
-        data: { method: 'initTrezor', chain: props.network.blockchain, network: props.network.network },
+        data: { method: 'initTrezor', chain: localNetwork.value?.blockchain, network: localNetwork.value?.network },
       })
 
       console.log('[TREZOR Dialog] Response:', response);
 
       if (response.data.success && response.data.coldWalletProps) {
         const coldWalletProps = response.data.coldWalletProps;
-        newWallet.value.name = coldWalletProps.productName;
         newWallet.value.publicKey = coldWalletProps.hwPublicKey;
         newWallet.value.keys = coldWalletProps.keys;
         newWallet.value.btSupported = coldWalletProps.btSupported;
@@ -588,8 +626,8 @@ const walletCreationStep3 = async () => {
         ...newWallet.value,
         type: walletType.value,
         theme: Theme.GERO,
-        chain: props.network.blockchain,
-        network: props.network.network
+        chain: localNetwork.value?.blockchain,
+        network: localNetwork.value?.network
       })
       dialogLocal.value = false
       const response: any = await Messaging.sendToBackgroundFromOptions({
@@ -630,7 +668,7 @@ const resetDialog = () => {
       qrCodeRef.value.innerHTML = '';
   }
   newWallet.value = {
-    name: '',
+    name: generateWalletName(),
     icon: '',
     publicKey: '',
     termsChecked: false,
@@ -643,10 +681,11 @@ const resetDialog = () => {
   creatingWalletLoader.value = false
 }
 </script>
-<style scoped>
+<style scoped lang="scss">
 #qr-code > svg {
   border-radius: 10px;
 }
+
 .qr-scanner {
   text-align: center;
   border: 1px solid white;
@@ -658,23 +697,178 @@ const resetDialog = () => {
   border-radius: 4px !important;
 }
 
-.overlay {
+// Stepper — no header, content only
+::v-deep .v-stepper {
+  box-shadow: none !important;
+}
+
+::v-deep .v-stepper__content {
+  height: 350px;
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+::v-deep .v-stepper__wrapper {
+  height: 350px !important;
+  overflow-y: auto;
+}
+
+// Action buttons bar
+::v-deep .v-card__actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  min-height: 68px;
+}
+
+// Terms link
+.terms-link {
+  color: var(--v-primary-base);
+  text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.step-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: white;
+}
+
+.network-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.network-tile {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  width: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  padding: 10px 8px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  min-height: 62px;
+  gap: 5px;
+  user-select: none;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &--active {
+    border-color: rgba(45, 240, 247, 0.55);
+    background: rgba(45, 240, 247, 0.06);
+    box-shadow: 0 0 14px rgba(45, 240, 247, 0.07);
+  }
+
+  &__label {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    line-height: 1.3;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &--testnet {
+    min-height: 46px;
+    padding: 7px 8px 6px;
+  }
+
+  &--active &__label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+.hw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.hw-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  min-height: 100px;
+  gap: 8px;
+  user-select: none;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &--active {
+    border-color: rgba(45, 240, 247, 0.55);
+    background: rgba(45, 240, 247, 0.06);
+    box-shadow: 0 0 14px rgba(45, 240, 247, 0.07);
+  }
+
+  &--disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  &__logo {
+    width: 100px;
+    height: 32px;
+    object-fit: contain;
+    filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);
+  }
+
+  &__label {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  &--active &__label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+.testnet-toggle {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
   color: white;
-  font-size: 1.5em;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.5);
+  }
 }
 
-.qr-result {
-  margin-top: 20px;
-}
-
-.v-dialog__content--active {
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+@media (max-width: 600px) {
+  ::v-deep .v-stepper__content {
+    height: auto;
+    min-height: 380px;
+  }
+  ::v-deep .v-stepper__wrapper {
+    height: auto !important;
+  }
 }
 </style>
