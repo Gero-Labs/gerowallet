@@ -26,6 +26,15 @@ const Blog = () => import('@/modules/blog/Blog.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
+const GoMining = () => import('@/modules/gomining/GoMining.vue');
+const BabylonStaking = () => import('@/modules/babylon/BabylonStaking.vue');
+const Ordinals = () => import('@/modules/ordinals/Ordinals.vue');
+const ThorchainSwap = () => import('@/modules/thorchain/ThorchainSwap.vue');
+const MempoolExplorer = () => import('@/modules/mempool/MempoolExplorer.vue');
+const LightningLnurl = () => import('@/modules/lightning/LightningLnurl.vue');
+const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue');
+const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
+const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -140,6 +149,33 @@ const routes = [
     },
   },
   {
+    path: '/sign-bitcoin-psbt',
+    name: 'sign-bitcoin-psbt',
+    component: BitcoinSignPsbt,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/sign-bitcoin-message',
+    name: 'sign-bitcoin-message',
+    component: BitcoinSignMessage,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/wc-session-proposal',
+    name: 'wc-session-proposal',
+    component: WCSessionProposal,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/warning',
     name: 'warning',
     component: WarningPopUp,
@@ -196,6 +232,60 @@ const routes = [
     },
   },
   {
+    path: '/gomining',
+    name: 'gomining',
+    component: GoMining,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/babylon',
+    name: 'babylon',
+    component: BabylonStaking,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/ordinals',
+    name: 'ordinals',
+    component: Ordinals,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/thorchain',
+    name: 'thorchain',
+    component: ThorchainSwap,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/mempool',
+    name: 'mempool',
+    component: MempoolExplorer,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/lightning',
+    name: 'lightning',
+    component: LightningLnurl,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '*',
     name: 'other',
     redirect: '/',
@@ -220,6 +310,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
     case 'card':
       // Gero Card is under maintenance if feature flag is disabled
       return !featureFlagsStore.isGeroCardEnabled();
+
+    case 'gomining':
+      // GoMining is under maintenance if feature flag is disabled
+      return !featureFlagsStore.isGoMiningEnabled();
 
     case 'multisig':
       // MultiSig is currently under maintenance (route is commented out)

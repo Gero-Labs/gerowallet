@@ -6,6 +6,7 @@ export interface FeatureFlags {
   isGeroCardEnabled: boolean;
   isBlogEnabled: boolean;
   isPhysicalCardOrderingEnabled: boolean;
+  isGoMiningEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -20,6 +21,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isGeroCardEnabled: false,
     isBlogEnabled: false,
     isPhysicalCardOrderingEnabled: false,
+    isGoMiningEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -58,6 +60,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isGeroCardEnabled = launchDarklyService.getFlag('isGeroCardEnabled', false);
     featureFlagsState.flags.isBlogEnabled = launchDarklyService.getFlag('isBlogEnabled', false);
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = launchDarklyService.getFlag('isPhysicalCardOrderingEnabled', false);
+    featureFlagsState.flags.isGoMiningEnabled = launchDarklyService.getFlag('isGoMiningEnabled', false);
   },
 
   /**
@@ -75,6 +78,9 @@ export const featureFlagsStore = {
     });
     launchDarklyService.onFlagChange('isPhysicalCardOrderingEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isPhysicalCardOrderingEnabled', newValue);
+    });
+    launchDarklyService.onFlagChange('isGoMiningEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isGoMiningEnabled', newValue);
     });
   },
 
@@ -107,6 +113,13 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if GoMining integration is enabled
+   */
+  isGoMiningEnabled(): boolean {
+    return featureFlagsState.flags.isGoMiningEnabled;
+  },
+
+  /**
    * Reset flags (disable all until reloaded from LaunchDarkly)
    */
   reset(): void {
@@ -114,7 +127,8 @@ export const featureFlagsStore = {
       swapEnabled: false,
       isGeroCardEnabled: false,
       isBlogEnabled: false,
-      isPhysicalCardOrderingEnabled: false
+      isPhysicalCardOrderingEnabled: false,
+      isGoMiningEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

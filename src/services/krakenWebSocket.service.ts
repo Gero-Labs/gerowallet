@@ -38,6 +38,7 @@ class KrakenWebSocketService {
   private isConnected = false;
   private subscriptions: Set<string> = new Set();
   private onTickerUpdate: ((ticker: any) => void) | null = null;
+  private onBtcTickerUpdate: ((ticker: any) => void) | null = null;
   private lastTickerTime = 0;
   private tickerRequestInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -116,10 +117,37 @@ class KrakenWebSocketService {
   }
 
   /**
-   * Set callback for ticker updates
+   * Subscribe to BTC/USD ticker updates
+   */
+  subscribeToBtcUsd(): void {
+    if (!this.isConnected || !this.ws) {
+      console.warn('🦑 ⚠️ Cannot subscribe to BTC/USD - not connected to Kraken WebSocket');
+      return;
+    }
+
+    const subscription = {
+      event: 'subscribe',
+      pair: ['XBT/USD'],
+      subscription: {
+        name: 'ticker'
+      }
+    };
+    this.ws.send(JSON.stringify(subscription));
+    this.subscriptions.add('XBT/USD');
+  }
+
+  /**
+   * Set callback for ADA/USD ticker updates
    */
   onTicker(callback: (ticker: any) => void): void {
     this.onTickerUpdate = callback;
+  }
+
+  /**
+   * Set callback for BTC/USD ticker updates
+   */
+  onBtcTicker(callback: (ticker: any) => void): void {
+    this.onBtcTickerUpdate = callback;
   }
 
   /**
@@ -167,12 +195,18 @@ class KrakenWebSocketService {
 
     const [_channelID, tickerData, channelName, pair] = data;
 
-    if (channelName === 'ticker' && pair === 'ADA/USD') {
+    if (channelName !== 'ticker') return;
+
+    if (pair === 'ADA/USD') {
       this.lastTickerTime = Date.now();
       const ticker = this.parseTickerData(tickerData);
-
       if (this.onTickerUpdate) {
         this.onTickerUpdate(ticker);
+      }
+    } else if (pair === 'XBT/USD') {
+      const ticker = this.parseTickerData(tickerData);
+      if (this.onBtcTickerUpdate) {
+        this.onBtcTickerUpdate(ticker);
       }
     }
   }

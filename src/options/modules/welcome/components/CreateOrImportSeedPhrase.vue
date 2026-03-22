@@ -62,7 +62,7 @@ import { computed, ref } from 'vue';
 import { NetworkInfo } from '@/utils/networks';
 
 interface Props {
-  network: NetworkInfo;
+  network?: NetworkInfo;
 }
 
 const props = defineProps<Props>();
@@ -101,7 +101,7 @@ const pairSvg = computed(() => {
   if (props.network?.blockchain?.includes('Apex')) {
     return assets.pairApexSvg
   }
-  return assets.pairSvg
+  return assets.pairGeroSvg
 })
 
 computed(() => {

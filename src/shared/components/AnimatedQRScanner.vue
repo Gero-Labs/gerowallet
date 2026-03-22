@@ -68,6 +68,10 @@ const props = defineProps({
     type: Array,
     required: false,
   },
+  mode: {
+    type: String,
+    default: 'keystone', // 'keystone' = UR-encoded animated QR, 'text' = raw text QR
+  },
   width: {
     type: [String, Number],
     default: '100%',
@@ -220,7 +224,32 @@ async function startScanning() {
   };
   videoElement.addEventListener('canplay', canplayListener.value);
 
-  // Set up animated QR scan handlers
+  if (props.mode === 'text') {
+    // Plain text QR scan — emit raw text string, no UR parsing
+    try {
+      scanControls.value = await codeReader.value.decodeFromVideoDevice(
+        undefined,
+        videoElement,
+        (result, error) => {
+          if (isDone.value) return;
+          if (result) {
+            isDone.value = true;
+            emit('scan', result.getText());
+            cleanup();
+          }
+          if (error && error.name !== 'NotFoundException') {
+            console.debug('[AnimatedQRScanner] text mode scan error:', error.message);
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error starting text scanner:', error);
+      emit('error', error.message);
+    }
+    return;
+  }
+
+  // Keystone UR-encoded animated QR mode (default)
   const { handleScanSuccess, handleScanFailure } = getAnimatedScan({
     purpose: props.purpose,
     urTypes: props.urTypes,

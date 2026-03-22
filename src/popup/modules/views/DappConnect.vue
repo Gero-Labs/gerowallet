@@ -72,13 +72,21 @@ const useSidePanel = computed(() => {
 
 // Methods
 const decline = async () => {
-  await controller.value.returnData({ data: {}, error: APIError.Refused });
+  try {
+    await controller.value.returnData({ data: {}, error: APIError.Refused });
+  } catch (e) {
+    console.warn('[DappConnect] returnData failed on decline:', e);
+  }
   window.close();
 };
 
 const confirm = async () => {
   await WalletStore.addConnectedDapp(loggedWallet.value.id, vmProxy.$refs.popupHeader.domain);
-  await controller.value.returnData({ data: true, error: {} });
+  try {
+    await controller.value.returnData({ data: true, error: {} });
+  } catch (e) {
+    console.warn('[DappConnect] returnData failed:', e);
+  }
   window.close();
 };
 

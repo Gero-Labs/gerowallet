@@ -183,6 +183,18 @@ export default defineConfig(({ command }) => {
         clientPort: port,
       },
       origin: `http://localhost:${port}`,
+      proxy: {
+        '/babylon-mainnet': {
+          target: 'https://staking-api.babylonlabs.io',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/babylon-mainnet/, ''),
+        },
+        '/babylon-testnet': {
+          target: 'https://staking-api.testnet.babylonlabs.io',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/babylon-testnet/, ''),
+        },
+      },
       fs: {
         allow: ['..'],
       },

@@ -6,8 +6,70 @@ import rollupTla from 'rollup-plugin-tla';
 import commonjs from '@rollup/plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
 
+// Virtual module plugin for CJS packages that break under Rollup's
+// getAugmentedNamespace double-wrapping (CJS→ESM→namespace→wrapper).
+// These small ljharb utility packages export a single native function
+// (e.g. Object.getOwnPropertyDescriptor) but Rollup wraps them twice,
+// turning functions into plain {} objects at runtime.
+// Must be at top-level Vite plugins with enforce:'pre' so it intercepts
+// BEFORE Vite's built-in resolver maps them to node_modules files.
+const cjsInteropPlugin = {
+  name: 'cjs-interop-virtual-modules',
+  enforce: 'pre' as const,
+  resolveId(source: string) {
+    const virtuals: Record<string, string> = {
+      'gopd': '\0virtual:gopd',
+      'gopd/gOPD': '\0virtual:gopd-gOPD',
+      'gopd/gOPD.js': '\0virtual:gopd-gOPD',
+      'es-define-property': '\0virtual:es-define-property',
+      'hasown': '\0virtual:hasown',
+      'function-bind': '\0virtual:function-bind',
+      'has-proto': '\0virtual:has-proto',
+    };
+    return virtuals[source] || null;
+  },
+  load(id: string) {
+    switch (id) {
+      // gopd/gOPD.js: exports Object.getOwnPropertyDescriptor directly
+      case '\0virtual:gopd-gOPD':
+        return `export default Object.getOwnPropertyDescriptor;`;
+
+      // gopd/index.js: exports Object.getOwnPropertyDescriptor (validated)
+      case '\0virtual:gopd':
+        return `var $gOPD = Object.getOwnPropertyDescriptor;
+try { $gOPD([], 'length'); } catch(e) { $gOPD = null; }
+export default $gOPD;`;
+
+      // es-define-property/index.js: exports Object.defineProperty (validated)
+      case '\0virtual:es-define-property':
+        return `var $dp = Object.defineProperty || false;
+if ($dp) { try { $dp({}, 'a', { value: 1 }); } catch(e) { $dp = false; } }
+export default $dp;`;
+
+      // hasown/index.js: exports bound Object.prototype.hasOwnProperty
+      case '\0virtual:hasown':
+        return `export default Function.prototype.call.bind(Object.prototype.hasOwnProperty);`;
+
+      // function-bind/index.js: exports Function.prototype.bind (native in modern browsers)
+      case '\0virtual:function-bind':
+        return `export default Function.prototype.bind;`;
+
+      // has-proto/index.js: exports function that tests __proto__ support
+      case '\0virtual:has-proto':
+        return `var test = { __proto__: null, foo: {} };
+var result = { __proto__: test }.foo === test.foo && !(test instanceof Object);
+export default function hasProto() { return result; };`;
+    }
+    return null;
+  }
+};
+
 export default defineConfig({
   ...sharedConfig,
+  plugins: [
+    ...(Array.isArray(sharedConfig.plugins) ? sharedConfig.plugins : []),
+    cjsInteropPlugin,
+  ],
   resolve: {
     ...sharedConfig.resolve,
   },
@@ -81,7 +143,7 @@ export default defineConfig({
     outDir: r('extension/background'),
     cssCodeSplit: false,
     emptyOutDir: false,
-    sourcemap: isDev ? 'inline' : false,
+    sourcemap: false, // Disabled — background bundle has 3000+ modules (WC SDK); sourcemaps cause OOM
     chunkSizeWarningLimit: 10000,
     ...(isDev ? {} : {
       terserOptions: {
@@ -123,20 +185,16 @@ export default defineConfig({
         return false;
       },
       plugins: [
-        // Custom plugin to provide pbkdf2 exports as a virtual module
+        // pbkdf2 virtual module — stays at Rollup level (works here, breaks at Vite level)
         {
           name: 'pbkdf2-virtual-module',
           enforce: 'pre',
           resolveId(source) {
-            if (source === 'pbkdf2') {
-              return '\0virtual:pbkdf2';
-            }
+            if (source === 'pbkdf2') return '\0virtual:pbkdf2';
             return null;
           },
           load(id) {
             if (id === '\0virtual:pbkdf2') {
-              // Create a virtual module that properly wraps pbkdf2
-              // We'll let commonjs handle the actual pbkdf2/browser.js file
               return `
 import pbkdf2Browser from 'pbkdf2/browser.js';
 export const pbkdf2 = pbkdf2Browser.pbkdf2 || pbkdf2Browser;
@@ -206,6 +264,20 @@ export default pbkdf2Browser;
                   /null && null\.tagName\.toUpperCase\(\) === 'SCRIPT' && null\.src \|\| document\.baseURI/g,
                   'self.location.href'
                 );
+                // Fix getAugmentedNamespace: native functions (Object.getOwnPropertyDescriptor,
+                // Object.defineProperty, etc.) have .prototype === undefined, which causes
+                // "Function has non-object prototype 'undefined' in instanceof check".
+                // Fix 1: Guard the prototype assignment
+                chunk.code = chunk.code.replace(
+                  /(\w+)\.prototype\s*=\s*(\w+)\.prototype;\s*\}\s*else\s*\n?\s*(\w+)\s*=\s*\{\};/g,
+                  '$1.prototype = $2.prototype; } else $3 = {}; if (!$1.prototype) $1.prototype = {};'
+                );
+                // Fix 2: Wrap instanceof in try-catch inside getAugmentedNamespace wrapper
+                // Handles both: `this instanceof X` and `typeof this !== "undefined" && this instanceof X`
+                chunk.code = chunk.code.replace(
+                  /if\s*\(typeof this\s*!==\s*"undefined"\s*&&\s*this\s+instanceof\s+(\w+)\)\s*\{?\s*return\s+Reflect\.construct\((\w+),\s*arguments,\s*this\.constructor\);\s*\}?/g,
+                  'if (typeof this !== "undefined" && $1.prototype && this instanceof $1) { return Reflect.construct($2, arguments, this.constructor); }'
+                );
                 // Fix `this instanceof` patterns that cause errors in service workers
                 chunk.code = chunk.code.replace(
                   /if \(this instanceof (\w+)\)/g,
@@ -220,7 +292,7 @@ export default pbkdf2Browser;
                 // Fix the specific getAugmentedNamespace anonymous function pattern
                 chunk.code = chunk.code.replace(
                   /var a = \/\* @__PURE__ \*\/ __name\(function (\w+)\(\) \{[\s\S]*?}, "a"\);/g,
-                  'var a = /* @__PURE__ */ __name(function $1() { try { if (typeof this !== "undefined" && this instanceof $1) { return Reflect.construct(f, arguments, this.constructor); } return f.apply(this, arguments); } catch(e) { return f.apply(this, arguments); } }, "a");'
+                  'var a = /* @__PURE__  */ __name(function $1() { try { if (typeof this !== "undefined" && this instanceof $1) { return Reflect.construct(f, arguments, this.constructor); } return f.apply(this, arguments); } catch(e) { return f.apply(this, arguments); } }, "a");'
                 );
                 // Fix axios fetch adapter destructuring issues in service worker
                 // Fix Request/Response destructuring - multiple patterns

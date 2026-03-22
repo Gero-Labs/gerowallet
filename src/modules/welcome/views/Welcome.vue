@@ -6,12 +6,17 @@
       <img
         :src="assets.cardanoBg"
         class="welcome-background-image"
-        :class="{ 'background-active': !selectedNetwork?.blockchain?.includes('Apex') }"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Cardano') }"
       />
       <img
         :src="assets.apexBg"
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Apex') }"
+      />
+      <img
+        :src="assets.bitcoinBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
       />
     </div>
 
@@ -27,7 +32,6 @@
         <WalletCreation
           :selectedNetwork="selectedNetwork"
           :createOrImportSeedPhrase="createOrImportSeedPhrase"
-          @networkChanged="onNetworkChanged"
           @createOrImportSeedPhrase="enableCreateOrImportSeedPhrase"
         />
       </div>
@@ -74,15 +78,12 @@ import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vu
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
 
 const createOrImportSeedPhrase = ref<boolean>(false);
-const selectedNetwork = ref<NetworkInfo>(null);
+const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 
 const { wallets } = toRefs(geroStore);
 
 const disableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = false;
-};
-const onNetworkChanged = (network: NetworkInfo) => {
-  selectedNetwork.value = network;
 };
 const enableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = true;
