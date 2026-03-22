@@ -40,6 +40,14 @@ function buildCSP(dev: boolean): string {
       : ['https://api.gerowallet.io', 'wss://api.gerowallet.io']),
     // Market data (REST + WebSocket)
     'https://market.gerowallet.io',
+    'wss://market.gerowallet.io',
+    // Bitcoin APIs
+    'https://blockstream.info',
+    'https://mempool.space',
+    'https://api.hiro.so',
+    // Babylon staking
+    'https://*.babylonchain.io',
+    'https://*.babylonlabs.io',
     // Ably (real-time blockchain updates)
     'wss://*.ably.net',
     'wss://*.ably-realtime.com',
