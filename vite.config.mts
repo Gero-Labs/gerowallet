@@ -240,8 +240,11 @@ export default defineConfig(({ command }) => {
           return false;
         },
         output: {
-          chunkFileNames: 'js/[name].[hash].js',
-          assetFileNames: 'assets/[name].[hash][extname]',
+          // No hashes on any filenames — Chrome extension caches aggressively
+          // and stale hashed references cause ERR_FILE_NOT_FOUND on every reload
+          entryFileNames: 'assets/[name].js',
+          chunkFileNames: 'js/[name].js',
+          assetFileNames: 'assets/[name][extname]',
           compact: false, // Disable for faster builds
           minifyInternalExports: false, // Disable for faster builds
         },

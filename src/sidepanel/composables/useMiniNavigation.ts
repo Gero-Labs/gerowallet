@@ -13,7 +13,7 @@ export const navTabs: NavTab[] = [
   { name: 'home', icon: 'mdi-home-outline', activeIcon: 'mdi-home', route: '/' },
   { name: 'staking', icon: 'mdi-finance', activeIcon: 'mdi-finance', route: '/staking' },
   { name: 'card', icon: 'mdi-credit-card-outline', activeIcon: 'mdi-credit-card', route: '/card', center: true },
-  { name: 'cashback', icon: 'mdi-cash-multiple', activeIcon: 'mdi-cash-multiple', route: '/cashback' },
+  { name: 'market', icon: 'mdi-chart-line', activeIcon: 'mdi-chart-line', route: '/market' },
   { name: 'activity', icon: 'mdi-history', activeIcon: 'mdi-history', route: '/activity' },
 ];
 

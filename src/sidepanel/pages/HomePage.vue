@@ -21,14 +21,13 @@
     <SendSheet v-model="showSend" />
     <ReceiveSheet v-model="showReceive" />
     <SwapSheet v-model="showSwap" />
-    <PerpsStubSheet v-model="showPerps" />
-
+    <BuySellSheet v-model="showBuySell" />
     <!-- Token Detail Bottom Sheet -->
     <BottomSheet
       :value="showTokenDetail"
       @input="showTokenDetail = $event"
       :title="selectedToken?.ticker || selectedToken?.name || ''"
-      height="60%"
+      height="70%"
     >
       <div v-if="selectedToken" class="token-detail">
         <div class="detail-header">
@@ -57,14 +56,39 @@
 
         <v-divider dark class="my-4" />
 
+        <!-- Holdings -->
         <div class="detail-row">
-          <span class="text-caption grey--text">Balance</span>
+          <span class="text-caption grey--text">{{ $t('miniGero.balance') }}</span>
           <span class="text-body-2 white--text">{{ formatDetailAmount(selectedToken) }}</span>
         </div>
         <div class="detail-row" v-if="selectedToken.price">
-          <span class="text-caption grey--text">Value</span>
+          <span class="text-caption grey--text">{{ $t('miniGero.value') }}</span>
           <span class="text-body-2 white--text">{{ formatDetailValue(selectedToken) }}</span>
         </div>
+
+        <!-- Market data (from useMarketData) -->
+        <template v-if="marketDetail">
+          <div class="detail-row" v-if="marketDetail.mcap">
+            <span class="text-caption grey--text">{{ $t('miniGero.marketCap') }}</span>
+            <span class="text-body-2 white--text">{{ formatCompact(marketDetail.mcap) }}</span>
+          </div>
+          <div class="detail-row" v-if="marketDetail.volume24h">
+            <span class="text-caption grey--text">{{ $t('miniGero.volume24h') }}</span>
+            <span class="text-body-2 white--text">{{ formatCompact(marketDetail.volume24h) }}</span>
+          </div>
+          <div class="detail-row" v-if="marketDetail.tvl">
+            <span class="text-caption grey--text">{{ $t('miniGero.tvl') }}</span>
+            <span class="text-body-2 white--text">{{ formatCompact(marketDetail.tvl) }}</span>
+          </div>
+          <div class="detail-row" v-if="marketDetail.holders">
+            <span class="text-caption grey--text">{{ $t('miniGero.holders') }}</span>
+            <span class="text-body-2 white--text">{{ marketDetail.holders.toLocaleString('en-US') }}</span>
+          </div>
+          <div class="detail-row" v-if="!marketDetail.isNative && marketDetail.priceAda">
+            <span class="text-caption grey--text">{{ $t('miniGero.priceInAda') }}</span>
+            <span class="text-body-2 white--text">{{ formatAdaPrice(marketDetail.priceAda) }}</span>
+          </div>
+        </template>
       </div>
     </BottomSheet>
   </div>
@@ -72,7 +96,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router/composables';
 import { walletStore } from '@/stores/walletStore';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
@@ -81,12 +107,14 @@ import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
 import ReceiveSheet from '../components/flows/ReceiveSheet.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';
-import PerpsStubSheet from '../components/flows/PerpsStubSheet.vue';
+import BuySellSheet from '../components/flows/BuySellSheet.vue';
+const router = useRouter();
+const { getTokenByUnit } = useMarketData();
 
 const showSend = ref(false);
 const showReceive = ref(false);
 const showSwap = ref(false);
-const showPerps = ref(false);
+const showBuySell = ref(false);
 const showTokenDetail = ref(false);
 const selectedToken = ref<any>(null);
 
@@ -104,8 +132,7 @@ const tokenCount = computed(() => {
 });
 
 function handleBuySell() {
-  console.log('[MiniGero] Buy/Sell ADA');
-  // Future: open buy/sell sheet
+  showBuySell.value = true;
 }
 
 function handleAction(id: string) {
@@ -120,7 +147,7 @@ function handleAction(id: string) {
       showSwap.value = true;
       break;
     case 'perps':
-      showPerps.value = true;
+      router.push('/perps');
       break;
   }
 }
@@ -129,6 +156,13 @@ function handleTokenSelect(token: any) {
   selectedToken.value = token;
   showTokenDetail.value = true;
 }
+
+// Look up market data for the selected token
+const marketDetail = computed(() => {
+  if (!selectedToken.value) return null;
+  const unit = selectedToken.value.unit === 'lovelace' ? 'lovelace' : selectedToken.value.unit;
+  return getTokenByUnit(unit) || null;
+});
 
 function formatPrice(price: number): string {
   if (!price) return '';
@@ -162,6 +196,22 @@ function formatDetailValue(token: any): string {
   return '$' + value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+}
+
+function formatCompact(value: number): string {
+  if (!value) return '--';
+  if (value >= 1_000_000_000) return '$' + (value / 1_000_000_000).toFixed(2) + 'B';
+  if (value >= 1_000_000) return '$' + (value / 1_000_000).toFixed(2) + 'M';
+  if (value >= 1_000) return '$' + (value / 1_000).toFixed(2) + 'K';
+  return '$' + value.toFixed(2);
+}
+
+function formatAdaPrice(price: number): string {
+  if (!price) return '--';
+  return '₳' + price.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: price < 1 ? 8 : 4,
   });
 }
 </script>

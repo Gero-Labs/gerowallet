@@ -81,8 +81,7 @@ async function handleLogin() {
 }
 
 function handleRegister() {
-  const backendUrl = import.meta.env['VITE_KAISEREX_OAUTH_URL'] || 'https://oauth-sa.kaiserex.com';
-  window.open(`${backendUrl}/register`, '_blank');
+  window.open('https://www.kaiserex.com/gerocard', '_blank');
 }
 </script>
 

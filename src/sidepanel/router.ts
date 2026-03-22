@@ -17,9 +17,19 @@ const routes: RouteConfig[] = [
     component: () => import('./pages/CardPage.vue'),
   },
   {
+    path: '/market',
+    name: 'market',
+    component: () => import('./pages/MarketPage.vue'),
+  },
+  {
     path: '/cashback',
     name: 'cashback',
     component: () => import('./pages/CashbackPage.vue'),
+  },
+  {
+    path: '/perps',
+    name: 'perps',
+    component: () => import('./pages/PerpetualsPage.vue'),
   },
   {
     path: '/activity',

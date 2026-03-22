@@ -1,5 +1,7 @@
 <template>
   <v-app dark>
+    <notifications></notifications>
+
     <!-- No wallet exists -->
     <NoWalletScreen v-if="!hasWallets" />
 
@@ -16,20 +18,16 @@
     <template v-else>
       <MiniLayout
         @wallet-switch="showWalletSwitcher = true"
-        @settings="showSettings = true"
+        @settings="openFullDashboard"
       />
       <DAppOverlay />
     </template>
 
     <!-- Wallet switcher bottom sheet (available from header) -->
     <BottomSheet v-model="showWalletSwitcher" :title="$t('miniGero.selectWallet')" height="60%">
-      <WalletSelector @select="onWalletSwitch" />
+      <WalletSelector compact @select="onWalletSwitch" />
     </BottomSheet>
 
-    <!-- Settings bottom sheet -->
-    <BottomSheet v-model="showSettings" :title="$t('miniGero.allSettings')" height="70%">
-      <SettingsSheet @close="showSettings = false" />
-    </BottomSheet>
   </v-app>
 </template>
 
@@ -45,10 +43,8 @@ import WalletSelector from './components/WalletSelector.vue';
 import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
 import BottomSheet from './components/BottomSheet.vue';
-import SettingsSheet from './components/SettingsSheet.vue';
 
 const showWalletSwitcher = ref(false);
-const showSettings = ref(false);
 
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
@@ -87,5 +83,9 @@ async function onWalletSelect(wallet: any) {
 function onWalletSwitch(wallet: any) {
   showWalletSwitcher.value = false;
   onWalletSelect(wallet);
+}
+
+function openFullDashboard() {
+  chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
 }
 </script>

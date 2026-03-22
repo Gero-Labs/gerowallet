@@ -235,12 +235,13 @@
             <v-avatar tile size="10" class="mr-1">
               <v-img :src="changeIcon(item.totalPnl)" alt="pnl" />
             </v-avatar>
-            {{ item.totalPnl >= 0 ? '+' : '' }}{{ formatCompact(item.totalPnl) }} {{ nativeSymbol }}
+            {{ item.totalPnl >= 0 ? '+' : '' }}{{ item.totalPnl.toFixed(2) }} {{ nativeSymbol }}
           </span>
         </template>
         <div>
-          <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? (item.unrealizedPnl >= 0 ? '+' : '') + item.unrealizedPnl.toFixed(2) + ' ' + nativeSymbol : '—' }}</div>
-          <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? (item.realizedPnl >= 0 ? '+' : '') + item.realizedPnl.toFixed(2) + ' ' + nativeSymbol : '—' }}</div>
+          <div>{{ $t('market.totalPnl') }}: {{ item.totalPnl >= 0 ? '+' : '' }}{{ item.totalPnl.toFixed(4) }} {{ nativeSymbol }}</div>
+          <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? (item.unrealizedPnl >= 0 ? '+' : '') + item.unrealizedPnl.toFixed(4) + ' ' + nativeSymbol : '—' }}</div>
+          <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? (item.realizedPnl >= 0 ? '+' : '') + item.realizedPnl.toFixed(4) + ' ' + nativeSymbol : '—' }}</div>
         </div>
       </v-tooltip>
       <span v-else style="font-size: 12px">—</span>

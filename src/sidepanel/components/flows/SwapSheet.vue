@@ -444,18 +444,19 @@
         </div>
 
         <!-- Spacer to push button to bottom -->
-        <div style="flex: 1" />
+        <div style="flex: 1 1 0px" />
 
         <!-- Swap / Review button -->
-        <v-btn
-          block color="#00c7f3" class="black--text font-weight-bold"
-          style="flex-shrink: 0"
-          :disabled="isSwapDisabled || loading || poolError"
-          :loading="loading"
-          @click="goToReview"
-        >
-          {{ swapButtonText }}
-        </v-btn>
+        <div style="flex: 0 0 auto; padding-bottom: 64px">
+          <v-btn
+            block color="#00c7f3" class="black--text font-weight-bold"
+            :disabled="isSwapDisabled || loading || poolError"
+            :loading="loading"
+            @click="goToReview"
+          >
+            {{ swapButtonText }}
+          </v-btn>
+        </div>
       </template>
     </div>
 
@@ -1379,7 +1380,7 @@ function truncateStr(s: string): string {
 }
 
 function copyTxId() {
-  if (txId.value) navigator.clipboard.writeText(txId.value);
+  if (txId.value) navigator.clipboard.writeText(txId.value).catch(() => {});
 }
 
 function onTokenImgError(event: Event, token: any) {
@@ -1399,6 +1400,7 @@ function onDone() {
 
 function onSheetInput(val: boolean) {
   if (!val) resetAll();
+  else startPeriodicEstimate();
   emit('input', val);
 }
 
@@ -1432,6 +1434,7 @@ function resetAll() {
   limitSplit.value = 1;
   blacklistedDexes.value = [];
   swapTxCbor.value = '';
+  clearPeriodicEstimate();
 }
 
 // ── Lifecycle ──

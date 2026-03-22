@@ -4,6 +4,7 @@ import '../shared/styles/liquid-glass.css';
 
 import Vue from 'vue';
 import VueRouter from 'vue-router';
+import Notifications from '@voerro/vue-notifications';
 import i18n, { loadLanguage } from '../plugins/i18n';
 import vuetify from '../plugins/vuetify';
 import router from './router';
@@ -14,6 +15,7 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 
 Vue.config.productionTip = false;
 Vue.use(VueRouter);
+Vue.component('notifications', Notifications);
 
 chrome.storage.local.get(['walletStore', 'geroStore'], async ({ walletStore: saved, geroStore }) => {
   const locale = geroStore?.config?.locale || saved?.config?.locale || 'us';

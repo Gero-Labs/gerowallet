@@ -246,13 +246,13 @@ onMounted(() => {
 }
 
 .pool-search >>> .v-input__slot {
-  background: #1a1a1a !important;
-  border-color: #2a2a2a !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
   min-height: 36px !important;
 }
 
 .pool-search >>> .v-input__slot fieldset {
-  border-color: #2a2a2a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .filter-switch >>> .v-input--switch__track {
@@ -268,7 +268,9 @@ onMounted(() => {
 }
 
 .pool-item {
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 10px 12px;
   cursor: pointer;
@@ -276,7 +278,7 @@ onMounted(() => {
 }
 
 .pool-item:hover {
-  background: #222;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .pool-item-header {
@@ -355,7 +357,8 @@ onMounted(() => {
 
 /* Delegate confirmation */
 .confirm-pool-info {
-  background: #111;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   padding: 14px;
 }

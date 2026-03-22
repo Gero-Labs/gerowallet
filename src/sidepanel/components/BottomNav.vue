@@ -5,7 +5,7 @@
       :key="tab.route"
       class="nav-tab"
       :class="{ active: activeTab === tab.route, center: tab.center }"
-      @click="$router.push(tab.route)"
+      @click="activeTab !== tab.route && $router.push(tab.route).catch(() => {})"
     >
       <v-icon :size="tab.center ? 28 : 22" :color="activeTab === tab.route ? '#00c7f3' : '#888'">
         {{ activeTab === tab.route ? tab.activeIcon : tab.icon }}
@@ -58,12 +58,11 @@ const { navTabs, activeTab } = useMiniNavigation();
 }
 
 .nav-tab.center {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  margin-top: -8px;
+  border-radius: 14px;
 }
 
 .nav-tab.center.active {

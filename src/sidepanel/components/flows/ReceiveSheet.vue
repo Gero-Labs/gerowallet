@@ -52,11 +52,10 @@ const qrCanvas = ref<HTMLCanvasElement | null>(null);
 const copied = ref(false);
 
 const receiveAddress = computed(() => {
-  // Use the first unused payment address, or the first payment address
+  // Use the first payment address (matches dashboard ReceiveDialog behavior)
   const keys = walletStore.keys;
   if (keys?.payment?.length > 0) {
-    const unused = keys.payment.find((k: any) => !k.used);
-    return (unused || keys.payment[0])?.address || '';
+    return keys.payment[0]?.address || '';
   }
   return '';
 });
@@ -88,11 +87,12 @@ async function generateQrCode(address: string) {
 
 function copyAddress() {
   if (!receiveAddress.value) return;
-  navigator.clipboard.writeText(receiveAddress.value);
-  copied.value = true;
-  setTimeout(() => {
-    copied.value = false;
-  }, 2000);
+  navigator.clipboard.writeText(receiveAddress.value).then(() => {
+    copied.value = true;
+    setTimeout(() => {
+      copied.value = false;
+    }, 2000);
+  }).catch(() => {});
 }
 </script>
 
