@@ -87,8 +87,10 @@ export function getUnconfirmedUtxos(utxos: IUnifiedUtxo[]): IUnifiedUtxo[] {
  */
 export function sortUtxosByValue(utxos: IUnifiedUtxo[], descending: boolean = false): IUnifiedUtxo[] {
   return [...utxos].sort((a, b) => {
-    const diff = Number(a.value - b.value);
-    return descending ? -diff : diff;
+    if (descending) {
+      return b.value > a.value ? 1 : b.value < a.value ? -1 : 0;
+    }
+    return a.value > b.value ? 1 : a.value < b.value ? -1 : 0;
   });
 }
 

@@ -247,7 +247,8 @@ export function buildSimpleSendPsbt(
   amount: bigint,
   changeAddress: string,
   feeRate: number,
-  network: string
+  network: string,
+  xpub?: string
 ): IUnsignedTx {
   const outputs: IOutput[] = [
     {
@@ -267,6 +268,7 @@ export function buildSimpleSendPsbt(
     feeRate,
     changeAddress,
     rbfEnabled: true, // Enable RBF by default
+    xpub,
   };
 
   return buildPsbt(params, network, options);

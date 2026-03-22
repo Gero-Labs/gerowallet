@@ -220,6 +220,7 @@ if (shouldInject()) {
 
     // Listen for WalletConnect deep link pairing from inject script
     window.addEventListener('message', (e) => {
+      if (e.source !== window || e.origin !== window.location.origin) return;
       const msg = e.data;
       if (msg?.target === 'gerowallet' && msg?.method === 'walletconnect_pair' && msg?.data?.uri) {
         // Forward to background as an options-context message so it reaches WC_PAIR handler

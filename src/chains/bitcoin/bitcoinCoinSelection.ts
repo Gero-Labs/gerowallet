@@ -119,11 +119,8 @@ function selectLargestFirst(
   utxos: IUnifiedUtxo[],
   targetAmount: bigint
 ): IUnifiedUtxo[] | null {
-  // Sort UTXOs by value (descending)
-  const sorted = [...utxos].sort((a, b) => {
-    const diff = Number(b.value - a.value);
-    return diff;
-  });
+  // Sort UTXOs by value (descending) — use bigint comparison to avoid precision loss
+  const sorted = [...utxos].sort((a, b) => b.value > a.value ? 1 : b.value < a.value ? -1 : 0);
 
   const selected: IUnifiedUtxo[] = [];
   let total = BigInt(0);
@@ -152,11 +149,8 @@ function selectSmallestFirst(
   utxos: IUnifiedUtxo[],
   targetAmount: bigint
 ): IUnifiedUtxo[] | null {
-  // Sort UTXOs by value (ascending)
-  const sorted = [...utxos].sort((a, b) => {
-    const diff = Number(a.value - b.value);
-    return diff;
-  });
+  // Sort UTXOs by value (ascending) — use bigint comparison to avoid precision loss
+  const sorted = [...utxos].sort((a, b) => a.value > b.value ? 1 : a.value < b.value ? -1 : 0);
 
   const selected: IUnifiedUtxo[] = [];
   let total = BigInt(0);
@@ -215,8 +209,8 @@ function selectBranchAndBound(
   targetAmount: bigint,
   feeRate: number
 ): IUnifiedUtxo[] | null {
-  // Sort UTXOs by value (descending) for better pruning
-  const sorted = [...utxos].sort((a, b) => Number(b.value - a.value));
+  // Sort UTXOs by value (descending) for better pruning — use bigint comparison to avoid precision loss
+  const sorted = [...utxos].sort((a, b) => b.value > a.value ? 1 : b.value < a.value ? -1 : 0);
 
   // Calculate total available
   const totalAvailable = sorted.reduce((sum, utxo) => sum + utxo.value, BigInt(0));
@@ -230,6 +224,10 @@ function selectBranchAndBound(
   let bestSelection: IUnifiedUtxo[] | null = null;
   let bestWaste = BigInt(2) ** BigInt(63) - BigInt(1); // Max bigint
 
+  // Iteration counter to prevent UI freeze with large UTXO sets
+  const MAX_ITERATIONS = 100_000;
+  let iterations = 0;
+
   /**
    * Recursive branch and bound search
    * @param index Current UTXO index
@@ -237,6 +235,11 @@ function selectBranchAndBound(
    * @param total Current total value
    */
   function search(index: number, selected: IUnifiedUtxo[], total: bigint): void {
+    // Bail out if we've exceeded the iteration budget
+    if (++iterations > MAX_ITERATIONS) {
+      return;
+    }
+
     // Base case: reached target
     if (total >= targetAmount) {
       const excess = total - targetAmount;

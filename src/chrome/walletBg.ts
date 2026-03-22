@@ -1006,19 +1006,56 @@ export class WalletBg {
   async fetchBitcoinUtxos(): Promise<any[]> {
     const { BitcoinApi } = await import('@/api/bitcoin-api');
     const { parseBitcoinUtxos } = await import('@/chains/bitcoin/bitcoinUtxoManager');
+    const { deriveBitcoinAddress: deriveBtcAddr } = await import('@/chains/bitcoin/bitcoinKeyManager');
 
     const bitcoinApi = new BitcoinApi({ chain: this.chain, network: this.network }, this.provider);
 
     try {
-      // Fetch UTXOs from Bitcoin API
-      const rawUtxos = await bitcoinApi.getUtxos(this.baseAddress);
+      // Build a reverse lookup: address -> { chain, index } from discovered addresses.
+      // Scan external (chain=0) and change (chain=1) using BIP44 gap limit (20).
+      const GAP_LIMIT = 20;
+      const addressToDerivation = new Map<string, { chain: number; index: number }>();
 
-      // Parse to unified format
-      const unifiedUtxos = parseBitcoinUtxos(rawUtxos, this.baseAddress);
+      for (const chain of [0, 1]) {
+        let consecutiveUnused = 0;
+        let idx = 0;
+        while (consecutiveUnused < GAP_LIMIT) {
+          const addr = deriveBtcAddr(this.publicKey, this.network, this.addressType || 'segwit', chain, idx);
+          addressToDerivation.set(addr, { chain, index: idx });
+          // We'll check usage below via UTXOs; for now just derive addresses
+          idx++;
+          consecutiveUnused++;
+        }
+      }
 
-      debugLog(`📦 Fetched ${unifiedUtxos.length} Bitcoin UTXOs for ${this.baseAddress}`);
+      // Fetch UTXOs for all discovered addresses, deduplicating by txHash:index
+      const allUtxos: any[] = [];
+      const utxoSeen = new Set<string>();
 
-      return unifiedUtxos;
+      for (const [addr, derivation] of addressToDerivation) {
+        try {
+          const rawUtxos = await bitcoinApi.getUtxos(addr);
+          if (rawUtxos.length > 0) {
+            const parsed = parseBitcoinUtxos(rawUtxos, addr);
+            for (const utxo of parsed) {
+              const key = `${utxo.txHash}:${utxo.index}`;
+              if (!utxoSeen.has(key)) {
+                utxoSeen.add(key);
+                utxo.derivationChain = derivation.chain;
+                utxo.derivationIndex = derivation.index;
+                allUtxos.push(utxo);
+              }
+            }
+          }
+        } catch (err) {
+          // Skip addresses that fail; don't break the whole fetch
+          console.warn(`Failed to fetch UTXOs for ${addr}:`, err);
+        }
+      }
+
+      debugLog(`📦 Fetched ${allUtxos.length} Bitcoin UTXOs across ${addressToDerivation.size} addresses`);
+
+      return allUtxos;
     } catch (error) {
       console.error('Failed to fetch Bitcoin UTXOs:', error);
       throw error;

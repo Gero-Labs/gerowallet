@@ -1654,7 +1654,8 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
       BigInt(amount),
       changeAddress,
       feeRate,
-      walletBg.network
+      walletBg.network,
+      walletBg.publicKey
     );
 
     // Step 3: Sign PSBT

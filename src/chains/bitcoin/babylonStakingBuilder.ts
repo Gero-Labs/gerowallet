@@ -46,12 +46,23 @@ export interface BabylonStakingPsbtResult {
 /**
  * Convert Gero's IUnifiedUtxo to the Babylon SDK's UTXO format
  */
-function toSdkUtxo(utxo: IUnifiedUtxo): { txid: string; vout: number; value: number; scriptPubKey: string } {
+function toSdkUtxo(utxo: IUnifiedUtxo, network: bitcoin.Network): { txid: string; vout: number; value: number; scriptPubKey: string } {
+  let scriptPubKey = utxo.scriptPubKey || '';
+
+  // Derive scriptPubKey from address if not already set
+  if (!scriptPubKey && utxo.address) {
+    try {
+      scriptPubKey = bitcoin.address.toOutputScript(utxo.address, network).toString('hex');
+    } catch (e) {
+      console.warn('Failed to derive scriptPubKey from address:', utxo.address, e);
+    }
+  }
+
   return {
     txid: utxo.txHash,
     vout: utxo.index,
     value: Number(utxo.value),
-    scriptPubKey: utxo.scriptPubKey || '',
+    scriptPubKey,
   };
 }
 
@@ -115,7 +126,7 @@ export async function buildBabylonStakingPsbt(
     stakingTimelock
   );
 
-  const sdkUtxos = utxos.map(toSdkUtxo);
+  const sdkUtxos = utxos.map(u => toSdkUtxo(u, bitcoinNetwork));
 
   // Build unsigned staking transaction
   const { transaction, fee } = staking.createStakingTransaction(
