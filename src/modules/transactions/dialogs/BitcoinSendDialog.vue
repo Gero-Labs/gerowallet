@@ -287,6 +287,7 @@ import { priceStore } from '@/stores/priceStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import { calculateTxSize } from '@/chains/bitcoin/bitcoinCoinSelection';
 
 const { t } = useTranslation();
 const { loggedWallet, utxos } = toRefs(walletStore);
@@ -347,7 +348,8 @@ const amountInSats = computed(() => {
 
 // Fee for a specific tier
 function estimatedFeeSatsFor(tier: 'fast' | 'medium' | 'slow'): number {
-  return 250 * feeEstimates.value[tier];
+  const inputCount = utxos.value?.length ?? 1;
+  return calculateTxSize(inputCount, 2) * feeEstimates.value[tier];
 }
 
 // Estimated fee for selected tier

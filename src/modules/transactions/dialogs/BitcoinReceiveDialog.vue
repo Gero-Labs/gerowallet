@@ -18,6 +18,7 @@
           outlined
           dense
           class="mb-4"
+          attach
           @change="updateAddress"
         >
           <template v-slot:selection="{ item }">
