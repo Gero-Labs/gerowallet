@@ -1,9 +1,34 @@
 <template>
   <div class="token-list">
-    <!-- Header -->
-    <div class="token-header">
-      <span class="text-subtitle-2 white--text font-weight-bold">{{ $t('miniGero.tokens') }}</span>
-      <span class="text-caption grey--text">{{ filteredTokens.length }}</span>
+    <!-- ADA pinned at top -->
+    <div class="token-item ada-row" @click="handleSelect(adaToken)">
+      <div class="token-left">
+        <v-avatar size="36" class="token-avatar ada-avatar">
+          <img :src="adaLogo" alt="ADA" />
+        </v-avatar>
+        <div class="token-info">
+          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
+            ADA
+            <v-icon x-small color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
+          </div>
+          <div class="token-amount text-caption grey--text">
+            {{ formattedAdaBalance }}
+          </div>
+        </div>
+      </div>
+      <div class="token-right">
+        <div class="token-value text-body-2 white--text" v-if="adaFiatValue">
+          {{ formattedAdaFiat }}
+        </div>
+        <div class="token-value text-body-2 grey--text" v-else>--</div>
+        <div
+          v-if="adaPriceChange !== null"
+          class="token-change text-caption"
+          :class="adaPriceChange >= 0 ? 'green-text' : 'red-text'"
+        >
+          {{ adaPriceChange >= 0 ? '+' : '' }}{{ adaPriceChange.toFixed(2) }}%
+        </div>
+      </div>
     </div>
 
     <!-- Token items -->
@@ -70,14 +95,68 @@ import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { resolveIcon } from '@/shared/utils/resolver';
+import { getBalance } from '@/chrome/serialization';
+import assetsUtil from '@/utils/assets';
+
+const adaLogo = assetsUtil.cardanoBlueLogo;
 
 const emit = defineEmits<{
   (e: 'select', token: any): void;
 }>();
 
-const { tokens: rawTokens } = toRefs(walletStore);
+const { tokens: rawTokens, utxos, collateral } = toRefs(walletStore);
 
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
+
+// ADA balance from UTXOs (in lovelace)
+const adaBalanceLovelace = computed(() => {
+  if (!utxos.value || utxos.value.length === 0) return 0;
+  try {
+    const balance = getBalance(utxos.value, collateral.value);
+    return Number(balance.coin().toString());
+  } catch {
+    return 0;
+  }
+});
+
+const adaBalanceAda = computed(() => adaBalanceLovelace.value / 1_000_000);
+
+const formattedAdaBalance = computed(() => {
+  const val = adaBalanceAda.value;
+  if (val === 0) return '0';
+  return val.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: val < 1 ? 6 : 2,
+  });
+});
+
+const adaFiatValue = computed(() => adaBalanceAda.value * adaPrice.value);
+
+const formattedAdaFiat = computed(() => {
+  const val = adaFiatValue.value;
+  if (val < 0.01) return '<$0.01';
+  return '$' + val.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+});
+
+const adaPriceChange = computed<number | null>(() => {
+  return priceStore.adaUsd?.priceChangePercentage ?? null;
+});
+
+const adaToken = computed(() => ({
+  unit: 'lovelace',
+  policy_id: '',
+  name: 'ADA',
+  ticker: 'ADA',
+  img: adaLogo,
+  quantity: adaBalanceLovelace.value,
+  decimals: 6,
+  verified: true,
+  price: adaPrice.value,
+  change: adaPriceChange.value,
+}));
 
 // Use walletStore.tokens (enriched with img, verified, isScam from resolver)
 // Filter out: native ADA (shown in BalanceSection), scam tokens, unverified tokens
@@ -163,13 +242,6 @@ function onImgError(event: Event) {
   flex-direction: column;
 }
 
-.token-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px 8px;
-}
-
 .token-item {
   display: flex;
   justify-content: space-between;
@@ -180,6 +252,15 @@ function onImgError(event: Event) {
   border-radius: 10px;
   margin: 2px 8px;
   border: 1px solid transparent;
+}
+
+.token-item.ada-row {
+  background: rgba(0, 199, 243, 0.04);
+  border-color: rgba(0, 199, 243, 0.1);
+}
+
+.ada-avatar {
+  background: rgba(0, 199, 243, 0.12) !important;
 }
 
 .token-item:hover {

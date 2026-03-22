@@ -376,12 +376,15 @@ function handleOpenBackupDialog() {
 }
 
 async function openMiniMode() {
-  const { Messaging } = await import('@/chrome/messaging');
-  const { MessageTypes } = await import('@/models/MessageTypes');
-  await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.OPEN_SIDE_PANEL,
-    data: {},
-  });
+  try {
+    // Must call sidePanel.open() directly from user gesture context
+    // (messaging to background loses user gesture propagation)
+    const win = await chrome.windows.getCurrent();
+    await chrome.sidePanel.setOptions({ path: 'sidepanel/index.html', enabled: true });
+    await (chrome.sidePanel as any).open({ windowId: win.id });
+  } catch (e) {
+    console.warn('Failed to open side panel:', e);
+  }
 }
 
 // Theme management - update colors when a chain changes

@@ -7,17 +7,28 @@ export interface DAppRequest {
   payload: any;
 }
 
+const VALID_METHODS = new Set(['enable', 'signTx', 'signData']);
+const MAX_RETRIES = 10;
+
 export function useDAppOverlay() {
   const isVisible = ref(false);
   const currentRequest = ref<DAppRequest | null>(null);
   const requestQueue = ref<DAppRequest[]>([]);
   let port: chrome.runtime.Port | null = null;
+  let retryCount = 0;
 
   function connect() {
-    port = chrome.runtime.connect({ name: 'mini-gero-dapp-channel' });
+    try {
+      port = chrome.runtime.connect({ name: 'mini-gero-dapp-channel' });
+    } catch (e) {
+      console.warn('[DApp] Failed to connect:', e);
+      scheduleReconnect();
+      return;
+    }
 
     port.onMessage.addListener((message: DAppRequest) => {
-      if (message.type === 'dapp-request') {
+      if (message.type === 'dapp-request' && VALID_METHODS.has(message.method)) {
+        retryCount = 0; // Reset on successful message
         if (currentRequest.value) {
           requestQueue.value.push(message);
         } else {
@@ -28,9 +39,19 @@ export function useDAppOverlay() {
     });
 
     port.onDisconnect.addListener(() => {
-      // Reconnect if background disconnects (service worker restart)
-      setTimeout(() => connect(), 1000);
+      port = null;
+      scheduleReconnect();
     });
+  }
+
+  function scheduleReconnect() {
+    if (retryCount < MAX_RETRIES) {
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+      retryCount++;
+      setTimeout(() => connect(), delay);
+    } else {
+      console.warn('[DApp] Max reconnection attempts reached');
+    }
   }
 
   function respond(requestId: string, data: any, error: string | null = null) {

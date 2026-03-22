@@ -15,7 +15,7 @@
           class="segment-btn text-none"
         >
           <v-icon small class="mr-1">mdi-server-network</v-icon>
-          Stakepool
+          {{ $t('miniGero.stakepool') }}
         </v-btn>
         <v-btn
           small
@@ -23,7 +23,7 @@
           class="segment-btn text-none"
         >
           <v-icon small class="mr-1">mdi-vote</v-icon>
-          Governance
+          {{ $t('miniGero.governance') }}
         </v-btn>
       </v-btn-toggle>
     </div>
@@ -42,18 +42,18 @@
     <!-- Claim Rewards Bottom Sheet -->
     <BottomSheet
       v-model="showClaimSheet"
-      title="Claim Rewards"
+      :title="$t('miniGero.claimRewards')"
       height="35%"
     >
       <div class="claim-confirm">
         <div class="claim-info-card">
           <div class="d-flex justify-space-between mb-2">
-            <span class="text-caption grey--text">Claimable Rewards</span>
+            <span class="text-caption grey--text">{{ $t('miniGero.claimableRewards') }}</span>
             <span class="text-body-2 font-weight-bold" style="color: #00c7f3;">{{ formattedRewards }}</span>
           </div>
           <div v-if="!hasDRepDelegation" class="drep-warning">
             <v-icon small color="warning" class="mr-1">mdi-alert-outline</v-icon>
-            <span class="text-caption warning--text">DRep delegation required to withdraw rewards</span>
+            <span class="text-caption warning--text">{{ $t('miniGero.drepRequired') }}</span>
           </div>
         </div>
 
@@ -64,7 +64,7 @@
           :disabled="!hasDRepDelegation"
           @click="confirmClaim"
         >
-          {{ hasDRepDelegation ? 'Confirm Withdrawal' : 'Delegate to DRep First' }}
+          {{ hasDRepDelegation ? $t('miniGero.confirmWithdrawal') : $t('miniGero.delegateDRepFirst') }}
         </v-btn>
 
         <v-btn
@@ -76,7 +76,7 @@
           class="mt-2 text-none"
           @click="goToGovernance"
         >
-          Go to Governance
+          {{ $t('miniGero.goToGovernance') }}
         </v-btn>
       </div>
     </BottomSheet>
@@ -88,7 +88,6 @@ import { ref, computed, toRefs, watch, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import governanceStoreActions from '@/stores/governanceStore';
-import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import StakingStatusCard from '../components/staking/StakingStatusCard.vue';
@@ -101,8 +100,6 @@ const showClaimSheet = ref(false);
 const claimLoading = ref(false);
 
 const { loggedWallet, account } = toRefs(walletStore);
-
-const { withdraw, withdrawalDialog, closeWithdrawalDialog } = useWithdrawal();
 
 const currencySymbol = computed(() => {
   return networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -193,7 +190,9 @@ watch(
 }
 
 .segment-toggle {
-  background: #1a1a1a !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px !important;
   width: 100%;
 }
@@ -215,7 +214,8 @@ watch(
 
 /* Claim confirmation */
 .claim-info-card {
-  background: #111;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   padding: 14px;
 }

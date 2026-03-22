@@ -43,18 +43,24 @@ const emit = defineEmits<{
 
 const entering = ref(false);
 const leaving = ref(false);
+let enterTimer: ReturnType<typeof setTimeout> | null = null;
+let leaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(() => props.value, (val) => {
+  if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; leaving.value = false; }
   if (val) {
     entering.value = true;
-    setTimeout(() => { entering.value = false; }, 300);
+    if (enterTimer) clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => { entering.value = false; enterTimer = null; }, 300);
   }
 });
 
 function close() {
+  if (enterTimer) { clearTimeout(enterTimer); enterTimer = null; entering.value = false; }
   leaving.value = true;
-  setTimeout(() => {
+  leaveTimer = setTimeout(() => {
     leaving.value = false;
+    leaveTimer = null;
     emit('input', false);
     emit('close');
   }, 300);

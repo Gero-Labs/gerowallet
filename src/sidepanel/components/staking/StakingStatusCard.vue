@@ -1,16 +1,16 @@
 <template>
   <div class="status-card">
-    <!-- Stakepool Row -->
+    <!-- {{ $t('miniGero.stakepool') }} Row -->
     <div class="status-row">
       <div class="status-label">
         <v-icon small color="grey lighten-1" class="mr-1">mdi-server-network</v-icon>
-        <span class="grey--text text--lighten-1 text-caption">Stakepool</span>
+        <span class="grey--text text--lighten-1 text-caption">{{ $t('miniGero.stakepool') }}</span>
       </div>
       <div class="status-value">
         <template v-if="pool">
           <span class="white--text text-body-2 font-weight-medium">[{{ pool.ticker }}] {{ pool.name }}</span>
         </template>
-        <span v-else class="grey--text text-body-2">Not delegated</span>
+        <span v-else class="grey--text text-body-2">{{ $t('miniGero.notDelegated') }}</span>
       </div>
     </div>
 
@@ -18,7 +18,7 @@
     <div class="status-row">
       <div class="status-label">
         <v-icon small color="grey lighten-1" class="mr-1">mdi-vote</v-icon>
-        <span class="grey--text text--lighten-1 text-caption">DRep</span>
+        <span class="grey--text text--lighten-1 text-caption">{{ $t('miniGero.drep') }}</span>
       </div>
       <div class="status-value">
         <span class="white--text text-body-2 font-weight-medium">{{ delegatingTo }}</span>
@@ -29,7 +29,7 @@
     <div class="status-row rewards-row">
       <div class="status-label">
         <v-icon small color="grey lighten-1" class="mr-1">mdi-gift-outline</v-icon>
-        <span class="grey--text text--lighten-1 text-caption">Rewards</span>
+        <span class="grey--text text--lighten-1 text-caption">{{ $t('miniGero.rewards') }}</span>
       </div>
       <div class="status-value d-flex align-center">
         <span
@@ -47,7 +47,7 @@
           :loading="claimLoading"
           @click="$emit('claim')"
         >
-          Claim
+          {{ $t('miniGero.claim') }}
         </v-btn>
       </div>
     </div>
@@ -56,6 +56,7 @@
 
 <script setup lang="ts">
 import { computed, toRefs } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import governanceStoreActions from '@/stores/governanceStore';
@@ -70,6 +71,7 @@ defineEmits<{
   (e: 'claim'): void;
 }>();
 
+const { t } = useTranslation();
 const { loggedWallet, account } = toRefs(walletStore);
 
 const pool = computed(() => {
@@ -101,9 +103,9 @@ const formattedRewards = computed(() => {
 
 const delegatingTo = computed(() => {
   const currentDRep = governanceStoreActions.state.currentDRep;
-  if (!currentDRep) return 'Not delegated';
-  if (currentDRep.drep_id === 'drep_always_abstain') return 'Abstain';
-  if (currentDRep.drep_id === 'drep_always_no_confidence') return 'No Confidence';
+  if (!currentDRep) return t('miniGero.notDelegated');
+  if (currentDRep.drep_id === 'drep_always_abstain') return t('miniGero.abstain');
+  if (currentDRep.drep_id === 'drep_always_no_confidence') return t('miniGero.noConfidence');
 
   const meta = currentDRep.metadata?.meta_json?.body?.givenName;
   if (meta) {
@@ -115,7 +117,9 @@ const delegatingTo = computed(() => {
 
 <style scoped>
 .status-card {
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 12px 14px;
 }
@@ -128,7 +132,7 @@ const delegatingTo = computed(() => {
 }
 
 .status-row + .status-row {
-  border-top: 1px solid #2a2a2a;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .status-label {

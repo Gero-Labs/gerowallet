@@ -2,7 +2,7 @@
   <header class="mini-header">
     <div class="header-left" @click="$emit('wallet-switch')">
       <v-avatar size="28" class="mr-2">
-        <v-icon size="20" color="white">mdi-wallet</v-icon>
+        <v-img :src="geroLogo" contain width="20" height="20" />
       </v-avatar>
       <span class="wallet-name text-body-2 white--text text-truncate">
         {{ walletName }}
@@ -28,6 +28,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import assets from '@/utils/assets';
+
+const geroLogo = assets.geroLogo;
 
 const walletName = computed(() => walletStore.loggedWallet?.name || 'Wallet');
 

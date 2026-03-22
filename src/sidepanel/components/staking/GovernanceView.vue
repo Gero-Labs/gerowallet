@@ -169,12 +169,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs, watch, onMounted, onUnmounted } from 'vue';
-import { Cardano, Serialization } from '@cardano-sdk/core';
+import { ref, computed, toRefs, watch, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import governanceStoreActions, { governanceStore as governanceStoreState } from '@/stores/governanceStore';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
 import filtersUtil from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
@@ -183,8 +180,7 @@ import debounce from 'lodash/debounce';
 
 const { truncate, toCurrency } = filtersUtil;
 
-const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
-const { epochParams, tip } = toRefs(networkStore);
+const { loggedWallet, account, keys } = toRefs(walletStore);
 
 const {
   dreps: governanceDReps,
@@ -272,110 +268,28 @@ const selectDRep = (drep: any) => {
 };
 
 const confirmDRepDelegate = async () => {
-  if (!selectedDRep.value || !epochParams.value || !keys.value) return;
+  if (!selectedDRep.value) return;
   drepDelegating.value = true;
 
   try {
-    const certificates: Cardano.Certificate[] = [];
-
-    const stakeCredential: Cardano.Credential = {
-      type: Cardano.CredentialType.KeyHash,
-      hash: keys.value.stake[0].cred,
-    };
-
-    const dRep = selectedDRep.value.has_script
-      ? Serialization.DRep.newScriptHash(selectedDRep.value.hex)
-      : Serialization.DRep.newKeyHash(selectedDRep.value.hex);
-
-    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
-    let implicitCoin = BigInt(0);
-
-    if (!account.value?.active) {
-      certificates.push({
-        __typename: Cardano.CertificateType.VoteRegistrationDelegation,
-        stakeCredential,
-        dRep: dRep.toCore(),
-        deposit: stakeKeyDepositLovelace,
-      } as Cardano.VoteRegistrationDelegationCertificate);
-      implicitCoin = stakeKeyDepositLovelace;
-    } else {
-      certificates.push({
-        __typename: Cardano.CertificateType.VoteDelegation,
-        stakeCredential,
-        dRep: dRep.toCore(),
-      } as Cardano.VoteDelegationCertificate);
-    }
-
-    const txData = await buildCardanoTransaction({
-      certificates,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-      implicitCoin,
-      walletContext: {
-        keys: keys.value,
-        stakeAddress: loggedWallet.value?.stakeAddress || '',
-        accountIndex: 0,
-      },
-    });
-
-    // Send to background for signing
-    const { Messaging } = await import('@/chrome/messaging');
-    const { MessageTypes } = await import('@/models/MessageTypes');
-
     showDRepSheet.value = false;
 
     // Navigate to full dashboard for transaction signing
-    // For v1, open the options page with the governance tab
     const optionsUrl = chrome.runtime.getURL('index.html#/governance');
     chrome.tabs.create({ url: optionsUrl });
   } catch (err: any) {
-    console.error('Error building DRep delegation tx:', err);
-    snackbar.setError('Failed to build delegation transaction');
+    console.error('Error delegating to DRep:', err);
+    snackbar.setError('Failed to initiate delegation');
   } finally {
     drepDelegating.value = false;
   }
 };
 
 const quickDelegate = async () => {
-  if (!delegationModel.value || !epochParams.value || !keys.value) return;
+  if (!delegationModel.value) return;
   delegateLoading.value = true;
 
   try {
-    const certificates: Cardano.Certificate[] = [];
-
-    const stakeCredential: Cardano.Credential = {
-      type: Cardano.CredentialType.KeyHash,
-      hash: keys.value.stake[0].cred,
-    };
-
-    let dRep: Cardano.DelegateRepresentative;
-    if (delegationModel.value === 'Abstain') {
-      dRep = { __typename: 'AlwaysAbstain' } as Cardano.AlwaysAbstain;
-    } else {
-      dRep = { __typename: 'AlwaysNoConfidence' } as Cardano.AlwaysNoConfidence;
-    }
-
-    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
-    let implicitCoin = BigInt(0);
-
-    if (!account.value?.active) {
-      certificates.push({
-        __typename: Cardano.CertificateType.VoteRegistrationDelegation,
-        stakeCredential,
-        dRep,
-        deposit: stakeKeyDepositLovelace,
-      } as Cardano.VoteRegistrationDelegationCertificate);
-      implicitCoin = stakeKeyDepositLovelace;
-    } else {
-      certificates.push({
-        __typename: Cardano.CertificateType.VoteDelegation,
-        stakeCredential,
-        dRep,
-      } as Cardano.VoteDelegationCertificate);
-    }
-
     // Open full dashboard for signing
     const optionsUrl = chrome.runtime.getURL('index.html#/governance');
     chrome.tabs.create({ url: optionsUrl });
@@ -391,8 +305,6 @@ const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).catch(() => {});
 };
 
-let searchTimeout: NodeJS.Timeout;
-
 onMounted(async () => {
   await loadDReps(1);
 
@@ -401,15 +313,13 @@ onMounted(async () => {
     await governanceStoreActions.loadDRepById(loggedWallet.value, account.value.drep_id);
   }
 });
-
-onUnmounted(() => {
-  if (searchTimeout) clearTimeout(searchTimeout);
-});
 </script>
 
 <style scoped>
 .governance-info-card {
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -450,12 +360,12 @@ onUnmounted(() => {
 }
 
 .delegation-select >>> .v-input__slot {
-  background: #1a1a1a !important;
+  background: rgba(255, 255, 255, 0.04) !important;
   min-height: 36px !important;
 }
 
 .delegation-select >>> .v-input__slot fieldset {
-  border-color: #2a2a2a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .delegate-action-btn {
@@ -468,12 +378,12 @@ onUnmounted(() => {
 }
 
 .drep-search >>> .v-input__slot {
-  background: #1a1a1a !important;
+  background: rgba(255, 255, 255, 0.04) !important;
   min-height: 36px !important;
 }
 
 .drep-search >>> .v-input__slot fieldset {
-  border-color: #2a2a2a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .drep-list {
@@ -485,7 +395,9 @@ onUnmounted(() => {
 }
 
 .drep-item {
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 10px 12px;
   cursor: pointer;
@@ -496,7 +408,7 @@ onUnmounted(() => {
 }
 
 .drep-item:hover {
-  background: #222;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .drep-item-left {
@@ -507,7 +419,7 @@ onUnmounted(() => {
 }
 
 .drep-avatar-placeholder {
-  background: #2a2a2a;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .drep-info {
@@ -546,7 +458,8 @@ onUnmounted(() => {
 
 /* Delegate confirmation */
 .confirm-drep-info {
-  background: #111;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   padding: 14px;
 }

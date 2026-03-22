@@ -11,18 +11,50 @@
       @settings="$emit('settings')"
     />
     <main class="mini-content">
-      <router-view />
+      <transition :name="transitionName" mode="out-in">
+        <router-view :key="$route.path" />
+      </transition>
     </main>
     <BottomNav />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue';
+import { useRoute } from 'vue-router/composables';
 import MiniHeader from '../components/MiniHeader.vue';
 import BottomNav from '../components/BottomNav.vue';
 import assets from '@/utils/assets';
 
 const cardanoBg = assets.cardanoBg;
+
+// Tab order for directional slide
+const tabOrder: Record<string, number> = {
+  '/': 0,
+  '/staking': 1,
+  '/card': 2,
+  '/market': 3,
+  '/activity': 4,
+};
+
+const transitionName = ref('page-fade');
+const route = useRoute();
+let prevIndex = tabOrder[route.path] ?? -1;
+
+watch(() => route.path, (to) => {
+  const toIndex = tabOrder[to];
+  const fromIndex = prevIndex;
+
+  if (toIndex !== undefined && fromIndex !== undefined && fromIndex >= 0) {
+    // Both are nav tabs — slide directionally
+    transitionName.value = toIndex > fromIndex ? 'page-slide-left' : 'page-slide-right';
+  } else {
+    // Sub-page (e.g. perps) — simple fade
+    transitionName.value = 'page-fade';
+  }
+
+  prevIndex = toIndex ?? -1;
+});
 </script>
 
 <style scoped>
@@ -62,5 +94,45 @@ const cardanoBg = assets.cardanoBg;
   overflow-x: hidden;
   position: relative;
   z-index: 1;
+}
+
+/* ── Page transitions ── */
+
+/* Fade (for sub-pages like perps) */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.page-fade-enter,
+.page-fade-leave-to {
+  opacity: 0;
+}
+
+/* Slide left (navigating forward in tabs) */
+.page-slide-left-enter-active,
+.page-slide-left-leave-active {
+  transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.22s ease;
+}
+.page-slide-left-enter {
+  transform: translateX(24px);
+  opacity: 0;
+}
+.page-slide-left-leave-to {
+  transform: translateX(-24px);
+  opacity: 0;
+}
+
+/* Slide right (navigating backward in tabs) */
+.page-slide-right-enter-active,
+.page-slide-right-leave-active {
+  transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.22s ease;
+}
+.page-slide-right-enter {
+  transform: translateX(-24px);
+  opacity: 0;
+}
+.page-slide-right-leave-to {
+  transform: translateX(24px);
+  opacity: 0;
 }
 </style>
