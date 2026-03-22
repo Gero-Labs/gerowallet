@@ -52,24 +52,6 @@ loadWallets().then(async () => {
   await hydrateWalletStore();
 
   if (walletStore.loggedWallet) {
-    // Safety: clear stale isLocked if no unlock method is configured
-    // Prevents users from being trapped on lock screen (e.g. after a bug or reset)
-    if (walletStore.isLocked) {
-      try {
-        const { getDb } = await import('@/db/wallet-db');
-        const db = await getDb(walletStore.loggedWallet.id);
-        const configTable = db.table('config');
-        const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-        if (!unlockMethodConfig?.value) {
-          WalletStore.setLocked(false);
-          console.log('🔓 Cleared stale lock — no unlock method configured');
-        }
-      } catch (e) {
-        console.warn('Failed to check unlock method for stale lock:', e);
-        WalletStore.setLocked(false);
-      }
-    }
-
     // CRITICAL: Check auto-lock BEFORE logging in to catch expired sessions
     // This prevents the activity tracker from resetting lastActivityTimestamp
     await checkAutoLock();
@@ -126,76 +108,11 @@ export async function openSidebar(tabId: number, path: string) {
       path,
       enabled: true
   })
-  try {
-    await chrome.sidePanel.open({ tabId });
-  } catch (e) {
-    // sidePanel.open() requires a user gesture; silently ignore when called programmatically
-    console.debug('sidePanel.open skipped (no user gesture):', e?.message || e);
-  }
+  chrome.sidePanel.setPanelBehavior({
+    openPanelOnActionClick: false
+  })
+  chrome.sidePanel.open({ tabId });
   return tabId;
-}
-
-// Mini-gero: side panel available but not the default action
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
-
-// Mini-gero DApp channel
-let miniGeroPort: chrome.runtime.Port | null = null;
-const pendingDAppRequests = new Map<string, (response: any) => void>();
-
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name === 'mini-gero-dapp-channel') {
-    // Reject pending requests from old port before replacing
-    if (miniGeroPort) {
-      const pending = Array.from(pendingDAppRequests.entries());
-      pendingDAppRequests.clear();
-      for (const [, resolver] of pending) {
-        resolver({ error: 'mini-gero reconnected from another window' });
-      }
-    }
-    miniGeroPort = port;
-
-    port.onMessage.addListener((message) => {
-      if (message.type === 'dapp-response' && message.requestId) {
-        const resolver = pendingDAppRequests.get(message.requestId);
-        if (resolver) {
-          resolver(message);
-          pendingDAppRequests.delete(message.requestId);
-        }
-      }
-    });
-
-    port.onDisconnect.addListener(() => {
-      if (miniGeroPort === port) miniGeroPort = null;
-      // Reject all pending requests atomically
-      const pending = Array.from(pendingDAppRequests.entries());
-      pendingDAppRequests.clear();
-      for (const [, resolver] of pending) {
-        resolver({ error: 'mini-gero disconnected' });
-      }
-    });
-  }
-});
-
-function sendToMiniGero(method: string, payload: any): Promise<any> {
-  if (!miniGeroPort) return Promise.reject(new Error('mini-gero not connected'));
-  return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
-    const timeout = setTimeout(() => {
-      pendingDAppRequests.delete(requestId);
-      reject(new Error('mini-gero request timeout'));
-    }, 60_000);
-    pendingDAppRequests.set(requestId, (response) => {
-      clearTimeout(timeout);
-      if (response.error) reject(new Error(response.error));
-      else resolve(response);
-    });
-    miniGeroPort!.postMessage({
-      type: 'dapp-request',
-      method,
-      requestId,
-      payload,
-    });
-  });
 }
 
 const processedDomains: Set<string> = new Set<string>();
@@ -409,20 +326,6 @@ app.add(METHOD.enable, (request, sendResponse) => {
     return reply({ data: true });
   }
 
-  // Mini-gero: route DApp requests to side panel if connected
-  if (miniGeroPort) {
-    sendToMiniGero('enable', { ...request.data, website: origin })
-      .then(async (response) => {
-        if (response.data === true) {
-          // Save DApp as connected (same as popup DappConnect.vue)
-          await WalletStore.addConnectedDapp(currentWallet.id, origin);
-        }
-        reply({ data: response.data });
-      })
-      .catch((err: any) => reply({ error: err.message || APIError.InternalError }));
-    return;
-  }
-
   if (typeof tabId !== 'number') {
     return reply({ error: APIError.InternalError });
   }
@@ -556,7 +459,7 @@ const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
 async function isWhitelisted(origin: string): Promise<boolean> {
   const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps || [];
-  if (whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1)) return true;
+  if (whitelisted.find(el => origin.includes(el.domain))) return true;
 
   // Only check bringDomains for Cardano Mainnet
   const loggedWallet = WalletStore.state.loggedWallet;
@@ -574,7 +477,7 @@ async function isWhitelisted(origin: string): Promise<boolean> {
     bringDomainsCache = { data: bringDomains, timestamp: now };
   }
 
-  return !!(bringDomains && bringDomains.find((el: string) => origin.indexOf(String(el)) !== -1));
+  return !!(bringDomains && bringDomains.find((el: string) => origin.includes(el)));
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
@@ -767,18 +670,6 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
 });
 
 app.add(METHOD.signData, (request, sendResponse) => {
-  // Mini-gero: route to side panel if connected
-  if (miniGeroPort) {
-    sendToMiniGero('signData', { ...request.data, website: request.origin })
-      .then((response) => {
-        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
-      })
-      .catch((err: any) => {
-        sendResponse({ id: request.id, error: err.message || APIError.InternalError, target: TARGET, sender: SENDER.extension });
-      });
-    return;
-  }
-
   let responsePromise: Promise<any>;
 
   if (WalletStore.state.config.useSidePanel) {
@@ -831,17 +722,6 @@ app.add(METHOD.signData, (request, sendResponse) => {
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
-  // Mini-gero: route DApp signTx to side panel if connected
-  if (miniGeroPort) {
-    try {
-      const response = await sendToMiniGero('signTx', { ...request.data, website: request.data?.origin || request.origin });
-      sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
-    } catch (err: any) {
-      sendResponse({ id: request.id, error: err.message || APIError.InternalError, target: TARGET, sender: SENDER.extension });
-    }
-    return;
-  }
-
   // Create a deep copy of the request to prevent mutations from affecting subsequent sign attempts
   const requestCopy = JSON.parse(JSON.stringify(request));
 
@@ -2040,30 +1920,6 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
     })
   }
   return true; // Important: return true for async handlers
-});
-
-app.addToOptions(MessageTypes.OPEN_SIDE_PANEL, async (request, sendResponse) => {
-  try {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab?.id) {
-      await openSidebar(activeTab.id, 'sidepanel/index.html');
-    }
-    sendResponse({
-      id: request.id,
-      data: { success: true },
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } catch (err) {
-    console.error('open side panel error', err);
-    sendResponse({
-      id: request.id,
-      data: { success: false },
-      target: TARGET,
-      sender: SENDER.extension,
-      error: err,
-    });
-  }
 });
 
 const openUI = async () => {

@@ -1,157 +1,121 @@
 <template>
   <div>
     <div
-      :class="['quick-actions-container', { 'compact': compact }]"
+      class="quick-actions-container"
       @mousemove="handleMouseMove"
       @mouseleave="handleMouseLeave"
     >
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              ref="buyButton"
-              :class="['expandable-button', 'buy-button', { 'icon-only': compact }]"
-              color="#FFF59E1A"
-              height="28"
-              @click="openDialog(dialogs.BUY)"
-              :style="getButtonGlowStyle('buy')"
-              v-bind="attrs"
-              v-on="on"
-            >
-              <v-avatar tile size="14">
-                <v-img
-                  :src="assets.dollarShieldSvg"
-                  :alt="$t('common.buy')"
-                  contain
-                ></v-img>
-              </v-avatar>
-              <span v-if="!compact" class="button-text">{{ $t('navigation.buySell') }}</span>
-            </v-btn>
-          </template>
-          <span>{{ $t('navigation.buySell') }}</span>
-        </v-tooltip>
+        <v-btn
+          ref="buyButton"
+          class="expandable-button buy-button"
+          color="#FFF59E1A"
+          height="28"
+          @click="openDialog(dialogs.BUY)"
+          :style="getButtonGlowStyle('buy')"
+        >
+          <v-avatar tile size="14">
+            <v-img
+              :src="assets.dollarShieldSvg"
+              :alt="$t('common.buy')"
+              contain
+            ></v-img>
+          </v-avatar>
+          <span class="button-text">{{ $t('navigation.buySell') }}</span>
+        </v-btn>
       </div>
 
       <div class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              ref="sendButton"
-              :class="['expandable-button', 'send-button', { 'icon-only': compact }]"
-              color="#00DFF31A"
-              height="28"
-              @click="openDialog(dialogs.SEND)"
-              :style="getButtonGlowStyle('send')"
-              v-bind="attrs"
-              v-on="on"
-            >
-              <v-avatar tile size="14">
-                <v-img
-                  :src="assets.sendSvg"
-                  :alt="$t('common.send')"
-                  contain
-                  style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
-                ></v-img>
-              </v-avatar>
-              <span v-if="!compact" class="button-text">{{ $t('navigation.send') }}</span>
-            </v-btn>
-          </template>
-          <span>{{ $t('navigation.send') }}</span>
-        </v-tooltip>
+        <v-btn
+          ref="sendButton"
+          class="expandable-button send-button"
+          color="#00DFF31A"
+          height="28"
+          @click="openDialog(dialogs.SEND)"
+          :style="getButtonGlowStyle('send')"
+        >
+          <v-avatar tile size="14">
+            <v-img
+              :src="assets.sendSvg"
+              :alt="$t('common.send')"
+              contain
+              style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
+            ></v-img>
+          </v-avatar>
+          <span class="button-text">{{ $t('navigation.send') }}</span>
+        </v-btn>
       </div>
 
       <div class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              ref="receiveButton"
-              :class="['expandable-button', 'receive-button', { 'icon-only': compact }]"
-              color="#75E0A71A"
-              height="28"
-              @click="openDialog(dialogs.RECEIVE)"
-              :style="getButtonGlowStyle('receive')"
-              v-bind="attrs"
-              v-on="on"
-            >
-              <v-avatar tile size="14">
-                <v-img
-                  :src="assets.qrCodeSvg"
-                  :alt="$t('common.receive')"
-                  contain
-                  style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
-                ></v-img>
-              </v-avatar>
-              <span v-if="!compact" class="button-text">{{ $t('navigation.receive') }}</span>
-            </v-btn>
-          </template>
-          <span>{{ $t('navigation.receive') }}</span>
-        </v-tooltip>
+        <v-btn
+          ref="receiveButton"
+          class="expandable-button receive-button"
+          color="#75E0A71A"
+          height="28"
+          @click="openDialog(dialogs.RECEIVE)"
+          :style="getButtonGlowStyle('receive')"
+        >
+          <v-avatar tile size="14">
+            <v-img
+              :src="assets.qrCodeSvg"
+              :alt="$t('common.receive')"
+              contain
+              style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
+            ></v-img>
+          </v-avatar>
+          <span class="button-text">{{ $t('navigation.receive') }}</span>
+        </v-btn>
       </div>
       <div v-if="isSwapSupportedByNetwork" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              ref="swapButton"
-              :class="['expandable-button', 'swap-button', { 'icon-only': compact }]"
-              color="#FDA29B1A"
-              height="28"
-              @click="openDialog(dialogs.SWAP)"
-              :style="getButtonGlowStyle('swap')"
-              :disabled="!isSwapEnabledByFeatureFlag"
-              :loading="loadingSwap"
-              v-bind="attrs"
-              v-on="on"
-            >
-              <v-avatar tile size="14">
-                <v-img
-                  :src="assets.swapSvg"
-                  :alt="$t('swap.swap')"
-                  contain
-                  style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
-                ></v-img>
-              </v-avatar>
-              <span v-if="!compact" class="button-text">{{ $t('swap.swap') }}</span>
-              <div v-if="!loadingSwap && !isSwapEnabledByFeatureFlag" class="ribbon top-right" aria-hidden="true">
-                <span>{{ $t('common.off') }}</span>
-              </div>
-            </v-btn>
-          </template>
-          <span>{{ $t('swap.swap') }}</span>
-        </v-tooltip>
+        <v-btn
+          ref="swapButton"
+          class="expandable-button swap-button"
+          color="#FDA29B1A"
+          height="28"
+          @click="openDialog(dialogs.SWAP)"
+          :style="getButtonGlowStyle('swap')"
+          :disabled="!isSwapEnabledByFeatureFlag"
+          :loading="loadingSwap"
+        >
+          <v-avatar tile size="14">
+            <v-img
+              :src="assets.swapSvg"
+              :alt="$t('swap.swap')"
+              contain
+              style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
+            ></v-img>
+          </v-avatar>
+          <span class="button-text">{{ $t('swap.swap') }}</span>
+          <div v-if="!loadingSwap && !isSwapEnabledByFeatureFlag" class="ribbon top-right" aria-hidden="true">
+            <span>{{ $t('common.off') }}</span>
+          </div>
+        </v-btn>
       </div>
       <div v-if="!isPerpetualsDisabled" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              ref="perpetualsButton"
-              :class="['expandable-button', 'perpetuals-button', { 'icon-only': compact }]"
-              color="#B794F41A"
-              height="28"
-              @click="openDialog(dialogs.PERPETUALS)"
-              :style="getButtonGlowStyle('perpetuals')"
-              :disabled="priceStore.connectionStatus !== 'connected'"
-              :loading="priceStore.connectionStatus === 'connecting'"
-              v-bind="attrs"
-              v-on="on"
-            >
-              <v-avatar tile size="14">
-                <v-img
-                  :src="assets.barChart"
-                  :alt="$t('perpetuals.perpetuals')"
-                  contain
-                  style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
-                ></v-img>
-              </v-avatar>
-              <span v-if="!compact" class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
-              <div v-if="priceStore.connectionStatus !== 'connected'" class="ribbon top-right" aria-hidden="true">
-                <span>{{ $t('common.down') }}</span>
-              </div>
-            </v-btn>
-          </template>
-          <span>{{ $t('perpetuals.perpetuals') }}</span>
-        </v-tooltip>
+        <v-btn
+          ref="perpetualsButton"
+          class="expandable-button perpetuals-button"
+          color="#B794F41A"
+          height="28"
+          @click="openDialog(dialogs.PERPETUALS)"
+          :style="getButtonGlowStyle('perpetuals')"
+          :disabled="priceStore.connectionStatus !== 'connected'"
+          :loading="priceStore.connectionStatus === 'connecting'"
+        >
+          <v-avatar tile size="14">
+            <v-img
+              :src="assets.barChart"
+              :alt="$t('perpetuals.perpetuals')"
+              contain
+              style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
+            ></v-img>
+          </v-avatar>
+          <span class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
+          <div v-if="priceStore.connectionStatus !== 'connected'" class="ribbon top-right" aria-hidden="true">
+            <span>{{ $t('common.down') }}</span>
+          </div>
+        </v-btn>
       </div>
-
     </div>
     <ReceiveDialog :isOpen="quickActionState.activeDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
     <SwapDialog
@@ -177,10 +141,6 @@ import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { priceStore } from '@/stores/priceStore';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
-
-const props = defineProps<{
-  compact?: boolean;
-}>();
 
 const { loggedWallet } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any
@@ -354,22 +314,11 @@ const getButtonGlowStyle = (buttonType: string) => {
   z-index: 5;
 }
 
-.quick-actions-container.compact {
-  padding: 0;
-  gap: 4px;
-  border: none;
-  min-width: unset;
-}
-
 .action-button-wrapper {
   display: flex;
   align-content: center;
   text-align: center;
   flex-shrink: 0;
-}
-
-.expandable-button.icon-only {
-  padding: 0 6px !important;
 }
 
 .expandable-button {

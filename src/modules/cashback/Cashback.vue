@@ -161,7 +161,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
+import { computed, ref, watch, onMounted, toRefs } from 'vue';
 import { useIntersectionObserver } from '@vueuse/core';
 import ViewRewardsDialog from '@/modules/cashback/dialogs/ViewRewardsDialog.vue';
 import filters from "@/shared/utils/filters";
@@ -175,7 +175,6 @@ import { getInitials } from '@/shared/utils/formatters';
 
 const { bringCache } = toRefs(bringStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
-const instance = getCurrentInstance();
 
 const isIntersecting = ref(false);
 const selectedCategoryIndex = ref(0);
@@ -311,30 +310,6 @@ onMounted(async () => {
     isLoading.value = false;
   }
 });
-
-// Handle ?store=<name> deep-link from Global Search
-watch(
-  () => instance?.proxy?.$route?.query?.store,
-  async (storeName) => {
-    if (!storeName || typeof storeName !== 'string') return;
-    try {
-      const retailersData = await cashbackApi.retailers(null, storeName);
-      const items = retailersData?.items || [];
-      if (items.length > 0) {
-        const match = items.find((r: any) => r.name?.toLowerCase() === storeName.toLowerCase()) || items[0];
-        const retailerObj = {
-          ...match,
-          img: retailersData.retailerIconBasePath + match.iconPath + retailersData.iconQueryParam
-        };
-        retailerTermsBasePath.value = retailersData.retailerTermsBasePath;
-        openRetailerDialog(retailerObj);
-      }
-    } catch (e) {
-      console.warn('Failed to open store from deep-link:', e);
-    }
-  },
-  { immediate: true }
-);
 </script>
 <style scoped>
 .card-text {

@@ -26,28 +26,29 @@
         <v-col cols="12" xl="9" lg="9" md="12" sm="12">
           <!-- Chart row -->
           <v-row no-gutters>
-            <v-col cols="12" class="pa-2" style="height: 210px;">
-              <PortfolioChart
-                :chart-data="computeChartData.adaData"
-                :chart-data-usd="computeChartData.usdData"
-                :chart-data-eur="computeChartData.eurData"
-                :portfolio-value-ada="currentPortfolioValues.ada"
-                :portfolio-value-usd="currentPortfolioValues.usd"
-                :portfolio-value-eur="currentPortfolioValues.eur"
-                :ada-only-value-ada="adaBalance"
-                :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
-                :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
-                :loading="portfolioLoading"
-                :progressive-loading="true"
-                :first-loaded-currency="firstLoadedCurrency"
-                :total-realized-pnl="pnlSummary?.totalRealizedPnlAda ?? null"
-                :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
-                :pnl-incomplete="pnlSummary?.tokens?.some(t => t.costBasisComplete === false) ?? false"
-                @refresh="refreshPortfolioChart"
-                @timeframe-change="handleChartTimeframeChange"
-                @withdraw-rewards="handleWithdrawRewards"
-                @delegate-gero="handleDelegateGero"
-              />
+            <v-col cols="12" class="pa-2">
+              <v-card
+                outlined
+                class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+              >
+                <v-card-text>
+                  <PortfolioChart
+                    :chart-data="computeChartData.adaData"
+                    :chart-data-usd="computeChartData.usdData"
+                    :chart-data-eur="computeChartData.eurData"
+                    :portfolio-value-ada="currentPortfolioValues.ada"
+                    :portfolio-value-usd="currentPortfolioValues.usd"
+                    :portfolio-value-eur="currentPortfolioValues.eur"
+                    :ada-only-value-ada="adaBalance"
+                    :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+                    :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+                    :loading="portfolioLoading"
+                    :progressive-loading="true"
+                    :first-loaded-currency="firstLoadedCurrency"
+                    @refresh="refreshPortfolioChart"
+                  />
+                </v-card-text>
+              </v-card>
             </v-col>
           </v-row>
 
@@ -76,24 +77,29 @@
 
       <!-- Separate chart row for non-Cardano wallets -->
       <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
-        <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2" style="height: 210px;">
-          <PortfolioChart
-            :chart-data="computeChartData.adaData"
-            :chart-data-usd="computeChartData.usdData"
-            :chart-data-eur="computeChartData.eurData"
-            :portfolio-value-ada="currentPortfolioValues.ada"
-            :portfolio-value-usd="currentPortfolioValues.usd"
-            :portfolio-value-eur="currentPortfolioValues.eur"
-            :ada-only-value-ada="adaBalance"
-            :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
-            :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
-            :loading="portfolioLoading"
-            :progressive-loading="true"
-            :first-loaded-currency="firstLoadedCurrency"
-            @refresh="refreshPortfolioChart"
-            @withdraw-rewards="handleWithdrawRewards"
-            @delegate-gero="handleDelegateGero"
-          />
+        <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
+          <v-card
+            outlined
+            class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+          >
+            <v-card-text>
+              <PortfolioChart
+                :chart-data="computeChartData.adaData"
+                :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
+                :portfolio-value-ada="currentPortfolioValues.ada"
+                :portfolio-value-usd="currentPortfolioValues.usd"
+                :portfolio-value-eur="currentPortfolioValues.eur"
+                :ada-only-value-ada="adaBalance"
+                :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+                :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+                :loading="portfolioLoading"
+                :progressive-loading="true"
+                :first-loaded-currency="firstLoadedCurrency"
+                @refresh="refreshPortfolioChart"
+              />
+            </v-card-text>
+          </v-card>
         </v-col>
 
         <!-- Apex Carousel Card -->
@@ -160,12 +166,6 @@
           <SwapWidget class="fill-height" />
         </v-col>
       </v-row>
-
-      <!-- Withdrawal Dialog -->
-      <WithdrawalDialog :isOpen="withdrawalDialog" :tx="withdrawalTxData" @close="closeWithdrawalDialog" />
-
-      <!-- Delegate Dialog -->
-      <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
     </template>
   </v-layout>
 </template>
@@ -183,8 +183,6 @@ import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
-import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
-import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -192,9 +190,6 @@ import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
-import { useWithdrawal } from '@/shared/composables/useWithdrawal';
-import { useDelegation } from '@/shared/composables/useDelegation';
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
@@ -207,16 +202,12 @@ const { t } = useTranslation();
 const instance = getCurrentInstance();
 
 const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
-const { pnlSummary, fetchPnl } = useWalletPnl();
-fetchPnl();
 
 // Store refs
 const { loggedWallet, transactions, account, utxos, collateral } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
-const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
-const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGero, closeDelegateDialog } = useDelegation();
 
 const proxy = instance?.proxy;
 
@@ -338,7 +329,6 @@ const {
   isLoading: portfolioLoading,
   loadDataProgressively,
   refreshPortfolioData,
-  loadForTimeframe,
   getCacheStats,
   getCacheStatus,
   firstLoadedCurrency,
@@ -454,7 +444,7 @@ const currentPortfolioValues = computed(() => {
     return {
       ada: latestPortfolioValues.value.ada !== null ? latestPortfolioValues.value.ada : computedValues.value.totalValue,
       usd: latestPortfolioValues.value.usd !== null ? latestPortfolioValues.value.usd : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
-      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0) * usdToEurRate.value),
+      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
     };
   }
 
@@ -565,30 +555,6 @@ const refreshPortfolioChart = async () => {
   const address = loggedWallet.value?.baseAddress;
   if (address && !isApex.value) {
     await refreshPortfolioData(address);
-  }
-};
-
-const handleWithdrawRewards = () => {
-  withdrawRewards();
-};
-
-const handleDelegateGero = () => {
-  delegateToGero();
-};
-
-let lastFetchedTimeframe = '1y';
-
-const handleChartTimeframeChange = async (timeframe: string) => {
-  const address = loggedWallet.value?.baseAddress;
-  if (!address || isApex.value) return;
-
-  const resolutionRank: Record<string, number> = { '24h': 1, '7d': 2, '30d': 2, '90d': 3, '1y': 3, 'all': 3 };
-  const newRank = resolutionRank[timeframe] ?? 3;
-  const lastRank = resolutionRank[lastFetchedTimeframe] ?? 3;
-
-  if (newRank < lastRank) {
-    lastFetchedTimeframe = timeframe;
-    await loadForTimeframe(address, timeframe);
   }
 };
 

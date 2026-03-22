@@ -15,9 +15,6 @@ interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
     scopes: string[];
   };
   key?: string;
-  side_panel?: {
-    default_path: string;
-  };
 }
 
 //@ts-ignore
@@ -26,92 +23,6 @@ const key = process.env.MANIFEST_KEY;
 const client_id = process.env.GOOGLE_CLIENT_ID;
 //@ts-ignore
 const isBeta: boolean = process.env.VITE_IS_BETA === 'true';
-
-// ── Content Security Policy (organized by category) ──────────────────────────
-
-function buildCSP(dev: boolean): string {
-  const connectSrc = [
-    // Gero backend
-    ...(dev
-      ? ['https://dev.gerowallet.io']
-      : ['https://api.gerowallet.io', 'wss://api.gerowallet.io']),
-    // Market data (REST + WebSocket)
-    'https://market.gerowallet.io',
-    // Ably (real-time blockchain updates)
-    'wss://*.ably.net',
-    'wss://*.ably-realtime.com',
-    'https://*.ably-realtime.com',
-    'https://*.ably.io',
-    'wss://*.ably.io',
-    // Kraken (price feed)
-    'wss://ws.kraken.com',
-    'https://api.kraken.com',
-    // Third-party APIs
-    'https://api.coingecko.com',
-    'https://analytics-snekfun.splash.trade',
-    'https://www.googleapis.com',
-    'https://api.handle.me/',
-    'https://media.bringweb3.io/',
-    'https://api.bringweb3.io/',
-    'https://api.cardanoshield.com/api/',
-    'https://connect.trezor.io',
-    // LaunchDarkly (feature flags)
-    'https://*.launchdarkly.com',
-    'wss://*.launchdarkly.com',
-    // Dev-only
-    ...(dev
-      ? [
-          'https://*.zkfold.io',
-          'https://guardarian.com/',
-          'http://localhost:*',
-          'ws://localhost:*',
-          'ws://127.0.0.1:*',
-          'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
-        ]
-      : ['ws://127.0.0.1:*']),
-    'data:',
-  ];
-
-  const scriptSrc = dev
-    ? ["'self'", "'wasm-unsafe-eval'", 'http://localhost:*']
-    : ["'self'", "'wasm-unsafe-eval'"];
-
-  const fontSrc = dev
-    ? ["'self'", 'https://fonts.gstatic.com/', 'http://localhost:*']
-    : ["'self'", 'https://fonts.gstatic.com/'];
-
-  const styleSrc = ['*', "'unsafe-inline'", "'self'", 'blob:'];
-
-  const imgSrc = dev
-    ? ["'self'", 'http:', 'data:']
-    : ["'self'", 'https:', 'data:'];
-
-  const frameSrc = [
-    ...(dev ? ['http://localhost:*'] : ['https://api.gerowallet.io/', 'https://guardarian.com/']),
-    'https://*.moonpay.com/',
-    'https://connect.trezor.io/',
-    'https://www.kaiserex.com/',
-    'https://kaiserex.com/',
-    'https://forms.zohopublic.eu/',
-  ];
-
-  const mediaSrc = [
-    ...(dev ? ['https://dev.gerowallet.io', 'http://localhost:*'] : ['https://api.gerowallet.io', 'https://dev.gerowallet.io']),
-    'data:',
-  ];
-
-  return [
-    `default-src 'self'`,
-    `script-src ${scriptSrc.join(' ')}`,
-    `font-src ${fontSrc.join(' ')}`,
-    `connect-src ${connectSrc.join(' ')}`,
-    `style-src ${styleSrc.join(' ')}`,
-    `img-src ${imgSrc.join(' ')}`,
-    `frame-src ${frameSrc.join(' ')}`,
-    `media-src ${mediaSrc.join(' ')}`,
-    `object-src 'self'`,
-  ].join('; ');
-}
 
 async function getManifest() {
   const pkg = await fs.readJSON(r('package.json')) as typeof PkgType
@@ -191,11 +102,10 @@ async function getManifest() {
         all_frames: true
       },
     ],
-    side_panel: {
-      default_path: 'sidepanel/index.html',
-    },
     content_security_policy: {
-      extension_pages: buildCSP(isDev),
+      extension_pages: isDev ?
+        `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://*.zkfold.io https://dev.gerowallet.io https://guardarian.com/ https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably.net wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io wss://ws.kraken.com https://api.kraken.com https://www.googleapis.com https://api.handle.me/ https://media.bringweb3.io/ https://api.bringweb3.io/ https://*.launchdarkly.com wss://*.launchdarkly.com http://localhost:* ws://localhost:* ws://127.0.0.1:* https://connect.trezor.io https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://*.moonpay.com https://connect.trezor.io/ https://www.kaiserex.com/ https://kaiserex.com/ https://forms.zohopublic.eu/; media-src https://dev.gerowallet.io http://localhost:* data:; object-src 'self'`
+        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably.net wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io wss://ws.kraken.com https://api.kraken.com https://www.googleapis.com https://api.handle.me/ https://media.bringweb3.io/ https://api.bringweb3.io https://api.gerowallet.io wss://api.gerowallet.io https://*.launchdarkly.com wss://*.launchdarkly.com ws://127.0.0.1:* https://connect.trezor.io https://api.cardanoshield.com data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://guardarian.com/ https://*.moonpay.com/ https://connect.trezor.io/ https://www.kaiserex.com/ https://kaiserex.com/ https://forms.zohopublic.eu/; media-src https://api.gerowallet.io https://dev.gerowallet.io data:; object-src 'self'`
     },
   }
 
