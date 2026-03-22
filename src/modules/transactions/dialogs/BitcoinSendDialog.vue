@@ -347,9 +347,29 @@ const amountInSats = computed(() => {
   return Math.round(amount * 100000000);
 });
 
+// Estimate how many inputs coin selection would pick for the current amount
+function estimateInputCount(): number {
+  if (!utxos.value || utxos.value.length === 0) return 1;
+  const target = BigInt(amountInSats.value || 0);
+  if (target <= BigInt(0)) return 1;
+  // Simulate largest-first selection (default strategy)
+  const sorted = [...utxos.value].sort((a: any, b: any) => {
+    const av = BigInt(a.value), bv = BigInt(b.value);
+    return bv > av ? 1 : bv < av ? -1 : 0;
+  });
+  let total = BigInt(0);
+  let count = 0;
+  for (const utxo of sorted) {
+    total += BigInt(utxo.value);
+    count++;
+    if (total >= target) return count;
+  }
+  return sorted.length; // All UTXOs needed (insufficient funds case)
+}
+
 // Fee for a specific tier
 function estimatedFeeSatsFor(tier: 'fast' | 'medium' | 'slow'): number {
-  const inputCount = utxos.value?.length ?? 1;
+  const inputCount = estimateInputCount();
   return calculateTxSize(inputCount, 2) * feeEstimates.value[tier];
 }
 
