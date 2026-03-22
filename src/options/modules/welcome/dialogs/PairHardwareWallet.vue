@@ -1,12 +1,14 @@
 <template>
   <BaseDialog
     :title="t('welcome.pairHardwareWallet')"
+    :title-info="t('welcome.hardwareWalletDescription')"
     :subtitle="localNetwork ? localNetwork.title : ''"
     :is-open="props.dialog"
     @close="onClose"
     :persistent="persistent"
     :img="assets.pairSvg"
     :min-height="0"
+    :width="600"
   >
     <v-card-text class="px-0 py-2">
       <v-stepper v-model="step" flat class="transparent">
@@ -18,22 +20,11 @@
           <v-stepper-content step="1" class="pt-0">
             <v-card flat class="transparent d-flex justify-center">
               <div style="max-width: 540px; width: 100%">
-                <v-alert
-                  color="primary"
-                  dense
-                  outlined
-                  type="info"
-                  prominent
-                  border="left"
-                >
-                  {{ $t('welcome.hardwareWalletDescription') }}
-                </v-alert>
-
-                <!-- Network Selection -->
+                <!-- Network — Mainnets -->
                 <div class="step-section-label mb-2">{{ $t('common.selectNetwork') }}</div>
-                <div class="network-grid mb-4">
+                <div class="network-grid mb-3">
                   <div
-                    v-for="net in allNetworks"
+                    v-for="net in mainnetNetworks"
                     :key="net.blockchain + net.network"
                     class="network-tile"
                     :class="{ 'network-tile--active': isNetworkSelected(net) }"
@@ -46,56 +37,48 @@
                   </div>
                 </div>
 
-                <v-card-title class="justify-center px-0" style="font-weight: 700; word-break: break-word">
-                  {{ $t('welcome.hardwareWalletType') }}
-                </v-card-title>
-                <v-item-group v-model="walletType" active-class="primary" class="pb-4">
-                  <v-row no-gutters>
-                    <v-col
-                      v-for="(item) in walletTypes"
-                      :key="item.name"
-                      cols="12"
-                      sm="4"
-                      xs="12"
-                      class="pa-1"
-                    >
-                      <v-item v-slot="{ active, toggle }" :value="item.name">
-                        <v-hover>
-                          <template v-slot:default="{ hover }">
-                            <v-card
-                              flat
-                              height="150"
-                              class="justify-center text-center pa-4 shadow"
-                              :style="{ backgroundColor: '#00000080', alignContent: 'center' }"
-                              @click="toggle"
-                              :disabled="!item.enabled"
-                            >
-                              <div style="align-content: center;">
-                                <img
-                                  :src="item.icon"
-                                  style="margin: auto; width: 130px; height: 50px; filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);"
-                                  :alt="item.name"
-                                />
-                              </div>
-                              <v-card-subtitle class="pt-1 pb-1">
-                                {{ item.support }}
-                              </v-card-subtitle>
-                              <v-card-subtitle class="pa-0">
-                                <v-chip color="red" small v-if="!item.enabled">{{ $t('welcome.soon') }}</v-chip>
-                              </v-card-subtitle>
-                              <v-scroll-y-transition>
-                                <v-icon color="white" style="position: absolute; right: 10px; bottom: 10px;" v-if="active">
-                                  mdi-check-circle-outline
-                                </v-icon>
-                              </v-scroll-y-transition>
-                              <v-overlay v-if="hover" absolute color="#ffffff"></v-overlay>
-                            </v-card>
-                          </template>
-                        </v-hover>
-                      </v-item>
-                    </v-col>
-                  </v-row>
-                </v-item-group>
+                <!-- Testnets — collapsed by default -->
+                <div class="testnet-toggle mb-4" @click="showTestnets = !showTestnets">
+                  <v-icon size="12" class="mr-1" style="color: inherit;">{{ showTestnets ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+                  <span>{{ $t('welcome.developerNetworks') }}</span>
+                  <v-chip v-if="isTestnetSelected" x-small color="warning" class="ml-2" style="height: 14px; font-size: 9px;">{{ localNetwork.currencyTicker }}</v-chip>
+                </div>
+                <div v-if="showTestnets" class="network-grid mb-4">
+                  <div
+                    v-for="net in testnetNetworks"
+                    :key="net.blockchain + net.network"
+                    class="network-tile network-tile--testnet"
+                    :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                    @click="selectNetwork(net)"
+                  >
+                    <v-avatar size="16" class="network-tile__icon">
+                      <v-img :src="net.icon" contain></v-img>
+                    </v-avatar>
+                    <span class="network-tile__label">{{ net.title }}</span>
+                  </div>
+                </div>
+
+                <div class="step-section-label mb-2 mt-4">{{ $t('welcome.hardwareWalletType') }}</div>
+                <div class="hw-grid">
+                  <div
+                    v-for="item in walletTypes"
+                    :key="item.name"
+                    class="hw-tile"
+                    :class="{
+                      'hw-tile--active': walletType === item.name,
+                      'hw-tile--disabled': !item.enabled
+                    }"
+                    @click="item.enabled && (walletType = item.name)"
+                  >
+                    <img
+                      :src="item.icon"
+                      class="hw-tile__logo"
+                      :alt="item.name"
+                    />
+                    <span class="hw-tile__label">{{ item.name }}</span>
+                    <v-chip v-if="!item.enabled" color="red" x-small style="height: 14px; font-size: 9px;">{{ $t('welcome.soon') }}</v-chip>
+                  </div>
+                </div>
               </div>
             </v-card>
           </v-stepper-content>
@@ -131,7 +114,6 @@
                     prominent
                     border="left"
                   >
-                    <b>{{ $t('welcome.instructions') }}</b>
                     <div v-if="walletType === WalletType.Ledger">
                       <ul class="text-left" style="line-height: 1.5">
                         <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
@@ -165,7 +147,7 @@
                       </ul>
                     </div>
                   </v-alert>
-                  <div style="display: flex;" v-if="walletType === WalletType.Ledger">
+                  <div style="display: flex; justify-content: center;" v-if="walletType === WalletType.Ledger">
                     <ToggleSwitch
                       :text-left="t('dashboard.usb')"
                       icon-left="mdi-usb"
@@ -203,17 +185,6 @@
                     <h3 class="white--text mb-1 text-h6">{{ $t('welcome.almostDone') }}</h3>
                     <p class="grey--text text--lighten-1 mb-0">{{ $t('welcome.reviewYourChoices') }}</p>
                   </div>
-
-                  <v-text-field
-                    v-model="newWallet.name"
-                    dense
-                    filled
-                    :label="$t('welcome.walletName')"
-                    :placeholder="$t('welcome.walletNamePlaceholder')"
-                    :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
-                    :disabled="creatingWalletLoader"
-                    class="mb-2"
-                  ></v-text-field>
 
                   <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
                     <v-card-text class="pa-3">
@@ -264,7 +235,7 @@
                       <span class="text-body-2">
                         {{ $t('welcome.agreeToTerms') }}
                         <a @click.stop href="https://gerowallet.io/legal/terms/" target="_blank">{{ $t('navigation.termsOfService') }}</a>.
-                      </div>
+                      </span>
                     </template>
                   </v-checkbox>
                 </div>
@@ -323,8 +294,7 @@
     <!-- Hardware loading overlay -->
     <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
-        <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
-        </video>
+        <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;" />
         <v-progress-linear
           buffer-value="0"
           color="primary"
@@ -332,9 +302,8 @@
           stream
           value="0"
           style="color: cyan; width: 100px; text-align: center"
-        ></v-progress-linear>
-        <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text">
-        </v-card-title>
+        />
+        <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text" />
       </v-card>
     </v-overlay>
   </BaseDialog>
@@ -342,7 +311,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, getCurrentInstance, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import rules from "@/utils/rules";
 import { Blockchain, coin_type, purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
@@ -361,6 +329,8 @@ import { Bip32PublicKey } from '@cardano-sdk/crypto';
 import snackbar from '@/plugins/snackbar';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { bech32 } from 'bech32';
+import { generateWalletName } from '@/shared/utils/walletNameGenerator';
+import { UR } from '@keystonehq/keystone-sdk';
 
 const { t } = useTranslation();
 
@@ -379,11 +349,15 @@ const router = vmProxy.$router;
 
 // Network selection
 const allNetworks = networks.networks;
+const mainnetNetworks = computed(() => allNetworks.filter(n => n.network === 'Mainnet'));
+const testnetNetworks = computed(() => allNetworks.filter(n => n.network !== 'Mainnet'));
+const isTestnetSelected = computed(() => localNetwork.value?.network !== 'Mainnet');
+const showTestnets = ref(props.network?.network !== 'Mainnet' && props.network != null);
 const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
 
 const onNetworkChange = (net: NetworkInfo) => {
   newWallet.value.icon = networks.resolveIconColor(net.blockchain, net.network) || 'green';
-  updateVuetifyTheme(net.blockchain?.includes('Apex'), true);
+  updateVuetifyTheme(net.blockchain, true);
 };
 
 const isNetworkSelected = (net: NetworkInfo) =>
@@ -396,15 +370,9 @@ const selectNetwork = (net: NetworkInfo) => {
 
 const isBitcoin = computed(() => localNetwork.value?.blockchain === Blockchain.BITCOIN);
 
-const dialogImg = computed(() => {
-  if (walletType.value === WalletType.Trezor) return assets.trezorLogoSvg;
-  if (walletType.value === WalletType.Keystone) return assets.keystoneLogoSvg;
-  return assets.ledgerLogoSvg;
-});
-
 const step = ref(1);
 const newWallet = ref({
-  name: '',
+  name: generateWalletName(),
   icon: props.network?.iconColor || networks.networks[0].iconColor || 'green',
   publicKey: '',
   termsChecked: false,
@@ -481,11 +449,10 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }) => {
 
     if (localNetwork.value?.blockchain === Blockchain.BITCOIN) {
       // Bitcoin flow - parse crypto-hdkey UR
-      const { UR } = await import('@keystonehq/keystone-sdk');
-      const bitcoinUR = UR.fromCBOR(Buffer.from(ur.cbor, 'hex'));
+
+      const bitcoinUR = UR.from(ur.cbor, 'hex');
       const bitcoinAccount = parseBitcoinAccount(bitcoinUR);
 
-      newWallet.value.name = 'Keystone';
       newWallet.value.xfp = bitcoinAccount.xfp;
       newWallet.value.publicKey = bitcoinAccount.xpub;
       newWallet.value.keys = [{
@@ -512,7 +479,6 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }) => {
     const keys = cryptoMultiAccounts.getKeys();
     const masterFingerprint = cryptoMultiAccounts.getMasterFingerprint();
 
-    newWallet.value.name = device;
     newWallet.value.xfp = masterFingerprint.toString('hex');
     const firstKey = keys[0];
     const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(
@@ -607,7 +573,6 @@ const walletCreationStep2 = async () => {
 
       const isConnected = !!coldWalletProps;
       if (isConnected) {
-        newWallet.value.name = coldWalletProps.productName;
         newWallet.value.publicKey = coldWalletProps.hwPublicKey;
         newWallet.value.keys = coldWalletProps.keys;
         newWallet.value.btSupported = coldWalletProps.btSupported;
@@ -631,7 +596,6 @@ const walletCreationStep2 = async () => {
 
       if (response.data.success && response.data.coldWalletProps) {
         const coldWalletProps = response.data.coldWalletProps;
-        newWallet.value.name = coldWalletProps.productName;
         newWallet.value.publicKey = coldWalletProps.hwPublicKey;
         newWallet.value.keys = coldWalletProps.keys;
         newWallet.value.btSupported = coldWalletProps.btSupported;
@@ -704,7 +668,7 @@ const resetDialog = () => {
       qrCodeRef.value.innerHTML = '';
   }
   newWallet.value = {
-    name: '',
+    name: generateWalletName(),
     icon: '',
     publicKey: '',
     termsChecked: false,
@@ -739,13 +703,13 @@ const resetDialog = () => {
 }
 
 ::v-deep .v-stepper__content {
-  height: 480px;
+  height: 350px;
   overflow-y: auto;
   padding: 0 16px;
 }
 
 ::v-deep .v-stepper__wrapper {
-  height: 480px !important;
+  height: 350px !important;
   overflow-y: auto;
 }
 
@@ -770,7 +734,7 @@ const resetDialog = () => {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: white;
 }
 
 .network-grid {
@@ -817,8 +781,84 @@ const resetDialog = () => {
     white-space: nowrap;
   }
 
+  &--testnet {
+    min-height: 46px;
+    padding: 7px 8px 6px;
+  }
+
   &--active &__label {
     color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+.hw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.hw-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  min-height: 100px;
+  gap: 8px;
+  user-select: none;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &--active {
+    border-color: rgba(45, 240, 247, 0.55);
+    background: rgba(45, 240, 247, 0.06);
+    box-shadow: 0 0 14px rgba(45, 240, 247, 0.07);
+  }
+
+  &--disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  &__logo {
+    width: 100px;
+    height: 32px;
+    object-fit: contain;
+    filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);
+  }
+
+  &__label {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  &--active &__label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+.testnet-toggle {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: white;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.5);
   }
 }
 

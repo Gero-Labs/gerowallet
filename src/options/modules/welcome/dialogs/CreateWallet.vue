@@ -8,6 +8,7 @@
     @close="dialogLocal = false"
     scrollable
     :min-height="0"
+    :width="600"
     :img="assets.walletSvg"
     :persistent="false"
   >
@@ -19,7 +20,7 @@
           <!-- ============================================ -->
           <v-stepper-content step="1">
             <v-card flat class="transparent d-flex justify-center">
-              <v-form ref="nameForm" v-model="nameValid" style="max-width: 540px; width: 100%;">
+              <v-form ref="nameForm" v-model="nameValid" style="width: 100%;">
 
                 <!-- Network — Mainnets -->
                 <div class="step-section-label mb-2">{{ $t('common.selectNetwork') }}</div>
@@ -42,7 +43,6 @@
                 <div class="testnet-toggle mb-4" @click="showTestnets = !showTestnets">
                   <v-icon size="12" class="mr-1" style="color: inherit;">{{ showTestnets ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
                   <span>{{ $t('welcome.developerNetworks') }}</span>
-                  <v-chip v-if="isTestnetSelected" x-small color="warning" class="ml-2" style="height: 14px; font-size: 9px;">{{ localNetwork.currencyTicker }}</v-chip>
                 </div>
                 <div v-if="showTestnets" class="network-grid mb-4">
                   <div
@@ -58,19 +58,6 @@
                     <span class="network-tile__label">{{ net.title }}</span>
                   </div>
                 </div>
-
-                <v-divider class="mb-4" style="border-color: rgba(255, 255, 255, 0.08);" />
-
-                <!-- Wallet Name -->
-                <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
-                <v-text-field
-                  v-model="newWallet.name"
-                  dense
-                  filled
-                  autofocus
-                  :placeholder="$t('welcome.walletNamePlaceholder')"
-                  :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
-                />
 
                 <!-- Security Method — side-by-side compact tiles -->
                 <template v-if="prfSupported">
@@ -129,9 +116,9 @@
           <!-- ============================================ -->
           <!-- SCREEN 2: Adaptive — PRF confirm / Password  -->
           <!-- ============================================ -->
-          <v-stepper-content step="2" class="align-content-center">
+          <v-stepper-content step="2">
             <v-card flat class="transparent d-flex justify-center">
-              <div style="max-width: 540px; width: 100%;">
+              <div style="width: 100%;">
 
                 <!-- ===== PRF PATH ===== -->
                 <template v-if="selectedSecurityMethod === 'prf'">
@@ -190,7 +177,7 @@
                       class="mb-1 mt-0"
                     >
                       <template v-slot:label>
-                        <span class="text-body-2">{{ $t('welcome.saveRecoveryBackup') }}</span>
+                        <span class="text-body-2">{{ $t('welcome.understandPasswordRecovery') }}</span>
                       </template>
                     </v-checkbox>
 
@@ -304,8 +291,6 @@
         <v-spacer></v-spacer>
         <v-btn
           color="primary"
-          :class="isApex ? 'apexButton' : 'geroButton'"
-          style="color: black!important;"
           :disabled="!nameValid"
           @click="handleContinue"
         >
@@ -320,8 +305,6 @@
         </v-btn>
         <v-btn
           color="primary"
-          :class="isApex ? 'apexButton' : 'geroButton'"
-          style="color: black!important;"
           :disabled="!canCreate"
           :loading="creatingWalletLoader"
           @click="walletCreationStep"
@@ -344,6 +327,8 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import networks, { NetworkInfo } from '@/utils/networks';
+import { generateWalletName } from '@/shared/utils/walletNameGenerator';
+import { updateVuetifyTheme } from '@/plugins/vuetify';
 
 const { t } = useTranslation();
 
@@ -367,7 +352,6 @@ const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
 
 const mainnetNetworks = computed(() => allNetworks.filter(n => n.network === 'Mainnet'));
 const testnetNetworks = computed(() => allNetworks.filter(n => n.network !== 'Mainnet'));
-const isTestnetSelected = computed(() => localNetwork.value?.network !== 'Mainnet');
 const showTestnets = ref(props.network?.network !== 'Mainnet' && props.network != null);
 
 const isNetworkSelected = (net: NetworkInfo) =>
@@ -375,7 +359,12 @@ const isNetworkSelected = (net: NetworkInfo) =>
 
 const selectNetwork = (net: NetworkInfo) => {
   localNetwork.value = net;
+  onNetworkChange(net);
+};
+
+const onNetworkChange = (net: NetworkInfo) => {
   newWallet.icon = networks.resolveIconColor(net.blockchain, net.network);
+  updateVuetifyTheme(net.blockchain, true);
 };
 
 // Step state (2 screens only)
@@ -399,7 +388,7 @@ const creatingWalletLoader = ref(false);
 const prfSupported = ref(false);
 
 const newWallet = reactive({
-  name: '',
+  name: generateWalletName(),
   icon: networks.resolveIconColor(props.network?.blockchain || networks.networks[0].blockchain, props.network?.network || networks.networks[0].network),
   password: '',
   confirmPassword: '',
@@ -452,10 +441,6 @@ const canCreate = computed(() => {
     return prfFormValid.value;
   }
   return passwordFormValid.value;
-});
-
-const isApex = computed(() => {
-  return localNetwork.value?.blockchain?.includes('Apex');
 });
 
 const dialogLocal = computed({
@@ -605,7 +590,7 @@ const walletCreationStep = async () => {
 
 const resetDialog = () => {
   Object.assign(newWallet, {
-    name: '',
+    name: generateWalletName(),
     icon: networks.resolveIconColor(localNetwork.value?.blockchain || '', localNetwork.value?.network || ''),
     password: '',
     confirmPassword: '',
@@ -645,13 +630,13 @@ const resetDialog = () => {
 }
 
 ::v-deep .v-stepper__content {
-  height: 480px;
+  height: 350px;
   overflow-y: auto;
   padding: 0 16px;
 }
 
 ::v-deep .v-stepper__wrapper {
-  height: 480px !important;
+  height: 350px !important;
   overflow-y: auto;
 }
 
@@ -681,7 +666,7 @@ const resetDialog = () => {
 @media (max-width: 600px) {
   ::v-deep .v-stepper__content {
     height: auto;
-    min-height: 380px;
+    min-height: 350px;
   }
   ::v-deep .v-stepper__wrapper {
     height: auto !important;
@@ -694,7 +679,7 @@ const resetDialog = () => {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgb(255, 255, 255);
+  color: white
 }
 
 // ─── Testnet toggle ───────────────────────────────────────────────────────────
@@ -704,7 +689,7 @@ const resetDialog = () => {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.25);
+  color: white;
   cursor: pointer;
   user-select: none;
   transition: color 0.15s ease;

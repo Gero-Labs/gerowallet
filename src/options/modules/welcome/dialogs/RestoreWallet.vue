@@ -10,8 +10,9 @@
     :min-height="0"
     :img="assets.keySvg"
     :persistent="false"
+    :width="600"
   >
-    <v-card-text class="px-0 py-2">
+    <v-card-text class="pa-0">
       <v-stepper v-model="step" flat class="transparent">
         <v-stepper-items>
           <v-stepper-content step="1">
@@ -20,13 +21,13 @@
                 flat
                 class="transparent d-flex row fill-height no-gutters"
               >
-                <v-card-text class="px-0 pb-0 justify-space-around no-gutters">
+                <v-card-text class="pa-0 justify-space-around no-gutters">
 
-                  <!-- Network Selection -->
+                  <!-- Network — Mainnets -->
                   <div class="step-section-label mb-2">{{ $t('common.selectNetwork') }}</div>
-                  <div class="network-grid mb-4">
+                  <div class="network-grid mb-3">
                     <div
-                      v-for="net in allNetworks"
+                      v-for="net in mainnetNetworks"
                       :key="net.blockchain + net.network"
                       class="network-tile"
                       :class="{ 'network-tile--active': isNetworkSelected(net) }"
@@ -38,10 +39,30 @@
                       <span class="network-tile__label">{{ net.title }}</span>
                     </div>
                   </div>
+
+                  <!-- Testnets — collapsed by default -->
+                  <div class="testnet-toggle mb-2" @click="showTestnets = !showTestnets">
+                    <v-icon size="12" class="mr-1" style="color: inherit;">{{ showTestnets ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+                    <span>{{ $t('welcome.developerNetworks') }}</span>
+                  </div>
+                  <div v-if="showTestnets" class="network-grid mb-4">
+                    <div
+                      v-for="net in testnetNetworks"
+                      :key="net.blockchain + net.network"
+                      class="network-tile network-tile--testnet"
+                      :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                      @click="selectNetwork(net)"
+                    >
+                      <v-avatar size="16" class="network-tile__icon">
+                        <v-img :src="net.icon" contain></v-img>
+                      </v-avatar>
+                      <span class="network-tile__label">{{ net.title }}</span>
+                    </div>
+                  </div>
                   <v-divider class="mb-4" style="border-color: rgba(255, 255, 255, 0.08);" />
 
                   <v-row no-gutters class="pb-2">
-                    <strong style="align-content: center; color: white">{{ $t('welcome.chooseRecoveryPhraseLength') }}</strong>
+                    <div class="step-section-label" style="align-content: center;">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
                     <v-spacer></v-spacer>
                     <v-btn-toggle color="primary" v-model="seedPhraseLength" mandatory>
                       <v-btn small value="12">
@@ -58,9 +79,9 @@
                       </v-btn>
                     </v-btn-toggle>
                   </v-row>
-                  <v-card flat outlined class="mb-4 pa-1" style="background-color: black">
+                  <v-card flat class="mb-0 pa-0 transparent mnemonic-grid">
                     <v-row no-gutters>
-                      <v-col class="pa-1" cols="12" :md="3" v-for="index in recoverySeedPhraseLength" :key="index">
+                      <v-col class="pa-half" cols="6" :md="3" v-for="index in recoverySeedPhraseLength" :key="index">
                         <mnemonic-autocomplete
                           v-model="recoverySeedPhrase[index - 1]"
                           :index="index"
@@ -78,23 +99,8 @@
           <v-stepper-content step="2">
             <v-card flat class="transparent d-flex justify-center" style="min-height: 380px">
               <v-form ref="nameForm" v-model="nameValid" style="max-width: 540px; width: 100%;">
-                <!-- Wallet Name -->
-                <h2 class="text-left white--text mb-3">{{ $t('welcome.setUpWalletName') }}</h2>
-
-                <v-text-field
-                  v-model="newWallet.name"
-                  dense
-                  filled
-                  autofocus
-                  :label="$t('welcome.walletName')"
-                  :placeholder="$t('welcome.walletNamePlaceholder')"
-                  :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
-                  hide-details
-                />
-
                 <!-- Security Method Selection -->
                 <template v-if="prfSupported">
-                  <v-divider class="my-5" style="border-color: rgba(255, 255, 255, 0.12);" />
                   <!-- PassKey Card (Full) -->
                   <SecurityMethodCard
                     :title="t('welcome.passKeyMethod')"
@@ -220,7 +226,7 @@
                       class="mb-1 mt-0"
                     >
                       <template v-slot:label>
-                        <span class="text-body-2">{{ $t('welcome.saveRecoveryBackup') }}</span>
+                        <span class="text-body-2">{{ $t('welcome.understandPasswordRecovery') }}</span>
                       </template>
                     </v-checkbox>
 
@@ -333,8 +339,6 @@
         <v-spacer></v-spacer>
         <v-btn
           color="primary"
-          :class="isApex ? 'apexButton' : 'geroButton'"
-          style="color: black!important;"
           :disabled="!valid"
           @click="walletCreationStep1"
         >
@@ -349,8 +353,6 @@
         </v-btn>
         <v-btn
           color="primary"
-          :class="isApex ? 'apexButton' : 'geroButton'"
-          style="color: black!important;"
           :disabled="!nameValid"
           @click="handleContinue"
         >
@@ -365,8 +367,6 @@
         </v-btn>
         <v-btn
           color="primary"
-          :class="isApex ? 'apexButton' : 'geroButton'"
-          style="color: black!important;"
           :disabled="!canCreate"
           :loading="creatingWalletLoader"
           @click="walletCreationStep3"
@@ -417,6 +417,8 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import GeroStore from '@/stores/geroStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { generateWalletName } from '@/shared/utils/walletNameGenerator';
+import { updateVuetifyTheme } from '@/plugins/vuetify';
 
 const { t } = useTranslation();
 
@@ -448,10 +450,14 @@ const prfFormValid = ref(false);
 
 // Network selection
 const allNetworks = networks.networks;
+const mainnetNetworks = computed(() => allNetworks.filter(n => n.network === 'Mainnet'));
+const testnetNetworks = computed(() => allNetworks.filter(n => n.network !== 'Mainnet'));
+const showTestnets = ref(props.network?.network !== 'Mainnet' && props.network != null);
 const localNetwork = ref<NetworkInfo>(props.network || networks.networks[0]);
 
 const onNetworkChange = (net: NetworkInfo) => {
   newWallet.icon = networks.resolveIconColor(net.blockchain, net.network);
+  updateVuetifyTheme(net.blockchain, true);
 };
 
 const isNetworkSelected = (net: NetworkInfo) =>
@@ -469,7 +475,7 @@ const show2 = ref<boolean>(false);
 const prfSupported = ref<boolean>(false);
 
 const newWallet = reactive({
-  name: '',
+  name: generateWalletName(),
   icon: networks.resolveIconColor(props.network?.blockchain || networks.networks[0].blockchain, props.network?.network || networks.networks[0].network),
   password: '',
   confirmPassword: '',
@@ -494,11 +500,6 @@ const existingWalletInfo = ref(null);
 // Computed properties
 const seedToStr = computed(() => {
   return computedRecoverySeedPhrase.value.join(' ');
-});
-
-// Check if selected network is Apex
-const isApex = computed(() => {
-  return localNetwork.value?.blockchain?.includes('Apex');
 });
 
 const computedRecoverySeedPhrase = computed(() => {
@@ -780,7 +781,7 @@ const openTerms = () => {
 
 const resetDialog = () => {
   Object.assign(newWallet, {
-    name: '',
+    name: generateWalletName(),
     icon: networks.resolveIconColor(localNetwork.value?.blockchain || '', localNetwork.value?.network || ''),
     password: '',
     confirmPassword: '',
@@ -815,19 +816,58 @@ onUnmounted(() => {
   backdrop-filter: blur(8px);
 }
 
+// Mnemonic grid — compact inputs
+.pa-half {
+  padding: 2px !important;
+}
+
+.mnemonic-grid ::v-deep {
+  .v-input {
+    font-size: 12px;
+  }
+  .v-input__slot {
+    min-height: 30px !important;
+    padding: 0 6px !important;
+  }
+  .v-input__prepend-outer {
+    margin-top: 4px !important;
+    margin-right: 2px !important;
+
+    span {
+      font-size: 10px !important;
+      min-width: 18px !important;
+    }
+  }
+  .v-text-field--outlined fieldset {
+    border-width: 1px;
+  }
+  input {
+    padding: 2px 0 !important;
+    font-size: 11px;
+  }
+  .v-input__append-inner {
+    margin-top: 2px !important;
+    padding-left: 0 !important;
+
+    .v-icon {
+      font-size: 16px !important;
+    }
+  }
+}
+
 // Stepper — no header, content only
 ::v-deep .v-stepper {
   box-shadow: none !important;
 }
 
 ::v-deep .v-stepper__content {
-  height: 520px;
+  height: 480px;
   overflow-y: auto;
   padding: 0 16px;
 }
 
 ::v-deep .v-stepper__wrapper {
-  height: 520px !important;
+  height: 480px !important;
   overflow-y: auto;
 }
 
@@ -875,7 +915,7 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: white
 }
 
 .network-grid {
@@ -922,8 +962,29 @@ onUnmounted(() => {
     white-space: nowrap;
   }
 
+  &--testnet {
+    min-height: 46px;
+    padding: 7px 8px 6px;
+  }
+
   &--active &__label {
     color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+.testnet-toggle {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: white;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.5);
   }
 }
 

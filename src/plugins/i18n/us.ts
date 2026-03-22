@@ -1791,7 +1791,6 @@ export default {
   'wallet.grantPermission': 'Grant Permission',
   'wallet.guardarianOffer': 'Limited Offer - 0% Wallet Fees',
   'wallet.moonpaySigningWarning': 'Payment URL signing unavailable. MoonPay may show a signature error — please check your backend configuration.',
-  'wallet.followHardwareInstructions': 'Follow the instructions on your {walletType} device',
   'wallet.hardwareWallet': 'Hardware Wallet',
   'wallet.hardwareWalletType': 'Hardware Wallet Type',
   'wallet.importExistingWallet': 'Import Existing Wallet',
@@ -2307,6 +2306,9 @@ export default {
   'send.transactionFailed': 'Transaction failed',
   'send.transactionSent': 'Transaction sent! TX ID: {txId}',
   'send.transactionError': 'Transaction error: {error}',
+
+  // Bitcoin send
+  'bitcoin.addressPlaceholder': 'bc1q... or 3... or 1...',
 
   // Bitcoin dashboard
   'bitcoin.walletBalance': 'Bitcoin Wallet',

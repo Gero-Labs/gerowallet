@@ -43,7 +43,7 @@
               <input
                 v-model="recipientAddress"
                 class="glass-input monospace-input"
-                :placeholder="'bc1q... or 3... or 1...'"
+                :placeholder="t('bitcoin.addressPlaceholder')"
                 @input="validateAddress"
                 autocomplete="off"
                 spellcheck="false"
@@ -69,7 +69,7 @@
                 placeholder="0.00000000"
                 @input="validateAmount"
               />
-              <button class="max-pill" @click="setMaxAmount" type="button">MAX</button>
+              <button class="max-pill" @click="setMaxAmount" type="button">{{ $t('common.max') }}</button>
             </div>
             <div class="amount-meta">
               <span v-if="amountError" class="field-error-msg">{{ amountError }}</span>
@@ -288,6 +288,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { calculateTxSize } from '@/chains/bitcoin/bitcoinCoinSelection';
+import { FeePriority } from '@/chains/bitcoin/bitcoinFeeEstimator';
 
 const { t } = useTranslation();
 const { loggedWallet, utxos } = toRefs(walletStore);
@@ -423,9 +424,9 @@ async function updateFeeEstimate() {
     const { getBitcoinFeeEstimator } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
     const estimator = getBitcoinFeeEstimator();
     const [fast, medium, slow] = await Promise.all([
-      estimator.getFeeEstimate('fast'),
-      estimator.getFeeEstimate('medium'),
-      estimator.getFeeEstimate('slow'),
+      estimator.getFeeEstimate(FeePriority.FAST),
+      estimator.getFeeEstimate(FeePriority.MEDIUM),
+      estimator.getFeeEstimate(FeePriority.SLOW),
     ]);
     feeEstimates.value = { fast: fast.feeRate, medium: medium.feeRate, slow: slow.feeRate };
   } catch (e) {
