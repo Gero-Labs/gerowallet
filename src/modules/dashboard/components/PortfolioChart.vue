@@ -67,7 +67,7 @@
           <template v-else-if="totalRealizedPnl != null || totalUnrealizedPnl != null">
             <div class="pnl-item">
               <span class="pnl-label">{{ $t('market.unrealizedPnlDetail') }}</span>
-              <v-tooltip v-if="pnlIncomplete" bottom max-width="220">
+              <v-tooltip v-if="pnlIncomplete" bottom max-width="220" content-class="custom-tooltip">
                 <template v-slot:activator="{ on }">
                   <span
                     class="pnl-value"
@@ -89,7 +89,7 @@
             </div>
             <div class="pnl-item">
               <span class="pnl-label">{{ $t('market.realizedPnlDetail') }}</span>
-              <v-tooltip v-if="pnlIncomplete" bottom max-width="220">
+              <v-tooltip v-if="pnlIncomplete" bottom max-width="220" content-class="custom-tooltip">
                 <template v-slot:activator="{ on }">
                   <span
                     class="pnl-value"
@@ -214,6 +214,7 @@ import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
+import { themes } from '@/config/themes';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import OdometerCounter from '@/shared/components/OdometerCounter.vue';
 
@@ -253,6 +254,24 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
 };
 
 const { loggedWallet, account } = toRefs(walletStore);
+
+const isApex = computed(() => {
+  const chain = loggedWallet.value?.chain;
+  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
+});
+
+const chartTheme = computed(() => {
+  const t = isApex.value ? themes.apex : themes.cardano;
+  const hex = t.primary;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return {
+    line: hex,
+    topFill: `rgba(${r}, ${g}, ${b}, 0.3)`,
+    bottomFill: `rgba(${r}, ${g}, ${b}, 0)`,
+  };
+});
 
 const props = defineProps({
   chartData: {
@@ -452,10 +471,6 @@ const handleRefresh = () => {
 };
 
 // --- Computed properties ---
-
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
 
 const shortenAddress = computed(() => {
   return loggedWallet.value?.baseAddress ? filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
@@ -732,18 +747,18 @@ const initChart = () => {
 
     if (!chart) return;
 
-    // Create area series with default (up) colors; will be updated in updateChartData
+    // Create area series with theme colors
     areaSeries = chart.addSeries(AreaSeries, {
-      lineColor: '#00c7f3',
+      lineColor: chartTheme.value.line,
       lineWidth: 2,
       lineType: 2, // Curved (spline interpolation)
-      topColor: 'rgba(0, 199, 243, 0.3)',
-      bottomColor: 'rgba(0, 199, 243, 0)',
+      topColor: chartTheme.value.topFill,
+      bottomColor: chartTheme.value.bottomFill,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 4,
       crosshairMarkerBorderColor: '#ffffff',
       crosshairMarkerBorderWidth: 2,
-      crosshairMarkerBackgroundColor: '#00c7f3',
+      crosshairMarkerBackgroundColor: chartTheme.value.line,
       priceLineVisible: false,
       lastValueVisible: false,
       priceFormat: {
@@ -849,12 +864,12 @@ const updateChartData = (animate = true) => {
     return;
   }
 
-  // Always use Gero brand teal for the chart
+  // Use theme-appropriate chart color
   areaSeries.applyOptions({
-    lineColor: '#00c7f3',
-    topColor: 'rgba(0, 199, 243, 0.3)',
-    bottomColor: 'rgba(0, 199, 243, 0)',
-    crosshairMarkerBackgroundColor: '#00c7f3',
+    lineColor: chartTheme.value.line,
+    topColor: chartTheme.value.topFill,
+    bottomColor: chartTheme.value.bottomFill,
+    crosshairMarkerBackgroundColor: chartTheme.value.line,
   });
 
   areaSeries.setData(chartData);

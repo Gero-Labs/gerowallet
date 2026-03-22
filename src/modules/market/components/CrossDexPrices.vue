@@ -73,18 +73,11 @@ function formatDexName(dex: string): string {
   return dex.replace(/_/g, ' ').replace(/V(\d)/g, ' v$1').replace(/\b\w/g, l => l.toUpperCase());
 }
 
+import { formatPriceRaw, formatCompact } from '@/modules/market/utils/formatters';
+
 function formatPrice(price: number | null | undefined): string {
   if (price == null) return '-';
-  if (price >= 1) return price.toFixed(2);
-  if (price >= 0.01) return price.toFixed(4);
-  return price.toFixed(6);
-}
-
-function formatCompact(value: number): string {
-  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
-  if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
-  if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
-  return value.toFixed(0);
+  return formatPriceRaw(price);
 }
 
 watch(() => props.assetId, () => loadPrices());
