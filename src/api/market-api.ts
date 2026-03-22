@@ -153,6 +153,10 @@ export interface NftCollectionStats {
   totalVolumeLovelace: number;
   saleCount: number;
   updatedAt: string;
+  // Metadata (from bulk endpoint)
+  name?: string;
+  imageUrl?: string;
+  description?: string;
 }
 
 export interface NftSale {
