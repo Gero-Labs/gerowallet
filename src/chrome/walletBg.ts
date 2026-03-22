@@ -1016,40 +1016,40 @@ export class WalletBg {
       const GAP_LIMIT = 20;
       const addressToDerivation = new Map<string, { chain: number; index: number }>();
 
+      // Fetch UTXOs for all discovered addresses, deduplicating by txHash:index
+      const allUtxos: any[] = [];
+      const utxoSeen = new Set<string>();
+
       for (const chain of [0, 1]) {
         let consecutiveUnused = 0;
         let idx = 0;
         while (consecutiveUnused < GAP_LIMIT) {
           const addr = deriveBtcAddr(this.publicKey, this.network, this.addressType || 'segwit', chain, idx);
-          addressToDerivation.set(addr, { chain, index: idx });
-          // We'll check usage below via UTXOs; for now just derive addresses
-          idx++;
-          consecutiveUnused++;
-        }
-      }
+          let rawUtxos: any[] = [];
+          try {
+            rawUtxos = await bitcoinApi.getUtxos(addr);
+          } catch (err) {
+            // Skip addresses that fail; don't break the whole fetch
+            console.warn(`Failed to fetch UTXOs for ${addr}:`, err);
+          }
 
-      // Fetch UTXOs for all discovered addresses, deduplicating by txHash:index
-      const allUtxos: any[] = [];
-      const utxoSeen = new Set<string>();
-
-      for (const [addr, derivation] of addressToDerivation) {
-        try {
-          const rawUtxos = await bitcoinApi.getUtxos(addr);
           if (rawUtxos.length > 0) {
+            consecutiveUnused = 0; // Reset gap counter on used address
             const parsed = parseBitcoinUtxos(rawUtxos, addr);
             for (const utxo of parsed) {
               const key = `${utxo.txHash}:${utxo.index}`;
               if (!utxoSeen.has(key)) {
                 utxoSeen.add(key);
-                utxo.derivationChain = derivation.chain;
-                utxo.derivationIndex = derivation.index;
+                utxo.derivationChain = chain;
+                utxo.derivationIndex = idx;
                 allUtxos.push(utxo);
               }
             }
+          } else {
+            consecutiveUnused++;
           }
-        } catch (err) {
-          // Skip addresses that fail; don't break the whole fetch
-          console.warn(`Failed to fetch UTXOs for ${addr}:`, err);
+          addressToDerivation.set(addr, { chain, index: idx });
+          idx++;
         }
       }
 
