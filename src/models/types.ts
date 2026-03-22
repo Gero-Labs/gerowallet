@@ -19,6 +19,7 @@ export interface Wallet {
   network: string;
   icon?: string;
   type?: WalletTypeValue;
+  addressType?: string; // Version 15+: 'legacy' | 'segwit' | 'taproot' (Bitcoin) | 'shelley' (Cardano)
   // PRF Encryption Support (Version 14+)
   encryptedPrivateKey?: string;
   encryptedMnemonic?: string;
@@ -79,6 +80,7 @@ const WalletTypePurpose = {
 const CoinTypes = {
   CARDANO: HARDENED + coin_type.cardano, // HARD_DERIVATION_START + 1815;
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
+  BITCOIN: HARDENED + 0, // HARD_DERIVATION_START + 0 (Bitcoin BIP44 coin type);
 };
 
 const BIP44_SCAN_SIZE = 20;
@@ -97,12 +99,14 @@ enum Provider {
   KOIOS,
   BLOCKFROST,
   YACI,
+  BLOCKSTREAM,
 }
 
 const Blockchain = {
   CARDANO: 'Cardano',
   APEX_PRIME: 'Apex Fusion Prime',
   APEX_VECTOR: 'Apex Fusion Vector',
+  BITCOIN: 'Bitcoin',
 };
 
 const Network = {

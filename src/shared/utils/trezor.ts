@@ -636,7 +636,7 @@ const mapAdditionalWitnessRequests = (body: Cardano.TxBody, context: TrezorTxTra
   // Only add stake key path if transaction has certificates or withdrawals
   // These are the only cases where stake key signature is required as an ADDITIONAL witness
   const hasCertificates = body.certificates && body.certificates.length > 0;
-  const hasWithdrawals = body.withdrawals && body.withdrawals.size > 0;
+  const hasWithdrawals = body.withdrawals && body.withdrawals.length > 0;
 
   if (hasCertificates || hasWithdrawals) {
     // util.stakeKeyPathFromGroupedAddress sometimes returns a BIP32Path array instead of AccountKeyDerivationPath,
@@ -1206,5 +1206,166 @@ export default {
         }
       }
     };
+  },
+
+  // ============================================================================
+  // BITCOIN TREZOR INTEGRATION
+  // ============================================================================
+
+  /**
+   * Initialize Bitcoin Trezor connection and get extended public key (xpub)
+   * @param addressType - Bitcoin address type ('legacy', 'segwit', 'taproot')
+   * @param accountIndex - Account index (default 0)
+   * @returns Bitcoin xpub and device info
+   */
+  async initBitcoinTrezor(addressType: string = 'segwit', accountIndex: number = 0): Promise<{
+    xpub: string;
+    deviceLabel: string;
+    firmwareVersion: string;
+  }> {
+    await this.init();
+
+    // Determine coin and derivation path based on address type
+    let path: string;
+    let coin: string = 'btc'; // Bitcoin mainnet
+
+    switch (addressType) {
+      case 'legacy':
+        path = `m/44'/0'/${accountIndex}'`; // BIP44
+        break;
+      case 'taproot':
+        path = `m/86'/0'/${accountIndex}'`; // BIP86
+        break;
+      case 'segwit':
+      default:
+        path = `m/84'/0'/${accountIndex}'`; // BIP84
+        break;
+    }
+
+    // Get extended public key from Trezor
+    const result = await TrezorConnect.getPublicKey({
+      path,
+      coin,
+      crossChain: false,
+    });
+
+    if (!result.success) {
+      throw new Error(result.payload.error || 'Failed to get Bitcoin public key from Trezor');
+    }
+
+    // Get device features for device info
+    const features = await TrezorConnect.getFeatures();
+    const deviceLabel = features.success ? features.payload.label : 'Trezor';
+    const firmwareVersion = features.success
+      ? `${features.payload.major_version}.${features.payload.minor_version}.${features.payload.patch_version}`
+      : 'Unknown';
+
+    return {
+      xpub: result.payload.xpub,
+      deviceLabel,
+      firmwareVersion,
+    };
+  },
+
+  /**
+   * Get Bitcoin address from Trezor with optional verification on device screen
+   * @param addressType - Bitcoin address type
+   * @param accountIndex - Account index
+   * @param addressIndex - Address index
+   * @param isChange - Internal (change) address or external (receive)
+   * @param verify - Display address on device for verification
+   * @returns Bitcoin address
+   */
+  async getBitcoinAddress(
+    addressType: string = 'segwit',
+    accountIndex: number = 0,
+    addressIndex: number = 0,
+    isChange: boolean = false,
+    verify: boolean = false
+  ): Promise<string> {
+    await this.init();
+
+    // Determine path and script type based on address type
+    let path: string;
+    let scriptType: any;
+
+    switch (addressType) {
+      case 'legacy':
+        path = `m/44'/0'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
+        scriptType = 'SPENDADDRESS'; // P2PKH
+        break;
+      case 'taproot':
+        path = `m/86'/0'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
+        scriptType = 'SPENDTAPROOT'; // P2TR
+        break;
+      case 'segwit':
+      default:
+        path = `m/84'/0'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
+        scriptType = 'SPENDWITNESS'; // P2WPKH
+        break;
+    }
+
+    const result = await TrezorConnect.getAddress({
+      path,
+      coin: 'btc',
+      showOnTrezor: verify,
+      scriptType,
+    });
+
+    if (!result.success) {
+      throw new Error(result.payload.error || 'Failed to get Bitcoin address from Trezor');
+    }
+
+    return result.payload.address;
+  },
+
+  /**
+   * Sign Bitcoin transaction (PSBT) with Trezor
+   * @param psbt - PSBT in base64 format
+   * @param addressType - Bitcoin address type
+   * @param accountIndex - Account index
+   * @returns Signed PSBT in base64 format
+   */
+  async signBitcoinTransaction(
+    psbt: string,
+    addressType: string = 'segwit',
+    accountIndex: number = 0
+  ): Promise<string> {
+    await this.init();
+
+    // Trezor Connect supports PSBT signing directly
+    const result = await TrezorConnect.signTransaction({
+      coin: 'btc',
+      inputs: [], // Will be parsed from PSBT
+      outputs: [], // Will be parsed from PSBT
+      // @ts-ignore - PSBT support in newer versions
+      serialize: true,
+      // @ts-ignore
+      psbt,
+    });
+
+    if (!result.success) {
+      throw new Error(result.payload.error || 'Failed to sign Bitcoin transaction with Trezor');
+    }
+
+    // Return signed PSBT
+    // @ts-ignore
+    return result.payload.serializedTx || result.payload.psbt;
+  },
+
+  /**
+   * Verify Bitcoin address on Trezor device screen
+   * @param addressType - Bitcoin address type
+   * @param accountIndex - Account index
+   * @param addressIndex - Address index
+   * @param isChange - Internal or external address
+   */
+  async verifyBitcoinAddress(
+    addressType: string = 'segwit',
+    accountIndex: number = 0,
+    addressIndex: number = 0,
+    isChange: boolean = false
+  ): Promise<string> {
+    return await this.getBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true);
   },
 };

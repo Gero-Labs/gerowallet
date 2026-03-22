@@ -3,6 +3,7 @@ import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import {
   APIError,
+  BITCOIN_METHOD,
   METHOD,
   POPUP,
   SENDER,
@@ -36,6 +37,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
+import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -57,6 +59,13 @@ loadWallets().then(async () => {
     await checkAutoLock();
 
     await walletManager.login(walletStore.loggedWallet);
+
+    // Initialize WalletConnect in background (non-blocking)
+    import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
+      walletConnectService.initialize()
+        .then(() => setupWalletConnectCallbacks(walletConnectService))
+        .catch(e => console.warn('⚠️ WC init failed:', e));
+    });
   } else {
     Loading.setLoading(false)
   }
@@ -211,6 +220,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     checkAutoLock().catch(error => {
       console.error('❌ Error in auto-lock check:', error);
     });
+  } else if (alarm.name === 'wc-keepalive') {
+    import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
+      walletConnectService.pingAll().catch(() => {});
+    }).catch(() => {});
   }
 });
 
@@ -288,7 +301,7 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
   try {
     const collateral = WalletStore.state.collateral;
     const utxosFromStorage = WalletStore.state.utxos;
-    const balance = getBalance(utxosFromStorage, collateral)
+    const balance = getBalance(utxosFromStorage as Cardano.Utxo[], collateral)
     sendResponse({
       id: request.id,
       data: balance.toCbor(),
@@ -395,6 +408,19 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+    return;
+  }
+  // Only support Cardano-based chains for dApp API
+  if (loggedWallet.chain !== Blockchain.CARDANO &&
+      loggedWallet.chain !== Blockchain.APEX_PRIME &&
+      loggedWallet.chain !== Blockchain.APEX_VECTOR) {
+    sendResponse({
+      id: request.id,
+      error: APIError.Refused,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+    return;
   }
   sendResponse({
     id: request.id,
@@ -521,7 +547,7 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
   try {
-    const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
+    const utxosFromStorage = WalletStore.state.utxos as Cardano.Utxo[];
     const collateral = WalletStore.state.collateral;
     const utxos = getUtxos(request.data.amount, request.data.paginate, utxosFromStorage, collateral)
     let res: string[] | null;
@@ -550,7 +576,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
   const storedUtxos = WalletStore.state.utxos;
   try {
-    const utxos: string[] = getCollateral(request.data.params, storedUtxos)
+    const utxos: string[] = getCollateral(request.data.params, storedUtxos as Cardano.Utxo[])
     sendResponse({
       id: request.id,
       data: utxos,
@@ -1489,6 +1515,237 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   }
 });
 
+// Bitcoin transaction signing handler (software wallets)
+app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (walletBg && walletBg.chain === Blockchain.BITCOIN) {
+      const { psbtHex, password, prfSecret } = request.data;
+
+      // Sign Bitcoin transaction
+      const signedTx = await walletBg.signBitcoinTransaction(psbtHex, password, prfSecret);
+
+      sendResponse({
+        id: request.id,
+        data: { success: true, ...signedTx },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing Bitcoin transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Bitcoin hardware wallet signing handler
+app.addToOptions(MessageTypes.SIGN_BITCOIN_TX_HARDWARE, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (walletBg && walletBg.chain === Blockchain.BITCOIN) {
+      // Sign Bitcoin transaction with hardware wallet
+      const result = await walletBg.signBitcoinTransactionWithHardware();
+
+      sendResponse({
+        id: request.id,
+        data: result,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing Bitcoin transaction with hardware wallet:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Bitcoin sync handler (manual refresh)
+app.addToOptions(MessageTypes.SYNC_BITCOIN, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    // Sync UTXOs and transactions
+    await walletBg.syncBitcoinWalletComplete();
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error syncing Bitcoin wallet:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Bitcoin send transaction handler (complete flow: build, sign, broadcast)
+app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    const { recipientAddress, amount, feeRate, password, privateKeyBytes } = request.data;
+
+    // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
+    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+
+    // Import Bitcoin transaction building modules
+    const { buildSimpleSendPsbt } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const { BitcoinApi } = await import('@/api/bitcoin-api');
+
+    // Step 1: Fetch UTXOs from store (WalletBg doesn't hold UTXOs directly)
+    const utxos = WalletStore.state.utxos;
+    if (!utxos || utxos.length === 0) {
+      throw new Error('No UTXOs available');
+    }
+
+    // Step 2: Build PSBT
+    const changeAddress = walletBg.baseAddress;
+    const unsignedTx = buildSimpleSendPsbt(
+      utxos as IUnifiedUtxo[],
+      recipientAddress,
+      BigInt(amount),
+      changeAddress,
+      feeRate,
+      walletBg.network,
+      walletBg.publicKey
+    );
+
+    // Step 3: Sign PSBT
+    const signedTx = await walletBg.signBitcoinTransaction(
+      unsignedTx.raw.hex,
+      password,
+      prfSecret
+    );
+
+    // Step 4: Broadcast transaction
+    const bitcoinApi = new BitcoinApi(
+      { chain: walletBg.chain, network: walletBg.network },
+      walletBg.provider
+    );
+    const txId = await bitcoinApi.broadcastTransaction(signedTx.txHex);
+
+    // Step 5: Refresh wallet data
+    await walletBg.syncBitcoinWallet();
+    await walletBg.syncBitcoinTransactions();
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, txId, txHex: signedTx.txHex },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error sending Bitcoin transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// Babylon staking handler
+// PSBT is built in the frontend (BabylonStakeDialog) to avoid bundling the heavy
+// @babylonlabs-io/btc-staking-ts library into the background service worker.
+// This handler only receives the pre-built psbtHex, signs it, and broadcasts.
+app.addToOptions(MessageTypes.BABYLON_STAKE, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Not a Bitcoin wallet or wallet not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    const { psbtHex, password, privateKeyBytes } = request.data;
+    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+
+    const { BitcoinApi } = await import('@/api/bitcoin-api');
+
+    // Step 1: Sign the pre-built PSBT
+    const signedTx = await walletBg.signBitcoinTransaction(psbtHex, password, prfSecret);
+
+    // Step 2: Broadcast
+    const bitcoinApi = new BitcoinApi(
+      { chain: walletBg.chain, network: walletBg.network },
+      walletBg.provider
+    );
+    const txId = await bitcoinApi.broadcastTransaction(signedTx.txHex);
+
+    // Step 3: Refresh wallet data
+    await walletBg.syncBitcoinWallet();
+    await walletBg.syncBitcoinTransactions();
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, txId, txHex: signedTx.txHex },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error signing/broadcasting Babylon staking transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
   try {
     console.log('submit tx', request);
@@ -1595,6 +1852,12 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
     console.log('login', request)
     const walletBg = await walletManager.login(request.data.wallet);
     if (walletBg) {
+      // Initialize WalletConnect in background (non-blocking)
+      import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
+        walletConnectService.initialize()
+          .then(() => setupWalletConnectCallbacks(walletConnectService))
+          .catch(e => console.warn('⚠️ WC init failed:', e));
+      });
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -1623,6 +1886,14 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
   try {
+    // Disconnect all WC sessions on logout (non-blocking)
+    import('@/services/walletConnect/walletConnect.service').then(async ({ walletConnectService }) => {
+      await walletConnectService.disconnectAllSessions();
+      walletConnectService.destroy();
+      const { default: WCStore } = await import('@/stores/walletConnectStore');
+      WCStore.clear();
+    }).catch(() => {});
+
     await walletManager.logout();
     sendResponse({
       id: request.id,
@@ -1831,12 +2102,27 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
     if (request.data.method === 'initTrezor') {
       const network = networks.resolveNetwork(request.data.chain, request.data.network);
 
-      let path;
+      let coldWalletProps;
       if (network.blockchain === Blockchain.CARDANO) {
-        path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`
+        const path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'`;
+        coldWalletProps = await trezor.getXpub(path);
+      } else if (network.blockchain === Blockchain.BITCOIN) {
+        // Bitcoin wallet - use default SegWit address type
+        coldWalletProps = await trezor.initBitcoinTrezor('segwit', 0);
+
+        // Format Bitcoin response to match expected structure
+        if (coldWalletProps) {
+          const { xpub, deviceLabel, firmwareVersion } = coldWalletProps;
+          coldWalletProps = {
+            productName: deviceLabel,
+            hwPublicKey: xpub,
+            keys: [{ publicKey: xpub, chainCode: '', path: "m/84'/0'/0'" }],
+            btSupported: true,
+            version: firmwareVersion
+          };
+        }
       }
-      // Use the clean Trezor wrapper (handles initialization, device name, etc.)
-      const coldWalletProps = await trezor.getXpub(path);
+
       sendResponse({
         id: request.id,
         data: { success: true, coldWalletProps },
@@ -1880,7 +2166,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         }
       };
 
-      const utxos: Cardano.Utxo[] = WalletStore.state.utxos;
+      const utxos = WalletStore.state.utxos as Cardano.Utxo[];
 
       // Get current wallet and network info
       const currentWallet = walletManager.getWallet();
@@ -1909,6 +2195,23 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+    } else if (request.data.method === 'verifyBitcoinAddress') {
+      // Verify Bitcoin address on Trezor device
+      const { addressType, accountIndex, addressIndex, isChange } = request.data;
+
+      const verifiedAddress = await trezor.verifyBitcoinAddress(
+        addressType || 'segwit',
+        accountIndex || 0,
+        addressIndex || 0,
+        isChange || false
+      );
+
+      sendResponse({
+        id: request.id,
+        data: { success: true, address: verifiedAddress },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
     }
   } catch (err) {
     console.error('[TREZOR Background] Error:', err);
@@ -1920,6 +2223,619 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
     })
   }
   return true; // Important: return true for async handlers
+});
+
+// ─── Bitcoin DApp API (Unisat-compatible) ──────────────────────────────────────
+
+app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
+  const { id, origin, send } = request;
+  const tabId = send.tab?.id;
+  const reply = (opts: { data?: any; error?: any }) =>
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.BITCOIN) {
+    return reply({ error: APIError.AccountNotSet });
+  }
+
+  if (WalletStore.isWhitelisted(origin)) {
+    return reply({ data: [currentWallet.baseAddress] });
+  }
+
+  if (typeof tabId !== 'number') {
+    return reply({ error: APIError.InternalError });
+  }
+
+  const handleResponse = (response: any) => {
+    if (response.data) {
+      // Immediately update the background's in-memory whitelist so that subsequent
+      // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
+      // waiting for the Dexie live-query subscription to fire asynchronously.
+      if (!WalletStore.isWhitelisted(origin)) {
+        try {
+          const hostname = new URL(origin).hostname;
+          const currentDapps = WalletStore.state.connectedDapps || [];
+          WalletStore.setConnectedDapps([...currentDapps, { domain: hostname }]);
+        } catch {}
+      }
+      reply({ data: [currentWallet.baseAddress] });
+    } else if (response.error) {
+      reply({ error: response.error });
+    } else {
+      reply({ error: APIError.InternalError });
+    }
+  };
+
+  if (WalletStore.state.config.useSidePanel && request.data?.userGesture) {
+    const sidePanelUrl =
+      `index.html#/${POPUP.dappConnect}` +
+      `?website=${encodeURIComponent(origin)}` +
+      `&tabId=${tabId}`;
+    openSidebar(tabId, sidePanelUrl)
+      .then(openedTabId => Messaging.sendToSidePanelInternal(openedTabId, request))
+      .then(handleResponse)
+      .catch(err => reply({ error: err }));
+  } else {
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}`
+    );
+    focusOrCreatePopup(popupURL, 470, 600)
+      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then(handleResponse)
+      .catch(err => reply({ error: err }));
+  }
+
+  return true;
+});
+
+app.add(BITCOIN_METHOD.isEnabled, (request, sendResponse) => {
+  isWhitelisted(request.origin)
+    .then(whitelisted => {
+      sendResponse({
+        id: request.id,
+        data: whitelisted,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    })
+    .catch(() => {
+      sendResponse({ id: request.id, error: APIError.InternalError, target: TARGET, sender: SENDER.extension });
+    });
+  return true;
+});
+
+app.add(BITCOIN_METHOD.getAccounts, async (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+  sendResponse({ id: request.id, data: [walletBg.baseAddress], target: TARGET, sender: SENDER.extension });
+});
+
+app.add(BITCOIN_METHOD.getPublicKey, async (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+  try {
+    const pubkey = await walletBg.getBitcoinPublicKey();
+    sendResponse({ id: request.id, data: pubkey, target: TARGET, sender: SENDER.extension });
+  } catch (e) {
+    sendResponse({ id: request.id, error: APIError.InternalError, target: TARGET, sender: SENDER.extension });
+  }
+  return true;
+});
+
+app.add(BITCOIN_METHOD.getNetwork, (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+  const network = walletBg.network.toLowerCase() === 'mainnet' ? 'mainnet' : 'testnet';
+  sendResponse({ id: request.id, data: network, target: TARGET, sender: SENDER.extension });
+});
+
+app.add(BITCOIN_METHOD.getBalance, (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+  const bal = WalletStore.state.bitcoinBalance;
+  const total = Number(bal?.total ?? 0);
+  const confirmed = Number(bal?.available ?? 0);
+  sendResponse({
+    id: request.id,
+    data: { confirmed, unconfirmed: total - confirmed, total },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(BITCOIN_METHOD.getUtxos, (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+  sendResponse({ id: request.id, data: WalletStore.state.utxos || [], target: TARGET, sender: SENDER.extension });
+});
+
+app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+
+  const popupURL = chrome.runtime.getURL(
+    `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
+  );
+  focusOrCreatePopup(popupURL, 470, 600)
+    .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+    .then((response: any) => {
+      if (response.data !== undefined) {
+        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
+      } else {
+        sendResponse({ id: request.id, error: response.error ?? APIError.InternalError, target: TARGET, sender: SENDER.extension });
+      }
+    })
+    .catch(err => sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension }));
+
+  return true;
+});
+
+app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+
+  const { psbtHexs, options } = request.data;
+  const signedHexs: string[] = [];
+  try {
+    for (const psbtHex of psbtHexs) {
+      const singleRequest = { ...request, data: { psbtHex, options } };
+      const popupURL = chrome.runtime.getURL(
+        `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
+      );
+      const tab = await focusOrCreatePopup(popupURL, 470, 600);
+      const response: any = await Messaging.sendToPopupInternal(tab.id, singleRequest);
+      if (response.error) throw response.error;
+      signedHexs.push(response.data);
+    }
+    sendResponse({ id: request.id, data: signedHexs, target: TARGET, sender: SENDER.extension });
+  } catch (err) {
+    sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension });
+  }
+  return true;
+});
+
+app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+
+  const popupURL = chrome.runtime.getURL(
+    `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent(request.origin)}`
+  );
+  focusOrCreatePopup(popupURL, 470, 600)
+    .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+    .then((response: any) => {
+      if (response.data !== undefined) {
+        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
+      } else {
+        sendResponse({ id: request.id, error: response.error ?? APIError.InternalError, target: TARGET, sender: SENDER.extension });
+      }
+    })
+    .catch(err => sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension }));
+
+  return true;
+});
+
+app.add(BITCOIN_METHOD.pushTx, async (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+  try {
+    const { BitcoinApi } = await import('@/api/bitcoin-api');
+    const bitcoinApi = new BitcoinApi({ chain: walletBg.chain, network: walletBg.network }, walletBg.provider);
+    const txid = await bitcoinApi.broadcastTransaction(request.data.rawtx);
+    sendResponse({ id: request.id, data: txid, target: TARGET, sender: SENDER.extension });
+  } catch (e) {
+    sendResponse({ id: request.id, error: getErrorMessage(e), target: TARGET, sender: SENDER.extension });
+  }
+  return true;
+});
+
+app.add(BITCOIN_METHOD.pushPsbt, async (request, sendResponse) => {
+  const walletBg = walletManager.getWallet();
+  if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+    return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
+  }
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  }
+  try {
+    const bitcoin = await import('bitcoinjs-lib');
+    const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
+    const network = getBitcoinNetwork(walletBg.network);
+    let psbt: any;
+    try { psbt = bitcoin.Psbt.fromHex(request.data.psbtHex, { network }); }
+    catch { psbt = bitcoin.Psbt.fromBase64(request.data.psbtHex, { network }); }
+    // Only finalize if inputs are not already finalized (prevents double-finalize crash
+    // when signAndSendTransaction passes an already-finalized PSBT from btcSignPsbt)
+    const alreadyFinalized = psbt.data.inputs.every(
+      (input: any) => input.finalScriptSig || input.finalScriptWitness
+    );
+    if (!alreadyFinalized) {
+      psbt.finalizeAllInputs();
+    }
+    const txHex = psbt.extractTransaction().toHex();
+
+    const { BitcoinApi } = await import('@/api/bitcoin-api');
+    const bitcoinApi = new BitcoinApi({ chain: walletBg.chain, network: walletBg.network }, walletBg.provider);
+    const txid = await bitcoinApi.broadcastTransaction(txHex);
+    sendResponse({ id: request.id, data: txid, target: TARGET, sender: SENDER.extension });
+  } catch (e) {
+    sendResponse({ id: request.id, error: getErrorMessage(e), target: TARGET, sender: SENDER.extension });
+  }
+  return true;
+});
+
+// Popup → background handlers for Bitcoin DApp signing (software wallets)
+app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_PSBT, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
+      return;
+    }
+    const { psbtHex, options, password, privateKeyBytes } = request.data;
+    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+    const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret);
+    sendResponse({ id: request.id, data: { success: true, signedHex }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
+      sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
+      return;
+    }
+    const { message, type, password, privateKeyBytes } = request.data;
+    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+    const signature = await walletBg.signBitcoinDappMessage(message, type, password, prfSecret);
+    sendResponse({ id: request.id, data: { success: true, signature }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+// ====== WalletConnect v2 ======
+
+// WC keepalive alarm
+chrome.alarms.create('wc-keepalive', {
+  delayInMinutes: 5,
+  periodInMinutes: 5,
+});
+
+/**
+ * Wire up WalletConnect event callbacks after SDK initialization.
+ * Handles session proposals, session requests (signing + read-only), and session deletions.
+ */
+function setupWalletConnectCallbacks(wcService: any) {
+  // Import store lazily (only needed in background)
+  const updateStore = async () => {
+    const { default: WCStore } = await import('@/stores/walletConnectStore');
+    WCStore.setActiveSessions(wcService.getActiveSessions());
+  };
+
+  // Sync store on init
+  updateStore().catch(() => {});
+
+  // ---- Session Proposal → open approval popup ----
+  wcService.onSessionProposal = async (proposal: any) => {
+    try {
+      const proposalData = proposal.params;
+      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}`);
+      const tab = await focusOrCreatePopup(popupURL, 470, 600);
+      const response: any = await Messaging.sendToPopupInternal(tab.id, { data: proposalData });
+
+      if (response?.data?.approved) {
+        // Build accounts from current wallet
+        const loggedWallet = WalletStore.state.loggedWallet;
+        if (!loggedWallet) {
+          await wcService.rejectSession(proposalData.id, 'No wallet logged in');
+          return;
+        }
+
+        const accounts: { cardano?: string[]; bitcoin?: string[] } = {};
+        if (loggedWallet.chain === Blockchain.CARDANO || loggedWallet.chain === 'Apex Prime' || loggedWallet.chain === 'Apex Vector') {
+          accounts.cardano = [loggedWallet.baseAddress];
+        } else if (loggedWallet.chain === Blockchain.BITCOIN) {
+          accounts.bitcoin = loggedWallet.bitcoinAddress ? [loggedWallet.bitcoinAddress] : [];
+        }
+
+        await wcService.approveSession(proposalData.id, accounts, loggedWallet.chain, loggedWallet.network);
+        await updateStore();
+      } else {
+        await wcService.rejectSession(proposalData.id, 'User rejected');
+      }
+    } catch (e) {
+      console.error('❌ WC session proposal handling failed:', e);
+      try { await wcService.rejectSession(proposal.params.id, 'Internal error'); } catch {}
+    }
+  };
+
+  // ---- Session Request → route to appropriate handler ----
+  wcService.onSessionRequest = async (event: any) => {
+    const { topic, params, id } = event;
+    const { request: wcRequest, chainId } = params;
+    const method = wcRequest.method;
+
+    try {
+      const loggedWallet = WalletStore.state.loggedWallet;
+      if (!loggedWallet) {
+        await wcService.respondError(topic, id, 4100, 'No wallet logged in');
+        return;
+      }
+
+      const { isCardanoChain, isBitcoinChain } = await import('@/services/walletConnect/chainUtils');
+
+      // ---- Cardano read-only methods ----
+      if (isCardanoChain(chainId)) {
+        switch (method) {
+          case 'cardano_getBalance': {
+            const collateral = WalletStore.state.collateral;
+            const utxos = WalletStore.state.utxos;
+            const balance = getBalance(utxos as any, collateral);
+            await wcService.respondSuccess(topic, id, balance.toCbor());
+            return;
+          }
+          case 'cardano_getNetworkId': {
+            const netId = networks.resolveNetworkId(loggedWallet.chain, loggedWallet.network);
+            await wcService.respondSuccess(topic, id, netId);
+            return;
+          }
+          case 'cardano_getUtxos': {
+            const utxos = WalletStore.state.utxos as Cardano.Utxo[];
+            const collateral = WalletStore.state.collateral;
+            const wcParams = wcRequest.params || {};
+            const converted = getUtxos(wcParams.amount, wcParams.paginate, utxos, collateral);
+            const result = converted ? converted.map(u => u.toCbor()) : null;
+            await wcService.respondSuccess(topic, id, result);
+            return;
+          }
+          case 'cardano_getCollateral': {
+            const storedUtxos = WalletStore.state.utxos as Cardano.Utxo[];
+            const wcParams = wcRequest.params || {};
+            const result = getCollateral(wcParams, storedUtxos);
+            await wcService.respondSuccess(topic, id, result);
+            return;
+          }
+          case 'cardano_getUsedAddresses': {
+            const keys = WalletStore.state.keys;
+            const wcParams = wcRequest.params || {};
+            const result = getUsedAddresses(keys, wcParams.paginate);
+            await wcService.respondSuccess(topic, id, result);
+            return;
+          }
+          case 'cardano_getUnusedAddresses': {
+            const keys = WalletStore.state.keys;
+            const result = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, keys);
+            await wcService.respondSuccess(topic, id, result);
+            return;
+          }
+          case 'cardano_getChangeAddress': {
+            const addr = Cardano.Address.fromBech32(loggedWallet.baseAddress).toBytes();
+            await wcService.respondSuccess(topic, id, addr);
+            return;
+          }
+          case 'cardano_submitTx': {
+            const txCbor = wcRequest.params?.tx || wcRequest.params;
+            const response = await submitTx(txCbor, loggedWallet.chain, loggedWallet.network);
+            if (response.ok) {
+              const txHash = await response.text();
+              await wcService.respondSuccess(topic, id, txHash);
+            } else {
+              await wcService.respondError(topic, id, 4100, `Submit failed: ${response.statusText}`);
+            }
+            return;
+          }
+          case 'cardano_signTx': {
+            // Open SignTx popup — reuse existing pattern
+            const wcParams = wcRequest.params || {};
+            const fakeRequest = {
+              id: `wc-${id}`,
+              data: { tx: wcParams.tx || wcParams, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
+              origin: 'WalletConnect',
+              send: { tab: { id: -1 } },
+            };
+            const popupURL = chrome.runtime.getURL(
+              `index.html#/${POPUP.signTx}?website=${encodeURIComponent('WalletConnect')}`
+            );
+            const tab = await focusOrCreatePopup(popupURL, 470, 852);
+            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            if (response.data) {
+              await wcService.respondSuccess(topic, id, response.data);
+            } else {
+              await wcService.respondError(topic, id, 4001, response.error?.info || 'User rejected');
+            }
+            return;
+          }
+          case 'cardano_signData': {
+            const wcParams = wcRequest.params || {};
+            const fakeRequest = {
+              id: `wc-${id}`,
+              data: { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
+              origin: 'WalletConnect',
+              send: { tab: { id: -1 } },
+            };
+            const popupURL = chrome.runtime.getURL(
+              `index.html#/${POPUP.dappSignData}?website=${encodeURIComponent('WalletConnect')}`
+            );
+            const tab = await focusOrCreatePopup(popupURL, 470, 600);
+            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            if (response.data) {
+              await wcService.respondSuccess(topic, id, response.data);
+            } else {
+              await wcService.respondError(topic, id, 4001, response.error?.info || 'User rejected');
+            }
+            return;
+          }
+        }
+      }
+
+      // ---- Bitcoin methods ----
+      if (isBitcoinChain(chainId)) {
+        switch (method) {
+          case 'getAccountAddresses': {
+            const addresses = loggedWallet.bitcoinAddress ? [{ address: loggedWallet.bitcoinAddress, publicKey: loggedWallet.publicKey }] : [];
+            await wcService.respondSuccess(topic, id, addresses);
+            return;
+          }
+          case 'signPsbt': {
+            const wcParams = wcRequest.params || {};
+            const fakeRequest = {
+              id: `wc-${id}`,
+              data: { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
+              origin: 'WalletConnect',
+              send: { tab: { id: -1 } },
+            };
+            const popupURL = chrome.runtime.getURL(
+              `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent('WalletConnect')}`
+            );
+            const tab = await focusOrCreatePopup(popupURL, 470, 600);
+            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            if (response.data !== undefined) {
+              await wcService.respondSuccess(topic, id, response.data);
+            } else {
+              await wcService.respondError(topic, id, 4001, 'User rejected');
+            }
+            return;
+          }
+          case 'signMessage': {
+            const wcParams = wcRequest.params || {};
+            const fakeRequest = {
+              id: `wc-${id}`,
+              data: { message: wcParams.message, type: wcParams.type || 'ecdsa' },
+              origin: 'WalletConnect',
+              send: { tab: { id: -1 } },
+            };
+            const popupURL = chrome.runtime.getURL(
+              `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent('WalletConnect')}`
+            );
+            const tab = await focusOrCreatePopup(popupURL, 470, 600);
+            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            if (response.data !== undefined) {
+              await wcService.respondSuccess(topic, id, response.data);
+            } else {
+              await wcService.respondError(topic, id, 4001, 'User rejected');
+            }
+            return;
+          }
+        }
+      }
+
+      // Unknown method
+      await wcService.respondError(topic, id, 4200, `Method not supported: ${method}`);
+    } catch (e) {
+      console.error('❌ WC session request handling failed:', e);
+      try { await wcService.respondError(topic, id, 4100, getErrorMessage(e)); } catch {}
+    }
+  };
+
+  // ---- Session Delete → update store ----
+  wcService.onSessionDelete = async () => {
+    await updateStore();
+  };
+}
+
+app.addToOptions(MessageTypes.WC_PAIR, async (request, sendResponse) => {
+  try {
+    const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
+    if (!walletConnectService.initialized) await walletConnectService.initialize();
+    await walletConnectService.pair(request.data.uri);
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.WC_APPROVE_SESSION, async (request, sendResponse) => {
+  try {
+    const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
+    const { default: WCStore } = await import('@/stores/walletConnectStore');
+    const { id, accounts, chain, network } = request.data;
+    const session = await walletConnectService.approveSession(id, accounts, chain, network);
+    WCStore.setActiveSessions(walletConnectService.getActiveSessions());
+    sendResponse({ id: request.id, data: { success: true, session }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.WC_REJECT_SESSION, async (request, sendResponse) => {
+  try {
+    const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
+    await walletConnectService.rejectSession(request.data.id, request.data.reason);
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.WC_DISCONNECT_SESSION, async (request, sendResponse) => {
+  try {
+    const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
+    const { default: WCStore } = await import('@/stores/walletConnectStore');
+    await walletConnectService.disconnectSession(request.data.topic);
+    WCStore.setActiveSessions(walletConnectService.getActiveSessions());
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => {
+  try {
+    const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
+    const sessions = walletConnectService.getActiveSessions();
+    sendResponse({ id: request.id, data: { success: true, sessions }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
 });
 
 const openUI = async () => {

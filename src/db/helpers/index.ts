@@ -1,6 +1,5 @@
-import { encryptPrivateKey } from '@/chrome/serialization';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
-import { encrypt } from '@/shared/utils/crypto';
+import { encrypt, encryptPrivateKey } from '@/shared/utils/crypto';
 import * as Crypto from '@cardano-sdk/crypto';
 import { bech32, bech32m } from 'bech32';
 import { HARDENED, CoinTypes, WalletTypePurpose } from '@/models/types';

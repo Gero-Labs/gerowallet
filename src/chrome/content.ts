@@ -218,6 +218,20 @@ if (shouldInject()) {
     await injectBring();
     Messaging.createProxyController();
 
+    // Listen for WalletConnect deep link pairing from inject script
+    window.addEventListener('message', (e) => {
+      if (e.source !== window || e.origin !== window.location.origin) return;
+      const msg = e.data;
+      if (msg?.target === 'gerowallet' && msg?.method === 'walletconnect_pair' && msg?.data?.uri) {
+        // Forward to background as an options-context message so it reaches WC_PAIR handler
+        chrome.runtime.sendMessage({
+          method: 'WC_PAIR',
+          sender: 'options',
+          data: { uri: msg.data.uri },
+        }).catch(() => {});
+      }
+    });
+
     // Store listener reference for cleanup
     messageListener = (message, _sender, _sendResponse) => {
       if (message.action === 'showOverlay') {

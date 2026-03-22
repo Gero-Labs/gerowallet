@@ -7,6 +7,8 @@ import {
   GetVersionResponse,
   TxOutputFormat,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+import AppBtc from '@ledgerhq/hw-app-btc';
+import { getAppAndVersion as getBtcAppAndVersion } from '@ledgerhq/hw-app-btc/lib/getAppAndVersion';
 import { Key, Keys } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
@@ -473,6 +475,201 @@ export default {
       // Keep error details for debugging
       const errorMessage = e instanceof Error ? e.message : i18n.t('wallet.ledgerSigningFailed') as string;
       snackbar.setError(`${errorMessage}. ${i18n.t('common.pleaseTryAgain')}`);
+    }
+  },
+
+  // ============================================================================
+  // BITCOIN LEDGER INTEGRATION
+  // ============================================================================
+
+  /**
+   * Initialize Bitcoin Ledger connection and get extended public key (xpub)
+   * @param isBluetooth - Use Bluetooth or USB connection
+   * @param addressType - Bitcoin address type ('legacy', 'segwit', 'taproot')
+   * @param accountIndex - Account index (default 0)
+   * @param network - 'Mainnet' or 'Testnet' (determines BIP44 coin type)
+   * @returns Bitcoin xpub, version, and device info
+   */
+  async initBitcoinLedger(isBluetooth: boolean, addressType: string = 'segwit', accountIndex: number = 0, network: string = 'Mainnet'): Promise<{
+    productName: string;
+    version: string;
+    xpub: string;
+    btSupported: boolean;
+  }> {
+    try {
+      let transport: Transport;
+      if (!isBluetooth) {
+        transport = await this.connectViaUSB();
+      } else {
+        transport = await this.connectViaBT();
+      }
+
+      const btc = new AppBtc({ transport });
+
+      hardwareLoading.setText('Retrieving Hardware Wallet Name ...');
+      const deviceModel: DeviceModel = transport.deviceModel;
+      const btSupported: boolean = !!deviceModel.bluetoothSpec;
+      const productName: string = deviceModel.productName;
+
+      hardwareLoading.setText('Retrieving Bitcoin App Version ...');
+      let version = 'unknown';
+      try {
+        const appConfig = await getBtcAppAndVersion(transport);
+        version = appConfig.version;
+      } catch (e) {
+        // Non-fatal: some app versions or states don't support getAppAndVersion
+        console.warn('[LEDGER] Could not get Bitcoin app version (is Bitcoin app open?):', e);
+      }
+
+      hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Key on Your Ledger Device.');
+
+      // Determine derivation path based on address type
+      let purpose: number;
+      switch (addressType) {
+        case 'legacy':
+          purpose = 44; // BIP44
+          break;
+        case 'taproot':
+          purpose = 86; // BIP86
+          break;
+        case 'segwit':
+        default:
+          purpose = 84; // BIP84
+          break;
+      }
+
+      // BIP44 coin type: 0 = mainnet, 1 = testnet
+      const coinType = network === 'Mainnet' ? 0 : 1;
+      const path = `m/${purpose}'/${coinType}'/${accountIndex}'`;
+
+      // Get extended public key from Ledger
+      // getWalletXpub returns a base58-encoded xpub string directly (not an object)
+      const xpub = await btc.getWalletXpub({ path, xpubVersion: 0x0488B21E });
+
+      return { productName, version, xpub, btSupported };
+    } catch (error: any) {
+      console.log('[LEDGER] Error initializing Bitcoin Ledger:', error);
+      snackbar.setError(error.message);
+      this.usbDevice = undefined;
+      throw error;
+    }
+  },
+
+  /**
+   * Get Bitcoin address from Ledger with optional verification on device screen
+   * @param addressType - Bitcoin address type
+   * @param accountIndex - Account index
+   * @param addressIndex - Address index
+   * @param isChange - Internal (change) address or external (receive)
+   * @param verify - Display address on device for verification
+   * @param isUsb - Use USB or Bluetooth
+   * @returns Bitcoin address
+   */
+  async getBitcoinAddress(
+    addressType: string = 'segwit',
+    accountIndex: number = 0,
+    addressIndex: number = 0,
+    isChange: boolean = false,
+    verify: boolean = false,
+    isUsb: boolean = true,
+    network: string = 'Mainnet'
+  ): Promise<string> {
+    try {
+      const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
+      const btc = new AppBtc({ transport });
+
+      // Determine derivation path
+      let purpose: number;
+      switch (addressType) {
+        case 'legacy':
+          purpose = 44;
+          break;
+        case 'taproot':
+          purpose = 86;
+          break;
+        case 'segwit':
+        default:
+          purpose = 84;
+          break;
+      }
+
+      // BIP44 coin type: 0 = mainnet, 1 = testnet
+      const coinType = network === 'Mainnet' ? 0 : 1;
+      const path = `m/${purpose}'/${coinType}'/${accountIndex}'/${isChange ? 1 : 0}/${addressIndex}`;
+
+      if (verify) {
+        hardwareLoading.setText('Please Verify Address on Your Ledger Device.');
+      }
+
+      // Get address from Ledger
+      const result = await btc.getWalletPublicKey(path, {
+        format: addressType === 'legacy' ? 'legacy' : (addressType === 'taproot' ? 'bech32m' : 'bech32'),
+        verify,
+      });
+
+      return result.bitcoinAddress;
+    } catch (error: any) {
+      console.error('[LEDGER] Error getting Bitcoin address:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Sign Bitcoin transaction (PSBT) with Ledger
+   * @param psbtHex - Unsigned PSBT in hex format
+   * @param addressType - Bitcoin address type
+   * @param accountIndex - Account index
+   * @param isUsb - Use USB or Bluetooth
+   * @returns Signed PSBT in hex format
+   */
+  async signBitcoinTransaction(
+    psbtHex: string,
+    addressType: string = 'segwit',
+    accountIndex: number = 0,
+    isUsb: boolean = true
+  ): Promise<string> {
+    try {
+      const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
+      const btc = new AppBtc({ transport });
+
+      hardwareLoading.setText('Please Confirm Transaction on Your Ledger Device.');
+
+      // Sign the PSBT
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const signedPsbt = await (btc as any).signPsbt(psbtHex);
+
+      hardwareLoading.setLoading(false);
+      return signedPsbt;
+    } catch (error: any) {
+      console.error('[LEDGER] Error signing Bitcoin transaction:', error);
+      hardwareLoading.setLoading(false);
+      throw error;
+    }
+  },
+
+  /**
+   * Verify Bitcoin address on Ledger device screen
+   * @param addressType - Bitcoin address type
+   * @param accountIndex - Account index
+   * @param addressIndex - Address index
+   * @param isChange - Internal or external address
+   * @param isUsb - Use USB or Bluetooth
+   */
+  async verifyBitcoinAddress(
+    addressType: string = 'segwit',
+    accountIndex: number = 0,
+    addressIndex: number = 0,
+    isChange: boolean = false,
+    isUsb: boolean = true
+  ): Promise<void> {
+    hardwareLoading.setLoading(true);
+    try {
+      await this.getBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true, isUsb);
+      hardwareLoading.setLoading(false);
+      snackbar.fireSuccess(i18n.t('wallet.ledgerAddressVerified') as string);
+    } catch (error: any) {
+      hardwareLoading.setLoading(false);
+      throw error;
     }
   }
 };

@@ -29,6 +29,11 @@ export class SyncService {
    * @param tip - Optional blockchain tip to sync to
    */
   async sync(tip?: Tip) {
+    // Bitcoin wallets don't use the Gero backend sync service
+    if (this.walletBg?.chain === Blockchain.BITCOIN) {
+      return;
+    }
+
     try {
       if (!tip) {
         tip = await this.api.getTip();
@@ -102,6 +107,11 @@ export class SyncService {
    * @param tip - Optional blockchain tip to sync to
    */
   async syncViaRest(tip?: Tip) {
+    // Bitcoin wallets don't use the Gero backend sync service
+    if (this.walletBg?.chain === Blockchain.BITCOIN) {
+      return;
+    }
+
     try {
       if (!tip) {
         tip = await this.api.getTip();

@@ -73,7 +73,7 @@ export function useUnstake() {
       txData.value = await buildCardanoTransaction({
         certificates,
         withdrawals,
-        utxos: utxos.value,
+        utxos: utxos.value as Cardano.Utxo[],
         epochParams: epochParams.value,
         changeAddress: keys.value.payment[0].address,
         tip: tip.value,

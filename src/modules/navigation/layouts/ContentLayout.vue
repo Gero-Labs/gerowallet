@@ -8,13 +8,17 @@
             :class="
               loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
                 ? 'apex-background-dashboard'
-                : 'cardano-background-dashboard'
+                : loggedWallet?.chain === Blockchain.BITCOIN
+                  ? 'bitcoin-background-dashboard'
+                  : 'cardano-background-dashboard'
             "
             :style="{
               backgroundImage: `url(${
                 loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
                   ? assets.apexBg
-                  : assets.cardanoBg
+                  : loggedWallet?.chain === Blockchain.BITCOIN
+                    ? assets.bitcoinBg
+                    : assets.cardanoBg
               })`,
             }"
           ></div>
@@ -205,7 +209,7 @@
       <WelcomeDialog :isOpen="!isWelcomeDone" @close="closeWelcomeDialog" />
 
       <ChangeLogDialog
-        :isOpen="changeLog.enabled || vmProxy.$route.query.changeLog === 'true'"
+        :isOpen="changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
         @close="closeChangeLogDialog"
         :persistent="false"
       />
@@ -245,7 +249,7 @@ import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotificatio
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy;
 const currentPage = computed(() => vmProxy.$route);
 const { isSyncing, connected, connecting } = toRefs(loadingState);
 const { loggedWallet, account, config } = toRefs(walletStore);
@@ -330,7 +334,9 @@ const isApex = computed(() => {
 });
 
 const primaryColor = computed(() => {
-  return isApex.value ? themes.apex.primary : themes.cardano.primary;
+  if (loggedWallet.value?.chain === Blockchain.BITCOIN) return themes.bitcoin.primary;
+  if (isApex.value) return themes.apex.primary;
+  return themes.cardano.primary;
 });
 
 const changeLog = changeLogPlugin;
@@ -400,11 +406,23 @@ function handleOpenBackupDialog() {
 
 // Theme management - update colors when a chain changes
 const updateThemeColors = () => {
-  const currentTheme = isApex.value ? themes.apex : themes.cardano;
-  const currentFilter = isApex.value ? iconFilters.apex : iconFilters.cardano;
+  const chain = loggedWallet.value?.chain ?? '';
+  let currentTheme: typeof themes.cardano;
+  let currentFilter: string;
+
+  if (chain === Blockchain.BITCOIN) {
+    currentTheme = themes.bitcoin;
+    currentFilter = iconFilters.bitcoin;
+  } else if (isApex.value) {
+    currentTheme = themes.apex;
+    currentFilter = iconFilters.apex;
+  } else {
+    currentTheme = themes.cardano;
+    currentFilter = iconFilters.cardano;
+  }
 
   // Update Vuetify theme
-  updateVuetifyTheme(isApex.value, true); // Always a dark theme for now
+  updateVuetifyTheme(chain, true); // Always dark theme for now
 
   // Set CSS custom properties
   Object.entries(currentTheme).forEach(([key, value]) => {
@@ -451,11 +469,18 @@ const fetchGeroPrice = async () => {
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
   const currentChain = loggedWallet.value?.chain;
-  const imageUrl =
-    currentChain === Blockchain.APEX_PRIME || currentChain === Blockchain.APEX_VECTOR
-      ? assets.apexBg
-      : assets.cardanoBg;
-
+  let imageUrl: string;
+  switch (currentChain) {
+    case Blockchain.APEX_PRIME:
+    case Blockchain.APEX_VECTOR:
+      imageUrl = assets.apexBg;
+      break;
+    case Blockchain.BITCOIN:
+      imageUrl = assets.bitcoinBg;
+      break;
+    default:
+      imageUrl = assets.cardanoBg;
+  }
   const img = new Image();
   img.onload = () => {
     backgroundImageLoaded.value = true;
@@ -523,6 +548,28 @@ onMounted(async () => {
   background-repeat: no-repeat;
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
   pointer-events: none; /* Allow clicks through */
+  filter: brightness(0.7);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+
+  &[style*='url('] {
+    opacity: 1;
+  }
+}
+
+/* Bitcoin background — slightly warmer tint to complement the orange theme */
+.bitcoin-background-dashboard {
+  position: absolute;
+  top: calc(-50% + 20px);
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2);
+  pointer-events: none;
   filter: brightness(0.7);
   opacity: 0;
   transition: opacity 0.3s ease-in-out;

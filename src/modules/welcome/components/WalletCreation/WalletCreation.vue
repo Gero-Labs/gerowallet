@@ -22,7 +22,6 @@
             <v-list-item-subtitle :class="['title-gradient', gradientClass]">{{ $t('welcome.glass') }}</v-list-item-subtitle>
           </v-list-item-content>
         </v-list-item>
-        <NetworkSelector @network-changed="onNetworkChanged" />
 
         <GButton
           block
@@ -48,13 +47,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
-import NetworkSelector from '@/options/modules/navigation/components/NetworkSelector.vue';
 import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { NetworkInfo } from '@/utils/networks';
 
 const emits = defineEmits<{
-  (e: 'networkChanged', network: NetworkInfo): void;
   (e: 'createOrImportSeedPhrase'): void;
 }>();
 
@@ -64,10 +61,6 @@ const props = defineProps<{
 }>();
 
 const isApex = ref(false);
-
-const onNetworkChanged = (network: NetworkInfo) => {
-    emits('networkChanged', network);
-};
 
 const enableCreateOrImportSeedPhrase = (): void => {
     emits('createOrImportSeedPhrase');

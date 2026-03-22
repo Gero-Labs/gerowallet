@@ -63,6 +63,7 @@ export class GoogleApi {
             return tokens.id_token;
         } catch (e) {
             console.log(e);
+            return undefined;
         }
     }
 }

@@ -17,8 +17,20 @@ interface PriceData {
   source: string;
 }
 
+export interface BtcPriceData {
+  lastPrice: number;
+  volume24h: number;
+  high24h: number;
+  low24h: number;
+  open24h: number;
+  priceChange: number;
+  priceChangePercentage: number;
+  timestamp: number;
+}
+
 export interface PriceStore {
   adaUsd: PriceData | null;
+  btcUsd: BtcPriceData | null;
   isConnected: boolean;
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
 }
@@ -29,6 +41,7 @@ const context = getContextType();
 // Create observable price store
 export const priceStore = Vue.observable<PriceStore>({
   adaUsd: null,
+  btcUsd: null,
   isConnected: false,
   connectionStatus: 'disconnected'
 });
@@ -51,30 +64,42 @@ if (context === 'browser') {
 
 class PriceService {
   private isInitialized = false;
+  private currentChain: 'Cardano' | 'Bitcoin' = 'Cardano';
 
   /**
-   * Initialize price service with Kraken WebSocket
+   * Initialize price service with Kraken WebSocket.
+   * Subscribes to ADA/USD for Cardano wallets, XBT/USD for Bitcoin wallets.
    */
-  async initialize(): Promise<void> {
-    if (this.isInitialized) {
-      // Re-register the ticker callback in case of HMR
-      this.registerTickerCallback();
+  async initialize(chain: 'Cardano' | 'Bitcoin' = 'Cardano'): Promise<void> {
+    // Re-initialize if chain changed
+    if (this.isInitialized && this.currentChain === chain) {
+      this.registerTickerCallback(chain);
       return;
     }
+
+    // Disconnect existing connection when switching chains
+    if (this.isInitialized && this.currentChain !== chain) {
+      this.disconnect();
+    }
+
+    this.currentChain = chain;
 
     try {
       priceStore.connectionStatus = 'connecting';
       broadcastFromBackground({ connectionStatus: 'connecting' });
 
       // Register ticker callback BEFORE connecting
-      // This ensures we can receive the connected status from the first ticker
-      this.registerTickerCallback();
+      this.registerTickerCallback(chain);
 
       // Connect to Kraken WebSocket
       await krakenWebSocketService.connect();
 
-      // Subscribe to ADA/USD ticker
-      krakenWebSocketService.subscribeToAdaUsd();
+      // Subscribe to the correct ticker pair for this wallet chain
+      if (chain === 'Bitcoin') {
+        krakenWebSocketService.subscribeToBtcUsd();
+      } else {
+        krakenWebSocketService.subscribeToAdaUsd();
+      }
 
       this.isInitialized = true;
 
@@ -87,21 +112,33 @@ class PriceService {
   }
 
   /**
-   * Register ticker update callback
-   * Extracted to support HMR re-registration
+   * Register ticker update callback for the given chain.
+   * Extracted to support HMR re-registration.
    */
-  private registerTickerCallback(): void {
-    krakenWebSocketService.onTicker((ticker: PriceData) => {
-      Vue.set(priceStore, 'adaUsd', ticker);
-      Vue.set(priceStore, 'isConnected', true);
-      Vue.set(priceStore, 'connectionStatus', 'connected');
-      // Broadcast to browser context
-      broadcastFromBackground({
-        adaUsd: ticker,
-        isConnected: true,
-        connectionStatus: 'connected'
+  private registerTickerCallback(chain: 'Cardano' | 'Bitcoin'): void {
+    if (chain === 'Bitcoin') {
+      krakenWebSocketService.onBtcTicker((ticker: BtcPriceData) => {
+        Vue.set(priceStore, 'btcUsd', ticker);
+        Vue.set(priceStore, 'isConnected', true);
+        Vue.set(priceStore, 'connectionStatus', 'connected');
+        broadcastFromBackground({
+          btcUsd: ticker,
+          isConnected: true,
+          connectionStatus: 'connected'
+        });
       });
-    });
+    } else {
+      krakenWebSocketService.onTicker((ticker: PriceData) => {
+        Vue.set(priceStore, 'adaUsd', ticker);
+        Vue.set(priceStore, 'isConnected', true);
+        Vue.set(priceStore, 'connectionStatus', 'connected');
+        broadcastFromBackground({
+          adaUsd: ticker,
+          isConnected: true,
+          connectionStatus: 'connected'
+        });
+      });
+    }
 
     // If Kraken is already connected, set status immediately
     if (krakenWebSocketService.getConnectionStatus()) {
@@ -136,10 +173,10 @@ class PriceService {
   /**
    * Reconnect price service (e.g., after wallet switch)
    */
-  async reconnect(): Promise<void> {
+  async reconnect(chain: 'Cardano' | 'Bitcoin' = this.currentChain): Promise<void> {
     debugLog('🦑 Reconnecting price service...');
     this.disconnect();
-    await this.initialize();
+    await this.initialize(chain);
   }
 
   /**
@@ -172,7 +209,7 @@ if (import.meta.hot) {
   import.meta.hot.accept(() => {
     // Re-register callback if already initialized
     if (priceService['isInitialized']) {
-      priceService['registerTickerCallback']();
+      priceService['registerTickerCallback'](priceService['currentChain']);
     }
   });
 }

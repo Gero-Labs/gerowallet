@@ -13,7 +13,7 @@
         >
         <CopyButton x-small :value="transactionInfo['id']" class="ml-1 mt-1" />
         <v-spacer />
-        <v-btn color="error" x-small outlined @click="isReportDialogOpen = true"> Report Transaction </v-btn>
+        <v-btn color="error" x-small outlined @click="isReportDialogOpen = true">{{ $t('navigation.reportTransaction')}}</v-btn>
       </div>
       <div>
         Time: <span class="value-text">{{ new Date(transactionInfo['tx_timestamp'] * 1000)?.toLocaleString() }}</span>
@@ -96,7 +96,7 @@
       </div>
     </div>
     <v-expansion-panels v-model="panels" multiple class="accordion-container">
-      <v-expansion-panel style="background-color: #1e273ab3">
+      <v-expansion-panel v-if="transactionInfo['utxo']?.inputs" style="background-color: #1e273ab3">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">

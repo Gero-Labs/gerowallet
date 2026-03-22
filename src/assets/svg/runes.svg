@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Left diamond -->
+  <path d="M12,50 L38,28 L50,50 L38,72 Z" stroke="white" stroke-width="3.5" fill="none" stroke-linejoin="round"/>
+  <!-- Right diamond -->
+  <path d="M50,50 L62,28 L88,50 L62,72 Z" stroke="white" stroke-width="3.5" fill="none" stroke-linejoin="round"/>
+  <!-- Upper-left extension -->
+  <line x1="38" y1="28" x2="16" y2="7" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Upper-right extension -->
+  <line x1="62" y1="28" x2="84" y2="7" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Lower-left extension -->
+  <line x1="38" y1="72" x2="16" y2="93" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Lower-right extension -->
+  <line x1="62" y1="72" x2="84" y2="93" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+</svg>
