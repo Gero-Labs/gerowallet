@@ -91,7 +91,7 @@
               x-small
               color="#FFD700"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
-            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> Maintenance</v-chip>
+            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
           </v-list-item-action>
           <v-list-item-action v-else-if="item.new">
             <v-chip
@@ -309,7 +309,6 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
-    // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { header: t('navigation.media'), enabled: true },
     { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: true },
@@ -326,7 +325,6 @@ const items = computed((): NavigationItemUnion[] => {
 
 // Loading state for swap feature flag
 const loadingFFs = computed(() => {
-  console.log('loadingFFs:', featureFlagsStore.state);
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
 
@@ -336,7 +334,6 @@ const isGeroCardEnabledByFeatureFlag = computed(() => {
 });
 
 const isBlogEnabledByFeatureFlag = computed(() => {
-  console.log('isBlogEnabledByFeatureFlag:', featureFlagsStore.isBlogEnabled());
   return featureFlagsStore.isBlogEnabled();
 })
 
@@ -475,7 +472,6 @@ onMounted(() => {
 // Cleanup on unmount
 import { onUnmounted } from 'vue'
 import featureFlagsStore from '@/stores/featureFlagsStore';
-import { fa } from 'vuetify/src/locale';
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)

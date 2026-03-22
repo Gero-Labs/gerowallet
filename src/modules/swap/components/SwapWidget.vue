@@ -285,6 +285,13 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 import { debugLog } from '@/utils/debug';
 import assets from '@/utils/assets';
 
+interface Props {
+  buyTokenUnit?: string;
+}
+const props = withDefaults(defineProps<Props>(), {
+  buyTokenUnit: undefined,
+});
+
 const emit = defineEmits(['onSwap']);
 
 const { t } = useTranslation();
@@ -414,7 +421,7 @@ const nativeTokenComputed = computed(() => {
   if (token) {
     return {
       ...token,
-      decimals: token.metadata?.decimals || token.decimals || 6,
+      decimals: token.metadata?.decimals ?? token.decimals ?? 6,
     };
   } else {
     return {
@@ -446,7 +453,7 @@ const availableTokens = computed(() => {
       const res = {
         ...token,
         balance: found ? found.quantity : 0,
-        decimals: token.metadata?.decimals || token.decimals || 6,
+        decimals: token.metadata?.decimals ?? token.decimals ?? 6,
       };
       if (found && selectedTokenB.value.unit === found.unit) {
         selectedTokenB.value.balance = res.balance;
@@ -546,15 +553,18 @@ watch(
     if (newVal === 'ADA') {
       // If selectedTokenA is changed to ADA, set selectedTokenB to last non-ADA tokenB if exists
       if (lastNonADATokenB.value) {
-        selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value?.ticker);
+        const found = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value?.ticker);
+        if (found) selectedTokenB.value = found;
       } else {
-        selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === oldVal);
+        const found = availableTokens.value.find(token => token['ticker'] === oldVal);
+        if (found) selectedTokenB.value = found;
       }
     } else {
       // Store the last non-ADA token for selectedTokenA
       lastNonADATokenA.value = { ...selectedTokenA.value };
       // Set selectedTokenB to ADA
-      selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
+      const found = availableTokens.value.find(token => token['ticker'] === 'ADA');
+      if (found) selectedTokenB.value = found;
     }
     await averagePrice(
       !selectedTokenA.value.unit ? selectedTokenA.value?.ticker : selectedTokenA.value.unit,
@@ -574,16 +584,19 @@ watch(
     if (newVal === 'ADA') {
       // If selectedTokenB is changed to ADA, set selectedTokenA to last non-ADA tokenA if exists
       if (lastNonADATokenA.value) {
-        selectedTokenA.value = availableTokens.value.find(token => token.ticker === lastNonADATokenA.value.ticker);
+        const found = availableTokens.value.find(token => token.ticker === lastNonADATokenA.value.ticker);
+        if (found) selectedTokenA.value = found;
       } else {
-        selectedTokenA.value = availableTokens.value.find(token => token.ticker === oldVal);
+        const found = availableTokens.value.find(token => token.ticker === oldVal);
+        if (found) selectedTokenA.value = found;
       }
     } else {
       // Store the last non-ADA token for selectedTokenB
       lastNonADATokenB.value = { ...selectedTokenB.value };
       // If selectedTokenB is not ADA, keep selectedTokenA as ADA
       if (selectedTokenA.value.ticker !== 'ADA') {
-        selectedTokenA.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
+        const found = availableTokens.value.find(token => token['ticker'] === 'ADA');
+        if (found) selectedTokenA.value = found;
       }
     }
     await averagePrice(
@@ -595,6 +608,21 @@ watch(
     isUpdating.value = false; // Reset flag
   }
 );
+
+// Pre-select buy token when passed from market page
+function applyBuyTokenPreselection(): boolean {
+  const unit = props.buyTokenUnit;
+  if (!unit) return false;
+  const tokens = availableTokens.value;
+  if (tokens.length <= 1) return false; // Only ADA (native) present — DexHunter tokens not loaded yet
+  const matchUnit = unit === 'lovelace' ? '' : unit;
+  const match = tokens.find((t: any) => t.unit === matchUnit);
+  if (match) {
+    selectedTokenB.value = match;
+    return true;
+  }
+  return false;
+}
 
 watch(
   () => limit.value,
@@ -738,6 +766,8 @@ const averagePrice = (token_in, token_out) => {
 };
 
 const performPeriodicEstimate = async () => {
+  // Skip when page/tab is hidden to avoid unnecessary API calls
+  if (document.hidden) return;
   // Add defensive checks for undefined tokens
   if (!selectedTokenA.value || !selectedTokenB.value) {
     debugLog('[Swap] Tokens not properly initialized');
@@ -826,7 +856,8 @@ const submit = async (cborHex: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`);
+  const safeTxId = txId ? String(txId).replace(/[^a-f0-9]/gi, '') : '';
+  snackbar.fireSuccess(`${t('swap.orderSubmittedSuccess')}\nTx Id: ${safeTxId}`);
 
   // Clear the input fields after successful submission
   clearInputs();
@@ -874,12 +905,32 @@ const setMaxTokenA = () => {
   }
 };
 
+// Watch buyTokenUnit prop — handles subsequent opens when dialog stays alive
+watch(() => props.buyTokenUnit, (newUnit) => {
+  if (newUnit) {
+    if (!applyBuyTokenPreselection()) {
+      // DexHunter tokens not loaded yet — watch until they arrive
+      const stopWatch = watch(
+        () => availableTokens.value.length,
+        (len) => {
+          if (len > 1 && applyBuyTokenPreselection()) {
+            stopWatch();
+          }
+        }
+      );
+    }
+  }
+});
+
 onMounted(async () => {
+  // Pre-select buy token if provided from market page
+  applyBuyTokenPreselection();
+
   await averagePrice(
     !selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit,
     !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit
   );
-  intervalId.value = setInterval(performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
+  intervalId.value = setInterval(performPeriodicEstimate, 10000);
 });
 
 onBeforeUnmount(() => {
