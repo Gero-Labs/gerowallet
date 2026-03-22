@@ -25,7 +25,7 @@
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
-                    <span v-html="$t('navigation.betaVersionNotice')"></span>
+                    {{ $t('navigation.betaVersionNoticePrefix') }} <strong>{{ $t('navigation.betaVersionNoticeBold') }}</strong>{{ $t('navigation.betaVersionNoticeSuffix') }}
                     <a
                       style="color: black; font-weight: 700"
                       href="https://chromewebstore.google.com/detail/gero-dashboard/bgpipimickeadkjlklgciifhnalhdjhe?hl=en-US&utm_source=ext_sidebar"
@@ -37,21 +37,32 @@
                 </v-col>
               </v-row>
               <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
-                <v-app-bar flat color="transparent" style="max-height: 55px">
+                <v-app-bar ref="navBarRef" flat color="transparent" style="max-height: 55px">
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
 
-                  <!-- TOKEN TICKER -->
-                  <PriceTicker
-                    :primary-color="primaryColor"
-                    :token-name="tokenName"
-                    :price-in-ada="geroPriceInAda"
-                    :price-in-usd="geroPriceInUsd"
-                    :price-in-eur="geroPriceInEur"
-                  ></PriceTicker>
+                  <!-- Global Search Field -->
+                  <v-tooltip bottom :disabled="!compactNav">
+                    <template v-slot:activator="{ on, attrs }">
+                      <div
+                        ref="searchFieldRef"
+                        :class="['nav-search-field', { 'nav-search-compact': compactNav }]"
+                        @click="openGlobalSearch"
+                        v-bind="attrs"
+                        v-on="on"
+                      >
+                        <v-icon size="16" color="#82B4FF" class="nav-search-icon">mdi-magnify</v-icon>
+                        <template v-if="!compactNav">
+                          <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
+                          <span class="nav-search-shortcut">Ctrl+K</span>
+                        </template>
+                      </div>
+                    </template>
+                    <span>{{ t('search.globalPlaceholder') }} (Ctrl+K)</span>
+                  </v-tooltip>
 
                   <v-spacer />
 
-                  <QuickActionsBox />
+                  <QuickActionsBox :compact="compactNav" />
 
                   <v-spacer />
 
@@ -67,7 +78,8 @@
                   >
                     <template v-slot:activator="{ on, attrs }">
                       <div
-                        style="display: flex; align-items: center; gap: 4px; min-width: 60px"
+                        style="display: flex; align-items: center; gap: 4px"
+                        :style="{ minWidth: compactNav ? '20px' : '60px' }"
                         v-bind="attrs"
                         v-on="on"
                       >
@@ -79,8 +91,9 @@
                           {{ connected ? 'mdi-lan-connect' : connecting ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                         </v-icon>
 
-                        <!-- Small epoch progress bar -->
+                        <!-- Small epoch progress bar (hidden in compact mode) -->
                         <v-progress-linear
+                          v-if="!compactNav"
                           class="epoch-progress-liquid-glass"
                           height="8"
                           :buffer-value="epochSlotPercentage"
@@ -145,6 +158,15 @@
                     </v-card>
                   </v-menu>
 
+                  <v-tooltip bottom>
+                    <template v-slot:activator="{ on }">
+                      <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
+                        <v-icon size="20">mdi-cellphone</v-icon>
+                      </v-btn>
+                    </template>
+                    <span>{{ t('miniGero.miniMode') }}</span>
+                  </v-tooltip>
+
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup || hasNewSettingsFeatures">
                       <v-avatar size="20">
@@ -184,7 +206,7 @@
                     </v-alert>
                   </v-col>
                 </v-row>
-                <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" @close="closeDialog" />
+                <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" :initial-tab="settingsInitialTab" @close="closeDialog(); settingsInitialTab = undefined" />
                 <v-sheet class="transparent pt-2">
                   <keep-alive>
                     <router-view
@@ -211,13 +233,15 @@
       />
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
+
+      <GlobalSearch />
     </v-app>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, getCurrentInstance, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
 import Player from '@/modules/media-player/Player.vue';
@@ -236,12 +260,10 @@ import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
-import { priceStore } from '@/stores/priceStore';
-import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 import networks from '@/utils/networks';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
+import GlobalSearch from '@/shared/components/GlobalSearch.vue';
+import { useGlobalSearch, settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -250,80 +272,35 @@ const currentPage = computed(() => vmProxy.$route);
 const { isSyncing, connected, connecting } = toRefs(loadingState);
 const { loggedWallet, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
-const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
-const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
-const { price } = toRefs(networkStore);
 
-// Load exchange rate immediately
-loadExchangeRate();
-
-// GERO token unit
-const GERO_UNIT = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f';
-
-// Reactive GERO price fallback (used when token not in dexHunterTokens)
-const geroFallbackPrice = ref<number>(0);
-
-const geroPriceInAda = computed(() => {
-  // For Apex, we show the native token price (AP3X = 1, like ADA = 1 for Cardano)
-  if (isApex.value) {
-    return 1;
-  }
-
-  // For Cardano, show GERO token price in ADA
-  const geroToken = dexHunterTokens.value[GERO_UNIT];
-  if (geroToken?.price && geroToken.price > 0) {
-    return Number(geroToken.price);
-  }
-
-  // Fallback: Use separately fetched price if token not in wallet
-  if (geroFallbackPrice.value > 0) {
-    return geroFallbackPrice.value;
-  }
-
-  return 0;
-});
-
-const geroPriceInUsd = computed(() => {
-  // For Apex, AP3X price in USD is same as ADA price (1:1 peg assumption or oracle price)
-  if (isApex.value) {
-    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
-    return Number(adaPriceUsd.toFixed(6));
-  }
-
-  // For Cardano, calculate GERO token price in USD
-  const priceInAda = geroPriceInAda.value;
-  if (priceInAda === 0) return 0;
-
-  // Get ADA/USD price
-  const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
-  return Number((priceInAda * adaPriceUsd).toFixed(6));
-});
-
-const geroPriceInEur = computed(() => {
-  const priceInUsd = geroPriceInUsd.value;
-  if (priceInUsd === 0) return 0;
-
-  // Convert USD to EUR
-  return Number((priceInUsd * usdToEurRate.value).toFixed(6));
-});
+// Global search
+const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
+
+// Compact nav mode — collapse labels to icons when toolbar is narrow
+const compactNav = ref(false);
+const navBarRef = ref<any>(null);
+const searchFieldRef = ref<HTMLElement | null>(null);
+let navBarObserver: ResizeObserver | null = null;
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
+const settingsInitialTab = ref<string | undefined>(undefined);
+
+// Watch for settings navigation requests from Global Search
+watch(settingsNavRequest, (req) => {
+  if (req) {
+    settingsInitialTab.value = req.tab;
+    currentDialog.value = dialogs.SETTINGS;
+    settingsNavRequest.value = null;
+  }
+});
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
-
-const tokenName = computed(() => {
-  if (isApex.value) {
-    // Use the currency ticker from network configuration
-    return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) || 'AP3X';
-  }
-  return 'GERO';
-});
 
 const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
@@ -398,6 +375,18 @@ function handleOpenBackupDialog() {
   backupWalletDialog.value = true;
 }
 
+async function openMiniMode() {
+  try {
+    // Must call sidePanel.open() directly from user gesture context
+    // (messaging to background loses user gesture propagation)
+    const win = await chrome.windows.getCurrent();
+    await chrome.sidePanel.setOptions({ path: 'sidepanel/index.html', enabled: true });
+    await (chrome.sidePanel as any).open({ windowId: win.id });
+  } catch (e) {
+    console.warn('Failed to open side panel:', e);
+  }
+}
+
 // Theme management - update colors when a chain changes
 const updateThemeColors = () => {
   const currentTheme = isApex.value ? themes.apex : themes.cardano;
@@ -423,30 +412,6 @@ watch(
   },
   { immediate: true }
 );
-
-// Fetch GERO price even if user doesn't own the token
-const fetchGeroPrice = async () => {
-  try {
-    // Only fetch for Cardano chains
-    if (isApex.value) return;
-
-    // Check if GERO is already loaded
-    const geroToken = dexHunterTokens.value[GERO_UNIT];
-    if (geroToken?.price && geroToken.price > 0) {
-      return; // Already have the price
-    }
-
-    // Import dexHunterApi directly to fetch price in browser context
-    const dexHunterApi = await import('@/api/dexhunter-api');
-    const res = await dexHunterApi.default.mCap(GERO_UNIT);
-
-    if (res.status === 200 && res.data?.price) {
-      geroFallbackPrice.value = Number(res.data.price);
-    }
-  } catch (error) {
-    console.warn('Failed to fetch GERO price for ticker:', error);
-  }
-};
 
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
@@ -474,9 +439,6 @@ onMounted(async () => {
   // Ensure colors are set on mount
   updateThemeColors();
 
-  // Fetch GERO price for ticker (non-blocking)
-  fetchGeroPrice();
-
   // Preload background image after critical content
   requestIdleCallback(
     () => {
@@ -484,6 +446,28 @@ onMounted(async () => {
     },
     { timeout: 2000 }
   );
+
+  // Global search keyboard shortcut (Ctrl+K / Cmd+K)
+  document.addEventListener('keydown', handleSearchKeydown);
+
+  // Detect when the absolutely-centered QuickActionsBox clashes with
+  // the search field or right-side icons. Uses overlap detection with
+  // estimated expanded sizes to avoid oscillation.
+  const barEl = navBarRef.value?.$el as HTMLElement | undefined;
+  if (barEl) {
+    // Known expanded element widths (measured from DOM):
+    // - Search field: ~180px, Buttons with labels: ~560px, Right icons: ~170px, Gaps: ~40px
+    const EXPANDED_CONTENT_WIDTH = 1020;
+    navBarObserver = new ResizeObserver(([entry]) => {
+      compactNav.value = entry.contentRect.width < EXPANDED_CONTENT_WIDTH;
+    });
+    navBarObserver.observe(barEl);
+  }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleSearchKeydown);
+  navBarObserver?.disconnect();
 });
 </script>
 
@@ -672,6 +656,52 @@ div.v-toolbar__content {
   backdrop-filter: blur(2px);
 }
 
+/* Search field in top nav bar */
+.nav-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(130, 180, 255, 0.08);
+  border: 1px solid rgba(130, 180, 255, 0.25);
+  cursor: pointer;
+  min-width: 180px;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  animation: nav-search-breathe 3s ease-in-out infinite;
+}
+.nav-search-field:hover {
+  background: rgba(130, 180, 255, 0.14);
+  border-color: rgba(130, 180, 255, 0.45);
+}
+.nav-search-placeholder {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-search-shortcut {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'Roboto Mono', monospace;
+  letter-spacing: 0.3px;
+}
+.nav-search-compact {
+  min-width: unset !important;
+  padding: 5px 8px !important;
+  border-radius: 6px !important;
+}
+@keyframes nav-search-breathe {
+  0%, 100% { box-shadow: 0 0 4px rgba(130, 180, 255, 0.15); }
+  50% { box-shadow: 0 0 14px rgba(130, 180, 255, 0.35); }
+}
+
 .toolbar-icon-btn {
   width: 28px !important;
   height: 28px !important;
@@ -681,6 +711,7 @@ div.v-toolbar__content {
 .toolbar-icon-btn .v-icon {
   color: rgba(255, 255, 255, 0.85) !important;
 }
+
 .liquid-glass-card,
 .v-card.liquid-glass-card {
   left: 0;

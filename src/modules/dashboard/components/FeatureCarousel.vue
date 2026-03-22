@@ -12,7 +12,9 @@
       :cycle="false"
       height="100%"
       hide-delimiter-background
-      show-arrows-on-hover
+      :hide-delimiters="items.length <= 1"
+      :show-arrows-on-hover="items.length > 1"
+      :show-arrows="items.length > 1"
       :class="carouselClass"
     >
       <v-carousel-item
@@ -25,8 +27,14 @@
         <div class="carousel-overlay" :class="getOverlayClass(item)">
           <div class="carousel-content" :class="getContentClass(item)">
             <!-- Special slot for debit card items -->
-            <div v-if="item.type === 'debit-card'" class="carousel-text-top">
+            <div v-if="item.type === 'debit-card'" class="carousel-centered-layout">
               <slot name="debit-card" :item="item">
+                <div class="carousel-text-overlay">
+                  <v-card-title class="pt-0 pb-0 white--text text-center debit-card-title" style="margin-bottom: 0;">{{ item.title }}</v-card-title>
+                  <div class="debit-card-description white--text text-center">
+                    {{item.subtitle}}
+                  </div>
+                </div>
                 <div class="debit-card-container">
                   <div class="debit-card-glow"></div>
                   <div class="debit-card-3d-wrapper" @mousemove="handleCardMouseMove" @mouseleave="handleCardMouseLeave" :style="debitCardStyle">
@@ -37,18 +45,21 @@
                     />
                   </div>
                 </div>
-                <div class="debit-card-text">
-                  <v-card-title class="pt-0 pb-0 white--text text-center debit-card-title" style="margin-bottom: 0;">{{ item.title }}</v-card-title>
-                  <div class="debit-card-description white--text text-center mb-2">
-                    {{item.subtitle}}
-                  </div>
-                </div>
               </slot>
             </div>
 
             <!-- Special slot for cashback items -->
-            <div v-else-if="item.type === 'ada-cashback'" class="carousel-text-top cashback-card">
+            <div v-else-if="item.type === 'ada-cashback'" class="carousel-centered-layout cashback-card">
               <slot name="ada-cashback" :item="item">
+                <div class="carousel-text-overlay">
+                  <v-card-title class="pa-0 white--text text-center debit-card-title cashback-title" style="margin-bottom: 0; word-break: break-word;">{{ item.title }}</v-card-title>
+                  <div class="debit-card-description white--text text-center cashback-subtitle">
+                    {{ item.subtitle.split('\n')[0] }}
+                  </div>
+                  <v-card-subtitle class="pb-0 white--text text-center debit-card-coming-soon cashback-cta">
+                    {{ item.subtitle.split('\n')[1] }}
+                  </v-card-subtitle>
+                </div>
                 <div class="cashback-container">
                   <img
                     :src="item.cardImage"
@@ -57,32 +68,23 @@
                   />
                   <div class="debit-card-glow"></div>
                 </div>
-                <div class="debit-card-text cashback-text">
-                  <v-card-title class="pa-0 white--text text-center debit-card-title cashback-title" style="margin-bottom: 0; word-break: break-word;">{{ item.title }}</v-card-title>
-                  <div class="debit-card-description white--text text-center mb-2 cashback-subtitle">
-                    {{ item.subtitle.split('\n')[0] }}
-                  </div>
-                  <v-card-subtitle class="pb-0 white--text text-center debit-card-coming-soon cashback-cta">
-                    {{ item.subtitle.split('\n')[1] }}
-                  </v-card-subtitle>
-                </div>
               </slot>
             </div>
 
             <!-- Default content for standard items -->
-            <div v-else class="carousel-content-center">
+            <div v-else class="carousel-centered-layout">
               <slot name="default" :item="item">
+                <div class="carousel-text-overlay" :class="{ 'apex-text': isApexItem(item) }">
+                  <v-card-title class="pt-0 white--text text-center carousel-title-large">{{ item.title }}</v-card-title>
+                  <v-card-subtitle class="pb-0 white--text text-center">{{ item.subtitle }}</v-card-subtitle>
+                </div>
                 <img
                   v-if="item.logo"
                   :src="item.logo"
                   :alt="item.logoAlt"
-                  class="carousel-logo mb-3"
+                  class="carousel-logo"
                   :class="{ 'apex-logo': isApexItem(item) }"
                 />
-                <div class="carousel-text" :class="{ 'apex-text': isApexItem(item) }">
-                  <v-card-title class="pt-0 white--text text-center carousel-title-large">{{ item.title }}</v-card-title>
-                  <v-card-subtitle class="pb-0 white--text text-center">{{ item.subtitle }}</v-card-subtitle>
-                </div>
               </slot>
             </div>
           </div>
@@ -192,12 +194,8 @@ const getOverlayClass = (item: CarouselItem) => {
   return classes;
 };
 
-const getContentClass = (item: CarouselItem) => {
-  const classes: string[] = [];
-  if (item.type === 'debit-card' || item.type === 'ada-cashback') {
-    classes.push('carousel-content-top');
-  }
-  return classes;
+const getContentClass = (_item: CarouselItem) => {
+  return [];
 };
 
 const isApexItem = (item: CarouselItem) => {
@@ -350,36 +348,48 @@ onUnmounted(() => {
   overflow: visible;
 }
 
-.carousel-content-center {
+.carousel-centered-layout {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   height: 100%;
+  position: relative;
 }
 
-.carousel-content-top {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-  justify-content: flex-start;
-  padding-top: 40px;
-  overflow: visible;
+.carousel-text-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 5;
+  width: 90%;
+  pointer-events: none;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9), 0 0 24px rgba(0, 0, 0, 0.7), 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 .carousel-logo {
   max-width: 80px;
   max-height: 80px;
-}
-
-.carousel-text {
-  margin-top: 10px;
+  z-index: 2;
+  opacity: 0.4;
 }
 
 .carousel-title-large {
-  font-size: 1.5rem !important;
+  font-size: 1.1rem !important;
   font-weight: 600 !important;
+}
+
+/* Smaller pagination dots */
+.carousel-wrapper ::v-deep .v-carousel__controls .v-btn {
+  width: 8px !important;
+  height: 8px !important;
+  margin: 0 2px !important;
+}
+
+.carousel-wrapper ::v-deep .v-carousel__controls .v-btn .v-icon {
+  font-size: 8px !important;
 }
 
 .carousel-progress-container {
@@ -453,21 +463,21 @@ onUnmounted(() => {
 }
 
 .debit-card-title {
-  font-size: 1.4rem !important;
+  font-size: 1.1rem !important;
   font-weight: 700 !important;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9), 0 0 24px rgba(0, 0, 0, 0.7);
 }
 
 .debit-card-description {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 0, 0, 0.6);
 }
 
 .debit-card-coming-soon {
-  font-size: 0.8rem !important;
+  font-size: 0.7rem !important;
   font-weight: 600 !important;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 0, 0, 0.6);
 }
 
 /* Cashback specific styles */
@@ -493,17 +503,17 @@ onUnmounted(() => {
 }
 
 .cashback-title {
-  font-size: 1.3rem !important;
+  font-size: 1.05rem !important;
   font-weight: 700 !important;
 }
 
 .cashback-subtitle {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
 .cashback-cta {
-  font-size: 0.75rem !important;
+  font-size: 0.65rem !important;
   font-weight: 600 !important;
 }
 </style>

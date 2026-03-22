@@ -1,0 +1,754 @@
+<template>
+  <v-card flat class="token-detail-panel">
+    <!-- Header -->
+    <div class="d-flex align-center pa-4 pb-2">
+      <v-avatar size="36" class="mr-3">
+        <img v-if="token.img" :src="token.img" :alt="token.ticker" />
+        <img v-else-if="chainLogo" :src="chainLogo" :alt="token.ticker" style="opacity: 0.5" />
+        <v-icon v-else>mdi-circle-outline</v-icon>
+      </v-avatar>
+      <div class="flex-grow-1">
+        <div class="d-flex align-center">
+          <span class="text-h6 font-weight-bold mr-2">{{ token.ticker }}</span>
+          <v-icon v-if="token.verified" small color="primary" class="mr-1">mdi-check-decagram</v-icon>
+          <TokenRiskBadge v-if="token.riskRating" :rating="token.riskRating" size="small" />
+        </div>
+        <span class="text--secondary text-caption">{{ token.name }}</span>
+      </div>
+      <v-btn icon small @click="toggleWatch(token.unit)" class="mr-1">
+        <v-icon :color="isWatched(token.unit) ? 'amber' : ''">
+          {{ isWatched(token.unit) ? 'mdi-star' : 'mdi-star-outline' }}
+        </v-icon>
+      </v-btn>
+      <v-btn icon small @click="openExplorer" class="mr-1">
+        <v-icon small>mdi-open-in-new</v-icon>
+      </v-btn>
+      <v-btn icon small @click="$emit('close')">
+        <v-icon>mdi-close</v-icon>
+      </v-btn>
+    </div>
+
+    <!-- Two-column layout -->
+    <div class="panel-columns">
+      <!-- ═══ LEFT COLUMN: Chart + Recent Trades ═══ -->
+      <div class="left-col">
+        <!-- Price + Currency Toggle -->
+        <div class="pb-3">
+          <div class="d-flex align-center" style="gap: 8px">
+            <span class="text-h5 font-weight-bold">{{ displayPrice }}</span>
+            <v-chip
+              x-small
+              :color="token.change24h >= 0 ? '#1b5e20' : '#b71c1c'"
+              :text-color="token.change24h >= 0 ? '#47CD89' : '#F97066'"
+            >
+              {{ token.change24h >= 0 ? '+' : '' }}{{ token.change24h.toFixed(2) }}%
+            </v-chip>
+          </div>
+          <div class="text--secondary text-caption mt-1">{{ secondaryPrice }}</div>
+
+          <!-- Currency toggle pills -->
+          <div class="currency-pills mt-2">
+            <span
+              v-for="c in currencyOptions"
+              :key="c"
+              class="currency-pill"
+              :class="{ active: selectedCurrency === c }"
+              @click="selectedCurrency = c"
+            >{{ c === 'NATIVE' ? nativeTicker : c }}</span>
+          </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="pb-2">
+          <!-- Timeframe + Indicators bar -->
+          <div class="d-flex align-center mb-1" style="gap: 6px">
+            <div class="timeframe-bar">
+              <span
+                v-for="tf in timeframeOptions"
+                :key="tf.value"
+                class="tf-btn"
+                :class="{ active: selectedTimeframe === tf.value }"
+                @click="selectedTimeframe = tf.value"
+              >{{ tf.label }}</span>
+            </div>
+
+            <v-spacer />
+
+            <!-- TA Indicator toggles -->
+            <div class="d-flex align-center" style="gap: 2px">
+              <v-tooltip bottom :open-delay="300" content-class="custom-tooltip" v-for="ind in indicatorOptions" :key="ind.value">
+                <template v-slot:activator="{ on, attrs }">
+                  <span
+                    v-bind="attrs"
+                    v-on="on"
+                    class="ind-btn"
+                    :class="{ active: activeIndicators.includes(ind.value) }"
+                    @click="toggleIndicator(ind.value)"
+                  >{{ ind.label }}</span>
+                </template>
+                <span>{{ $t(ind.tooltipKey) }}</span>
+              </v-tooltip>
+            </div>
+          </div>
+
+          <div v-if="!candlesLoading && convertedCandles.length === 0" class="chart-no-data d-flex align-center justify-center" :style="{ height: chartHeight }">
+            <div class="text-center">
+              <v-icon color="grey" size="32" class="mb-2">mdi-chart-line-variant</v-icon>
+              <div class="text--secondary text-caption">{{ $t('market.noChartData') }}</div>
+            </div>
+          </div>
+          <TechnicalAnalysisChart
+            v-else
+            :key="selectedCurrency"
+            :candles="convertedCandles"
+            :height="chartHeight"
+            :indicators="activeIndicators"
+          />
+        </div>
+
+        <!-- Buy vs Sell Volume (Cardano DEX data only) -->
+        <div v-if="!isApex" class="pt-2">
+          <BuySellVolume
+            v-if="tokenPolicyId && tokenAssetName"
+            :policy-id="tokenPolicyId"
+            :asset-name="tokenAssetName"
+          />
+        </div>
+
+        <!-- Recent Trades (Cardano DEX data only) -->
+        <div v-if="!isApex" class="pt-2">
+          <RecentTrades
+            v-if="tokenPolicyId && tokenAssetName"
+            :policy-id="tokenPolicyId"
+            :asset-name="tokenAssetName"
+          />
+        </div>
+      </div>
+
+      <!-- ═══ RIGHT COLUMN: Swap/Depth tabs + Token Info ═══ -->
+      <div class="right-col">
+        <!-- Right column tabs -->
+        <v-tabs v-model="rightTab" dense background-color="transparent" height="28" class="detail-sub-tabs mb-3">
+          <v-tab>{{ $t('market.swap') }}</v-tab>
+          <v-tab>{{ $t('market.depth') }}</v-tab>
+        </v-tabs>
+
+        <!-- Swap tab -->
+        <transition name="tab-fade" mode="out-in">
+        <div v-if="rightTab === 0" key="swap">
+          <!-- QuickSwap (Cardano DEX only) -->
+          <QuickSwap
+            v-if="!isApex && token.unit !== 'lovelace'"
+            :token-unit="token.unit"
+            :token-ticker="token.ticker"
+            :token-decimals="token.decimals"
+            @swap-complete="onSwapComplete"
+          />
+          <div v-else class="text-center py-4 text--secondary text-caption">
+            {{ $t('market.na') }}
+          </div>
+
+          <!-- Token Info (compact grid) -->
+          <div class="token-info-grid mt-4">
+            <div class="info-item" v-for="stat in compactStats" :key="stat.label">
+              <span class="info-label">{{ stat.label }}</span>
+              <span class="info-value">
+                <component :is="stat.component" v-if="stat.component" v-bind="stat.componentProps" />
+                <template v-else>{{ stat.value }}</template>
+              </span>
+            </div>
+          </div>
+
+          <!-- Policy ID row -->
+          <div v-if="tokenPolicyId" class="policy-row mt-2">
+            <div class="d-flex align-center" style="gap: 4px">
+              <v-icon x-small :color="token.policyLocked ? '#47CD89' : '#F97066'">
+                {{ token.policyLocked ? 'mdi-lock' : 'mdi-lock-open-variant' }}
+              </v-icon>
+              <span class="info-label">{{ $t('market.policy') }}</span>
+              <span class="text-caption" :style="{ color: token.policyLocked ? '#47CD89' : '#F97066' }">
+                {{ token.policyLocked ? $t('market.locked') : $t('market.open') }}
+              </span>
+            </div>
+            <div class="policy-id text-caption text--secondary mt-1" :title="tokenPolicyId" @click="copyPolicyId">
+              {{ tokenPolicyId }}
+              <v-icon x-small class="ml-1" style="opacity: 0.4">mdi-content-copy</v-icon>
+            </div>
+          </div>
+
+          <!-- P&L Section (if user holds this token) -->
+          <div v-if="tokenPnl" class="pnl-section mt-3">
+            <span class="text-caption text--secondary font-weight-medium d-block mb-1">P&L</span>
+            <v-simple-table dense class="transparent stats-table">
+              <tbody>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.avgCostBasis') }}</td>
+                  <td class="text-right" style="font-size: 12px; padding: 4px 8px">{{ formatPnlValue(tokenPnl.avgCostBasisAda) }}</td>
+                </tr>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.unrealizedPnlDetail') }}</td>
+                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.unrealizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                    {{ formatPnlSigned(tokenPnl.unrealizedPnlAda) }}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.realizedPnlDetail') }}</td>
+                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.realizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                    {{ formatPnlSigned(tokenPnl.realizedPnlAda) }}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px; font-weight: 600">{{ $t('market.totalPnlDetail') }}</td>
+                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', fontWeight: '600', color: totalPnl >= 0 ? '#47CD89' : '#F97066' }">
+                    {{ formatPnlSigned(totalPnl) }}
+                  </td>
+                </tr>
+              </tbody>
+            </v-simple-table>
+          </div>
+        </div>
+
+        <!-- Depth tab (Cardano DEX data only) -->
+        <div v-else-if="rightTab === 1" key="depth">
+          <div v-if="!isApex" style="display: flex; flex-direction: column; gap: 12px">
+            <DepthChart
+              v-if="tokenPolicyId && tokenAssetName"
+              :policy-id="tokenPolicyId"
+              :asset-name="tokenAssetName"
+              style="max-height: 200px"
+            />
+            <OrderBookTable
+              v-if="tokenPolicyId && tokenAssetName"
+              :policy-id="tokenPolicyId"
+              :asset-name="tokenAssetName"
+            />
+          </div>
+          <div v-else class="text-center py-6 text--secondary text-caption">
+            {{ $t('market.na') }}
+          </div>
+        </div>
+        </transition>
+      </div>
+    </div>
+  </v-card>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, markRaw, type Ref } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { useWatchlist } from '@/modules/market/composables/useWatchlist';
+import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
+import TechnicalAnalysisChart from './TechnicalAnalysisChart.vue';
+import TokenRiskBadge from './TokenRiskBadge.vue';
+import OrderBookTable from './OrderBookTable.vue';
+import DepthChart from './DepthChart.vue';
+import QuickSwap from './QuickSwap.vue';
+import RecentTrades from './RecentTrades.vue';
+import BuySellVolume from './BuySellVolume.vue';
+import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
+import { priceStore } from '@/stores/priceStore';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
+import snackbar from '@/plugins/snackbar';
+import networks from '@/utils/networks';
+
+const chainLogo = computed(() =>
+  networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
+);
+
+const props = defineProps<{
+  token: MarketToken;
+}>();
+
+defineEmits<{
+  (e: 'close'): void;
+}>();
+
+const { t } = useTranslation();
+const { isWatched, toggleWatchlist } = useWatchlist();
+const { getTokenCandles } = useMarketData();
+const { getTokenPnl } = useWalletPnl();
+const { usdToEurRate } = useCurrencyConverter();
+const { currencySymbol: nativeSymbol, currencyTicker: nativeTicker } = useNativeCurrency();
+
+const isApex = computed(() => {
+  const chain = walletStore.loggedWallet?.chain;
+  return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
+});
+
+type Currency = 'NATIVE' | 'USD' | 'EUR';
+const currencyOptions: Currency[] = ['NATIVE', 'USD', 'EUR'];
+const selectedCurrency = ref<Currency>('USD');
+
+// Currency conversion helpers
+const adaUsdPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
+
+/** Convert a USD value to the selected currency */
+function convertUsd(usdValue: number): number {
+  switch (selectedCurrency.value) {
+    case 'NATIVE': return adaUsdPrice.value > 0 ? usdValue / adaUsdPrice.value : 0;
+    case 'EUR': return usdValue * (usdToEurRate.value || 1);
+    case 'USD':
+    default: return usdValue;
+  }
+}
+
+const currencySymbol = computed(() => {
+  switch (selectedCurrency.value) {
+    case 'NATIVE': return nativeSymbol.value;
+    case 'EUR': return '\u20AC';
+    case 'USD':
+    default: return '$';
+  }
+});
+
+// Display prices based on selected currency
+const displayPrice = computed(() => {
+  const tok = props.token;
+  switch (selectedCurrency.value) {
+    case 'NATIVE': return formatPrice(tok.priceAda, nativeSymbol.value);
+    case 'EUR': return formatPrice(tok.price * (usdToEurRate.value || 1), '\u20AC');
+    case 'USD':
+    default: return formatPrice(tok.price, '$');
+  }
+});
+
+const secondaryPrice = computed(() => {
+  const tok = props.token;
+  switch (selectedCurrency.value) {
+    case 'NATIVE': return '$' + formatPriceRaw(tok.price);
+    case 'USD': return formatPriceRaw(tok.priceAda) + ' ' + nativeSymbol.value;
+    case 'EUR': return formatPriceRaw(tok.priceAda) + ' ' + nativeSymbol.value;
+    default: return '';
+  }
+});
+
+const selectedTimeframe = ref('1h');
+const rightTab = ref(0);
+
+const tokenPnl = computed(() => getTokenPnl(props.token.unit));
+const totalPnl = computed(() => {
+  const p = tokenPnl.value;
+  return p ? p.realizedPnlAda + p.unrealizedPnlAda : 0;
+});
+
+const tokenPolicyId = computed(() => {
+  if (props.token.unit === 'lovelace') return '';
+  return props.token.unit.substring(0, 56);
+});
+const tokenAssetName = computed(() => {
+  if (props.token.unit === 'lovelace') return '';
+  return props.token.unit.substring(56);
+});
+const activeIndicators = ref<string[]>(['vol']);
+
+const timeframeOptions = [
+  { value: '15m', label: '15m' },
+  { value: '1h', label: '1H' },
+  { value: '1d', label: '1D' },
+  { value: '1w', label: '1W' },
+];
+
+function toggleIndicator(value: string) {
+  const idx = activeIndicators.value.indexOf(value);
+  if (idx >= 0) {
+    activeIndicators.value.splice(idx, 1);
+  } else {
+    activeIndicators.value.push(value);
+  }
+}
+
+const indicatorOptions = computed(() => [
+  { value: 'vol', label: t('market.volumeIndicator'), tooltipKey: 'market.volumeTooltip' },
+  { value: 'sma', label: 'SMA', tooltipKey: 'market.smaTooltip' },
+  { value: 'ema', label: 'EMA', tooltipKey: 'market.emaTooltip' },
+  { value: 'rsi', label: 'RSI', tooltipKey: 'market.rsiTooltip' },
+  { value: 'macd', label: 'MACD', tooltipKey: 'market.macdTooltip' },
+  { value: 'bb', label: 'BB', tooltipKey: 'market.bbTooltip' },
+]);
+
+const chartHeight = computed(() => {
+  let height = 200;
+  if (activeIndicators.value.includes('rsi')) height += 60;
+  if (activeIndicators.value.includes('macd')) height += 60;
+  return height + 'px';
+});
+
+const candles: Ref<CandlestickDataPoint[]> = ref([]);
+const candlesLoading = ref(true);
+
+/** Map selected currency to the backend currency param (ada/usd/eur) */
+function candleCurrency(): string {
+  if (selectedCurrency.value === 'NATIVE') return 'ada';
+  return selectedCurrency.value.toLowerCase();
+}
+
+// Backend returns candles already converted — just pass through
+const convertedCandles = computed(() => candles.value);
+
+let candleRequestId = 0;
+async function loadCandles() {
+  const requestId = ++candleRequestId;
+  candlesLoading.value = true;
+
+  try {
+    const result = await getTokenCandles(
+      props.token.unit === 'lovelace' ? 'lovelace' : props.token.unit,
+      selectedTimeframe.value,
+      candleCurrency(),
+    );
+    if (requestId === candleRequestId) {
+      candles.value = result;
+    }
+  } finally {
+    if (requestId === candleRequestId) {
+      candlesLoading.value = false;
+    }
+  }
+}
+
+// Load candles on setup
+loadCandles();
+
+// Compact stats for the right column grid (removed liquidity, kept essentials)
+const compactStats = computed(() => {
+  const tok = props.token;
+  const sym = currencySymbol.value;
+  return [
+    { label: t('market.marketCap'), value: sym + formatCompact(convertUsd(tok.mcap)) },
+    { label: t('market.volume24h'), value: sym + formatCompact(convertUsd(tok.volume24h)) },
+    { label: t('market.tvl'), value: tok.tvl ? sym + formatCompact(convertUsd(tok.tvl)) : t('market.na') },
+    { label: t('market.holders'), value: tok.holders != null ? tok.holders.toLocaleString() : t('market.na') },
+    {
+      label: t('market.risk'),
+      value: tok.riskRating || t('market.na'),
+      component: tok.riskRating ? markRaw(TokenRiskBadge) : undefined,
+      componentProps: tok.riskRating ? { rating: tok.riskRating, size: 'small' } : undefined,
+    },
+    {
+      label: t('market.verified'),
+      value: tok.verified ? '✓' : t('market.no'),
+    },
+  ];
+});
+
+function toggleWatch(unit: string) {
+  toggleWatchlist(unit);
+}
+
+function onSwapComplete() {
+  // Could refresh token data or recent trades here
+}
+
+function copyPolicyId() {
+  if (tokenPolicyId.value) {
+    navigator.clipboard.writeText(tokenPolicyId.value)
+      .then(() => snackbar.fireSuccess(t('market.policyIdCopied')))
+      .catch(() => snackbar.fireError(t('market.copyFailed')));
+  }
+}
+
+/** Convert a native-token value to the selected currency */
+function convertAda(adaValue: number): number {
+  switch (selectedCurrency.value) {
+    case 'USD': return adaValue * adaUsdPrice.value;
+    case 'EUR': return adaValue * adaUsdPrice.value * (usdToEurRate.value || 1);
+    case 'NATIVE':
+    default: return adaValue;
+  }
+}
+
+function formatPnlValue(adaValue: number | null): string {
+  if (adaValue == null) return '—';
+  const converted = convertAda(adaValue);
+  const decimals = converted < 1 ? 6 : 2;
+  return currencySymbol.value + converted.toFixed(decimals);
+}
+
+function formatPnlSigned(adaValue: number): string {
+  const converted = convertAda(adaValue);
+  const sign = converted >= 0 ? '+' : '';
+  return sign + currencySymbol.value + converted.toFixed(2);
+}
+
+import { formatPriceRaw, formatPrice, formatCompact } from '@/modules/market/utils/formatters';
+
+function openExplorer() {
+  const fingerprint = props.token.fingerprint;
+  const url = isApex.value
+    ? `https://apexscan.org/en/token/${fingerprint}`
+    : `https://cardanoscan.io/token/${fingerprint}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+// Reset timeframe and reload candles when token changes
+watch(() => props.token, () => {
+  selectedTimeframe.value = '1h';
+  rightTab.value = 0;
+  loadCandles();
+});
+
+// Reload candles when timeframe or currency changes
+watch(selectedTimeframe, () => {
+  loadCandles();
+});
+
+watch(selectedCurrency, () => {
+  loadCandles();
+});
+</script>
+
+<style scoped>
+.token-detail-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* 70% of content area (viewport minus 270px nav drawer) */
+  width: calc(70 * (100vw - 270px) / 100);
+  z-index: 10;
+  background: rgba(12, 14, 18, 0.65) !important;
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border-left: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 0 12px 12px 0;
+  overflow: hidden;
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.06),
+    -8px 0 32px rgba(0, 0, 0, 0.5);
+  animation: panelSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes panelSlideIn {
+  from {
+    transform: translateX(40px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ═══ Two-column layout ═══ */
+.panel-columns {
+  display: flex;
+  height: calc(100% - 60px);
+  overflow: hidden;
+}
+
+.left-col {
+  flex: 6;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  scroll-behavior: smooth;
+}
+
+.right-col {
+  flex: 4;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  scroll-behavior: smooth;
+}
+
+/* ═══ Chart controls ═══ */
+.timeframe-bar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  padding: 1px;
+}
+
+.tf-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tf-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.tf-btn.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ind-btn {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.35);
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ind-btn:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ind-btn.active {
+  color: #90caf9;
+  background: rgba(144, 202, 249, 0.1);
+}
+
+/* ═══ Token info grid ═══ */
+.token-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.info-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.info-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.info-value {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ═══ Policy row ═══ */
+.policy-row {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+.policy-id {
+  font-size: 11px;
+  font-family: monospace;
+  word-break: break-all;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.policy-id:hover {
+  opacity: 1;
+}
+
+/* ═══ P&L / Stats ═══ */
+.pnl-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 12px;
+}
+
+.stats-table >>> td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+.stats-table >>> tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* ═══ Tab transitions ═══ */
+.tab-fade-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tab-fade-leave-active {
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.tab-fade-enter {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* ═══ Stagger fade-in for info grid items ═══ */
+.token-info-grid .info-item {
+  animation: infoFadeIn 0.25s ease both;
+}
+.token-info-grid .info-item:nth-child(1) { animation-delay: 0.03s; }
+.token-info-grid .info-item:nth-child(2) { animation-delay: 0.06s; }
+.token-info-grid .info-item:nth-child(3) { animation-delay: 0.09s; }
+.token-info-grid .info-item:nth-child(4) { animation-delay: 0.12s; }
+.token-info-grid .info-item:nth-child(5) { animation-delay: 0.15s; }
+.token-info-grid .info-item:nth-child(6) { animation-delay: 0.18s; }
+
+@keyframes infoFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══ Tabs ═══ */
+.detail-sub-tabs >>> .v-tab {
+  text-transform: none !important;
+  font-size: 12px;
+  min-width: unset;
+  padding: 0 10px;
+  letter-spacing: 0;
+  transition: color 0.15s ease;
+}
+
+.detail-sub-tabs >>> .v-tabs-slider {
+  height: 2px;
+  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══ Currency pills ═══ */
+.currency-pills {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 2px;
+  width: fit-content;
+}
+
+.currency-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.currency-pill:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.currency-pill.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chart-no-data {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+}
+</style>

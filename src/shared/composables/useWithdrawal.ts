@@ -39,6 +39,11 @@ export function useWithdrawal() {
    */
   const withdraw = async () => {
     try {
+      if (!loggedWallet.value || !keys.value?.payment?.length || !epochParams.value) {
+        snackbar.setError(t('errors.networkError'));
+        return;
+      }
+
       // Check if user has DRep delegation (Cardano only)
       const isCardano = loggedWallet.value?.chain === Blockchain.CARDANO;
       if (isCardano && !account.value?.drep_id) {

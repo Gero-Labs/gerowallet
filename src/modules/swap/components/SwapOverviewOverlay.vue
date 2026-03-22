@@ -90,7 +90,7 @@ const emit = defineEmits(['excludedChange', 'input']);
 
 const dexesTemplate = ref([
   { name: 'SPLASH', img: 'https://storage.googleapis.com/dexhunter-images/public/splashlogo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
-  { name: 'MINSWAPV2', img: 'https://minswap.org/_next/static/media/minswap-v2-logo.25f219f1.svg', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'MINSWAPV2', img: 'https://storage.googleapis.com/dexhunter-images/public/minswapv2logodh.webp', amount: 0, priceImpact: 0, percentage: 0 },
   { name: 'SUNDAESWAPV3', img: 'https://storage.googleapis.com/dexhunter-images/public/sundaev3.webp', amount: 0, priceImpact: 0, percentage: 0 },
   { name: 'AXO', img: 'https://storage.googleapis.com/dexhunter-images/public/axo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
   { name: 'VYFI', img: 'https://storage.googleapis.com/dexhunter-images/public/vyfi.png', amount: 0, priceImpact: 0, percentage: 0 },
@@ -101,7 +101,6 @@ const dexesTemplate = ref([
   { name: 'CERRASWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/cerralogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
   { name: 'SATURN', img: 'https://storage.googleapis.com/dexhunter-images/public/saturn.jpg', amount: 0, priceImpact: 0, percentage: 0 },
   { name: 'GENIUS', img: 'https://storage.googleapis.com/dexhunter-images/public/geniusyield.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
-  { name: 'MUESLISWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/mueslilogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
 ]);
 
 const excluded = ref<string[]>([]);
