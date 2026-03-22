@@ -16,6 +16,9 @@ export interface IUnifiedUtxo {
   assets?: Map<string, bigint>;     // Only for Cardano (native tokens)
   scriptPubKey?: string;            // Only for Bitcoin
   confirmed: boolean;
+  // BIP32 derivation info for Bitcoin (chain=0 external, chain=1 change)
+  derivationChain?: number;         // 0 = external (receive), 1 = internal (change)
+  derivationIndex?: number;         // Address index within the chain
   // Chain-specific raw data stored as any
   raw?: any;
 }

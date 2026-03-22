@@ -43,10 +43,11 @@ export class BitcoinTransactionSync {
   private xpub: string;
   private config: BitcoinSyncConfig;
 
-  // Address tracking
-  private discoveredAddresses: Map<number, string> = new Map(); // index -> address
+  // Address tracking (keyed as "chain:index" -> address)
+  private discoveredAddresses: Map<string, string> = new Map(); // "chain:index" -> address
   private usedAddresses: Set<string> = new Set();              // addresses with transactions
-  private highestUsedIndex: number = -1;                       // highest index with txs
+  private highestUsedIndex: number = -1;                       // highest external index with txs
+  private highestUsedChangeIndex: number = -1;                 // highest change index with txs
 
   // Transaction cache
   private transactionCache: Map<string, BitcoinTransaction> = new Map(); // txid -> tx
@@ -96,42 +97,58 @@ export class BitcoinTransactionSync {
 
   /**
    * Discover all used addresses following BIP44 gap limit
-   * Scans addresses until maxAddressGap consecutive unused addresses are found
+   * Scans both external (chain=0) and internal/change (chain=1) addresses
+   * until maxAddressGap consecutive unused addresses are found on each chain
    */
   private async discoverUsedAddresses(): Promise<void> {
     console.log('🔍 Discovering used Bitcoin addresses...');
 
+    // Scan external chain (chain=0, receive addresses)
+    await this.discoverUsedAddressesForChain(0);
+    // Scan internal chain (chain=1, change addresses)
+    await this.discoverUsedAddressesForChain(1);
+
+    console.log(`✅ Address discovery complete: ${this.usedAddresses.size} used addresses found (highest external: ${this.highestUsedIndex}, highest change: ${this.highestUsedChangeIndex})`);
+  }
+
+  /**
+   * Discover used addresses for a specific chain (external=0 or internal/change=1)
+   */
+  private async discoverUsedAddressesForChain(chain: number): Promise<void> {
+    const chainLabel = chain === 0 ? 'external' : 'change';
     let currentIndex = 0;
     let consecutiveUnused = 0;
 
     while (consecutiveUnused < this.config.maxAddressGap) {
-      // Derive address for current index
+      // Derive address for current chain and index
       const address = deriveBitcoinAddress(
         this.xpub,
         this.network,
         this.addressType,
-        0, // External chain (receive addresses)
+        chain,
         currentIndex
       );
 
-      this.discoveredAddresses.set(currentIndex, address);
+      this.discoveredAddresses.set(`${chain}:${currentIndex}`, address);
 
       // Check if address has been used (has transactions)
       const hasTransactions = await this.checkAddressUsage(address);
 
       if (hasTransactions) {
         this.usedAddresses.add(address);
-        this.highestUsedIndex = currentIndex;
+        if (chain === 0) {
+          this.highestUsedIndex = currentIndex;
+        } else {
+          this.highestUsedChangeIndex = currentIndex;
+        }
         consecutiveUnused = 0; // Reset gap counter
-        console.log(`📍 Found used address at index ${currentIndex}: ${address}`);
+        console.log(`📍 Found used ${chainLabel} address at index ${currentIndex}: ${address}`);
       } else {
         consecutiveUnused++;
       }
 
       currentIndex++;
     }
-
-    console.log(`✅ Address discovery complete: ${this.usedAddresses.size} used addresses found (highest index: ${this.highestUsedIndex})`);
   }
 
   /**
@@ -190,10 +207,11 @@ export class BitcoinTransactionSync {
    */
   getNextUnusedAddress(): string {
     const nextIndex = this.highestUsedIndex + 1;
+    const key = `0:${nextIndex}`;
 
     // Check if we already derived this address
-    if (this.discoveredAddresses.has(nextIndex)) {
-      return this.discoveredAddresses.get(nextIndex)!;
+    if (this.discoveredAddresses.has(key)) {
+      return this.discoveredAddresses.get(key)!;
     }
 
     // Derive new address
@@ -205,7 +223,7 @@ export class BitcoinTransactionSync {
       nextIndex
     );
 
-    this.discoveredAddresses.set(nextIndex, address);
+    this.discoveredAddresses.set(key, address);
 
     return address;
   }
@@ -214,22 +232,25 @@ export class BitcoinTransactionSync {
    * Get address at specific index
    *
    * @param index Address index
+   * @param chain Chain (0 = external, 1 = change). Default: 0
    * @returns string Address at index
    */
-  getAddressAtIndex(index: number): string {
-    if (this.discoveredAddresses.has(index)) {
-      return this.discoveredAddresses.get(index)!;
+  getAddressAtIndex(index: number, chain: number = 0): string {
+    const key = `${chain}:${index}`;
+
+    if (this.discoveredAddresses.has(key)) {
+      return this.discoveredAddresses.get(key)!;
     }
 
     const address = deriveBitcoinAddress(
       this.xpub,
       this.network,
       this.addressType,
-      0, // External chain
+      chain,
       index
     );
 
-    this.discoveredAddresses.set(index, address);
+    this.discoveredAddresses.set(key, address);
 
     return address;
   }
@@ -280,6 +301,7 @@ export class BitcoinTransactionSync {
     this.discoveredAddresses.clear();
     this.usedAddresses.clear();
     this.highestUsedIndex = -1;
+    this.highestUsedChangeIndex = -1;
   }
 }
 

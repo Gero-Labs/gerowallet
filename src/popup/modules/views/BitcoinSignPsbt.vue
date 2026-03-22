@@ -319,7 +319,7 @@ const signWithTrezor = async () => {
 const showKeystoneQR = async () => {
   try {
     const { generateKeystonePsbtQR } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
-    const result = generateKeystonePsbtQR(request.value.data.psbtHex);
+    const result = await generateKeystonePsbtQR(request.value.data.psbtHex);
     if (!result.success) throw new Error(result.error || 'QR generation failed');
     keystoneType.value = result.keystoneQrType!;
     keystoneCbor.value = result.keystoneQrCbor!;
@@ -333,7 +333,7 @@ const showKeystoneQR = async () => {
 const onKeystoneScan = async (ur: UR) => {
   try {
     const { parseKeystoneSignedPsbt } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
-    const result = parseKeystoneSignedPsbt(ur, request.value.data.psbtHex, loggedWallet.value.network);
+    const result = await parseKeystoneSignedPsbt(ur, request.value.data.psbtHex, loggedWallet.value.network);
     if (!result.success || !result.signedPsbtHex) throw new Error(result.error || 'Failed to parse Keystone signature');
 
     keystoneOverlay.value = false;

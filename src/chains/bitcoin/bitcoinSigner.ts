@@ -126,10 +126,20 @@ export function signPsbtWithMnemonic(
 
   for (let i = 0; i < inputCount; i++) {
     try {
-      // Derive signing key for this input
-      // Note: This assumes all inputs use the same derivation path
-      // For multi-path signing, would need to determine path per input
-      const signingKey = deriveSigningKey(accountKey, 0, i);
+      // Derive signing key using bip32Derivation metadata if available,
+      // otherwise fall back to external chain (0) with index 0
+      let chain = 0;
+      let index = 0;
+      const bip32Deriv = psbtObj.data.inputs[i].bip32Derivation;
+      if (bip32Deriv && bip32Deriv.length > 0) {
+        // Parse chain and index from the path (e.g. "m/0/3" or "m/1/7")
+        const pathParts = bip32Deriv[0].path.split('/');
+        if (pathParts.length >= 3) {
+          chain = parseInt(pathParts[pathParts.length - 2], 10);
+          index = parseInt(pathParts[pathParts.length - 1], 10);
+        }
+      }
+      const signingKey = deriveSigningKey(accountKey, chain, index);
 
       // Create signer object compatible with bitcoinjs-lib
       const signer = {
@@ -247,27 +257,31 @@ export function signPsbtWithPassword(
  * Sign PSBT with PRF-encrypted mnemonic
  *
  * @param psbt PSBT to sign
- * @param prfEncryptedMnemonic PRF-encrypted mnemonic phrase
- * @param prfSecret PRF secret (from WebAuthn)
+ * @param prfEncryptedMnemonic PRF-encrypted mnemonic phrase (hex)
+ * @param prfSecret PRF output bytes (from WebAuthn)
+ * @param credentialId Base64-encoded credential ID (must match encryption)
+ * @param walletId Wallet ID for key derivation (must match encryption)
  * @param network Bitcoin network
  * @param addressType Address type
  * @param accountIndex Account index
  * @returns Signed PSBT
  */
-export function signPsbtWithPrf(
+export async function signPsbtWithPrf(
   psbt: string | bitcoin.Psbt,
   prfEncryptedMnemonic: string,
   prfSecret: Uint8Array,
+  credentialId: string,
+  walletId: string,
   network: string,
   addressType: string = 'segwit',
   accountIndex: number = 0
-): bitcoin.Psbt {
+): Promise<bitcoin.Psbt> {
   // Import PRF decryption utility
-  const { decryptWithPrfSecret } = require('@/shared/utils/webauthn-prf');
+  const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
 
   try {
-    // Decrypt mnemonic with PRF secret
-    const mnemonic = decryptWithPrfSecret(prfEncryptedMnemonic, prfSecret);
+    // Decrypt mnemonic with PRF output
+    const mnemonic = await decryptMnemonicWithPrfOutput(prfEncryptedMnemonic, prfSecret, credentialId, walletId);
 
     // Validate mnemonic
     if (!bip39.validateMnemonic(mnemonic)) {

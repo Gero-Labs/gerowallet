@@ -418,8 +418,8 @@ function setMaxAmount() {
 
 async function updateFeeEstimate() {
   try {
-    const { BitcoinFeeEstimator } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
-    const estimator = BitcoinFeeEstimator.getInstance();
+    const { getBitcoinFeeEstimator } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
+    const estimator = getBitcoinFeeEstimator();
     const [fast, medium, slow] = await Promise.all([
       estimator.getFeeEstimate('fast'),
       estimator.getFeeEstimate('medium'),

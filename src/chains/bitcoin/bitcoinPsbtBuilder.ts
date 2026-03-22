@@ -8,8 +8,9 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
+import { HDKey } from '@scure/bip32';
 import type { IUnifiedUtxo, IOutput, IBuildTxParams, IUnsignedTx } from '@/chains/common/interfaces';
-import { selectCoins, CoinSelectionStrategy } from './bitcoinCoinSelection';
+import { selectCoins, CoinSelectionStrategy, calculateTxSize } from './bitcoinCoinSelection';
 
 /**
  * PSBT build options
@@ -32,6 +33,9 @@ export interface PsbtBuildOptions {
 
   /** Enable Replace-By-Fee (RBF) */
   rbfEnabled?: boolean;
+
+  /** Account xpub for adding bip32Derivation metadata to inputs (improves signing accuracy) */
+  xpub?: string;
 }
 
 /**
@@ -53,11 +57,13 @@ export function getBitcoinNetwork(network: string): bitcoin.Network {
 /**
  * Convert IUnifiedUtxo to PSBT input format
  * Includes witness UTXO data required for SegWit signing
+ * Optionally adds bip32Derivation metadata for correct key derivation during signing
  */
 function utxoToPsbtInput(
   utxo: IUnifiedUtxo,
   network: bitcoin.Network,
-  sequence: number
+  sequence: number,
+  xpub?: string
 ): any {
   // Convert hex string to Buffer
   const txidBuffer = Buffer.from(utxo.txHash, 'hex').reverse(); // Reverse for little-endian
@@ -68,12 +74,37 @@ function utxoToPsbtInput(
     value: Number(utxo.value), // PSBT expects number, not bigint
   };
 
-  return {
+  const input: any = {
     hash: txidBuffer,
     index: utxo.index,
     witnessUtxo,
     sequence,
   };
+
+  // Add bip32Derivation if we have derivation info and xpub
+  if (xpub && utxo.derivationChain !== undefined && utxo.derivationIndex !== undefined) {
+    try {
+      const accountNode = HDKey.fromExtendedKey(xpub);
+      const masterFingerprint = accountNode.fingerprint;
+      const childNode = accountNode.derive(`m/${utxo.derivationChain}/${utxo.derivationIndex}`);
+      if (childNode.publicKey) {
+        input.bip32Derivation = [{
+          masterFingerprint: Buffer.from(new Uint8Array([
+            (masterFingerprint >> 24) & 0xff,
+            (masterFingerprint >> 16) & 0xff,
+            (masterFingerprint >> 8) & 0xff,
+            masterFingerprint & 0xff,
+          ])),
+          pubkey: Buffer.from(childNode.publicKey),
+          path: `m/${utxo.derivationChain}/${utxo.derivationIndex}`,
+        }];
+      }
+    } catch (e) {
+      console.warn('Failed to add bip32Derivation to PSBT input:', e);
+    }
+  }
+
+  return input;
 }
 
 /**
@@ -136,7 +167,7 @@ export function buildPsbt(
 
   // Add inputs from selected UTXOs
   for (const utxo of selection.selectedUtxos) {
-    const input = utxoToPsbtInput(utxo, bitcoinNetwork, sequence);
+    const input = utxoToPsbtInput(utxo, bitcoinNetwork, sequence, options.xpub);
     psbt.addInput(input);
   }
 
@@ -285,7 +316,6 @@ export function buildSendAllPsbt(
 
   // Extract transaction to get size
   // Note: This won't work without signatures, so we'll estimate manually
-  const { calculateTxSize } = require('./bitcoinCoinSelection');
   const estimatedVsize = calculateTxSize(confirmedUtxos.length, 1);
   const fee = BigInt(Math.ceil(estimatedVsize * feeRate));
 

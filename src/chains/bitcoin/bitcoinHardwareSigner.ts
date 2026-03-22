@@ -124,9 +124,9 @@ export async function signPsbtWithTrezor(
  * @param psbt PSBT to sign (hex string)
  * @returns QR code data for display
  */
-export function generateKeystonePsbtQR(psbt: string): HardwareSigningResult {
+export async function generateKeystonePsbtQR(psbt: string): Promise<HardwareSigningResult> {
   try {
-    const { generateBitcoinPSBTQR } = require('@/shared/utils/keystone');
+    const { generateBitcoinPSBTQR } = await import('@/shared/utils/keystone');
 
     // Generate QR code options
     const qrOptions = generateBitcoinPSBTQR(psbt);
@@ -155,13 +155,13 @@ export function generateKeystonePsbtQR(psbt: string): HardwareSigningResult {
  * @param network Bitcoin network
  * @returns Signed transaction
  */
-export function parseKeystoneSignedPsbt(
+export async function parseKeystoneSignedPsbt(
   urString: string,
   network: string
-): HardwareSigningResult {
+): Promise<HardwareSigningResult> {
   try {
-    const { parseBitcoinSignature } = require('@/shared/utils/keystone');
-    const { URDecoder } = require('@ngraveio/bc-ur');
+    const { parseBitcoinSignature } = await import('@/shared/utils/keystone');
+    const { URDecoder } = await import('@ngraveio/bc-ur');
 
     // Decode UR string
     const decoder = new URDecoder();

@@ -2488,7 +2488,14 @@ app.add(BITCOIN_METHOD.pushPsbt, async (request, sendResponse) => {
     let psbt: any;
     try { psbt = bitcoin.Psbt.fromHex(request.data.psbtHex, { network }); }
     catch { psbt = bitcoin.Psbt.fromBase64(request.data.psbtHex, { network }); }
-    psbt.finalizeAllInputs();
+    // Only finalize if inputs are not already finalized (prevents double-finalize crash
+    // when signAndSendTransaction passes an already-finalized PSBT from btcSignPsbt)
+    const alreadyFinalized = psbt.data.inputs.every(
+      (input: any) => input.finalScriptSig || input.finalScriptWitness
+    );
+    if (!alreadyFinalized) {
+      psbt.finalizeAllInputs();
+    }
     const txHex = psbt.extractTransaction().toHex();
 
     const { BitcoinApi } = await import('@/api/bitcoin-api');
