@@ -117,8 +117,8 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
 
 // --- Fetch all tokens ---
 
-async function fetchAllTokens(): Promise<void> {
-  loading.value = true;
+async function fetchAllTokens(silent = false): Promise<void> {
+  if (!silent) loading.value = true;
   error.value = null;
 
   try {
@@ -157,11 +157,12 @@ async function fetchAllTokens(): Promise<void> {
     // Build native token (ADA / AP3X) at position 0
     const nativeName = networks.resolveCurrencyName(chain, walletStore.loggedWallet?.network) || 'Cardano';
     const nativeTicker = networks.resolveCurrencyTicker(chain, walletStore.loggedWallet?.network) || 'ADA';
+    const nativeImg = networks.resolveCurrencyImage(chain, walletStore.loggedWallet?.network) || '';
     const nativeToken: MarketToken = {
       unit: 'lovelace',
       name: nativeName,
       ticker: nativeTicker,
-      img: '',
+      img: nativeImg,
       verified: true,
       price: nativePrice.priceUsd,
       priceAda: 1,
@@ -343,12 +344,205 @@ function getTokenByUnit(unit: string): MarketToken | undefined {
   return allTokens.value.find(t => t.unit === unit);
 }
 
+// --- Live price streaming via SockJS XHR + STOMP ---
+// WebSocket upgrade is blocked by Cloudflare from extension origin,
+// so we use SockJS XHR streaming transport (HTTP-based, works everywhere).
+
+const MARKET_API_BASE = import.meta.env['VITE_MARKET_API_URL'] || 'https://market.gerowallet.io';
+const STOMP_TOPIC = '/topic/market/prices';
+
+let xhrStream: XMLHttpRequest | null = null;
+let xhrSendUrl = '';
+let streamReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+const wsConnected = ref(false);
+let renderPending = false;
+
+/** Build a token index for O(1) lookups */
+function buildTokenIndex(): Record<string, number> {
+  const index: Record<string, number> = {};
+  allTokens.value.forEach((t, i) => { index[t.unit] = i; });
+  return index;
+}
+
+/** Merge incoming price updates into existing tokens silently */
+function mergePriceUpdates(updates: any) {
+  const tokenIndex = buildTokenIndex();
+  let changed = false;
+
+  (Array.isArray(updates) ? updates : [updates]).forEach((u: any) => {
+    if (!u.assetId) return;
+    const idx = tokenIndex[u.assetId];
+    if (idx == null) return;
+
+    const t = allTokens.value[idx];
+    if (u.priceAda != null) t.priceAda = u.priceAda;
+    if (u.priceUsd != null) t.price = u.priceUsd;
+    if (u.priceChange1h != null) t.change1h = u.priceChange1h;
+    if (u.priceChange24h != null) t.change24h = u.priceChange24h;
+    if (u.priceChange7d != null) t.change7d = u.priceChange7d;
+    if (u.volume24h != null) t.volume24h = u.volume24h;
+    if (u.tvl != null) t.tvl = u.tvl;
+    if (u.liquidity != null) t.liquidity = u.liquidity;
+    if (u.marketCap != null) t.mcap = u.marketCap;
+    if (u.holders != null) t.holders = u.holders;
+    if (u.isNew != null) t.isNew = u.isNew;
+    changed = true;
+  });
+
+  if (!changed || renderPending) return;
+  renderPending = true;
+  setTimeout(() => {
+    renderPending = false;
+    allTokens.value = [...allTokens.value];
+  }, 2000);
+}
+
+/** Minimal STOMP framing */
+function stompFrame(command: string, headers: Record<string, string> = {}, body = ''): string {
+  let frame = command + '\n';
+  for (const [k, v] of Object.entries(headers)) frame += `${k}:${v}\n`;
+  frame += '\n' + body + '\0';
+  return frame;
+}
+
+function parseStompFrame(data: string): { command: string; headers: Record<string, string>; body: string } | null {
+  const idx = data.indexOf('\n\n');
+  if (idx < 0) return null;
+  const headerSection = data.substring(0, idx);
+  const body = data.substring(idx + 2).replace(/\0$/, '');
+  const lines = headerSection.split('\n');
+  const command = lines[0];
+  const headers: Record<string, string> = {};
+  for (let i = 1; i < lines.length; i++) {
+    const colon = lines[i].indexOf(':');
+    if (colon > 0) headers[lines[i].substring(0, colon)] = lines[i].substring(colon + 1);
+  }
+  return { command, headers, body };
+}
+
+/** Send a STOMP frame via SockJS XHR send endpoint */
+function stompSend(frame: string): void {
+  if (!xhrSendUrl) return;
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', xhrSendUrl, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.send(JSON.stringify([frame]));
+}
+
+/** Process a SockJS message chunk from the XHR stream */
+function processSockJsChunk(chunk: string): void {
+  if (chunk === 'o') {
+    // SockJS open — send STOMP CONNECT
+    stompSend(stompFrame('CONNECT', { 'accept-version': '1.2', 'heart-beat': '0,0' }));
+    return;
+  }
+  if (chunk === 'h') return; // heartbeat
+  if (chunk.startsWith('c')) { disconnectStream(); return; }
+
+  if (chunk.startsWith('a')) {
+    let messages: string[];
+    try { messages = JSON.parse(chunk.substring(1)); } catch { return; }
+
+    for (const msg of messages) {
+      const frame = parseStompFrame(msg);
+      if (!frame) continue;
+
+      if (frame.command === 'CONNECTED') {
+        stompSend(stompFrame('SUBSCRIBE', { id: 'sub-0', destination: STOMP_TOPIC }));
+        wsConnected.value = true;
+        console.debug('📡 Market stream connected and subscribed');
+      } else if (frame.command === 'MESSAGE' && frame.body) {
+        try { mergePriceUpdates(JSON.parse(frame.body)); } catch { /* ignore */ }
+      }
+    }
+  }
+}
+
+let polling = false;
+let xhrPollUrl = '';
+
+/** Long-poll: POST to /xhr, get one message, repeat */
+function poll(): void {
+  if (!polling || !xhrPollUrl) return;
+
+  const xhr = new XMLHttpRequest();
+  xhrStream = xhr;
+  xhr.open('POST', xhrPollUrl, true);
+  xhr.timeout = 30000; // SockJS long-poll typically returns within 25s
+
+  xhr.onload = () => {
+    xhrStream = null;
+    if (xhr.status === 200 && xhr.responseText) {
+      processSockJsChunk(xhr.responseText.trim());
+    }
+    // Continue polling
+    if (polling) poll();
+  };
+
+  xhr.onerror = xhr.ontimeout = () => {
+    xhrStream = null;
+    wsConnected.value = false;
+    // Retry after delay
+    if (polling) streamReconnectTimer = setTimeout(() => connectStream(), 5000);
+  };
+
+  xhr.send(null);
+}
+
+function connectStream(): void {
+  if (polling) return;
+
+  const server = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  const session = Math.random().toString(36).substring(2, 10);
+  const baseSessionUrl = `${MARKET_API_BASE}/ws/market/${server}/${session}`;
+  xhrSendUrl = `${baseSessionUrl}/xhr_send`;
+  xhrPollUrl = `${baseSessionUrl}/xhr`;
+
+  // Open session: first POST to /xhr returns 'o'
+  const openXhr = new XMLHttpRequest();
+  openXhr.open('POST', xhrPollUrl, true);
+  openXhr.onload = () => {
+    if (openXhr.status !== 200) {
+      console.warn('📡 Market stream open failed:', openXhr.status);
+      streamReconnectTimer = setTimeout(() => connectStream(), 5000);
+      return;
+    }
+    processSockJsChunk(openXhr.responseText.trim());
+    // Start long-polling loop
+    polling = true;
+    poll();
+  };
+  openXhr.onerror = () => {
+    streamReconnectTimer = setTimeout(() => connectStream(), 5000);
+  };
+  openXhr.send(null);
+}
+
+function disconnectStream(): void {
+  polling = false;
+  if (streamReconnectTimer) {
+    clearTimeout(streamReconnectTimer);
+    streamReconnectTimer = null;
+  }
+  if (xhrStream) {
+    xhrStream.onload = null;
+    xhrStream.onerror = null;
+    xhrStream.ontimeout = null;
+    xhrStream.abort();
+    xhrStream = null;
+  }
+  wsConnected.value = false;
+  xhrSendUrl = '';
+  xhrPollUrl = '';
+}
+
 // --- Cleanup ---
 
 let chainWatcherStop: WatchStopHandle | null = null;
 let coinGeckoWatcherStop: WatchStopHandle | null = null;
 
 function cleanup(): void {
+  disconnectStream();
   if (refreshInterval) {
     clearInterval(refreshInterval);
     refreshInterval = null;
@@ -370,16 +564,18 @@ export function useMarketData() {
   // Initialize once on first composable call
   if (!initialized) {
     initialized = true;
-    fetchAllTokens();
+    fetchAllTokens().then(() => connectStream()); // WS after initial data is ready
+    // REST fallback every 5 minutes (in case WS is down)
     refreshInterval = setInterval(() => {
-      if (!document.hidden) fetchAllTokens();
-    }, 60_000);
+      if (!document.hidden) fetchAllTokens(true);
+    }, 300_000);
   }
 
   // Watch for wallet chain changes — re-fetch data when switching wallets
   if (!chainWatcherStop) {
     chainWatcherStop = watch(() => walletStore.loggedWallet?.chain, () => {
-      fetchAllTokens();
+      disconnectStream();
+      fetchAllTokens().then(() => connectStream()); // Reconnect WS with fresh data
     });
   }
 
@@ -388,7 +584,7 @@ export function useMarketData() {
     coinGeckoWatcherStop = watch(() => coinGeckoStore.cache, () => {
       const chain = walletStore.loggedWallet?.chain;
       const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
-      if (isApex) fetchAllTokens();
+      if (isApex) fetchAllTokens(true); // Silent — just updating prices
     }, { deep: true });
   }
 
@@ -437,6 +633,7 @@ export function useMarketData() {
     searchTokens,
     getTokenByUnit,
     getTokenCandles,
+    wsConnected,
     fetchAllTokens,
     cleanup,
   };

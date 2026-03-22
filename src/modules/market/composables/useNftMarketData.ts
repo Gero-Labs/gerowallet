@@ -1,22 +1,37 @@
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onUnmounted, getCurrentInstance, type WatchStopHandle } from 'vue';
 import marketApi, { type NftCollectionStats } from '@/api/market-api';
 import { walletStore } from '@/stores/walletStore';
 
 export interface NftCollectionDisplay {
   policyId: string;
+  policyIdShort: string;
   name: string;
   img: string;
   quantity: number;
   isScam: boolean;
+  description: string;
   // Market data (optional — may not be available from backend)
   floorPriceLovelace: number | null;
+  lastSalePriceLovelace: number | null;
   totalVolumeLovelace: number | null;
   saleCount: number | null;
+  // Computed
+  floorValueLovelace: number | null;
 }
 
 const collections = ref<NftCollectionDisplay[]>([]);
 const loading = ref(false);
 let nftWatcherRegistered = false;
+let nftWatcherStop: WatchStopHandle | null = null;
+let consumerCount = 0;
+
+function cleanup(): void {
+  if (nftWatcherStop) {
+    nftWatcherStop();
+    nftWatcherStop = null;
+  }
+  nftWatcherRegistered = false;
+}
 
 export function useNftMarketData() {
   async function fetchUserNftCollections() {
@@ -35,13 +50,17 @@ export function useNftMarketData() {
       const baseCollections: NftCollectionDisplay[] = entries
         .map(([policyId, col]) => ({
           policyId,
+          policyIdShort: policyId.slice(0, 12) + '...',
           name: col.name || policyId.slice(0, 8) + '...',
           img: col.img || '',
           quantity: col.quantity || col.items?.length || 0,
           isScam: col.isScam || false,
+          description: '',
           floorPriceLovelace: null,
+          lastSalePriceLovelace: null,
           totalVolumeLovelace: null,
           saleCount: null,
+          floorValueLovelace: null,
         }));
 
       // Set immediately so the user sees their collections
@@ -91,11 +110,18 @@ export function useNftMarketData() {
         collections.value = baseCollections.map(col => {
           const s = statsMap.get(col.policyId);
           if (s) {
+            const floor = s.floorPriceLovelace ?? null;
+            const qty = col.quantity || 0;
             return {
               ...col,
-              floorPriceLovelace: s.floorPriceLovelace ?? null,
+              name: s.name || col.name,
+              img: s.imageUrl || col.img,
+              description: s.description || col.description || '',
+              floorPriceLovelace: floor,
+              lastSalePriceLovelace: s.lastSalePriceLovelace ?? null,
               totalVolumeLovelace: s.totalVolumeLovelace ?? null,
               saleCount: s.saleCount ?? null,
+              floorValueLovelace: floor != null && qty > 0 ? floor * qty : null,
             };
           }
           return col;
@@ -120,8 +146,19 @@ export function useNftMarketData() {
   // Re-fetch when wallet collections change (e.g. wallet switch) — register only once
   if (!nftWatcherRegistered) {
     nftWatcherRegistered = true;
-    watch(() => walletStore.collections, () => {
+    nftWatcherStop = watch(() => walletStore.collections, () => {
       fetchUserNftCollections();
+    });
+  }
+
+  // Consumer counting for cleanup
+  consumerCount++;
+  if (getCurrentInstance()) {
+    onUnmounted(() => {
+      consumerCount--;
+      if (consumerCount <= 0) {
+        cleanup();
+      }
     });
   }
 

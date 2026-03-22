@@ -12,7 +12,9 @@
       :cycle="false"
       height="100%"
       hide-delimiter-background
-      show-arrows-on-hover
+      :hide-delimiters="items.length <= 1"
+      :show-arrows-on-hover="items.length > 1"
+      :show-arrows="items.length > 1"
       :class="carouselClass"
     >
       <v-carousel-item

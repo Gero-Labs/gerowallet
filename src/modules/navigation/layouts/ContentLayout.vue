@@ -457,7 +457,7 @@ onMounted(async () => {
   if (barEl) {
     // Known expanded element widths (measured from DOM):
     // - Search field: ~180px, Buttons with labels: ~560px, Right icons: ~170px, Gaps: ~40px
-    const EXPANDED_CONTENT_WIDTH = 850;
+    const EXPANDED_CONTENT_WIDTH = 1020;
     navBarObserver = new ResizeObserver(([entry]) => {
       compactNav.value = entry.contentRect.width < EXPANDED_CONTENT_WIDTH;
     });

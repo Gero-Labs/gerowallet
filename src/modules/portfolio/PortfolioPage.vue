@@ -41,7 +41,7 @@
             :first-loaded-currency="firstLoadedCurrency"
             :total-realized-pnl="isMainnetCardano ? (pnlSummary?.totalRealizedPnlAda ?? null) : null"
             :total-unrealized-pnl="isMainnetCardano ? (pnlSummary?.totalUnrealizedPnlAda ?? null) : null"
-            :pnl-incomplete="isMainnetCardano && (pnlSummary?.tokens?.some(t => t.costBasisComplete === false) ?? false)"
+            :pnl-incomplete="isMainnetCardano && (pnlSummary?.tokens?.some(to => to.costBasisComplete === false) ?? false)"
             :pnl-loading="isMainnetCardano && pnlLoading"
             @refresh="refreshPortfolioChart"
             @timeframe-change="handleChartTimeframeChange"
@@ -57,7 +57,7 @@
               :items="carouselItems"
               :paused="carouselPaused"
               :is-loading="false"
-              :show-progress-bar="true"
+              :show-progress-bar="carouselItems.length > 1"
               carousel-class="feature-carousel dashboard-card feature-card-full-height"
               @item-click="handleCarouselClick"
             />
@@ -104,76 +104,98 @@
                 </v-btn>
               </div>
 
-              <!-- Search field -->
-              <v-text-field
-                v-model="searchQuery"
-                :placeholder="activeView === 'collectibles'
-                  ? $t('assets.searchCollections')
-                  : $t('market.searchPlaceholder')"
-                prepend-inner-icon="mdi-magnify"
-                solo-inverted
-                dense
-                flat
-                hide-details
-                clearable
-                class="search-field flex-shrink-0"
-                style="max-width: 180px"
-              />
-
-              <!-- 3-dot filter menu -->
-              <v-menu offset-y left :close-on-content-click="false">
+              <!-- Live indicator -->
+              <v-tooltip v-if="isMainnetCardano" bottom content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
-                  <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0">
-                    <v-badge
-                      :value="verifiedOnly || !hideScam || (!isApex && hasCustomColumns)"
-                      dot
-                      color="primary"
-                      overlap
-                    >
-                      <v-icon small>mdi-dots-vertical</v-icon>
+                  <div class="live-indicator flex-shrink-0 d-flex align-center" v-bind="attrs" v-on="on">
+                    <span class="live-dot" :class="{ 'live-dot--active': marketWsConnected }"></span>
+                    <span class="live-label" :class="{ 'live-label--active': marketWsConnected }">LIVE</span>
+                  </div>
+                </template>
+                <span>{{ marketWsConnected ? $t('market.liveUpdates') : $t('market.connecting') }}</span>
+              </v-tooltip>
+
+              <!-- Unified filter menu (search + filters + columns) -->
+              <v-menu
+                v-model="filterMenuOpen"
+                offset-y
+                left
+                :close-on-content-click="false"
+                nudge-bottom="4"
+                content-class="filter-panel-menu"
+                eager
+                transition="none"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0 filter-menu-btn">
+                    <v-badge :value="!!searchQuery || !verifiedOnly || !hideScam || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                      <v-icon small>mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
                 </template>
-                <v-list dense class="filter-menu-list">
-                  <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
-                    <v-list-item-action class="mr-2">
-                      <v-icon small :color="verifiedOnly ? 'primary' : ''">
-                        {{ verifiedOnly ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                      </v-icon>
-                    </v-list-item-action>
-                    <v-list-item-title style="font-size: 13px;">{{ $t('market.verifiedOnly') }}</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item @click="hideScam = !hideScam">
-                    <v-list-item-action class="mr-2">
-                      <v-icon small :color="hideScam ? 'primary' : ''">
-                        {{ hideScam ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                      </v-icon>
-                    </v-list-item-action>
-                    <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
-                  </v-list-item>
-                  <template v-if="!isApex">
-                    <v-divider class="my-1" />
-                    <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
-                    <v-list-item
-                      v-for="col in columnOptions"
-                      :key="col.key"
-                      @click="toggleColumn(col.key)"
-                    >
+                <v-card flat class="liquid-glass-dialog">
+                  <!-- Search -->
+                  <div class="px-3 pt-3 pb-1">
+                    <v-text-field
+                      ref="searchFieldRef"
+                      v-model="searchQuery"
+                      :placeholder="activeView === 'collectibles'
+                        ? $t('assets.searchCollections')
+                        : $t('market.searchPlaceholder')"
+                      prepend-inner-icon="mdi-magnify"
+                      dense
+                      flat
+                      hide-details
+                      clearable
+                      class="filter-panel-search"
+                    />
+                  </div>
+
+                  <!-- Filters -->
+                  <v-list dense class="transparent pa-0">
+                    <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
                       <v-list-item-action class="mr-2">
-                        <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
-                          {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        <v-icon small :color="verifiedOnly ? 'primary' : ''">
+                          {{ verifiedOnly ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
                         </v-icon>
                       </v-list-item-action>
-                      <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                      <v-list-item-title style="font-size: 13px;">{{ $t('market.verifiedOnly') }}</v-list-item-title>
                     </v-list-item>
-                    <v-divider class="my-1" />
-                    <v-list-item @click="resetToDefaults">
-                      <v-list-item-title style="font-size: 12px; color: #7c4dff;">
-                        {{ $t('market.resetColumns') }}
-                      </v-list-item-title>
+                    <v-list-item @click="hideScam = !hideScam">
+                      <v-list-item-action class="mr-2">
+                        <v-icon small :color="hideScam ? 'primary' : ''">
+                          {{ hideScam ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </v-list-item-action>
+                      <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
                     </v-list-item>
-                  </template>
-                </v-list>
+
+                    <!-- Column preferences (Cardano only) -->
+                    <template v-if="!isApex">
+                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                      <v-subheader style="height: 28px; font-size: 11px;">{{ $t('market.columns') }}</v-subheader>
+                      <v-list-item
+                        v-for="col in columnOptions"
+                        :key="col.key"
+                        @click="toggleColumn(col.key)"
+                        dense
+                      >
+                        <v-list-item-action class="mr-2">
+                          <v-icon small :color="columnPrefs[col.key] ? 'primary' : ''">
+                            {{ columnPrefs[col.key] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                          </v-icon>
+                        </v-list-item-action>
+                        <v-list-item-title style="font-size: 13px;">{{ col.label }}</v-list-item-title>
+                      </v-list-item>
+                      <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
+                      <v-list-item dense @click="resetToDefaults">
+                        <v-list-item-title style="font-size: 12px; color: #7c4dff;">
+                          {{ $t('market.resetColumns') }}
+                        </v-list-item-title>
+                      </v-list-item>
+                    </template>
+                  </v-list>
+                </v-card>
               </v-menu>
             </div>
 
@@ -251,7 +273,6 @@ import { dexHunterStore } from '@/stores/dexHunterStore';
 import { priceStore } from '@/stores/priceStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain, Network } from '@/models/types';
-import { Cardano } from '@cardano-sdk/core';
 import { getBalance } from '@/chrome/serialization';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
 
@@ -268,6 +289,7 @@ import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import assets from '@/utils/assets';
+import networks from '@/utils/networks';
 
 const { t } = useTranslation();
 const instance = getCurrentInstance();
@@ -280,8 +302,8 @@ const {
   trendingTokens,
   topGainers,
   topLosers,
-  newTokens,
   loading: marketLoading,
+  wsConnected: marketWsConnected,
 } = useMarketData();
 const { isWatched, watchlistCount } = useWatchlist();
 const { pnlSummary, pnlLoading, fetchPnl, getTokenPnl } = useWalletPnl();
@@ -290,11 +312,11 @@ const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker }
 const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
 
 const columnOptions: { key: ColumnKey; label: string }[] = [
-  { key: 'change24h', label: t('market.change24h') },
   { key: 'change1h', label: t('market.change1h') },
+  { key: 'change24h', label: t('market.change24h') },
   { key: 'change7d', label: t('market.change7d') },
-  { key: 'mcap', label: t('market.marketCap') },
   { key: 'volume24h', label: t('market.volume24h') },
+  { key: 'mcap', label: t('market.marketCap') },
   { key: 'tvl', label: t('market.tvl') },
   { key: 'risk', label: t('market.risk') },
   { key: 'allocation', label: t('common.allocation') },
@@ -346,17 +368,19 @@ function setActiveView(view: ViewMode) {
   activeView.value = view;
   // Sync to URL for shareable links and back/forward navigation
   const router = instance?.proxy?.$router;
-  const currentView = instance?.proxy?.$route?.query?.view;
+  const currentView = instance?.proxy?.$route?.query?.['view'];
   if (router && currentView !== view) {
     router.replace({ query: { view } }).catch(() => {});
   }
 }
 
 const searchQuery = ref('');
+const filterMenuOpen = ref(false);
+const searchFieldRef = ref<HTMLElement | null>(null);
 const verifiedOnly = ref(true);
 const hideScam = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
-const nftDialogData = ref<any>(null);
+const nftDialogData = ref<Record<string, unknown> | null>(null);
 const selectedToken = ref<MarketToken | null>(null);
 const panelOpen = ref(false);
 const swapDialogOpen = ref(false);
@@ -366,18 +390,54 @@ const currentTimestamp = ref(Date.now());
 // Carousel state
 const currentCarouselIndex = ref(0);
 const carouselPaused = ref(false);
-const carouselItems = ref<CarouselItem[]>([
-  {
-    id: 'gero-debit-card',
-    title: t('card.geroCard'),
-    subtitle: t('card.topUpAdaInstantly'),
-    logoAlt: 'Gero Logo',
-    backgroundImage: assets.debitCardBgImage,
-    cardImage: assets.debitCardImage,
-    action: 'showDebitCardInfo',
-    type: 'debit-card' as const,
-  },
-]);
+const carouselItems = computed<CarouselItem[]>(() => {
+  const chain = walletStore.loggedWallet?.chain;
+  const network = walletStore.loggedWallet?.network;
+
+  // Apex wallets get their own carousel
+  if (chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR) {
+    return [
+      {
+        id: 'apex-welcome',
+        title: t('dashboard.apexFusion'),
+        subtitle: t('dashboard.nextGenerationBlockchain'),
+        logo: assets.geroDashboardApex,
+        logoAlt: 'Apex Fusion Logo',
+        backgroundImage: assets.apexBgDashboard,
+        action: 'showApexWelcome',
+      },
+    ];
+  }
+
+  // Cardano wallets
+  const items: CarouselItem[] = [
+    {
+      id: 'gero-debit-card',
+      title: t('card.geroCard'),
+      subtitle: t('card.topUpAdaInstantly'),
+      logoAlt: 'Gero Logo',
+      backgroundImage: assets.debitCardBgImage,
+      cardImage: assets.debitCardImage,
+      action: 'showDebitCardInfo',
+      type: 'debit-card' as const,
+    },
+  ];
+
+  if (chain && network && networks.resolveCashbackSupport(chain, network)) {
+    items.push({
+      id: 'ada-cashback',
+      title: t('cashback.adaCashback'),
+      subtitle: `${t('cashback.payOnlineReceiveCashback')} \n ${t('cashback.clickToSeeDeals')}`,
+      logoAlt: 'Gero Logo',
+      backgroundImage: assets.cashbackCarouselImage,
+      cardImage: assets.cashbackImage,
+      action: 'navigateToCashback',
+      type: 'ada-cashback' as const,
+    });
+  }
+
+  return items;
+});
 
 // ── Debounced search ──────────────────────────────────────────────────────────
 
@@ -397,21 +457,6 @@ const shouldBackup = computed(() => {
   return config && 'backup' in config && !config.backup;
 });
 
-// NFTs: check wallet collections (synced from chain)
-const hasNfts = computed(() => {
-  return Object.keys(collections.value || {}).length > 0;
-});
-
-const tokensCount = computed(() => Object.keys(walletTokens.value || {}).length);
-
-const collectiblesCount = computed(() => {
-  let count = 0;
-  Object.values(collections.value || {}).forEach((col: any) => {
-    if (col.items) count += col.items.length;
-  });
-  return count;
-});
-
 // ── Computed: Portfolio values (ported from Dashboard.vue) ────────────────────
 
 const nativePriceUsd = computed(() => {
@@ -427,7 +472,7 @@ const adaBalance = computed(() => {
 const computedValues = computed(() => {
   let assetsValue = 0;
   if (portfolio.value?.positionsFt) {
-    portfolio.value.positionsFt.forEach((position: any) => { assetsValue += position.adaValue; });
+    portfolio.value.positionsFt.forEach((position: { adaValue: number }) => { assetsValue += position.adaValue; });
   }
   if (account.value?.controlled_amount && Number(account.value.controlled_amount) > 0) {
     assetsValue += Number(account.value.controlled_amount) / 1000000;
@@ -449,7 +494,7 @@ const adaOnlyChartData = computed(() => {
   const graphData: number[][] = [];
   const usdData: number[][] = [];
   const eurData: number[][] = [];
-  const sortedTransactions = [...transactions.value].sort((a: any, b: any) => a.tx_timestamp - b.tx_timestamp);
+  const sortedTransactions = [...transactions.value].sort((a: { tx_timestamp: number }, b: { tx_timestamp: number }) => a.tx_timestamp - b.tx_timestamp);
   const now = currentTimestamp.value;
   const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
   const firstTxTimestamp = sortedTransactions[0].tx_timestamp * 1000;
@@ -470,7 +515,7 @@ const adaOnlyChartData = computed(() => {
     eurData.push([firstTxTimestamp - 1000, 0]);
   }
   let currentBalance = 0;
-  sortedTransactions.forEach((tx: any) => {
+  sortedTransactions.forEach((tx: { ada: number; tx_timestamp: number }) => {
     currentBalance += tx.ada;
     const balanceInAda = currentBalance / 1000000;
     const timestamp = tx.tx_timestamp * 1000;
@@ -526,10 +571,10 @@ const myHoldings = computed<MarketToken[]>(() => {
   const adaPriceUsd = isApex.value
     ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
     : (priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0);
-  const dhTokens = (dexHunterStore as any).dexHunterTokens || {};
+  const dhTokens = dexHunterStore.dexHunterTokens || {};
   const holdings: MarketToken[] = [];
 
-  Object.entries(tokens).forEach(([unit, token]: [string, any]) => {
+  Object.entries(tokens).forEach(([unit, token]: [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }]) => {
     if (!token.quantity || Number(token.quantity) <= 0) return;
 
     const decimals = token.metadata?.decimals || 0;
@@ -566,6 +611,7 @@ const myHoldings = computed<MarketToken[]>(() => {
       verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
       price: priceUsd,
       priceAda,
+      priceEur: marketToken?.priceEur ?? 0,
       change1h: marketToken?.change1h || 0,
       change24h: marketToken?.change24h || 0,
       change7d: marketToken?.change7d || 0,
@@ -625,7 +671,7 @@ const watchlistedTokens = computed(() => allTokens.value.filter(tok => isWatched
 // ── Computed: Unified displayed tokens ────────────────────────────────────────
 
 const displayedTokens = computed(() => {
-  let tokens: MarketToken[] = [];
+  let tokens: MarketToken[];
 
   switch (activeView.value) {
     case 'holdings':
@@ -719,6 +765,8 @@ function handleCarouselClick(item: CarouselItem) {
     proxy.$router.push('/card');
   } else if (item.action === 'navigateToCashback' && proxy?.$router && proxy.$route.path !== '/cashback') {
     proxy.$router.push('/cashback');
+  } else if (item.action === 'showApexWelcome') {
+    window.open('https://apexfusion.org', '_blank');
   }
 }
 
@@ -794,10 +842,25 @@ onMounted(() => {
     fetchPnl();
   }
 
-  // Watch chip bar width to toggle compact mode
+  // Watch chip bar width — go compact when content would overflow
   if (chipBarRef.value) {
+    // Capture the full (expanded) scroll width on mount before any compaction
+    let expandedScrollWidth = chipBarRef.value.scrollWidth;
+
     chipBarObserver = new ResizeObserver(([entry]) => {
-      compactChips.value = entry.contentRect.width < 520;
+      const availableWidth = entry.contentRect.width;
+      if (!compactChips.value) {
+        // Currently expanded — record the full content width and check overflow
+        expandedScrollWidth = chipBarRef.value?.scrollWidth ?? expandedScrollWidth;
+        if (expandedScrollWidth > availableWidth) {
+          compactChips.value = true;
+        }
+      } else {
+        // Currently compact — expand only if the cached full width fits
+        if (expandedScrollWidth <= availableWidth) {
+          compactChips.value = false;
+        }
+      }
     });
     chipBarObserver.observe(chipBarRef.value);
   }
@@ -837,15 +900,15 @@ watch(
 );
 
 // Handle /?view= deep-link and nav drawer clicks
-const validViews: ViewMode[] = ['holdings', 'collectibles', 'all', 'trending', 'gainers', 'losers', 'new', 'watchlist'];
+const validViews: ViewMode[] = ['holdings', 'collectibles', 'all', 'trending', 'gainers', 'losers', 'watchlist'];
 watch(
-  () => instance?.proxy?.$route?.query?.view,
+  () => instance?.proxy?.$route?.query?.['view'],
   (view) => {
     if (view && validViews.includes(view as ViewMode)) {
       activeView.value = view as ViewMode;
     }
     // Legacy support: ?tab=market maps to 'all'
-    const tab = instance?.proxy?.$route?.query?.tab;
+    const tab = instance?.proxy?.$route?.query?.['tab'];
     if (tab === 'market') {
       activeView.value = 'all';
     }
@@ -858,7 +921,7 @@ const CARDANO_ID_RE = /^[0-9a-f]{1,120}$/i;
 
 // Handle /?token=<unit> deep-link (e.g. from Global Search)
 watch(
-  () => instance?.proxy?.$route?.query?.token,
+  () => instance?.proxy?.$route?.query?.['token'],
   (unit) => {
     if (unit && typeof unit === 'string' && CARDANO_ID_RE.test(unit)) {
       openTokenByUnit(unit);
@@ -869,7 +932,7 @@ watch(
 
 // Handle /?nft=<policyId> deep-link
 watch(
-  () => instance?.proxy?.$route?.query?.nft,
+  () => instance?.proxy?.$route?.query?.['nft'],
   (policyId) => {
     if (policyId && typeof policyId === 'string' && CARDANO_ID_RE.test(policyId)) {
       openNftCollection(policyId);
@@ -1000,18 +1063,56 @@ watch(
   font-feature-settings: 'tnum' 1;
 }
 
-/* ── Search field ────────────────────────────────────────────────────────────── */
+/* ── Search popover ─────────────────────────────────────────────────────────── */
 
-.search-field ::v-deep .v-input__slot {
-  min-height: 32px !important;
-  font-size: 13px;
-  background: #000000 !important;
+/* ── Filter menu button ──────────────────────────────────────────────────────── */
+
+.filter-menu-btn {
+  transition: background 0.2s ease;
 }
 
-.search-field ::v-deep .v-input__prepend-inner {
-  margin-top: 4px !important;
+.filter-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 
+/* ── Live indicator ──────────────────────────────────────────────────────────── */
+
+.live-indicator {
+  gap: 4px;
+  cursor: default;
+  user-select: none;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.3s ease;
+}
+
+.live-dot--active {
+  background: #47CD89;
+  box-shadow: 0 0 6px rgba(71, 205, 137, 0.6);
+  animation: livePulse 2s ease-in-out infinite;
+}
+
+.live-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.25);
+  transition: color 0.3s ease;
+}
+
+.live-label--active {
+  color: #47CD89;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 
 /* ── Token detail panel positioning ──────────────────────────────────────────── */
 
@@ -1049,8 +1150,60 @@ watch(
   .filter-chip-bar .v-chip {
     font-size: 12px;
   }
-  .search-field {
-    max-width: 140px !important;
-  }
+}
+</style>
+
+<style>
+/* Filter panel — rendered outside scoped component by v-menu */
+.filter-panel-menu {
+  border-radius: 12px !important;
+}
+
+.filter-panel {
+  min-width: 220px;
+  padding-bottom: 4px !important;
+  background:
+    linear-gradient(135deg, rgba(19, 22, 27, 0.75) 0%, rgba(19, 22, 27, 0.65) 100%),
+    radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%) !important;
+  background-color: transparent !important;
+  backdrop-filter: blur(24px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset -1px 0 0 rgba(45, 240, 247, 0.08) !important;
+  isolation: isolate !important;
+}
+
+.filter-panel-search .v-input__slot {
+  min-height: 34px !important;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-radius: 8px !important;
+  color: white !important;
+}
+
+.filter-panel-search .v-input__slot input {
+  color: white !important;
+  caret-color: white !important;
+}
+
+.filter-panel-search .v-input__slot input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.filter-panel-search .v-input__prepend-inner {
+  margin-top: 5px !important;
+}
+
+.filter-panel .v-list-item {
+  min-height: 36px !important;
+}
+
+.filter-panel .v-subheader {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 </style>

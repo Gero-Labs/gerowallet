@@ -54,11 +54,13 @@
             </template>
             <v-avatar size="28">
               <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
+              <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
               <v-icon v-else>mdi-circle-outline</v-icon>
             </v-avatar>
           </v-badge>
           <v-avatar size="28" v-else>
             <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
+            <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
         </v-list-item-action>
@@ -110,7 +112,7 @@
 
     <!-- Change columns -->
     <template v-slot:[`item.change1h`]="{ item }">
-      <span :style="{ color: changeColor(item.change1h), fontSize: '12px' }">
+      <span :style="{ color: changeColor(item.change1h), fontSize: '12px', whiteSpace: 'nowrap' }">
         <v-avatar tile size="10" class="mr-1">
           <v-img :src="changeIcon(item.change1h)" alt="trend" />
         </v-avatar>
@@ -119,7 +121,7 @@
     </template>
 
     <template v-slot:[`item.change24h`]="{ item }">
-      <span :style="{ color: changeColor(item.change24h), fontSize: '12px' }">
+      <span :style="{ color: changeColor(item.change24h), fontSize: '12px', whiteSpace: 'nowrap' }">
         <v-avatar tile size="10" class="mr-1">
           <v-img :src="changeIcon(item.change24h)" alt="trend" />
         </v-avatar>
@@ -128,7 +130,7 @@
     </template>
 
     <template v-slot:[`item.change7d`]="{ item }">
-      <span :style="{ color: changeColor(item.change7d), fontSize: '12px' }">
+      <span :style="{ color: changeColor(item.change7d), fontSize: '12px', whiteSpace: 'nowrap' }">
         <v-avatar tile size="10" class="mr-1">
           <v-img :src="changeIcon(item.change7d)" alt="trend" />
         </v-avatar>
@@ -365,6 +367,11 @@ import type { MarketToken } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { Blockchain } from '@/models/types';
+import networks from '@/utils/networks';
+
+const chainLogo = computed(() =>
+  networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
+);
 
 const props = withDefaults(defineProps<{
   tokens: MarketToken[];
@@ -418,26 +425,26 @@ const baseHeaders = computed(() => {
     { text: t('market.rank'), value: 'rank', sortable: false, width: '40px' },
     { text: t('market.token'), value: 'name', sortable: true },
     { text: t('market.price'), value: 'price', sortable: true, width: '100px' },
-    { text: t('market.change1h'), value: 'change1h', sortable: true, width: '70px', class: 'hidden-md-and-down' },
+    { text: t('market.change1h'), value: 'change1h', sortable: true, width: '70px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
     { text: t('market.change24h'), value: 'change24h', sortable: true, width: '70px' },
-    { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px', class: 'hidden-md-and-down' },
-    { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px', class: 'hidden-sm-and-down' },
+    { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
+    { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px', class: 'hidden-sm-and-down', cellClass: 'hidden-sm-and-down' },
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
-    { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px', class: 'hidden-sm-and-down' },
-    ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px', class: 'hidden-md-and-down' }] : []),
-    { text: t('market.risk'), value: 'risk', sortable: true, width: '70px', class: 'hidden-md-and-down' },
+    { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px', class: 'hidden-sm-and-down', cellClass: 'hidden-sm-and-down' },
+    ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' }] : []),
+    { text: t('market.risk'), value: 'risk', sortable: true, width: '70px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
   ];
 
   // Allocation is toggleable via column preferences (works in both market and holdings views)
   headers.push(
-    { text: t('common.allocation'), value: 'allocation', sortable: true, width: '110px', class: 'hidden-sm-and-down' },
+    { text: t('common.allocation'), value: 'allocation', sortable: true, width: '110px', class: 'hidden-sm-and-down', cellClass: 'hidden-sm-and-down' },
   );
 
   if (props.showHoldingsColumns) {
     headers.push(
       { text: t('market.balance'), value: 'balance', sortable: true, width: '80px' },
       { text: t('market.value'), value: 'value', sortable: true, width: '80px' },
-      { text: t('market.avgCost'), value: 'avgCostBasis', sortable: true, width: '80px', class: 'hidden-md-and-down' },
+      { text: t('market.avgCost'), value: 'avgCostBasis', sortable: true, width: '80px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
       { text: t('market.totalPnl'), value: 'totalPnl', sortable: true, width: '90px' },
     );
   }
@@ -501,27 +508,7 @@ function handleImgError(e: Event) {
   if (target) target.style.display = 'none';
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1) return '$' + price.toFixed(2);
-  if (price >= 0.01) return '$' + price.toFixed(4);
-  return '$' + price.toFixed(6);
-}
-
-function formatCompact(value: number): string {
-  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
-  if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
-  if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
-  return value.toFixed(value < 1 ? 4 : 0);
-}
-
-function formatChange(change: number): string {
-  return Math.abs(change).toFixed(1) + '%';
-}
-
-function changeColor(change: number): string {
-  if (change === 0) return '#A3A3A3';
-  return change > 0 ? '#47CD89' : '#F97066';
-}
+import { formatPrice, formatCompact, formatChange, changeColor } from '@/modules/market/utils/formatters';
 
 function changeIcon(change: number): string {
   if (change === 0) return assets.arrowRightSvg;

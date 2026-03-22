@@ -4,6 +4,7 @@
     <div class="d-flex align-center pa-4 pb-2">
       <v-avatar size="36" class="mr-3">
         <img v-if="token.img" :src="token.img" :alt="token.ticker" />
+        <img v-else-if="chainLogo" :src="chainLogo" :alt="token.ticker" style="opacity: 0.5" />
         <v-icon v-else>mdi-circle-outline</v-icon>
       </v-avatar>
       <div class="flex-grow-1">
@@ -251,6 +252,11 @@ import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrenc
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
+import networks from '@/utils/networks';
+
+const chainLogo = computed(() =>
+  networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
+);
 
 const props = defineProps<{
   token: MarketToken;
@@ -467,22 +473,7 @@ function formatPnlSigned(adaValue: number): string {
   return sign + currencySymbol.value + converted.toFixed(2);
 }
 
-function formatPriceRaw(price: number): string {
-  if (price >= 1) return price.toFixed(2);
-  if (price >= 0.01) return price.toFixed(4);
-  return price.toFixed(6);
-}
-
-function formatPrice(price: number, symbol: string = '$'): string {
-  return symbol + formatPriceRaw(price);
-}
-
-function formatCompact(value: number): string {
-  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
-  if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
-  if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
-  return value.toFixed(0);
-}
+import { formatPriceRaw, formatPrice, formatCompact } from '@/modules/market/utils/formatters';
 
 function openExplorer() {
   const fingerprint = props.token.fingerprint;
