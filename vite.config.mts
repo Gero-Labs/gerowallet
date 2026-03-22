@@ -224,7 +224,6 @@ export default defineConfig(({ command }) => {
         treeshake: false, // Disable for faster builds
         input: {
           options: r('src/options/index.html'),
-          sidepanel: r('src/sidepanel/index.html'),
         },
         onwarn(warning, warn) {
           // Suppress window/window warnings - harmless artifacts from terser minification
@@ -240,11 +239,8 @@ export default defineConfig(({ command }) => {
           return false;
         },
         output: {
-          // No hashes on any filenames — Chrome extension caches aggressively
-          // and stale hashed references cause ERR_FILE_NOT_FOUND on every reload
-          entryFileNames: 'assets/[name].js',
-          chunkFileNames: 'js/[name].js',
-          assetFileNames: 'assets/[name][extname]',
+          chunkFileNames: 'js/[name].[hash].js',
+          assetFileNames: 'assets/[name].[hash][extname]',
           compact: false, // Disable for faster builds
           minifyInternalExports: false, // Disable for faster builds
         },

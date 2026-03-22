@@ -13,8 +13,7 @@
             <span>{{ $t('staking.delegatingTo') }}</span>
             <div v-if="currentPool" class="d-flex align-center justify-center">
               <v-avatar size="28" class="mr-2">
-                <v-img v-if="poolExtendedInfo?.info?.url_png_icon_64x64" :src="poolExtendedInfo.info.url_png_icon_64x64" alt="pool logo" contain/>
-                <v-icon v-else small>mdi-server</v-icon>
+                <v-img :src="JSON.parse(currentPool?.pool_extended_info)?.info?.url_png_icon_64x64" alt="pool logo" contain/>
               </v-avatar>
               <h3 class="staking2-pool-title">{{ `${currentPool.ticker}` }}</h3>
               <v-menu
@@ -379,12 +378,8 @@ const isApex = computed(() => {
 });
 
 const poolExtendedInfo = computed(() => {
-  if (currentPool.value?.pool_extended_info) {
-    const parsed = JSON.parse(currentPool.value.pool_extended_info);
-    if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
-      parsed.info.url_png_icon_64x64 = '';
-    }
-    return parsed;
+  if (currentPool.value) {
+    return JSON.parse(currentPool.value.pool_extended_info);
   }
   return null;
 });

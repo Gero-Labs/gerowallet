@@ -1,15 +1,11 @@
 import { PortfolioCacheService, PortfolioDataPoint } from '@/db/portfolio-cache';
-import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
-// Note: computed, ref, watch are auto-imported globally by unplugin-auto-import
+// Note: computed, ref are auto-imported globally by unplugin-auto-import
 
 interface UsePortfolioDataOptions {
   cacheTimeMs?: number; // Cache time in milliseconds, default 1 minute for testing
   enableCache?: boolean; // Enable/disable caching
 }
-
-// Singleton cache service — shared across all composable callers
-let sharedCacheService: PortfolioCacheService | null = null;
 
 export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const {
@@ -17,49 +13,28 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     enableCache = true,
   } = options;
 
-  // Reuse singleton cache service
-  if (!sharedCacheService) {
-    sharedCacheService = new PortfolioCacheService({
-      cacheTimeMs,
-      enableCache,
-    });
-  }
-  const cacheService = sharedCacheService;
-
-  // Get EUR conversion rate for snapshot transformation
-  const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
-  // Ensure rate is loaded
-  loadExchangeRate();
-
-  // Keep cache service's EUR rate in sync with the reactive ref
-  watch(usdToEurRate, (rate) => {
-    cacheService.usdToEurRate = rate;
-  }, { immediate: true });
+  // Create a cache service instance with options
+  const cacheService = new PortfolioCacheService({
+    cacheTimeMs,
+    enableCache,
+  });
 
   // Loading states
   const loadingAda = ref(false);
   const loadingUsd = ref(false);
+  const loadingEur = ref(false);
 
-  // Data refs (only ADA and USD are stored; EUR is derived)
+  // Data refs
   const adaData = ref<PortfolioDataPoint[]>([]);
   const usdData = ref<PortfolioDataPoint[]>([]);
-
-  // EUR data is always derived from USD data × current EUR rate (never stale)
-  const eurData = computed<PortfolioDataPoint[]>(() => {
-    const rate = usdToEurRate.value;
-    if (!rate || rate === 0) return [];
-    return usdData.value.map(([ts, val]) => [ts, val * rate] as PortfolioDataPoint);
-  });
-
-  // EUR loading mirrors USD loading (EUR appears as soon as USD arrives)
-  const loadingEur = computed(() => loadingUsd.value);
+  const eurData = ref<PortfolioDataPoint[]>([]);
 
   // Track loading order
   const loadingOrder = ref<Array<'ADA' | 'USD' | 'EUR'>>([]);
 
   // Computed loading state
   const isLoading = computed(() => {
-    return loadingAda.value || loadingUsd.value;
+    return loadingAda.value || loadingUsd.value || loadingEur.value;
   });
 
   // Get first loaded currency
@@ -68,10 +43,14 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   });
 
   // Get latest portfolio values (most recent data point from each currency)
+  // CRITICAL FIX: Find the data point with the MAXIMUM timestamp to ensure we get the most recent value
+  // This fixes the issue where cached/merged data might not be properly sorted
   const latestPortfolioValues = computed(() => {
     const getLatestValue = (data: PortfolioDataPoint[], currency: string): number | null => {
       if (!data || data.length === 0) return null;
 
+      // Find the data point with the maximum timestamp (most recent) using Math.max for better performance
+      // Add validation to ensure data points are valid before processing
       const validData = data.filter(point =>
         Array.isArray(point) &&
         typeof point[0] === 'number' &&
@@ -82,11 +61,22 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
 
       if (validData.length === 0) return null;
 
-      let maxIdx = 0;
-      for (let i = 1; i < validData.length; i++) {
-        if (validData[i][0] > validData[maxIdx][0]) maxIdx = i;
+      const timestamps = validData.map(point => point[0]);
+      const maxTimestamp = Math.max(...timestamps);
+      const maxIndex = timestamps.indexOf(maxTimestamp);
+      const latestValue = maxIndex !== -1 ? validData[maxIndex][1] : null;
+
+      // Check if data is stale (older than 15 minutes to match cache service) and return null to trigger fallback
+      const now = Date.now();
+      const fifteenMinutesAgo = now - (15 * 60 * 1000);
+      const isStale = maxTimestamp < fifteenMinutesAgo;
+
+      // If data is stale, return null to force fallback to computedValues
+      if (isStale) {
+        return null;
       }
-      return validData[maxIdx][1];
+
+      return latestValue;
     };
 
     return {
@@ -96,23 +86,21 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     };
   });
 
-  // Load portfolio data for specific currency (ADA or USD only; EUR is derived)
+  // Load portfolio data for specific currency
   const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> => {
     if (!address) {
       console.warn('No address provided for portfolio data');
       return [];
     }
 
-    // EUR is derived from USD — load USD instead
-    const actualCurrency = currency === 'EUR' ? 'USD' : currency;
-
-    const loadingRef = actualCurrency === 'ADA' ? loadingAda : loadingUsd;
+    // Set loading state
+    const loadingRef = currency === 'ADA' ? loadingAda : currency === 'USD' ? loadingUsd : loadingEur;
     loadingRef.value = true;
 
     try {
-      return await cacheService.loadPortfolioData(address, actualCurrency);
+      return cacheService.loadPortfolioData(address, currency);
     } catch (error) {
-      console.error(`Error loading ${actualCurrency} portfolio data:`, error);
+      console.error(`Error loading ${currency} portfolio data:`, error);
       return [];
     } finally {
       loadingRef.value = false;
@@ -128,32 +116,44 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
 
     try {
       const result = await cacheService.loadAllPortfolioData(address);
+
+      // Update refs with null checks
       adaData.value = result?.adaData || [];
       usdData.value = result?.usdData || [];
-      // eurData is computed from usdData — no assignment needed
+      eurData.value = result?.eurData || [];
     } catch (error) {
       console.error('Error loading all portfolio data:', error);
+      // Set empty arrays on error
       adaData.value = [];
       usdData.value = [];
+      eurData.value = [];
     }
   };
 
   // Refresh data (ignores cache)
   const refreshPortfolioData = async (address: string): Promise<void> => {
+    // Set loading states
     loadingAda.value = true;
     loadingUsd.value = true;
+    loadingEur.value = true;
 
     try {
       const result = await cacheService.refreshPortfolioData(address);
+
+      // Update refs with null checks
       adaData.value = result?.adaData || [];
       usdData.value = result?.usdData || [];
+      eurData.value = result?.eurData || [];
     } catch (error) {
       console.error('Error refreshing portfolio data:', error);
+      // Set empty arrays on error
       adaData.value = [];
       usdData.value = [];
+      eurData.value = [];
     } finally {
       loadingAda.value = false;
       loadingUsd.value = false;
+      loadingEur.value = false;
     }
   };
 
@@ -186,54 +186,62 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     }
 
     try {
+      // Set loading states
       loadingAda.value = true;
       loadingUsd.value = true;
+      loadingEur.value = true;
 
       const result = await cacheService.loadMissingData(address);
+
+      // Update refs with null checks
       adaData.value = result?.adaData || [];
       usdData.value = result?.usdData || [];
+      eurData.value = result?.eurData || [];
     } catch (error) {
       console.error('Error loading missing portfolio data:', error);
+      // Set empty arrays on error
       adaData.value = [];
       usdData.value = [];
+      eurData.value = [];
     } finally {
       loadingAda.value = false;
       loadingUsd.value = false;
+      loadingEur.value = false;
     }
   };
 
-  // Progressive loading - loads ADA and USD in parallel, EUR is derived automatically
+  // Progressive loading - loads all currencies in parallel, showing results as they become available
   const loadDataProgressively = async (address: string): Promise<void> => {
     if (!address) {
       console.warn('No address provided for progressive loading');
       return;
     }
 
-    // Reset loading order and set loading states
+    // Reset loading order and set all loading states to true
     loadingOrder.value = [];
     loadingAda.value = true;
     loadingUsd.value = true;
+    loadingEur.value = true;
 
-    // Only load ADA and USD; EUR is derived from USD
-    const currencies: Array<'ADA' | 'USD'> = ['ADA', 'USD'];
+    // Load all currencies in parallel
+    const currencies: Array<'ADA' | 'USD' | 'EUR'> = ['ADA', 'USD', 'EUR'];
 
     const loadPromises = currencies.map(async (currency) => {
       try {
+
         const data = await loadPortfolioData(address, currency);
 
         // Track the loading order and update the corresponding ref immediately
         if (!loadingOrder.value.includes(currency)) {
           loadingOrder.value.push(currency);
         }
-        // When USD arrives, EUR is also available (computed)
-        if (currency === 'USD' && !loadingOrder.value.includes('EUR')) {
-          loadingOrder.value.push('EUR');
-        }
 
         if (currency === 'ADA') {
           adaData.value = data;
         } else if (currency === 'USD') {
           usdData.value = data;
+        } else if (currency === 'EUR') {
+          eurData.value = data;
         }
 
         return { currency, data, success: true };
@@ -243,32 +251,11 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
       }
     });
 
+    // Wait for all promises to complete (but data is updated as each one finishes)
     try {
       await Promise.allSettled(loadPromises);
     } catch (error) {
       console.error('Error in parallel loading:', error);
-    }
-  };
-
-  // Load portfolio data at a specific timeframe resolution (for chart timeframe changes)
-  const loadForTimeframe = async (address: string, timeframe: string): Promise<void> => {
-    if (!address) {
-      console.warn('No address provided for timeframe loading');
-      return;
-    }
-
-    loadingAda.value = true;
-    loadingUsd.value = true;
-
-    try {
-      const result = await cacheService.loadForTimeframe(address, timeframe);
-      adaData.value = result?.adaData || [];
-      usdData.value = result?.usdData || [];
-    } catch (error) {
-      console.error('Error loading portfolio data for timeframe:', error);
-    } finally {
-      loadingAda.value = false;
-      loadingUsd.value = false;
     }
   };
 
@@ -278,22 +265,27 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
       return;
     }
 
-    // EUR is derived from USD
-    const actualCurrency = currency === 'EUR' ? 'USD' : currency;
-
-    const loadingRef = actualCurrency === 'ADA' ? loadingAda : loadingUsd;
+    // Set loading state for specific currency
+    const loadingRef = currency === 'ADA' ? loadingAda : currency === 'USD' ? loadingUsd : loadingEur;
     loadingRef.value = true;
 
     try {
-      const data = await cacheService.forceLoadCurrencyData(address, actualCurrency);
+      const data = await cacheService.forceLoadCurrencyData(address, currency);
 
-      if (actualCurrency === 'ADA') {
-        adaData.value = data;
-      } else {
-        usdData.value = data;
+      // Update specific currency data
+      switch (currency) {
+        case 'ADA':
+          adaData.value = data;
+          break;
+        case 'USD':
+          usdData.value = data;
+          break;
+        case 'EUR':
+          eurData.value = data;
+          break;
       }
     } catch (error) {
-      console.error(`Error force loading ${actualCurrency} portfolio data:`, error);
+      console.error(`Error force loading ${currency} portfolio data:`, error);
     } finally {
       loadingRef.value = false;
     }
@@ -324,7 +316,6 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     refreshPortfolioData,
     loadMissingData,
     loadDataProgressively,
-    loadForTimeframe,
     forceLoadCurrencyData,
 
     // Cache management

@@ -461,7 +461,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount, getCurrentInstance } from 'vue';
+import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useDelegation } from '@/shared/composables/useDelegation';
 import debounce from 'lodash/debounce';
@@ -476,7 +476,6 @@ import filters from '@/shared/utils/filters';
 import { setWalletConfiguration } from '@/db/wallet-db';
 
 const { t } = useTranslation();
-const instance = getCurrentInstance();
 
 const { config, loggedWallet, account } = toRefs(walletStore);
 
@@ -620,21 +619,9 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
   }
 });
 
-const poolExtendedInfoCache = new Map<string, any>();
 const poolExtendedInfo = (pool: any) => {
   if (pool && pool.pool_extended_info) {
-    const key = pool.pool_id_bech32 || pool.pool_id;
-    if (key && poolExtendedInfoCache.has(key)) return poolExtendedInfoCache.get(key);
-    const parsed = JSON.parse(pool.pool_extended_info);
-    // Sanitize icon URL — some pools have placeholder text instead of a real URL
-    if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
-      parsed.info.url_png_icon_64x64 = '';
-    }
-    if (parsed?.info?.url_png_logo && !parsed.info.url_png_logo.startsWith('http')) {
-      parsed.info.url_png_logo = '';
-    }
-    if (key) poolExtendedInfoCache.set(key, parsed);
-    return parsed;
+    return JSON.parse(pool.pool_extended_info);
   }
   return undefined;
 };
@@ -642,12 +629,6 @@ const poolExtendedInfo = (pool: any) => {
 onMounted(() => {
   // Load initial paginated pools data
   reloadWithFilters();
-
-  // Handle ?pool=<id> deep-link from Global Search — pre-fill search
-  const poolQuery = instance?.proxy?.$route?.query?.pool;
-  if (poolQuery && typeof poolQuery === 'string') {
-    searchInput.value = poolQuery;
-  }
 });
 
 onBeforeUnmount(() => {
