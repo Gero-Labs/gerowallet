@@ -14,6 +14,13 @@
         <template v-else>
           <PoolDashboard />
 
+          <!-- Advanced Sections (only if registered) -->
+          <template v-if="isRegistered">
+            <EpochHistory />
+            <LeaderSchedule />
+            <NodeMonitor />
+          </template>
+
           <!-- Action Panels -->
           <v-expansion-panels v-model="openPanel" flat class="spo-panels mt-3">
             <!-- Register / Update Pool -->
@@ -90,6 +97,9 @@ import ColdKeySetup from './components/ColdKeySetup.vue';
 import PoolRegistrationForm from './components/PoolRegistrationForm.vue';
 import PoolRetirementForm from './components/PoolRetirementForm.vue';
 import KesRotation from './components/KesRotation.vue';
+import EpochHistory from './components/EpochHistory.vue';
+import LeaderSchedule from './components/LeaderSchedule.vue';
+import NodeMonitor from './components/NodeMonitor.vue';
 
 const { coldKeySource, isRegistered } = toRefs(poolOperatorStore);
 const openPanel = ref<number | undefined>(undefined);

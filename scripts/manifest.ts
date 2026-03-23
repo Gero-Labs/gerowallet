@@ -57,6 +57,10 @@ function buildCSP(dev: boolean): string {
     // Kraken (price feed)
     'wss://ws.kraken.com',
     'https://api.kraken.com',
+    // Koios (SPO pool data)
+    'https://api.koios.rest',
+    'https://preprod.koios.rest',
+    'https://preview.koios.rest',
     // Third-party APIs
     'https://api.coingecko.com',
     'https://analytics-snekfun.splash.trade',
