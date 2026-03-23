@@ -3179,6 +3179,8 @@ export default {
   'poolOperator.peers': 'Peers',
   'poolOperator.memory': 'Memory',
   'poolOperator.mempool': 'Mempool',
+  'poolOperator.remaining': 'remaining',
+  'poolOperator.kesRotationNeeded': 'KES rotation needed soon!',
   'poolOperator.deposit': 'Deposit',
   'poolOperator.retiring': 'Retiring',
   'poolOperator.epoch': 'Epoch',

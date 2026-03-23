@@ -9,13 +9,14 @@
           {{ $t('poolOperator.live') }}
         </span>
       </div>
-      <v-btn v-if="!configured" text x-small class="configure-btn" @click="showConfig = true">
-        <v-icon x-small class="mr-1">mdi-cog</v-icon>
-        {{ $t('poolOperator.configure') }}
-      </v-btn>
-      <v-btn v-else text x-small class="refresh-btn" @click="pollNode" :loading="polling">
-        <v-icon x-small class="mr-1">mdi-refresh</v-icon>
-      </v-btn>
+      <div class="header-actions">
+        <v-btn v-if="configured" text x-small class="action-btn" @click="pollNode" :loading="polling">
+          <v-icon x-small class="mr-1">mdi-refresh</v-icon>
+        </v-btn>
+        <v-btn text x-small class="action-btn" @click="showConfig = true">
+          <v-icon x-small>mdi-cog</v-icon>
+        </v-btn>
+      </div>
     </div>
 
     <!-- Not configured -->
@@ -31,55 +32,109 @@
     </div>
 
     <!-- Connected — Node Stats -->
-    <div v-else class="node-stats-grid">
-      <div class="node-stat liquid-glass-compact" :class="{ 'stat-error': !connected }">
-        <v-icon size="14" :color="connected ? '#75E0A7' : '#FDA29B'">{{ connected ? 'mdi-check-network' : 'mdi-close-network' }}</v-icon>
-        <div class="ns-content">
-          <span class="ns-label">{{ $t('poolOperator.nodeStatus') }}</span>
-          <span class="ns-value" :class="connected ? 'text-ok' : 'text-err'">{{ connected ? $t('poolOperator.online') : $t('poolOperator.offline') }}</span>
+    <template v-else>
+      <!-- Connection error -->
+      <div v-if="configured && !connected && !polling" class="node-error liquid-glass-compact">
+        <v-icon size="16" color="#FDA29B" class="mr-2">mdi-close-network</v-icon>
+        <div>
+          <span style="font-size: 12px; color: #FDA29B">{{ $t('poolOperator.offline') }}</span>
+          <span style="font-size: 11px; color: rgba(255,255,255,0.3); display: block">{{ nodeUrl }}</span>
         </div>
       </div>
 
-      <div class="node-stat liquid-glass-compact">
-        <v-icon size="14" color="#2DF0F7">mdi-cube-outline</v-icon>
-        <div class="ns-content">
-          <span class="ns-label">{{ $t('poolOperator.nodeTip') }}</span>
-          <span class="ns-value">{{ nodeData?.blockHeight?.toLocaleString() || '--' }}</span>
+      <!-- Stats Grid -->
+      <div v-if="nodeData" class="node-stats-grid">
+        <!-- Status + Version -->
+        <div class="node-stat liquid-glass-compact stat-wide">
+          <div class="stat-row">
+            <div class="stat-item">
+              <v-icon size="12" :color="connected ? '#75E0A7' : '#FDA29B'">{{ connected ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+              <span class="ns-value-sm" :class="connected ? 'text-ok' : 'text-err'">{{ connected ? $t('poolOperator.online') : $t('poolOperator.offline') }}</span>
+            </div>
+            <div class="stat-item">
+              <v-icon size="12" color="rgba(255,255,255,0.3)">mdi-tag</v-icon>
+              <span class="ns-value-sm">{{ nodeData.nodeVersion }}</span>
+            </div>
+            <div class="stat-item">
+              <v-icon size="12" color="rgba(255,255,255,0.3)">mdi-clock-outline</v-icon>
+              <span class="ns-value-sm">{{ formatUptime(nodeData.uptimeSeconds) }}</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="node-stat liquid-glass-compact">
-        <v-icon size="14" color="#FDB022">mdi-key-chain</v-icon>
-        <div class="ns-content">
-          <span class="ns-label">{{ $t('poolOperator.kesRemaining') }}</span>
-          <span class="ns-value" :class="kesRemainingClass">{{ nodeData?.kesRemaining ?? '--' }}</span>
+        <!-- Block Height -->
+        <div class="node-stat liquid-glass-compact">
+          <v-icon size="14" color="#2DF0F7">mdi-cube-outline</v-icon>
+          <div class="ns-content">
+            <span class="ns-label">{{ $t('poolOperator.nodeTip') }}</span>
+            <span class="ns-value">{{ nodeData.blockHeight?.toLocaleString() }}</span>
+          </div>
         </div>
-      </div>
 
-      <div class="node-stat liquid-glass-compact">
-        <v-icon size="14" color="#A078FF">mdi-account-group</v-icon>
-        <div class="ns-content">
-          <span class="ns-label">{{ $t('poolOperator.peers') }}</span>
-          <span class="ns-value">{{ nodeData?.peers ?? '--' }}</span>
+        <!-- KES Remaining -->
+        <div class="node-stat liquid-glass-compact" :class="{ 'stat-critical': isKesCritical }">
+          <v-icon size="14" :color="kesColor">mdi-key-chain</v-icon>
+          <div class="ns-content">
+            <span class="ns-label">{{ $t('poolOperator.kesRemaining') }}</span>
+            <span class="ns-value" :class="kesTextClass">{{ nodeData.kesRemaining ?? '--' }}</span>
+            <span v-if="isKesCritical" class="ns-warn">{{ $t('poolOperator.kesRotationNeeded') }}</span>
+          </div>
         </div>
-      </div>
 
-      <div class="node-stat liquid-glass-compact">
-        <v-icon size="14" color="#00ffd1">mdi-memory</v-icon>
-        <div class="ns-content">
-          <span class="ns-label">{{ $t('poolOperator.memory') }}</span>
-          <span class="ns-value">{{ nodeData?.memoryMb ? nodeData.memoryMb + ' MB' : '--' }}</span>
+        <!-- Peers -->
+        <div class="node-stat liquid-glass-compact">
+          <v-icon size="14" color="#A078FF">mdi-account-group</v-icon>
+          <div class="ns-content">
+            <span class="ns-label">{{ $t('poolOperator.peers') }}</span>
+            <span class="ns-value">{{ nodeData.peers }}</span>
+          </div>
         </div>
-      </div>
 
-      <div class="node-stat liquid-glass-compact">
-        <v-icon size="14" color="#FDA29B">mdi-email-outline</v-icon>
-        <div class="ns-content">
-          <span class="ns-label">{{ $t('poolOperator.mempool') }}</span>
-          <span class="ns-value">{{ nodeData?.mempoolTxs ?? '--' }} txs</span>
+        <!-- Memory -->
+        <div class="node-stat liquid-glass-compact">
+          <v-icon size="14" color="#00ffd1">mdi-memory</v-icon>
+          <div class="ns-content">
+            <span class="ns-label">{{ $t('poolOperator.memory') }}</span>
+            <span class="ns-value">{{ formatMemory(nodeData.memoryMb) }}</span>
+          </div>
+        </div>
+
+        <!-- CPU -->
+        <div class="node-stat liquid-glass-compact">
+          <v-icon size="14" color="#FDB022">mdi-cpu-64-bit</v-icon>
+          <div class="ns-content">
+            <span class="ns-label">CPU</span>
+            <span class="ns-value">{{ nodeData.cpuPercent?.toFixed(1) }}%</span>
+          </div>
+        </div>
+
+        <!-- Mempool -->
+        <div class="node-stat liquid-glass-compact">
+          <v-icon size="14" color="#FDA29B">mdi-tray-full</v-icon>
+          <div class="ns-content">
+            <span class="ns-label">{{ $t('poolOperator.mempool') }}</span>
+            <span class="ns-value">{{ nodeData.mempoolTxs }} <span class="ns-unit">txs</span></span>
+          </div>
+        </div>
+
+        <!-- Epoch Progress -->
+        <div class="node-stat liquid-glass-compact stat-wide">
+          <div class="ns-content" style="width: 100%">
+            <div class="epoch-progress-header">
+              <span class="ns-label">{{ $t('poolOperator.epoch') }} {{ nodeData.epoch }}</span>
+              <span class="ns-label">{{ epochProgressPct }}%</span>
+            </div>
+            <div class="epoch-bar-track">
+              <div class="epoch-bar-fill" :style="{ width: epochProgressPct + '%' }" />
+            </div>
+            <div class="epoch-progress-footer">
+              <span class="ns-sub">{{ $t('poolOperator.slot') }} {{ nodeData.epochSlot?.toLocaleString() }}</span>
+              <span class="ns-sub">{{ formatTimeRemaining(nodeData.epochSlotsRemaining) }} {{ $t('poolOperator.remaining') }}</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
 
     <!-- Configuration Dialog -->
     <v-dialog v-model="showConfig" max-width="450px">
@@ -95,15 +150,10 @@
           <v-text-field
             v-model="nodeUrl"
             :label="$t('poolOperator.nodeEndpoint')"
-            placeholder="http://your-node-ip:12798"
+            placeholder="http://10.0.0.35:12799"
             outlined dense dark hide-details
             class="glass-input"
           />
-
-          <div class="config-code mt-4">
-            <div class="code-label">{{ $t('poolOperator.quickSetup') }}</div>
-            <pre class="code-block">curl -sSL https://gerowallet.io/node-monitor.sh | bash</pre>
-          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -136,21 +186,70 @@ let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 interface NodeData {
   blockHeight: number;
-  kesRemaining: number;
+  slotNo: number;
+  epoch: number;
+  epochSlot: number;
+  epochSlotsRemaining: number;
+  syncProgress: number;
+  kesRemaining: number | null;
+  kesPeriod: number | null;
   peers: number;
-  memoryMb: number;
   mempoolTxs: number;
-  uptime: number;
+  mempoolBytes: number;
+  memoryMb: number;
+  cpuPercent: number;
+  uptimeSeconds: number;
+  nodeVersion: string;
+  timestamp: number;
 }
 
 const nodeData = ref<NodeData | null>(null);
 
-const kesRemainingClass = computed(() => {
-  if (!nodeData.value?.kesRemaining) return '';
-  if (nodeData.value.kesRemaining < 50) return 'text-err';
-  if (nodeData.value.kesRemaining < 200) return 'text-warn';
+const isKesCritical = computed(() => nodeData.value?.kesRemaining != null && nodeData.value.kesRemaining < 50);
+const kesColor = computed(() => {
+  const r = nodeData.value?.kesRemaining;
+  if (r == null) return 'rgba(255,255,255,0.3)';
+  if (r < 20) return '#FDA29B';
+  if (r < 50) return '#FDB022';
+  return '#75E0A7';
+});
+const kesTextClass = computed(() => {
+  const r = nodeData.value?.kesRemaining;
+  if (r == null) return '';
+  if (r < 20) return 'text-err';
+  if (r < 50) return 'text-warn';
   return 'text-ok';
 });
+
+const epochProgressPct = computed(() => {
+  if (!nodeData.value) return 0;
+  const total = nodeData.value.epochSlot + nodeData.value.epochSlotsRemaining;
+  if (total === 0) return 0;
+  return ((nodeData.value.epochSlot / total) * 100).toFixed(1);
+});
+
+function formatUptime(seconds: number): string {
+  if (!seconds) return '--';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  if (d > 0) return `${d}d ${h}h`;
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+function formatMemory(mb: number): string {
+  if (!mb) return '--';
+  if (mb >= 1024) return (mb / 1024).toFixed(1) + ' GB';
+  return mb + ' MB';
+}
+
+function formatTimeRemaining(slots: number): string {
+  if (!slots) return '--';
+  const hours = Math.floor(slots / 3600);
+  const mins = Math.floor((slots % 3600) / 60);
+  if (hours > 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+  return `${hours}h ${mins}m`;
+}
 
 async function pollNode() {
   if (!nodeUrl.value) return;
@@ -173,7 +272,6 @@ async function pollNode() {
 async function saveConfig() {
   if (!nodeUrl.value) return;
 
-  // Save to wallet DB
   const walletId = walletStore.loggedWallet?.id;
   if (walletId) {
     const { setWalletConfiguration } = await import('@/db/wallet-db');
@@ -184,7 +282,6 @@ async function saveConfig() {
   showConfig.value = false;
   await pollNode();
 
-  // Start polling every 30s
   if (pollInterval) clearInterval(pollInterval);
   pollInterval = setInterval(pollNode, 30_000);
 
@@ -237,6 +334,19 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
   gap: 4px;
 }
 
+.header-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.action-btn {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  color: rgba(255,255,255,0.3) !important;
+  min-width: 28px !important;
+  padding: 0 4px !important;
+}
+
 .live-indicator {
   display: inline-flex;
   align-items: center;
@@ -262,13 +372,6 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
   50% { opacity: 0.3; }
 }
 
-.configure-btn, .refresh-btn {
-  text-transform: none !important;
-  letter-spacing: normal !important;
-  color: rgba(255,255,255,0.3) !important;
-  font-size: 11px !important;
-}
-
 /* Setup */
 .node-setup {
   text-align: center;
@@ -289,6 +392,16 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
   margin: 4px auto 0;
 }
 
+/* Error */
+.node-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-color: rgba(253,162,155,0.15) !important;
+}
+
 /* Stats Grid */
 .node-stats-grid {
   display: grid;
@@ -300,6 +413,10 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
   .node-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+.stat-wide {
+  grid-column: 1 / -1;
+}
+
 .node-stat {
   display: flex;
   align-items: flex-start;
@@ -309,7 +426,27 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
 }
 
 .node-stat:hover { border-color: rgba(255,255,255,0.12) !important; }
-.node-stat.stat-error { border-color: rgba(253,162,155,0.15) !important; }
+.node-stat.stat-critical { border-color: rgba(253,162,155,0.2) !important; }
+
+/* Status row */
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ns-value-sm {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+}
 
 .ns-content { display: flex; flex-direction: column; }
 
@@ -328,9 +465,54 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
   margin-top: 1px;
 }
 
+.ns-unit {
+  font-size: 10px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.3);
+}
+
+.ns-warn {
+  font-size: 9px;
+  color: #FDA29B;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.ns-sub {
+  font-size: 10px;
+  color: rgba(255,255,255,0.25);
+}
+
 .text-ok { color: #75E0A7; }
 .text-warn { color: #FDB022; }
 .text-err { color: #FDA29B; }
+
+/* Epoch progress */
+.epoch-progress-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.epoch-bar-track {
+  height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.epoch-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+.epoch-progress-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
 
 /* Config dialog */
 .config-card {
@@ -342,30 +524,6 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
   font-size: 12px;
   color: rgba(255,255,255,0.4);
   line-height: 1.5;
-}
-
-.config-code {
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.code-label {
-  font-size: 10px;
-  color: rgba(255,255,255,0.35);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  margin-bottom: 6px;
-}
-
-.code-block {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 11px;
-  color: #75E0A7;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
 .glass-input >>> .v-input__slot {
