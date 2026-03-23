@@ -7,107 +7,148 @@
       </div>
     </div>
 
-    <!-- VRF Key Required Notice -->
-    <div v-if="!hasVrfSkey" class="vrf-notice liquid-glass-compact">
-      <div class="vrf-notice-icon">
-        <v-icon size="24" color="#FDB022">mdi-key-alert</v-icon>
+    <!-- Node not connected -->
+    <div v-if="!nodeConnected" class="ls-notice liquid-glass-compact">
+      <div class="ls-notice-icon" style="background: rgba(253,176,34,0.1)">
+        <v-icon size="20" color="#FDB022">mdi-server-off</v-icon>
       </div>
       <div>
-        <div class="vrf-notice-title">{{ $t('poolOperator.vrfSkeyRequired') }}</div>
-        <div class="vrf-notice-text">{{ $t('poolOperator.vrfSkeyRequiredDescription') }}</div>
-        <v-file-input
-          v-model="vrfSkeyFile"
-          :label="$t('poolOperator.vrfSkeyFile')"
-          accept=".skey,.json"
-          outlined dense dark hide-details
-          prepend-icon="mdi-file-key"
-          class="mt-3"
-          style="max-width: 360px"
-          @change="importVrfSkey"
-        />
+        <div class="ls-notice-title">{{ $t('poolOperator.nodeRequiredForSchedule') }}</div>
+        <div class="ls-notice-text">{{ $t('poolOperator.nodeRequiredForScheduleDescription') }}</div>
       </div>
     </div>
 
-    <!-- Schedule Display -->
+    <!-- Node connected — schedule controls -->
     <template v-else>
       <div class="schedule-controls">
         <v-btn-toggle v-model="scheduleView" mandatory dense class="schedule-toggle">
           <v-btn x-small :value="'current'" class="toggle-btn">{{ $t('poolOperator.currentEpoch') }}</v-btn>
           <v-btn x-small :value="'next'" class="toggle-btn">{{ $t('poolOperator.nextEpoch') }}</v-btn>
         </v-btn-toggle>
-        <v-btn text x-small class="refresh-btn" @click="calculateSchedule" :loading="calculating">
-          <v-icon x-small class="mr-1">mdi-calculator</v-icon>
-          {{ $t('poolOperator.calculate') }}
+        <v-btn text x-small class="refresh-btn" @click="fetchSchedule" :loading="loading">
+          <v-icon x-small class="mr-1">mdi-refresh</v-icon>
+          {{ $t('poolOperator.fetch') }}
         </v-btn>
       </div>
 
-      <!-- VRF WASM Not Available -->
-      <div v-if="!vrfWasmAvailable" class="vrf-wasm-notice liquid-glass-compact mt-3">
-        <v-icon size="18" color="rgba(255,255,255,0.3)" class="mr-2">mdi-information-outline</v-icon>
-        <div>
-          <div style="font-size: 12px; color: rgba(255,255,255,0.6)">{{ $t('poolOperator.vrfWasmRequired') }}</div>
-          <div style="font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 4px">{{ $t('poolOperator.vrfWasmRequiredDescription') }}</div>
-        </div>
+      <!-- Loading -->
+      <div v-if="loading" class="text-center py-6">
+        <v-progress-circular indeterminate color="#FDB022" size="24" />
+        <div class="loading-text mt-2">{{ $t('poolOperator.calculatingSchedule') }}</div>
+      </div>
+
+      <!-- Error -->
+      <div v-else-if="error" class="ls-error liquid-glass-compact mt-3">
+        <v-icon size="16" color="#FDA29B" class="mr-2">mdi-alert-circle</v-icon>
+        <span>{{ error }}</span>
       </div>
 
       <!-- Schedule Results -->
-      <div v-else-if="slots.length" class="schedule-results mt-3">
+      <div v-else-if="slots.length" class="mt-3">
+        <!-- Summary Cards -->
         <div class="schedule-summary">
-          <div class="summary-stat">
+          <div class="summary-card liquid-glass-compact">
             <span class="summary-value">{{ slots.length }}</span>
             <span class="summary-label">{{ $t('poolOperator.assignedSlots') }}</span>
           </div>
-          <div class="summary-stat">
-            <span class="summary-value">{{ nextSlotCountdown || '--' }}</span>
+          <div class="summary-card liquid-glass-compact">
+            <span class="summary-value" :class="nextSlot ? 'text-accent' : ''">{{ nextSlotCountdown || '--' }}</span>
             <span class="summary-label">{{ $t('poolOperator.nextBlock') }}</span>
+          </div>
+          <div class="summary-card liquid-glass-compact">
+            <span class="summary-value">{{ producedCount }}/{{ pastCount }}</span>
+            <span class="summary-label">{{ $t('poolOperator.produced') }}</span>
+          </div>
+          <div v-if="missedCount > 0" class="summary-card liquid-glass-compact summary-card--warn">
+            <span class="summary-value text-warn">{{ missedCount }}</span>
+            <span class="summary-label">{{ $t('poolOperator.missed') }}</span>
           </div>
         </div>
 
+        <!-- Slot List -->
         <div class="slot-list mt-3">
-          <div v-for="(slot, i) in slots" :key="slot.slot" class="slot-item" :class="{ 'slot-past': slot.isPast, 'slot-next': slot.isNext }">
+          <div
+            v-for="(slot, i) in slots"
+            :key="slot.slot"
+            class="slot-item"
+            :class="{
+              'slot-past': slot.isPast,
+              'slot-next': slot.isNext,
+              'slot-missed': slot.isPast && !slot.produced,
+            }"
+          >
             <div class="slot-index">#{{ i + 1 }}</div>
             <div class="slot-info">
               <span class="slot-time">{{ slot.time }}</span>
-              <span class="slot-detail">{{ $t('poolOperator.slot') }} {{ slot.slot }}</span>
+              <span class="slot-detail">{{ $t('poolOperator.slot') }} {{ slot.slotInEpoch }}</span>
             </div>
             <div class="slot-status">
-              <v-icon x-small :color="slot.isPast ? (slot.produced ? '#75E0A7' : '#FDA29B') : 'rgba(255,255,255,0.2)'">
-                {{ slot.isPast ? (slot.produced ? 'mdi-check-circle' : 'mdi-close-circle') : 'mdi-clock-outline' }}
-              </v-icon>
+              <template v-if="slot.isPast">
+                <v-icon v-if="slot.produced" x-small color="#75E0A7">mdi-check-circle</v-icon>
+                <v-icon v-else x-small color="#FDA29B">mdi-close-circle</v-icon>
+              </template>
+              <template v-else-if="slot.isNext">
+                <span class="next-badge">{{ $t('poolOperator.nextBlock') }}</span>
+              </template>
+              <v-icon v-else x-small color="rgba(255,255,255,0.15)">mdi-clock-outline</v-icon>
             </div>
           </div>
         </div>
       </div>
 
-      <div v-else-if="!calculating" class="text-center py-4">
-        <span class="empty-text">{{ $t('poolOperator.clickCalculate') }}</span>
+      <!-- Empty -->
+      <div v-else-if="!loading && fetched" class="text-center py-4">
+        <v-icon size="32" color="rgba(255,255,255,0.1)">mdi-calendar-blank</v-icon>
+        <div class="empty-text mt-2">{{ $t('poolOperator.noSlotsAssigned') }}</div>
+      </div>
+
+      <div v-else class="text-center py-4">
+        <span class="empty-text">{{ $t('poolOperator.clickFetchSchedule') }}</span>
       </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs } from 'vue';
+import { ref, computed, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
-import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
 const { poolId } = toRefs(poolOperatorStore);
-const { loggedWallet } = toRefs(walletStore);
 
-const hasVrfSkey = ref(false);
-const vrfSkeyFile = ref<File | null>(null);
-const vrfWasmAvailable = ref(false); // Will be true when VRF WASM module is loaded
-const calculating = ref(false);
+const loading = ref(false);
+const fetched = ref(false);
+const error = ref('');
 const scheduleView = ref<'current' | 'next'>('current');
-const slots = ref<any[]>([]);
+
+interface ScheduleSlot {
+  slot: number;
+  slotInEpoch: number;
+  timestamp: number;
+  time: string;
+  isPast: boolean;
+  isNext: boolean;
+  produced: boolean;
+}
+
+const slots = ref<ScheduleSlot[]>([]);
+
+// Node connection — read from the stored node monitor URL
+const nodeConnected = computed(() => {
+  // Check if node monitor is configured by looking for the URL in the store or a flag
+  // The NodeMonitor component stores the URL in wallet DB; we check via a simple approach
+  return !!nodeMonitorUrl.value;
+});
+
+const nodeMonitorUrl = ref('');
+
+const nextSlot = computed(() => slots.value.find(s => s.isNext));
 
 const nextSlotCountdown = computed(() => {
-  const next = slots.value.find(s => s.isNext);
-  if (!next) return null;
-  const diff = next.timestamp - Date.now() / 1000;
+  if (!nextSlot.value) return null;
+  const diff = nextSlot.value.timestamp - Date.now() / 1000;
   if (diff <= 0) return t('poolOperator.now');
   const hours = Math.floor(diff / 3600);
   const mins = Math.floor((diff % 3600) / 60);
@@ -115,33 +156,85 @@ const nextSlotCountdown = computed(() => {
   return `${mins}m`;
 });
 
-async function importVrfSkey() {
-  if (!vrfSkeyFile.value) return;
+const pastCount = computed(() => slots.value.filter(s => s.isPast).length);
+const producedCount = computed(() => slots.value.filter(s => s.isPast && s.produced).length);
+const missedCount = computed(() => slots.value.filter(s => s.isPast && !s.produced).length);
+
+async function loadNodeUrl() {
+  const walletId = walletStore.loggedWallet?.id;
+  if (!walletId) return;
   try {
-    const text = await vrfSkeyFile.value.text();
-    const envelope = JSON.parse(text);
-    if (!envelope.cborHex || !envelope.type?.includes('VrfSigningKey')) {
-      throw new Error('Invalid VRF signing key file');
+    const { getDb } = await import('@/db/wallet-db');
+    const db = await getDb(walletId);
+    const entry = await db.table('config').where({ key: 'spo_nodeMonitorUrl' }).first();
+    nodeMonitorUrl.value = entry?.value || '';
+  } catch { /* ignore */ }
+}
+
+async function fetchSchedule() {
+  if (!nodeMonitorUrl.value) return;
+  loading.value = true;
+  error.value = '';
+  fetched.value = false;
+
+  try {
+    const epoch = scheduleView.value;
+    const response = await fetch(
+      `${nodeMonitorUrl.value}/leader-schedule?epoch=${epoch}`,
+      { signal: AbortSignal.timeout(120_000) } // Leader schedule can take time to compute
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(body || `HTTP ${response.status}`);
     }
-    // Store VRF skey encrypted in wallet DB (same as cold key)
-    // For now, just mark as available
-    hasVrfSkey.value = true;
-    snackbar.fireSuccess(t('poolOperator.vrfSkeyImported'));
+
+    const data = await response.json();
+    const now = Date.now() / 1000;
+
+    // Expected response: { slots: [{ slot, slotInEpoch, timestamp, produced? }], epoch }
+    if (data.slots && Array.isArray(data.slots)) {
+      let foundNext = false;
+      slots.value = data.slots.map((s: any) => {
+        const isPast = s.timestamp < now;
+        let isNext = false;
+        if (!isPast && !foundNext) {
+          isNext = true;
+          foundNext = true;
+        }
+        return {
+          slot: s.slot,
+          slotInEpoch: s.slotInEpoch || s.slot_in_epoch || 0,
+          timestamp: s.timestamp,
+          time: new Date(s.timestamp * 1000).toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+          }),
+          isPast,
+          isNext,
+          produced: s.produced ?? (isPast ? true : false), // Assume produced if not specified
+        };
+      });
+    } else {
+      slots.value = [];
+    }
+
+    fetched.value = true;
   } catch (e: any) {
-    snackbar.setError(e.message || t('poolOperator.invalidVrfKeyFile'));
+    error.value = e.message || t('errors.unknownError');
+    slots.value = [];
+  } finally {
+    loading.value = false;
   }
 }
 
-async function calculateSchedule() {
-  calculating.value = true;
-  try {
-    // TODO: VRF WASM implementation
-    // For now, show the notice that VRF WASM is not yet available
-    vrfWasmAvailable.value = false;
-  } finally {
-    calculating.value = false;
-  }
-}
+// Re-fetch when epoch view changes
+watch(scheduleView, () => {
+  if (nodeMonitorUrl.value && fetched.value) fetchSchedule();
+});
+
+// Load node URL on mount
+import { onMounted } from 'vue';
+onMounted(() => loadNodeUrl());
 </script>
 
 <style scoped>
@@ -166,32 +259,31 @@ async function calculateSchedule() {
   letter-spacing: 0.5px;
 }
 
-/* VRF Notice */
-.vrf-notice {
+/* Notice */
+.ls-notice {
   display: flex;
   gap: 14px;
   padding: 16px;
   align-items: flex-start;
 }
 
-.vrf-notice-icon {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
+.ls-notice-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
   border-radius: 10px;
-  background: rgba(253,176,34,0.1);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.vrf-notice-title {
+.ls-notice-title {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255,255,255,0.8);
+  color: rgba(255,255,255,0.7);
 }
 
-.vrf-notice-text {
+.ls-notice-text {
   font-size: 11px;
   color: rgba(255,255,255,0.35);
   line-height: 1.5;
@@ -218,61 +310,93 @@ async function calculateSchedule() {
   font-size: 11px !important;
 }
 
-/* WASM notice */
-.vrf-wasm-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px;
+.loading-text {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
 }
 
-/* Schedule Results */
+/* Error */
+.ls-error {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  font-size: 12px;
+  color: #FDA29B;
+}
+
+/* Summary */
 .schedule-summary {
-  display: flex;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
 }
 
-.summary-stat {
-  display: flex;
-  flex-direction: column;
+.summary-card {
+  padding: 12px;
+  text-align: center;
+}
+
+.summary-card--warn {
+  border-color: rgba(253,162,155,0.15) !important;
 }
 
 .summary-value {
-  font-size: 24px;
+  display: block;
+  font-size: 22px;
   font-weight: 800;
   color: rgba(255,255,255,0.95);
+  font-variant-numeric: tabular-nums;
 }
 
+.summary-value.text-accent { color: #FDB022; }
+.summary-value.text-warn { color: #FDA29B; }
+
 .summary-label {
-  font-size: 10px;
-  color: rgba(255,255,255,0.35);
+  display: block;
+  font-size: 9px;
+  color: rgba(255,255,255,0.3);
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.4px;
+  margin-top: 2px;
 }
 
 /* Slot list */
 .slot-list {
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
 }
 
 .slot-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
   transition: background 0.15s;
 }
 
-.slot-item:hover { background: rgba(255,255,255,0.03); }
-.slot-past { opacity: 0.5; }
-.slot-next { background: rgba(45,240,247,0.04); border: 1px solid rgba(45,240,247,0.1); }
+.slot-item:last-child { border-bottom: none; }
+.slot-item:hover { background: rgba(255,255,255,0.02); }
+
+.slot-past { opacity: 0.45; }
+.slot-next {
+  background: rgba(253,176,34,0.04);
+  opacity: 1;
+  border-left: 2px solid #FDB022;
+}
+.slot-missed {
+  opacity: 0.7;
+  background: rgba(253,162,155,0.03);
+  border-left: 2px solid rgba(253,162,155,0.3);
+}
 
 .slot-index {
   font-size: 10px;
-  color: rgba(255,255,255,0.25);
-  min-width: 24px;
+  color: rgba(255,255,255,0.2);
+  min-width: 28px;
+  font-variant-numeric: tabular-nums;
 }
 
 .slot-info { flex: 1; }
@@ -286,8 +410,21 @@ async function calculateSchedule() {
 
 .slot-detail {
   font-size: 10px;
-  color: rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.2);
   font-family: 'Roboto Mono', monospace;
+}
+
+.slot-status {
+  min-width: 60px;
+  text-align: right;
+}
+
+.next-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #FDB022;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .empty-text {
