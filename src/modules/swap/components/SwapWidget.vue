@@ -238,23 +238,11 @@
       </div>
     </v-card-text>
     <v-card-actions class="px-3 pt-2 pb-1" style="justify-content: center; flex-wrap: wrap">
-      <v-text-field
-        v-if="!isPrfWallet"
-        v-model="spendingPassword"
-        type="password"
-        :label="$t('wallet.spendingPassword')"
-        outlined
-        dense
-        hide-details
-        class="mb-2"
-        style="max-width: 420px"
-        @keydown.enter="prepareSwap"
-      />
       <v-btn
         max-width="420"
         style="color: black !important; width: 100%; border-radius: 10px"
         class="geroButton"
-        :disabled="isSwapDisabled || loading || poolError || (!isPrfWallet && !spendingPassword)"
+        :disabled="isSwapDisabled || loading || poolError"
         @click="prepareSwap"
         :loading="loading"
       >
@@ -286,6 +274,7 @@ import networks from '@/utils/networks';
 import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
+import { METHOD } from '@/chrome/config';
 import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
@@ -311,15 +300,10 @@ const isSwapEnabled = computed(() => {
   return featureFlagsStore.isSwapEnabled();
 });
 
-const { loggedWallet, tokens: resolvedAssets, keys } = toRefs(walletStore);
+const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { utxos } = toRefs(walletStore);
-
-// Spending password for transaction signing
-const spendingPassword = ref('');
-const privateKeyBytes = ref<Uint8Array | null>(null);
-const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
 
 const isUpdating = ref<boolean>(false);
 const lastNonADATokenA = ref(null);
@@ -832,34 +816,17 @@ const prepareSwap = async () => {
       );
     }
     const txCbor = swapRes.cbor;
-
-    // Sign via options-context handler (direct signing with password/PRF)
-    const signingData: any = {
-      txCbor,
-      partialSign: true,
-      password: spendingPassword.value,
-      accountIndex: 0,
-      utxos: utxos.value,
-      addresses: keys.value,
-      mergeWitnesses: false,
-    };
-
-    // For PRF wallets, pass the already-decrypted privateKeyBytes
-    if (isPrfWallet.value && privateKeyBytes.value) {
-      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
-    }
-
-    const signaturesRes = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: signingData,
-    })) as { data: { witnesses?: string; error?: string } };
+    const partialSign = true;
+    const signaturesRes: any = await Messaging.sendToBackground({
+      method: METHOD.signTx,
+      data: { tx: txCbor, partialSign, origin: 'https://gerowallet.io/', mergeWitnesses: false },
+    });
     debugLog('signaturesRes', signaturesRes);
-    if (signaturesRes.data.error) {
-      snackbar.setError(signaturesRes.data.error);
+    if (signaturesRes.error) {
+      snackbar.setError(signaturesRes.error.info);
     } else {
-      const signRes: any = await dexHunterApi.swapSign(signaturesRes.data.witnesses!, txCbor);
+      const signRes: any = await dexHunterApi.swapSign(signaturesRes.data, txCbor);
       await submit(signRes.cbor);
-      spendingPassword.value = '';
     }
   } catch (error: any) {
     debugLog('[Swap] Error:', error);
