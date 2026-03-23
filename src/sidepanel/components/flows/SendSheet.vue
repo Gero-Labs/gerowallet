@@ -170,7 +170,7 @@
               <div v-for="(token, idx) in extraTokens" :key="token.unit" class="asset-input-section mt-2">
                 <div class="asset-input-header">
                   <v-avatar size="24" class="mr-2">
-                    <img v-if="token.img" :src="token.img" :alt="token.ticker" />
+                    <img v-if="token.img" :src="getTokenImg(token)" :alt="token.ticker" />
                     <v-icon v-else size="16" color="#888">mdi-circle-outline</v-icon>
                   </v-avatar>
                   <span class="white--text text-body-2 font-weight-bold">{{ token.ticker || token.name }}</span>
@@ -227,7 +227,7 @@
                       @click="addToken(token)"
                     >
                       <v-avatar size="24" class="mr-2">
-                        <img v-if="token.img" :src="token.img" />
+                        <img v-if="token.img" :src="getTokenImg(token)" />
                         <v-icon v-else size="14" color="#888">mdi-circle-outline</v-icon>
                       </v-avatar>
                       <span class="white--text text-body-2">{{ token.ticker || token.name }}</span>
@@ -541,6 +541,7 @@ import { computeMinimumCoinQuantity } from '@cardano-sdk/tx-construction';
 import { Messaging, BackgroundResponse, VerifyPasswordResponse, SignTxResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { isPaymentAddress } from '@/chrome/serialization';
+import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
@@ -854,6 +855,10 @@ function toggleNft(nft: any) {
 
 function formatBalance(lovelace: number): string {
   return filters.toCurrency(lovelace);
+}
+
+function getTokenImg(token: any): string {
+  return applyTokenImageOverride(token.ticker || token.name, token.img || '');
 }
 
 function formatTokenBalance(token: any): string {

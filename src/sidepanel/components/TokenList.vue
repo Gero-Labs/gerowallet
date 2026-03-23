@@ -94,7 +94,7 @@ import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
-import { resolveIcon } from '@/shared/utils/resolver';
+import { resolveIcon, applyTokenImageOverride } from '@/shared/utils/resolver';
 import { getBalance } from '@/chrome/serialization';
 import assetsUtil from '@/utils/assets';
 
@@ -176,10 +176,9 @@ const filteredTokens = computed(() => {
 });
 
 function getTokenImg(token: any): string {
-  if (token.img) return token.img;
-  if (token.metadata?.logo) return resolveIcon(token.metadata.logo);
-  if (token.metadata?.image) return resolveIcon(token.metadata.image);
-  return '';
+  const name = token.metadata?.ticker || token.name || token.metadata?.name;
+  const baseImg = token.img || (token.metadata?.logo ? resolveIcon(token.metadata.logo) : '') || (token.metadata?.image ? resolveIcon(token.metadata.image) : '') || '';
+  return applyTokenImageOverride(name, baseImg);
 }
 
 function getTokenName(token: any): string {

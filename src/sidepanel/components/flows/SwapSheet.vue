@@ -50,7 +50,7 @@
             @click="onTokenSelected(token)"
           >
             <v-avatar size="32" class="mr-3">
-              <img :src="token.img" :alt="token.ticker" @error="onTokenImgError($event, token)" />
+              <img :src="getTokenImg(token)" :alt="token.ticker" @error="onTokenImgError($event, token)" />
             </v-avatar>
             <div class="token-item-info">
               <span class="white--text text-body-2 font-weight-bold">{{ token.ticker || token.name }}</span>
@@ -481,6 +481,7 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Messaging, BackgroundResponse, VerifyPasswordResponse, SignTxResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -1381,6 +1382,10 @@ function truncateStr(s: string): string {
 
 function copyTxId() {
   if (txId.value) navigator.clipboard.writeText(txId.value).catch(() => {});
+}
+
+function getTokenImg(token: any): string {
+  return applyTokenImageOverride(token.ticker || token.name, token.img || '');
 }
 
 function onTokenImgError(event: Event, token: any) {

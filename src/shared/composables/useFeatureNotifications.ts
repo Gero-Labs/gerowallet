@@ -43,6 +43,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   //   version: '2.6.0',
   //   path: ['navigation', 'governance']
   // },
+  // Navigation > Pool Operator (SPO Management)
+  {
+    id: 'navigation.poolOperator',
+    version: '2.7.0',
+    path: ['navigation', 'poolOperator']
+  },
   // Navigation > Market page
   {
     id: 'navigation.market',

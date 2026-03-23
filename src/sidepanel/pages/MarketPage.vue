@@ -52,7 +52,7 @@
           <v-avatar size="36" class="token-avatar">
             <img
               v-if="token.img"
-              :src="token.img"
+              :src="getTokenImg(token)"
               :alt="token.ticker"
               @error="onImgError($event)"
             />
@@ -204,6 +204,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
 import { getBalance } from '@/chrome/serialization';
+import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import BottomSheet from '../components/BottomSheet.vue';
 
 const { t } = useTranslation();
@@ -332,6 +333,10 @@ function formatCompact(value: number): string {
   if (value >= 1_000_000) return '$' + (value / 1_000_000).toFixed(2) + 'M';
   if (value >= 1_000) return '$' + (value / 1_000).toFixed(2) + 'K';
   return '$' + value.toFixed(2);
+}
+
+function getTokenImg(token: any): string {
+  return applyTokenImageOverride(token.ticker || token.name, token.img || '');
 }
 
 function onImgError(event: Event) {

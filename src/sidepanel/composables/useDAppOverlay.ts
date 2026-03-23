@@ -55,13 +55,21 @@ export function useDAppOverlay() {
   }
 
   function respond(requestId: string, data: any, error: string | null = null) {
-    if (port) {
-      port.postMessage({
-        type: 'dapp-response',
-        requestId,
-        data,
-        error,
-      });
+    try {
+      if (port) {
+        port.postMessage({
+          type: 'dapp-response',
+          requestId,
+          data,
+          error,
+        });
+      } else {
+        console.warn('[DApp] Port not connected, response dropped for request:', requestId);
+      }
+    } catch (e) {
+      // Port may have disconnected between the null check and postMessage
+      console.warn('[DApp] Failed to send response, port likely disconnected:', e);
+      port = null;
     }
 
     currentRequest.value = null;

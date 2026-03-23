@@ -1635,6 +1635,102 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   }
 });
 
+// Pool operator transaction signing handler (cold key + wallet keys)
+app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) {
+      sendResponse({ id: request.id, data: { error: 'Wallet instance not available' }, target: TARGET, sender: SENDER.extension });
+      return;
+    }
+
+    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes } = request.data;
+
+    // Step 1: Sign with wallet keys (payment + stake) using existing signTx
+    let transaction;
+    if (txCbor) {
+      transaction = deserializeCardanoJsSdkTx(txCbor);
+    } else {
+      throw new Error('No transaction data provided');
+    }
+
+    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+    const walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+
+    // Step 2: Decrypt cold key from wallet DB and sign with it
+    const { getDb } = await import('@/db/wallet-db');
+    const db = await getDb(walletBg.id);
+    const configTable = db.table('config');
+    const encryptedColdKeyEntry = await configTable.where({ key: 'spo_encryptedColdKey' }).first();
+    const coldKeyEncryptionEntry = await configTable.where({ key: 'spo_coldKeyEncryption' }).first();
+
+    if (!encryptedColdKeyEntry?.value) {
+      throw new Error('No cold key configured. Import your cold key first.');
+    }
+
+    // Decrypt the cold key based on encryption method
+    let coldKeyBytes: Buffer | Uint8Array;
+    const coldKeyEncryption = coldKeyEncryptionEntry?.value || 'password';
+
+    if (coldKeyEncryption === 'prf') {
+      // PRF wallet: decrypt with PRF-derived key
+      const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
+      const wallet = walletManager.getWallet();
+      if (!wallet?.webAuthnCredentialId) {
+        throw new Error('PRF wallet credentials not available');
+      }
+      coldKeyBytes = await decryptPrivateKeyWithPrf(
+        encryptedColdKeyEntry.value,
+        wallet.webAuthnCredentialId,
+        wallet.id.toString()
+      );
+    } else {
+      // Normal wallet: decrypt with spending password
+      const { decryptWithPassword } = await import('@/shared/utils/crypto');
+      coldKeyBytes = decryptWithPassword(password, encryptedColdKeyEntry.value);
+    }
+
+    // Step 3: Sign the transaction hash with the cold key
+    const { ed25519 } = await import('@noble/curves/ed25519');
+    const { Serialization } = await import('@cardano-sdk/core');
+
+    // Get the transaction body hash (what we sign)
+    const txBody = Serialization.TransactionBody.fromCore(transaction.body);
+    const blake2b = (await import('blake2b')).default;
+    const txBodyCbor = txBody.toCbor() as unknown as Uint8Array;
+    const txBodyHash = blake2b(32).update(txBodyCbor).digest();
+
+    // Sign with the cold key
+    const coldKeySignature = ed25519.sign(txBodyHash, new Uint8Array(coldKeyBytes));
+    const coldPubKey = ed25519.getPublicKey(new Uint8Array(coldKeyBytes));
+
+    // Step 4: Build cold key VKeyWitness and merge with wallet witnesses
+    const coldPubKeyHex = Array.from(coldPubKey).map(b => b.toString(16).padStart(2, '0')).join('');
+    const coldSigHex = Array.from(coldKeySignature).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    sendResponse({
+      id: request.id,
+      data: {
+        witnesses: walletWitnesses.witnesses || walletWitnesses,
+        coldKeyWitness: {
+          vkey: coldPubKeyHex,
+          signature: coldSigHex,
+        },
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error signing pool operator transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 // Bitcoin transaction signing handler (software wallets)
 app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => {
   try {
