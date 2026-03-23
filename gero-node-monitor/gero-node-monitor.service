@@ -1,0 +1,20 @@
+[Unit]
+Description=Gero Node Monitor — Cardano SPO monitoring agent
+After=cardano-node.service
+Wants=cardano-node.service
+
+[Service]
+Type=simple
+User=cardano
+Group=cardano
+ExecStart=/usr/local/bin/gero-node-monitor.sh --start
+ExecStop=/usr/local/bin/gero-node-monitor.sh --stop
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment=CARDANO_NODE_SOCKET_PATH=/opt/cardano/cnode/sockets/node.socket
+Environment=CNODE_HOME=/opt/cardano/cnode
+
+[Install]
+WantedBy=multi-user.target
