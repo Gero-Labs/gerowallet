@@ -11,12 +11,12 @@ import { debugLog } from '@/utils/debug';
 function getResolutionForTimeframe(timeframe: string): string {
   switch (timeframe) {
     case '24h': return '1H';
-    case '7d': return '4H';
-    case '30d': return '4H';  // ~180 data points for a month
+    case '7d': return '6H';
+    case '30d':
     case '90d': return '1D';
     case '1y':
     case 'all':
-    default: return '1D';
+    default: return '1W';
   }
 }
 
@@ -462,13 +462,16 @@ export class PortfolioCacheService {
   /**
    * Load portfolio data with caching
    */
-  async loadPortfolioData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> {
+  async loadPortfolioData(address: string, currency: 'ADA' | 'USD' | 'EUR', adaOnly: boolean = false): Promise<PortfolioDataPoint[]> {
     if (!address) {
       return [];
     }
 
+    // Use prefixed cache key for ada-only data to avoid mixing with full portfolio
+    const cacheAddress = adaOnly ? `adaonly:${address}` : address;
+
     // Check cache first
-    const cachedData = await this.getCachedData(address, currency);
+    const cachedData = await this.getCachedData(cacheAddress, currency);
 
     // If we have valid cached data, check if it's recent enough
     if (cachedData && cachedData.length > 0) {
@@ -511,7 +514,7 @@ export class PortfolioCacheService {
         if (portfolioTable) {
           const existingEntry = await portfolioTable
             .where(['address', 'currency'])
-            .equals([address, currency])
+            .equals([cacheAddress, currency])
             .first();
 
           if (existingEntry && existingEntry.expiresAt) {
@@ -547,7 +550,7 @@ export class PortfolioCacheService {
         return [];
       }
       const resolution = getResolutionForTimeframe(timeframe);
-      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, adaOnly);
       const newData = snapshotsToDataPoints(snapshots, currency, this.usdToEurRate);
 
       // Get existing data before removing cache entry
@@ -560,7 +563,7 @@ export class PortfolioCacheService {
           if (portfolioTable) {
             const existingEntry = await portfolioTable
               .where(['address', 'currency'])
-              .equals([address, currency])
+              .equals([cacheAddress, currency])
               .first();
 
             if (existingEntry && existingEntry.data) {
@@ -580,11 +583,11 @@ export class PortfolioCacheService {
       const mergedData = this.mergePortfolioData(existingData, newData);
 
       // Use merged data as-is for better chart resolution
-      let finalData = mergedData;
+      const finalData = mergedData;
 
       // Remove expired entry and save merged data
-      await this.removeCachedData(address, currency);
-      await this.saveToCache(address, currency, finalData);
+      await this.removeCachedData(cacheAddress, currency);
+      await this.saveToCache(cacheAddress, currency, finalData);
 
       return finalData;
     } catch (error) {
@@ -595,7 +598,7 @@ export class PortfolioCacheService {
   /**
    * Load all portfolio data for address with smart caching
    */
-  async loadAllPortfolioData(address: string): Promise<{
+  async loadAllPortfolioData(address: string, adaOnly: boolean = false): Promise<{
     adaData: PortfolioDataPoint[];
     usdData: PortfolioDataPoint[];
     eurData: PortfolioDataPoint[];
@@ -603,6 +606,8 @@ export class PortfolioCacheService {
     if (!address) {
       return { adaData: [], usdData: [], eurData: [] };
     }
+
+    const cacheAddress = adaOnly ? `adaonly:${address}` : address;
 
     try {
       const db = await getWalletDb();
@@ -625,7 +630,7 @@ export class PortfolioCacheService {
         }
         try {
           const resolution = getResolutionForTimeframe('1y');
-          const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+          const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, adaOnly);
           const adaData = snapshotsToDataPoints(snapshots, 'ADA', this.usdToEurRate);
           const usdData = snapshotsToDataPoints(snapshots, 'USD', this.usdToEurRate);
           const eurData = snapshotsToDataPoints(snapshots, 'EUR', this.usdToEurRate);
@@ -638,9 +643,9 @@ export class PortfolioCacheService {
 
       // Load cache data in parallel for better performance
       const [cachedAda, cachedUsd, cachedEur] = await Promise.all([
-        portfolioTable.where(['address', 'currency']).equals([address, 'ADA']).first(),
-        portfolioTable.where(['address', 'currency']).equals([address, 'USD']).first(),
-        portfolioTable.where(['address', 'currency']).equals([address, 'EUR']).first(),
+        portfolioTable.where(['address', 'currency']).equals([cacheAddress, 'ADA']).first(),
+        portfolioTable.where(['address', 'currency']).equals([cacheAddress, 'USD']).first(),
+        portfolioTable.where(['address', 'currency']).equals([cacheAddress, 'EUR']).first(),
       ]);
 
       // Determine what needs to be loaded
@@ -654,7 +659,7 @@ export class PortfolioCacheService {
       if (!isValidEntry(cachedEur)) currenciesToLoad.push('EUR');
 
       // Parse cached data
-      const parseData = (entry: any, currency: string) => {
+      const parseData = (entry: any) => {
         if (!entry || !entry.data) {
           return [];
         }
@@ -665,9 +670,9 @@ export class PortfolioCacheService {
         }
       };
 
-      let adaData = parseData(cachedAda, 'ADA');
-      let usdData = parseData(cachedUsd, 'USD');
-      let eurData = parseData(cachedEur, 'EUR');
+      let adaData = parseData(cachedAda);
+      let usdData = parseData(cachedUsd);
+      let eurData = parseData(cachedEur);
 
       // Load missing data in parallel for better performance
       if (currenciesToLoad.length > 0) {
@@ -680,14 +685,14 @@ export class PortfolioCacheService {
 
           // Single API call returns both ADA and USD values
           const resolution = getResolutionForTimeframe('1y');
-          const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+          const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, adaOnly);
 
           const loadPromises = currenciesToLoad.map(async currency => {
             try {
               const processedData = snapshotsToDataPoints(snapshots, currency, this.usdToEurRate);
 
               // Save to cache
-              await this.saveToCache(address, currency, processedData);
+              await this.saveToCache(cacheAddress, currency, processedData);
 
               return { currency, data: processedData };
             } catch (error) {
@@ -728,13 +733,14 @@ export class PortfolioCacheService {
   /**
    * Refresh portfolio data (ignores cache)
    */
-  async refreshPortfolioData(address: string): Promise<{
+  async refreshPortfolioData(address: string, adaOnly: boolean = false): Promise<{
     adaData: PortfolioDataPoint[];
     usdData: PortfolioDataPoint[];
     eurData: PortfolioDataPoint[];
   }> {
-    await this.clearAddressCache(address);
-    return this.loadAllPortfolioData(address);
+    const cacheAddress = adaOnly ? `adaonly:${address}` : address;
+    await this.clearAddressCache(cacheAddress);
+    return this.loadAllPortfolioData(address, adaOnly);
   }
 
   /**
@@ -844,7 +850,8 @@ export class PortfolioCacheService {
   /**
    * Force load specific currency data (ignores cache)
    */
-  async forceLoadCurrencyData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> {
+  async forceLoadCurrencyData(address: string, currency: 'ADA' | 'USD' | 'EUR', adaOnly: boolean = false): Promise<PortfolioDataPoint[]> {
+    const cacheAddress = adaOnly ? `adaonly:${address}` : address;
     try {
       // Determine timeframe based on existing expired data before removing it
       let timeframe = 'all'; // default
@@ -857,27 +864,22 @@ export class PortfolioCacheService {
           if (portfolioTable) {
             const existingEntry = await portfolioTable
               .where(['address', 'currency'])
-              .equals([address, currency])
+              .equals([cacheAddress, currency])
               .first();
 
             if (existingEntry && existingEntry.expiresAt) {
               const now = Date.now();
               if (now > existingEntry.expiresAt) {
-                // Data expired, determine timeframe based on expiry time
-                // But always use at least 30d for good chart data
                 const calculatedTimeframe = getTimeframeBasedOnExpiry(existingEntry.expiresAt);
                 timeframe = ['24h', '7d'].includes(calculatedTimeframe) ? '30d' : calculatedTimeframe;
               }
             } else {
-              // No existing data, use full year for an initial load
               timeframe = '1y';
             }
           } else {
-            // Table doesn't exist, use default timeframe
             timeframe = '1y';
           }
         } else {
-          // No database available, use default timeframe
           timeframe = '1y';
         }
       } catch (error) {
@@ -894,7 +896,7 @@ export class PortfolioCacheService {
           if (portfolioTable) {
             const existingEntry = await portfolioTable
               .where(['address', 'currency'])
-              .equals([address, currency])
+              .equals([cacheAddress, currency])
               .first();
 
             if (existingEntry && existingEntry.data) {
@@ -917,18 +919,15 @@ export class PortfolioCacheService {
         return [];
       }
       const resolution = getResolutionForTimeframe(timeframe);
-      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, adaOnly);
       const newData = snapshotsToDataPoints(snapshots, currency, this.usdToEurRate);
 
       // Professional data merging: preserve existing + add new (already sorted)
-      const mergedData = this.mergePortfolioData(existingData, newData);
-
-      // Use merged data as-is for better chart resolution
-      let finalData = mergedData;
+      const finalData = this.mergePortfolioData(existingData, newData);
 
       // Remove existing cache for this currency and save merged data
-      await this.removeCachedData(address, currency);
-      await this.saveToCache(address, currency, finalData);
+      await this.removeCachedData(cacheAddress, currency);
+      await this.saveToCache(cacheAddress, currency, finalData);
       return finalData;
     } catch (error) {
       return [];
@@ -977,7 +976,7 @@ export class PortfolioCacheService {
    * Fetch data at a specific timeframe resolution and merge with existing cached data.
    * Used when user changes chart timeframe and needs higher-resolution data.
    */
-  async loadForTimeframe(address: string, timeframe: string): Promise<{
+  async loadForTimeframe(address: string, timeframe: string, adaOnly: boolean = false): Promise<{
     adaData: PortfolioDataPoint[];
     usdData: PortfolioDataPoint[];
     eurData: PortfolioDataPoint[];
@@ -986,6 +985,7 @@ export class PortfolioCacheService {
       return { adaData: [], usdData: [], eurData: [] };
     }
 
+    const cacheAddress = adaOnly ? `adaonly:${address}` : address;
     const stakeAddress = walletStore.loggedWallet?.stakeAddress;
     if (!stakeAddress) {
       console.warn('No stake address available for timeframe data');
@@ -995,7 +995,7 @@ export class PortfolioCacheService {
     const resolution = getResolutionForTimeframe(timeframe);
 
     try {
-      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, false);
+      const snapshots = await marketApi.getWalletHistory(stakeAddress, resolution, adaOnly);
 
       const currencies: Array<'ADA' | 'USD' | 'EUR'> = ['ADA', 'USD', 'EUR'];
       const result: Record<string, PortfolioDataPoint[]> = {};
@@ -1006,7 +1006,7 @@ export class PortfolioCacheService {
         // Get existing cached data
         let existingData: PortfolioDataPoint[] = [];
         try {
-          const cached = await this.getCachedData(address, currency);
+          const cached = await this.getCachedData(cacheAddress, currency);
           if (cached && cached.length > 0) {
             existingData = cached;
           }
@@ -1018,8 +1018,8 @@ export class PortfolioCacheService {
         const mergedData = this.mergePortfolioData(existingData, newData);
 
         // Save merged data back to cache
-        await this.removeCachedData(address, currency);
-        await this.saveToCache(address, currency, mergedData);
+        await this.removeCachedData(cacheAddress, currency);
+        await this.saveToCache(cacheAddress, currency, mergedData);
 
         result[currency] = mergedData;
       }

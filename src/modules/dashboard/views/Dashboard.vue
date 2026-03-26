@@ -31,6 +31,9 @@
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
                 :chart-data-eur="computeChartData.eurData"
+                :ada-only-chart-data="computeChartData.adaOnlyAdaData"
+                :ada-only-chart-data-usd="computeChartData.adaOnlyUsdData"
+                :ada-only-chart-data-eur="computeChartData.adaOnlyEurData"
                 :portfolio-value-ada="currentPortfolioValues.ada"
                 :portfolio-value-usd="currentPortfolioValues.usd"
                 :portfolio-value-eur="currentPortfolioValues.eur"
@@ -106,6 +109,9 @@
             :chart-data="computeChartData.adaData"
             :chart-data-usd="computeChartData.usdData"
             :chart-data-eur="computeChartData.eurData"
+            :ada-only-chart-data="computeChartData.adaOnlyAdaData"
+            :ada-only-chart-data-usd="computeChartData.adaOnlyUsdData"
+            :ada-only-chart-data-eur="computeChartData.adaOnlyEurData"
             :portfolio-value-ada="currentPortfolioValues.ada"
             :portfolio-value-usd="currentPortfolioValues.usd"
             :portfolio-value-eur="currentPortfolioValues.eur"
@@ -133,6 +139,9 @@
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
                 :chart-data-eur="computeChartData.eurData"
+                :ada-only-chart-data="computeChartData.adaOnlyAdaData"
+                :ada-only-chart-data-usd="computeChartData.adaOnlyUsdData"
+                :ada-only-chart-data-eur="computeChartData.adaOnlyEurData"
                 :portfolio-value-ada="currentPortfolioValues.ada"
                 :portfolio-value-usd="currentPortfolioValues.usd"
                 :portfolio-value-eur="currentPortfolioValues.eur"
@@ -420,6 +429,9 @@ const {
   adaData: adaChartData,
   usdData: usdChartData,
   eurData: eurChartData,
+  adaOnlyAdaData: adaOnlyAdaChartData,
+  adaOnlyUsdData: adaOnlyUsdChartData,
+  adaOnlyEurData: adaOnlyEurChartData,
   isLoading: portfolioLoading,
   loadDataProgressively,
   refreshPortfolioData,
@@ -434,12 +446,15 @@ const {
 const currentTimestamp = ref(Date.now());
 
 const computeChartData = computed(() => {
-  // For Cardano mainnet, return ADA and USD data
+  // For Cardano mainnet, return full and ada-only data from market API
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
       adaData: adaChartData.value,
       usdData: usdChartData.value,
       eurData: eurChartData.value,
+      adaOnlyAdaData: adaOnlyAdaChartData.value,
+      adaOnlyUsdData: adaOnlyUsdChartData.value,
+      adaOnlyEurData: adaOnlyEurChartData.value,
     };
   }
   // For other chains, calculate from transactions
@@ -528,6 +543,10 @@ const computeChartData = computed(() => {
     adaData: graphData || [],
     usdData: usdData || [],
     eurData: eurData || [],
+    // Non-Cardano: ada-only is the same as full (only native balance)
+    adaOnlyAdaData: graphData || [],
+    adaOnlyUsdData: usdData || [],
+    adaOnlyEurData: eurData || [],
   };
 });
 
