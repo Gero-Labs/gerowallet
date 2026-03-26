@@ -29,6 +29,10 @@ export class WalletManager {
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
   // public syncMutex = withTimeout(new Mutex(), 2 * 60_000);
 
+  // Throttle sync when wallet is locked (sync at most once every 5 minutes)
+  private lastLockedSyncTime: number = 0;
+  private static LOCKED_SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
+
 
   private constructor() {}
 
@@ -383,6 +387,15 @@ export class WalletManager {
 
               // Mark as processed BEFORE starting sync to prevent duplicates
               ablyService.markTipAsProcessed(tip.hash);
+
+              // Throttle sync when wallet is locked — sync at most every 5 minutes
+              if (WalletStore.state.isLocked) {
+                const now = Date.now();
+                if (now - this.lastLockedSyncTime < WalletManager.LOCKED_SYNC_INTERVAL) {
+                  return;
+                }
+                this.lastLockedSyncTime = now;
+              }
 
               debugLog('TIP', tip);
 

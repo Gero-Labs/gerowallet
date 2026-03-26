@@ -25,7 +25,7 @@
 
           <v-layout :align-start="true">
             <NavigationDrawer v-model="drawer" />
-            <v-sheet style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent">
+            <v-sheet ref="scrollContainer" style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent" @scroll.native="onSheetScroll">
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
@@ -129,35 +129,46 @@
                     </div>
                   </v-tooltip>
 
-                  <!-- Notifications Menu (preserved from current version) -->
+                  <!-- Notifications Menu -->
                   <v-menu
+                    v-model="notificationsMenu"
                     offset-y
-                    :close-on-content-click="false"
                     nudge-left="75"
-                    nudge-top="-10"
-                    eager
+                    :close-on-content-click="true"
                     transition="none"
                   >
                     <template v-slot:activator="{ on, attrs }">
                       <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
-                        <v-icon size="20">mdi-bell-outline</v-icon>
+                        <v-badge :value="kesWarningVisible" color="error" dot overlap>
+                          <v-icon size="20">mdi-bell-outline</v-icon>
+                        </v-badge>
                       </v-btn>
                     </template>
-                    <v-card outlined class="notifications-card" min-width="200">
-                      <v-card-title class="pa-2 text-h6"> {{ t('navigation.notifications') }} </v-card-title>
-                      <v-card-text class="pa-0">
-                        <v-list class="transparent">
-                          <v-list-item>
+                    <v-card outlined class="notifications-card" style="min-width: 280px; max-width: 320px">
+                      <v-card-title class="pa-3 pb-1" style="font-size: 15px">{{ t('navigation.notifications') }}</v-card-title>
+                      <v-card-text class="pa-0 pb-2">
+                        <v-list v-if="kesWarningVisible" class="transparent" dense>
+                          <v-list-item class="kes-notification-item" @click="navigateToPoolOperator">
+                            <v-list-item-avatar size="32" class="mr-2" style="background: rgba(253,176,34,0.12); border-radius: 8px; min-width: 32px">
+                              <v-icon size="16" color="#FDB022">mdi-key-chain</v-icon>
+                            </v-list-item-avatar>
                             <v-list-item-content>
-                              <v-list-item-title class="text-center" style="color: #ccc">
-                                <v-avatar size="30" color="#333" class="mr-2">
-                                  <v-icon small color="#CCC"> mdi-message-text-outline </v-icon>
-                                </v-avatar>
-                                {{ t('navigation.nothingNew') }}
+                              <v-list-item-title style="font-size: 13px; font-weight: 600; color: #FDB022; white-space: normal">
+                                {{ t('poolOperator.kesWarningTitle', { remaining: kesRemainingGlobal }) }}
                               </v-list-item-title>
+                              <v-list-item-subtitle style="font-size: 11px; white-space: normal; color: rgba(255,255,255,0.5)">
+                                {{ t('poolOperator.kesWarningSubtitle') }}
+                              </v-list-item-subtitle>
                             </v-list-item-content>
+                            <v-list-item-action class="my-0 ml-1">
+                              <v-icon small color="#FDB022">mdi-chevron-right</v-icon>
+                            </v-list-item-action>
                           </v-list-item>
                         </v-list>
+                        <div v-else class="text-center pa-4" style="color: rgba(255,255,255,0.4); font-size: 13px">
+                          <v-icon small color="rgba(255,255,255,0.3)" class="mr-1">mdi-bell-check-outline</v-icon>
+                          {{ t('navigation.nothingNew') }}
+                        </div>
                       </v-card-text>
                     </v-card>
                   </v-menu>
@@ -239,6 +250,7 @@
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
 
       <GlobalSearch />
+
     </v-app>
   </div>
 </template>
@@ -260,11 +272,11 @@ import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
 import { walletStore } from '@/stores/walletStore';
+import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
-import networks from '@/utils/networks';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import GlobalSearch from '@/shared/components/GlobalSearch.vue';
 import { useGlobalSearch, settingsNavRequest } from '@/shared/composables/useGlobalSearch';
@@ -287,7 +299,7 @@ const currentDialog = ref<string | null>(null);
 
 // Compact nav mode — collapse labels to icons when toolbar is narrow
 const compactNav = ref(false);
-const navBarRef = ref<any>(null);
+const navBarRef = ref(null);
 const searchFieldRef = ref<HTMLElement | null>(null);
 let navBarObserver: ResizeObserver | null = null;
 const dialogs = { SETTINGS: 'SETTINGS' };
@@ -329,6 +341,19 @@ const hasNewSettingsFeatures = computed(() => hasNewFeaturesInPath(['settings'])
 const isWalletEmpty = computed(() => {
   return !account.value || account.value.controlled_amount === '0';
 });
+// Notifications menu
+const notificationsMenu = ref(false);
+
+// KES rotation warning — shows globally when BP node reports low KES remaining
+const kesRemainingGlobal = computed(() => {
+  const bp = poolOperatorStore.nodes.find(n => n.type === 'bp' && n.connected && n.data);
+  return bp?.data?.kesRemaining ?? null;
+});
+
+const kesWarningVisible = computed(() => {
+  return kesRemainingGlobal.value !== null && kesRemainingGlobal.value < 50;
+});
+
 const epochSlotPercentage = computed(() => {
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;
 });
@@ -380,6 +405,16 @@ function handleOpenBackupDialog() {
   console.log('Received backup dialog event from dashboard');
   backupWalletDialog.value = true;
 }
+
+function onSheetScroll() {
+  if (notificationsMenu.value) notificationsMenu.value = false;
+}
+
+function navigateToPoolOperator() {
+  notificationsMenu.value = false;
+  vmProxy.$router.push('/pool-operator');
+}
+
 
 async function openMiniMode() {
   try {
@@ -463,6 +498,25 @@ const preloadBackgroundImage = () => {
 onMounted(async () => {
   // Ensure colors are set on mount
   updateThemeColors();
+
+  // Load SPO node config and start polling for KES notifications
+  const walletId = walletStore.loggedWallet?.id;
+  if (walletId && poolOperatorStore.nodes.length === 0) {
+    try {
+      const { loadPoolOperatorConfig } = await import('@/stores/poolOperatorStore');
+      await loadPoolOperatorConfig(walletId);
+      // Poll connected BP nodes for status (KES data)
+      if (poolOperatorStore.nodes.length > 0) {
+        const { nodeFetch } = await import('@/modules/pool-operator/utils/nodeFetch');
+        for (const node of poolOperatorStore.nodes) {
+          try {
+            node.data = await nodeFetch(node.url + '/status', 8000);
+            node.connected = true;
+          } catch { node.connected = false; }
+        }
+      }
+    } catch { /* SPO not configured, skip */ }
+  }
 
   // Preload background image after critical content
   requestIdleCallback(
@@ -792,4 +846,19 @@ div.v-toolbar__content {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   isolation: isolate !important;
 }
+
+
 </style>
+
+<style>
+.kes-notification-item {
+  cursor: pointer;
+  border-radius: 8px;
+  margin: 0 8px;
+}
+
+.kes-notification-item:hover {
+  background: rgba(253, 176, 34, 0.06) !important;
+}
+</style>
+

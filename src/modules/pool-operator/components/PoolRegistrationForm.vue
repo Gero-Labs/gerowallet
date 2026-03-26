@@ -4,7 +4,7 @@
       <!-- Core Parameters -->
       <div class="form-section">
         <div class="section-label">
-          <v-icon x-small color="rgba(255,255,255,0.3)" class="mr-1">mdi-tune</v-icon>
+          <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-tune</v-icon>
           {{ $t('poolOperator.coreParameters') }}
         </div>
         <div class="param-grid">
@@ -43,7 +43,7 @@
       <!-- Metadata -->
       <div class="form-section">
         <div class="section-label">
-          <v-icon x-small color="rgba(255,255,255,0.3)" class="mr-1">mdi-tag-text-outline</v-icon>
+          <v-icon x-small color="white" class="mr-1">mdi-tag-text-outline</v-icon>
           {{ $t('poolOperator.poolMetadata') }}
         </div>
         <MetadataEditor v-model="metadata" />
@@ -52,7 +52,7 @@
       <!-- Relays -->
       <div class="form-section">
         <div class="section-label">
-          <v-icon x-small color="rgba(255,255,255,0.3)" class="mr-1">mdi-access-point-network</v-icon>
+          <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-access-point-network</v-icon>
           {{ $t('poolOperator.relays') }}
         </div>
         <RelayEditor v-model="relays" />
@@ -72,7 +72,7 @@
         {{ isUpdate ? $t('poolOperator.updatePool') : $t('poolOperator.registerPool') }}
       </v-btn>
       <div v-if="!isUpdate" class="deposit-note">
-        <v-icon x-small color="rgba(255,255,255,0.3)" class="mr-1">mdi-information-outline</v-icon>
+        <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-information-outline</v-icon>
         {{ $t('poolOperator.depositNote') }}
       </div>
     </v-form>
@@ -104,9 +104,22 @@ const maxValue = (max: number) => (v: string) => !v || Number(v) <= max || `Max 
 const valid = ref(false);
 const pledge = ref(registeredParams.value?.pledge ? String(Number(registeredParams.value.pledge) / 1_000_000) : '');
 const cost = ref(registeredParams.value?.cost ? String(Number(registeredParams.value.cost) / 1_000_000) : '340');
-const margin = ref('5');
-const metadata = ref({ url: '', hash: '' });
-const relays = ref<any[]>([]);
+const margin = ref(registeredParams.value?.margin
+  ? String(((registeredParams.value.margin.numerator || 0) / (registeredParams.value.margin.denominator || 10000)) * 100)
+  : '5');
+const metadata = ref({
+  url: registeredParams.value?.metadataUrl || '',
+  hash: registeredParams.value?.metadataHash || '',
+});
+const relays = ref<any[]>(registeredParams.value?.relays?.length
+  ? registeredParams.value.relays.map((r: any) => {
+      if (r.dns || r.hostname || r.__typename === 'RelayByName') return { type: 'dns' as const, hostname: r.dns || r.hostname || '', port: r.port };
+      if (r.ipv4 || r.__typename === 'RelayByAddress' && !r.ipv6) return { type: 'ipv4' as const, ip: r.ipv4 || r.ip || '', port: r.port };
+      if (r.ipv6 || r.__typename === 'RelayByAddress' && r.ipv6) return { type: 'ipv6' as const, ip: r.ipv6 || r.ip || '', port: r.port };
+      if (r.srv || r.dnsName || r.__typename === 'RelayByNameMultihost') return { type: 'srv' as const, dnsName: r.srv || r.dnsName || '' };
+      return { type: 'dns' as const, hostname: r.dns || r.hostname || '', port: r.port };
+    })
+  : []);
 
 const isUpdate = computed(() => isRegistered.value);
 
@@ -177,13 +190,13 @@ function onSigned() {
 
 .param-hint {
   font-size: 10px;
-  color: rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.45);
   margin-top: 6px;
 }
 
 .deposit-note {
   font-size: 11px;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.5);
   text-align: center;
   margin-top: 10px;
   display: flex;
@@ -201,7 +214,7 @@ function onSigned() {
 }
 
 .glass-input >>> .v-text-field__suffix {
-  color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.5);
   font-size: 12px;
 }
 </style>

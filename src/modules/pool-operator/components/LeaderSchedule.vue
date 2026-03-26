@@ -2,7 +2,7 @@
   <div class="leader-schedule">
     <div class="section-header">
       <div class="section-title">
-        <v-icon size="16" color="#FDB022" class="mr-2">mdi-calendar-clock</v-icon>
+        <v-icon size="16" color="white" class="mr-2">mdi-calendar-clock</v-icon>
         {{ $t('poolOperator.leaderSchedule') }}
       </div>
     </div>
@@ -113,7 +113,7 @@
 import { ref, computed, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
-import { walletStore } from '@/stores/walletStore';
+import { nodeFetch } from '../utils/nodeFetch';
 
 const { t } = useTranslation();
 const { poolId } = toRefs(poolOperatorStore);
@@ -135,14 +135,13 @@ interface ScheduleSlot {
 
 const slots = ref<ScheduleSlot[]>([]);
 
-// Node connection — read from the stored node monitor URL
-const nodeConnected = computed(() => {
-  // Check if node monitor is configured by looking for the URL in the store or a flag
-  // The NodeMonitor component stores the URL in wallet DB; we check via a simple approach
-  return !!nodeMonitorUrl.value;
-});
+const nodeConnected = computed(() => !!nodeMonitorUrl.value);
 
-const nodeMonitorUrl = ref('');
+const nodeMonitorUrl = computed(() => {
+  // Find the block producer node from the nodes list
+  const bp = poolOperatorStore.nodes.find(n => n.type === 'bp' && n.connected);
+  return bp?.url || '';
+});
 
 const nextSlot = computed(() => slots.value.find(s => s.isNext));
 
@@ -160,16 +159,6 @@ const pastCount = computed(() => slots.value.filter(s => s.isPast).length);
 const producedCount = computed(() => slots.value.filter(s => s.isPast && s.produced).length);
 const missedCount = computed(() => slots.value.filter(s => s.isPast && !s.produced).length);
 
-async function loadNodeUrl() {
-  const walletId = walletStore.loggedWallet?.id;
-  if (!walletId) return;
-  try {
-    const { getDb } = await import('@/db/wallet-db');
-    const db = await getDb(walletId);
-    const entry = await db.table('config').where({ key: 'spo_nodeMonitorUrl' }).first();
-    nodeMonitorUrl.value = entry?.value || '';
-  } catch { /* ignore */ }
-}
 
 async function fetchSchedule() {
   if (!nodeMonitorUrl.value) return;
@@ -179,17 +168,14 @@ async function fetchSchedule() {
 
   try {
     const epoch = scheduleView.value;
-    const response = await fetch(
+    const data = await nodeFetch(
       `${nodeMonitorUrl.value}/leader-schedule?epoch=${epoch}`,
-      { signal: AbortSignal.timeout(120_000) } // Leader schedule can take time to compute
+      120_000 // Leader schedule can take time to compute
     );
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(body || `HTTP ${response.status}`);
+    if (data.error) {
+      throw new Error(data.error);
     }
-
-    const data = await response.json();
     const now = Date.now() / 1000;
 
     // Expected response: { slots: [{ slot, slotInEpoch, timestamp, produced? }], epoch }
@@ -232,9 +218,6 @@ watch(scheduleView, () => {
   if (nodeMonitorUrl.value && fetched.value) fetchSchedule();
 });
 
-// Load node URL on mount
-import { onMounted } from 'vue';
-onMounted(() => loadNodeUrl());
 </script>
 
 <style scoped>
@@ -250,7 +233,7 @@ onMounted(() => loadNodeUrl());
 }
 
 .section-title {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: rgba(255,255,255,0.6);
   display: flex;
@@ -284,8 +267,8 @@ onMounted(() => loadNodeUrl());
 }
 
 .ls-notice-text {
-  font-size: 11px;
-  color: rgba(255,255,255,0.35);
+  font-size: 13px;
+  color: rgba(255,255,255,0.55);
   line-height: 1.5;
   margin-top: 2px;
 }
@@ -300,19 +283,19 @@ onMounted(() => loadNodeUrl());
 .toggle-btn {
   text-transform: none !important;
   letter-spacing: normal !important;
-  font-size: 11px !important;
+  font-size: 13px !important;
 }
 
 .refresh-btn {
   text-transform: none !important;
   letter-spacing: normal !important;
-  color: rgba(255,255,255,0.3) !important;
-  font-size: 11px !important;
+  color: rgba(255,255,255,0.5) !important;
+  font-size: 13px !important;
 }
 
 .loading-text {
-  font-size: 11px;
-  color: rgba(255,255,255,0.3);
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
 }
 
 /* Error */
@@ -320,7 +303,7 @@ onMounted(() => loadNodeUrl());
   display: flex;
   align-items: center;
   padding: 12px;
-  font-size: 12px;
+  font-size: 14px;
   color: #FDA29B;
 }
 
@@ -353,8 +336,8 @@ onMounted(() => loadNodeUrl());
 
 .summary-label {
   display: block;
-  font-size: 9px;
-  color: rgba(255,255,255,0.3);
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   margin-top: 2px;
@@ -393,8 +376,8 @@ onMounted(() => loadNodeUrl());
 }
 
 .slot-index {
-  font-size: 10px;
-  color: rgba(255,255,255,0.2);
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
   min-width: 28px;
   font-variant-numeric: tabular-nums;
 }
@@ -402,15 +385,15 @@ onMounted(() => loadNodeUrl());
 .slot-info { flex: 1; }
 
 .slot-time {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: rgba(255,255,255,0.8);
   display: block;
 }
 
 .slot-detail {
-  font-size: 10px;
-  color: rgba(255,255,255,0.2);
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
   font-family: 'Roboto Mono', monospace;
 }
 
@@ -420,7 +403,7 @@ onMounted(() => loadNodeUrl());
 }
 
 .next-badge {
-  font-size: 9px;
+  font-size: 13px;
   font-weight: 700;
   color: #FDB022;
   text-transform: uppercase;
@@ -428,7 +411,7 @@ onMounted(() => loadNodeUrl());
 }
 
 .empty-text {
-  color: rgba(255,255,255,0.25);
-  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+  font-size: 14px;
 }
 </style>

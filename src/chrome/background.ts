@@ -1731,6 +1731,40 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
   }
 });
 
+// SPO Node Monitor — proxy fetch through background (bypasses extension page CSP)
+app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
+  try {
+    const { url, timeout, method, body } = request.data;
+    if (!url || typeof url !== 'string') {
+      throw new Error('Invalid URL');
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout || 10000);
+    const fetchOpts: RequestInit = { signal: controller.signal };
+    if (method === 'POST') {
+      fetchOpts.method = 'POST';
+      fetchOpts.headers = { 'Content-Type': 'application/json' };
+      if (body) fetchOpts.body = body;
+    }
+    const response = await fetch(url, fetchOpts);
+    clearTimeout(timer);
+    const data = await response.json();
+    sendResponse({
+      id: request.id,
+      data: { success: true, status: response.status, body: data },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error: any) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: error.message || 'Fetch failed' },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 // Bitcoin transaction signing handler (software wallets)
 app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => {
   try {

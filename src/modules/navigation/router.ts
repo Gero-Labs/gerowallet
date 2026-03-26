@@ -330,6 +330,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
       // GoMining is under maintenance if feature flag is disabled
       return !featureFlagsStore.isGoMiningEnabled();
 
+    case 'poolOperator':
+      // Pool Operator dashboard gated by feature flag
+      return !featureFlagsStore.isPoolOperatorEnabled();
+
     case 'multisig':
       // MultiSig is currently under maintenance (route is commented out)
       return true;

@@ -248,18 +248,15 @@ async function importWithPassKey() {
     let credentialId: string;
     let prfOutput: ArrayBuffer | null = null;
 
-    // Check if wallet already has a WebAuthn credential (PRF wallets)
-    if (wallet.webAuthnCredentialId) {
-      credentialId = wallet.webAuthnCredentialId;
-    } else {
-      // Register a new credential for this wallet (hardware wallets, normal wallets without PassKey)
-      const registration = await registerWebAuthnCredentialWithPrf(
-        wallet.id.toString(),
-        wallet.name || 'Gero Wallet'
-      );
-      credentialId = registration.credentialId;
-      prfOutput = registration.prfOutput;
-    }
+    // Always register a fresh credential for cold key encryption
+    // (wallet's credential may be on a different device/profile)
+    console.log('[ColdKey] Registering new credential for cold key encryption');
+    const registration = await registerWebAuthnCredentialWithPrf(
+      `spo-${wallet.id}`,
+      `${wallet.name || 'Gero Wallet'} - Pool Cold Key`
+    );
+    credentialId = registration.credentialId;
+    prfOutput = registration.prfOutput;
 
     // Encrypt cold key with PRF-derived key
     const encrypted = await encryptPrivateKeyWithPrf(

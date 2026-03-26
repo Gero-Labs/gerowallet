@@ -235,6 +235,11 @@ export default {
   // ── Price Service ───────────────────────────────────────────────────────────
 
   async getCandles(assetId: string, resolution: string = '1h', from?: string, to?: string, currency?: string): Promise<CandleResponse[]> {
+    // ADA uses a dedicated endpoint (the generic one returns [] for lovelace)
+    if (assetId === 'lovelace' || assetId === 'ada') {
+      const { data } = await axiosInstance.get('/api/v1/prices/ada/candles', { params: { currency, resolution, from, to } });
+      return data;
+    }
     const { data } = await axiosInstance.get('/api/v1/prices/historical/candles', { params: { assetId, resolution, from, to, currency } });
     return data;
   },

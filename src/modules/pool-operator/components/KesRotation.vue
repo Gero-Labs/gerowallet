@@ -288,7 +288,7 @@ function downloadFile(filename: string, content: string) {
 
 .kes-info-hint {
   font-size: 10px;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.5);
   line-height: 1.4;
   margin-top: 2px;
 }
@@ -348,7 +348,7 @@ function downloadFile(filename: string, content: string) {
   padding: 8px 12px;
   font-family: 'Roboto Mono', monospace;
   font-size: 10px;
-  color: rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.45);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

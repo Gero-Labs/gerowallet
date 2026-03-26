@@ -97,13 +97,18 @@
               <div class="text--secondary text-caption">{{ $t('market.noChartData') }}</div>
             </div>
           </div>
-          <TechnicalAnalysisChart
-            v-else
-            :key="selectedCurrency"
-            :candles="convertedCandles"
-            :height="chartHeight"
-            :indicators="activeIndicators"
-          />
+          <template v-else>
+            <div v-if="staleDataWarning" class="stale-warning">
+              <v-icon x-small color="rgba(253,176,34,0.7)" class="mr-1">mdi-alert-outline</v-icon>
+              {{ staleDataWarning }}
+            </div>
+            <TechnicalAnalysisChart
+              :key="selectedCurrency"
+              :candles="convertedCandles"
+              :height="chartHeight"
+              :indicators="activeIndicators"
+            />
+          </template>
         </div>
 
         <!-- Buy vs Sell Volume (Cardano DEX data only) -->
@@ -279,7 +284,8 @@ const isApex = computed(() => {
 });
 
 type Currency = 'NATIVE' | 'USD' | 'EUR';
-const currencyOptions: Currency[] = ['NATIVE', 'USD', 'EUR'];
+const isAda = computed(() => props.token.unit === 'lovelace' || props.token.ticker === 'ADA');
+const currencyOptions = computed<Currency[]>(() => isAda.value ? ['USD', 'EUR'] : ['NATIVE', 'USD', 'EUR']);
 const selectedCurrency = ref<Currency>('USD');
 
 // Currency conversion helpers
@@ -387,6 +393,17 @@ function candleCurrency(): string {
 
 // Backend returns candles already converted — just pass through
 const convertedCandles = computed(() => candles.value);
+
+const staleDataWarning = computed(() => {
+  if (!candles.value.length) return '';
+  const lastCandle = candles.value[candles.value.length - 1];
+  const lastTime = typeof lastCandle.time === 'number' ? lastCandle.time * 1000 : new Date(lastCandle.time as string).getTime();
+  const daysSince = (Date.now() - lastTime) / 86400000;
+  if (daysSince > 7) {
+    return `Chart data last updated ${Math.floor(daysSince)} days ago`;
+  }
+  return '';
+});
 
 let candleRequestId = 0;
 async function loadCandles() {

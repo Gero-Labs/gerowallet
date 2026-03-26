@@ -161,7 +161,7 @@ function onSigned() {
 
 .epoch-label {
   font-size: 10px;
-  color: rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.55);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }

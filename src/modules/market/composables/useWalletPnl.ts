@@ -37,7 +37,7 @@ async function fetchPnl() {
     }
     pnlByUnit.value = lookup;
   } catch (err: any) {
-    console.error('Wallet P&L fetch error:', err);
+    console.debug('Wallet P&L fetch error:', err?.message || err);
     pnlError.value = err?.message || 'Failed to load P&L data';
   } finally {
     pnlLoading.value = false;

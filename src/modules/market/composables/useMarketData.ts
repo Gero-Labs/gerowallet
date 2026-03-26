@@ -287,16 +287,23 @@ const RESOLUTION_MAP: Record<string, string> = {
 };
 
 async function getTokenCandles(unit: string, timeframe: string, currency?: string): Promise<CandlestickDataPoint[]> {
-  const assetId = unit === 'lovelace' ? 'lovelace' : unit;
+  const isAda = unit === 'lovelace';
+  const assetId = isAda ? 'lovelace' : unit;
   const resolution = RESOLUTION_MAP[timeframe] || timeframe;
   const to = Math.floor(Date.now() / 1000).toString();
 
+  // For non-ADA tokens: don't pass currency to API (data is ADA-denominated by default,
+  // USD-converted data stops early). Only ADA uses currency param for USD/EUR pricing.
+  const apiCurrency = isAda ? currency : (currency === 'ada' ? undefined : currency);
+
   // Try candle endpoint first (from=0 fetches all available data, matching chart.html)
   try {
-    const candles: CandleResponse[] = await marketApi.getCandles(assetId, resolution, '0', to, currency);
+    const candles: CandleResponse[] = await marketApi.getCandles(assetId, resolution, '0', to, apiCurrency);
     if (candles.length > 0) {
       return candles
         .filter(c => c.open != null && c.close != null)
+        // Filter out zero-volume gap-fill candles (OHLC all identical with 0 volume)
+        .filter(c => c.volume !== 0 || c.open !== c.close || c.high !== c.low)
         .map(c => ({
           time: c.time,
           open: c.open,

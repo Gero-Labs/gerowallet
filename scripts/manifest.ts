@@ -84,6 +84,8 @@ function buildCSP(dev: boolean): string {
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
       : ['ws://127.0.0.1:*']),
+    // SPO Node Monitor (Cloudflare Tunnel)
+    'https://*.trycloudflare.com',
     'data:',
   ];
 

@@ -14,7 +14,6 @@ export interface NetworkStore {
     epoch_slot: number;
   };
   price: any;
-  tickerStatisticsIntervalId: number;
   genesis: any;
 }
 
@@ -24,7 +23,6 @@ export const networkStore = Vue.observable<NetworkStore>({
   epochParams: null,
   tip: null,
   price: {},
-  tickerStatisticsIntervalId: null,
   genesis: null,
 });
 
@@ -147,15 +145,6 @@ export default {
     broadcastFromBackground({ price });
   },
 
-  setTickerStatisticsIntervalId(tickerStatisticsIntervalId: any) {
-    const context = getContextType();
-    debugLog(`🔍 NetworkStore setTickerStatisticsIntervalId called from ${context} context`);
-    networkStore.tickerStatisticsIntervalId = tickerStatisticsIntervalId;
-
-    // Broadcast from background context
-    broadcastFromBackground({ tickerStatisticsIntervalId });
-  },
-
   setGenesis(genesis: any) {
     const context = getContextType();
     debugLog(`🔍 NetworkStore setGenesis called from ${context} context`);
@@ -175,17 +164,11 @@ export default {
 
   // Utility method to reset state
   reset() {
-    // Clear any active intervals before reset
-    if (networkStore.tickerStatisticsIntervalId) {
-      clearInterval(networkStore.tickerStatisticsIntervalId);
-    }
-
     const resetState: NetworkStore = {
       assets: {},
       epochParams: null,
       tip: null,
       price: {},
-      tickerStatisticsIntervalId: null,
       genesis: null
     };
 
