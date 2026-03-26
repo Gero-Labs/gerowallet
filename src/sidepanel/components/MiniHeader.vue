@@ -1,9 +1,14 @@
 <template>
   <header class="mini-header">
     <div class="header-left" @click="$emit('wallet-switch')">
-      <v-avatar size="28" class="mr-2">
-        <v-img :src="geroLogo" contain width="20" height="20" />
-      </v-avatar>
+      <div class="header-icon mr-2">
+        <v-avatar size="28" :color="walletTheme">
+          <v-img :src="walletIcon" contain width="28" height="28"></v-img>
+        </v-avatar>
+        <v-avatar size="14" class="chain-badge">
+          <v-img :src="networkIcon" contain width="14" height="14"></v-img>
+        </v-avatar>
+      </div>
       <span class="wallet-name text-body-2 white--text text-truncate">
         {{ walletName }}
       </span>
@@ -29,10 +34,17 @@
 import { computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
-
-const geroLogo = assets.geroLogo;
+import networks from '@/utils/networks';
 
 const walletName = computed(() => walletStore.loggedWallet?.name || 'Wallet');
+const walletIcon = computed(() => assets.resolveIcon(walletStore.loggedWallet?.icon));
+const walletTheme = computed(() => walletStore.loggedWallet?.theme || '#1a1a1a');
+const networkIcon = computed(() => {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet) return '';
+  const network = networks.resolveNetwork(wallet.chain, wallet.network);
+  return network ? network.icon : '';
+});
 
 function openFullDashboard() {
   chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
@@ -75,5 +87,19 @@ function openFullDashboard() {
 .toolbar-btn {
   width: 32px;
   height: 32px;
+}
+
+.header-icon {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+}
+
+.chain-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -4px;
+  border: 1.5px solid #0a0a0a;
 }
 </style>

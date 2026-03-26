@@ -69,6 +69,8 @@
 import { computed } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { WalletType, Wallet } from '@/models/types';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 
@@ -85,7 +87,16 @@ const resolveNetworkIcon = (item: Wallet): string => {
   return network ? network.icon : '';
 };
 
-function openSetup() {
+async function openSetup() {
+  // Logout so both dashboard and mini gero return to wallet selection
+  try {
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGOUT,
+      data: {},
+    });
+  } catch (e) {
+    console.error('Logout before setup error:', e);
+  }
   chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/welcome') });
 }
 

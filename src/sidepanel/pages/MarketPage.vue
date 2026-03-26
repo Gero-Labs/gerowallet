@@ -29,7 +29,7 @@
         :key="filter.id"
         class="chip"
         :class="{ active: activeFilter === filter.id }"
-        @click="!chipDragged && (activeFilter = filter.id)"
+        @click="selectFilter(filter.id)"
       >
         {{ filter.label }}
       </button>
@@ -86,6 +86,13 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Error -->
+    <div v-else-if="marketError" class="empty-state">
+      <v-icon size="40" color="#F97066">mdi-alert-circle-outline</v-icon>
+      <div class="text-body-2 grey--text mt-2">{{ marketError }}</div>
+      <button class="retry-btn mt-3" @click="retry">{{ $t('miniGero.retry') }}</button>
     </div>
 
     <!-- Empty -->
@@ -214,7 +221,9 @@ const {
   topGainers,
   topLosers,
   loading,
+  error: marketError,
   searchTokens,
+  fetchAllTokens,
 } = useMarketData();
 
 const searchQuery = ref('');
@@ -337,6 +346,16 @@ function formatCompact(value: number): string {
 
 function getTokenImg(token: any): string {
   return applyTokenImageOverride(token.ticker || token.name, token.img || '');
+}
+
+function selectFilter(id: string) {
+  console.log('selectFilter called:', id, 'chipDragged:', chipDragged, 'current:', activeFilter.value);
+  activeFilter.value = id;
+  console.log('activeFilter now:', activeFilter.value, 'displayTokens count:', displayTokens.value.length);
+}
+
+function retry() {
+  fetchAllTokens();
 }
 
 function onImgError(event: Event) {
@@ -503,6 +522,16 @@ function onImgError(event: Event) {
   flex-direction: column;
   align-items: center;
   padding: 48px 16px;
+}
+
+.retry-btn {
+  padding: 6px 20px;
+  border-radius: 8px;
+  background: rgba(0, 199, 243, 0.1);
+  border: 1px solid rgba(0, 199, 243, 0.2);
+  color: #00c7f3;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 /* Token detail */
