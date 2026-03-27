@@ -1,4 +1,5 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef, type WatchStopHandle } from 'vue';
+import SockJS from 'sockjs-client';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { xerberusStore } from '@/stores/xerberusStore';
@@ -224,6 +225,8 @@ const TIMEFRAME_BUCKET: Record<string, number> = {
 /**
  * Build OHLCV candles from raw price history snapshots.
  * Groups data points into time buckets matching the requested timeframe.
+ * @param history
+ * @param timeframe
  * @param priceField - which price field to use ('priceAda' or 'priceUsd')
  */
 function buildCandlesFromHistory(
@@ -351,15 +354,12 @@ function getTokenByUnit(unit: string): MarketToken | undefined {
   return allTokens.value.find(t => t.unit === unit);
 }
 
-// --- Live price streaming via SockJS XHR + STOMP ---
-// WebSocket upgrade is blocked by Cloudflare from extension origin,
-// so we use SockJS XHR streaming transport (HTTP-based, works everywhere).
+// --- Live price streaming via SockJS + STOMP ---
 
 const MARKET_API_BASE = import.meta.env['VITE_MARKET_API_URL'] || 'https://market.gerowallet.io';
 const STOMP_TOPIC = '/topic/market/prices';
 
-let xhrStream: XMLHttpRequest | null = null;
-let xhrSendUrl = '';
+let sock: WebSocket | null = null;
 let streamReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const wsConnected = ref(false);
 let renderPending = false;
@@ -427,120 +427,57 @@ function parseStompFrame(data: string): { command: string; headers: Record<strin
   return { command, headers, body };
 }
 
-/** Send a STOMP frame via SockJS XHR send endpoint */
-function stompSend(frame: string): void {
-  if (!xhrSendUrl) return;
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', xhrSendUrl, true);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.send(JSON.stringify([frame]));
-}
-
-/** Process a SockJS message chunk from the XHR stream */
-function processSockJsChunk(chunk: string): void {
-  if (chunk === 'o') {
-    // SockJS open — send STOMP CONNECT
-    stompSend(stompFrame('CONNECT', { 'accept-version': '1.2', 'heart-beat': '0,0' }));
-    return;
-  }
-  if (chunk === 'h') return; // heartbeat
-  if (chunk.startsWith('c')) { disconnectStream(); return; }
-
-  if (chunk.startsWith('a')) {
-    let messages: string[];
-    try { messages = JSON.parse(chunk.substring(1)); } catch { return; }
-
-    for (const msg of messages) {
-      const frame = parseStompFrame(msg);
-      if (!frame) continue;
-
-      if (frame.command === 'CONNECTED') {
-        stompSend(stompFrame('SUBSCRIBE', { id: 'sub-0', destination: STOMP_TOPIC }));
-        wsConnected.value = true;
-        console.debug('📡 Market stream connected and subscribed');
-      } else if (frame.command === 'MESSAGE' && frame.body) {
-        try { mergePriceUpdates(JSON.parse(frame.body)); } catch { /* ignore */ }
-      }
-    }
-  }
-}
-
-let polling = false;
-let xhrPollUrl = '';
-
-/** Long-poll: POST to /xhr, get one message, repeat */
-function poll(): void {
-  if (!polling || !xhrPollUrl) return;
-
-  const xhr = new XMLHttpRequest();
-  xhrStream = xhr;
-  xhr.open('POST', xhrPollUrl, true);
-  xhr.timeout = 30000; // SockJS long-poll typically returns within 25s
-
-  xhr.onload = () => {
-    xhrStream = null;
-    if (xhr.status === 200 && xhr.responseText) {
-      processSockJsChunk(xhr.responseText.trim());
-    }
-    // Continue polling
-    if (polling) poll();
-  };
-
-  xhr.onerror = xhr.ontimeout = () => {
-    xhrStream = null;
-    wsConnected.value = false;
-    // Retry after delay
-    if (polling) streamReconnectTimer = setTimeout(() => connectStream(), 5000);
-  };
-
-  xhr.send(null);
-}
-
 function connectStream(): void {
-  if (polling) return;
+  if (sock) return;
 
-  const server = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  const session = Math.random().toString(36).substring(2, 10);
-  const baseSessionUrl = `${MARKET_API_BASE}/ws/market/${server}/${session}`;
-  xhrSendUrl = `${baseSessionUrl}/xhr_send`;
-  xhrPollUrl = `${baseSessionUrl}/xhr`;
+  const url = `${MARKET_API_BASE}/ws/market`;
+  console.log(`📡 Market WS: connecting via SockJS to ${url}`);
+  const socket = new SockJS(url) as unknown as WebSocket;
+  sock = socket;
 
-  // Open session: first POST to /xhr returns 'o'
-  const openXhr = new XMLHttpRequest();
-  openXhr.open('POST', xhrPollUrl, true);
-  openXhr.onload = () => {
-    if (openXhr.status !== 200) {
-      console.warn('📡 Market stream open failed:', openXhr.status);
-      streamReconnectTimer = setTimeout(() => connectStream(), 5000);
-      return;
-    }
-    processSockJsChunk(openXhr.responseText.trim());
-    // Start long-polling loop
-    polling = true;
-    poll();
+  socket.onopen = () => {
+    console.log('📡 Market WS: SockJS opened, sending STOMP CONNECT');
+    socket.send(stompFrame('CONNECT', { 'accept-version': '1.2', 'heart-beat': '0,0' }));
   };
-  openXhr.onerror = () => {
+
+  socket.onmessage = (event: MessageEvent) => {
+    const data = typeof event.data === 'string' ? event.data : '';
+    if (!data || data === '\n') return; // heartbeat
+
+    const frame = parseStompFrame(data);
+    if (!frame) return;
+
+    if (frame.command === 'CONNECTED') {
+      socket.send(stompFrame('SUBSCRIBE', { id: 'sub-0', destination: STOMP_TOPIC }));
+      wsConnected.value = true;
+      console.log('📡 Market WS: subscribed to', STOMP_TOPIC);
+    } else if (frame.command === 'MESSAGE' && frame.body) {
+      try { mergePriceUpdates(JSON.parse(frame.body)); } catch { /* ignore */ }
+    } else if (frame.command === 'ERROR') {
+      console.error('📡 Market WS: STOMP ERROR:', frame.headers['message'], frame.body);
+    }
+  };
+
+  socket.onclose = () => {
+    console.log('📡 Market WS: closed, reconnecting in 5s');
+    sock = null;
+    wsConnected.value = false;
     streamReconnectTimer = setTimeout(() => connectStream(), 5000);
   };
-  openXhr.send(null);
 }
 
 function disconnectStream(): void {
-  polling = false;
   if (streamReconnectTimer) {
     clearTimeout(streamReconnectTimer);
     streamReconnectTimer = null;
   }
-  if (xhrStream) {
-    xhrStream.onload = null;
-    xhrStream.onerror = null;
-    xhrStream.ontimeout = null;
-    xhrStream.abort();
-    xhrStream = null;
+  if (sock) {
+    sock.onclose = null;
+    sock.onmessage = null;
+    sock.close();
+    sock = null;
   }
   wsConnected.value = false;
-  xhrSendUrl = '';
-  xhrPollUrl = '';
 }
 
 // --- Cleanup ---

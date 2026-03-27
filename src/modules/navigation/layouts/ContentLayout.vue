@@ -45,7 +45,7 @@
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
 
                   <!-- Global Search Field -->
-                  <v-tooltip bottom :disabled="!compactNav">
+                  <v-tooltip bottom :disabled="!compactNav" content-class="custom-tooltip">
                     <template v-slot:activator="{ on, attrs }">
                       <div
                         ref="searchFieldRef"
@@ -173,7 +173,7 @@
                     </v-card>
                   </v-menu>
 
-                  <v-tooltip bottom>
+                  <v-tooltip bottom content-class="custom-tooltip">
                     <template v-slot:activator="{ on }">
                       <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
                         <v-icon size="20">mdi-cellphone</v-icon>

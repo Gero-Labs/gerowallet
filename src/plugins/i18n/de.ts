@@ -2723,7 +2723,7 @@ export default {
   'market.owned': 'Im Besitz',
 
   // Portfolio Page
-  'portfolio.myHoldings': 'Meine Bestände',
+  'portfolio.myHoldings': 'Bestände',
   'portfolio.collectibles': 'Sammlerstücke',
   'portfolio.all': 'Alle',
   'portfolio.trending': 'Im Trend',

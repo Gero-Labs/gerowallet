@@ -78,15 +78,14 @@
                   <template v-slot:activator="{ on, attrs }">
                     <v-chip
                       small
-                      :color="activeView === chip.value ? 'primary' : undefined"
                       :outlined="activeView !== chip.value"
                       @click="setActiveView(chip.value)"
-                      class="flex-shrink-0"
+                      :class="['flex-shrink-0', { 'geroButton': activeView === chip.value }]"
                       style="cursor: pointer"
                       v-bind="attrs"
                       v-on="on"
                     >
-                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }">{{ chip.icon }}</v-icon>
+                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }" :color="activeView === chip.value ? 'black' : undefined">{{ chip.icon }}</v-icon>
                       <template v-if="!compactChips">{{ chip.label }}</template>
                       <span v-if="chip.value === 'watchlist' && watchlistCount > 0" class="ml-1" style="font-size: 11px; opacity: 0.7;">({{ watchlistCount }})</span>
                     </v-chip>
@@ -300,9 +299,6 @@ const instance = getCurrentInstance();
 const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
 const {
   allTokens,
-  trendingTokens,
-  topGainers,
-  topLosers,
   loading: marketLoading,
   wsConnected: marketWsConnected,
 } = useMarketData();
@@ -351,7 +347,7 @@ const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
 
-type ViewMode = 'holdings' | 'collectibles' | 'all' | 'trending' | 'gainers' | 'losers' | 'watchlist';
+type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist';
 const activeView = ref<ViewMode>('holdings');
 
 // Compact chip mode — collapse labels to icons when space is tight
@@ -651,10 +647,7 @@ const filterChips = computed(() => {
   // Market tabs only available on Cardano Mainnet
   if (isMainnetCardano.value) {
     chips.push(
-      { value: 'all' as ViewMode, label: t('portfolio.all'), icon: 'mdi-view-list' },
-      { value: 'trending' as ViewMode, label: t('portfolio.trending'), icon: 'mdi-fire' },
-      { value: 'gainers' as ViewMode, label: t('portfolio.gainers'), icon: 'mdi-trending-up' },
-      { value: 'losers' as ViewMode, label: t('portfolio.losers'), icon: 'mdi-trending-down' },
+      { value: 'market' as ViewMode, label: t('navigation.market'), icon: 'mdi-chart-line' },
       { value: 'watchlist' as ViewMode, label: t('portfolio.watchlist'), icon: 'mdi-star' },
     );
   }
@@ -672,17 +665,8 @@ const displayedTokens = computed(() => {
     case 'holdings':
       tokens = myHoldings.value;
       break;
-    case 'all':
-      tokens = allTokens.value;
-      break;
-    case 'trending':
-      tokens = trendingTokens.value;
-      break;
-    case 'gainers':
-      tokens = topGainers.value;
-      break;
-    case 'losers':
-      tokens = topLosers.value;
+    case 'market':
+      tokens = allTokens.value.filter(t => !t.isNative);
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
@@ -906,7 +890,7 @@ watch(
 );
 
 // Handle /?view= deep-link and nav drawer clicks
-const validViews: ViewMode[] = ['holdings', 'collectibles', 'all', 'trending', 'gainers', 'losers', 'watchlist'];
+const validViews: ViewMode[] = ['holdings', 'collectibles', 'market', 'watchlist'];
 watch(
   () => instance?.proxy?.$route?.query?.['view'],
   (view) => {
@@ -916,7 +900,7 @@ watch(
     // Legacy support: ?tab=market maps to 'all'
     const tab = instance?.proxy?.$route?.query?.['tab'];
     if (tab === 'market') {
-      activeView.value = 'all';
+      activeView.value = 'market';
     }
   },
   { immediate: true }

@@ -67,13 +67,6 @@
         <v-list-item-content>
           <v-list-item-title style="font-size: 13px">
             <span class="font-weight-bold">{{ item.ticker }}</span>
-            <v-avatar size="14" style="margin-top: -2px; margin-left: 4px !important" v-if="item.riskRating">
-              <v-img
-                width="14"
-                :src="assets.resolveRisk(item.riskRating)"
-                :alt="item.riskRating"
-              />
-            </v-avatar>
             <v-chip
               v-if="showOwnedBadge && ownedUnits.has(item.unit)"
               x-small label
@@ -177,13 +170,12 @@
 
     <!-- Risk Rating column -->
     <template v-slot:[`item.risk`]="{ item }">
-      <span
-        v-if="item.riskRating"
-        style="font-size: 12px; font-weight: 500"
-        :style="{ color: riskColor(item.riskRating) }"
-      >
-        {{ item.riskRating }}
-      </span>
+      <v-avatar size="24" v-if="item.riskRating">
+        <v-img
+          :src="assets.resolveRisk(item.riskRating)"
+          :alt="item.riskRating"
+        />
+      </v-avatar>
       <span v-else style="font-size: 12px; opacity: 0.4">—</span>
     </template>
 
@@ -518,13 +510,6 @@ function changeIcon(change: number): string {
 function pnlColor(pnl: number): string {
   if (pnl === 0) return '#A3A3A3';
   return pnl > 0 ? '#47CD89' : '#F97066';
-}
-
-function riskColor(rating: string): string {
-  if (['AAA', 'AA', 'A'].includes(rating)) return '#47CD89';
-  if (['BBB', 'BB', 'B'].includes(rating)) return '#FFC107';
-  if (['CCC', 'CC', 'C', 'D'].includes(rating)) return '#F97066';
-  return '#666';
 }
 
 function rowClass(item: MarketToken): string {

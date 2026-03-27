@@ -99,7 +99,7 @@
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
-              color="primary"
+              color="geroButton"
               x-small
             >
               {{ $t('common.new') }}

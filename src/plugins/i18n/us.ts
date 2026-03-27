@@ -2422,7 +2422,7 @@ export default {
   'market.owned': 'Owned',
 
   // Portfolio Page
-  'portfolio.myHoldings': 'My Holdings',
+  'portfolio.myHoldings': 'Holdings',
   'portfolio.collectibles': 'Collectibles',
   'portfolio.all': 'All',
   'portfolio.trending': 'Trending',
