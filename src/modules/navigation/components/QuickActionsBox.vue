@@ -6,7 +6,7 @@
       @mouseleave="handleMouseLeave"
     >
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
+        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               ref="buyButton"
@@ -33,7 +33,7 @@
       </div>
 
       <div class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
+        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               ref="sendButton"
@@ -61,7 +61,7 @@
       </div>
 
       <div class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
+        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               ref="receiveButton"
@@ -88,7 +88,7 @@
         </v-tooltip>
       </div>
       <div v-if="isSwapSupportedByNetwork" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
+        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               ref="swapButton"
@@ -120,7 +120,7 @@
         </v-tooltip>
       </div>
       <div v-if="!isPerpetualsDisabled" class="action-button-wrapper">
-        <v-tooltip bottom :disabled="!compact">
+        <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               ref="perpetualsButton"
