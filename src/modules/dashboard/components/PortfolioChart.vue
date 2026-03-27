@@ -7,23 +7,23 @@
         <div class="metrics-header-row">
           <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <v-spacer />
-          <v-menu v-if="!isApex" offset-y>
+          <v-tooltip v-if="!isApex" bottom content-class="custom-tooltip">
             <template v-slot:activator="{ on, attrs }">
-              <v-btn x-small text v-bind="attrs" v-on="on" class="mode-toggle-btn">
-                <v-icon x-small class="mr-1">{{ portfolioMode === 'full' ? 'mdi-chart-line' : 'mdi-circle' }}</v-icon>
-                {{ portfolioMode === 'full' ? $t('dashboard.fullPortfolio') : $t('dashboard.adaOnly') }}
-              </v-btn>
+              <div class="mode-segmented-toggle" v-bind="attrs" v-on="on">
+                <button
+                  class="mode-segment"
+                  :class="{ active: portfolioMode === 'ada-only' }"
+                  @click="setPortfolioMode('ada-only')"
+                >₳</button>
+                <button
+                  class="mode-segment"
+                  :class="{ active: portfolioMode === 'full' }"
+                  @click="setPortfolioMode('full')"
+                >{{ $t('dashboard.all') }}</button>
+              </div>
             </template>
-            <v-list dense>
-              <v-list-item @click="togglePortfolioMode">
-                <v-list-item-content>
-                  <v-list-item-title style="font-size: 12px;">
-                    {{ portfolioMode === 'full' ? $t('dashboard.switchToAdaBalance') : $t('dashboard.switchToFullPortfolio') }}
-                  </v-list-item-title>
-                </v-list-item-content>
-              </v-list-item>
-            </v-list>
-          </v-menu>
+            <span>{{ portfolioMode === 'ada-only' ? $t('dashboard.adaOnlyTooltip') : $t('dashboard.fullPortfolioTooltip') }}</span>
+          </v-tooltip>
           <v-btn icon x-small @click="handleRefresh" :disabled="isRefreshing">
             <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
           </v-btn>
@@ -220,6 +220,7 @@ import OdometerCounter from '@/shared/components/OdometerCounter.vue';
 
 const { t } = useTranslation();
 
+
 // Currency Types
 enum CurrencyType {
   ADA = 'ADA',
@@ -356,6 +357,7 @@ const props = defineProps({
 const emit = defineEmits<{
   (e: 'refresh'): void;
   (e: 'timeframe-change', timeframe: string): void;
+  (e: 'mode-change', adaOnly: boolean): void;
   (e: 'withdraw-rewards'): void;
   (e: 'delegate-gero'): void;
 }>();
@@ -430,10 +432,12 @@ const savePortfolioMode = (mode: 'full' | 'ada-only'): void => {
 
 portfolioMode.value = loadPortfolioMode();
 
-const togglePortfolioMode = () => {
-  portfolioMode.value = portfolioMode.value === 'full' ? 'ada-only' : 'full';
-  savePortfolioMode(portfolioMode.value);
-  updateChartData();
+const setPortfolioMode = (mode: 'full' | 'ada-only') => {
+  if (portfolioMode.value === mode) return;
+  console.log(`📊 setPortfolioMode: ${portfolioMode.value} → ${mode}`);
+  portfolioMode.value = mode;
+  savePortfolioMode(mode);
+  emit('mode-change', mode === 'ada-only');
 };
 
 // --- Timeframe persistence ---
@@ -517,15 +521,15 @@ const currentCurrencyConfig = computed(() => {
 });
 
 const activeChartData = computed(() => {
-  const isAdaOnly = portfolioMode.value === 'ada-only';
+  // Data already reflects the current mode (adaOnly) — parent fetches the right data
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
-      return (isAdaOnly ? props.adaOnlyChartDataUsd : props.chartDataUsd) || [];
+      return props.chartDataUsd || [];
     case CurrencyType.EUR:
-      return (isAdaOnly ? props.adaOnlyChartDataEur : props.chartDataEur) || [];
+      return props.chartDataEur || [];
     case CurrencyType.ADA:
     default:
-      return (isAdaOnly ? props.adaOnlyChartData : props.chartData) || [];
+      return props.chartData || [];
   }
 });
 
@@ -603,9 +607,7 @@ const formatPnl = (value: number): string => {
 const transformData = (rawData: any[]): AreaData<Time>[] => {
   if (!rawData || rawData.length === 0) return [];
 
-  const now = Date.now();
   const cutoff = timeframeCutoffs[selectedTimeframe.value];
-  const cutoffTime = cutoff ? now - cutoff : 0;
 
   // Parse and sort all valid points
   const allPoints: { ts: number; val: number }[] = [];
@@ -617,6 +619,10 @@ const transformData = (rawData: any[]): AreaData<Time>[] => {
   }
   allPoints.sort((a, b) => a.ts - b.ts);
   if (allPoints.length === 0) return [];
+
+  // Cutoff is relative to the newest data point, not today
+  const newestTs = allPoints[allPoints.length - 1].ts;
+  const cutoffTime = cutoff ? newestTs - cutoff : 0;
 
   // Deduplicate by second-level timestamp (keep last value per second)
   const timeMap = new Map<number, number>();
@@ -642,20 +648,12 @@ const transformData = (rawData: any[]): AreaData<Time>[] => {
       if (p.ts < cutoffTime) continue;
       timeMap.set(Math.floor(p.ts / 1000), p.val);
     }
+
   } else {
-    // No cutoff — include all points
+    // No cutoff (shouldn't happen with current tabs) — show all data
     for (const p of allPoints) {
       timeMap.set(Math.floor(p.ts / 1000), p.val);
     }
-  }
-
-  // Add current portfolio value at "now" so chart extends to the present
-  // (the parent passes the live value via activePortfolioValue)
-  const nowSec = Math.floor(now / 1000);
-  if (timeMap.size > 0 && !timeMap.has(nowSec)) {
-    // Use the last data point's value as the endpoint
-    const lastVal = allPoints[allPoints.length - 1].val;
-    timeMap.set(nowSec, lastVal);
   }
 
   // Convert to sorted array
@@ -910,11 +908,10 @@ const uiToApiTimeframe: Record<string, string> = {
 };
 
 const handleTimeframeClick = (tabItem: TimeframeTab) => {
+  const apiTimeframe = uiToApiTimeframe[tabItem.value] || '1y';
+  console.log(`📊 handleTimeframeClick: ${tabItem.value} → ${apiTimeframe}`);
   selectedTimeframe.value = tabItem.value;
   saveTimeframeSetting(tabItem.value);
-  updateChartData();
-  // Notify parent to fetch data at appropriate resolution for the selected timeframe
-  const apiTimeframe = uiToApiTimeframe[tabItem.value] || '1y';
   emit('timeframe-change', apiTimeframe);
 };
 
@@ -924,6 +921,7 @@ const handleTimeframeClick = (tabItem: TimeframeTab) => {
 watch(
   () => [props.chartData, props.chartDataUsd, props.chartDataEur],
   () => {
+    console.log(`📊 Chart data watcher fired: chartData=${props.chartData?.length}, usd=${props.chartDataUsd?.length}, eur=${props.chartDataEur?.length}`);
     // Progressive loading: switch to the first loaded currency if current has no data
     if (props.progressiveLoading) {
       const firstLoadedString = props.firstLoadedCurrency;
@@ -957,6 +955,15 @@ watch(selectedCurrency, () => {
     updateChartData();
   } catch (error) {
     console.error('PortfolioChart: Failed to update chart on currency change:', error);
+  }
+});
+
+// Watch timeframe changes — re-filter displayed data to match the selected window
+watch(selectedTimeframe, () => {
+  try {
+    updateChartData();
+  } catch (error) {
+    console.error('PortfolioChart: Failed to update chart on timeframe change:', error);
   }
 });
 
@@ -1205,12 +1212,35 @@ onBeforeUnmount(() => {
   opacity: 0.85;
 }
 
-.mode-toggle-btn {
-  font-size: 10px !important;
+.mode-segmented-toggle {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 1px;
+}
+
+.mode-segment {
+  font-size: 10px;
   letter-spacing: 0.02em;
-  text-transform: none !important;
-  color: rgba(255, 255, 255, 0.5) !important;
-  padding: 0 6px !important;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.mode-segment:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mode-segment.active {
+  background: rgba(45, 240, 247, 0.15);
+  color: #2df0f7;
 }
 
 /* ── Chart Panel (Right 70%) ──────────────────────────────────────────────────── */

@@ -45,6 +45,7 @@
             :pnl-loading="isMainnetCardano && pnlLoading"
             @refresh="refreshPortfolioChart"
             @timeframe-change="handleChartTimeframeChange"
+            @mode-change="handleChartModeChange"
             @withdraw-rewards="handleWithdrawRewards"
             @delegate-gero="handleDelegateGero"
           />
@@ -333,22 +334,16 @@ const { portfolio } = toRefs(tapToolsStore);
 
 // ── Portfolio Data ────────────────────────────────────────────────────────────
 
-const portfolioComposable = usePortfolioData({
-  cacheTimeMs: 4 * 60 * 60 * 1000,
-  enableCache: true,
-});
-
 const {
   adaData: adaChartData,
   usdData: usdChartData,
   eurData: eurChartData,
   isLoading: portfolioLoading,
-  loadDataProgressively,
   refreshPortfolioData,
   loadForTimeframe,
   firstLoadedCurrency,
   latestPortfolioValues,
-} = portfolioComposable;
+} = usePortfolioData();
 
 // ── UI State ──────────────────────────────────────────────────────────────────
 
@@ -804,9 +799,6 @@ async function refreshPortfolioChart() {
   }
 }
 
-// Track last fetched timeframe to avoid redundant API calls
-let lastFetchedTimeframe = '1y';
-
 function handleWithdrawRewards() {
   withdrawRewards();
 }
@@ -815,22 +807,33 @@ function handleDelegateGero() {
   delegateToGero();
 }
 
+// Read persisted chart settings so API calls match the UI toggle state
+function getPersistedChartSettings(walletId: number | undefined) {
+  if (!walletId) return { adaOnly: false, timeframe: '7d' };
+  const uiToApi: Record<string, string> = { DAY: '24h', WEEK: '7d', MONTH: '30d', QUARTER: '90d', YEAR: '1y' };
+  const mode = localStorage.getItem(`portfolioMode_${walletId}`) || 'full';
+  const uiTimeframe = localStorage.getItem(`portfolioTab_${walletId}`) || 'WEEK';
+  return { adaOnly: mode === 'ada-only', timeframe: uiToApi[uiTimeframe] || '7d' };
+}
+
+// Track current chart settings for cross-handler re-fetches
+let currentTimeframe = '7d';
+let currentAdaOnly = false;
+
 async function handleChartTimeframeChange(timeframe: string) {
   const address = loggedWallet.value?.baseAddress;
   if (!address || isApex.value) return;
 
-  // Don't re-fetch if we already have data at this resolution or coarser
-  // The resolution mapping: 24h→1H, 7d→4H, 30d→4H, 90d→1D, 1y→1D
-  // If we fetched at a fine resolution, coarser timeframes already have enough data
-  const resolutionRank: Record<string, number> = { '24h': 1, '7d': 2, '30d': 2, '90d': 3, '1y': 3, 'all': 3 };
-  const newRank = resolutionRank[timeframe] ?? 3;
-  const lastRank = resolutionRank[lastFetchedTimeframe] ?? 3;
+  currentTimeframe = timeframe;
+  await loadForTimeframe(address, timeframe, currentAdaOnly);
+}
 
-  // Only fetch if we need finer resolution than what we already have
-  if (newRank < lastRank) {
-    lastFetchedTimeframe = timeframe;
-    await loadForTimeframe(address, timeframe);
-  }
+async function handleChartModeChange(adaOnly: boolean) {
+  const address = loggedWallet.value?.baseAddress;
+  if (!address || isApex.value) return;
+
+  currentAdaOnly = adaOnly;
+  await loadForTimeframe(address, currentTimeframe, adaOnly);
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -886,7 +889,10 @@ watch(
           if (account && Number(account.value?.controlled_amount) > 0 &&
             loggedWallet.value?.chain === Blockchain.CARDANO &&
             loggedWallet.value?.network === Network.MAINNET) {
-            loadDataProgressively(newAddress).catch(error => {
+            const settings = getPersistedChartSettings(loggedWallet.value?.id);
+            currentTimeframe = settings.timeframe;
+            currentAdaOnly = settings.adaOnly;
+            loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
               console.warn('Portfolio data loading failed:', error);
             });
           }

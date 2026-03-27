@@ -31,9 +31,6 @@
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
                 :chart-data-eur="computeChartData.eurData"
-                :ada-only-chart-data="computeChartData.adaOnlyAdaData"
-                :ada-only-chart-data-usd="computeChartData.adaOnlyUsdData"
-                :ada-only-chart-data-eur="computeChartData.adaOnlyEurData"
                 :portfolio-value-ada="currentPortfolioValues.ada"
                 :portfolio-value-usd="currentPortfolioValues.usd"
                 :portfolio-value-eur="currentPortfolioValues.eur"
@@ -47,7 +44,6 @@
                 :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
                 :pnl-incomplete="pnlSummary?.tokens?.some(t => t.costBasisComplete === false) ?? false"
                 @refresh="refreshPortfolioChart"
-                @timeframe-change="handleChartTimeframeChange"
                 @withdraw-rewards="handleWithdrawRewards"
                 @delegate-gero="handleDelegateGero"
               />
@@ -109,9 +105,6 @@
             :chart-data="computeChartData.adaData"
             :chart-data-usd="computeChartData.usdData"
             :chart-data-eur="computeChartData.eurData"
-            :ada-only-chart-data="computeChartData.adaOnlyAdaData"
-            :ada-only-chart-data-usd="computeChartData.adaOnlyUsdData"
-            :ada-only-chart-data-eur="computeChartData.adaOnlyEurData"
             :portfolio-value-ada="currentPortfolioValues.ada"
             :portfolio-value-usd="currentPortfolioValues.usd"
             :portfolio-value-eur="currentPortfolioValues.eur"
@@ -121,6 +114,8 @@
             :loading="portfolioLoading"
             :progressive-loading="true"
             :first-loaded-currency="firstLoadedCurrency"
+            @timeframe-change="handleChartTimeframeChange"
+            @mode-change="handleChartModeChange"
             @refresh="refreshPortfolioChart"
             @withdraw-rewards="handleWithdrawRewards"
             @delegate-gero="handleDelegateGero"
@@ -139,9 +134,6 @@
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
                 :chart-data-eur="computeChartData.eurData"
-                :ada-only-chart-data="computeChartData.adaOnlyAdaData"
-                :ada-only-chart-data-usd="computeChartData.adaOnlyUsdData"
-                :ada-only-chart-data-eur="computeChartData.adaOnlyEurData"
                 :portfolio-value-ada="currentPortfolioValues.ada"
                 :portfolio-value-usd="currentPortfolioValues.usd"
                 :portfolio-value-eur="currentPortfolioValues.eur"
@@ -419,42 +411,46 @@ const computedValues = computed(() => {
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
-// Initialize portfolio data composable with a 4-hour cache
-const portfolioComposable = usePortfolioData({
-  cacheTimeMs: 4 * 60 * 60 * 1000, // 4 hours
-  enableCache: true,
-});
-
+// Initialize portfolio data composable
 const {
   adaData: adaChartData,
   usdData: usdChartData,
   eurData: eurChartData,
-  adaOnlyAdaData: adaOnlyAdaChartData,
-  adaOnlyUsdData: adaOnlyUsdChartData,
-  adaOnlyEurData: adaOnlyEurChartData,
   isLoading: portfolioLoading,
-  loadDataProgressively,
   refreshPortfolioData,
   loadForTimeframe,
-  getCacheStats,
-  getCacheStatus,
   firstLoadedCurrency,
   latestPortfolioValues,
-} = portfolioComposable;
+} = usePortfolioData();
+
+// Read persisted chart settings to make the right initial API call
+const uiToApiTimeframe: Record<string, string> = {
+  DAY: '24h', WEEK: '7d', MONTH: '30d', QUARTER: '90d', YEAR: '1y',
+};
+
+function getPersistedChartSettings(walletId: number | undefined) {
+  if (!walletId) return { adaOnly: false, timeframe: '7d' };
+  const mode = localStorage.getItem(`portfolioMode_${walletId}`) || 'full';
+  const uiTimeframe = localStorage.getItem(`portfolioTab_${walletId}`) || 'WEEK';
+  return {
+    adaOnly: mode === 'ada-only',
+    timeframe: uiToApiTimeframe[uiTimeframe] || '7d',
+  };
+}
+
+const currentAdaOnly = ref(false);
+const currentTimeframe = ref('7d');
 
 // Cache current timestamp to avoid computed recalculation
 const currentTimestamp = ref(Date.now());
 
 const computeChartData = computed(() => {
-  // For Cardano mainnet, return full and ada-only data from market API
+  // For Cardano mainnet, return data from market API (mode already applied via adaOnly param)
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
       adaData: adaChartData.value,
       usdData: usdChartData.value,
       eurData: eurChartData.value,
-      adaOnlyAdaData: adaOnlyAdaChartData.value,
-      adaOnlyUsdData: adaOnlyUsdChartData.value,
-      adaOnlyEurData: adaOnlyEurChartData.value,
     };
   }
   // For other chains, calculate from transactions
@@ -543,10 +539,6 @@ const computeChartData = computed(() => {
     adaData: graphData || [],
     usdData: usdData || [],
     eurData: eurData || [],
-    // Non-Cardano: ada-only is the same as full (only native balance)
-    adaOnlyAdaData: graphData || [],
-    adaOnlyUsdData: usdData || [],
-    adaOnlyEurData: eurData || [],
   };
 });
 
@@ -668,7 +660,7 @@ const adaBalance = computed(() => {
 const refreshPortfolioChart = async () => {
   const address = loggedWallet.value?.baseAddress;
   if (address && !isApex.value) {
-    await refreshPortfolioData(address);
+    await refreshPortfolioData(address, currentAdaOnly.value);
   }
 };
 
@@ -680,39 +672,35 @@ const handleDelegateGero = () => {
   delegateToGero();
 };
 
-let lastFetchedTimeframe = '1y';
-
 const handleChartTimeframeChange = async (timeframe: string) => {
-  const address = loggedWallet.value?.baseAddress;
-  if (!address || isApex.value) return;
-
-  const resolutionRank: Record<string, number> = { '24h': 1, '7d': 2, '30d': 2, '90d': 3, '1y': 3, 'all': 3 };
-  const newRank = resolutionRank[timeframe] ?? 3;
-  const lastRank = resolutionRank[lastFetchedTimeframe] ?? 3;
-
-  if (newRank < lastRank) {
-    lastFetchedTimeframe = timeframe;
-    await loadForTimeframe(address, timeframe);
-  }
-};
-
-// Utility function to get cache information (for debugging)
-const getPortfolioCacheInfo = async () => {
+  console.log(`📊 Dashboard handleChartTimeframeChange: timeframe=${timeframe}, adaOnly=${currentAdaOnly.value}`);
   const address = loggedWallet.value?.baseAddress;
   if (!address || isApex.value) {
-    return null;
+    console.log(`📊 Dashboard handleChartTimeframeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    return;
   }
 
-  const stats = await getCacheStats();
-  const status = await getCacheStatus(address);
+  currentTimeframe.value = timeframe;
+  await loadForTimeframe(address, timeframe, currentAdaOnly.value);
+};
 
-  return { stats, status };
+const handleChartModeChange = async (adaOnly: boolean) => {
+  console.log(`📊 Dashboard handleChartModeChange: adaOnly=${adaOnly}, timeframe=${currentTimeframe.value}`);
+  const address = loggedWallet.value?.baseAddress;
+  if (!address || isApex.value) {
+    console.log(`📊 Dashboard handleChartModeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    return;
+  }
+
+  currentAdaOnly.value = adaOnly;
+  console.log(`📊 Dashboard: calling loadForTimeframe(${address}, ${currentTimeframe.value}, ${adaOnly})`);
+  await loadForTimeframe(address, currentTimeframe.value, adaOnly);
+  console.log(`📊 Dashboard: loadForTimeframe completed, adaData=${adaChartData.value?.length}, usdData=${usdChartData.value?.length}`);
 };
 
 // Expose functions for potential use
 defineExpose({
   refreshPortfolioChart,
-  getPortfolioCacheInfo,
 });
 // Update timestamp when transactions change
 watch(
@@ -739,8 +727,11 @@ watch(
             loggedWallet.value?.chain === Blockchain.CARDANO &&
             loggedWallet.value?.network === Network.MAINNET
           ) {
-            // Start parallel loading immediately (don't await - let it run in the background)
-            loadDataProgressively(newAddress).catch(error => {
+            // Read persisted toggle + timeframe and load matching data
+            const settings = getPersistedChartSettings(loggedWallet.value?.id);
+            currentAdaOnly.value = settings.adaOnly;
+            currentTimeframe.value = settings.timeframe;
+            loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
               console.warn('Portfolio data loading failed:', error);
             });
           }
