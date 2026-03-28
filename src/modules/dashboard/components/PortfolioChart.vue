@@ -35,7 +35,7 @@
           :class="{ clickable: availableCurrencies.length > 1 }"
         >
           <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
-          <OdometerCounter v-if="isReadyToRender" :value="Math.round(activePortfolioValue)" format="int" :duration="1000" :key="selectedCurrency" />
+          <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
           <span v-else class="portfolio-amount-placeholder">—</span>
         </div>
 

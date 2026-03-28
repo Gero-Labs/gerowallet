@@ -2,8 +2,9 @@
   <BottomSheet
     :value="isVisible"
     :persistent="true"
-    :show-handle="false"
-    height="85%"
+    :show-handle="currentRequest?.method !== 'enable'"
+    :height="currentRequest?.method === 'enable' ? '70%' : '85%'"
+    :draggable="currentRequest?.method !== 'enable'"
   >
     <div v-if="currentRequest" class="dapp-overlay">
       <!-- Queue indicator -->
@@ -15,12 +16,54 @@
 
       <!-- DApp Connect -->
       <div v-if="currentRequest.method === 'enable'" class="dapp-connect">
-        <v-icon size="48" color="#00c7f3" class="mb-3">mdi-link-variant</v-icon>
-        <h3 class="white--text text-h6 mb-1">{{ $t('miniGero.connectRequest') }}</h3>
-        <p class="grey--text text-body-2 mb-4">{{ currentRequest.payload?.website }}</p>
+        <!-- Favicon + domain -->
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img
+              :src="faviconUrl"
+              class="favicon-img"
+              @error="faviconFailed = true"
+              v-if="!faviconFailed"
+            />
+            <v-icon v-else size="32" color="#00c7f3">mdi-web</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
+            <span class="dapp-url grey--text text-caption">{{ enableDomain }}</span>
+          </div>
+        </div>
+
+        <!-- URL warning -->
+        <div class="url-warning mb-3">
+          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        </div>
+
+        <!-- Permissions -->
+        <div class="permissions-section mb-3">
+          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
+          <v-checkbox
+            v-model="enableConsent"
+            color="#00DFF3"
+            hide-details
+            dark
+            dense
+            class="consent-checkbox mt-0"
+            :label="$t('navigation.viewAddressAndBalance')"
+          />
+        </div>
+
+        <!-- Security note -->
+        <div class="security-note mb-4">
+          <v-icon size="14" color="rgba(255,255,255,0.4)" class="mr-1 flex-shrink-0" style="margin-top: 2px;">mdi-shield-check-outline</v-icon>
+          <span class="grey--text text-caption">
+            {{ $t('miniGero.futureTransactionsNote') }}
+          </span>
+        </div>
+
         <div class="action-buttons">
           <v-btn outlined rounded dark @click="reject()">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed @click="approve(true)">
+          <v-btn class="geroButton" rounded depressed :disabled="!enableConsent" @click="approve(true)">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -170,6 +213,23 @@ const spendingPassword = ref('');
 const showPassword = ref(false);
 const signing = ref(false);
 const signError = ref('');
+const enableConsent = ref(false);
+const faviconFailed = ref(false);
+
+const enableDomain = computed(() => {
+  const website = currentRequest.value?.payload?.website || '';
+  try {
+    return new URL(website).hostname;
+  } catch {
+    return website;
+  }
+});
+
+const faviconUrl = computed(() => {
+  const domain = enableDomain.value;
+  if (!domain) return '';
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+});
 
 // Keystone state
 const showKeystoneDialog = ref(false);
@@ -190,6 +250,8 @@ watch(currentRequest, () => {
   showPassword.value = false;
   signing.value = false;
   signError.value = '';
+  enableConsent.value = false;
+  faviconFailed.value = false;
 });
 
 function rejectSign() {
@@ -401,12 +463,86 @@ async function handleSign() {
 .dapp-overlay {
   display: flex;
   flex-direction: column;
-  align-items: center;
   padding: 16px;
 }
 
 .queue-indicator {
   text-align: center;
+}
+
+/* ── Enable / Connect ── */
+
+.dapp-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.favicon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.favicon-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.dapp-domain-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dapp-url {
+  word-break: break-all;
+  line-height: 1.3;
+}
+
+.url-warning {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 10px;
+  background: rgba(255, 167, 38, 0.08);
+  border: 1px solid rgba(255, 167, 38, 0.15);
+  border-radius: 8px;
+}
+
+.permissions-section {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.consent-checkbox >>> .v-label {
+  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.security-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  line-height: 1.4;
+}
+
+/* ── Sign ── */
+
+.dapp-sign-tx,
+.dapp-sign {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .message-preview {

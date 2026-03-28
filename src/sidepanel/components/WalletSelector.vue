@@ -6,22 +6,18 @@
     </div>
     <div class="wallet-list">
       <div
-        v-for="wallet in wallets"
+        v-for="wallet in availableWallets"
         :key="wallet.id"
         class="wallet-item"
         @click="$emit('select', wallet)"
       >
         <div class="wallet-icon-wrapper">
-          <v-badge overlap avatar bottom bordered offset-y="18">
-            <template v-slot:badge>
-              <v-avatar size="16">
-                <v-img :src="resolveNetworkIcon(wallet)"></v-img>
-              </v-avatar>
-            </template>
-            <v-avatar size="36" :color="wallet.theme || '#1a1a1a'">
-              <v-img :src="assets.resolveIcon(wallet.icon)"></v-img>
-            </v-avatar>
-          </v-badge>
+          <v-avatar size="36" class="wallet-avatar">
+            <v-img :src="assets.resolveIcon(wallet.icon)" />
+          </v-avatar>
+          <v-avatar size="16" class="network-badge">
+            <v-img contain :src="resolveNetworkIcon(wallet)" />
+          </v-avatar>
         </div>
         <div class="wallet-info">
           <span class="white--text text-body-2">{{ wallet.name }}</span>
@@ -66,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, toRefs } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { WalletType, Wallet } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
@@ -76,10 +72,13 @@ import networks from '@/utils/networks';
 
 const geroLogo = assets.geroLogo;
 
-const wallets = computed(() =>
-  Object.values(geroStore.wallets || {}).filter((wallet: any) =>
-    networks.resolveNetwork(wallet?.chain, wallet?.network)
-  )
+const { wallets } = toRefs(geroStore);
+
+const availableWallets = computed(() =>
+  (Object.values(wallets.value) as Wallet[])
+    .filter((wallet: Wallet) => {
+      return networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google;
+    })
 );
 
 const resolveNetworkIcon = (item: Wallet): string => {
@@ -140,18 +139,50 @@ defineEmits<{
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: #1a1a1a;
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.2);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s ease;
 }
 
 .wallet-item:hover {
-  background: #222;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.wallet-item:active {
+  transform: scale(0.98);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .wallet-icon-wrapper {
+  position: relative;
   flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.wallet-avatar {
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+}
+
+.network-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -4px;
+  border: 1.5px solid rgba(0, 0, 0, 0.5);
+  background: rgba(20, 20, 20, 0.8);
 }
 
 .wallet-info {

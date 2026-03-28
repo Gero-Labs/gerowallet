@@ -10,6 +10,14 @@ export function formatCompact(value: number): string {
   return value.toFixed(value < 1 ? 4 : 0);
 }
 
+/** Format a balance (always 2 decimal places, compact for large numbers) */
+export function formatBalance(value: number): string {
+  if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B';
+  if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
+  if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K';
+  return value.toFixed(2);
+}
+
 /** Format a price with adaptive decimal places (no symbol) */
 export function formatPriceRaw(price: number): string {
   if (price >= 1) return price.toFixed(2);

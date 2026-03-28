@@ -2761,6 +2761,7 @@ export default {
   'miniGero.connectRequest': 'Verbindungsanfrage',
   'miniGero.signDataRequest': 'Daten signieren',
   'miniGero.signTxRequest': 'Transaktion signieren',
+  'miniGero.futureTransactionsNote': 'Zu Ihrer Sicherheit erfordern zukünftige Transaktionen von dieser Website eine zusätzliche Verifizierung vor der Signierung.',
   'miniGero.reject': 'Ablehnen',
   'miniGero.approve': 'Genehmigen',
   'miniGero.sign': 'Signieren',

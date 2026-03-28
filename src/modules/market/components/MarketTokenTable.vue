@@ -181,11 +181,23 @@
 
     <!-- Holdings columns (when showHoldingsColumns) -->
     <template v-slot:[`item.balance`]="{ item }">
-      <span style="font-size: 12px">{{ item.balance ? formatCompact(item.balance) : '—' }}</span>
+      <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ formatBalance(item.balance) }}</span>
+        </template>
+        {{ item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
+      </v-tooltip>
+      <span v-else style="font-size: 12px">—</span>
     </template>
 
     <template v-slot:[`item.value`]="{ item }">
-      <span style="font-size: 12px">{{ item.value ? '$' + formatCompact(item.value) : '—' }}</span>
+      <v-tooltip v-if="item.value" top content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatBalance(item.value) }}</span>
+        </template>
+        ${{ item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
+      </v-tooltip>
+      <span v-else style="font-size: 12px">—</span>
     </template>
 
     <!-- Allocation column (progress bar) -->
@@ -352,7 +364,7 @@
 import { ref, computed, watch } from 'vue';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
-import { useColumnPreferences, type ColumnKey } from '@/modules/market/composables/useColumnPreferences';
+import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
@@ -417,14 +429,14 @@ const baseHeaders = computed(() => {
     { text: t('market.rank'), value: 'rank', sortable: false, width: '40px' },
     { text: t('market.token'), value: 'name', sortable: true },
     { text: t('market.price'), value: 'price', sortable: true, width: '100px' },
-    { text: t('market.change1h'), value: 'change1h', sortable: true, width: '70px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
+    { text: t('market.change1h'), value: 'change1h', sortable: true, width: '70px' },
     { text: t('market.change24h'), value: 'change24h', sortable: true, width: '70px' },
-    { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
-    { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px', class: 'hidden-sm-and-down', cellClass: 'hidden-sm-and-down' },
+    { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px' },
+    { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px' },
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
-    { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px', class: 'hidden-sm-and-down', cellClass: 'hidden-sm-and-down' },
-    ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' }] : []),
-    { text: t('market.risk'), value: 'risk', sortable: true, width: '70px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
+    { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px' },
+    ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px' }] : []),
+    { text: t('market.risk'), value: 'risk', sortable: true, width: '70px' },
   ];
 
   // Allocation is toggleable via column preferences (works in both market and holdings views)
@@ -500,7 +512,7 @@ function handleImgError(e: Event) {
   if (target) target.style.display = 'none';
 }
 
-import { formatPrice, formatCompact, formatChange, changeColor } from '@/modules/market/utils/formatters';
+import { formatPrice, formatCompact, formatBalance, formatChange, changeColor } from '@/modules/market/utils/formatters';
 
 function changeIcon(change: number): string {
   if (change === 0) return assets.arrowRightSvg;

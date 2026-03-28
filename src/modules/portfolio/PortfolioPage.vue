@@ -451,9 +451,12 @@ const shouldBackup = computed(() => {
 // ── Computed: Portfolio values (ported from Dashboard.vue) ────────────────────
 
 const nativePriceUsd = computed(() => {
-  return isApex.value
-    ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
-    : (price.value?.lastPrice || 0);
+  if (isApex.value) {
+    return coinGeckoStore.cache['apex-4']?.usd ?? 0;
+  }
+  // Prefer market API price (same source as holdings), fallback to networkStore
+  const marketAdaPrice = allTokens.value.find(t => t.unit === 'lovelace')?.price;
+  return marketAdaPrice || Number(price.value?.lastPrice) || 0;
 });
 
 const adaBalance = computed(() => {
@@ -543,16 +546,13 @@ const computeChartData = computed(() => {
   return adaOnlyChartData.value;
 });
 
+// Live portfolio value computed from holdings (reactive to balance + price changes)
 const currentPortfolioValues = computed(() => {
-  if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
-    return {
-      ada: latestPortfolioValues.value.ada !== null ? latestPortfolioValues.value.ada : computedValues.value.totalValue,
-      usd: latestPortfolioValues.value.usd !== null ? latestPortfolioValues.value.usd : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
-      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0) * usdToEurRate.value),
-    };
-  }
-  const totalValueUsd = computedValues.value.totalValue * nativePriceUsd.value;
-  return { ada: computedValues.value.totalValue, usd: totalValueUsd, eur: totalValueUsd * usdToEurRate.value };
+  const totalUsd = myHoldings.value.reduce((sum, t) => sum + (t.value || 0), 0);
+  const adaPriceUsd = nativePriceUsd.value;
+  const totalAda = adaPriceUsd > 0 ? totalUsd / adaPriceUsd : adaBalance.value;
+  const totalEur = totalUsd * usdToEurRate.value;
+  return { ada: totalAda, usd: totalUsd, eur: totalEur };
 });
 
 // ── Computed: Holdings (wallet tokens enriched with market data + P&L) ────────

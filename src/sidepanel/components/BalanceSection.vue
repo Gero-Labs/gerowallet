@@ -23,7 +23,7 @@
       rounded
       small
       color="#00c7f3"
-      class="buy-sell-btn mt-3"
+      class="buy-sell-btn mt-3 geroButton"
       @click="$emit('buy-sell')"
     >
       <v-icon small left>mdi-swap-horizontal</v-icon>
@@ -36,14 +36,15 @@
 import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
 import { getBalance } from '@/chrome/serialization';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 
 defineEmits<{
   (e: 'buy-sell'): void;
 }>();
 
 const { utxos, collateral } = toRefs(walletStore);
+const { allTokens: marketTokens, adaData } = useMarketData();
 
 const adaBalance = computed<number | null>(() => {
   if (!utxos.value || utxos.value.length === 0) return 0;
@@ -56,34 +57,38 @@ const adaBalance = computed<number | null>(() => {
 });
 
 const adaPrice = computed(() => {
-  return priceStore.adaUsd?.lastPrice || 0;
+  return adaData.value?.priceUsd || priceStore.adaUsd?.lastPrice || 0;
 });
 
 const priceChange = computed<number | null>(() => {
-  return priceStore.adaUsd?.priceChangePercentage ?? null;
+  return adaData.value?.priceChange24h ?? priceStore.adaUsd?.priceChangePercentage ?? null;
+});
+
+// Compute portfolio value reactively from wallet balances × live market prices
+// Same logic as PortfolioPage.myHoldings — reacts to UTXOs changes, price updates, and sync
+const totalPortfolioUsd = computed(() => {
+  const ada = adaBalance.value || 0;
+  let total = ada * adaPrice.value;
+
+  const tokens = walletStore.tokens;
+  if (tokens) {
+    for (const token of Object.values(tokens) as any[]) {
+      if (token.policy_id === '') continue;
+      const marketToken = marketTokens.value.find(t => t.unit === token.unit);
+      if (marketToken?.price) {
+        const decimals = token.metadata?.decimals ?? 0;
+        let amount = Number(token.quantity || 0);
+        if (decimals > 0) amount = amount / Math.pow(10, decimals);
+        total += amount * marketToken.price;
+      }
+    }
+  }
+  return total;
 });
 
 const totalPortfolioAda = computed(() => {
-  const ada = adaBalance.value || 0;
-  // Sum token values using dexHunter prices (in ADA)
-  const tokens = walletStore.tokens;
-  if (!tokens) return ada;
-  let tokenValueAda = 0;
-  for (const token of Object.values(tokens) as any[]) {
-    if (token.policy_id === '') continue; // ADA already counted
-    const dexToken = dexHunterStore.dexHunterTokens[token.unit];
-    if (dexToken?.price) {
-      const decimals = token.metadata?.decimals ?? 0;
-      let amount = Number(token.quantity || 0);
-      if (decimals > 0) amount = amount / Math.pow(10, decimals);
-      tokenValueAda += amount * dexToken.price;
-    }
-  }
-  return ada + tokenValueAda;
-});
-
-const totalPortfolioUsd = computed(() => {
-  return totalPortfolioAda.value * adaPrice.value;
+  if (adaPrice.value === 0) return adaBalance.value || 0;
+  return totalPortfolioUsd.value / adaPrice.value;
 });
 
 const formattedBalance = computed(() => {
@@ -97,7 +102,7 @@ const formattedBalance = computed(() => {
 });
 
 const formattedAdaBalance = computed(() => {
-  const val = adaBalance.value || 0;
+  const val = totalPortfolioAda.value;
   if (val === 0) return '0';
   return val.toLocaleString('en-US', {
     minimumFractionDigits: 2,

@@ -146,7 +146,6 @@
       <v-list-item three-line class="px-0">
         <v-list-item-avatar style="margin: auto" class="mr-3" size="40">
           <v-img v-if="account" :src="avatar" />
-          <!-- Avatar change dialog commented out -->
         </v-list-item-avatar>
 
         <v-list-item-content class="py-0" style="align-self: initial">

@@ -93,9 +93,9 @@
 import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
 import { resolveIcon, applyTokenImageOverride } from '@/shared/utils/resolver';
 import { getBalance } from '@/chrome/serialization';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 import assetsUtil from '@/utils/assets';
 
 const adaLogo = assetsUtil.cardanoBlueLogo;
@@ -105,8 +105,9 @@ const emit = defineEmits<{
 }>();
 
 const { tokens: rawTokens, utxos, collateral } = toRefs(walletStore);
+const { allTokens: marketTokens, adaData } = useMarketData();
 
-const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
+const adaPrice = computed(() => adaData.value?.priceUsd || priceStore.adaUsd?.lastPrice || 0);
 
 // ADA balance from UTXOs (in lovelace)
 const adaBalanceLovelace = computed(() => {
@@ -142,7 +143,7 @@ const formattedAdaFiat = computed(() => {
 });
 
 const adaPriceChange = computed<number | null>(() => {
-  return priceStore.adaUsd?.priceChangePercentage ?? null;
+  return adaData.value?.priceChange24h ?? priceStore.adaUsd?.priceChangePercentage ?? null;
 });
 
 const adaToken = computed(() => ({
@@ -186,13 +187,14 @@ function getTokenName(token: any): string {
 }
 
 function getTokenPrice(token: any): number {
-  const dexToken = dexHunterStore.dexHunterTokens[token.unit];
-  if (dexToken?.price) return dexToken.price * adaPrice.value;
+  const marketToken = marketTokens.value.find(t => t.unit === token.unit);
+  if (marketToken?.price) return marketToken.price;
   return 0;
 }
 
 function getTokenChange(token: any): number | null {
-  return token.change ?? null;
+  const marketToken = marketTokens.value.find(t => t.unit === token.unit);
+  return marketToken?.change24h ?? null;
 }
 
 function getTokenFiatValue(token: any): number {
