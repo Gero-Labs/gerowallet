@@ -101,7 +101,7 @@ async function openSetup() {
 
 defineProps<{ compact?: boolean }>();
 defineEmits<{
-  (e: 'select', wallet: any): void;
+  (e: 'select', wallet: Wallet): void;
 }>();
 </script>
 

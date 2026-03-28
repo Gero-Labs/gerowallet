@@ -6,11 +6,11 @@
       :style="{ backgroundImage: `url(${cardanoBg})` }"
     ></div>
 
-    <MiniHeader
-      @wallet-switch="$emit('wallet-switch')"
-      @settings="$emit('settings')"
-    />
     <main class="mini-content">
+      <MiniHeader
+        @wallet-switch="$emit('wallet-switch')"
+        @settings="$emit('settings')"
+      />
       <transition :name="transitionName" mode="out-in">
         <router-view :key="$route.path" />
       </transition>
