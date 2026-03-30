@@ -440,7 +440,7 @@ function connectStream(): void {
   if (sock) return;
 
   const url = `${MARKET_API_BASE}/ws/market`;
-  console.log(`📡 Market WS: connecting via SockJS to ${url}`);
+  debugLog(`📡 Market WS: connecting via SockJS to ${url}`);
   const socket = new SockJS(url) as unknown as WebSocket;
   sock = socket;
 
