@@ -59,14 +59,14 @@ export type VaultPeriod = '24h' | '7d' | '30d' | '6m' | '1y' | 'all';
 // ---------------------------------------------------------------------------
 
 export interface StrikeAuthHeaders {
-  /** Ed25519 public key (hex) */
-  'X-Strike-Public-Key': string;
-  /** Unix timestamp in milliseconds */
-  'X-Strike-Timestamp': string;
-  /** Ed25519 signature of the canonical request string (hex) */
-  'X-Strike-Signature': string;
-  /** Account ID associated with the key */
-  'X-Strike-Account-Id': string;
+  /** Ed25519 public key (64 hex characters) */
+  'X-API-Wallet-Public-Key': string;
+  /** Ed25519 signature of the canonical message (128 hex characters) */
+  'X-API-Wallet-Signature': string;
+  /** Unix timestamp in seconds */
+  'X-API-Wallet-Timestamp': string;
+  /** Unique UUID v4 per request */
+  'X-API-Wallet-Nonce': string;
 }
 
 // ---------------------------------------------------------------------------
