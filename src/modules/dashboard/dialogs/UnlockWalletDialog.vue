@@ -16,18 +16,8 @@
         <div class="mt-2 title white--text font-weight-bold">{{ walletName }}</div>
       </div>
 
-      <!-- Loading overlay during unlock -->
-      <div v-if="unlocking" class="unlock-loading-overlay">
-        <v-progress-circular
-          indeterminate
-          color="primary"
-          size="48"
-        ></v-progress-circular>
-        <div class="mt-4 subtitle-1 white--text">{{ $t('security.unlocking') }}</div>
-      </div>
-
       <!-- Unlock method content -->
-      <div v-else class="unlock-method-wrapper">
+      <div class="unlock-method-wrapper">
         <!-- PIN Input -->
         <div v-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
             <numeric-otp-input
@@ -125,7 +115,7 @@
                   v-model="password"
                   :label="configLoaded ? (isPrfWallet ? $t('security.lockPassword') : $t('security.spendingPassword')) : $t('wallet.password')"
                   :type="show ? 'text' : 'password'"
-                  :rules="[rules.required()]"
+                  :error="passwordError"
                   outlined
                   dense
                   hide-details
@@ -205,15 +195,16 @@ import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PatternLock from '../components/PatternLock.vue';
 import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
 import { authenticateWebAuthn } from '@/shared/utils/security';
 import { resolveIcon } from '@/shared/utils/resolver';
 import { verifyPattern } from '@/shared/utils/security';
-import rules from '@/utils/rules';
 import assets from '@/utils/assets';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { getAllWallets } from '@/db/gero-db';
 
 const { t } = useTranslation();
 // Define props and emits
@@ -253,6 +244,7 @@ const pattern = ref<number[]>([]);
 const patternError = ref<string>('');
 const patternTooltip = ref(false);
 const password = ref('');
+const passwordError = ref(false);
 const totpCode = ref('');
 
 const unlocking = ref(false);
@@ -325,7 +317,7 @@ async function loadWalletInfo() {
   } else {
     const wallet = walletStore.loggedWallet;
     if (wallet) {
-      console.log('Wallet info:', wallet);
+      debugLog('Wallet info:', wallet);
       walletName.value = wallet.name || 'Wallet';
       walletIcon.value = wallet.icon || 'mdi-wallet';
     }
@@ -341,12 +333,12 @@ async function loadSecurityConfig() {
       return;
     }
 
-    // Resolve encryption method for pre-login PRF detection
+    // Resolve wallet record for pre-login PRF detection and credential retrieval
+    let preLoginWalletRecord: any = null;
     if (props.preLoginWalletId) {
-      const { getAllWallets } = await import('@/db/gero-db');
       const walletsMap = await getAllWallets();
-      const walletRecord = walletsMap[walletId];
-      preLoginEncryptionMethod.value = walletRecord?.encryptionMethod || null;
+      preLoginWalletRecord = walletsMap[walletId] || null;
+      preLoginEncryptionMethod.value = preLoginWalletRecord?.encryptionMethod || null;
     }
 
     const { getDb } = await import('@/db/wallet-db');
@@ -380,11 +372,16 @@ async function loadSecurityConfig() {
 
     // Check for PRF wallets: credential ID stored in wallet record, not config
     const wallet = walletStore.loggedWallet;
-    const walletIsPrf = wallet?.encryptionMethod === 'prf';
+    const walletIsPrf = wallet?.encryptionMethod === 'prf' || preLoginEncryptionMethod.value === 'prf';
 
-    if (walletIsPrf && wallet?.webAuthnCredentialId) {
-      // PRF wallet: Use credential from wallet record
-      webAuthnCredentialId.value = wallet.webAuthnCredentialId;
+    if (walletIsPrf) {
+      // PRF wallet: Use credential from wallet record (not config table)
+      if (wallet?.webAuthnCredentialId) {
+        webAuthnCredentialId.value = wallet.webAuthnCredentialId;
+      } else if (preLoginWalletRecord) {
+        // Pre-login: use wallet record already fetched above
+        webAuthnCredentialId.value = preLoginWalletRecord.webAuthnCredentialId || null;
+      }
       // PRF wallets can always use PassKey for unlock
       passKeyEnabled.value = true;
     } else {
@@ -448,15 +445,17 @@ async function handlePassKeyAuth() {
     }
 
     // Use WebAuthn for PassKey authentication
-    console.log('🔐 Authenticating with WebAuthn credential');
+    debugLog('🔐 Authenticating with WebAuthn credential');
     const authenticated = await authenticateWebAuthn(webAuthnCredentialId.value);
 
     if (authenticated) {
-      console.log('✅ PassKey authentication successful - unlocking wallet');
+      debugLog('✅ PassKey authentication successful - unlocking wallet');
 
-      // PassKey authentication successful - proceed to unlock
-      // (No auto-fill, just pure authentication signal like iPhone Face ID)
-      // Note: No need to modify unlockMethod - we use unlockCredential to signal PassKey auth
+      // Reset password field validation so it doesn't show red during PassKey unlock
+      if (passwordInputRef.value) {
+        (passwordInputRef.value as any).resetValidation();
+      }
+
       if (twoFactorEnabled.value) {
         show2FA.value = true;
       } else {
@@ -476,7 +475,11 @@ async function handlePassKeyAuth() {
 async function handleUnlock(passKeyAuthenticated = false) {
   if (!canUnlock.value && !passKeyAuthenticated) return;
 
+  unlocking.value = true;
   errorMessage.value = '';
+
+  // Yield to browser so the loading spinner renders before any heavy computation
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   try {
     let unlockCredential: string | number[] | null;
@@ -502,6 +505,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
       if (!isValid) {
         showError(t('security.wrongLockPassword'));
         password.value = '';
+        passwordError.value = true;
         return;
       }
       // Verification passed — signal background (same pattern as passkey-authenticated)
@@ -525,9 +529,8 @@ async function handleUnlock(passKeyAuthenticated = false) {
         password: password.value || undefined
       }
     });
-    console.log('Unlock response:', response);
+    debugLog('Unlock response:', response);
     if (response.data.success) {
-      unlocking.value = true;
       emit('input', false);
       emit('unlocked');
     } else {
@@ -545,6 +548,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
         // so a background failure means something else went wrong (DB error, wallet load, etc.)
         showError(isPrfWallet.value ? t('security.unlockFailed') : t('wallet.wrongSpendingPassword'));
         password.value = '';  // Clear password input
+        passwordError.value = true;
       }
     }
   } catch (error: any) {
@@ -585,6 +589,7 @@ function resetForm() {
   patternError.value = '';
   patternTooltip.value = false;
   password.value = '';
+  passwordError.value = false;
   totpCode.value = '';
   errorMessage.value = '';
   show2FA.value = false;
@@ -605,6 +610,9 @@ function resetForm() {
   }
 }
 
+// Clear password error when user types (not when programmatically cleared to '')
+watch(password, (newVal) => { if (newVal.length > 0) passwordError.value = false; });
+
 // Watch for dialog open/close
 watch(() => props.value, async (newVal) => {
   if (newVal) {
@@ -619,10 +627,10 @@ watch(() => props.value, async (newVal) => {
 
     // Auto-focus on the appropriate unlock method input
     if (unlockMethod.value === 'pin' && pinInputRef.value) {
-      console.log('🎯 Auto-focusing PIN input');
+      debugLog('🎯 Auto-focusing PIN input');
       pinInputRef.value.focus();
     } else if ((unlockMethod.value === 'password' || !unlockMethod.value) && passwordInputRef.value) {
-      console.log('🎯 Auto-focusing password input');
+      debugLog('🎯 Auto-focusing password input');
       passwordInputRef.value.focus();
     }
     // Pattern and PassKey don't need focus - pattern is already interactive, PassKey auto-triggers
@@ -638,7 +646,7 @@ watch(() => props.value, async (newVal) => {
     );
 
     if (shouldAutoTrigger) {
-      console.log('🔐 Auto-triggering PassKey prompt (auto-trigger unlock is enabled)');
+      debugLog('🔐 Auto-triggering PassKey prompt (auto-trigger unlock is enabled)');
       setTimeout(() => {
         handlePassKeyAuth();
       }, 200);

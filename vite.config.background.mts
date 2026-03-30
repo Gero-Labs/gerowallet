@@ -72,6 +72,16 @@ export default defineConfig({
   ],
   resolve: {
     ...sharedConfig.resolve,
+    alias: (() => {
+      // Clone shared aliases but remove 'pbkdf2' - the virtual module plugin (rollup plugin)
+      // handles pbkdf2 resolution for the background build instead. The shared config alias
+      // ('pbkdf2' -> 'pbkdf2/browser') races with the virtual module plugin because Vite
+      // aliases resolve BEFORE Rollup plugins, causing sporadic "pbkdf2Sync is not exported"
+      // errors when the alias wins the race.
+      const aliases = { ...sharedConfig.resolve?.alias } as Record<string, string>;
+      delete aliases['pbkdf2'];
+      return aliases;
+    })(),
   },
   server: {
     watch: {
@@ -88,9 +98,8 @@ export default defineConfig({
         '**/tmp/**',
         '**/node_modules/**',
         '**/.git/**',
-        'D:\\DumpStack.log.tmp',
-        'D:\\DumpStack.log',
-        'D:\\*.tmp'
+        '**/DumpStack.log.tmp',
+        '**/DumpStack.log'
       ]
     }
   },

@@ -351,6 +351,21 @@ export const fromPlutusData = (
 };
 
 
+// Token image overrides — replace bad/missing logos for specific tokens
+// In service worker (background), SVG imports are empty — overrides only apply in browser context.
+export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker ? {} : {
+  'NIGHT': assetsModule.nightTokenSvg,
+};
+
+/**
+ * Apply token image overrides for a given token name/ticker.
+ * Returns the override image if one exists, otherwise returns the original.
+ */
+export function applyTokenImageOverride(name: string | undefined, originalImg: string): string {
+  if (name && TOKEN_IMAGE_OVERRIDES[name]) return TOKEN_IMAGE_OVERRIDES[name];
+  return originalImg;
+}
+
 export function resolveAsset(token: any): any {
   const unit = token.unit;
   let metadata = null;
@@ -489,6 +504,9 @@ export function resolveAsset(token: any): any {
       }
     }
   }
+  // Apply token image overrides
+  img = applyTokenImageOverride(name, img);
+
   return {
     unit,
     img,
@@ -705,6 +723,31 @@ export function analyzeTransactionForSignatures(
           type: 'stake'
         });
       }
+
+      // Pool operator certificates
+      if (certificate.__typename === Cardano.CertificateType.PoolRegistration) {
+        // Pool registration requires owner stake key signatures
+        // The cold key signature is handled separately (outside HD derivation tree)
+        const poolCert = certificate as Cardano.PoolRegistrationCertificate;
+        if (poolCert.poolParameters?.owners) {
+          for (const owner of poolCert.poolParameters.owners) {
+            // If this wallet's stake address is an owner, require stake key signature
+            if (owner === stakeAddress) {
+              requiredSigners.push({
+                derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+                type: 'stake'
+              });
+            }
+          }
+        }
+        // Flag that cold key signature is also needed (handled by pool signing flow)
+        (requiredSigners as any).requiresColdKeySignature = true;
+      }
+
+      if (certificate.__typename === Cardano.CertificateType.PoolRetirement) {
+        // Pool retirement requires cold key signature (handled by pool signing flow)
+        (requiredSigners as any).requiresColdKeySignature = true;
+      }
     }
   }
 
@@ -762,11 +805,18 @@ export function analyzeTransactionForSignatures(
   }
 
   // Remove duplicates
-  return requiredSigners.filter((signer, index, self) =>
+  const result = requiredSigners.filter((signer, index, self) =>
       index === self.findIndex(s =>
         s.derivationPath.join(',') === signer.derivationPath.join(',') && s.type === signer.type
       )
   );
+
+  // Carry forward the pool operator cold key flag (if set during certificate analysis)
+  if ((requiredSigners as any).requiresColdKeySignature) {
+    (result as any).requiresColdKeySignature = true;
+  }
+
+  return result;
 }
 
 /**

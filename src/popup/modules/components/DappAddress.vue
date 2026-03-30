@@ -39,7 +39,8 @@
                   x-small
                   color="white"
                   style="margin-left: 1px; margin-bottom: 1px"
-                ><span style="color: #0fd25b; font-weight: 600">$</span>{{ contactInfo.label.replace(/^\$/, '') }}</v-chip>
+                ><span style="color: #0fd25b; font-weight: 600">$</span>{{ contactInfo.label.replace(/^\$/, '') }}
+                </v-chip>
                 <v-chip
                   v-else-if="contactInfo"
                   outlined

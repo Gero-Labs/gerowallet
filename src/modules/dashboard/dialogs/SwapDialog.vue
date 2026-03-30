@@ -11,7 +11,7 @@
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <v-card-text class="text-center justify-center pt-6" style="position: relative;">
-      <SwapWidget @onSwap="$emit('close')"></SwapWidget>
+      <SwapWidget @onSwap="$emit('close')" :buy-token-unit="props.buyTokenUnit"></SwapWidget>
     </v-card-text>
   </BaseDialog>
 </template>
@@ -23,6 +23,7 @@ import assets from '@/utils/assets';
 
 interface Props {
   isOpen: boolean;
+  buyTokenUnit?: string;
 }
 const props = defineProps<Props>();
 defineEmits(['close']);

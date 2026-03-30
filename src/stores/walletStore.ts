@@ -403,7 +403,7 @@ export default {
   isWhitelisted(origin: string): boolean {
     if (!walletStore.connectedDapps || !Array.isArray(walletStore.connectedDapps)) return false;
     const whitelisted = walletStore.connectedDapps as WhitelistedEntry[]
-    return !!whitelisted.find(el => origin.includes(el.domain));
+    return !!whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1);
   },
 
   logout() {

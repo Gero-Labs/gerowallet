@@ -349,7 +349,11 @@ const signDelegationTx = async () => {
 
 const poolExtendedInfo = (pool: any): any => {
   if (pool && pool.pool_extended_info) {
-    return JSON.parse(pool.pool_extended_info);
+    const parsed = JSON.parse(pool.pool_extended_info);
+    if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
+      parsed.info.url_png_icon_64x64 = '';
+    }
+    return parsed;
   }
   return undefined;
 };
