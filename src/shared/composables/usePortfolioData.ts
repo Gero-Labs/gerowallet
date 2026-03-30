@@ -1,25 +1,25 @@
 import { PortfolioCacheService, PortfolioDataPoint } from '@/db/portfolio-cache';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { debugLog } from '@/utils/debug';
 
 // Note: computed, ref, watch are auto-imported globally by unplugin-auto-import
 
 // Singleton service — shared across all composable callers
 let sharedService: PortfolioCacheService | null = null;
 
+// Module-level EUR rate sync (runs once, not per component)
+const { usdToEurRate: _usdToEurRate, loadExchangeRate: _loadExchangeRate } = useCurrencyConverter();
+_loadExchangeRate();
+
 export function usePortfolioData() {
   if (!sharedService) {
     sharedService = new PortfolioCacheService();
+    // Keep service's EUR rate in sync (registered once on first init)
+    watch(_usdToEurRate, (rate) => {
+      sharedService!.usdToEurRate = rate;
+    }, { immediate: true });
   }
   const service = sharedService;
-
-  // Get EUR conversion rate for snapshot transformation
-  const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
-  loadExchangeRate();
-
-  // Keep service's EUR rate in sync with the reactive ref
-  watch(usdToEurRate, (rate) => {
-    service.usdToEurRate = rate;
-  }, { immediate: true });
 
   // Loading state
   const isLoading = ref(false);
@@ -27,13 +27,7 @@ export function usePortfolioData() {
   // Data refs
   const adaData = ref<PortfolioDataPoint[]>([]);
   const usdData = ref<PortfolioDataPoint[]>([]);
-
-  // EUR data derived from USD × rate
-  const eurData = computed<PortfolioDataPoint[]>(() => {
-    const rate = usdToEurRate.value;
-    if (!rate || rate === 0) return [];
-    return usdData.value.map(([ts, val]) => [ts, val * rate] as PortfolioDataPoint);
-  });
+  const eurData = ref<PortfolioDataPoint[]>([]);
 
   // Track first loaded currency for progressive loading
   const firstLoadedCurrency = ref<string | null>(null);
@@ -57,14 +51,15 @@ export function usePortfolioData() {
   const loadForTimeframe = async (address: string, timeframe: string, adaOnly: boolean = false): Promise<void> => {
     if (!address) return;
 
-    console.log(`📊 composable loadForTimeframe: timeframe=${timeframe}, adaOnly=${adaOnly}`);
+    debugLog(`📊 composable loadForTimeframe: timeframe=${timeframe}, adaOnly=${adaOnly}`);
     isLoading.value = true;
     try {
       const result = await service.loadForTimeframe(address, timeframe, adaOnly);
-      console.log(`📊 composable: received adaData=${result.adaData.length}, usdData=${result.usdData.length}`);
+      debugLog(`📊 composable: received adaData=${result.adaData.length}, usdData=${result.usdData.length}`);
 
       adaData.value = result.adaData;
       usdData.value = result.usdData;
+      eurData.value = result.eurData;
 
       if (!firstLoadedCurrency.value) {
         if (result.adaData.length > 0) firstLoadedCurrency.value = 'ADA';

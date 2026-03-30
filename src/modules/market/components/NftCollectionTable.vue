@@ -44,7 +44,7 @@
             <v-list-item-title style="font-size: 13px">
               <span class="font-weight-bold">{{ item.name }}</span>
               <v-chip v-if="item.isScam" x-small color="error" class="ml-1" style="height: 16px; font-size: 9px; padding: 0 4px;">
-                SCAM
+                {{ $t('portfolio.scam') }}
               </v-chip>
             </v-list-item-title>
             <v-list-item-subtitle class="d-flex align-center" style="font-size: 10px; opacity: 0.5">

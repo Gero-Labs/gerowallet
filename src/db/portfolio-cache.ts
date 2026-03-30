@@ -63,13 +63,13 @@ export class PortfolioCacheService {
    */
   async loadForTimeframe(address: string, timeframe: string, adaOnly: boolean = false): Promise<PortfolioResult> {
     if (!address) {
-      return { adaData: [], usdData: [], eurData: [] };
+      return { adaData: [], usdData: [] };
     }
 
     const stakeAddress = walletStore.loggedWallet?.stakeAddress;
     if (!stakeAddress) {
       console.warn('No stake address available for portfolio data');
-      return { adaData: [], usdData: [], eurData: [] };
+      return { adaData: [], usdData: [] };
     }
 
     const resolution = getResolutionForTimeframe(timeframe);

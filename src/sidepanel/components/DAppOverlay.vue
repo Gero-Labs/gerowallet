@@ -10,7 +10,7 @@
       <!-- Queue indicator -->
       <div v-if="requestQueue.length > 0" class="queue-indicator mb-2">
         <span class="grey--text text-caption">
-          Request 1 of {{ requestQueue.length + 1 }}
+          {{ $t('miniGero.requestQueueIndicator', { current: 1, total: requestQueue.length + 1 }) }}
         </span>
       </div>
 

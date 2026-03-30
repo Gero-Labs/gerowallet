@@ -31,7 +31,7 @@
       <div class="d-flex align-center justify-space-between mb-1">
         <span class="text-caption text--secondary">{{ $t('market.amount') }}</span>
         <span class="text-caption text--secondary">
-          Bal: {{ formattedBalance }} {{ mode === 'buy' ? currencyTicker : tokenTicker }}
+          {{ $t('market.balance') }}: {{ formattedBalance }} {{ mode === 'buy' ? currencyTicker : tokenTicker }}
         </span>
       </div>
       <v-slider

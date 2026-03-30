@@ -2424,6 +2424,7 @@ export default {
   // Portfolio Page
   'portfolio.myHoldings': 'Holdings',
   'portfolio.collectibles': 'Collectibles',
+  'portfolio.scam': 'SCAM',
   'portfolio.all': 'All',
   'portfolio.trending': 'Trending',
   'portfolio.gainers': 'Top Gainers',
@@ -2478,6 +2479,7 @@ export default {
   'miniGero.signDataRequest': 'Sign Data Request',
   'miniGero.signTxRequest': 'Sign Transaction',
   'miniGero.futureTransactionsNote': 'For your security, any future transactions from this website will require additional verification before signing.',
+  'miniGero.requestQueueIndicator': 'Request {current} of {total}',
   'miniGero.reject': 'Reject',
   'miniGero.approve': 'Approve',
   'miniGero.sign': 'Sign',

@@ -212,6 +212,7 @@ import { useMarketData, type MarketToken } from '@/modules/market/composables/us
 import { walletStore } from '@/stores/walletStore';
 import { getBalance } from '@/chrome/serialization';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
+import { debugLog } from '@/utils/debug';
 import BottomSheet from '../components/BottomSheet.vue';
 
 const { t } = useTranslation();
@@ -349,9 +350,9 @@ function getTokenImg(token: any): string {
 }
 
 function selectFilter(id: string) {
-  console.log('selectFilter called:', id, 'chipDragged:', chipDragged, 'current:', activeFilter.value);
+  debugLog('selectFilter called:', id, 'chipDragged:', chipDragged, 'current:', activeFilter.value);
   activeFilter.value = id;
-  console.log('activeFilter now:', activeFilter.value, 'displayTokens count:', displayTokens.value.length);
+  debugLog('activeFilter now:', activeFilter.value, 'displayTokens count:', displayTokens.value.length);
 }
 
 function retry() {

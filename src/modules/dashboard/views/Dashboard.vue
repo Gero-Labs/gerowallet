@@ -263,6 +263,7 @@ import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
 import { getBalance } from '@/chrome/serialization';
+import { debugLog } from '@/utils/debug';
 
 // Translation composable
 const { t } = useTranslation();
@@ -349,7 +350,7 @@ const isSwapEnabled = computed(() => {
 // Empty state computed
 const isWalletEmpty = computed(() => {
   // Debug logging
-  console.log('🔍 Dashboard Debug:', {
+  debugLog('🔍 Dashboard Debug:', {
     chain: loggedWallet.value?.chain,
     isBitcoin: loggedWallet.value?.chain === Blockchain.BITCOIN,
     bitcoinBalance: bitcoinBalance.value,
@@ -359,12 +360,12 @@ const isWalletEmpty = computed(() => {
   // For Bitcoin wallets, never show empty state - always show balance card
   // This allows users to receive Bitcoin even with 0 balance
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
-    console.log('✅ Bitcoin wallet detected - showing balance card');
+    debugLog('✅ Bitcoin wallet detected - showing balance card');
     return false;
   }
   // For Cardano wallets, check account controlled amount
   const isEmpty = !account.value || account.value?.controlled_amount === '0';
-  console.log('📊 Cardano wallet - isEmpty:', isEmpty);
+  debugLog('📊 Cardano wallet - isEmpty:', isEmpty);
   return isEmpty;
 });
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
@@ -673,10 +674,10 @@ const handleDelegateGero = () => {
 };
 
 const handleChartTimeframeChange = async (timeframe: string) => {
-  console.log(`📊 Dashboard handleChartTimeframeChange: timeframe=${timeframe}, adaOnly=${currentAdaOnly.value}`);
+  debugLog(`📊 Dashboard handleChartTimeframeChange: timeframe=${timeframe}, adaOnly=${currentAdaOnly.value}`);
   const address = loggedWallet.value?.baseAddress;
   if (!address || isApex.value) {
-    console.log(`📊 Dashboard handleChartTimeframeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    debugLog(`📊 Dashboard handleChartTimeframeChange: skipped (address=${address}, isApex=${isApex.value})`);
     return;
   }
 
@@ -685,17 +686,17 @@ const handleChartTimeframeChange = async (timeframe: string) => {
 };
 
 const handleChartModeChange = async (adaOnly: boolean) => {
-  console.log(`📊 Dashboard handleChartModeChange: adaOnly=${adaOnly}, timeframe=${currentTimeframe.value}`);
+  debugLog(`📊 Dashboard handleChartModeChange: adaOnly=${adaOnly}, timeframe=${currentTimeframe.value}`);
   const address = loggedWallet.value?.baseAddress;
   if (!address || isApex.value) {
-    console.log(`📊 Dashboard handleChartModeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    debugLog(`📊 Dashboard handleChartModeChange: skipped (address=${address}, isApex=${isApex.value})`);
     return;
   }
 
   currentAdaOnly.value = adaOnly;
-  console.log(`📊 Dashboard: calling loadForTimeframe(${address}, ${currentTimeframe.value}, ${adaOnly})`);
+  debugLog(`📊 Dashboard: calling loadForTimeframe(${address}, ${currentTimeframe.value}, ${adaOnly})`);
   await loadForTimeframe(address, currentTimeframe.value, adaOnly);
-  console.log(`📊 Dashboard: loadForTimeframe completed, adaData=${adaChartData.value?.length}, usdData=${usdChartData.value?.length}`);
+  debugLog(`📊 Dashboard: loadForTimeframe completed, adaData=${adaChartData.value?.length}, usdData=${usdChartData.value?.length}`);
 };
 
 // Expose functions for potential use

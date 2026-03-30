@@ -7,6 +7,7 @@ import { walletStore } from '@/stores/walletStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 export interface MarketToken {
   unit: string;
@@ -71,6 +72,11 @@ const error: Ref<string | null> = ref(null);
 
 let initialized = false;
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
+let _tokenIndexCache: Record<string, number> | null = null;
+
+// Module-level EUR rate for Apex price conversion
+const { usdToEurRate: _usdToEurRate, loadExchangeRate: _loadExchangeRate } = useCurrencyConverter();
+_loadExchangeRate();
 let consumerCount = 0;
 
 // --- Helper: enrich API data with store data (DexHunter as fallback) ---
@@ -108,7 +114,7 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
     holders: apiToken.holders ?? dhToken?.holders ?? 0,
     riskRating: xerberusRisk?.risk || null,
     isNew: apiToken.isNew ?? false,
-    policyLocked: true, // TODO: get from API — hardcoded until backend provides minting policy status
+    policyLocked: false, // TODO: get from API — default false until backend provides minting policy status
     fingerprint,
     decimals: apiToken.decimals ?? dhToken?.decimals ?? 0,
     organicVolume24h: apiToken.organicVolume24h ?? 0,
@@ -133,7 +139,7 @@ async function fetchAllTokens(silent = false): Promise<void> {
       const apexData = coinGeckoStore.cache['apex-4'];
       nativePrice = {
         priceUsd: apexData?.usd ?? 0,
-        priceEur: apexData?.usd ?? 0, // CoinGecko only fetches USD; EUR not available
+        priceEur: (apexData?.usd ?? 0) * (_usdToEurRate.value || 1),
         priceChange24h: apexData?.usd_24h_change ?? 0,
         marketCap: apexData?.usd_market_cap ?? 0,
         volume24h: apexData?.usd_24h_vol ?? 0,
@@ -187,6 +193,7 @@ async function fetchAllTokens(silent = false): Promise<void> {
     // Remove any existing lovelace entry, then prepend native token
     const filtered = tokens.filter(t => t.unit !== 'lovelace');
     allTokens.value = [nativeToken, ...filtered];
+    _tokenIndexCache = null; // Invalidate index on full refresh
 
     // Set adaData ref (used for native currency price display)
     adaData.value = {
@@ -364,10 +371,12 @@ let streamReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const wsConnected = ref(false);
 let renderPending = false;
 
-/** Build a token index for O(1) lookups */
+/** Build a token index for O(1) lookups (cached, invalidated on full refresh) */
 function buildTokenIndex(): Record<string, number> {
+  if (_tokenIndexCache) return _tokenIndexCache;
   const index: Record<string, number> = {};
   allTokens.value.forEach((t, i) => { index[t.unit] = i; });
+  _tokenIndexCache = index;
   return index;
 }
 

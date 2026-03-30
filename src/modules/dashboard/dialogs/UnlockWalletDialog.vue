@@ -195,6 +195,7 @@ import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PatternLock from '../components/PatternLock.vue';
 import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
@@ -316,7 +317,7 @@ async function loadWalletInfo() {
   } else {
     const wallet = walletStore.loggedWallet;
     if (wallet) {
-      console.log('Wallet info:', wallet);
+      debugLog('Wallet info:', wallet);
       walletName.value = wallet.name || 'Wallet';
       walletIcon.value = wallet.icon || 'mdi-wallet';
     }
@@ -444,11 +445,11 @@ async function handlePassKeyAuth() {
     }
 
     // Use WebAuthn for PassKey authentication
-    console.log('🔐 Authenticating with WebAuthn credential');
+    debugLog('🔐 Authenticating with WebAuthn credential');
     const authenticated = await authenticateWebAuthn(webAuthnCredentialId.value);
 
     if (authenticated) {
-      console.log('✅ PassKey authentication successful - unlocking wallet');
+      debugLog('✅ PassKey authentication successful - unlocking wallet');
 
       // Reset password field validation so it doesn't show red during PassKey unlock
       if (passwordInputRef.value) {
@@ -528,7 +529,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
         password: password.value || undefined
       }
     });
-    console.log('Unlock response:', response);
+    debugLog('Unlock response:', response);
     if (response.data.success) {
       emit('input', false);
       emit('unlocked');
@@ -626,10 +627,10 @@ watch(() => props.value, async (newVal) => {
 
     // Auto-focus on the appropriate unlock method input
     if (unlockMethod.value === 'pin' && pinInputRef.value) {
-      console.log('🎯 Auto-focusing PIN input');
+      debugLog('🎯 Auto-focusing PIN input');
       pinInputRef.value.focus();
     } else if ((unlockMethod.value === 'password' || !unlockMethod.value) && passwordInputRef.value) {
-      console.log('🎯 Auto-focusing password input');
+      debugLog('🎯 Auto-focusing password input');
       passwordInputRef.value.focus();
     }
     // Pattern and PassKey don't need focus - pattern is already interactive, PassKey auto-triggers
@@ -645,7 +646,7 @@ watch(() => props.value, async (newVal) => {
     );
 
     if (shouldAutoTrigger) {
-      console.log('🔐 Auto-triggering PassKey prompt (auto-trigger unlock is enabled)');
+      debugLog('🔐 Auto-triggering PassKey prompt (auto-trigger unlock is enabled)');
       setTimeout(() => {
         handlePassKeyAuth();
       }, 200);

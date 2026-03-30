@@ -183,7 +183,7 @@
 
           <!-- P&L Section (if user holds this token) -->
           <div v-if="tokenPnl" class="pnl-section mt-3">
-            <span class="text-caption text--secondary font-weight-medium d-block mb-1">P&L</span>
+            <span class="text-caption text--secondary font-weight-medium d-block mb-1">{{ $t('market.pnl') }}</span>
             <v-simple-table dense class="transparent stats-table">
               <tbody>
                 <tr>

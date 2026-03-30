@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue';
+import { ref, watch, type Ref } from 'vue';
 import marketApi, { type WalletPnlSummary, type WalletPnlToken } from '@/api/market-api';
 import { walletStore } from '@/stores/walletStore';
 
@@ -6,6 +6,11 @@ const pnlSummary: Ref<WalletPnlSummary | null> = ref(null);
 const pnlByUnit = ref<Record<string, WalletPnlToken>>({});
 const pnlLoading = ref(false);
 const pnlError: Ref<string | null> = ref(null);
+
+// Auto-refetch when wallet changes
+watch(() => walletStore.loggedWallet?.stakeAddress, (addr) => {
+  if (addr) fetchPnl();
+});
 
 async function fetchPnl() {
   const stakeAddress = walletStore.loggedWallet?.stakeAddress;
