@@ -19,7 +19,7 @@
             </div>
             <div style="color: white">
               <br/>
-              <p class="ml-9">{{ $t('navigation.futureTransactionsRequire', { action: loggedWallet.type === WalletType.Normal ? $t('navigation.enteringYourSpendingPassword') : $t('navigation.interactingWithHardware') }) }}</p>
+              <p class="ml-9">{{ $t('navigation.futureTransactionsNote') }}</p>
             </div>
           </section>
     </v-card-text>
@@ -47,10 +47,8 @@ import { computed, onMounted, ref, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
-import { WalletType } from '@/models/types';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
-
 
 const { t } = useTranslation();
 

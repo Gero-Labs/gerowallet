@@ -29,6 +29,21 @@ export default {
     }
   },
 
+  async getPoolHistory(poolId: string, chain: string, network: string) {
+    const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === chain) || '';
+    const networkEnum: string = Object.keys(Network).find(key => Network[key] === network) || '';
+    try {
+      const { data, status } = await axiosInstance.get(
+        `/api/pools/${poolId}/history?chain=${chainEnum}&network=${networkEnum}`
+      );
+      if (status === 200) return data;
+      return [];
+    } catch (error: any | AxiosError) {
+      console.warn('Failed to fetch pool history:', error);
+      return [];
+    }
+  },
+
   async getPoolsPaginated(
     params: PaginationParams = {},
     chain: string,

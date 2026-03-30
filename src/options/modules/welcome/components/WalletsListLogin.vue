@@ -122,7 +122,7 @@ const isWalletLocked = (wallet: Wallet): boolean => {
   return loggedWallet.value?.id === wallet.id && isLocked.value;
 };
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 
 const submitLogin = async (walletId: number): Promise<void> => {
   // Check if wallet is locked
@@ -217,7 +217,7 @@ const submitLogin = async (walletId: number): Promise<void> => {
     });
 
     // Trust the background response
-    if (!response || (response as any).error) {
+    if (!response || response['error']) {
       console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
       return;
     }
@@ -270,6 +270,7 @@ const submitLogin = async (walletId: number): Promise<void> => {
     await navigateAfterLogin();
   } catch (error) {
     console.error(error);
+
   }
 };
 
@@ -316,6 +317,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
 
       if (!wallet) {
         console.error('❌ Wallet not found:', walletId);
+    
         return;
       }
 
@@ -325,8 +327,9 @@ const handleWalletUnlocked = async (): Promise<void> => {
         data: { wallet },
       });
 
-      if (!response || (response as any).error) {
+      if (!response || response['error']) {
         console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+    
         return;
       }
 
@@ -358,6 +361,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
 
       if (!loginSuccess) {
         console.error('❌ Login state did not propagate in time');
+    
         return;
       }
 
@@ -374,6 +378,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
       await navigateAfterLogin();
     } catch (error) {
       console.error('❌ Login error after pre-login unlock:', error);
+  
     }
     return;
   }

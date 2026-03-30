@@ -1,7 +1,7 @@
 {
   "name": "gero-wallet",
   "displayName": "Gero Dashboard",
-  "version": "2.6.4",
+  "version": "2.7.0",
   "private": true,
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "scripts": {
@@ -27,7 +27,7 @@
     "pack:xpi": "cross-env WEB_EXT_ARTIFACTS_DIR=./ web-ext build --source-dir ./extension --filename extension.xpi --overwrite-dest",
     "start:chromium": "web-ext run --source-dir ./extension --target=chromium",
     "start:firefox": "web-ext run --source-dir ./extension --target=firefox-desktop",
-    "clear": "rimraf --glob extension/assets extension/background extension/js extension/content extension/index.html extension/manifest.json",
+    "clear": "rimraf --glob extension/assets extension/background extension/js extension/content extension/index.html extension/sidepanel.html extension/sidepanel extension/manifest.json",
     "lint": "eslint --cache .",
     "test": "vitest test",
     "test:e2e": "playwright test",
@@ -54,6 +54,7 @@
     "@noble/hashes": "^2.0.1",
     "@reown/walletkit": "^1.5.3",
     "@scure/bip32": "^1.7.0",
+    "@stomp/stompjs": "^7.3.0",
     "@trezor/connect-webextension": "^9.7.1",
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",
@@ -98,6 +99,7 @@
     "psl": "^1.9.0",
     "qr-code-styling": "^1.6.0-rc.1",
     "qrcode": "^1.5.4",
+    "sockjs-client": "^1.6.1",
     "tiny-fifo-cache": "^1.0.1",
     "tiny-secp256k1": "^2.2.4",
     "tldts": "^6.1.59",

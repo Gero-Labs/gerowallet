@@ -26,29 +26,27 @@
         <v-col cols="12" xl="9" lg="9" md="12" sm="12">
           <!-- Chart row -->
           <v-row no-gutters>
-            <v-col cols="12" class="pa-2">
-              <v-card
-                outlined
-                class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
-              >
-                <v-card-text>
-                  <PortfolioChart
-                    :chart-data="computeChartData.adaData"
-                    :chart-data-usd="computeChartData.usdData"
-                    :chart-data-eur="computeChartData.eurData"
-                    :portfolio-value-ada="currentPortfolioValues.ada"
-                    :portfolio-value-usd="currentPortfolioValues.usd"
-                    :portfolio-value-eur="currentPortfolioValues.eur"
-                    :ada-only-value-ada="adaBalance"
-                    :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
-                    :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
-                    :loading="portfolioLoading"
-                    :progressive-loading="true"
-                    :first-loaded-currency="firstLoadedCurrency"
-                    @refresh="refreshPortfolioChart"
-                  />
-                </v-card-text>
-              </v-card>
+            <v-col cols="12" class="pa-2" style="height: 210px;">
+              <PortfolioChart
+                :chart-data="computeChartData.adaData"
+                :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
+                :portfolio-value-ada="currentPortfolioValues.ada"
+                :portfolio-value-usd="currentPortfolioValues.usd"
+                :portfolio-value-eur="currentPortfolioValues.eur"
+                :ada-only-value-ada="adaBalance"
+                :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+                :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+                :loading="portfolioLoading"
+                :progressive-loading="true"
+                :first-loaded-currency="firstLoadedCurrency"
+                :total-realized-pnl="pnlSummary?.totalRealizedPnlAda ?? null"
+                :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
+                :pnl-incomplete="pnlSummary?.tokens?.some(t => t.costBasisComplete === false) ?? false"
+                @refresh="refreshPortfolioChart"
+                @withdraw-rewards="handleWithdrawRewards"
+                @delegate-gero="handleDelegateGero"
+              />
             </v-col>
           </v-row>
 
@@ -99,6 +97,30 @@
           </v-col>
         </v-row>
       </template>
+
+      <!-- Separate chart row for non-Cardano wallets -->
+      <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
+        <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2" style="height: 210px;">
+          <PortfolioChart
+            :chart-data="computeChartData.adaData"
+            :chart-data-usd="computeChartData.usdData"
+            :chart-data-eur="computeChartData.eurData"
+            :portfolio-value-ada="currentPortfolioValues.ada"
+            :portfolio-value-usd="currentPortfolioValues.usd"
+            :portfolio-value-eur="currentPortfolioValues.eur"
+            :ada-only-value-ada="adaBalance"
+            :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+            :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+            :loading="portfolioLoading"
+            :progressive-loading="true"
+            :first-loaded-currency="firstLoadedCurrency"
+            @timeframe-change="handleChartTimeframeChange"
+            @mode-change="handleChartModeChange"
+            @refresh="refreshPortfolioChart"
+            @withdraw-rewards="handleWithdrawRewards"
+            @delegate-gero="handleDelegateGero"
+          />
+        </v-col>
 
       <!-- Separate chart row for non-Cardano/non-Bitcoin wallets -->
       <v-row no-gutters v-if="loggedWallet?.chain !== Blockchain.BITCOIN && (loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO)">
@@ -198,6 +220,12 @@
           <SwapWidget class="fill-height" />
         </v-col>
       </v-row>
+
+      <!-- Withdrawal Dialog -->
+      <WithdrawalDialog :isOpen="withdrawalDialog" :tx="withdrawalTxData" @close="closeWithdrawalDialog" />
+
+      <!-- Delegate Dialog -->
+      <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
     </template>
   </v-layout>
 </template>
@@ -219,6 +247,8 @@ import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
+import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
+import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -226,10 +256,14 @@ import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
+import { useWithdrawal } from '@/shared/composables/useWithdrawal';
+import { useDelegation } from '@/shared/composables/useDelegation';
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
 import { getBalance } from '@/chrome/serialization';
+import { debugLog } from '@/utils/debug';
 
 // Translation composable
 const { t } = useTranslation();
@@ -238,12 +272,16 @@ const { t } = useTranslation();
 const instance = getCurrentInstance();
 
 const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
+const { pnlSummary, fetchPnl } = useWalletPnl();
+fetchPnl();
 
 // Store refs
 const { loggedWallet, transactions, account, utxos, collateral, bitcoinBalance } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
+const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
+const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGero, closeDelegateDialog } = useDelegation();
 
 const proxy = instance?.proxy;
 
@@ -312,7 +350,7 @@ const isSwapEnabled = computed(() => {
 // Empty state computed
 const isWalletEmpty = computed(() => {
   // Debug logging
-  console.log('🔍 Dashboard Debug:', {
+  debugLog('🔍 Dashboard Debug:', {
     chain: loggedWallet.value?.chain,
     isBitcoin: loggedWallet.value?.chain === Blockchain.BITCOIN,
     bitcoinBalance: bitcoinBalance.value,
@@ -322,12 +360,12 @@ const isWalletEmpty = computed(() => {
   // For Bitcoin wallets, never show empty state - always show balance card
   // This allows users to receive Bitcoin even with 0 balance
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
-    console.log('✅ Bitcoin wallet detected - showing balance card');
+    debugLog('✅ Bitcoin wallet detected - showing balance card');
     return false;
   }
   // For Cardano wallets, check account controlled amount
   const isEmpty = !account.value || account.value?.controlled_amount === '0';
-  console.log('📊 Cardano wallet - isEmpty:', isEmpty);
+  debugLog('📊 Cardano wallet - isEmpty:', isEmpty);
   return isEmpty;
 });
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
@@ -374,30 +412,41 @@ const computedValues = computed(() => {
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
-// Initialize portfolio data composable with a 4-hour cache
-const portfolioComposable = usePortfolioData({
-  cacheTimeMs: 4 * 60 * 60 * 1000, // 4 hours
-  enableCache: true,
-});
-
+// Initialize portfolio data composable
 const {
   adaData: adaChartData,
   usdData: usdChartData,
   eurData: eurChartData,
   isLoading: portfolioLoading,
-  loadDataProgressively,
   refreshPortfolioData,
-  getCacheStats,
-  getCacheStatus,
+  loadForTimeframe,
   firstLoadedCurrency,
   latestPortfolioValues,
-} = portfolioComposable;
+} = usePortfolioData();
+
+// Read persisted chart settings to make the right initial API call
+const uiToApiTimeframe: Record<string, string> = {
+  DAY: '24h', WEEK: '7d', MONTH: '30d', QUARTER: '90d', YEAR: '1y',
+};
+
+function getPersistedChartSettings(walletId: number | undefined) {
+  if (!walletId) return { adaOnly: false, timeframe: '7d' };
+  const mode = localStorage.getItem(`portfolioMode_${walletId}`) || 'full';
+  const uiTimeframe = localStorage.getItem(`portfolioTab_${walletId}`) || 'WEEK';
+  return {
+    adaOnly: mode === 'ada-only',
+    timeframe: uiToApiTimeframe[uiTimeframe] || '7d',
+  };
+}
+
+const currentAdaOnly = ref(false);
+const currentTimeframe = ref('7d');
 
 // Cache current timestamp to avoid computed recalculation
 const currentTimestamp = ref(Date.now());
 
 const computeChartData = computed(() => {
-  // For Cardano mainnet, return ADA and USD data
+  // For Cardano mainnet, return data from market API (mode already applied via adaOnly param)
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
       adaData: adaChartData.value,
@@ -502,7 +551,7 @@ const currentPortfolioValues = computed(() => {
     return {
       ada: latestPortfolioValues.value.ada !== null ? latestPortfolioValues.value.ada : computedValues.value.totalValue,
       usd: latestPortfolioValues.value.usd !== null ? latestPortfolioValues.value.usd : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
-      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
+      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0) * usdToEurRate.value),
     };
   }
 
@@ -612,27 +661,47 @@ const adaBalance = computed(() => {
 const refreshPortfolioChart = async () => {
   const address = loggedWallet.value?.baseAddress;
   if (address && !isApex.value) {
-    await refreshPortfolioData(address);
+    await refreshPortfolioData(address, currentAdaOnly.value);
   }
 };
 
-// Utility function to get cache information (for debugging)
-const getPortfolioCacheInfo = async () => {
+const handleWithdrawRewards = () => {
+  withdrawRewards();
+};
+
+const handleDelegateGero = () => {
+  delegateToGero();
+};
+
+const handleChartTimeframeChange = async (timeframe: string) => {
+  debugLog(`📊 Dashboard handleChartTimeframeChange: timeframe=${timeframe}, adaOnly=${currentAdaOnly.value}`);
   const address = loggedWallet.value?.baseAddress;
   if (!address || isApex.value) {
-    return null;
+    debugLog(`📊 Dashboard handleChartTimeframeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    return;
   }
 
-  const stats = await getCacheStats();
-  const status = await getCacheStatus(address);
+  currentTimeframe.value = timeframe;
+  await loadForTimeframe(address, timeframe, currentAdaOnly.value);
+};
 
-  return { stats, status };
+const handleChartModeChange = async (adaOnly: boolean) => {
+  debugLog(`📊 Dashboard handleChartModeChange: adaOnly=${adaOnly}, timeframe=${currentTimeframe.value}`);
+  const address = loggedWallet.value?.baseAddress;
+  if (!address || isApex.value) {
+    debugLog(`📊 Dashboard handleChartModeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    return;
+  }
+
+  currentAdaOnly.value = adaOnly;
+  debugLog(`📊 Dashboard: calling loadForTimeframe(${address}, ${currentTimeframe.value}, ${adaOnly})`);
+  await loadForTimeframe(address, currentTimeframe.value, adaOnly);
+  debugLog(`📊 Dashboard: loadForTimeframe completed, adaData=${adaChartData.value?.length}, usdData=${usdChartData.value?.length}`);
 };
 
 // Expose functions for potential use
 defineExpose({
   refreshPortfolioChart,
-  getPortfolioCacheInfo,
 });
 // Update timestamp when transactions change
 watch(
@@ -659,8 +728,11 @@ watch(
             loggedWallet.value?.chain === Blockchain.CARDANO &&
             loggedWallet.value?.network === Network.MAINNET
           ) {
-            // Start parallel loading immediately (don't await - let it run in the background)
-            loadDataProgressively(newAddress).catch(error => {
+            // Read persisted toggle + timeframe and load matching data
+            const settings = getPersistedChartSettings(loggedWallet.value?.id);
+            currentAdaOnly.value = settings.adaOnly;
+            currentTimeframe.value = settings.timeframe;
+            loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
               console.warn('Portfolio data loading failed:', error);
             });
           }

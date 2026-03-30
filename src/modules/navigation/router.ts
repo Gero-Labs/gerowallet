@@ -7,7 +7,7 @@ import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 
 // Critical parts loaded immediately
 import Welcome from '@/modules/welcome/views/Welcome.vue';
-import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
+import PortfolioPage from '@/modules/portfolio/PortfolioPage.vue';
 import Login from '@/popup/modules/views/Login.vue';
 
 // Lazy loading for other components (saves ~5MB initial load)
@@ -18,6 +18,7 @@ const SignTx = () => import('@/popup/modules/views/SignTx.vue');
 const Cashback = () => import("@/modules/cashback/Cashback.vue");
 const MediaPlayer = () => import("@/modules/media-player/MediaPlayer.vue");
 const Swap = () => import('@/modules/swap/Swap.vue');
+// Market.vue no longer used as standalone route — unified into PortfolioPage
 const DevTools = () => import('@/modules/devTools/DevTools.vue');
 const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
@@ -35,6 +36,7 @@ const LightningLnurl = () => import('@/modules/lightning/LightningLnurl.vue');
 const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue');
 const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
 const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
+const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -44,7 +46,7 @@ const routes = [
   {
     path: '/',
     name: 'dashboard',
-    component: Dashboard,
+    component: PortfolioPage,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -60,7 +62,11 @@ const routes = [
   },
   {
     path: '/market',
-    name: 'market',
+    redirect: '/?view=all',
+  },
+  {
+    path: '/swap',
+    name: 'swap',
     component: Swap,
     meta: {
       layout: ContentLayout,
@@ -89,6 +95,15 @@ const routes = [
     path: '/governance',
     name: 'governance',
     component: Governance,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/pool-operator',
+    name: 'poolOperator',
+    component: PoolOperator,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -314,6 +329,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
     case 'gomining':
       // GoMining is under maintenance if feature flag is disabled
       return !featureFlagsStore.isGoMiningEnabled();
+
+    case 'poolOperator':
+      // Pool Operator dashboard gated by feature flag
+      return !featureFlagsStore.isPoolOperatorEnabled();
 
     case 'multisig':
       // MultiSig is currently under maintenance (route is commented out)

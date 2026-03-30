@@ -122,5 +122,15 @@ loadPersistedWallet().then(() => {
         }
       }
     );
+
+    // Redirect to dashboard when wallet is logged in from another context (e.g., mini gero)
+    app.$watch(
+      () => walletStoreState.loggedWallet,
+      (wallet, oldWallet) => {
+        if (wallet && !oldWallet && !walletStoreState.isLocked && router.currentRoute.path === '/welcome') {
+          router.push('/');
+        }
+      }
+    );
   });
 });

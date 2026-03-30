@@ -152,6 +152,15 @@
       </v-progress-linear>
     </template>
   </v-data-table>
+
+  <!-- Token Detail Dialog -->
+  <v-dialog v-model="showTokenDetail" max-width="900px" content-class="token-detail-dialog">
+    <TokenDetailPanel
+      v-if="selectedToken"
+      :token="selectedToken"
+      @close="showTokenDetail = false"
+    />
+  </v-dialog>
 </template>
 
 <script setup lang="ts">
@@ -169,6 +178,8 @@ import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { priceStore } from '@/stores/priceStore';
 import { get24hChange } from '@/shared/utils/resolver';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
+import type { MarketToken } from '@/modules/market/composables/useMarketData';
 
 // Props
 interface Props {
@@ -334,7 +345,7 @@ const tokensList = computed(() => {
       if (token.name === 'Cardano') {
         coinGeckoCurrency = 'cardano';
       } else if (token.name === 'Apex Fusion') {
-        coinGeckoCurrency = 'apex-2';
+        coinGeckoCurrency = 'apex-4';
         token.price = convertFiat(price.value?.lastPrice || 0);
       }
       token.mcap = convertFiat(cache.value[coinGeckoCurrency]?.usd_market_cap);
@@ -436,8 +447,40 @@ const totalAllocation = computed(() => {
   return total;
 });
 
-const handleTokenRowClick = (_row: any) => {
-  // TODO: Implement token detail view
+const showTokenDetail = ref(false);
+const selectedToken = ref<MarketToken | null>(null);
+
+const handleTokenRowClick = (row: any) => {
+  const adaPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  const isAda = row.policy_id === '' && (row.name === 'Cardano' || row.unit === 'lovelace');
+  const dexToken = dexHunterTokens.value[row.unit];
+  const priceInAda = isAda ? 1 : (dexToken?.price || 0);
+
+  selectedToken.value = {
+    unit: row.unit || 'lovelace',
+    name: row.name || 'Cardano',
+    ticker: row.metadata?.ticker || row.ticker || (isAda ? 'ADA' : ''),
+    img: row.metadata?.image || row.img || '',
+    verified: row.metadata?.verified || isAda,
+    price: row.price || 0,
+    priceAda: priceInAda,
+    priceEur: 0,
+    change1h: 0,
+    change24h: Number(row.change) || 0,
+    change7d: 0,
+    volume24h: isAda ? (priceStore.adaUsd?.volume24h || 0) : (dexToken?.volume24h || 0),
+    mcap: row.mcap || 0,
+    tvl: null,
+    liquidity: 0,
+    holders: 0,
+    riskRating: row.risk || null,
+    isNew: false,
+    policyLocked: false,
+    fingerprint: row.fingerprint || '',
+    decimals: row.metadata?.decimals || (isAda ? 6 : 0),
+    balance: Number(row.quantity) || 0,
+  };
+  showTokenDetail.value = true;
 };
 
 // Sort the full tokensList first, then paginate

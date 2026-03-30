@@ -7,6 +7,7 @@ export interface FeatureFlags {
   isBlogEnabled: boolean;
   isPhysicalCardOrderingEnabled: boolean;
   isGoMiningEnabled: boolean;
+  isPoolOperatorEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -22,6 +23,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isBlogEnabled: false,
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
+    isPoolOperatorEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -61,6 +63,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isBlogEnabled = launchDarklyService.getFlag('isBlogEnabled', false);
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = launchDarklyService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = launchDarklyService.getFlag('isGoMiningEnabled', false);
+    featureFlagsState.flags.isPoolOperatorEnabled = launchDarklyService.getFlag('isPoolOperatorEnabled', false);
   },
 
   /**
@@ -81,6 +84,9 @@ export const featureFlagsStore = {
     });
     launchDarklyService.onFlagChange('isGoMiningEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isGoMiningEnabled', newValue);
+    });
+    launchDarklyService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isPoolOperatorEnabled', newValue);
     });
   },
 
@@ -120,6 +126,13 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if Pool Operator dashboard is enabled
+   */
+  isPoolOperatorEnabled(): boolean {
+    return featureFlagsState.flags.isPoolOperatorEnabled;
+  },
+
+  /**
    * Reset flags (disable all until reloaded from LaunchDarkly)
    */
   reset(): void {
@@ -129,6 +142,7 @@ export const featureFlagsStore = {
       isBlogEnabled: false,
       isPhysicalCardOrderingEnabled: false,
       isGoMiningEnabled: false,
+      isPoolOperatorEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

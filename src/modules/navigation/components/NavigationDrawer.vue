@@ -93,13 +93,13 @@
               x-small
               color="#FFD700"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
-            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> Maintenance</v-chip>
+            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
           </v-list-item-action>
           <v-list-item-action v-else-if="item.new">
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
-              color="primary"
+              color="geroButton"
               x-small
             >
               {{ $t('common.new') }}
@@ -146,7 +146,6 @@
       <v-list-item three-line class="px-0">
         <v-list-item-avatar style="margin: auto" class="mr-3" size="40">
           <v-img v-if="account" :src="avatar" />
-          <!-- Avatar change dialog commented out -->
         </v-list-item-avatar>
 
         <v-list-item-content class="py-0" style="align-self: initial">
@@ -305,6 +304,7 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
+    { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
     { title: t('navigation.multisig'), icon: assts.multisigTree, link: '/multisig', enabled: false }, // Disabled - under maintenance
     {
       title: t('navigation.geroCard'),
@@ -363,7 +363,6 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
-    // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { header: t('navigation.media'), enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
     { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
@@ -380,7 +379,6 @@ const items = computed((): NavigationItemUnion[] => {
 
 // Loading state for swap feature flag
 const loadingFFs = computed(() => {
-  console.log('loadingFFs:', featureFlagsStore.state);
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
 
@@ -394,7 +392,6 @@ const isGoMiningEnabledByFeatureFlag = computed(() => {
 });
 
 const isBlogEnabledByFeatureFlag = computed(() => {
-  console.log('isBlogEnabledByFeatureFlag:', featureFlagsStore.isBlogEnabled());
   return featureFlagsStore.isBlogEnabled();
 })
 

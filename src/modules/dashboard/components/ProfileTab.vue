@@ -8,7 +8,7 @@
         </v-col>
         <v-col cols="5" style="align-content: center">
           <EditableTextField
-            :placeholder="$t('settings.walletNamePlaceholder')"
+            :placeholder="t('settings.walletNamePlaceholder')"
             :rules="[
               rules.required(),
               rules.minCharacters(3),
@@ -73,11 +73,9 @@
         <v-col cols="7" class="text-left">
           <h3 style="color: white">
             {{ $t('settings.displayLanguage') }}
-            <NotificationDot
-              :show="hasNewLanguage"
-              color="success"
-              :pulse="true"
-            />
+            <v-icon color="error" x-small class="ml-1" v-if="hasNewLanguage">
+              mdi-circle
+            </v-icon>
           </h3>
           <span class="helper">{{ $t('settings.setLanguageHelper') }}</span>
         </v-col>
@@ -170,7 +168,7 @@ const availableLanguages = computed(() => {
 });
 
 // Get store instance
-const { loggedWallet, config } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 const { wallets } = toRefs(geroStore);
 
 // Access Vue instance for i18n
