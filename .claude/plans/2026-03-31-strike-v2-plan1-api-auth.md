@@ -1,12 +1,14 @@
 # Strike v2 Migration — Plan 1: API Client + Auth Layer
 
+> **STATUS: IMPLEMENTED** — All 9 tasks complete on branch `strike-v2-api-auth`. Code below is the original plan spec; actual implementation uses `@noble/ed25519` + `sha256` (not blake2b) per Strike's official TS example. Auth keys are a dedicated Ed25519 key pair generated independently — NOT derived from the Cardano wallet mnemonic.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the v1 Strike Finance API client and backend proxy with v2's Ed25519-authenticated, account-based API.
 
-**Architecture:** The v2 API uses Ed25519 signature authentication (not Cardano tx signing). The wallet's Ed25519 private key signs a message `{METHOD}:{PATH}:{TIMESTAMP}:{NONCE}:{BODY_HASH}` and sends the public key + signature in HTTP headers. The backend proxy injects the partner address but no longer builds/signs CBOR transactions.
+**Architecture:** Strike v2 is a separate execution layer on Cardano. Auth uses a dedicated Ed25519 key pair (NOT the Cardano wallet key). The key pair is generated via `generateStrikeKeyPair()`, public key registered with Strike, private key stored encrypted. Body hash uses sha256 (not blake2b). Signature message: `{METHOD}:{PATH}:{TIMESTAMP}:{NONCE}:{BODY_HASH}`.
 
-**Tech Stack:** TypeScript, Axios, Ed25519 (`@noble/ed25519` or `@cardano-sdk/core`), Java/Spring Boot (backend proxy)
+**Tech Stack:** TypeScript, Axios, `@noble/ed25519`, `@noble/hashes/sha2.js`, Java/Spring Boot (backend proxy)
 
 **Reference specs:** `strike-v2-trade-api.yaml`, `strike-v2-user-api.yaml`, `strike-v2-market-api.yaml`, `strike-v2-common.yaml`, `strike-v2-vaults.yaml`
 
