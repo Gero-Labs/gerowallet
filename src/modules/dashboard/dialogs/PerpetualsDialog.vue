@@ -116,12 +116,22 @@
               >
                 {{ $t(tab.label) }}
               </span>
+              <span class="chart-subtabs-spacer" />
+              <span
+                v-for="tf in ['5m', '1h', '1d']"
+                :key="tf"
+                class="chart-subtab chart-tf"
+                :class="{ 'chart-subtab--active': chartTimeframe === tf }"
+                @click="chartTimeframe = tf"
+              >
+                {{ tf }}
+              </span>
             </div>
             <TradingViewChart
-              :symbol="selectedSymbol"
+              :symbol="'ADA/USD'"
               :data="chartData"
               :enable-realtime="true"
-              :realtime-data="realtimeCandle"
+              :realtime-data="adaRealtimeData"
               width="100%"
               height="100%"
               theme="dark"
@@ -772,6 +782,8 @@ import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketW
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
 import { useStrikePositions } from '@/modules/market/composables/useStrikePositions';
 import { useStrikeHistory } from '@/modules/market/composables/useStrikeHistory';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
+import { priceStore } from '@/stores/priceStore';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { strikeMarketApi } from '@/api/strike-v2.market';
 import { strikeUserApi } from '@/api/strike-v2.user';
@@ -788,7 +800,7 @@ import type {
 } from '@/api/strike-v2.types';
 import snackbar from '@/plugins/snackbar';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
-import type { IChartApi, Time } from 'lightweight-charts';
+import type { IChartApi } from 'lightweight-charts';
 
 // ---------------------------------------------------------------------------
 // Props / emits
@@ -816,8 +828,10 @@ function close() {
 // ---------------------------------------------------------------------------
 
 const { symbols, symbolNames, tickers, fundingRates, loading: marketLoading, getSymbolInfo, getTicker, getFunding } = useStrikeMarket();
+const { getTokenCandles } = useMarketData();
 
-const selectedSymbol = ref<string>('BTC-USD');
+// For Cardano wallets, default to ADA-USD. BTC-USD is for future Bitcoin wallet support.
+const selectedSymbol = ref<string>('ADA-USD');
 
 watch(symbolNames, (names) => {
   if (names.length > 0 && !names.includes(selectedSymbol.value)) {
@@ -921,70 +935,60 @@ const currentPositionSize = computed(() => {
 });
 
 // ---------------------------------------------------------------------------
-// TradingView chart — kline data from WebSocket
+// TradingView chart — ADA/USD candle data from Gero market API
 // ---------------------------------------------------------------------------
 
 interface CandlestickDataPoint {
-  time: Time;
+  time: number;
   open: number;
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 const chartData = ref<CandlestickDataPoint[]>([]);
-const realtimeCandle = ref<CandlestickDataPoint | null>(null);
-const chartInterval = ref('5m');
+const chartTimeframe = ref('5m');
+
+// Live price updates for the chart from Gero price store (ADA/USD)
+const adaRealtimeData = computed(() => priceStore.adaUsd);
+const chartLoading = ref(false);
 let chartInstance: IChartApi | null = null;
-let unsubKline: (() => void) | null = null;
 
 const symbolPrecision = computed(() => {
-  const info = getSymbolInfo(selectedSymbol.value);
-  return info?.pricePrecision ?? 4;
+  // ADA has 4-6 decimal places for price
+  return selectedSymbol.value.startsWith('ADA') ? 5 : 2;
 });
 
 const symbolMinMove = computed(() => {
-  const prec = symbolPrecision.value;
-  return 1 / Math.pow(10, prec);
+  return 1 / Math.pow(10, symbolPrecision.value);
 });
 
 function onChartReady(chart: IChartApi) {
   chartInstance = chart;
 }
 
-function subscribeKlineWs(symbol: string) {
-  if (unsubKline) { unsubKline(); unsubKline = null; }
-  chartData.value = [];
-  realtimeCandle.value = null;
-
-  unsubKline = subscribeKline(symbol, chartInterval.value, (data: unknown) => {
-    const event = data as Record<string, unknown>;
-    const k = event.k as Record<string, unknown>;
-    if (!k) return;
-
-    const candle: CandlestickDataPoint = {
-      time: (Math.floor((k.t as number) / 1000)) as Time,
-      open: parseFloat(k.o as string),
-      high: parseFloat(k.h as string),
-      low: parseFloat(k.l as string),
-      close: parseFloat(k.c as string),
-    };
-
-    if (k.x) {
-      // Closed candle — add to historical data
-      chartData.value = [...chartData.value, candle];
-    } else {
-      // In-progress candle — update real-time
-      realtimeCandle.value = candle;
-    }
-  });
+async function loadChartData() {
+  chartLoading.value = true;
+  try {
+    // Use Gero market API for ADA/USD candles
+    const candles = await getTokenCandles('lovelace', chartTimeframe.value, 'usd');
+    chartData.value = candles;
+  } catch (e) {
+    console.warn('[Perps] Failed to load chart data:', e);
+  } finally {
+    chartLoading.value = false;
+  }
 }
+
+// Reload chart when timeframe changes
+watch(chartTimeframe, () => loadChartData());
 
 // ---------------------------------------------------------------------------
 // WebSocket — order book + trades
 // ---------------------------------------------------------------------------
 
-const { subscribeDepth, subscribeTrades, subscribeKline, connected: wsConnected } = useStrikeMarketWs();
+const { subscribeDepth, subscribeTrades, connected: wsConnected } = useStrikeMarketWs();
 
 interface OBLevel { price: string; size: string; total: string; pct: number; }
 
@@ -1002,7 +1006,6 @@ function subscribeSymbolWs(symbol: string) {
   // Clean up previous
   if (unsubDepth) { unsubDepth(); unsubDepth = null; }
   if (unsubTrades) { unsubTrades(); unsubTrades = null; }
-  subscribeKlineWs(symbol);
   obAsks.value = [];
   obBids.value = [];
   recentTrades.value = [];
@@ -1117,7 +1120,6 @@ watch(selectedSymbol, (sym) => {
 onBeforeUnmount(() => {
   if (unsubDepth) unsubDepth();
   if (unsubTrades) unsubTrades();
-  if (unsubKline) unsubKline();
 });
 
 // ---------------------------------------------------------------------------
@@ -1365,6 +1367,8 @@ watch(selectedSymbol, () => {
 
 watch(dialogVisible, async (open) => {
   if (open) {
+    // Always load chart data (ADA/USD from Gero market API — no Strike auth needed)
+    loadChartData();
     await checkConnection();
     if (isConnected.value) {
       await Promise.all([loadAccount(), onTabChange(0), onTabChange(1)]);
@@ -1664,6 +1668,10 @@ function onLogoError(e: Event) {
 .chart-subtab--active {
   color: #26FAB0;
   background: rgba(38, 250, 176, 0.08);
+}
+
+.chart-subtabs-spacer {
+  flex: 1;
 }
 
 .chart-area >>> .trading-view-chart-container {
