@@ -1,208 +1,137 @@
 <template>
   <v-dialog v-model="dialogVisible" fullscreen transition="dialog-bottom-transition">
-    <v-card dark class="perps-dialog">
+    <v-card dark class="perps-terminal">
 
-      <!-- Toolbar -->
-      <v-toolbar dark flat color="transparent" class="perps-toolbar">
-        <v-btn icon @click="close">
-          <v-icon>mdi-close</v-icon>
+      <!-- ═══════════════════════════════════════════════════════════════════
+           ROW 1 — Symbol Tabs (scrollable)
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div class="symbol-tabs-bar">
+        <v-btn icon small class="mr-1" @click="close">
+          <v-icon size="18">mdi-close</v-icon>
         </v-btn>
 
-        <!-- Symbol selector -->
+        <div class="symbol-tabs-scroll">
+          <div
+            v-for="name in symbolNames"
+            :key="name"
+            class="symbol-tab"
+            :class="{ 'symbol-tab--active': name === selectedSymbol }"
+            @click="selectedSymbol = name"
+          >
+            <v-icon
+              x-small
+              class="mr-1 star-icon"
+              :color="favorites.has(name) ? '#F0B90B' : '#848e9c'"
+              @click.stop="toggleFavorite(name)"
+            >
+              {{ favorites.has(name) ? 'mdi-star' : 'mdi-star-outline' }}
+            </v-icon>
+            <span class="symbol-tab__name">{{ name }}</span>
+            <span
+              class="symbol-tab__change ml-1"
+              :class="getTickerChangeClass(name)"
+            >
+              {{ formatChange(tickers[name]?.priceChangePercent) }}%
+            </span>
+          </div>
+        </div>
+
+        <v-spacer />
+
+        <v-btn icon small :loading="tradingLoading" @click="refreshAll()">
+          <v-icon size="18">mdi-reload</v-icon>
+        </v-btn>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           ROW 2 — Price Info Bar
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div class="price-info-bar">
         <v-select
           v-model="selectedSymbol"
           :items="symbolNames"
           dense
           hide-details
           outlined
-          class="symbol-select ml-2"
-          style="max-width: 180px;"
+          class="symbol-dropdown"
           :attach="true"
           :loading="marketLoading"
         />
 
-        <!-- Price ticker -->
-        <div v-if="currentTicker" class="price-ticker ml-4 d-flex align-center">
-          <span class="ticker-price">{{ formatPrice(currentTicker.lastPrice) }}</span>
-          <span
-            class="ticker-change ml-2"
-            :class="tickerChangeClass"
-          >
-            {{ formatChange(currentTicker.priceChangePercent) }}%
-          </span>
-          <span class="ticker-meta ml-3 d-none d-md-inline">
-            {{ $t('perpetuals.24hVol') }}: {{ formatPrice(currentTicker.volume) }}
-          </span>
-          <span class="ticker-meta ml-3 d-none d-md-inline">
-            {{ $t('perpetuals.markPrice') }}: {{ formatPrice(currentTicker.markPrice) }}
-          </span>
-          <span class="ticker-meta ml-3 d-none d-lg-inline" :class="fundingClass">
-            {{ $t('perpetuals.funding') }}: {{ formatFundingRate(currentFunding?.lastFundingRate) }}
-          </span>
-        </div>
+        <template v-if="currentTicker">
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.markPrice') }}</span>
+            <span class="price-info-value">{{ formatPrice(currentFunding?.markPrice) }}</span>
+          </div>
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.indexPrice') }}</span>
+            <span class="price-info-value">{{ formatPrice(currentFunding?.indexPrice) }}</span>
+          </div>
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.funding') }}</span>
+            <span class="price-info-value" :class="fundingClass">
+              {{ formatFundingRate(currentFunding?.lastFundingRate) }}
+            </span>
+            <span class="price-info-countdown ml-1">/ {{ fundingCountdown }}</span>
+          </div>
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.24hChange') }}</span>
+            <span class="price-info-value" :class="tickerChangeClass">
+              {{ formatChange(currentTicker.priceChangePercent) }}%
+            </span>
+          </div>
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.24hHigh') }}</span>
+            <span class="price-info-value">{{ formatPrice(currentTicker.highPrice) }}</span>
+          </div>
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.24hLow') }}</span>
+            <span class="price-info-value">{{ formatPrice(currentTicker.lowPrice) }}</span>
+          </div>
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.24hVol') }}</span>
+            <span class="price-info-value">{{ formatVolume(currentTicker.volume) }}</span>
+          </div>
+        </template>
+      </div>
 
-        <v-spacer />
+      <!-- ═══════════════════════════════════════════════════════════════════
+           MAIN 3-COLUMN LAYOUT
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div class="terminal-body">
 
-        <!-- Account summary -->
-        <div v-if="account" class="account-summary mr-4 d-none d-md-flex align-center">
-          <span class="account-label">{{ $t('perpetuals.availableBalance') }}:</span>
-          <span class="account-value ml-1">{{ account.available_balance }} USD</span>
-        </div>
-
-        <v-btn icon :loading="tradingLoading" @click="refreshAll">
-          <v-icon>mdi-reload</v-icon>
-        </v-btn>
-      </v-toolbar>
-
-      <!-- Main content -->
-      <v-card-text class="pa-0 perps-content">
-        <v-row no-gutters style="height: 100%;">
-
-          <!-- Left column: Order Form -->
-          <v-col cols="12" md="4" class="pa-3 order-form-col">
-            <!-- Order type toggle -->
-            <v-btn-toggle v-model="orderType" mandatory class="mb-3 d-flex">
-              <v-btn value="market" small class="flex-grow-1">{{ $t('perpetuals.market') }}</v-btn>
-              <v-btn value="limit" small class="flex-grow-1">{{ $t('perpetuals.limit') }}</v-btn>
-            </v-btn-toggle>
-
-            <!-- Side toggle -->
-            <v-btn-toggle v-model="orderSide" mandatory class="mb-3 d-flex">
-              <v-btn value="buy" small color="success" class="flex-grow-1" style="color: #fff;">
-                {{ $t('perpetuals.long') }}
-              </v-btn>
-              <v-btn value="sell" small color="error" class="flex-grow-1" style="color: #fff;">
-                {{ $t('perpetuals.short') }}
-              </v-btn>
-            </v-btn-toggle>
-
-            <!-- Price field (limit only) -->
-            <v-text-field
-              v-if="orderType === 'limit'"
-              v-model="limitPrice"
-              :label="$t('perpetuals.price')"
-              type="number"
-              outlined
-              dense
-              hide-details
-              class="mb-3"
-              prefix="$"
-            />
-
-            <!-- Size -->
-            <v-text-field
-              v-model="orderSize"
-              :label="$t('perpetuals.size')"
-              type="number"
-              outlined
-              dense
-              hide-details
-              class="mb-3"
-            />
-
-            <!-- Leverage -->
-            <div class="mb-3">
-              <div class="d-flex justify-space-between mb-1">
-                <span class="form-label">{{ $t('perpetuals.leverage') }}</span>
-                <span class="form-value">{{ leverage }}x</span>
-              </div>
-              <v-slider
-                v-model="leverage"
-                min="1"
-                max="125"
-                step="1"
-                color="#26FAB0"
-                track-color="rgba(255,255,255,0.2)"
-                thumb-label
-                hide-details
-                dense
-              />
-              <div class="d-flex justify-space-between mt-1">
-                <span class="slider-label">1x</span>
-                <span class="slider-label">25x</span>
-                <span class="slider-label">50x</span>
-                <span class="slider-label">125x</span>
-              </div>
+        <!-- ─────────────────────────────────────────────────────────────────
+             LEFT COLUMN (~60%) — Chart + Positions
+             ───────────────────────────────────────────────────────────────── -->
+        <div class="col-left">
+          <!-- Chart area -->
+          <div class="chart-area">
+            <div class="chart-subtabs">
+              <span
+                v-for="tab in chartSubTabs"
+                :key="tab.id"
+                class="chart-subtab"
+                :class="{ 'chart-subtab--active': activeChartSubTab === tab.id }"
+                @click="activeChartSubTab = tab.id"
+              >
+                {{ $t(tab.label) }}
+              </span>
             </div>
-
-            <!-- TP/SL -->
-            <v-expansion-panels flat class="mb-3">
-              <v-expansion-panel>
-                <v-expansion-panel-header class="pa-0 form-label">
-                  {{ $t('perpetuals.tpSl') }} ({{ $t('common.optional') }})
-                </v-expansion-panel-header>
-                <v-expansion-panel-content>
-                  <v-text-field
-                    v-model="takeProfitPrice"
-                    :label="$t('perpetuals.takeProfitPriceUsd')"
-                    type="number"
-                    outlined
-                    dense
-                    hide-details
-                    class="mb-2 mt-2"
-                    prefix="$"
-                    prepend-inner-icon="mdi-target"
-                  />
-                  <v-text-field
-                    v-model="stopLossPrice"
-                    :label="$t('perpetuals.stopLossPriceUsd')"
-                    type="number"
-                    outlined
-                    dense
-                    hide-details
-                    prefix="$"
-                    prepend-inner-icon="mdi-stop-circle"
-                  />
-                </v-expansion-panel-content>
-              </v-expansion-panel>
-            </v-expansion-panels>
-
-            <!-- Order summary -->
-            <div class="order-summary mb-3">
-              <div class="summary-row">
-                <span>{{ $t('perpetuals.notionalValue') }}</span>
-                <span class="summary-value">{{ notionalValue }}</span>
-              </div>
+            <div class="chart-placeholder">
+              <v-icon size="48" color="#2b2f36">mdi-chart-line</v-icon>
+              <div class="chart-placeholder__symbol">{{ selectedSymbol }}</div>
+              <div class="chart-placeholder__text">{{ $t('perpetuals.chartComingSoon') }}</div>
             </div>
+          </div>
 
-            <!-- Place order button -->
-            <v-btn
-              :color="orderSide === 'buy' ? 'success' : 'error'"
-              block
-              :loading="placingOrder"
-              :disabled="!canPlaceOrder"
-              @click="placeOrderAction()"
-              class="place-order-btn"
-            >
-              <v-icon small class="mr-1">{{ orderType === 'market' ? 'mdi-flash' : 'mdi-target' }}</v-icon>
-              {{ orderSide === 'buy' ? $t('perpetuals.buyLong') : $t('perpetuals.sellShort') }}
-              {{ selectedSymbol }}
-            </v-btn>
-
-            <v-alert v-if="tradingError" type="error" dense class="mt-2" dismissible @input="tradingError = null">
-              {{ tradingError }}
-            </v-alert>
-
-            <!-- Order book -->
-            <div class="order-book mt-4">
-              <div class="section-header mb-2">{{ $t('perpetuals.orderBook') }}</div>
-              <div v-if="currentTicker" class="ob-mid-price text-center my-2">
-                <span class="ob-price">{{ formatPrice(currentTicker.lastPrice) }}</span>
-              </div>
-              <div class="ob-placeholder text-center text--secondary caption">
-                {{ $t('perpetuals.orderBookLive') }}
-              </div>
-            </div>
-          </v-col>
-
-          <!-- Right column: Tabs -->
-          <v-col cols="12" md="8" class="pa-3">
+          <!-- Positions / Orders tabs (spans full width below chart) -->
+          <div class="positions-area">
             <v-tabs
               v-model="activeTab"
               background-color="transparent"
               color="#26FAB0"
               slider-color="#26FAB0"
-              height="36"
+              height="32"
               @change="onTabChange"
             >
               <v-tab class="tab-item">
@@ -224,18 +153,16 @@
               </v-tab>
             </v-tabs>
 
-            <v-divider class="mb-2" />
+            <v-tabs-items v-model="activeTab" class="transparent positions-tabs-items">
 
-            <v-tabs-items v-model="activeTab" class="transparent">
-
-              <!-- Tab 0: Positions -->
+              <!-- Positions -->
               <v-tab-item>
                 <div v-if="tabLoading[0]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="32" />
+                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
                 </div>
                 <div v-else-if="openPositions.length === 0" class="empty-state">
-                  <v-icon size="40" color="grey">mdi-chart-line</v-icon>
-                  <p class="mt-2">{{ $t('perpetuals.noOpenPositions') }}</p>
+                  <v-icon size="32" color="#2b2f36">mdi-chart-line</v-icon>
+                  <p class="mt-1">{{ $t('perpetuals.noOpenPositions') }}</p>
                 </div>
                 <v-data-table
                   v-else
@@ -247,31 +174,32 @@
                   :items-per-page="-1"
                 >
                   <template v-slot:[`item.Side`]="{ item }">
-                    <v-chip
-                      x-small
-                      label
-                      :color="item.Side === 'long' ? 'success' : 'error'"
-                      class="status-chip"
-                    >
-                      {{ item.Side.toUpperCase() }}
-                    </v-chip>
-                  </template>
-                  <template v-slot:[`item.upnl`]="{ item }">
-                    <span :class="parseFloat(item.upnl) >= 0 ? 'positive' : 'negative'">
-                      {{ parseFloat(item.upnl) >= 0 ? '+' : '' }}{{ parseFloat(item.upnl).toFixed(2) }}
+                    <span :class="item.Side === 'long' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
+                      {{ item.Side }}
                     </span>
                   </template>
+                  <template v-slot:[`item.EntryPrice`]="{ item }">
+                    <span class="font-mono">{{ formatPrice(item.EntryPrice) }}</span>
+                  </template>
+                  <template v-slot:[`item.mark_price`]="{ item }">
+                    <span class="font-mono">{{ formatPrice(item.mark_price) }}</span>
+                  </template>
                   <template v-slot:[`item.liquidation_price`]="{ item }">
-                    <span class="warning--text">{{ formatPrice(item.liquidation_price) }}</span>
+                    <span class="font-mono clr-yellow">{{ formatPrice(item.liquidation_price) }}</span>
+                  </template>
+                  <template v-slot:[`item.upnl`]="{ item }">
+                    <span :class="parseFloat(item.upnl) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono fw-600">
+                      {{ parseFloat(item.upnl) >= 0 ? '+' : '' }}{{ parseFloat(item.upnl).toFixed(2) }}
+                    </span>
                   </template>
                   <template v-slot:[`item.actions`]="{ item }">
                     <v-btn
                       x-small
-                      color="error"
-                      outlined
+                      text
+                      color="#F6465D"
                       :loading="closingPosition === item.PositionID"
                       @click="closePosition(item)"
-                      class="action-btn-compact"
+                      class="action-btn"
                     >
                       {{ $t('perpetuals.close') }}
                     </v-btn>
@@ -279,14 +207,11 @@
                 </v-data-table>
               </v-tab-item>
 
-              <!-- Tab 1: Open Orders -->
+              <!-- Open Orders -->
               <v-tab-item>
-                <div class="d-flex justify-end mb-2">
+                <div class="d-flex justify-end pa-1" v-if="openOrders.length > 0">
                   <v-btn
-                    v-if="openOrders.length > 0"
-                    x-small
-                    outlined
-                    color="error"
+                    x-small text color="#F6465D"
                     :loading="cancellingAll"
                     @click="cancelAllOrdersAction()"
                   >
@@ -294,11 +219,11 @@
                   </v-btn>
                 </div>
                 <div v-if="tabLoading[1]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="32" />
+                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
                 </div>
                 <div v-else-if="openOrders.length === 0" class="empty-state">
-                  <v-icon size="40" color="grey">mdi-format-list-bulleted</v-icon>
-                  <p class="mt-2">{{ $t('perpetuals.noOpenOrders') }}</p>
+                  <v-icon size="32" color="#2b2f36">mdi-format-list-bulleted</v-icon>
+                  <p class="mt-1">{{ $t('perpetuals.noOpenOrders') }}</p>
                 </div>
                 <v-data-table
                   v-else
@@ -309,32 +234,17 @@
                   hide-default-footer
                   :items-per-page="-1"
                 >
-                  <template v-slot:[`item.Type`]="{ item }">
-                    <span class="text-uppercase">{{ item.Type }}</span>
-                  </template>
                   <template v-slot:[`item.Side`]="{ item }">
-                    <v-chip
-                      x-small
-                      label
-                      :color="item.Side === 'buy' ? 'success' : 'error'"
-                      class="status-chip"
-                    >
-                      {{ item.Side.toUpperCase() }}
-                    </v-chip>
-                  </template>
-                  <template v-slot:[`item.Status`]="{ item }">
-                    <v-chip x-small label :class="orderStatusClass(item.Status)" class="status-chip">
-                      {{ item.Status }}
-                    </v-chip>
+                    <span :class="item.Side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
+                      {{ item.Side }}
+                    </span>
                   </template>
                   <template v-slot:[`item.actions`]="{ item }">
                     <v-btn
-                      x-small
-                      outlined
-                      color="error"
+                      x-small text color="#F6465D"
                       :loading="cancellingOrder === item.ID"
                       @click="cancelOrderAction(item)"
-                      class="action-btn-compact"
+                      class="action-btn"
                     >
                       {{ $t('perpetuals.cancel') }}
                     </v-btn>
@@ -342,14 +252,14 @@
                 </v-data-table>
               </v-tab-item>
 
-              <!-- Tab 2: Order History -->
+              <!-- Order History -->
               <v-tab-item>
                 <div v-if="tabLoading[2]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="32" />
+                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
                 </div>
                 <div v-else-if="orderHistory.length === 0" class="empty-state">
-                  <v-icon size="40" color="grey">mdi-history</v-icon>
-                  <p class="mt-2">{{ $t('perpetuals.noOrderHistory') }}</p>
+                  <v-icon size="32" color="#2b2f36">mdi-history</v-icon>
+                  <p class="mt-1">{{ $t('perpetuals.noOrderHistory') }}</p>
                 </div>
                 <v-data-table
                   v-else
@@ -361,19 +271,9 @@
                   :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
                 >
                   <template v-slot:[`item.side`]="{ item }">
-                    <v-chip
-                      x-small
-                      label
-                      :color="item.side === 'buy' ? 'success' : 'error'"
-                      class="status-chip"
-                    >
-                      {{ item.side.toUpperCase() }}
-                    </v-chip>
-                  </template>
-                  <template v-slot:[`item.status`]="{ item }">
-                    <v-chip x-small label :class="orderStatusClass(item.status)" class="status-chip">
-                      {{ item.status }}
-                    </v-chip>
+                    <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
+                      {{ item.side }}
+                    </span>
                   </template>
                   <template v-slot:[`item.created_at`]="{ item }">
                     {{ formatTime(item.created_at) }}
@@ -381,14 +281,14 @@
                 </v-data-table>
               </v-tab-item>
 
-              <!-- Tab 3: Fill History -->
+              <!-- Fill / Trade History -->
               <v-tab-item>
                 <div v-if="tabLoading[3]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="32" />
+                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
                 </div>
                 <div v-else-if="fillHistory.length === 0" class="empty-state">
-                  <v-icon size="40" color="grey">mdi-swap-horizontal</v-icon>
-                  <p class="mt-2">{{ $t('perpetuals.noFillHistory') }}</p>
+                  <v-icon size="32" color="#2b2f36">mdi-swap-horizontal</v-icon>
+                  <p class="mt-1">{{ $t('perpetuals.noFillHistory') }}</p>
                 </div>
                 <v-data-table
                   v-else
@@ -400,30 +300,14 @@
                   :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
                 >
                   <template v-slot:[`item.side`]="{ item }">
-                    <v-chip
-                      x-small
-                      label
-                      :color="item.side === 'buy' ? 'success' : 'error'"
-                      class="status-chip"
-                    >
-                      {{ item.side.toUpperCase() }}
-                    </v-chip>
-                  </template>
-                  <template v-slot:[`item.realized_pnl`]="{ item }">
-                    <span :class="parseFloat(item.realized_pnl) >= 0 ? 'positive' : 'negative'">
-                      {{ parseFloat(item.realized_pnl) >= 0 ? '+' : '' }}{{ parseFloat(item.realized_pnl).toFixed(4) }}
+                    <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
+                      {{ item.side }}
                     </span>
                   </template>
-                  <template v-slot:[`item.auto_close_type`]="{ item }">
-                    <v-chip
-                      v-if="item.auto_close_type === 'LIQUIDATION'"
-                      x-small
-                      label
-                      color="error"
-                      class="status-chip"
-                    >
-                      {{ $t('perpetuals.liquidation') }}
-                    </v-chip>
+                  <template v-slot:[`item.realized_pnl`]="{ item }">
+                    <span :class="parseFloat(item.realized_pnl) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono">
+                      {{ parseFloat(item.realized_pnl) >= 0 ? '+' : '' }}{{ parseFloat(item.realized_pnl).toFixed(4) }}
+                    </span>
                   </template>
                   <template v-slot:[`item.time`]="{ item }">
                     {{ formatTime(item.time) }}
@@ -431,14 +315,14 @@
                 </v-data-table>
               </v-tab-item>
 
-              <!-- Tab 4: Funding History -->
+              <!-- Funding History -->
               <v-tab-item>
                 <div v-if="tabLoading[4]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="32" />
+                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
                 </div>
                 <div v-else-if="fundingHistory.length === 0" class="empty-state">
-                  <v-icon size="40" color="grey">mdi-percent</v-icon>
-                  <p class="mt-2">{{ $t('perpetuals.noFundingHistory') }}</p>
+                  <v-icon size="32" color="#2b2f36">mdi-percent</v-icon>
+                  <p class="mt-1">{{ $t('perpetuals.noFundingHistory') }}</p>
                 </div>
                 <v-data-table
                   v-else
@@ -450,7 +334,7 @@
                   :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
                 >
                   <template v-slot:[`item.income`]="{ item }">
-                    <span :class="parseFloat(item.income) >= 0 ? 'positive' : 'negative'">
+                    <span :class="parseFloat(item.income) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono">
                       {{ parseFloat(item.income) >= 0 ? '+' : '' }}{{ parseFloat(item.income).toFixed(6) }}
                       {{ item.asset }}
                     </span>
@@ -462,14 +346,405 @@
               </v-tab-item>
 
             </v-tabs-items>
-          </v-col>
+          </div>
+        </div>
 
-        </v-row>
-      </v-card-text>
+        <!-- ─────────────────────────────────────────────────────────────────
+             CENTER COLUMN (~20%) — Order Book
+             ───────────────────────────────────────────────────────────────── -->
+        <div class="col-center">
+          <!-- OB / Trades toggle -->
+          <div class="ob-header">
+            <span
+              class="ob-tab"
+              :class="{ 'ob-tab--active': obView === 'book' }"
+              @click="obView = 'book'"
+            >
+              {{ $t('perpetuals.orderBook') }}
+            </span>
+            <span
+              class="ob-tab"
+              :class="{ 'ob-tab--active': obView === 'trades' }"
+              @click="obView = 'trades'"
+            >
+              {{ $t('perpetuals.trades') }}
+            </span>
+          </div>
+
+          <!-- Order Book view -->
+          <div v-if="obView === 'book'" class="ob-content">
+            <div class="ob-col-headers">
+              <span>{{ $t('perpetuals.price') }} (USD)</span>
+              <span>{{ $t('perpetuals.size') }} ({{ baseAsset }})</span>
+              <span>{{ $t('perpetuals.total') }} ({{ baseAsset }})</span>
+            </div>
+
+            <!-- Asks (red, reversed so lowest ask is at bottom) -->
+            <div class="ob-asks">
+              <div
+                v-for="(ask, i) in displayAsks"
+                :key="'a' + i"
+                class="ob-row ob-row--ask"
+              >
+                <div
+                  class="ob-row-bg ob-row-bg--ask"
+                  :style="{ width: ask.pct + '%' }"
+                />
+                <span class="ob-cell ob-price clr-red">{{ ask.price }}</span>
+                <span class="ob-cell">{{ ask.size }}</span>
+                <span class="ob-cell">{{ ask.total }}</span>
+              </div>
+            </div>
+
+            <!-- Spread / mid-price -->
+            <div class="ob-spread">
+              <span class="ob-spread__price" :class="lastTradeClass">
+                {{ formatPrice(currentTicker?.lastPrice) }}
+              </span>
+              <span class="ob-spread__info">
+                {{ $t('perpetuals.spread') }}: {{ spreadValue }} / {{ spreadPercent }}
+              </span>
+            </div>
+
+            <!-- Bids (green) -->
+            <div class="ob-bids">
+              <div
+                v-for="(bid, i) in displayBids"
+                :key="'b' + i"
+                class="ob-row ob-row--bid"
+              >
+                <div
+                  class="ob-row-bg ob-row-bg--bid"
+                  :style="{ width: bid.pct + '%' }"
+                />
+                <span class="ob-cell ob-price clr-green">{{ bid.price }}</span>
+                <span class="ob-cell">{{ bid.size }}</span>
+                <span class="ob-cell">{{ bid.total }}</span>
+              </div>
+            </div>
+
+            <!-- Buy / Sell ratio bar -->
+            <div class="ob-ratio">
+              <div class="ob-ratio__bar">
+                <div class="ob-ratio__buy" :style="{ width: buyRatioPct + '%' }" />
+                <div class="ob-ratio__sell" :style="{ width: (100 - buyRatioPct) + '%' }" />
+              </div>
+              <div class="ob-ratio__labels">
+                <span class="clr-green">{{ buyRatioPct.toFixed(1) }}%</span>
+                <span class="clr-red">{{ (100 - buyRatioPct).toFixed(1) }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Trades view -->
+          <div v-else class="ob-content">
+            <div class="ob-col-headers">
+              <span>{{ $t('perpetuals.price') }} (USD)</span>
+              <span>{{ $t('perpetuals.size') }} ({{ baseAsset }})</span>
+              <span>{{ $t('perpetuals.time') }}</span>
+            </div>
+            <div class="ob-trades-list">
+              <div
+                v-for="(trade, i) in recentTrades"
+                :key="'t' + i"
+                class="ob-row"
+              >
+                <span class="ob-cell ob-price" :class="trade.isBuyerMaker ? 'clr-red' : 'clr-green'">
+                  {{ formatPrice(trade.price) }}
+                </span>
+                <span class="ob-cell">{{ formatSize(trade.qty) }}</span>
+                <span class="ob-cell ob-time">{{ formatTradeTime(trade.time) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─────────────────────────────────────────────────────────────────
+             RIGHT COLUMN (~20%) — Order Form + Account
+             ───────────────────────────────────────────────────────────────── -->
+        <div class="col-right">
+          <div class="order-form-scroll">
+
+            <!-- Margin mode / Leverage / Position mode -->
+            <div class="of-margin-row">
+              <v-btn-toggle v-model="marginMode" mandatory dense class="of-toggle of-toggle--margin">
+                <v-btn value="cross" x-small>{{ $t('perpetuals.cross') }}</v-btn>
+                <v-btn value="isolated" x-small>{{ $t('perpetuals.isolated') }}</v-btn>
+              </v-btn-toggle>
+
+              <v-menu offset-y :attach="true">
+                <template v-slot:activator="{ on, attrs }">
+                  <v-btn x-small outlined class="of-leverage-btn" v-bind="attrs" v-on="on">
+                    {{ leverage }}x
+                  </v-btn>
+                </template>
+                <v-card dark class="panel-bg pa-3" style="width: 220px;">
+                  <div class="form-label mb-2">{{ $t('perpetuals.leverage') }}</div>
+                  <v-slider
+                    v-model="leverage"
+                    min="1"
+                    max="125"
+                    step="1"
+                    color="#26FAB0"
+                    track-color="rgba(255,255,255,0.1)"
+                    thumb-label
+                    hide-details
+                    dense
+                  />
+                  <div class="d-flex justify-space-between mt-1">
+                    <span class="slider-tick">1x</span>
+                    <span class="slider-tick">25x</span>
+                    <span class="slider-tick">50x</span>
+                    <span class="slider-tick">125x</span>
+                  </div>
+                  <v-btn
+                    small block color="#26FAB0" class="mt-2"
+                    style="color: #0b0e11;"
+                    @click="applyLeverage()"
+                  >
+                    {{ $t('perpetuals.confirm') }}
+                  </v-btn>
+                </v-card>
+              </v-menu>
+
+              <span class="of-posmode-label">{{ $t('perpetuals.oneWay') }}</span>
+            </div>
+
+            <!-- Order type tabs -->
+            <div class="of-type-tabs">
+              <span
+                v-for="t in orderTypes"
+                :key="t.value"
+                class="of-type-tab"
+                :class="{ 'of-type-tab--active': orderType === t.value }"
+                @click="orderType = t.value"
+              >
+                {{ $t(t.label) }}
+              </span>
+            </div>
+
+            <!-- Side toggle: Long/Buy — Short/Sell -->
+            <div class="of-side-toggle">
+              <div
+                class="of-side-btn of-side-btn--buy"
+                :class="{ 'of-side-btn--active': orderSide === 'buy' }"
+                @click="orderSide = 'buy'"
+              >
+                {{ $t('perpetuals.buyLong') }}
+              </div>
+              <div
+                class="of-side-btn of-side-btn--sell"
+                :class="{ 'of-side-btn--active': orderSide === 'sell' }"
+                @click="orderSide = 'sell'"
+              >
+                {{ $t('perpetuals.sellShort') }}
+              </div>
+            </div>
+
+            <!-- Available balance + current position -->
+            <div class="of-info-row">
+              <span class="form-label">{{ $t('perpetuals.availableBalance') }}</span>
+              <span class="form-value">${{ formatBalance(account?.available_balance) }}</span>
+            </div>
+            <div class="of-info-row">
+              <span class="form-label">{{ $t('perpetuals.currentPosition') }}</span>
+              <span class="form-value">{{ currentPositionSize }} {{ baseAsset }}</span>
+            </div>
+
+            <!-- Price field (limit / stop-limit) -->
+            <v-text-field
+              v-if="orderType !== 'market'"
+              v-model="limitPrice"
+              :label="$t('perpetuals.price')"
+              type="number"
+              outlined
+              dense
+              hide-details
+              class="of-input mb-2"
+              prefix="$"
+            />
+
+            <!-- Stop price (stop-limit) -->
+            <v-text-field
+              v-if="orderType === 'stop_limit'"
+              v-model="stopPrice"
+              :label="$t('perpetuals.stopPrice')"
+              type="number"
+              outlined
+              dense
+              hide-details
+              class="of-input mb-2"
+              prefix="$"
+            />
+
+            <!-- Size input -->
+            <div class="of-size-row">
+              <v-text-field
+                v-model="orderSize"
+                :label="$t('perpetuals.size')"
+                type="number"
+                outlined
+                dense
+                hide-details
+                class="of-input of-size-input"
+              />
+              <v-select
+                v-model="sizeAsset"
+                :items="[baseAsset, 'USD']"
+                dense
+                outlined
+                hide-details
+                class="of-size-asset"
+                :attach="true"
+              />
+            </div>
+
+            <!-- Size slider -->
+            <div class="of-slider-row">
+              <v-slider
+                v-model="sizePercent"
+                min="0"
+                max="100"
+                step="1"
+                color="#26FAB0"
+                track-color="rgba(255,255,255,0.1)"
+                hide-details
+                dense
+                class="of-slider"
+              />
+              <span class="of-slider-pct">{{ sizePercent }}%</span>
+            </div>
+
+            <!-- Checkboxes: Reduce Only + TP/SL -->
+            <div class="of-checkboxes">
+              <v-checkbox
+                v-model="reduceOnly"
+                :label="$t('perpetuals.reduceOnly')"
+                hide-details
+                dense
+                class="of-checkbox"
+              />
+              <v-checkbox
+                v-model="showTpSl"
+                :label="$t('perpetuals.tpSl')"
+                hide-details
+                dense
+                class="of-checkbox"
+              />
+            </div>
+
+            <!-- TP/SL inputs (expanded) -->
+            <div v-if="showTpSl" class="of-tpsl">
+              <v-text-field
+                v-model="takeProfitPrice"
+                :label="$t('perpetuals.takeProfitPriceUsd')"
+                type="number"
+                outlined
+                dense
+                hide-details
+                class="of-input mb-2"
+                prefix="$"
+              />
+              <v-text-field
+                v-model="stopLossPrice"
+                :label="$t('perpetuals.stopLossPriceUsd')"
+                type="number"
+                outlined
+                dense
+                hide-details
+                class="of-input"
+                prefix="$"
+              />
+            </div>
+
+            <!-- Place Order button -->
+            <v-btn
+              block
+              :color="orderSide === 'buy' ? '#26FAB0' : '#F6465D'"
+              :loading="placingOrder"
+              :disabled="!canPlaceOrder"
+              @click="placeOrderAction()"
+              class="of-place-btn mt-3"
+              :style="{ color: orderSide === 'buy' ? '#0b0e11' : '#ffffff' }"
+            >
+              {{ orderSide === 'buy' ? $t('perpetuals.buyLong') : $t('perpetuals.sellShort') }}
+              {{ selectedSymbol }}
+            </v-btn>
+
+            <v-alert v-if="tradingError" type="error" dense class="mt-2" dismissible @input="tradingError = null">
+              {{ tradingError }}
+            </v-alert>
+
+            <!-- Order info estimates -->
+            <div class="of-estimates mt-3">
+              <div class="of-est-row">
+                <span>{{ $t('perpetuals.estLiqPrice') }}</span>
+                <span class="form-value">—</span>
+              </div>
+              <div class="of-est-row">
+                <span>{{ $t('perpetuals.margin') }}</span>
+                <span class="form-value">—</span>
+              </div>
+              <div class="of-est-row">
+                <span>{{ $t('perpetuals.orderValue') }}</span>
+                <span class="form-value">{{ notionalValue }}</span>
+              </div>
+              <div class="of-est-row">
+                <span>{{ $t('perpetuals.estFee') }}</span>
+                <span class="form-value">—</span>
+              </div>
+            </div>
+
+            <!-- Divider -->
+            <v-divider class="my-3" style="border-color: #2b2f36;" />
+
+            <!-- Deposit / Withdraw -->
+            <div class="of-deposit-row">
+              <v-btn small outlined class="of-deposit-btn" color="#26FAB0">
+                {{ $t('perpetuals.deposit') }}
+              </v-btn>
+              <v-btn small outlined class="of-deposit-btn" color="#848e9c">
+                {{ $t('perpetuals.withdraw') }}
+              </v-btn>
+            </div>
+
+            <!-- Account overview -->
+            <div class="of-account-section mt-3">
+              <div class="of-account-header">{{ $t('perpetuals.accountOverview') }}</div>
+              <div class="of-account-row">
+                <span>{{ $t('perpetuals.accountValue') }}</span>
+                <span class="form-value">${{ formatBalance(account?.wallet_balance) }}</span>
+              </div>
+              <div class="of-account-row">
+                <span>{{ $t('perpetuals.availableBalance') }}</span>
+                <span class="form-value">${{ formatBalance(account?.available_balance) }}</span>
+              </div>
+              <div class="of-account-row">
+                <span>{{ $t('perpetuals.unrealizedPnl') }}</span>
+                <span
+                  class="form-value"
+                  :class="parseFloat(account?.unrealized_pnl ?? '0') >= 0 ? 'clr-green' : 'clr-red'"
+                >
+                  ${{ formatBalance(account?.unrealized_pnl) }}
+                </span>
+              </div>
+              <div class="of-account-row">
+                <span>{{ $t('perpetuals.marginRatio') }}</span>
+                <span class="form-value">{{ marginRatioDisplay }}%</span>
+              </div>
+              <div class="of-account-row">
+                <span>{{ $t('perpetuals.maintenanceMargin') }}</span>
+                <span class="form-value">${{ formatBalance(account?.maintenance_margin) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
 
       <!-- Footer -->
-      <div class="d-flex align-center justify-center py-1 perps-footer">
-        <span class="powered-by-text mr-2">{{ $t('common.poweredBy') }}</span>
+      <div class="terminal-footer">
+        <span class="powered-by">{{ $t('common.poweredBy') }}</span>
         <img
           src="https://app.strikefinance.org/logo.svg"
           alt="Strike Finance"
@@ -483,10 +758,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onBeforeUnmount, reactive } from 'vue';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
+import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketWs';
+import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
+import { useStrikePositions } from '@/modules/market/composables/useStrikePositions';
+import { useStrikeHistory } from '@/modules/market/composables/useStrikeHistory';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
+import { strikeMarketApi } from '@/api/strike-v2.market';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { strikeTradeApi } from '@/api/strike-v2.trade';
 import type {
@@ -496,6 +776,8 @@ import type {
   FillHistoryResult,
   FundingHistoryResult,
   CreateOrderRequest,
+  TradeResponse,
+  MarginMode,
 } from '@/api/strike-v2.types';
 import snackbar from '@/plugins/snackbar';
 
@@ -521,7 +803,7 @@ function close() {
 }
 
 // ---------------------------------------------------------------------------
-// Market data
+// Market data (singleton)
 // ---------------------------------------------------------------------------
 
 const { symbols, symbolNames, tickers, fundingRates, loading: marketLoading } = useStrikeMarket();
@@ -537,18 +819,55 @@ watch(symbolNames, (names) => {
 const currentTicker = computed(() => tickers.value[selectedSymbol.value]);
 const currentFunding = computed(() => fundingRates.value[selectedSymbol.value]);
 
+const baseAsset = computed(() => {
+  const sym = selectedSymbol.value;
+  const idx = sym.indexOf('-');
+  return idx > 0 ? sym.substring(0, idx) : sym;
+});
+
 const tickerChangeClass = computed(() => {
   const pct = parseFloat(currentTicker.value?.priceChangePercent ?? '0');
-  return pct >= 0 ? 'positive' : 'negative';
+  return pct >= 0 ? 'clr-green' : 'clr-red';
 });
 
 const fundingClass = computed(() => {
   const rate = parseFloat(currentFunding.value?.lastFundingRate ?? '0');
-  return rate >= 0 ? 'positive' : 'negative';
+  return rate >= 0 ? 'clr-green' : 'clr-red';
 });
 
+function getTickerChangeClass(name: string): string {
+  const pct = parseFloat(tickers.value[name]?.priceChangePercent ?? '0');
+  return pct >= 0 ? 'clr-green' : 'clr-red';
+}
+
+// Funding countdown
+const fundingCountdown = ref('--:--:--');
+let countdownInterval: ReturnType<typeof setInterval> | null = null;
+
+function updateFundingCountdown() {
+  const nextTime = currentFunding.value?.nextFundingTime;
+  if (!nextTime) { fundingCountdown.value = '--:--:--'; return; }
+  const diff = nextTime - Date.now();
+  if (diff <= 0) { fundingCountdown.value = '00:00:00'; return; }
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  const s = Math.floor((diff % 60_000) / 1000);
+  fundingCountdown.value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+countdownInterval = setInterval(updateFundingCountdown, 1000);
+onBeforeUnmount(() => { if (countdownInterval) clearInterval(countdownInterval); });
+
+// Favorites
+const favorites = reactive(new Set<string>());
+
+function toggleFavorite(name: string) {
+  if (favorites.has(name)) favorites.delete(name);
+  else favorites.add(name);
+}
+
 // ---------------------------------------------------------------------------
-// Onboarding / auth — load API keys before any authenticated call
+// Onboarding / auth
 // ---------------------------------------------------------------------------
 
 const { isConnected, checkConnection } = useStrikeOnboarding();
@@ -568,33 +887,206 @@ const {
   loadPositions,
   cancelOrder,
   cancelAllOrders,
+  setLeverage: apiSetLeverage,
+  setMarginMode: apiSetMarginMode,
 } = useStrikeTrading();
 
 const tradingError = ref<string | null>(null);
 
-// Only positions with non-zero size
 const openPositions = computed<Position[]>(() =>
   (positions.value ?? []).filter((p) => parseFloat(p.Size) !== 0),
 );
+
+const currentPositionSize = computed(() => {
+  const pos = openPositions.value.find((p) => p.symbol === selectedSymbol.value);
+  if (!pos) return '0.00';
+  return parseFloat(pos.Size).toFixed(2);
+});
+
+// ---------------------------------------------------------------------------
+// WebSocket — order book + trades
+// ---------------------------------------------------------------------------
+
+const { subscribeDepth, subscribeTrades, connected: wsConnected } = useStrikeMarketWs();
+
+interface OBLevel { price: string; size: string; total: string; pct: number; }
+
+const obAsks = ref<[string, string][]>([]);
+const obBids = ref<[string, string][]>([]);
+const recentTrades = ref<TradeResponse[]>([]);
+const obView = ref<'book' | 'trades'>('book');
+
+const OB_DEPTH = 14;
+
+let unsubDepth: (() => void) | null = null;
+let unsubTrades: (() => void) | null = null;
+
+function subscribeSymbolWs(symbol: string) {
+  // Clean up previous
+  if (unsubDepth) { unsubDepth(); unsubDepth = null; }
+  if (unsubTrades) { unsubTrades(); unsubTrades = null; }
+  obAsks.value = [];
+  obBids.value = [];
+  recentTrades.value = [];
+
+  // Fetch initial order book snapshot
+  strikeMarketApi.getOrderBook(symbol, OB_DEPTH * 2).then((snap) => {
+    obAsks.value = snap.asks ?? [];
+    obBids.value = snap.bids ?? [];
+  }).catch(() => {});
+
+  // WS depth updates
+  unsubDepth = subscribeDepth(symbol, (data: unknown) => {
+    const d = data as { a?: [string, string][]; b?: [string, string][] };
+    if (d.a) obAsks.value = mergeOBSide(obAsks.value, d.a, 'ask');
+    if (d.b) obBids.value = mergeOBSide(obBids.value, d.b, 'bid');
+  });
+
+  // WS trades
+  unsubTrades = subscribeTrades(symbol, (data: unknown) => {
+    const t = data as TradeResponse;
+    if (t && t.price) {
+      recentTrades.value = [t, ...recentTrades.value].slice(0, 50);
+    }
+  });
+}
+
+function mergeOBSide(
+  existing: [string, string][],
+  updates: [string, string][],
+  side: 'ask' | 'bid',
+): [string, string][] {
+  const map = new Map<string, string>();
+  for (const [p, q] of existing) map.set(p, q);
+  for (const [p, q] of updates) {
+    if (parseFloat(q) === 0) map.delete(p);
+    else map.set(p, q);
+  }
+  const entries = Array.from(map.entries());
+  entries.sort((a, b) => {
+    const diff = parseFloat(a[0]) - parseFloat(b[0]);
+    return side === 'ask' ? diff : -diff;
+  });
+  return entries;
+}
+
+const displayAsks = computed<OBLevel[]>(() => {
+  // Show lowest asks, reversed so lowest is at bottom
+  const sliced = obAsks.value.slice(0, OB_DEPTH);
+  let cumTotal = 0;
+  const levels = sliced.map(([p, q]) => {
+    cumTotal += parseFloat(q);
+    return { price: p, size: q, total: cumTotal.toFixed(4), cumTotal };
+  });
+  const maxTotal = levels.length > 0 ? levels[levels.length - 1].cumTotal : 1;
+  return levels.reverse().map((l) => ({
+    price: l.price,
+    size: l.size,
+    total: l.total,
+    pct: (l.cumTotal / maxTotal) * 100,
+  }));
+});
+
+const displayBids = computed<OBLevel[]>(() => {
+  const sliced = obBids.value.slice(0, OB_DEPTH);
+  let cumTotal = 0;
+  const levels = sliced.map(([p, q]) => {
+    cumTotal += parseFloat(q);
+    return { price: p, size: q, total: cumTotal.toFixed(4), cumTotal };
+  });
+  const maxTotal = levels.length > 0 ? levels[levels.length - 1].cumTotal : 1;
+  return levels.map((l) => ({
+    price: l.price,
+    size: l.size,
+    total: l.total,
+    pct: (l.cumTotal / maxTotal) * 100,
+  }));
+});
+
+const spreadValue = computed(() => {
+  if (obAsks.value.length === 0 || obBids.value.length === 0) return '—';
+  const bestAsk = parseFloat(obAsks.value[0][0]);
+  const bestBid = parseFloat(obBids.value[0][0]);
+  return (bestAsk - bestBid).toFixed(5);
+});
+
+const spreadPercent = computed(() => {
+  if (obAsks.value.length === 0 || obBids.value.length === 0) return '—';
+  const bestAsk = parseFloat(obAsks.value[0][0]);
+  const bestBid = parseFloat(obBids.value[0][0]);
+  const mid = (bestAsk + bestBid) / 2;
+  if (mid === 0) return '0%';
+  return ((bestAsk - bestBid) / mid * 100).toFixed(3) + '%';
+});
+
+const buyRatioPct = computed(() => {
+  const bidVol = obBids.value.slice(0, OB_DEPTH).reduce((s, [, q]) => s + parseFloat(q), 0);
+  const askVol = obAsks.value.slice(0, OB_DEPTH).reduce((s, [, q]) => s + parseFloat(q), 0);
+  const total = bidVol + askVol;
+  return total > 0 ? (bidVol / total) * 100 : 50;
+});
+
+const lastTradeClass = computed(() => {
+  if (recentTrades.value.length === 0) return 'clr-green';
+  return recentTrades.value[0].isBuyerMaker ? 'clr-red' : 'clr-green';
+});
+
+// Subscribe on symbol change
+watch(selectedSymbol, (sym) => {
+  subscribeSymbolWs(sym);
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (unsubDepth) unsubDepth();
+  if (unsubTrades) unsubTrades();
+});
+
+// ---------------------------------------------------------------------------
+// Chart sub-tabs
+// ---------------------------------------------------------------------------
+
+const chartSubTabs = [
+  { id: 'chart', label: 'perpetuals.chart' },
+  { id: 'data', label: 'perpetuals.data' },
+  { id: 'depth', label: 'perpetuals.depth' },
+  { id: 'liquidations', label: 'perpetuals.liquidations' },
+  { id: 'details', label: 'perpetuals.details' },
+];
+const activeChartSubTab = ref('chart');
 
 // ---------------------------------------------------------------------------
 // Order form state
 // ---------------------------------------------------------------------------
 
-const orderType = ref<'market' | 'limit'>('market');
+const orderTypes = [
+  { value: 'market', label: 'perpetuals.market' },
+  { value: 'limit', label: 'perpetuals.limit' },
+  { value: 'stop_limit', label: 'perpetuals.stopLimit' },
+] as const;
+
+const orderType = ref<'market' | 'limit' | 'stop_limit'>('market');
 const orderSide = ref<'buy' | 'sell'>('buy');
 const orderSize = ref<string>('');
 const limitPrice = ref<string>('');
-const leverage = ref<number>(5);
+const stopPrice = ref<string>('');
+const leverage = ref<number>(20);
+const marginMode = ref<MarginMode>('cross');
+const sizeAsset = ref<string>('ADA');
+const sizePercent = ref<number>(0);
+const reduceOnly = ref(false);
+const showTpSl = ref(false);
 const takeProfitPrice = ref<string>('');
 const stopLossPrice = ref<string>('');
 const placingOrder = ref(false);
 
+// Update sizeAsset when symbol changes
+watch(baseAsset, (v) => { sizeAsset.value = v; });
+
 const notionalValue = computed(() => {
   const size = parseFloat(orderSize.value);
-  const price = orderType.value === 'limit'
-    ? parseFloat(limitPrice.value)
-    : parseFloat(currentTicker.value?.lastPrice ?? '0');
+  const price = orderType.value === 'market'
+    ? parseFloat(currentTicker.value?.lastPrice ?? '0')
+    : parseFloat(limitPrice.value || '0');
   if (!size || !price) return '$0.00';
   return `$${(size * price).toFixed(2)}`;
 });
@@ -602,12 +1094,32 @@ const notionalValue = computed(() => {
 const canPlaceOrder = computed(() => {
   const size = parseFloat(orderSize.value);
   if (!size || size <= 0) return false;
-  if (orderType.value === 'limit') {
+  if (orderType.value === 'limit' || orderType.value === 'stop_limit') {
     const price = parseFloat(limitPrice.value);
     if (!price || price <= 0) return false;
   }
+  if (orderType.value === 'stop_limit') {
+    const sp = parseFloat(stopPrice.value);
+    if (!sp || sp <= 0) return false;
+  }
   return true;
 });
+
+const marginRatioDisplay = computed(() => {
+  const margin = parseFloat(account.value?.total_margin ?? '0');
+  const balance = parseFloat(account.value?.margin_balance ?? '0');
+  if (!margin || !balance) return '0.00';
+  return ((margin / balance) * 100).toFixed(2);
+});
+
+async function applyLeverage() {
+  try {
+    await apiSetLeverage(selectedSymbol.value, leverage.value);
+    snackbar.show({ message: `Leverage set to ${leverage.value}x`, color: 'success' });
+  } catch (e) {
+    snackbar.show({ message: e instanceof Error ? e.message : String(e), color: 'error' });
+  }
+}
 
 async function placeOrderAction() {
   if (!canPlaceOrder.value) return;
@@ -618,11 +1130,17 @@ async function placeOrderAction() {
     const params: CreateOrderRequest = {
       symbol: selectedSymbol.value,
       side: orderSide.value,
-      type: orderType.value,
+      type: orderType.value === 'stop_limit' ? 'stop' : orderType.value,
       size: orderSize.value,
     };
-    if (orderType.value === 'limit' && limitPrice.value) {
+    if (orderType.value !== 'market' && limitPrice.value) {
       params.price = limitPrice.value;
+    }
+    if (orderType.value === 'stop_limit' && stopPrice.value) {
+      params.stop_price = stopPrice.value;
+    }
+    if (reduceOnly.value) {
+      params.reduce_only = true;
     }
 
     let order: Order;
@@ -653,8 +1171,10 @@ async function placeOrderAction() {
     snackbar.show({ message: `Order placed: ${order.ID ?? order.ClientOrderID}`, color: 'success' });
     orderSize.value = '';
     limitPrice.value = '';
+    stopPrice.value = '';
     takeProfitPrice.value = '';
     stopLossPrice.value = '';
+    sizePercent.value = 0;
     await Promise.all([loadOpenOrders(selectedSymbol.value), loadAccount()]);
   } catch (e) {
     tradingError.value = e instanceof Error ? e.message : String(e);
@@ -759,16 +1279,13 @@ async function onTabChange(tab: number) {
   }
 }
 
-// Reset loaded state when symbol changes so data is refreshed
 watch(selectedSymbol, () => {
   tabLoaded.value = { 0: false, 1: false, 2: false, 3: false, 4: false };
   onTabChange(activeTab.value);
 });
 
-// Load initial data when dialog opens
 watch(dialogVisible, async (open) => {
   if (open) {
-    // Ensure API keys are loaded before any authenticated call
     await checkConnection();
     if (isConnected.value) {
       await Promise.all([loadAccount(), onTabChange(0), onTabChange(1)]);
@@ -793,10 +1310,12 @@ const positionHeaders = [
   { text: 'Size', value: 'Size', sortable: true },
   { text: 'Entry Price', value: 'EntryPrice', sortable: true },
   { text: 'Mark Price', value: 'mark_price', sortable: false },
-  { text: 'PnL', value: 'upnl', sortable: true },
-  { text: 'Leverage', value: 'Leverage', sortable: true },
   { text: 'Liq. Price', value: 'liquidation_price', sortable: false },
-  { text: 'Actions', value: 'actions', sortable: false },
+  { text: 'Margin', value: 'IsolatedMargin', sortable: true },
+  { text: 'PNL (ROE%)', value: 'upnl', sortable: true },
+  { text: 'Funding', value: 'maintenance_margin', sortable: false },
+  { text: 'TP/SL', value: 'tpsl', sortable: false },
+  { text: '', value: 'actions', sortable: false, width: 70 },
 ];
 
 const openOrderHeaders = [
@@ -807,7 +1326,7 @@ const openOrderHeaders = [
   { text: 'Size', value: 'Size', sortable: true },
   { text: 'Filled', value: 'Filled', sortable: true },
   { text: 'Status', value: 'Status', sortable: true },
-  { text: 'Actions', value: 'actions', sortable: false },
+  { text: '', value: 'actions', sortable: false, width: 70 },
 ];
 
 const orderHistoryHeaders = [
@@ -828,7 +1347,6 @@ const fillHistoryHeaders = [
   { text: 'Qty', value: 'qty', sortable: true },
   { text: 'Fee', value: 'commission', sortable: true },
   { text: 'Realized PnL', value: 'realized_pnl', sortable: true },
-  { text: 'Type', value: 'auto_close_type', sortable: false },
   { text: 'Time', value: 'time', sortable: true },
 ];
 
@@ -849,6 +1367,22 @@ function formatPrice(val: string | number | undefined): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 }
 
+function formatSize(val: string | number | undefined): string {
+  if (val === undefined || val === null || val === '') return '—';
+  const n = parseFloat(String(val));
+  if (isNaN(n)) return '—';
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+function formatVolume(val: string | number | undefined): string {
+  if (val === undefined || val === null || val === '') return '—';
+  const n = parseFloat(String(val));
+  if (isNaN(n)) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
 function formatChange(val: string | undefined): string {
   if (!val) return '0.00';
   const n = parseFloat(val);
@@ -861,6 +1395,13 @@ function formatFundingRate(val: string | undefined): string {
   return (n >= 0 ? '+' : '') + n.toFixed(4) + '%';
 }
 
+function formatBalance(val: string | undefined): string {
+  if (!val) return '0.00';
+  const n = parseFloat(val);
+  if (isNaN(n)) return '0.00';
+  return n.toFixed(2);
+}
+
 function formatTime(val: number | string | undefined): string {
   if (!val) return '—';
   const ts = typeof val === 'number' ? val : Date.parse(val);
@@ -868,16 +1409,10 @@ function formatTime(val: number | string | undefined): string {
   return new Date(ts).toLocaleString();
 }
 
-function orderStatusClass(status: string): string {
-  switch (status) {
-    case 'filled': return 'status-chip success';
-    case 'canceled':
-    case 'cancelled': return 'status-chip grey';
-    case 'rejected': return 'status-chip error';
-    case 'open':
-    case 'pending': return 'status-chip primary';
-    default: return 'status-chip grey';
-  }
+function formatTradeTime(val: number | undefined): string {
+  if (!val) return '—';
+  const d = new Date(val);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
 function onLogoError(e: Event) {
@@ -886,166 +1421,641 @@ function onLogoError(e: Event) {
 </script>
 
 <style scoped>
-.perps-dialog {
-  background: #0f1117 !important;
+/* ═══════════════════════════════════════════════════════════════════════════
+   TERMINAL LAYOUT
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.perps-terminal {
+  background: #0b0e11 !important;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Symbol tabs bar ──────────────────────────────────────────────────── */
+
+.symbol-tabs-bar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid #2b2f36;
+  flex-shrink: 0;
+  background: #0b0e11;
+}
+
+.symbol-tabs-scroll {
+  display: flex;
+  overflow-x: auto;
+  gap: 2px;
+  flex: 1;
+  scrollbar-width: none;
+}
+.symbol-tabs-scroll::-webkit-scrollbar { display: none; }
+
+.symbol-tab {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #848e9c;
+  transition: background 0.15s;
+}
+.symbol-tab:hover { background: rgba(255,255,255,0.04); }
+.symbol-tab--active {
+  background: rgba(255,255,255,0.06);
+  color: #ffffff;
+}
+
+.symbol-tab__name { font-weight: 600; }
+.symbol-tab__change { font-size: 11px; font-weight: 600; }
+
+.star-icon { cursor: pointer; }
+
+/* ── Price info bar ───────────────────────────────────────────────────── */
+
+.price-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 12px;
+  border-bottom: 1px solid #2b2f36;
+  flex-shrink: 0;
+  background: #0b0e11;
+  overflow-x: auto;
+}
+
+.symbol-dropdown {
+  max-width: 140px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.price-info-item {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+}
+
+.price-info-label {
+  font-size: 10px;
+  color: #848e9c;
+  line-height: 1.2;
+}
+
+.price-info-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #eaecef;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  line-height: 1.3;
+}
+
+.price-info-countdown {
+  font-size: 10px;
+  color: #848e9c;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Main 3-column body ──────────────────────────────────────────────── */
+
+.terminal-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left column: chart + positions */
+.col-left {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #2b2f36;
+  min-width: 0;
+}
+
+/* Center column: order book */
+.col-center {
+  flex: 1;
+  min-width: 220px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #2b2f36;
+}
+
+/* Right column: order form */
+.col-right {
+  flex: 1;
+  min-width: 260px;
+  max-width: 320px;
   display: flex;
   flex-direction: column;
 }
 
-.perps-toolbar {
-  flex-shrink: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
+/* ── Chart area ───────────────────────────────────────────────────────── */
 
-.perps-content {
+.chart-area {
   flex: 1;
-  overflow-y: auto;
-  height: calc(100vh - 64px - 36px);
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #2b2f36;
+  min-height: 300px;
 }
 
-.perps-footer {
+.chart-subtabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #1b1d23;
+}
+
+.chart-subtab {
+  font-size: 11px;
+  color: #848e9c;
+  padding: 3px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.chart-subtab:hover { background: rgba(255,255,255,0.04); }
+.chart-subtab--active {
+  color: #26FAB0;
+  background: rgba(38, 250, 176, 0.08);
+}
+
+.chart-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #1b1d23;
+}
+
+.chart-placeholder__symbol {
+  font-size: 16px;
+  font-weight: 700;
+  color: #848e9c;
+  margin-top: 8px;
+}
+
+.chart-placeholder__text {
+  font-size: 12px;
+  color: #5e6673;
+  margin-top: 4px;
+}
+
+/* ── Positions area ───────────────────────────────────────────────────── */
+
+.positions-area {
   flex-shrink: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.3);
+  min-height: 180px;
+  max-height: 300px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Symbol selector */
-.symbol-select {
+.positions-tabs-items {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ── Order Book ───────────────────────────────────────────────────────── */
+
+.ob-header {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #2b2f36;
+}
+
+.ob-tab {
+  font-size: 11px;
+  color: #848e9c;
+  padding: 2px 8px;
+  cursor: pointer;
+  border-radius: 3px;
   font-weight: 600;
 }
+.ob-tab:hover { background: rgba(255,255,255,0.04); }
+.ob-tab--active { color: #eaecef; background: rgba(255,255,255,0.06); }
 
-/* Price ticker */
-.ticker-price {
-  font-size: 18px;
+.ob-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+}
+
+.ob-col-headers {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: #5e6673;
+  border-bottom: 1px solid #1b1d23;
+}
+
+.ob-asks, .ob-bids, .ob-trades-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.ob-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 1px 8px;
+  position: relative;
+  line-height: 18px;
+}
+
+.ob-row-bg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  pointer-events: none;
+}
+.ob-row-bg--ask { background: rgba(246, 70, 93, 0.08); }
+.ob-row-bg--bid { background: rgba(38, 250, 176, 0.08); }
+
+.ob-cell {
+  position: relative;
+  z-index: 1;
+  color: #eaecef;
+  min-width: 0;
+  flex: 1;
+  text-align: right;
+}
+.ob-cell:first-child { text-align: left; }
+
+.ob-price { font-weight: 600; }
+
+.ob-time {
+  font-size: 10px;
+  color: #5e6673;
+}
+
+.ob-spread {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-top: 1px solid #2b2f36;
+  border-bottom: 1px solid #2b2f36;
+  background: rgba(255,255,255,0.02);
+}
+
+.ob-spread__price {
+  font-size: 14px;
   font-weight: 700;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.ob-spread__info {
+  font-size: 10px;
+  color: #5e6673;
+}
+
+.ob-ratio {
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+
+.ob-ratio__bar {
+  display: flex;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ob-ratio__buy { background: #26FAB0; }
+.ob-ratio__sell { background: #F6465D; }
+
+.ob-ratio__labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* ── Order Form (right column) ────────────────────────────────────────── */
+
+.order-form-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+
+.of-margin-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.of-toggle--margin {
+  height: 24px !important;
+}
+.of-toggle--margin .v-btn {
+  height: 24px !important;
+  font-size: 10px !important;
+  text-transform: none !important;
+  padding: 0 8px !important;
+  min-width: auto !important;
+}
+
+.of-leverage-btn {
+  font-size: 11px !important;
+  text-transform: none !important;
+  min-width: auto !important;
+  height: 24px !important;
+  padding: 0 8px !important;
+  border-color: #2b2f36 !important;
+  color: #eaecef !important;
+}
+
+.of-posmode-label {
+  font-size: 10px;
+  color: #848e9c;
+  margin-left: auto;
+}
+
+/* Order type tabs */
+.of-type-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.of-type-tab {
+  font-size: 11px;
+  color: #848e9c;
+  padding: 3px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.of-type-tab:hover { background: rgba(255,255,255,0.04); }
+.of-type-tab--active {
+  color: #eaecef;
+  background: rgba(255,255,255,0.08);
+}
+
+/* Side toggle */
+.of-side-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.of-side-btn {
+  flex: 1;
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.of-side-btn--buy {
+  color: #0b0e11;
+  background: rgba(38, 250, 176, 0.15);
+  color: #26FAB0;
+}
+.of-side-btn--buy.of-side-btn--active {
+  background: #26FAB0;
+  color: #0b0e11;
+}
+
+.of-side-btn--sell {
+  background: rgba(246, 70, 93, 0.15);
+  color: #F6465D;
+}
+.of-side-btn--sell.of-side-btn--active {
+  background: #F6465D;
   color: #ffffff;
 }
 
-.ticker-change {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.ticker-meta {
-  font-size: 11px;
-  color: #9ca3af;
-}
-
-/* Account summary */
-.account-label {
-  font-size: 11px;
-  color: #9ca3af;
-}
-
-.account-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: #26FAB0;
-}
-
-/* Order form */
-.order-form-col {
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  max-height: calc(100vh - 100px);
-  overflow-y: auto;
+/* Info rows */
+.of-info-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
 }
 
 .form-label {
-  font-size: 12px;
-  color: #9ca3af;
+  font-size: 11px;
+  color: #848e9c;
 }
 
 .form-value {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  color: #eaecef;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Inputs */
+.of-input {
+  font-size: 12px !important;
+}
+
+.of-input >>> .v-input__slot {
+  min-height: 32px !important;
+  background: #1b1d23 !important;
+  border-color: #2b2f36 !important;
+}
+
+.of-input >>> input {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  font-size: 12px !important;
+  color: #eaecef !important;
+}
+
+/* Size row */
+.of-size-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.of-size-input { flex: 1; }
+
+.of-size-asset {
+  max-width: 80px;
+  flex-shrink: 0;
+}
+
+.of-size-asset >>> .v-input__slot {
+  min-height: 32px !important;
+  background: #1b1d23 !important;
+  border-color: #2b2f36 !important;
+}
+
+/* Slider row */
+.of-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.of-slider { flex: 1; }
+.of-slider-pct {
+  font-size: 11px;
   color: #26FAB0;
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
 }
 
-.slider-label {
-  font-size: 10px;
-  color: #6b7280;
+/* Checkboxes */
+.of-checkboxes {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
-.order-summary {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  padding: 8px 12px;
+.of-checkbox {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.of-checkbox >>> .v-label {
+  font-size: 11px !important;
+  color: #848e9c !important;
+}
+.of-checkbox >>> .v-input--selection-controls__input {
+  margin-right: 4px !important;
 }
 
-.summary-row {
+/* TP/SL */
+.of-tpsl {
+  margin-top: 6px;
+}
+
+/* Place order button */
+.of-place-btn {
+  border-radius: 4px !important;
+  text-transform: none !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  height: 40px !important;
+  letter-spacing: 0 !important;
+}
+
+/* Estimates */
+.of-estimates {
+  background: rgba(255,255,255,0.02);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.of-est-row {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  color: #9ca3af;
+  font-size: 11px;
+  color: #5e6673;
+  line-height: 20px;
 }
 
-.summary-value {
-  color: #26FAB0;
-  font-weight: 600;
+/* Deposit/Withdraw row */
+.of-deposit-row {
+  display: flex;
+  gap: 8px;
 }
 
-.place-order-btn {
-  border-radius: 8px !important;
+.of-deposit-btn {
+  flex: 1;
   text-transform: none !important;
-  font-weight: 600 !important;
-  height: 44px !important;
+  font-size: 11px !important;
+  height: 28px !important;
 }
 
-/* Order book */
-.section-header {
-  font-size: 12px;
+/* Account overview */
+.of-account-section {
+  background: rgba(255,255,255,0.02);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.of-account-header {
+  font-size: 11px;
   font-weight: 600;
-  color: #9ca3af;
+  color: #848e9c;
+  margin-bottom: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
 }
 
-.ob-mid-price .ob-price {
-  font-size: 16px;
-  font-weight: 700;
-  color: #26FAB0;
+.of-account-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #5e6673;
+  line-height: 20px;
 }
 
-.ob-placeholder {
-  padding: 24px 0;
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHARED STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.panel-bg { background: #1b1d23 !important; }
+
+.slider-tick {
+  font-size: 9px;
+  color: #5e6673;
 }
 
 /* Tabs */
 .tab-item {
   min-width: auto !important;
-  padding: 0 12px !important;
-  font-size: 12px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
   font-weight: 500 !important;
   text-transform: none !important;
 }
 
-.tab-text {
-  font-size: 12px;
-}
+.tab-text { font-size: 11px; }
 
 .tab-count {
-  background: rgba(38, 250, 176, 0.2);
+  background: rgba(38, 250, 176, 0.15);
   color: #26FAB0;
-  border-radius: 10px;
-  padding: 1px 5px;
-  font-size: 10px;
+  border-radius: 8px;
+  padding: 0 4px;
+  font-size: 9px;
   font-weight: 600;
 }
 
 /* Tables */
-.perps-table {
-  background: transparent !important;
-}
+.perps-table { background: transparent !important; }
 
 .perps-table >>> th {
-  font-size: 11px !important;
-  color: #6b7280 !important;
+  font-size: 10px !important;
+  color: #5e6673 !important;
   white-space: nowrap;
+  padding: 4px 8px !important;
+  height: 28px !important;
 }
 
 .perps-table >>> td {
-  font-size: 12px !important;
+  font-size: 11px !important;
   white-space: nowrap;
+  padding: 2px 8px !important;
+  height: 28px !important;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: #eaecef;
 }
 
 /* Loading / empty states */
@@ -1053,7 +2063,7 @@ function onLogoError(e: Event) {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 40px;
+  padding: 24px;
 }
 
 .empty-state {
@@ -1061,69 +2071,48 @@ function onLogoError(e: Event) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
-  color: #6b7280;
-  font-size: 13px;
+  padding: 24px;
+  color: #5e6673;
+  font-size: 12px;
 }
 
-/* Color helpers */
-.positive {
-  color: #10b981;
-  font-weight: 600;
-}
-
-.negative {
-  color: #ef4444;
-  font-weight: 600;
-}
-
-/* Status chips */
-.status-chip {
-  font-size: 9px !important;
-  height: 18px !important;
-  padding: 0 6px !important;
-  font-weight: 600 !important;
-}
-
-.status-chip.success {
-  background: rgba(16, 185, 129, 0.15) !important;
-  color: #10b981 !important;
-  border: 1px solid rgba(16, 185, 129, 0.3) !important;
-}
-
-.status-chip.error {
-  background: rgba(239, 68, 68, 0.15) !important;
-  color: #ef4444 !important;
-  border: 1px solid rgba(239, 68, 68, 0.3) !important;
-}
-
-.status-chip.primary {
-  background: rgba(33, 150, 243, 0.15) !important;
-  color: #2196f3 !important;
-  border: 1px solid rgba(33, 150, 243, 0.3) !important;
-}
-
-.status-chip.grey {
-  background: rgba(156, 163, 175, 0.15) !important;
-  color: #9ca3af !important;
-  border: 1px solid rgba(156, 163, 175, 0.3) !important;
-}
-
-.action-btn-compact {
+/* Action buttons */
+.action-btn {
   font-size: 10px !important;
-  height: 22px !important;
-  padding: 0 8px !important;
+  text-transform: none !important;
   min-width: auto !important;
+  height: 22px !important;
+  padding: 0 6px !important;
 }
+
+/* Color utilities */
+.clr-green { color: #26FAB0 !important; }
+.clr-red { color: #F6465D !important; }
+.clr-yellow { color: #F0B90B !important; }
+
+.fw-600 { font-weight: 600; }
+
+.font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
 
 /* Footer */
-.powered-by-text {
-  font-size: 11px;
-  color: #6b7280;
+.terminal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 0;
+  border-top: 1px solid #2b2f36;
+  background: #0b0e11;
+  flex-shrink: 0;
+}
+
+.powered-by {
+  font-size: 10px;
+  color: #5e6673;
+  margin-right: 6px;
 }
 
 .strike-logo {
-  height: 18px;
-  opacity: 0.7;
+  height: 14px;
+  opacity: 0.6;
 }
 </style>
