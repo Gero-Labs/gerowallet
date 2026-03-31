@@ -117,11 +117,18 @@
                 {{ $t(tab.label) }}
               </span>
             </div>
-            <div class="chart-placeholder">
-              <v-icon size="48" color="#2b2f36">mdi-chart-line</v-icon>
-              <div class="chart-placeholder__symbol">{{ selectedSymbol }}</div>
-              <div class="chart-placeholder__text">{{ $t('perpetuals.chartComingSoon') }}</div>
-            </div>
+            <TradingViewChart
+              :symbol="selectedSymbol"
+              :data="chartData"
+              :enable-realtime="true"
+              :realtime-data="realtimeCandle"
+              width="100%"
+              height="100%"
+              theme="dark"
+              :price-precision="symbolPrecision"
+              :price-min-move="symbolMinMove"
+              @chartReady="onChartReady"
+            />
           </div>
 
           <!-- Positions / Orders tabs (spans full width below chart) -->
@@ -780,6 +787,8 @@ import type {
   MarginMode,
 } from '@/api/strike-v2.types';
 import snackbar from '@/plugins/snackbar';
+import TradingViewChart from '@/shared/components/TradingViewChart.vue';
+import type { IChartApi, Time } from 'lightweight-charts';
 
 // ---------------------------------------------------------------------------
 // Props / emits
@@ -806,7 +815,7 @@ function close() {
 // Market data (singleton)
 // ---------------------------------------------------------------------------
 
-const { symbols, symbolNames, tickers, fundingRates, loading: marketLoading } = useStrikeMarket();
+const { symbols, symbolNames, tickers, fundingRates, loading: marketLoading, getSymbolInfo, getTicker, getFunding } = useStrikeMarket();
 
 const selectedSymbol = ref<string>('BTC-USD');
 
@@ -904,10 +913,70 @@ const currentPositionSize = computed(() => {
 });
 
 // ---------------------------------------------------------------------------
+// TradingView chart — kline data from WebSocket
+// ---------------------------------------------------------------------------
+
+interface CandlestickDataPoint {
+  time: Time;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+const chartData = ref<CandlestickDataPoint[]>([]);
+const realtimeCandle = ref<CandlestickDataPoint | null>(null);
+const chartInterval = ref('5m');
+let chartInstance: IChartApi | null = null;
+let unsubKline: (() => void) | null = null;
+
+const symbolPrecision = computed(() => {
+  const info = getSymbolInfo(selectedSymbol.value);
+  return info?.pricePrecision ?? 4;
+});
+
+const symbolMinMove = computed(() => {
+  const prec = symbolPrecision.value;
+  return 1 / Math.pow(10, prec);
+});
+
+function onChartReady(chart: IChartApi) {
+  chartInstance = chart;
+}
+
+function subscribeKlineWs(symbol: string) {
+  if (unsubKline) { unsubKline(); unsubKline = null; }
+  chartData.value = [];
+  realtimeCandle.value = null;
+
+  unsubKline = subscribeKline(symbol, chartInterval.value, (data: unknown) => {
+    const event = data as Record<string, unknown>;
+    const k = event.k as Record<string, unknown>;
+    if (!k) return;
+
+    const candle: CandlestickDataPoint = {
+      time: (Math.floor((k.t as number) / 1000)) as Time,
+      open: parseFloat(k.o as string),
+      high: parseFloat(k.h as string),
+      low: parseFloat(k.l as string),
+      close: parseFloat(k.c as string),
+    };
+
+    if (k.x) {
+      // Closed candle — add to historical data
+      chartData.value = [...chartData.value, candle];
+    } else {
+      // In-progress candle — update real-time
+      realtimeCandle.value = candle;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket — order book + trades
 // ---------------------------------------------------------------------------
 
-const { subscribeDepth, subscribeTrades, connected: wsConnected } = useStrikeMarketWs();
+const { subscribeDepth, subscribeTrades, subscribeKline, connected: wsConnected } = useStrikeMarketWs();
 
 interface OBLevel { price: string; size: string; total: string; pct: number; }
 
@@ -925,6 +994,7 @@ function subscribeSymbolWs(symbol: string) {
   // Clean up previous
   if (unsubDepth) { unsubDepth(); unsubDepth = null; }
   if (unsubTrades) { unsubTrades(); unsubTrades = null; }
+  subscribeKlineWs(symbol);
   obAsks.value = [];
   obBids.value = [];
   recentTrades.value = [];
@@ -1039,6 +1109,7 @@ watch(selectedSymbol, (sym) => {
 onBeforeUnmount(() => {
   if (unsubDepth) unsubDepth();
   if (unsubTrades) unsubTrades();
+  if (unsubKline) unsubKline();
 });
 
 // ---------------------------------------------------------------------------
@@ -1587,26 +1658,10 @@ function onLogoError(e: Event) {
   background: rgba(38, 250, 176, 0.08);
 }
 
-.chart-placeholder {
+.chart-area >>> .trading-view-chart-container {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  min-height: 300px;
   background: #1b1d23;
-}
-
-.chart-placeholder__symbol {
-  font-size: 16px;
-  font-weight: 700;
-  color: #848e9c;
-  margin-top: 8px;
-}
-
-.chart-placeholder__text {
-  font-size: 12px;
-  color: #5e6673;
-  margin-top: 4px;
 }
 
 /* ── Positions area ───────────────────────────────────────────────────── */
