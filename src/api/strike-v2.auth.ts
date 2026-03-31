@@ -1,10 +1,15 @@
 // Strike Finance v2 API — Ed25519 Auth Header Builder
 // Signature message format: {METHOD}:{PATH}:{TIMESTAMP}:{NONCE}:{BODY_HASH}
-// where BODY_HASH = hex(blake2b-256(body)) for POST/DELETE with body, empty string otherwise.
+// where BODY_HASH = hex(sha256(bodyString)) — always computed, even for empty body.
 // Timestamp is Unix time in seconds.
+// Reference: Strike API Wallet Authentication TypeScript Example
 
-import { ed25519 } from '@noble/curves/ed25519';
+import * as ed25519 from '@noble/ed25519';
+import { sha512, sha256 } from '@noble/hashes/sha2.js';
 import type { StrikeAuthHeaders } from './strike-v2.types';
+
+// Required for @noble/ed25519 — set sha512 sync implementation
+ed25519.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed25519.etc.concatBytes(...m));
 
 // ---------------------------------------------------------------------------
 // Hex utilities
@@ -25,18 +30,6 @@ export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-// ---------------------------------------------------------------------------
-// Blake2b-256 body hash (lazy-loaded — WASM module)
-// ---------------------------------------------------------------------------
-
-async function computeBodyHash(body: string): Promise<string> {
-  if (!body) return '';
-  const blake2b = (await import('blake2b')).default;
-  const bodyBytes = new TextEncoder().encode(body);
-  const hash: Uint8Array = blake2b(32).update(bodyBytes).digest() as Uint8Array;
-  return bytesToHex(hash);
 }
 
 // ---------------------------------------------------------------------------
@@ -63,14 +56,17 @@ export async function buildStrikeAuthHeaders(
 ): Promise<StrikeAuthHeaders> {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = crypto.randomUUID();
-  const bodyHash = await computeBodyHash(body);
+
+  // Body hash: sha256 of body string (always computed, even for empty string)
+  const bodyStr = body || '';
+  const bodyHash = bytesToHex(sha256(bodyStr));
 
   // Canonical message per Strike v2 spec
   const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}:${bodyHash}`;
 
   const privateKeyBytes = hexToBytes(privateKeyHex);
   const messageBytes = new TextEncoder().encode(message);
-  const signatureBytes = ed25519.sign(messageBytes, privateKeyBytes);
+  const signatureBytes = await ed25519.signAsync(messageBytes, privateKeyBytes);
   const signature = bytesToHex(signatureBytes);
 
   return {
@@ -78,5 +74,18 @@ export async function buildStrikeAuthHeaders(
     'X-API-Wallet-Signature': signature,
     'X-API-Wallet-Timestamp': timestamp,
     'X-API-Wallet-Nonce': nonce,
+  };
+}
+
+/**
+ * Generate a new Ed25519 key pair for Strike API authentication.
+ * Useful for initial account setup.
+ */
+export async function generateStrikeKeyPair(): Promise<{ privateKeyHex: string; publicKeyHex: string }> {
+  const privateKey = ed25519.utils.randomSecretKey();
+  const publicKey = await ed25519.getPublicKeyAsync(privateKey);
+  return {
+    privateKeyHex: bytesToHex(privateKey),
+    publicKeyHex: bytesToHex(publicKey),
   };
 }
