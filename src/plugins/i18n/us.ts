@@ -1488,6 +1488,14 @@ export default {
   'perpetuals.nextFunding': 'Next Funding',
   'perpetuals.openInterest': 'Open Interest',
   'perpetuals.volume24h': '24h Volume',
+  'perpetuals.24hVol': '24h Vol',
+  'perpetuals.tpSl': 'TP / SL',
+  'perpetuals.buyLong': 'Buy / Long',
+  'perpetuals.sellShort': 'Sell / Short',
+  'perpetuals.orderBookLive': 'Order Book (Live)',
+  'perpetuals.funding': 'Funding',
+  'perpetuals.notionalValue': 'Notional Value',
+  'perpetuals.noOpenPositions': 'No Open Positions',
 
   // Strike v2 onboarding
   'perpetuals.connectToStrike': 'Connect to Strike',

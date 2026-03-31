@@ -109,7 +109,7 @@
               <v-slider
                 v-model="leverage"
                 min="1"
-                max="20"
+                max="125"
                 step="1"
                 color="#26FAB0"
                 track-color="rgba(255,255,255,0.2)"
@@ -119,9 +119,9 @@
               />
               <div class="d-flex justify-space-between mt-1">
                 <span class="slider-label">1x</span>
-                <span class="slider-label">5x</span>
-                <span class="slider-label">10x</span>
-                <span class="slider-label">20x</span>
+                <span class="slider-label">25x</span>
+                <span class="slider-label">50x</span>
+                <span class="slider-label">125x</span>
               </div>
             </div>
 
@@ -486,6 +486,7 @@
 import { computed, ref, watch } from 'vue';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { strikeTradeApi } from '@/api/strike-v2.trade';
 import type {
@@ -525,7 +526,7 @@ function close() {
 
 const { symbols, symbolNames, tickers, fundingRates, loading: marketLoading } = useStrikeMarket();
 
-const selectedSymbol = ref<string>('ADAUSDT');
+const selectedSymbol = ref<string>('BTC-USD');
 
 watch(symbolNames, (names) => {
   if (names.length > 0 && !names.includes(selectedSymbol.value)) {
@@ -545,6 +546,12 @@ const fundingClass = computed(() => {
   const rate = parseFloat(currentFunding.value?.lastFundingRate ?? '0');
   return rate >= 0 ? 'positive' : 'negative';
 });
+
+// ---------------------------------------------------------------------------
+// Onboarding / auth — load API keys before any authenticated call
+// ---------------------------------------------------------------------------
+
+const { isConnected, checkConnection } = useStrikeOnboarding();
 
 // ---------------------------------------------------------------------------
 // Trading state (shared singleton)
@@ -761,13 +768,19 @@ watch(selectedSymbol, () => {
 // Load initial data when dialog opens
 watch(dialogVisible, async (open) => {
   if (open) {
-    await Promise.all([loadAccount(), onTabChange(0), onTabChange(1)]);
+    // Ensure API keys are loaded before any authenticated call
+    await checkConnection();
+    if (isConnected.value) {
+      await Promise.all([loadAccount(), onTabChange(0), onTabChange(1)]);
+    }
   }
 });
 
 async function refreshAll() {
   tabLoaded.value = { 0: false, 1: false, 2: false, 3: false, 4: false };
-  await Promise.all([loadAccount(), onTabChange(activeTab.value)]);
+  if (isConnected.value) {
+    await Promise.all([loadAccount(), onTabChange(activeTab.value)]);
+  }
 }
 
 // ---------------------------------------------------------------------------
