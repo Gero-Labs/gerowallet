@@ -1731,7 +1731,6 @@ export default {
   'perpetuals.sellShort': 'Verkaufen / Short',
   'perpetuals.orderBookLive': 'Orderbuch (Live)',
   'perpetuals.funding': 'Finanzierung',
-  'perpetuals.notionalValue': 'Nominaler Wert',
 
   // Strike v2 — zusätzliche Schlüssel
   'perpetuals.noOpenOrders': 'Keine offenen Orders',
