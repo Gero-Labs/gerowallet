@@ -1427,6 +1427,76 @@ export default {
   'perpetuals.yourPendingLimitOrders': 'Your pending limit orders will appear here',
   'perpetuals.yourPerpetualPositions': 'Your perpetual positions will appear here',
   'perpetuals.takeProfitPriceUsd': 'Take Profit Price (USD)',
+
+  // Strike v2 order types
+  'perpetuals.orderTypeMarket': 'Market',
+  'perpetuals.orderTypeLimit': 'Limit',
+  'perpetuals.orderTypeStop': 'Stop',
+  'perpetuals.orderTypeStopLimit': 'Stop Limit',
+  'perpetuals.orderTypeTakeProfit': 'Take Profit',
+  'perpetuals.orderTypeTakeProfitLimit': 'TP Limit',
+
+  // Strike v2 margin/leverage
+  'perpetuals.marginCross': 'Cross',
+  'perpetuals.marginIsolated': 'Isolated',
+  'perpetuals.leverageLabel': 'Leverage',
+  'perpetuals.marginMode': 'Margin Mode',
+  'perpetuals.maxLeverage': 'Max Leverage',
+
+  // Strike v2 order form
+  'perpetuals.size': 'Size',
+  'perpetuals.price': 'Price',
+  'perpetuals.triggerPrice': 'Trigger Price',
+  'perpetuals.takeProfitPrice': 'Take Profit',
+  'perpetuals.stopLossPrice': 'Stop Loss',
+  'perpetuals.reduceOnly': 'Reduce Only',
+  'perpetuals.postOnly': 'Post Only',
+  'perpetuals.closePosition': 'Close Position',
+  'perpetuals.timeInForce': 'Time in Force',
+  'perpetuals.placeOrder': 'Place Order',
+  'perpetuals.placeBuyOrder': 'Buy / Long',
+  'perpetuals.placeSellOrder': 'Sell / Short',
+  'perpetuals.cancelOrder': 'Cancel Order',
+  'perpetuals.cancelAll': 'Cancel All',
+  'perpetuals.confirmCancel': 'Confirm cancel?',
+
+  // Strike v2 account
+  'perpetuals.availableBalance': 'Available Balance',
+  'perpetuals.walletBalance': 'Wallet Balance',
+  'perpetuals.marginBalance': 'Margin Balance',
+  'perpetuals.unrealizedPnl': 'Unrealized PnL',
+  'perpetuals.realizedPnl': 'Realized PnL',
+  'perpetuals.allTimePnl': 'All-Time PnL',
+  'perpetuals.allTimeVolume': 'All-Time Volume',
+  'perpetuals.feeTier': 'Fee Tier',
+
+  // Strike v2 positions
+  'perpetuals.entryPrice': 'Entry Price',
+  'perpetuals.markPrice': 'Mark Price',
+  'perpetuals.indexPrice': 'Index Price',
+  'perpetuals.liquidationPrice': 'Liquidation',
+  'perpetuals.positionSize': 'Size',
+  'perpetuals.closeMarket': 'Close Market',
+
+  // Strike v2 history tabs
+  'perpetuals.openOrders': 'Open Orders',
+  'perpetuals.orderHistory': 'Order History',
+  'perpetuals.fillHistory': 'Fill History',
+  'perpetuals.fundingHistory': 'Funding History',
+  'perpetuals.transactions': 'Transactions',
+
+  // Strike v2 order book
+  'perpetuals.orderBook': 'Order Book',
+  'perpetuals.spread': 'Spread',
+  'perpetuals.bidAsk': 'Bid / Ask',
+
+  // Strike v2 symbols
+  'perpetuals.selectMarket': 'Select Market',
+  'perpetuals.fundingRate': 'Funding Rate',
+  'perpetuals.nextFunding': 'Next Funding',
+  'perpetuals.openInterest': 'Open Interest',
+  'perpetuals.volume24h': '24h Volume',
+
   'portfolio.collection': 'Collection',
   'portfolio.floorPrice': 'Floor',
   'portfolio.floorPriceTooltip': 'Lowest listing price for an NFT in this collection',
