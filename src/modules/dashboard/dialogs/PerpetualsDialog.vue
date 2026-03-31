@@ -21,10 +21,10 @@
             <v-icon
               x-small
               class="mr-1 star-icon"
-              :color="favorites.has(name) ? '#F0B90B' : '#848e9c'"
+              :color="isFavorite(name) ? '#F0B90B' : '#848e9c'"
               @click.stop="toggleFavorite(name)"
             >
-              {{ favorites.has(name) ? 'mdi-star' : 'mdi-star-outline' }}
+              {{ isFavorite(name) ? 'mdi-star' : 'mdi-star-outline' }}
             </v-icon>
             <span class="symbol-tab__name">{{ name }}</span>
             <span
@@ -765,7 +765,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount, reactive } from 'vue';
+import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketWs';
@@ -867,12 +867,20 @@ function updateFundingCountdown() {
 countdownInterval = setInterval(updateFundingCountdown, 1000);
 onBeforeUnmount(() => { if (countdownInterval) clearInterval(countdownInterval); });
 
-// Favorites
-const favorites = reactive(new Set<string>());
+// Favorites (use plain object — Vue 2 doesn't support reactive Set)
+const favorites = ref<Record<string, boolean>>({});
 
 function toggleFavorite(name: string) {
-  if (favorites.has(name)) favorites.delete(name);
-  else favorites.add(name);
+  if (favorites.value[name]) {
+    delete favorites.value[name];
+    favorites.value = { ...favorites.value }; // trigger reactivity
+  } else {
+    favorites.value = { ...favorites.value, [name]: true };
+  }
+}
+
+function isFavorite(name: string): boolean {
+  return !!favorites.value[name];
 }
 
 // ---------------------------------------------------------------------------
