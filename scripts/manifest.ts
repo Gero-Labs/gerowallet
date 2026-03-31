@@ -70,6 +70,10 @@ function buildCSP(dev: boolean): string {
     'https://api.bringweb3.io/',
     'https://api.cardanoshield.com/api/',
     'https://connect.trezor.io',
+    // Strike Finance (perpetuals)
+    'https://api.strikefinance.org',
+    'https://api-v2.strikefinance.org',
+    'wss://api-v2.strikefinance.org',
     // LaunchDarkly (feature flags)
     'https://*.launchdarkly.com',
     'wss://*.launchdarkly.com',
