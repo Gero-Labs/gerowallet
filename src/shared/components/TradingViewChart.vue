@@ -132,6 +132,9 @@ const initChart = async () => {
         secondsVisible: false,
         fixLeftEdge: true,
         fixRightEdge: true,
+        barSpacing: 6,
+        minBarSpacing: 2,
+        rightOffset: 5,
       },
     });
 
@@ -200,6 +203,8 @@ const initChart = async () => {
       candlestickSeries.setData(deduped);
       chartData = deduped; // Store data for real-time updates
       showFallback.value = false; // Hide loading state
+      // Fit content to show all candles without gaps
+      chart.timeScale().fitContent();
     } else {
       showFallback.value = true;
     }
