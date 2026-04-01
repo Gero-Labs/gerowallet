@@ -322,8 +322,6 @@ async function getTokenCandles(unit: string, timeframe: string, currency?: strin
     if (candles.length > 0) {
       return candles
         .filter(c => c.open != null && c.close != null)
-        // Filter out zero-volume gap-fill candles (OHLC all identical with 0 volume)
-        .filter(c => c.volume !== 0 || c.open !== c.close || c.high !== c.low)
         .map(c => ({
           time: c.time,
           open: c.open,
