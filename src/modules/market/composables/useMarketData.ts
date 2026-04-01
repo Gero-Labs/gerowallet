@@ -8,6 +8,7 @@ import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { debugLog } from '@/utils/debug';
 
 export interface MarketToken {
   unit: string;
@@ -306,9 +307,18 @@ async function getTokenCandles(unit: string, timeframe: string, currency?: strin
   // USD-converted data stops early). Only ADA uses currency param for USD/EUR pricing.
   const apiCurrency = isAda ? currency : (currency === 'ada' ? undefined : currency);
 
-  // Try candle endpoint first (from=0 fetches all available data, matching chart.html)
+  // Lookback: fetch candles from a reasonable time ago based on timeframe
+  const lookbackSeconds: Record<string, number> = {
+    '5m': 2 * 86400,       // 2 days
+    '15m': 7 * 86400,      // 1 week
+    '1h': 30 * 86400,      // 1 month
+    '1d': 365 * 86400,     // 1 year
+    '1w': 2 * 365 * 86400, // 2 years
+  };
+  const from = Math.floor(Date.now() / 1000 - (lookbackSeconds[timeframe] || 365 * 86400));
+
   try {
-    const candles: CandleResponse[] = await marketApi.getCandles(assetId, resolution, '0', to, apiCurrency);
+    const candles: CandleResponse[] = await marketApi.getCandles(assetId, resolution, from.toString(), to, apiCurrency);
     if (candles.length > 0) {
       return candles
         .filter(c => c.open != null && c.close != null)
