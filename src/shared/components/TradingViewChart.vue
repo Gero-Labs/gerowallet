@@ -130,6 +130,8 @@ const initChart = async () => {
         borderColor: props.theme === 'dark' ? 'rgba(197, 203, 206, 0.2)' : 'rgba(197, 203, 206, 0.8)',
         timeVisible: true,
         secondsVisible: false,
+        fixLeftEdge: true,
+        fixRightEdge: true,
       },
     });
 
@@ -173,18 +175,30 @@ const initChart = async () => {
   // Set data from props
   const dataToSet = props.data || [];
 
-  // Validate and set candlestick data
+  // Validate, deduplicate, and sort candlestick data
+  // lightweight-charts requires strictly ascending unique timestamps
   if (dataToSet.length > 0) {
-    // Final validation before setting data
-    const validData = dataToSet.filter(candle => {
-      const timeValid = !isNaN(candle.time as number) && (candle.time as number) > 0;
-      const priceValid = !isNaN(candle.open) && !isNaN(candle.high) && !isNaN(candle.low) && !isNaN(candle.close);
-      return timeValid && priceValid;
-    });
+    const validData = dataToSet
+      .filter(candle => {
+        const timeValid = !isNaN(candle.time as number) && (candle.time as number) > 0;
+        const priceValid = !isNaN(candle.open) && !isNaN(candle.high) && !isNaN(candle.low) && !isNaN(candle.close);
+        return timeValid && priceValid;
+      })
+      .sort((a, b) => (a.time as number) - (b.time as number));
 
-    if (validData.length > 0) {
-      candlestickSeries.setData(validData);
-      chartData = validData; // Store data for real-time updates
+    // Deduplicate by timestamp (keep last occurrence)
+    const deduped: CandlestickDataPoint[] = [];
+    for (const candle of validData) {
+      if (deduped.length === 0 || (deduped[deduped.length - 1].time as number) !== (candle.time as number)) {
+        deduped.push(candle);
+      } else {
+        deduped[deduped.length - 1] = candle; // overwrite duplicate
+      }
+    }
+
+    if (deduped.length > 0) {
+      candlestickSeries.setData(deduped);
+      chartData = deduped; // Store data for real-time updates
       showFallback.value = false; // Hide loading state
     } else {
       showFallback.value = true;
@@ -288,15 +302,27 @@ const updateLastCandle = (realtimeData: any) => {
 watch(() => props.data, (newData) => {
   if (candlestickSeries && newData) {
     if (newData.length > 0) {
-      const validData = newData.filter(candle => {
-        const timeValid = !isNaN(candle.time as number) && (candle.time as number) > 0;
-        const priceValid = !isNaN(candle.open) && !isNaN(candle.high) && !isNaN(candle.low) && !isNaN(candle.close);
-        return timeValid && priceValid;
-      });
-      
-      if (validData.length > 0) {
-        candlestickSeries.setData(validData);
-        chartData = validData;
+      const sorted = [...newData]
+        .filter(candle => {
+          const timeValid = !isNaN(candle.time as number) && (candle.time as number) > 0;
+          const priceValid = !isNaN(candle.open) && !isNaN(candle.high) && !isNaN(candle.low) && !isNaN(candle.close);
+          return timeValid && priceValid;
+        })
+        .sort((a, b) => (a.time as number) - (b.time as number));
+
+      // Deduplicate by timestamp
+      const deduped: CandlestickDataPoint[] = [];
+      for (const candle of sorted) {
+        if (deduped.length === 0 || (deduped[deduped.length - 1].time as number) !== (candle.time as number)) {
+          deduped.push(candle);
+        } else {
+          deduped[deduped.length - 1] = candle;
+        }
+      }
+
+      if (deduped.length > 0) {
+        candlestickSeries.setData(deduped);
+        chartData = deduped;
         showFallback.value = false;
       } else {
         showFallback.value = true;
