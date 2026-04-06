@@ -73,7 +73,7 @@ function buildCSP(dev: boolean): string {
     // Strike Finance (perpetuals)
     'https://api.strikefinance.org',
     'https://api-v2.strikefinance.org',
-    'wss://api-v2.strikefinance.org',
+    'wss://*.strikefinance.org',
     // LaunchDarkly (feature flags)
     'https://*.launchdarkly.com',
     'wss://*.launchdarkly.com',
