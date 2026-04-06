@@ -9,25 +9,24 @@ All formulas include worked numerical examples so you can verify your implementa
 ## Table of Contents
 
 1. [API Base URLs](#1-api-base-urls)
-2. [Authentication](#2-authentication)
-3. [WebSocket Streams](#3-websocket-streams)
-4. [Market Configuration](#4-market-configuration)
-5. [Order Book](#5-order-book)
-6. [Account & Balances](#6-account--balances)
-7. [Positions Table (All Math)](#7-positions-table-all-math)
-8. [PnL Calculations](#8-pnl-calculations)
-9. [Liquidation Price](#9-liquidation-price)
-10. [Margin Tiers](#10-margin-tiers)
-11. [Order Placement](#11-order-placement)
-12. [Estimated Entry, Slippage & Fees](#12-estimated-entry-slippage--fees)
-13. [Margin & Order Value](#13-margin--order-value)
-14. [Leverage & Margin Mode](#14-leverage--margin-mode)
-15. [Funding Rate](#15-funding-rate)
-16. [Fee Tiers](#16-fee-tiers)
-17. [Deposit & Withdrawal](#17-deposit--withdrawal)
-18. [History Endpoints](#18-history-endpoints)
-19. [Vault Endpoints](#19-vault-endpoints)
-20. [Referral Endpoints](#20-referral-endpoints)
+2. [WebSocket Streams](#2-websocket-streams)
+3. [Market Configuration](#3-market-configuration)
+4. [Order Book](#4-order-book)
+5. [Account & Balances](#5-account--balances)
+6. [Positions Table (All Math)](#6-positions-table-all-math)
+7. [PnL Calculations](#7-pnl-calculations)
+8. [Liquidation Price](#8-liquidation-price)
+9. [Margin Tiers](#9-margin-tiers)
+10. [Order Placement](#10-order-placement)
+11. [Estimated Entry, Slippage & Fees](#11-estimated-entry-slippage--fees)
+12. [Margin & Order Value](#12-margin--order-value)
+13. [Leverage & Margin Mode](#13-leverage--margin-mode)
+14. [Funding Rate](#14-funding-rate)
+15. [Fee Tiers](#15-fee-tiers)
+16. [Deposit & Withdrawal](#16-deposit--withdrawal)
+17. [History Endpoints](#17-history-endpoints)
+18. [Vault Endpoints](#18-vault-endpoints)
+19. [Referral Endpoints](#19-referral-endpoints)
 
 ---
 
@@ -68,9 +67,9 @@ Fee tier:
 
 | Service | Default URL | Env Variable |
 |---------|-------------|--------------|
-| **Main API** (trading, account, auth) | `https://api-v2-testnet.strikefinance.org` | `NEXT_PUBLIC_API_URL` |
+| **Main API** (trading, account) | `https://api.strikefinance.org` | `NEXT_PUBLIC_API_URL` |
 | **Price API** (market data REST) | Same as main, or dedicated price host | `NEXT_PUBLIC_PRICE_URL` |
-| **Stats API** (analytics, leaderboard) | `https://api-v2-testnet.strikefinance.org/stat` | `NEXT_PUBLIC_STATS_URL` |
+| **Stats API** (analytics, leaderboard) | `https://api.strikefinance.org/stat` | `NEXT_PUBLIC_STATS_URL` |
 | **Price WebSocket** | `wss://v2.strikefinance.org/ws/stream` | `NEXT_PUBLIC_PRICE_WS_URL` |
 | **User WebSocket** | `wss://v2.strikefinance.org/ws` | `NEXT_PUBLIC_USER_STREAM_WS_URL` |
 
@@ -82,105 +81,9 @@ Content-Type: application/json
 
 ---
 
-## 2. Authentication
+## 2. WebSocket Streams
 
-### 2.1 Full Auth Flow
-
-```
-Connect Wallet -> Request Challenge -> Sign Challenge -> Verify Signature -> Receive JWT
-```
-
-### 2.2 Request Signature Challenge
-
-```
-POST /auth/request-signature
-
-Body:
-{
-  "address": "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x",
-  "chain": "cardano"
-}
-
-Response:
-{
-  "message": "Sign this message to authenticate with Strike Finance. Nonce: abc123def456"
-}
-```
-
-Supported chains: `"cardano"`, `"ethereum"`, `"solana"`, `"bnb"`, `"arbitrum"`
-
-### 2.3 Sign the Challenge
-
-Chain-specific signing:
-- **Cardano**: CIP-30 `signData()` — convert challenge to hex payload, returns `signature:key` format
-- **Solana**: `wallet.signMessage(new TextEncoder().encode(message))`
-- **EVM** (Ethereum/Arbitrum/BNB): `personal_sign` via wallet provider
-
-### 2.4 Verify Signature
-
-```
-POST /auth/verify-signature
-
-Body:
-{
-  "address": "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer...",
-  "chain": "cardano",
-  "message": "Sign this message to authenticate with Strike Finance. Nonce: abc123def456",
-  "signature": "845846a201276761646472657373...",
-  "stay_connected": true
-}
-
-Response:
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "account_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "wallet_balance": 10500.00,
-  "new_account": false,
-  "agreement_acknowledged": true,
-  "connection_expires_at": 1700086400,
-  "trading_enabled_expires_at": 1700043200
-}
-```
-
-Save the `token` — use it as `Authorization: Bearer {token}` for all authenticated requests.
-
-### 2.5 Account Requirements (Pre-Auth Check)
-
-Before allowing new account creation, check if the user has minimum balance:
-
-```
-GET /auth/account-requirements?address=addr1qx2fxv2...&chain=cardano
-
-Response:
-{
-  "account_exists": false,
-  "min_usd_value": 10.00,
-  "eligible_assets": ["ADA", "USDC"]
-}
-```
-
-If `account_exists` is false and `min_usd_value > 0`, check that the user's wallet holds at least $10 worth of ADA or USDC before proceeding with auth.
-
-### 2.6 Enable Trading (Re-auth for Trading Session)
-
-Some actions (placing orders, changing leverage) require an active trading session. If expired:
-
-```
-1. POST /auth/request-signature  (get new challenge)
-2. Sign the challenge with wallet
-3. POST /auth/refresh-wallet-signature
-   Headers: Authorization: Bearer <existing JWT>
-   Body: { "address": "...", "chain": "cardano", "message": "...", "signature": "..." }
-   Response: 200 OK
-```
-
-After success, trading is re-enabled until the next expiry.
-
----
-
-## 3. WebSocket Streams
-
-### 3.1 Price Stream (`wss://v2.strikefinance.org/ws/stream`)
+### 2.1 Price Stream (`wss://v2.strikefinance.org/ws/stream`)
 
 #### Subscribe/Unsubscribe
 
@@ -309,7 +212,7 @@ Can arrive as single object or array. Subscribe with channel `!miniTicker@arr`.
 
 ---
 
-### 3.2 User Stream (`wss://v2.strikefinance.org/ws`)
+### 2.2 User Stream (`wss://v2.strikefinance.org/ws`)
 
 #### Authenticate
 
@@ -430,7 +333,7 @@ Fired on every order state change and fill.
 
 ---
 
-## 4. Market Configuration
+## 3. Market Configuration
 
 ### GET /v2/markets
 
@@ -492,13 +395,13 @@ Key fields for integrators:
 - `order_tick_price`: snap all prices to multiples of this
 - `order_limit_step_size` / `order_market_step_size`: snap all sizes to multiples of this
 - `order_min_notional`: minimum order value (`size * price`) in USD
-- `margin_tiers`: used for liquidation price, max leverage, maintenance margin (see Section 10)
+- `margin_tiers`: used for liquidation price, max leverage, maintenance margin (see Section 9)
 
 ---
 
-## 5. Order Book
+## 4. Order Book
 
-### 5.1 REST Snapshot
+### 4.1 REST Snapshot
 
 ```
 GET /v2/depth?symbol=BTC-USD&limit=100
@@ -512,11 +415,11 @@ Response:
 }
 ```
 
-### 5.2 WebSocket Updates
+### 4.2 WebSocket Updates
 
 Subscribe to `depth` channel. Each `depthUpdate` is a full-book snapshot — clear and rebuild.
 
-### 5.3 Rendering Logic
+### 4.3 Rendering Logic
 
 #### Grouping/Aggregation
 
@@ -568,7 +471,7 @@ sellPercent = 44.2%
 
 **Display**: A colored bar that's 55.8% green, 44.2% red.
 
-### 5.4 Market Fill Price Estimation (VWAP)
+### 4.4 Market Fill Price Estimation (VWAP)
 
 Walk the order book to estimate what price you'd get for a market order.
 
@@ -631,9 +534,9 @@ function estimateMarketFillPrice(orderBook, side, size, skipSize = 0):
 
 ---
 
-## 6. Account & Balances
+## 5. Account & Balances
 
-### 6.1 Get Account
+### 5.1 Get Account
 
 ```
 GET /v2/account?account_id=a1b2c3d4-...
@@ -661,7 +564,7 @@ Response:
 
 Also supports `?vault_id={id}` or `?blockchain={chain}&blockchain_address={addr}`.
 
-### 6.2 Balance Formulas (with Examples)
+### 5.2 Balance Formulas (with Examples)
 
 Using: walletBalance = $10,500, one isolated position with isoBalance = $1,075, one cross position requiring $1,000 initial margin with $200 uPnL and $45 maintenance margin. Open order costs = $500. Locked rewards = $100.
 
@@ -690,7 +593,7 @@ Available Balance:  $8,125.00
 Position Value:     $1,275.00  (margin + uPnL = $1,075 + $200)
 ```
 
-### 6.3 Portfolio Summary
+### 5.3 Portfolio Summary
 
 ```
 GET /v2/portfolio?account_id=a1b2c3d4-...
@@ -721,11 +624,11 @@ Response:
 
 ---
 
-## 7. Positions Table (All Math)
+## 6. Positions Table (All Math)
 
 This is the core of the trading UI. Every field is either from the API or **derived in real-time from the mark price**.
 
-### 7.1 Fetch Positions
+### 6.1 Fetch Positions
 
 ```
 GET /v2/positions?account_id=a1b2c3d4-...
@@ -734,7 +637,7 @@ Headers: Authorization: Bearer <JWT>
 
 Positions also arrive via the `ACCOUNT_UPDATE` WebSocket event.
 
-### 7.2 Base Fields (from API/WS)
+### 6.2 Base Fields (from API/WS)
 
 | Field | Example | Description |
 |-------|---------|-------------|
@@ -747,7 +650,7 @@ Positions also arrive via the `ACCOUNT_UPDATE` WebSocket event.
 | `leverage` | `20` | Position leverage from API |
 | `accumulatedFundingFees` | `-12.50` | Cumulative funding paid/received |
 
-### 7.3 Derived Fields (recalculate on EVERY mark price update)
+### 6.3 Derived Fields (recalculate on EVERY mark price update)
 
 Using our reference position: Long 0.5 BTC at $43,000 entry, mark = $43,500, isolated with $1,075 balance.
 
@@ -863,7 +766,7 @@ Example (if uPnL were -$800):
 
 ---
 
-### 7.4 Enrichment Flow (How to Update Positions in Real-Time)
+### 6.4 Enrichment Flow (How to Update Positions in Real-Time)
 
 On every `markPriceUpdate` WebSocket event:
 
@@ -872,7 +775,7 @@ Step 1: For each position, calculate derived fields:
   - Get markPrice from the price stream for this symbol
   - Calculate uPnL, notional, currentMargin, requiredMargin,
     maintenanceMargin, leverage, pnlPercentage, marginRatio
-  - For ISOLATED positions: calculate liquidationPrice (Section 9.1)
+  - For ISOLATED positions: calculate liquidationPrice (Section 8.1)
 
 Step 2: Aggregate across ALL positions:
   - totalIsolatedMargin = sum of isoBalance for all isolated positions
@@ -883,10 +786,10 @@ Step 3: For each CROSS position, calculate liquidation price:
   - Exclude THIS position from the totals:
       otherCrossUPnL = totalCrossUPnL - thisPosition.uPnL
       otherCrossMM = totalCrossMaintenanceMargin - thisPosition.maintenanceMargin
-  - Calculate cross liquidation (Section 9.2)
+  - Calculate cross liquidation (Section 8.2)
 ```
 
-### 7.5 What Each Column Shows
+### 6.5 What Each Column Shows
 
 | Column | Value | Format Example | Color |
 |--------|-------|---------------|-------|
@@ -901,7 +804,7 @@ Step 3: For each CROSS position, calculate liquidation price:
 | TP/SL | TP/SL prices or "View" | `45,000 / 41,000` | White/default |
 | Actions | Close button | Button | |
 
-### 7.6 TP/SL Display
+### 6.6 TP/SL Display
 
 Strategy orders are linked via `strategy_id` or client order ID pattern:
 ```
@@ -914,7 +817,7 @@ Filter open orders by matching strategy ID. Extract `stop_price` from TP/SL orde
 
 If there are multiple TP or SL orders (partial sizes), show a "View" button instead of prices.
 
-### 7.7 Modify Margin (Isolated Only)
+### 6.7 Modify Margin (Isolated Only)
 
 ```
 Max removable:
@@ -928,7 +831,7 @@ Max removable:
 
 **Display**: "Max removable: $237.50". After removing $237.50, the new liquidation price would shift closer to the current price.
 
-### 7.8 Position Merging (WS Updates)
+### 6.8 Position Merging (WS Updates)
 
 When `ACCOUNT_UPDATE` arrives:
 - Key positions by `symbol-positionSide` (e.g. `"BTC-USD-LONG"`)
@@ -938,9 +841,9 @@ When `ACCOUNT_UPDATE` arrives:
 
 ---
 
-## 8. PnL Calculations
+## 7. PnL Calculations
 
-### 8.1 Unrealized PnL (per position)
+### 7.1 Unrealized PnL (per position)
 
 ```
 Long:  uPnL = (markPrice - entryPrice) * size
@@ -952,14 +855,14 @@ Short: uPnL = -(markPrice - entryPrice) * size
 
 Always uses **mark price** (the `p` field from `markPriceUpdate`), not last trade price.
 
-### 8.2 PnL Percentage / ROE
+### 7.2 PnL Percentage / ROE
 
 ```
 pnlPercentage = (uPnL / currentMargin) * 100
              = ($250 / $1,075) * 100 = +23.26%
 ```
 
-### 8.3 Realized PnL (from trades)
+### 7.3 Realized PnL (from trades)
 
 From trade history response:
 ```
@@ -968,7 +871,7 @@ fee = fee                 (e.g. $10.75)
 netPnl = $500.00 - $10.75 = $489.25
 ```
 
-### 8.4 All-Time PnL
+### 7.4 All-Time PnL
 
 ```
 externalNetFlow = allTimeDeposits - allTimeWithdrawals = $15,000 - $3,000 = $12,000
@@ -976,7 +879,7 @@ perpRealizedPnl = walletBalance - externalNetFlow = $10,500 - $12,000 = -$1,500
 allTimePnl = perpRealizedPnl + totalUnrealizedPnL = -$1,500 + $250 = -$1,250
 ```
 
-### 8.5 TP/SL PnL Conversions
+### 7.5 TP/SL PnL Conversions
 
 Convert between ROI%, USD, and trigger price:
 
@@ -1001,9 +904,9 @@ Example: TP at $44,075 -> ($44,075 - $43,000) * 0.5 = $537.50
 
 ---
 
-## 9. Liquidation Price
+## 8. Liquidation Price
 
-### 9.1 Isolated Margin
+### 8.1 Isolated Margin
 
 ```
 Formula:
@@ -1053,7 +956,7 @@ LP = 45150 / 1.004 = $44,960.16
 
 **Display**: `"$44,960.16"` — if BTC rises to this price, you get liquidated.
 
-### 9.2 Cross Margin
+### 8.2 Cross Margin
 
 ```
 Formula:
@@ -1090,7 +993,7 @@ Cross liquidation price **changes in real-time** as:
 - Other cross positions' PnL moves
 - New positions are opened/closed
 
-### 9.3 Order Liquidation Price Estimation (for order form)
+### 8.3 Order Liquidation Price Estimation (for order form)
 
 Before placing an order, estimate what the liquidation price would be:
 
@@ -1109,7 +1012,7 @@ Validation:
 
 ---
 
-## 10. Margin Tiers
+## 9. Margin Tiers
 
 Each market has tiers sorted by `max_notional` ascending:
 
@@ -1155,9 +1058,9 @@ getMaxPositionSizeForLeverage(market, leverage):
 
 ---
 
-## 11. Order Placement
+## 10. Order Placement
 
-### 11.1 Place Order (Market, Limit, Stop)
+### 10.1 Place Order (Market, Limit, Stop)
 
 ```
 POST /v2/order
@@ -1187,7 +1090,7 @@ Response:
 }
 ```
 
-### 11.2 Strategy Order (with TP/SL)
+### 10.2 Strategy Order (with TP/SL)
 
 ```
 POST /v2/order/strategy
@@ -1226,7 +1129,7 @@ Body:
 }
 ```
 
-### 11.3 Replace Order (Atomic Cancel + Create)
+### 10.3 Replace Order (Atomic Cancel + Create)
 
 ```
 POST /v2/order/replace
@@ -1246,7 +1149,7 @@ Body:
 }
 ```
 
-### 11.4 Cancel Order / Cancel All
+### 10.4 Cancel Order / Cancel All
 
 ```
 DELETE /v2/order/cancel
@@ -1256,7 +1159,7 @@ DELETE /v2/order/cancel-all
 Body: { "symbol": "BTC-USD" }     // optional: omit to cancel ALL
 ```
 
-### 11.5 Mappings
+### 10.5 Mappings
 
 | UI | API `side` | | UI | API `type` |
 |---|---|---|---|---|
@@ -1267,7 +1170,7 @@ Body: { "symbol": "BTC-USD" }     // optional: omit to cancel ALL
 | | | | Take Profit | `"take_profit"` |
 | | | | Take Profit Limit | `"take_profit_limit"` |
 
-### 11.6 Size & Price Formatting
+### 10.6 Size & Price Formatting
 
 Before submitting, snap to valid increments:
 ```
@@ -1278,9 +1181,9 @@ formattedSize = "0.5123"   (string with base_prec decimals)
 
 ---
 
-## 12. Estimated Entry, Slippage & Fees
+## 11. Estimated Entry, Slippage & Fees
 
-### 12.1 Estimated Entry Price
+### 11.1 Estimated Entry Price
 
 **No existing position**: VWAP from order book (market) or limit price (limit).
 
@@ -1295,9 +1198,9 @@ newEntry = (0.3 * 42800 + 0.2 * 43100) / (0.3 + 0.2)
 
 **Display**: `"Est. Entry: $42,920.00"` (blended entry)
 
-**Position flip**: skip closing portion, VWAP only opening portion (see Section 5.4).
+**Position flip**: skip closing portion, VWAP only opening portion (see Section 4.4).
 
-### 12.2 Slippage
+### 11.2 Slippage
 
 Only for market orders. Compares VWAP fill to current mark price:
 
@@ -1311,7 +1214,7 @@ Example: Long market, VWAP fill = $43,260, markPrice = $43,250
 
 **Display**: `"Est. Slippage: 0.0231%"`
 
-### 12.3 Estimated Fee
+### 11.3 Estimated Fee
 
 ```
 orderValue = size * assumedPrice = 0.5 * 43000 = $21,500
@@ -1331,9 +1234,9 @@ estimatedFee = $21,500 * 0.00018 = $3.870
 
 ---
 
-## 13. Margin & Order Value
+## 12. Margin & Order Value
 
-### 13.1 Order Value
+### 12.1 Order Value
 
 ```
 orderValue = size * assumedPrice
@@ -1342,7 +1245,7 @@ orderValue = size * assumedPrice
 
 **Display**: `"Order Value: $21,500.00"`
 
-### 13.2 Required Margin for Order
+### 12.2 Required Margin for Order
 
 Only the **opening portion** needs margin (closing existing position doesn't):
 
@@ -1360,7 +1263,7 @@ Example: You have no position, Long 0.5 BTC at 20x:
 
 **Display**: `"Margin: $1,075.00"`
 
-### 13.3 Max Order Size
+### 12.3 Max Order Size
 
 ```
 costPerUnit = (currentPrice / leverage) + openLossPerUnit
@@ -1375,7 +1278,7 @@ maxOrderSize = oppositePositionSize + maxOpeningSize
 
 **Display**: "Max" button fills size to `3.8139`.
 
-### 13.4 Tier Validation
+### 12.4 Tier Validation
 
 ```
 Before submitting a Long 2.0 BTC order at 30x with no existing position:
@@ -1387,9 +1290,9 @@ Before submitting a Long 2.0 BTC order at 30x with no existing position:
 
 ---
 
-## 14. Leverage & Margin Mode
+## 13. Leverage & Margin Mode
 
-### 14.1 Update Leverage
+### 13.1 Update Leverage
 
 ```
 POST /v2/leverage?account_id=a1b2c3d4-...
@@ -1400,7 +1303,7 @@ Body: { "symbol": "BTC-USD", "leverage": 25 }
 Response: { "leverage": 25, "maxNotionalValue": "250000", "symbol": "BTC-USD" }
 ```
 
-### 14.2 Update Margin Mode
+### 13.2 Update Margin Mode
 
 ```
 POST /v2/marginMode?account_id=a1b2c3d4-...
@@ -1411,7 +1314,7 @@ Body: { "symbol": "BTC-USD", "marginMode": "isolated" }
 Response: { "symbol": "BTC-USD", "marginMode": "isolated" }
 ```
 
-### 14.3 Modify Isolated Margin
+### 13.3 Modify Isolated Margin
 
 ```
 POST /v2/isoMargin
@@ -1424,15 +1327,15 @@ Response: { "symbol": "BTC-USD", "sequence_id": 123, "message_id": "..." }
 
 ---
 
-## 15. Funding Rate
+## 14. Funding Rate
 
-### 15.1 Data Source
+### 14.1 Data Source
 
 From `markPriceUpdate` WS event:
 - `r` = current funding rate as decimal string
 - `T` = next funding time (unix ms)
 
-### 15.2 Display
+### 14.2 Display
 
 ```
 fundingRatePercent = parseFloat("0.0001") * 100 = 0.01%
@@ -1444,7 +1347,7 @@ annualizedRate = 0.0001 * 100 * 3 * 365 = 10.95%
 
 Positive rate = Longs pay Shorts. Negative rate = Shorts pay Longs.
 
-### 15.3 Countdown Timer
+### 14.3 Countdown Timer
 
 ```
 countdown = nextFundingTime - Date.now()
@@ -1453,7 +1356,7 @@ countdown = nextFundingTime - Date.now()
 Display: "01:00:00"   (update every second)
 ```
 
-### 15.4 Funding History
+### 14.4 Funding History
 
 ```
 GET /v2/history/funding?account_id=a1b2c3d4-...&limit=20
@@ -1475,7 +1378,7 @@ Calculation: `amount = positionNotional * fundingRate * direction`
 = $21,750 * 0.0001 * (-1 for Long paying positive rate) = -$2.175
 ```
 
-### 15.5 Accumulated Funding (per position)
+### 14.5 Accumulated Funding (per position)
 
 `accumulatedFundingFees` is a running total from the API:
 - Positive = net received funding
@@ -1486,9 +1389,9 @@ Calculation: `amount = positionNotional * fundingRate * direction`
 
 ---
 
-## 16. Fee Tiers
+## 15. Fee Tiers
 
-### 16.1 Fetch Fee Tiers (Public)
+### 15.1 Fetch Fee Tiers (Public)
 
 ```
 GET /v2/fee-tiers
@@ -1503,7 +1406,7 @@ Response:
 
 User's current tier comes from `/v2/portfolio` response (`fee_tier` field).
 
-### 16.2 Fee Calculation Example
+### 15.2 Fee Calculation Example
 
 ```
 Tier 1 user, 10% discount, placing a market order for 0.5 BTC at $43,000:
@@ -1514,7 +1417,7 @@ discountedRate = 0.0004 * (1 - 0.10) = 0.00036
 fee = $21,500 * 0.00036 = $7.74
 ```
 
-### 16.3 Display Format
+### 15.3 Display Format
 
 ```
 Rate display: 0.0004 * 100 = "0.040%"
@@ -1525,9 +1428,9 @@ Default rates (when no tier data available): taker 0.05%, maker 0.02%.
 
 ---
 
-## 17. Deposit & Withdrawal
+## 16. Deposit & Withdrawal
 
-### 17.1 Deposit Flow
+### 16.1 Deposit Flow
 
 **Step 1: Get Quote**
 ```
@@ -1568,7 +1471,7 @@ GET /v2/transaction/status?request_id=d1e2f3a4-...&type=deposit
 Response: { "status": "completed" }
 ```
 
-### 17.2 Withdrawal Flow
+### 16.2 Withdrawal Flow
 
 **Step 1: Get Quote**
 ```
@@ -1597,11 +1500,11 @@ Sign and submit batcher TX, then proceed to POST /v2/withdraw
 
 ---
 
-## 18. History Endpoints
+## 17. History Endpoints
 
 All history endpoints use **cursor-based pagination**. Set `fromId` or `fromOrderID` to the last item's `id` to fetch the next page. Stop when `count < limit`.
 
-### 18.1 Order History
+### 17.1 Order History
 
 ```
 GET /v2/history/order?account_id={id}&limit=20&symbol=BTC-USD&fromOrderID=12344
@@ -1638,7 +1541,7 @@ Response:
 
 Statuses: `pending`, `open`, `filled`, `canceled`, `rejected`, `expired`, `untriggered`
 
-### 18.2 Trade/Fill History
+### 17.2 Trade/Fill History
 
 ```
 GET /v2/history/fill?account_id={id}&limit=20&fromId=5677
@@ -1668,7 +1571,7 @@ Response:
 
 Net PnL per trade: `netPnl = parseFloat(realized_pnl) - parseFloat(fee)`
 
-### 18.3 Deposit/Withdrawal History
+### 17.3 Deposit/Withdrawal History
 
 ```
 GET /v2/history/transaction?account_id={id}&type=deposit,withdraw&limit=20
@@ -1694,7 +1597,7 @@ Type values: 1=Deposit, 2=Withdraw. Status values: 1=Pending, 2=Completed, 3=Fai
 
 ---
 
-## 19. Vault Endpoints
+## 18. Vault Endpoints
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
@@ -1714,7 +1617,7 @@ Type values: 1=Deposit, 2=Withdraw. Status values: 1=Pending, 2=Completed, 3=Fai
 
 ---
 
-## 20. Referral Endpoints
+## 19. Referral Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|

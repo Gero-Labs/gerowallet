@@ -1,6 +1,6 @@
 // Strike Finance v2 API — Market Data (public, no auth)
 
-import { strikeMarketClient } from './strike-v2.client';
+import { strikeClient, strikeMarketClient } from './strike-v2.client';
 import type {
   ExchangeInfo,
   OrderBookResponse,
@@ -11,6 +11,7 @@ import type {
   BookTickerResponse,
   OpenInterestResponse,
   StrikeKline,
+  StrikeMarketsResponse,
 } from './strike-v2.types';
 
 export const strikeMarketApi = {
@@ -73,6 +74,12 @@ export const strikeMarketApi = {
     endTime?: number;
   }): Promise<StrikeKline[]> {
     const { data } = await strikeMarketClient.get('/v2/klines', { params });
+    return data;
+  },
+
+  /** Fetch market configuration (tick sizes, margin tiers, min/max sizes). No auth required. */
+  async getMarkets(): Promise<StrikeMarketsResponse> {
+    const { data } = await strikeClient.get('/v2/markets');
     return data;
   },
 };

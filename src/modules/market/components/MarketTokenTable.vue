@@ -96,7 +96,7 @@
               ${{ (item.price ?? 0).toFixed(8) }}
             </v-tooltip>
           </v-list-item-title>
-          <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
+          <v-list-item-subtitle v-if="!item.isNative" style="font-size: 10px; opacity: 0.5">
             {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} {{ nativeSymbol }}
           </v-list-item-subtitle>
         </v-list-item-content>
@@ -425,7 +425,7 @@ const currentPage = ref(1);
 const itemsPerPage = 25;
 
 const baseHeaders = computed(() => {
-  const headers: any[] = [
+  const headers: { text: string; value: string; sortable: boolean; width?: string; class?: string; cellClass?: string }[] = [
     { text: t('market.rank'), value: 'rank', sortable: false, width: '40px' },
     { text: t('market.token'), value: 'name', sortable: true },
     { text: t('market.price'), value: 'price', sortable: true, width: '100px' },
@@ -445,9 +445,18 @@ const baseHeaders = computed(() => {
   );
 
   if (props.showHoldingsColumns) {
-    headers.push(
+    // Balance after name
+    const nameIndex = headers.findIndex(h => h.value === 'name');
+    headers.splice(nameIndex + 1, 0,
       { text: t('market.balance'), value: 'balance', sortable: true, width: '80px' },
+    );
+    // Value after price
+    const priceIndex = headers.findIndex(h => h.value === 'price');
+    headers.splice(priceIndex + 1, 0,
       { text: t('market.value'), value: 'value', sortable: true, width: '80px' },
+    );
+    // Avg cost and PnL at the end (before watchlist)
+    headers.push(
       { text: t('market.avgCost'), value: 'avgCostBasis', sortable: true, width: '80px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
       { text: t('market.totalPnl'), value: 'totalPnl', sortable: true, width: '90px' },
     );
@@ -547,23 +556,24 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
     // Remap header value to data field name where they differ
     const effectiveSortKey = sortKey === 'risk' ? 'riskRating' : sortKey;
 
-    rest.sort((a: any, b: any) => {
-      const va = a[effectiveSortKey];
-      const vb = b[effectiveSortKey];
+    const key = effectiveSortKey as keyof MarketToken;
+    rest.sort((a: MarketToken, b: MarketToken) => {
+      const va = a[key];
+      const vb = b[key];
       // Null/undefined always sort last regardless of direction
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
       // Risk rating: use weight map for correct ordering (AAA > AA > A > BBB > ...)
-      if (effectiveSortKey === 'riskRating') {
-        const wa = RISK_WEIGHT[va] ?? 0;
-        const wb = RISK_WEIGHT[vb] ?? 0;
+      if (key === 'riskRating') {
+        const wa = RISK_WEIGHT[va as string] ?? 0;
+        const wb = RISK_WEIGHT[vb as string] ?? 0;
         return desc ? wb - wa : wa - wb;
       }
-      if (typeof va === 'string') {
+      if (typeof va === 'string' && typeof vb === 'string') {
         return desc ? vb.localeCompare(va) : va.localeCompare(vb);
       }
-      return desc ? vb - va : va - vb;
+      return desc ? Number(vb) - Number(va) : Number(va) - Number(vb);
     });
   }
 
