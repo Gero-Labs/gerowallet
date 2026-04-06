@@ -166,7 +166,7 @@
       @input="val => !val && closeDialog()"
     />
     <SendDialog v-else :isOpen="quickActionState.activeDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
-    <PerpetualsDialog v-if="!isPerpetualsDisabled" :isOpen="quickActionState.activeDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
+    <PerpetualsDialog v-if="!isPerpetualsDisabled" :visible="quickActionState.activeDialog === dialogs.PERPETUALS" @update:visible="val => !val && closeDialog()"></PerpetualsDialog>
   </div>
 </template>
 <script setup lang="ts">

@@ -10,6 +10,7 @@ import type {
   TickerPriceResponse,
   BookTickerResponse,
   OpenInterestResponse,
+  StrikeKline,
 } from './strike-v2.types';
 
 export const strikeMarketApi = {
@@ -60,6 +61,18 @@ export const strikeMarketApi = {
 
   async getOpenInterest(symbol?: string): Promise<OpenInterestResponse | OpenInterestResponse[]> {
     const { data } = await strikeMarketClient.get('/v2/openInterest', { params: symbol ? { symbol } : undefined });
+    return data;
+  },
+
+  async getKlines(params: {
+    symbol: string;
+    interval: string;
+    priceType?: 'mark' | 'index' | 'last';
+    limit?: number;
+    startTime?: number;
+    endTime?: number;
+  }): Promise<StrikeKline[]> {
+    const { data } = await strikeMarketClient.get('/v2/klines', { params });
     return data;
   },
 };

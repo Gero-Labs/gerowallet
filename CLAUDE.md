@@ -76,6 +76,7 @@ npm run pack             # Package .zip/.crx/.xpi
 - **Always use `$t()` for user-facing text** — never hardcode strings
 - Translation files: `src/plugins/i18n/us.ts` (English), `de.ts` (German)
 - **When adding keys to `us.ts`, always add corresponding German in `de.ts`**
+- **Before creating a new i18n key, search for an existing key with the same text** (e.g., `errors.insufficientBalance` already exists — reuse it instead of creating `perpetuals.insufficientBalance`)
 
 ### Vuetify
 - `v-select`, `v-autocomplete`, `v-combobox`: **Always use `attach` prop** (prevents dropdown positioning issues on scroll)

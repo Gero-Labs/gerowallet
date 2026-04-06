@@ -130,9 +130,12 @@ export async function openSidebar(tabId: number, path: string) {
   if (typeof tabId !== 'number') {
     return null;
   }
+  // Append tabId so the side panel can identify which tab it belongs to
+  const separator = path.includes('?') ? '&' : '?';
+  const fullPath = `${path}${separator}tabId=${tabId}`;
   chrome.sidePanel.setOptions({
       tabId,
-      path,
+      path: fullPath,
       enabled: true
   })
   try {
@@ -147,21 +150,27 @@ export async function openSidebar(tabId: number, path: string) {
 // Mini-gero: side panel available but not the default action
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 
-// Mini-gero DApp channel
-let miniGeroPort: chrome.runtime.Port | null = null;
+// Mini-gero DApp channel — per-tab port routing
+// Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
+const miniGeroPorts = new Map<number, chrome.runtime.Port>();
 const pendingDAppRequests = new Map<string, (response: any) => void>();
 
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name === 'mini-gero-dapp-channel') {
-    // Reject pending requests from old port before replacing
-    if (miniGeroPort) {
-      const pending = Array.from(pendingDAppRequests.entries());
-      pendingDAppRequests.clear();
-      for (const [, resolver] of pending) {
-        resolver({ error: 'mini-gero reconnected from another window' });
-      }
+  if (port.name.startsWith('mini-gero-dapp-channel')) {
+    // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123")
+    const parts = port.name.split(':');
+    const tabId = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
+    if (isNaN(tabId)) {
+      console.warn('[DApp] mini-gero port connected without tab ID, ignoring');
+      return;
     }
-    miniGeroPort = port;
+
+    // Reject pending requests from old port for this tab
+    const oldPort = miniGeroPorts.get(tabId);
+    if (oldPort) {
+      try { oldPort.disconnect(); } catch { /* already disconnected */ }
+    }
+    miniGeroPorts.set(tabId, port);
 
     port.onMessage.addListener((message) => {
       if (message.type === 'dapp-response' && message.requestId) {
@@ -174,31 +183,26 @@ chrome.runtime.onConnect.addListener((port) => {
     });
 
     port.onDisconnect.addListener(() => {
-      if (miniGeroPort === port) miniGeroPort = null;
-      // Reject all pending requests atomically
-      const pending = Array.from(pendingDAppRequests.entries());
-      pendingDAppRequests.clear();
-      for (const [, resolver] of pending) {
-        resolver({ error: 'mini-gero disconnected' });
+      if (miniGeroPorts.get(tabId) === port) {
+        miniGeroPorts.delete(tabId);
       }
     });
   }
 });
 
-function sendToMiniGero(method: string, payload: any): Promise<any> {
-  if (!miniGeroPort) return Promise.reject(new Error('mini-gero not connected'));
+function sendToMiniGero(method: string, payload: any, tabId?: number): Promise<any> {
+  // Find the correct port: prefer exact tab, fall back to any connected port
+  const port = (typeof tabId === 'number' && miniGeroPorts.get(tabId)) || miniGeroPorts.values().next().value;
+  if (!port) return Promise.reject(new Error('mini-gero not connected'));
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
-    const timeout = setTimeout(() => {
-      pendingDAppRequests.delete(requestId);
-      reject(new Error('mini-gero request timeout'));
-    }, 60_000);
+    // No timeout — user interaction can take as long as needed.
+    // Cleanup happens via port disconnect or explicit user response.
     pendingDAppRequests.set(requestId, (response) => {
-      clearTimeout(timeout);
       if (response.error) reject(new Error(response.error));
       else resolve(response);
     });
-    miniGeroPort!.postMessage({
+    port.postMessage({
       type: 'dapp-request',
       method,
       requestId,
@@ -208,14 +212,15 @@ function sendToMiniGero(method: string, payload: any): Promise<any> {
 }
 
 /**
- * Wait for the mini-gero side panel to connect its DApp channel port.
- * Resolves once `miniGeroPort` is set, rejects after `timeoutMs`.
+ * Wait for the mini-gero side panel to connect its DApp channel port for a specific tab.
+ * Resolves once the port for `tabId` is set, rejects after `timeoutMs`.
  */
-function waitForMiniGeroPort(timeoutMs = 5000): Promise<void> {
-  if (miniGeroPort) return Promise.resolve();
+function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
+  const hasPort = () => typeof tabId === 'number' ? miniGeroPorts.has(tabId) : miniGeroPorts.size > 0;
+  if (hasPort()) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const interval = setInterval(() => {
-      if (miniGeroPort) {
+      if (hasPort()) {
         clearInterval(interval);
         clearTimeout(timer);
         resolve();
@@ -446,7 +451,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
   const enablePayload = { ...request.data, website: origin };
 
   const handleMiniGeroEnable = () => {
-    return sendToMiniGero('enable', enablePayload)
+    return sendToMiniGero('enable', enablePayload, tabId)
       .then(async (response) => {
         if (response.data === true) {
           await WalletStore.addConnectedDapp(currentWallet.id, origin);
@@ -460,7 +465,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
       return reply({ error: APIError.InternalError });
     }
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000))
+      .then(() => waitForMiniGeroPort(5000, tabId))
       .then(() => handleMiniGeroEnable())
       .catch(() => {
         // Fallback: popup window when side panel is not supported or fails
@@ -479,16 +484,10 @@ app.add(METHOD.enable, (request, sendResponse) => {
   };
 
   // Primary: route through mini-gero side panel drawer
-  if (miniGeroPort) {
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroEnable()
       .catch((err: any) => {
-        // Port message failed (user_rejected or stale port) — if user_rejected, reply with error;
-        // otherwise re-open side panel
-        if (err.message === 'user_rejected') {
-          reply({ error: err.message });
-        } else {
-          openSidePanelAndSend();
-        }
+        reply({ error: err.message || APIError.InternalError });
       });
   } else {
     openSidePanelAndSend();
@@ -823,7 +822,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignData = () => {
-    return sendToMiniGero('signData', signDataPayload)
+    return sendToMiniGero('signData', signDataPayload, tabId)
       .then((response) => signDataReply({ data: response.data }));
   };
 
@@ -832,7 +831,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
       return signDataReply({ error: APIError.InternalError });
     }
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000))
+      .then(() => waitForMiniGeroPort(5000, tabId))
       .then(() => handleMiniGeroSignData())
       .catch(() => {
         // Fallback: popup window
@@ -849,11 +848,10 @@ app.add(METHOD.signData, (request, sendResponse) => {
   };
 
   // Primary: route through mini-gero side panel drawer
-  if (miniGeroPort) {
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroSignData()
       .catch((err: any) => {
-        if (err.message === 'user_rejected') signDataReply({ error: err.message });
-        else openSidePanelForSignData();
+        signDataReply({ error: err.message || APIError.InternalError });
       });
   } else {
     openSidePanelForSignData();
@@ -869,7 +867,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
-    return sendToMiniGero('signTx', signTxPayload)
+    return sendToMiniGero('signTx', signTxPayload, tabId)
       .then((response) => signTxReply({ data: response.data }));
   };
 
@@ -881,7 +879,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     const requestCopy = JSON.parse(JSON.stringify(request));
 
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000))
+      .then(() => waitForMiniGeroPort(5000, tabId))
       .then(() => handleMiniGeroSignTx())
       .catch(async () => {
         // Fallback: popup window
@@ -912,11 +910,10 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   };
 
   // Primary: route through mini-gero side panel drawer
-  if (miniGeroPort) {
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroSignTx()
       .catch((err: any) => {
-        if (err.message === 'user_rejected') signTxReply({ error: err.message });
-        else openSidePanelForSignTx();
+        signTxReply({ error: err.message || APIError.InternalError });
       });
   } else {
     openSidePanelForSignTx();
@@ -2527,7 +2524,7 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
   };
 
   const handleMiniGeroBtcEnable = () => {
-    sendToMiniGero('enable', { ...request.data, website: origin })
+    sendToMiniGero('enable', { ...request.data, website: origin }, tabId)
       .then(async (response) => {
         if (response.data === true) {
           await WalletStore.addConnectedDapp(currentWallet.id, origin);
@@ -2538,11 +2535,11 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
   };
 
   // Primary: route through mini-gero side panel drawer
-  if (miniGeroPort) {
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroBtcEnable();
   } else {
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000))
+      .then(() => waitForMiniGeroPort(5000, tabId))
       .then(() => handleMiniGeroBtcEnable())
       .catch(() => {
         // Fallback: popup window

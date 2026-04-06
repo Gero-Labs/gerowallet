@@ -29,7 +29,7 @@ import { ref } from 'vue';
 
 const WS_URL =
   (import.meta.env.VITE_STRIKE_WS_URL as string | undefined) ??
-  'wss://api-v2.strikefinance.org/ws/price';
+  'wss://api.strikefinance.org/ws/price';
 
 type WsCallback = (data: unknown) => void;
 
@@ -162,11 +162,16 @@ function fireCallbacks(channel: string, symbol: string | undefined, data: unknow
 }
 
 function connect(): void {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    console.log('[StrikeWS] Already connected/connecting, skipping');
+    return;
+  }
 
+  console.log('[StrikeWS] Connecting to', WS_URL);
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
+    console.log('[StrikeWS] Connected');
     connected.value = true;
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     resubscribeAll();
@@ -175,14 +180,18 @@ function connect(): void {
 
   ws.onmessage = handleMessage;
 
-  ws.onclose = () => {
+  ws.onclose = (event) => {
+    console.log('[StrikeWS] Closed:', event.code, event.reason);
     connected.value = false;
     ws = null;
     stopPingInterval();
     reconnectTimer = setTimeout(connect, 5000);
   };
 
-  ws.onerror = () => ws?.close();
+  ws.onerror = (event) => {
+    console.error('[StrikeWS] Error:', event);
+    ws?.close();
+  };
 }
 
 function disconnect(): void {

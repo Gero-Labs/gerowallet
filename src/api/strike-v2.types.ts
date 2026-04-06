@@ -611,6 +611,18 @@ export interface OpenInterestResponse {
   time: number;
 }
 
+export interface StrikeKline {
+  /** Open time (Unix ms) */
+  openTime: number;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string;
+  /** Close time (Unix ms) */
+  closeTime: number;
+}
+
 // ---------------------------------------------------------------------------
 // Vault API
 // ---------------------------------------------------------------------------

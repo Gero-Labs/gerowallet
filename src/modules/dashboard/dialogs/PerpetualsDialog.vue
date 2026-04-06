@@ -6,9 +6,7 @@
            ROW 1 — Symbol Tabs (scrollable)
            ═══════════════════════════════════════════════════════════════════ -->
       <div class="symbol-tabs-bar">
-        <v-btn icon small class="mr-1" @click="close">
-          <v-icon size="18">mdi-close</v-icon>
-        </v-btn>
+        <v-card-title class="px-1">{{ $t('navigation.perpetuals') }}</v-card-title>
 
         <div class="symbol-tabs-scroll">
           <div
@@ -38,8 +36,8 @@
 
         <v-spacer />
 
-        <v-btn icon small :loading="tradingLoading" @click="refreshAll()">
-          <v-icon size="18">mdi-reload</v-icon>
+        <v-btn icon small class="mr-1" @click="close">
+          <v-icon size="18">mdi-close</v-icon>
         </v-btn>
       </div>
 
@@ -47,32 +45,49 @@
            ROW 2 — Price Info Bar
            ═══════════════════════════════════════════════════════════════════ -->
       <div class="price-info-bar">
-        <v-select
-          v-model="selectedSymbol"
-          :items="symbolNames"
-          dense
-          hide-details
-          outlined
-          class="symbol-dropdown"
-          :attach="true"
-          :loading="marketLoading"
-        />
+        <div class="symbol-pair">
+          <img src="@/assets/svg/cardano-blue.svg" alt="" class="symbol-pair__icon" />
+          <span class="symbol-pair__name">{{ selectedSymbol }}</span>
+        </div>
 
         <template v-if="currentTicker">
           <div class="price-info-item">
-            <span class="price-info-label">{{ $t('perpetuals.markPrice') }}</span>
-            <span class="price-info-value">{{ formatPrice(currentFunding?.markPrice) }}</span>
+            <v-tooltip bottom content-class="custom-tooltip" max-width="260">
+              <template #activator="{ on, attrs }">
+                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.markPrice') }}</span>
+              </template>
+              <span>{{ $t('perpetuals.markPriceTooltip') }}</span>
+            </v-tooltip>
+            <span
+              class="price-info-value"
+              :class="{
+                'price-flash-up': markPriceFlash === 'up',
+                'price-flash-down': markPriceFlash === 'down',
+              }"
+            >{{ formatPrice(liveMarkPrice ?? currentFunding?.markPrice) }}</span>
           </div>
           <div class="price-info-item">
-            <span class="price-info-label">{{ $t('perpetuals.indexPrice') }}</span>
-            <span class="price-info-value">{{ formatPrice(currentFunding?.indexPrice) }}</span>
+            <v-tooltip bottom content-class="custom-tooltip" max-width="260">
+              <template #activator="{ on, attrs }">
+                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.indexPrice') }}</span>
+              </template>
+              <span>{{ $t('perpetuals.indexPriceTooltip') }}</span>
+            </v-tooltip>
+            <span class="price-info-value">{{ formatPrice(liveIndexPrice ?? currentFunding?.indexPrice) }}</span>
           </div>
           <div class="price-info-item">
-            <span class="price-info-label">{{ $t('perpetuals.funding') }}</span>
-            <span class="price-info-value" :class="fundingClass">
-              {{ formatFundingRate(currentFunding?.lastFundingRate) }}
-            </span>
-            <span class="price-info-countdown ml-1">/ {{ fundingCountdown }}</span>
+            <v-tooltip bottom content-class="custom-tooltip" max-width="280">
+              <template #activator="{ on, attrs }">
+                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.fundingCountdown') }}</span>
+              </template>
+              <span>{{ $t('perpetuals.fundingCountdownTooltip') }}</span>
+            </v-tooltip>
+            <div class="funding-value-row">
+              <span class="price-info-value" :class="fundingClass">
+                {{ formatFundingRate(liveFundingRate ?? currentFunding?.lastFundingRate) }}
+              </span>
+              <span class="price-info-countdown">/ {{ fundingCountdown }}</span>
+            </div>
           </div>
           <div class="price-info-item">
             <span class="price-info-label">{{ $t('perpetuals.24hChange') }}</span>
@@ -89,8 +104,21 @@
             <span class="price-info-value">{{ formatPrice(currentTicker.lowPrice) }}</span>
           </div>
           <div class="price-info-item">
-            <span class="price-info-label">{{ $t('perpetuals.24hVol') }}</span>
-            <span class="price-info-value">{{ formatVolume(currentTicker.volume) }}</span>
+            <span class="price-info-label">24h Vol({{ baseCurrency }})</span>
+            <span class="price-info-value">{{ formatFullNumber(currentTicker.volume) }} {{ baseCurrency }}</span>
+          </div>
+          <div class="price-info-item">
+            <span class="price-info-label">{{ $t('perpetuals.24hVolQuote') }}</span>
+            <span class="price-info-value">${{ formatFullNumber(currentTicker.quoteVolume) }}</span>
+          </div>
+          <div class="price-info-item">
+            <v-tooltip bottom content-class="custom-tooltip" max-width="260">
+              <template #activator="{ on, attrs }">
+                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.openInterest') }}</span>
+              </template>
+              <span>{{ $t('perpetuals.openInterestTooltip') }}</span>
+            </v-tooltip>
+            <span class="price-info-value">${{ formatFullNumber(openInterest) }}</span>
           </div>
         </template>
       </div>
@@ -100,10 +128,7 @@
            ═══════════════════════════════════════════════════════════════════ -->
       <div class="terminal-body">
 
-        <!-- ─────────────────────────────────────────────────────────────────
-             LEFT COLUMN (~60%) — Chart + Positions
-             ───────────────────────────────────────────────────────────────── -->
-        <div class="col-left">
+            <div class="col-left">
           <!-- Chart area -->
           <div class="chart-area">
             <div class="chart-subtabs">
@@ -116,22 +141,43 @@
               >
                 {{ $t(tab.label) }}
               </span>
-              <span class="chart-subtabs-spacer" />
+            </div>
+            <!-- Chart toolbar (timeframes + price type) -->
+            <div class="chart-toolbar">
               <span
                 v-for="tf in ['5m', '1h', '1d']"
                 :key="tf"
-                class="chart-subtab chart-tf"
-                :class="{ 'chart-subtab--active': chartTimeframe === tf }"
+                class="chart-toolbar__tf"
+                :class="{ 'chart-toolbar__tf--active': chartTimeframe === tf }"
                 @click="chartTimeframe = tf"
               >
                 {{ tf }}
               </span>
+              <v-menu offset-y :attach="true" content-class="chart-price-menu">
+                <template #activator="{ on, attrs }">
+                  <span class="chart-toolbar__price-trigger" v-bind="attrs" v-on="on">
+                    {{ priceTypeOptions.find(o => o.value === chartPriceType)?.label }}
+                    <v-icon size="14" class="ml-1">mdi-chevron-down</v-icon>
+                  </span>
+                </template>
+                <v-list dense dark class="chart-price-list">
+                  <v-list-item
+                    v-for="opt in priceTypeOptions"
+                    :key="opt.value"
+                    @click="chartPriceType = opt.value"
+                    :class="{ 'chart-price-list__item--active': chartPriceType === opt.value }"
+                  >
+                    <v-list-item-title>{{ opt.label }}</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
             </div>
             <TradingViewChart
               :symbol="'ADA/USD'"
               :data="chartData"
               :enable-realtime="true"
-              :realtime-data="adaRealtimeData"
+              :realtime-data="strikeRealtimeData"
+              :candle-interval="candleIntervalSeconds"
               width="100%"
               height="100%"
               theme="dark"
@@ -139,230 +185,6 @@
               :price-min-move="symbolMinMove"
               @chartReady="onChartReady"
             />
-          </div>
-
-          <!-- Positions / Orders tabs (spans full width below chart) -->
-          <div class="positions-area">
-            <v-tabs
-              v-model="activeTab"
-              background-color="transparent"
-              color="#26FAB0"
-              slider-color="#26FAB0"
-              height="32"
-              @change="onTabChange"
-            >
-              <v-tab class="tab-item">
-                <span class="tab-text">{{ $t('perpetuals.positions') }}</span>
-                <span v-if="openPositions.length > 0" class="tab-count ml-1">{{ openPositions.length }}</span>
-              </v-tab>
-              <v-tab class="tab-item">
-                <span class="tab-text">{{ $t('perpetuals.openOrders') }}</span>
-                <span v-if="openOrders.length > 0" class="tab-count ml-1">{{ openOrders.length }}</span>
-              </v-tab>
-              <v-tab class="tab-item">
-                <span class="tab-text">{{ $t('perpetuals.orderHistory') }}</span>
-              </v-tab>
-              <v-tab class="tab-item">
-                <span class="tab-text">{{ $t('perpetuals.fillHistory') }}</span>
-              </v-tab>
-              <v-tab class="tab-item">
-                <span class="tab-text">{{ $t('perpetuals.funding') }}</span>
-              </v-tab>
-            </v-tabs>
-
-            <v-tabs-items v-model="activeTab" class="transparent positions-tabs-items">
-
-              <!-- Positions -->
-              <v-tab-item>
-                <div v-if="tabLoading[0]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
-                </div>
-                <div v-else-if="openPositions.length === 0" class="empty-state">
-                  <v-icon size="32" color="#2b2f36">mdi-chart-line</v-icon>
-                  <p class="mt-1">{{ $t('perpetuals.noOpenPositions') }}</p>
-                </div>
-                <v-data-table
-                  v-else
-                  dense
-                  :headers="positionHeaders"
-                  :items="openPositions"
-                  class="transparent perps-table"
-                  hide-default-footer
-                  :items-per-page="-1"
-                >
-                  <template v-slot:[`item.Side`]="{ item }">
-                    <span :class="item.Side === 'long' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
-                      {{ item.Side }}
-                    </span>
-                  </template>
-                  <template v-slot:[`item.EntryPrice`]="{ item }">
-                    <span class="font-mono">{{ formatPrice(item.EntryPrice) }}</span>
-                  </template>
-                  <template v-slot:[`item.mark_price`]="{ item }">
-                    <span class="font-mono">{{ formatPrice(item.mark_price) }}</span>
-                  </template>
-                  <template v-slot:[`item.liquidation_price`]="{ item }">
-                    <span class="font-mono clr-yellow">{{ formatPrice(item.liquidation_price) }}</span>
-                  </template>
-                  <template v-slot:[`item.upnl`]="{ item }">
-                    <span :class="parseFloat(item.upnl) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono fw-600">
-                      {{ parseFloat(item.upnl) >= 0 ? '+' : '' }}{{ parseFloat(item.upnl).toFixed(2) }}
-                    </span>
-                  </template>
-                  <template v-slot:[`item.actions`]="{ item }">
-                    <v-btn
-                      x-small
-                      text
-                      color="#F6465D"
-                      :loading="closingPosition === item.PositionID"
-                      @click="closePosition(item)"
-                      class="action-btn"
-                    >
-                      {{ $t('perpetuals.close') }}
-                    </v-btn>
-                  </template>
-                </v-data-table>
-              </v-tab-item>
-
-              <!-- Open Orders -->
-              <v-tab-item>
-                <div class="d-flex justify-end pa-1" v-if="openOrders.length > 0">
-                  <v-btn
-                    x-small text color="#F6465D"
-                    :loading="cancellingAll"
-                    @click="cancelAllOrdersAction()"
-                  >
-                    {{ $t('perpetuals.cancelAll') }}
-                  </v-btn>
-                </div>
-                <div v-if="tabLoading[1]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
-                </div>
-                <div v-else-if="openOrders.length === 0" class="empty-state">
-                  <v-icon size="32" color="#2b2f36">mdi-format-list-bulleted</v-icon>
-                  <p class="mt-1">{{ $t('perpetuals.noOpenOrders') }}</p>
-                </div>
-                <v-data-table
-                  v-else
-                  dense
-                  :headers="openOrderHeaders"
-                  :items="openOrders"
-                  class="transparent perps-table"
-                  hide-default-footer
-                  :items-per-page="-1"
-                >
-                  <template v-slot:[`item.Side`]="{ item }">
-                    <span :class="item.Side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
-                      {{ item.Side }}
-                    </span>
-                  </template>
-                  <template v-slot:[`item.actions`]="{ item }">
-                    <v-btn
-                      x-small text color="#F6465D"
-                      :loading="cancellingOrder === item.ID"
-                      @click="cancelOrderAction(item)"
-                      class="action-btn"
-                    >
-                      {{ $t('perpetuals.cancel') }}
-                    </v-btn>
-                  </template>
-                </v-data-table>
-              </v-tab-item>
-
-              <!-- Order History -->
-              <v-tab-item>
-                <div v-if="tabLoading[2]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
-                </div>
-                <div v-else-if="orderHistory.length === 0" class="empty-state">
-                  <v-icon size="32" color="#2b2f36">mdi-history</v-icon>
-                  <p class="mt-1">{{ $t('perpetuals.noOrderHistory') }}</p>
-                </div>
-                <v-data-table
-                  v-else
-                  dense
-                  :headers="orderHistoryHeaders"
-                  :items="orderHistory"
-                  class="transparent perps-table"
-                  :items-per-page="20"
-                  :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
-                >
-                  <template v-slot:[`item.side`]="{ item }">
-                    <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
-                      {{ item.side }}
-                    </span>
-                  </template>
-                  <template v-slot:[`item.created_at`]="{ item }">
-                    {{ formatTime(item.created_at) }}
-                  </template>
-                </v-data-table>
-              </v-tab-item>
-
-              <!-- Fill / Trade History -->
-              <v-tab-item>
-                <div v-if="tabLoading[3]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
-                </div>
-                <div v-else-if="fillHistory.length === 0" class="empty-state">
-                  <v-icon size="32" color="#2b2f36">mdi-swap-horizontal</v-icon>
-                  <p class="mt-1">{{ $t('perpetuals.noFillHistory') }}</p>
-                </div>
-                <v-data-table
-                  v-else
-                  dense
-                  :headers="fillHistoryHeaders"
-                  :items="fillHistory"
-                  class="transparent perps-table"
-                  :items-per-page="20"
-                  :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
-                >
-                  <template v-slot:[`item.side`]="{ item }">
-                    <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
-                      {{ item.side }}
-                    </span>
-                  </template>
-                  <template v-slot:[`item.realized_pnl`]="{ item }">
-                    <span :class="parseFloat(item.realized_pnl) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono">
-                      {{ parseFloat(item.realized_pnl) >= 0 ? '+' : '' }}{{ parseFloat(item.realized_pnl).toFixed(4) }}
-                    </span>
-                  </template>
-                  <template v-slot:[`item.time`]="{ item }">
-                    {{ formatTime(item.time) }}
-                  </template>
-                </v-data-table>
-              </v-tab-item>
-
-              <!-- Funding History -->
-              <v-tab-item>
-                <div v-if="tabLoading[4]" class="tab-loading">
-                  <v-progress-circular indeterminate color="#26FAB0" size="24" />
-                </div>
-                <div v-else-if="fundingHistory.length === 0" class="empty-state">
-                  <v-icon size="32" color="#2b2f36">mdi-percent</v-icon>
-                  <p class="mt-1">{{ $t('perpetuals.noFundingHistory') }}</p>
-                </div>
-                <v-data-table
-                  v-else
-                  dense
-                  :headers="fundingHistoryHeaders"
-                  :items="fundingHistory"
-                  class="transparent perps-table"
-                  :items-per-page="20"
-                  :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
-                >
-                  <template v-slot:[`item.income`]="{ item }">
-                    <span :class="parseFloat(item.income) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono">
-                      {{ parseFloat(item.income) >= 0 ? '+' : '' }}{{ parseFloat(item.income).toFixed(6) }}
-                      {{ item.asset }}
-                    </span>
-                  </template>
-                  <template v-slot:[`item.time`]="{ item }">
-                    {{ formatTime(item.time) }}
-                  </template>
-                </v-data-table>
-              </v-tab-item>
-
-            </v-tabs-items>
           </div>
         </div>
 
@@ -389,15 +211,61 @@
           </div>
 
           <!-- Order Book view -->
-          <div v-if="obView === 'book'" class="ob-content">
+          <div v-if="obView === 'book'" ref="obContainerRef" class="ob-content">
+            <!-- Filter icons + tick size -->
+            <div class="ob-filter-row">
+              <div class="ob-filter-icons">
+                <span
+                  class="ob-filter-icon"
+                  :class="{ 'ob-filter-icon--active': obFilter === 'both' }"
+                  @click="obFilter = 'both'"
+                >
+                  <span class="ob-filter-bar ob-filter-bar--red" />
+                  <span class="ob-filter-bar ob-filter-bar--green" />
+                </span>
+                <span
+                  class="ob-filter-icon"
+                  :class="{ 'ob-filter-icon--active': obFilter === 'bids' }"
+                  @click="obFilter = 'bids'"
+                >
+                  <span class="ob-filter-bar ob-filter-bar--green ob-filter-bar--big" />
+                </span>
+                <span
+                  class="ob-filter-icon"
+                  :class="{ 'ob-filter-icon--active': obFilter === 'asks' }"
+                  @click="obFilter = 'asks'"
+                >
+                  <span class="ob-filter-bar ob-filter-bar--red ob-filter-bar--big" />
+                </span>
+              </div>
+              <v-menu offset-y left :attach="true" content-class="ob-tick-menu">
+                <template #activator="{ on, attrs }">
+                  <span class="ob-tick-trigger" v-bind="attrs" v-on="on">
+                    {{ obTickSize }}
+                    <v-icon size="12" class="ml-1">mdi-chevron-down</v-icon>
+                  </span>
+                </template>
+                <v-list dense dark class="ob-tick-list">
+                  <v-list-item
+                    v-for="ts in tickSizeOptions"
+                    :key="ts"
+                    @click="obTickSize = ts"
+                    :class="{ 'ob-tick-list__item--active': obTickSize === ts }"
+                  >
+                    <v-list-item-title>{{ ts }}</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
+            </div>
+
             <div class="ob-col-headers">
-              <span>{{ $t('perpetuals.price') }} (USD)</span>
-              <span>{{ $t('perpetuals.size') }} ({{ baseAsset }})</span>
-              <span>{{ $t('perpetuals.total') }} ({{ baseAsset }})</span>
+              <span>{{ $t('perpetuals.price') }}(USD)</span>
+              <span>{{ $t('perpetuals.size') }}({{ baseAsset }})</span>
+              <span>{{ $t('perpetuals.total') }}({{ baseAsset }})</span>
             </div>
 
             <!-- Asks (red, reversed so lowest ask is at bottom) -->
-            <div class="ob-asks">
+            <div v-if="obFilter !== 'bids'" class="ob-asks">
               <div
                 v-for="(ask, i) in displayAsks"
                 :key="'a' + i"
@@ -407,24 +275,27 @@
                   class="ob-row-bg ob-row-bg--ask"
                   :style="{ width: ask.pct + '%' }"
                 />
-                <span class="ob-cell ob-price clr-red">{{ ask.price }}</span>
-                <span class="ob-cell">{{ ask.size }}</span>
-                <span class="ob-cell">{{ ask.total }}</span>
+                <span class="ob-cell ob-price clr-red ob-cell--left">{{ ask.price }}</span>
+                <span class="ob-cell ob-cell--center">{{ formatOBSize(ask.size) }}</span>
+                <span class="ob-cell ob-cell--right">{{ formatOBSize(ask.total) }}</span>
               </div>
             </div>
 
             <!-- Spread / mid-price -->
             <div class="ob-spread">
               <span class="ob-spread__price" :class="lastTradeClass">
-                {{ formatPrice(currentTicker?.lastPrice) }}
+                {{ formatPrice(liveMarkPrice ?? currentTicker?.lastPrice) }}
+                <v-icon size="11" :color="lastTradeClass === 'clr-green' ? '#0ecb81' : '#f6465d'">
+                  {{ lastTradeClass === 'clr-green' ? 'mdi-arrow-up-bold' : 'mdi-arrow-down-bold' }}
+                </v-icon>
               </span>
               <span class="ob-spread__info">
-                {{ $t('perpetuals.spread') }}: {{ spreadValue }} / {{ spreadPercent }}
+                Spread: {{ spreadValue }}/{{ spreadPercent }}
               </span>
             </div>
 
             <!-- Bids (green) -->
-            <div class="ob-bids">
+            <div v-if="obFilter !== 'asks'" class="ob-bids">
               <div
                 v-for="(bid, i) in displayBids"
                 :key="'b' + i"
@@ -434,9 +305,9 @@
                   class="ob-row-bg ob-row-bg--bid"
                   :style="{ width: bid.pct + '%' }"
                 />
-                <span class="ob-cell ob-price clr-green">{{ bid.price }}</span>
-                <span class="ob-cell">{{ bid.size }}</span>
-                <span class="ob-cell">{{ bid.total }}</span>
+                <span class="ob-cell ob-price clr-green ob-cell--left">{{ bid.price }}</span>
+                <span class="ob-cell ob-cell--center">{{ formatOBSize(bid.size) }}</span>
+                <span class="ob-cell ob-cell--right">{{ formatOBSize(bid.total) }}</span>
               </div>
             </div>
 
@@ -447,8 +318,8 @@
                 <div class="ob-ratio__sell" :style="{ width: (100 - buyRatioPct) + '%' }" />
               </div>
               <div class="ob-ratio__labels">
-                <span class="clr-green">{{ buyRatioPct.toFixed(1) }}%</span>
-                <span class="clr-red">{{ (100 - buyRatioPct).toFixed(1) }}%</span>
+                <span class="clr-green">B {{ buyRatioPct.toFixed(2) }}%</span>
+                <span class="clr-red">{{ (100 - buyRatioPct).toFixed(2) }}% S</span>
               </div>
             </div>
           </div>
@@ -456,9 +327,9 @@
           <!-- Recent Trades view -->
           <div v-else class="ob-content">
             <div class="ob-col-headers">
-              <span>{{ $t('perpetuals.price') }} (USD)</span>
-              <span>{{ $t('perpetuals.size') }} ({{ baseAsset }})</span>
-              <span>{{ $t('perpetuals.time') }}</span>
+              <span>Price</span>
+              <span>Size ({{ baseAsset }})</span>
+              <span>Time</span>
             </div>
             <div class="ob-trades-list">
               <div
@@ -467,15 +338,14 @@
                 class="ob-row"
               >
                 <span class="ob-cell ob-price" :class="trade.isBuyerMaker ? 'clr-red' : 'clr-green'">
-                  {{ formatPrice(trade.price) }}
+                  {{ trade.price }}
                 </span>
-                <span class="ob-cell">{{ formatSize(trade.qty) }}</span>
-                <span class="ob-cell ob-time">{{ formatTradeTime(trade.time) }}</span>
+                <span class="ob-cell ob-cell--center">{{ formatOBSize(trade.qty) }}</span>
+                <span class="ob-cell ob-cell--right ob-time">{{ formatTradeTime(trade.time) }}</span>
               </div>
             </div>
           </div>
-        </div>
-
+          </div>
         <!-- ─────────────────────────────────────────────────────────────────
              RIGHT COLUMN (~20%) — Order Form + Account
              ───────────────────────────────────────────────────────────────── -->
@@ -484,79 +354,144 @@
 
             <!-- Margin mode / Leverage / Position mode -->
             <div class="of-margin-row">
-              <v-btn-toggle v-model="marginMode" mandatory dense class="of-toggle of-toggle--margin">
-                <v-btn value="cross" x-small>{{ $t('perpetuals.cross') }}</v-btn>
-                <v-btn value="isolated" x-small>{{ $t('perpetuals.isolated') }}</v-btn>
-              </v-btn-toggle>
+              <v-btn x-small outlined class="of-top-btn" @click="pendingMarginMode = marginMode; showMarginDialog = true">
+                {{ marginMode === 'cross' ? $t('perpetuals.cross') : $t('perpetuals.isolated') }}
+              </v-btn>
+              <v-btn x-small outlined class="of-top-btn" @click="pendingLeverage = leverage; showLeverageDialog = true">
+                {{ leverage }}x
+              </v-btn>
+              <v-btn x-small outlined class="of-top-btn" @click="showPosModeDialog = true">
+                {{ $t('perpetuals.oneWay') }}
+              </v-btn>
+            </div>
 
-              <v-menu offset-y :attach="true">
-                <template v-slot:activator="{ on, attrs }">
-                  <v-btn x-small outlined class="of-leverage-btn" v-bind="attrs" v-on="on">
-                    {{ leverage }}x
-                  </v-btn>
-                </template>
-                <v-card dark class="panel-bg pa-3" style="width: 220px;">
-                  <div class="form-label mb-2">{{ $t('perpetuals.leverage') }}</div>
+            <!-- Margin Mode Dialog -->
+            <v-dialog v-model="showMarginDialog" max-width="420" dark>
+              <v-card class="perps-modal">
+                <div class="perps-modal__header">
+                  <span class="perps-modal__title">{{ $t('perpetuals.marginMode') }}</span>
+                  <v-icon size="20" @click="showMarginDialog = false" class="perps-modal__close">mdi-close</v-icon>
+                </div>
+                <div class="perps-modal__body">
+                  <div
+                    class="perps-modal__option"
+                    :class="{ 'perps-modal__option--active': pendingMarginMode === 'cross' }"
+                    @click="pendingMarginMode = 'cross'"
+                  >
+                    <v-icon size="20" :color="pendingMarginMode === 'cross' ? '#26FAB0' : '#848e9c'" class="mr-2">
+                      {{ pendingMarginMode === 'cross' ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                    </v-icon>
+                    <div>
+                      <div class="perps-modal__option-title">{{ $t('perpetuals.cross') }}</div>
+                      <div class="perps-modal__option-desc">{{ $t('perpetuals.crossDesc') }}</div>
+                    </div>
+                  </div>
+                  <div
+                    class="perps-modal__option"
+                    :class="{ 'perps-modal__option--active': pendingMarginMode === 'isolated' }"
+                    @click="pendingMarginMode = 'isolated'"
+                  >
+                    <v-icon size="20" :color="pendingMarginMode === 'isolated' ? '#26FAB0' : '#848e9c'" class="mr-2">
+                      {{ pendingMarginMode === 'isolated' ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                    </v-icon>
+                    <div>
+                      <div class="perps-modal__option-title">{{ $t('perpetuals.isolated') }}</div>
+                      <div class="perps-modal__option-desc">{{ $t('perpetuals.isolatedDesc') }}</div>
+                    </div>
+                  </div>
+                </div>
+                <v-btn block color="#26FAB0" class="perps-modal__confirm" @click="marginMode = pendingMarginMode; showMarginDialog = false; snackbar.fireSuccess(`Margin mode set to ${pendingMarginMode}`)">
+                  {{ $t('perpetuals.confirm') }}
+                </v-btn>
+              </v-card>
+            </v-dialog>
+
+            <!-- Leverage Dialog -->
+            <v-dialog v-model="showLeverageDialog" max-width="420" dark>
+              <v-card class="perps-modal">
+                <div class="perps-modal__header">
+                  <span class="perps-modal__title">{{ $t('perpetuals.adjustLeverage') }}</span>
+                  <v-icon size="20" @click="showLeverageDialog = false" class="perps-modal__close">mdi-close</v-icon>
+                </div>
+                <div class="perps-modal__body text-center">
+                  <div class="leverage-display">{{ pendingLeverage }}x</div>
+                  <div class="leverage-max">{{ $t('perpetuals.maxLeverage') }}: 20x</div>
                   <v-slider
-                    v-model="leverage"
+                    v-model="pendingLeverage"
                     min="1"
-                    max="125"
+                    max="20"
                     step="1"
-                    color="#26FAB0"
-                    track-color="rgba(255,255,255,0.1)"
-                    thumb-label
+                    color="#4efab080"
+                    track-color="#ffffff1a"
                     hide-details
-                    dense
+                    class="mt-4 custom-slider"
+                    ticks="always"
+                    tick-size="4"
                   />
                   <div class="d-flex justify-space-between mt-1">
                     <span class="slider-tick">1x</span>
-                    <span class="slider-tick">25x</span>
-                    <span class="slider-tick">50x</span>
-                    <span class="slider-tick">125x</span>
+                    <span class="slider-tick">20x</span>
                   </div>
-                  <v-btn
-                    small block color="#26FAB0" class="mt-2"
-                    style="color: #0b0e11;"
-                    @click="applyLeverage()"
-                  >
-                    {{ $t('perpetuals.confirm') }}
-                  </v-btn>
-                </v-card>
-              </v-menu>
+                </div>
+                <v-btn block color="#26FAB0" class="perps-modal__confirm" @click="leverage = pendingLeverage; applyLeverage(); showLeverageDialog = false">
+                  {{ $t('perpetuals.confirm') }}
+                </v-btn>
+                <div class="leverage-warning mt-3">
+                  {{ $t('perpetuals.leverageWarning') }}
+                </div>
+                <div class="leverage-max-size mt-2 text-center">
+                  {{ $t('perpetuals.maxPositionSize') }}: $5,000
+                </div>
+              </v-card>
+            </v-dialog>
 
-              <span class="of-posmode-label">{{ $t('perpetuals.oneWay') }}</span>
-            </div>
+            <!-- Position Mode Dialog -->
+            <v-dialog v-model="showPosModeDialog" max-width="420" dark>
+              <v-card class="perps-modal">
+                <div class="perps-modal__header">
+                  <span class="perps-modal__title">{{ $t('perpetuals.positionMode') }}</span>
+                  <v-icon size="20" @click="showPosModeDialog = false" class="perps-modal__close">mdi-close</v-icon>
+                </div>
+                <div class="perps-modal__body">
+                  <div class="perps-modal__option perps-modal__option--active">
+                    <v-icon size="20" color="#26FAB0" class="mr-2">mdi-checkbox-marked</v-icon>
+                    <div>
+                      <div class="perps-modal__option-title">{{ $t('perpetuals.oneWay') }}</div>
+                      <div class="perps-modal__option-desc">{{ $t('perpetuals.oneWayDesc') }}</div>
+                    </div>
+                  </div>
+                </div>
+                <v-btn block color="#26FAB0" class="perps-modal__confirm" @click="showPosModeDialog = false">
+                  {{ $t('perpetuals.confirm') }}
+                </v-btn>
+              </v-card>
+            </v-dialog>
 
             <!-- Order type tabs -->
-            <div class="of-type-tabs">
-              <span
-                v-for="t in orderTypes"
-                :key="t.value"
-                class="of-type-tab"
-                :class="{ 'of-type-tab--active': orderType === t.value }"
-                @click="orderType = t.value"
-              >
+            <v-tabs
+              :value="orderTypes.findIndex(tr => tr.value === orderType)"
+              background-color="transparent"
+              grow
+              color="#eaecef"
+              slider-color="#26FAB0"
+              height="32"
+              class="of-type-tabs"
+              @change="(i) => orderType = orderTypes[i].value"
+            >
+              <v-tab v-for="t in orderTypes" :key="t.value" class="of-type-tab">
                 {{ $t(t.label) }}
-              </span>
-            </div>
+              </v-tab>
+            </v-tabs>
 
             <!-- Side toggle: Long/Buy — Short/Sell -->
-            <div class="of-side-toggle">
-              <div
-                class="of-side-btn of-side-btn--buy"
-                :class="{ 'of-side-btn--active': orderSide === 'buy' }"
-                @click="orderSide = 'buy'"
-              >
+            <v-btn-toggle v-model="orderSide" mandatory dense class="of-side-toggle">
+              <v-btn value="buy" class="of-side-btn of-side-btn--buy">
                 {{ $t('perpetuals.buyLong') }}
-              </div>
-              <div
-                class="of-side-btn of-side-btn--sell"
-                :class="{ 'of-side-btn--active': orderSide === 'sell' }"
-                @click="orderSide = 'sell'"
-              >
+              </v-btn>
+              <v-btn value="sell" class="of-side-btn of-side-btn--sell">
                 {{ $t('perpetuals.sellShort') }}
-              </div>
-            </div>
+              </v-btn>
+            </v-btn-toggle>
 
             <!-- Available balance + current position -->
             <div class="of-info-row">
@@ -569,67 +504,62 @@
             </div>
 
             <!-- Price field (limit / stop-limit) -->
-            <v-text-field
-              v-if="orderType !== 'market'"
-              v-model="limitPrice"
-              :label="$t('perpetuals.price')"
-              type="number"
-              outlined
-              dense
-              hide-details
-              class="of-input mb-2"
-              prefix="$"
-            />
+            <div v-if="orderType !== 'market'" class="of-field mb-2">
+              <span class="of-field__label">{{ $t('perpetuals.price') }}</span>
+              <input v-model="limitPrice" type="number" class="of-field__input"  />
+              <span class="of-field__suffix">USD</span>
+            </div>
 
             <!-- Stop price (stop-limit) -->
-            <v-text-field
-              v-if="orderType === 'stop_limit'"
-              v-model="stopPrice"
-              :label="$t('perpetuals.stopPrice')"
-              type="number"
-              outlined
-              dense
-              hide-details
-              class="of-input mb-2"
-              prefix="$"
-            />
+            <div v-if="orderType === 'stop_limit'" class="of-field mb-2">
+              <span class="of-field__label">{{ $t('perpetuals.stopPrice') }}</span>
+              <input v-model="stopPrice" type="number" class="of-field__input"  />
+              <span class="of-field__suffix">USD</span>
+            </div>
 
             <!-- Size input -->
-            <div class="of-size-row">
-              <v-text-field
-                v-model="orderSize"
-                :label="$t('perpetuals.size')"
-                type="number"
-                outlined
-                dense
-                hide-details
-                class="of-input of-size-input"
+            <div class="of-field mb-2">
+              <input
+                :value="formatCurrencyInput(orderSize)"
+                @input="onSizeInput"
+                type="text"
+                inputmode="decimal"
+                class="of-field__input"
+                :placeholder="t('perpetuals.size')"
               />
-              <v-select
-                v-model="sizeAsset"
-                :items="[baseAsset, 'USD']"
-                dense
-                outlined
-                hide-details
-                class="of-size-asset"
-                :attach="true"
-              />
+              <v-menu offset-y left :attach="true" content-class="of-asset-menu">
+                <template #activator="{ on, attrs }">
+                  <span class="of-field__asset-trigger" v-bind="attrs" v-on="on">
+                    {{ sizeAsset }}
+                    <v-icon size="12" class="ml-1">mdi-chevron-down</v-icon>
+                  </span>
+                </template>
+                <v-list dense dark class="of-asset-list">
+                  <v-list-item
+                    v-for="a in ['USD', baseAsset]"
+                    :key="a"
+                    @click="sizeAsset = a"
+                    :class="{ 'of-asset-list__current-item': sizeAsset === a }"
+                  >
+                    <v-list-item-title>{{ a }}</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
             </div>
 
             <!-- Size slider -->
             <div class="of-slider-row">
               <v-slider
-                v-model="sizePercent"
+                v-model="_sizePercent"
                 min="0"
                 max="100"
-                step="1"
-                color="#26FAB0"
-                track-color="rgba(255,255,255,0.1)"
+                step="0.1"
+                color="#4efab080"
+                track-color="#ffffff1a"
                 hide-details
-                dense
-                class="of-slider"
+                class="of-slider custom-slider"
               />
-              <span class="of-slider-pct">{{ sizePercent }}%</span>
+              <span class="of-slider-pct-box">{{ _sizePercent.toFixed(1) }}%</span>
             </div>
 
             <!-- Checkboxes: Reduce Only + TP/SL -->
@@ -639,14 +569,18 @@
                 :label="$t('perpetuals.reduceOnly')"
                 hide-details
                 dense
+                color="#26FAB0"
                 class="of-checkbox"
+                :ripple="false"
               />
               <v-checkbox
                 v-model="showTpSl"
                 :label="$t('perpetuals.tpSl')"
                 hide-details
                 dense
+                color="#26FAB0"
                 class="of-checkbox"
+                :ripple="false"
               />
             </div>
 
@@ -677,15 +611,14 @@
             <!-- Place Order button -->
             <v-btn
               block
-              :color="orderSide === 'buy' ? '#26FAB0' : '#F6465D'"
+              :color="(insufficientBalance || belowMinOrder || aboveMaxOrder) ? '#2b2f36' : (orderSide === 'buy' ? '#26FAB0' : '#F6465D')"
               :loading="placingOrder"
               :disabled="!canPlaceOrder"
               @click="placeOrderAction()"
               class="of-place-btn mt-3"
-              :style="{ color: orderSide === 'buy' ? '#0b0e11' : '#ffffff' }"
+              :style="{ color: (insufficientBalance || belowMinOrder || aboveMaxOrder) ? '#F6465D' : (orderSide === 'buy' ? '#0b0e11' : '#ffffff') }"
             >
-              {{ orderSide === 'buy' ? $t('perpetuals.buyLong') : $t('perpetuals.sellShort') }}
-              {{ selectedSymbol }}
+              {{ insufficientBalance ? $t('errors.insufficientBalance') : belowMinOrder ? $t('perpetuals.minOrderSize') : aboveMaxOrder ? $t('perpetuals.maxOrderSize') : $t('perpetuals.placeOrder') }}
             </v-btn>
 
             <v-alert v-if="tradingError" type="error" dense class="mt-2" dismissible @input="tradingError = null">
@@ -695,69 +628,285 @@
             <!-- Order info estimates -->
             <div class="of-estimates mt-3">
               <div class="of-est-row">
-                <span>{{ $t('perpetuals.estLiqPrice') }}</span>
-                <span class="form-value">—</span>
+                <v-tooltip bottom content-class="custom-tooltip" max-width="220">
+                  <template #activator="{ on, attrs }">
+                    <span class="price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.estLiqPrice') }}</span>
+                  </template>
+                  <span>{{ $t('perpetuals.estLiqPriceTooltip') }}</span>
+                </v-tooltip>
+                <span class="form-value">{{ estLiquidationPrice }}</span>
               </div>
               <div class="of-est-row">
                 <span>{{ $t('perpetuals.margin') }}</span>
-                <span class="form-value">—</span>
+                <span class="form-value">{{ estMargin }}</span>
               </div>
               <div class="of-est-row">
                 <span>{{ $t('perpetuals.orderValue') }}</span>
                 <span class="form-value">{{ notionalValue }}</span>
               </div>
               <div class="of-est-row">
-                <span>{{ $t('perpetuals.estFee') }}</span>
-                <span class="form-value">—</span>
+                <v-tooltip bottom content-class="custom-tooltip" max-width="240">
+                  <template #activator="{ on, attrs }">
+                    <span class="price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.estFee') }}</span>
+                  </template>
+                  <span style="white-space: pre-line;">{{ $t('perpetuals.estFeeTooltip') }}</span>
+                </v-tooltip>
+                <span class="form-value">{{ estFee }}</span>
               </div>
             </div>
 
-            <!-- Divider -->
-            <v-divider class="my-3" style="border-color: #2b2f36;" />
+          </div>
+        </div>
 
-            <!-- Deposit / Withdraw -->
-            <div class="of-deposit-row">
-              <v-btn small outlined class="of-deposit-btn" color="#26FAB0">
-                {{ $t('perpetuals.deposit') }}
-              </v-btn>
-              <v-btn small outlined class="of-deposit-btn" color="#848e9c">
-                {{ $t('perpetuals.withdraw') }}
-              </v-btn>
+        <!-- Positions area — spans chart + OB columns via grid -->
+        <div class="positions-area">
+        <v-tabs
+          v-model="activeTab"
+          background-color="transparent"
+          color="#26FAB0"
+          slider-color="#26FAB0"
+          height="32"
+          @change="onTabChange"
+        >
+          <v-tab class="tab-item">
+            <span class="tab-text">{{ $t('perpetuals.positions') }}</span>
+            <span v-if="openPositions.length > 0" class="tab-count ml-1">{{ openPositions.length }}</span>
+          </v-tab>
+          <v-tab class="tab-item">
+            <span class="tab-text">{{ $t('perpetuals.openOrders') }}</span>
+            <span v-if="openOrders.length > 0" class="tab-count ml-1">{{ openOrders.length }}</span>
+          </v-tab>
+          <v-tab class="tab-item">
+            <span class="tab-text">{{ $t('perpetuals.orderHistory') }}</span>
+          </v-tab>
+          <v-tab class="tab-item">
+            <span class="tab-text">{{ $t('perpetuals.fillHistory') }}</span>
+          </v-tab>
+          <v-tab class="tab-item">
+            <span class="tab-text">{{ $t('perpetuals.funding') }}</span>
+          </v-tab>
+        </v-tabs>
+
+        <v-tabs-items v-model="activeTab" class="transparent positions-tabs-items">
+          <!-- Positions -->
+          <v-tab-item>
+            <div v-if="tabLoading[0]" class="tab-loading">
+              <v-progress-circular indeterminate color="#26FAB0" size="24" />
             </div>
-
-            <!-- Account overview -->
-            <div class="of-account-section mt-3">
-              <div class="of-account-header">{{ $t('perpetuals.accountOverview') }}</div>
-              <div class="of-account-row">
-                <span>{{ $t('perpetuals.accountValue') }}</span>
-                <span class="form-value">${{ formatBalance(account?.wallet_balance) }}</span>
-              </div>
-              <div class="of-account-row">
-                <span>{{ $t('perpetuals.availableBalance') }}</span>
-                <span class="form-value">${{ formatBalance(account?.available_balance) }}</span>
-              </div>
-              <div class="of-account-row">
-                <span>{{ $t('perpetuals.unrealizedPnl') }}</span>
-                <span
-                  class="form-value"
-                  :class="parseFloat(account?.unrealized_pnl ?? '0') >= 0 ? 'clr-green' : 'clr-red'"
-                >
-                  ${{ formatBalance(account?.unrealized_pnl) }}
+            <div v-else-if="openPositions.length === 0" class="empty-state">
+              <v-icon size="32" color="#2b2f36">mdi-chart-line</v-icon>
+              <p class="mt-1">{{ $t('perpetuals.noOpenPositions') }}</p>
+            </div>
+            <v-data-table
+              v-else
+              dense
+              :headers="positionHeaders"
+              :items="openPositions"
+              class="transparent perps-table"
+              hide-default-footer
+              :items-per-page="-1"
+            >
+              <template v-slot:[`item.Side`]="{ item }">
+                <span :class="item.Side === 'long' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
+                  {{ item.Side }}
                 </span>
-              </div>
-              <div class="of-account-row">
-                <span>{{ $t('perpetuals.marginRatio') }}</span>
-                <span class="form-value">{{ marginRatioDisplay }}%</span>
-              </div>
-              <div class="of-account-row">
-                <span>{{ $t('perpetuals.maintenanceMargin') }}</span>
-                <span class="form-value">${{ formatBalance(account?.maintenance_margin) }}</span>
-              </div>
+              </template>
+              <template v-slot:[`item.EntryPrice`]="{ item }">
+                <span class="font-mono">{{ formatPrice(item.EntryPrice) }}</span>
+              </template>
+              <template v-slot:[`item.mark_price`]="{ item }">
+                <span class="font-mono">{{ formatPrice(item.mark_price) }}</span>
+              </template>
+              <template v-slot:[`item.liquidation_price`]="{ item }">
+                <span class="font-mono clr-yellow">{{ formatPrice(item.liquidation_price) }}</span>
+              </template>
+              <template v-slot:[`item.upnl`]="{ item }">
+                <span :class="parseFloat(item.upnl) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono fw-600">
+                  {{ parseFloat(item.upnl) >= 0 ? '+' : '' }}{{ parseFloat(item.upnl).toFixed(2) }}
+                </span>
+              </template>
+              <template v-slot:[`item.actions`]="{ item }">
+                <v-btn
+                  x-small text color="#F6465D"
+                  :loading="closingPosition === item.PositionID"
+                  @click="closePosition(item)"
+                  class="action-btn"
+                >
+                  {{ $t('perpetuals.close') }}
+                </v-btn>
+              </template>
+            </v-data-table>
+          </v-tab-item>
+
+          <!-- Open Orders -->
+          <v-tab-item>
+            <div class="d-flex justify-end pa-1" v-if="openOrders.length > 0">
+              <v-btn x-small text color="#F6465D" :loading="cancellingAll" @click="cancelAllOrdersAction()">
+                {{ $t('perpetuals.cancelAll') }}
+              </v-btn>
+            </div>
+            <div v-if="tabLoading[1]" class="tab-loading">
+              <v-progress-circular indeterminate color="#26FAB0" size="24" />
+            </div>
+            <div v-else-if="openOrders.length === 0" class="empty-state">
+              <v-icon size="32" color="#2b2f36">mdi-format-list-bulleted</v-icon>
+              <p class="mt-1">{{ $t('perpetuals.noOpenOrders') }}</p>
+            </div>
+            <v-data-table
+              v-else
+              dense
+              :headers="openOrderHeaders"
+              :items="openOrders"
+              class="transparent perps-table"
+              hide-default-footer
+              :items-per-page="-1"
+            >
+              <template v-slot:[`item.Side`]="{ item }">
+                <span :class="item.Side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
+                  {{ item.Side }}
+                </span>
+              </template>
+              <template v-slot:[`item.actions`]="{ item }">
+                <v-btn x-small text color="#F6465D" :loading="cancellingOrder === item.ID" @click="cancelOrderAction(item)" class="action-btn">
+                  {{ $t('perpetuals.cancel') }}
+                </v-btn>
+              </template>
+            </v-data-table>
+          </v-tab-item>
+
+          <!-- Order History -->
+          <v-tab-item>
+            <div v-if="tabLoading[2]" class="tab-loading">
+              <v-progress-circular indeterminate color="#26FAB0" size="24" />
+            </div>
+            <div v-else-if="orderHistory.length === 0" class="empty-state">
+              <v-icon size="32" color="#2b2f36">mdi-history</v-icon>
+              <p class="mt-1">{{ $t('perpetuals.noOrderHistory') }}</p>
+            </div>
+            <v-data-table
+              v-else dense
+              :headers="orderHistoryHeaders"
+              :items="orderHistory"
+              class="transparent perps-table"
+              :items-per-page="20"
+              :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
+            >
+              <template v-slot:[`item.side`]="{ item }">
+                <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">{{ item.side }}</span>
+              </template>
+              <template v-slot:[`item.created_at`]="{ item }">{{ formatTime(item.created_at) }}</template>
+            </v-data-table>
+          </v-tab-item>
+
+          <!-- Fill History -->
+          <v-tab-item>
+            <div v-if="tabLoading[3]" class="tab-loading">
+              <v-progress-circular indeterminate color="#26FAB0" size="24" />
+            </div>
+            <div v-else-if="fillHistory.length === 0" class="empty-state">
+              <v-icon size="32" color="#2b2f36">mdi-swap-horizontal</v-icon>
+              <p class="mt-1">{{ $t('perpetuals.noFillHistory') }}</p>
+            </div>
+            <v-data-table
+              v-else dense
+              :headers="fillHistoryHeaders"
+              :items="fillHistory"
+              class="transparent perps-table"
+              :items-per-page="20"
+              :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
+            >
+              <template v-slot:[`item.side`]="{ item }">
+                <span :class="item.side === 'buy' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">{{ item.side }}</span>
+              </template>
+              <template v-slot:[`item.realized_pnl`]="{ item }">
+                <span :class="parseFloat(item.realized_pnl) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono">
+                  {{ parseFloat(item.realized_pnl) >= 0 ? '+' : '' }}{{ parseFloat(item.realized_pnl).toFixed(4) }}
+                </span>
+              </template>
+              <template v-slot:[`item.time`]="{ item }">{{ formatTime(item.time) }}</template>
+            </v-data-table>
+          </v-tab-item>
+
+          <!-- Funding History -->
+          <v-tab-item>
+            <div v-if="tabLoading[4]" class="tab-loading">
+              <v-progress-circular indeterminate color="#26FAB0" size="24" />
+            </div>
+            <div v-else-if="fundingHistory.length === 0" class="empty-state">
+              <v-icon size="32" color="#2b2f36">mdi-percent</v-icon>
+              <p class="mt-1">{{ $t('perpetuals.noFundingHistory') }}</p>
+            </div>
+            <v-data-table
+              v-else dense
+              :headers="fundingHistoryHeaders"
+              :items="fundingHistory"
+              class="transparent perps-table"
+              :items-per-page="20"
+              :footer-props="{ itemsPerPageOptions: [10, 20, 50] }"
+            >
+              <template v-slot:[`item.income`]="{ item }">
+                <span :class="parseFloat(item.income) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono">
+                  {{ parseFloat(item.income) >= 0 ? '+' : '' }}{{ parseFloat(item.income).toFixed(6) }} {{ item.asset }}
+                </span>
+              </template>
+              <template v-slot:[`item.time`]="{ item }">{{ formatTime(item.time) }}</template>
+            </v-data-table>
+          </v-tab-item>
+        </v-tabs-items>
+        </div>
+        <!-- end positions-area -->
+
+        <!-- Account section — below order form, right of positions -->
+        <div class="col-account">
+          <div class="of-deposit-row">
+            <v-btn small outlined class="of-deposit-btn" color="#26FAB0">
+              {{ $t('perpetuals.deposit') }}
+            </v-btn>
+            <v-btn small outlined class="of-deposit-btn" color="#848e9c">
+              {{ $t('perpetuals.withdraw') }}
+            </v-btn>
+          </div>
+
+          <div class="of-account-section mt-3">
+            <div class="of-account-header">{{ $t('perpetuals.accountOverview') }}</div>
+            <div class="of-account-row">
+              <span>{{ $t('perpetuals.accountValue') }}</span>
+              <span class="form-value">${{ formatBalance(account?.wallet_balance) }}</span>
+            </div>
+            <div class="of-account-row">
+              <span>{{ $t('perpetuals.availableBalance') }}</span>
+              <span class="form-value">${{ formatBalance(account?.available_balance) }}</span>
+            </div>
+            <div class="of-account-row">
+              <span>{{ $t('perpetuals.withdrawableBalance') }}</span>
+              <span class="form-value">${{ formatBalance(account?.available_balance) }}</span>
+            </div>
+            <div class="of-account-row">
+              <span>{{ $t('perpetuals.positionValue') }}</span>
+              <span class="form-value">${{ formatBalance(account?.total_margin) }}</span>
+            </div>
+            <div class="of-account-row">
+              <span>{{ $t('perpetuals.unrealizedPnl') }}</span>
+              <span
+                class="form-value"
+                :class="parseFloat(account?.unrealized_pnl ?? '0') >= 0 ? 'clr-green' : 'clr-red'"
+              >
+                ${{ formatBalance(account?.unrealized_pnl) }}
+              </span>
+            </div>
+            <div class="of-account-row">
+              <span>{{ $t('perpetuals.marginRatio') }}</span>
+              <span class="form-value">{{ marginRatioDisplay }}%</span>
+            </div>
+            <div class="of-account-row">
+              <span>{{ $t('perpetuals.maintenanceMargin') }}</span>
+              <span class="form-value">${{ formatBalance(account?.maintenance_margin) }}</span>
             </div>
           </div>
         </div>
 
       </div>
+      <!-- end terminal-body -->
 
       <!-- Footer -->
       <div class="terminal-footer">
@@ -768,6 +917,9 @@
           class="strike-logo"
           @error="onLogoError"
         />
+        <span class="footer-spacer" />
+        <a href="https://docs.strikefinance.org/" target="_blank" rel="noopener" class="footer-link">Docs</a>
+        <a href="mailto:shan@strikefinance.org" class="footer-link">Support</a>
       </div>
 
     </v-card>
@@ -775,32 +927,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import type { IChartApi, Time } from 'lightweight-charts';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketWs';
-import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
-import { useStrikePositions } from '@/modules/market/composables/useStrikePositions';
-import { useStrikeHistory } from '@/modules/market/composables/useStrikeHistory';
-import { useMarketData } from '@/modules/market/composables/useMarketData';
-import { priceStore } from '@/stores/priceStore';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
+import { walletStore } from '@/stores/walletStore';
 import { strikeMarketApi } from '@/api/strike-v2.market';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { strikeTradeApi } from '@/api/strike-v2.trade';
 import type {
-  Position,
-  Order,
-  OrderHistoryResult,
+  CreateOrderRequest,
   FillHistoryResult,
   FundingHistoryResult,
-  CreateOrderRequest,
-  TradeResponse,
   MarginMode,
+  Order,
+  OrderHistoryResult,
+  Position,
+  TradeResponse,
 } from '@/api/strike-v2.types';
 import snackbar from '@/plugins/snackbar';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
-import type { IChartApi } from 'lightweight-charts';
+import { useTranslation } from '@/shared/composables/useTranslation';
+
+const { t } = useTranslation();
 
 // ---------------------------------------------------------------------------
 // Props / emits
@@ -827,11 +978,11 @@ function close() {
 // Market data (singleton)
 // ---------------------------------------------------------------------------
 
-const { symbols, symbolNames, tickers, fundingRates, loading: marketLoading, getSymbolInfo, getTicker, getFunding } = useStrikeMarket();
-const { getTokenCandles } = useMarketData();
-
+const { symbolNames, tickers, fundingRates, loading: marketLoading } = useStrikeMarket();
 // For Cardano wallets, default to ADA-USD. BTC-USD is for future Bitcoin wallet support.
 const selectedSymbol = ref<string>('ADA-USD');
+const baseCurrency = computed(() => selectedSymbol.value.split('-')[0]);
+const openInterest = ref<string>('');
 
 watch(symbolNames, (names) => {
   if (names.length > 0 && !names.includes(selectedSymbol.value)) {
@@ -854,7 +1005,7 @@ const tickerChangeClass = computed(() => {
 });
 
 const fundingClass = computed(() => {
-  const rate = parseFloat(currentFunding.value?.lastFundingRate ?? '0');
+  const rate = parseFloat(liveFundingRate.value ?? currentFunding.value?.lastFundingRate ?? '0');
   return rate >= 0 ? 'clr-green' : 'clr-red';
 });
 
@@ -868,7 +1019,7 @@ const fundingCountdown = ref('--:--:--');
 let countdownInterval: ReturnType<typeof setInterval> | null = null;
 
 function updateFundingCountdown() {
-  const nextTime = currentFunding.value?.nextFundingTime;
+  const nextTime = liveNextFundingTime.value ?? currentFunding.value?.nextFundingTime;
   if (!nextTime) { fundingCountdown.value = '--:--:--'; return; }
   const diff = nextTime - Date.now();
   if (diff <= 0) { fundingCountdown.value = '00:00:00'; return; }
@@ -912,14 +1063,14 @@ const {
   openOrders,
   positions,
   loading: tradingLoading,
-  error: tradingErrorRef,
+  error: _tradingErrorRef,
   loadAccount,
   loadOpenOrders,
   loadPositions,
   cancelOrder,
   cancelAllOrders,
   setLeverage: apiSetLeverage,
-  setMarginMode: apiSetMarginMode,
+  setMarginMode: _apiSetMarginMode,
 } = useStrikeTrading();
 
 const tradingError = ref<string | null>(null);
@@ -934,12 +1085,8 @@ const currentPositionSize = computed(() => {
   return parseFloat(pos.Size).toFixed(2);
 });
 
-// ---------------------------------------------------------------------------
-// TradingView chart — ADA/USD candle data from Gero market API
-// ---------------------------------------------------------------------------
-
 interface CandlestickDataPoint {
-  time: number;
+  time: Time;
   open: number;
   high: number;
   low: number;
@@ -949,11 +1096,27 @@ interface CandlestickDataPoint {
 
 const chartData = ref<CandlestickDataPoint[]>([]);
 const chartTimeframe = ref('5m');
+const chartPriceType = ref<'mark' | 'index' | 'last'>('mark');
+const priceTypeOptions: { value: 'mark' | 'index' | 'last'; label: string }[] = [
+  { label: 'Mark Price', value: 'mark' },
+  { label: 'Index Price', value: 'index' },
+  { label: 'Last Traded Price', value: 'last' },
+];
 
-// Live price updates for the chart from Gero price store (ADA/USD)
-const adaRealtimeData = computed(() => priceStore.adaUsd);
+// Live price updates from Strike mark price WebSocket
+const strikeRealtimeData = ref<{ lastPrice: number } | null>(null);
+const liveMarkPrice = ref<string | null>(null);
+const liveIndexPrice = ref<string | null>(null);
+const liveFundingRate = ref<string | null>(null);
+const liveNextFundingTime = ref<number | null>(null);
+const markPriceFlash = ref<'up' | 'down' | null>(null);
+let markPriceFlashTimer: ReturnType<typeof setTimeout> | null = null;
+const candleIntervalSeconds = computed(() => {
+  const map: Record<string, number> = { '5m': 300, '1h': 3600, '1d': 86400 };
+  return map[chartTimeframe.value] ?? 300;
+});
 const chartLoading = ref(false);
-let chartInstance: IChartApi | null = null;
+let _chartInstance: IChartApi | null = null;
 
 const symbolPrecision = computed(() => {
   // ADA has 4-6 decimal places for price
@@ -965,15 +1128,48 @@ const symbolMinMove = computed(() => {
 });
 
 function onChartReady(chart: IChartApi) {
-  chartInstance = chart;
+  _chartInstance = chart;
 }
 
 async function loadChartData() {
   chartLoading.value = true;
   try {
-    // Use Gero market API for ADA/USD candles
-    const candles = await getTokenCandles('lovelace', chartTimeframe.value, 'usd');
-    chartData.value = candles;
+    const now = Date.now();
+    const intervalMs: Record<string, number> = { '5m': 300_000, '1h': 3_600_000, '1d': 86_400_000 };
+    const ms = intervalMs[chartTimeframe.value] ?? 3_600_000;
+    const startTime = now - ms * 500;
+
+    const klines = await strikeMarketApi.getKlines({
+      symbol: selectedSymbol.value,
+      interval: chartTimeframe.value,
+      priceType: chartPriceType.value,
+      limit: 500,
+      startTime,
+      endTime: now,
+    });
+
+    // Strike klines returns arrays: [openTime, open, high, low, close, volume, closeTime, ...]
+    chartData.value = klines.map((k: any) => {
+      const row = Array.isArray(k) ? k : k;
+      if (Array.isArray(row)) {
+        return {
+          time: Math.floor(Number(row[0]) / 1000) as any,
+          open: parseFloat(row[1]),
+          high: parseFloat(row[2]),
+          low: parseFloat(row[3]),
+          close: parseFloat(row[4]),
+          volume: parseFloat(row[5]),
+        };
+      }
+      return {
+        time: Math.floor(k.openTime / 1000) as any,
+        open: parseFloat(k.open),
+        high: parseFloat(k.high),
+        low: parseFloat(k.low),
+        close: parseFloat(k.close),
+        volume: parseFloat(k.volume),
+      };
+    });
   } catch (e) {
     console.warn('[Perps] Failed to load chart data:', e);
   } finally {
@@ -981,14 +1177,24 @@ async function loadChartData() {
   }
 }
 
-// Reload chart when timeframe changes
+// Reload chart when timeframe or price type changes
 watch(chartTimeframe, () => loadChartData());
+watch(chartPriceType, () => loadChartData());
+
+async function loadOpenInterest() {
+  try {
+    const res = await strikeMarketApi.getOpenInterest(selectedSymbol.value) as { openInterest: string };
+    openInterest.value = res.openInterest;
+  } catch {
+    openInterest.value = '';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // WebSocket — order book + trades
 // ---------------------------------------------------------------------------
 
-const { subscribeDepth, subscribeTrades, connected: wsConnected } = useStrikeMarketWs();
+const { subscribeDepth, subscribeTrades, subscribeMarkPrice, connected: wsConnected } = useStrikeMarketWs();
 
 interface OBLevel { price: string; size: string; total: string; pct: number; }
 
@@ -996,68 +1202,225 @@ const obAsks = ref<[string, string][]>([]);
 const obBids = ref<[string, string][]>([]);
 const recentTrades = ref<TradeResponse[]>([]);
 const obView = ref<'book' | 'trades'>('book');
+const obFilter = ref<'both' | 'bids' | 'asks'>('both');
+const obTickSize = ref('0.00001');
+const tickSizeOptions = ['0.00001', '0.00005', '0.0001', '0.0005', '0.001'];
 
-const OB_DEPTH = 14;
+const obContainerRef = ref<HTMLElement | null>(null);
+const obRowHeight = 20; // px per row
+const obContainerHeight = ref(0);
+
+let obResizeObserver: ResizeObserver | null = null;
+
+watch(obContainerRef, (el, _, onCleanup) => {
+  if (!el) return;
+  const update = () => { obContainerHeight.value = el.clientHeight; };
+  update();
+  obResizeObserver = new ResizeObserver(update);
+  obResizeObserver.observe(el);
+  onCleanup(() => { obResizeObserver?.disconnect(); obResizeObserver = null; });
+}, { immediate: true });
+
+const obDepth = computed(() => {
+  const fixedHeader = 30 + 24; // filter row + col headers
+  const fixedSpread = 32; // spread row always visible
+  const fixedRatio = 36;
+  const available = obContainerHeight.value - fixedHeader - fixedSpread - fixedRatio;
+  const sides = obFilter.value === 'both' ? 2 : 1;
+  const perSide = Math.floor(available / sides / obRowHeight);
+  return Math.max(4, Math.min(perSide, 50));
+});
+
+function formatCurrencyInput(val: string): string {
+  if (!val) return '';
+  const parts = val.split('.');
+  const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.length > 1 ? `${intPart}.${parts[1]}` : intPart;
+}
+
+function parseCurrencyInput(val: string): string {
+  const cleaned = val.replace(/,/g, '').replace(/[^\d.]/g, '');
+  // Allow only one decimal point
+  const parts = cleaned.split('.');
+  if (parts.length > 2) return parts[0] + '.' + parts.slice(1).join('');
+  return cleaned;
+}
+
+function onSizeInput(e: Event) {
+  orderSize.value = parseCurrencyInput((e.target as HTMLInputElement).value);
+}
+
+function formatOBSize(val: string): string {
+  const n = parseFloat(val);
+  if (isNaN(n)) return val;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
 
 let unsubDepth: (() => void) | null = null;
 let unsubTrades: (() => void) | null = null;
+let unsubMarkPrice: (() => void) | null = null;
+let obBuffer: Array<{ u: bigint; a?: [string, string][]; b?: [string, string][] }> = [];
+let obSnapshotReady = false;
+
+// Internal maps for fast merge — only convert to sorted arrays on read
+const askMap = new Map<string, string>();
+const bidMap = new Map<string, string>();
+
+const OB_MAX_LEVELS = 100;
+
+function applyUpdates(side: 'ask' | 'bid', updates: [string, string][]) {
+  const map = side === 'ask' ? askMap : bidMap;
+  for (const [p, q] of updates) {
+    if (parseFloat(q) === 0) map.delete(p);
+    else map.set(p, q);
+  }
+  // Convert to sorted array for Vue reactivity
+  let entries: [string, string][] = Array.from(map.entries());
+  entries.sort((a, b) => {
+    const diff = parseFloat(a[0]) - parseFloat(b[0]);
+    return side === 'ask' ? diff : -diff;
+  });
+  // Cap to nearest OB_MAX_LEVELS — discard far-from-market levels
+  if (entries.length > OB_MAX_LEVELS) {
+    const removed = entries.slice(OB_MAX_LEVELS);
+    entries = entries.slice(0, OB_MAX_LEVELS);
+    for (const [p] of removed) map.delete(p);
+  }
+  if (side === 'ask') obAsks.value = entries;
+  else obBids.value = entries;
+}
 
 function subscribeSymbolWs(symbol: string) {
   // Clean up previous
   if (unsubDepth) { unsubDepth(); unsubDepth = null; }
   if (unsubTrades) { unsubTrades(); unsubTrades = null; }
+  if (unsubMarkPrice) { unsubMarkPrice(); unsubMarkPrice = null; }
   obAsks.value = [];
   obBids.value = [];
   recentTrades.value = [];
+  askMap.clear();
+  bidMap.clear();
+  obBuffer = [];
+  obSnapshotReady = false;
 
-  // Fetch initial order book snapshot
-  strikeMarketApi.getOrderBook(symbol, OB_DEPTH * 2).then((snap) => {
-    obAsks.value = snap.asks ?? [];
-    obBids.value = snap.bids ?? [];
-  }).catch(() => {});
-
-  // WS depth updates
+  // 1. Subscribe to WS depth first (buffer events until snapshot arrives)
   unsubDepth = subscribeDepth(symbol, (data: unknown) => {
-    const d = data as { a?: [string, string][]; b?: [string, string][] };
-    if (d.a) obAsks.value = mergeOBSide(obAsks.value, d.a, 'ask');
-    if (d.b) obBids.value = mergeOBSide(obBids.value, d.b, 'bid');
+    const raw = data as { u?: number | string; a?: [string, string][]; b?: [string, string][] };
+
+    if (!obSnapshotReady) {
+      obBuffer.push({ u: BigInt(raw.u ?? 0), a: raw.a, b: raw.b });
+      return;
+    }
+
+    if (raw.a) applyUpdates('ask', raw.a);
+    if (raw.b) applyUpdates('bid', raw.b);
   });
 
-  // WS trades
+  // 2. Fetch initial snapshot (100 levels per side — matches Strike's depth)
+  strikeMarketApi.getOrderBook(symbol, 100).then((snap) => {
+    const snapId = BigInt((snap as Record<string, unknown>).lastUpdateId as number ?? 0);
+
+    // Populate maps from snapshot
+    for (const [p, q] of (snap.asks ?? [])) askMap.set(p, q);
+    for (const [p, q] of (snap.bids ?? [])) bidMap.set(p, q);
+
+    // Apply buffered WS events after snapshot
+    for (const evt of obBuffer) {
+      if (evt.u <= snapId) continue;
+      if (evt.a) for (const [p, q] of evt.a) { if (parseFloat(q) === 0) askMap.delete(p); else askMap.set(p, q); }
+      if (evt.b) for (const [p, q] of evt.b) { if (parseFloat(q) === 0) bidMap.delete(p); else bidMap.set(p, q); }
+    }
+    obBuffer = [];
+
+    // Trigger Vue reactivity once
+    applyUpdates('ask', []);
+    applyUpdates('bid', []);
+    obSnapshotReady = true;
+  }).catch(() => { obSnapshotReady = true; });
+
+  // Fetch initial recent trades
+  strikeMarketApi.getRecentTrades(symbol, 50).then((trades) => {
+    // Sort newest first
+    recentTrades.value = trades.sort((a, b) => b.time - a.time);
+  }).catch(() => {});
+
+  // WS trades — prepend new trades in real-time
   unsubTrades = subscribeTrades(symbol, (data: unknown) => {
     const t = data as TradeResponse;
     if (t && t.price) {
       recentTrades.value = [t, ...recentTrades.value].slice(0, 50);
     }
   });
+
+  // WS mark price → feed chart realtime + live mark/index price display
+  // Event: { e: "markPriceUpdate", p: markPrice, i: indexPrice, r: fundingRate, ... }
+  unsubMarkPrice = subscribeMarkPrice(symbol, (data: unknown) => {
+    const d = data as { p?: string; i?: string; r?: string; T?: number };
+    const markStr = d.p ?? '';
+    const mark = parseFloat(markStr);
+    if (mark > 0) {
+      // Flash direction
+      const prev = strikeRealtimeData.value?.lastPrice;
+      if (prev != null && mark !== prev) {
+        markPriceFlash.value = mark > prev ? 'up' : 'down';
+        if (markPriceFlashTimer) clearTimeout(markPriceFlashTimer);
+        markPriceFlashTimer = setTimeout(() => { markPriceFlash.value = null; }, 300);
+      }
+      liveMarkPrice.value = markStr;
+      strikeRealtimeData.value = { lastPrice: mark };
+    }
+    if (d.i) liveIndexPrice.value = d.i;
+    if (d.r) liveFundingRate.value = d.r;
+    if (d.T) liveNextFundingTime.value = d.T;
+  });
 }
 
-function mergeOBSide(
-  existing: [string, string][],
-  updates: [string, string][],
-  side: 'ask' | 'bid',
-): [string, string][] {
-  const map = new Map<string, string>();
-  for (const [p, q] of existing) map.set(p, q);
-  for (const [p, q] of updates) {
-    if (parseFloat(q) === 0) map.delete(p);
-    else map.set(p, q);
+
+
+const tickDecimals = computed(() => obTickSize.value.split('.')[1]?.length ?? 5);
+
+function aggregateByTick(levels: [string, string][], side: 'ask' | 'bid', displayDepth: number): [string, string][] {
+  const tick = parseFloat(obTickSize.value);
+  const dec = tickDecimals.value;
+  if (tick <= 0) return levels.slice(0, displayDepth);
+  const map = new Map<string, number>();
+  // Process raw levels until we have enough distinct buckets for the display
+  for (const [p, q] of levels) {
+    const price = parseFloat(p);
+    const bucketed = Math.floor(price / tick) * tick;
+    const key = (Math.round(bucketed * Math.pow(10, dec)) / Math.pow(10, dec)).toFixed(dec);
+    map.set(key, (map.get(key) ?? 0) + parseFloat(q));
+    // Stop once we have enough buckets — +1 so slice later trims cleanly
+    if (map.size > displayDepth) break;
   }
-  const entries = Array.from(map.entries());
+  const entries: [string, string][] = Array.from(map.entries()).map(([p, q]) => [p, String(Math.round(q))]);
   entries.sort((a, b) => {
     const diff = parseFloat(a[0]) - parseFloat(b[0]);
     return side === 'ask' ? diff : -diff;
   });
-  return entries;
+  return entries.slice(0, displayDepth);
 }
 
+// Midpoint bucket: aggregated asks must be strictly above this, bids strictly below
+const midBucket = computed(() => {
+  const tick = parseFloat(obTickSize.value);
+  const dec = tickDecimals.value;
+  const bestAsk = obAsks.value.length > 0 ? parseFloat(obAsks.value[0][0]) : 0;
+  const bestBid = obBids.value.length > 0 ? parseFloat(obBids.value[0][0]) : 0;
+  const mid = (bestAsk + bestBid) / 2;
+  const bucketed = Math.floor(mid / tick) * tick;
+  return Math.round(bucketed * Math.pow(10, dec)) / Math.pow(10, dec);
+});
+
 const displayAsks = computed<OBLevel[]>(() => {
-  // Show lowest asks, reversed so lowest is at bottom
-  const sliced = obAsks.value.slice(0, OB_DEPTH);
+  const aggregated = aggregateByTick(obAsks.value, 'ask', obDepth.value + 5);
+  // Remove buckets at or below the mid bucket
+  const clean = aggregated.filter(([p]) => parseFloat(p) > midBucket.value);
+  const sliced = clean.slice(0, obDepth.value);
   let cumTotal = 0;
   const levels = sliced.map(([p, q]) => {
     cumTotal += parseFloat(q);
-    return { price: p, size: q, total: cumTotal.toFixed(4), cumTotal };
+    return { price: p, size: q, total: String(Math.round(cumTotal)), cumTotal };
   });
   const maxTotal = levels.length > 0 ? levels[levels.length - 1].cumTotal : 1;
   return levels.reverse().map((l) => ({
@@ -1069,11 +1432,14 @@ const displayAsks = computed<OBLevel[]>(() => {
 });
 
 const displayBids = computed<OBLevel[]>(() => {
-  const sliced = obBids.value.slice(0, OB_DEPTH);
+  const aggregated = aggregateByTick(obBids.value, 'bid', obDepth.value + 5);
+  // Remove buckets at or above the mid bucket
+  const clean = aggregated.filter(([p]) => parseFloat(p) < midBucket.value);
+  const sliced = clean.slice(0, obDepth.value);
   let cumTotal = 0;
   const levels = sliced.map(([p, q]) => {
     cumTotal += parseFloat(q);
-    return { price: p, size: q, total: cumTotal.toFixed(4), cumTotal };
+    return { price: p, size: q, total: String(Math.round(cumTotal)), cumTotal };
   });
   const maxTotal = levels.length > 0 ? levels[levels.length - 1].cumTotal : 1;
   return levels.map((l) => ({
@@ -1088,7 +1454,8 @@ const spreadValue = computed(() => {
   if (obAsks.value.length === 0 || obBids.value.length === 0) return '—';
   const bestAsk = parseFloat(obAsks.value[0][0]);
   const bestBid = parseFloat(obBids.value[0][0]);
-  return (bestAsk - bestBid).toFixed(5);
+  const spread = Math.abs(bestAsk - bestBid);
+  return spread.toFixed(tickDecimals.value);
 });
 
 const spreadPercent = computed(() => {
@@ -1097,12 +1464,12 @@ const spreadPercent = computed(() => {
   const bestBid = parseFloat(obBids.value[0][0]);
   const mid = (bestAsk + bestBid) / 2;
   if (mid === 0) return '0%';
-  return ((bestAsk - bestBid) / mid * 100).toFixed(3) + '%';
+  return (Math.abs(bestAsk - bestBid) / mid * 100).toFixed(3) + '%';
 });
 
 const buyRatioPct = computed(() => {
-  const bidVol = obBids.value.slice(0, OB_DEPTH).reduce((s, [, q]) => s + parseFloat(q), 0);
-  const askVol = obAsks.value.slice(0, OB_DEPTH).reduce((s, [, q]) => s + parseFloat(q), 0);
+  const bidVol = obBids.value.slice(0, obDepth.value).reduce((s, [, q]) => s + parseFloat(q), 0);
+  const askVol = obAsks.value.slice(0, obDepth.value).reduce((s, [, q]) => s + parseFloat(q), 0);
   const total = bidVol + askVol;
   return total > 0 ? (bidVol / total) * 100 : 50;
 });
@@ -1117,9 +1484,24 @@ watch(selectedSymbol, (sym) => {
   subscribeSymbolWs(sym);
 }, { immediate: true });
 
+// Re-fetch snapshot when tick size changes (reset accumulated WS density)
+watch(obTickSize, () => refreshOBSnapshot());
+
+function refreshOBSnapshot() {
+  askMap.clear();
+  bidMap.clear();
+  strikeMarketApi.getOrderBook(selectedSymbol.value, 100).then((snap) => {
+    for (const [p, q] of (snap.asks ?? [])) askMap.set(p, q);
+    for (const [p, q] of (snap.bids ?? [])) bidMap.set(p, q);
+    applyUpdates('ask', []);
+    applyUpdates('bid', []);
+  }).catch(() => {});
+}
+
 onBeforeUnmount(() => {
   if (unsubDepth) unsubDepth();
   if (unsubTrades) unsubTrades();
+  if (unsubMarkPrice) unsubMarkPrice();
 });
 
 // ---------------------------------------------------------------------------
@@ -1153,9 +1535,64 @@ const stopPrice = ref<string>('');
 const leverage = ref<number>(20);
 const marginMode = ref<MarginMode>('cross');
 const sizeAsset = ref<string>('ADA');
-const sizePercent = ref<number>(0);
+const _sizePercent = ref(0);
+
+// Available ADA balance from wallet (controlled_amount is in lovelace)
+const walletAdaBalance = computed(() => {
+  const lovelace = parseFloat(walletStore.account?.controlled_amount ?? '0');
+  return lovelace / 1_000_000;
+});
+
+// Available balance in ADA for the slider
+const availableBalanceAda = computed(() => {
+  // Use Strike account balance if connected, otherwise wallet ADA balance
+  const strikeBal = parseFloat(account.value?.available_balance ?? '0');
+  const bal = strikeBal > 0 ? strikeBal : walletAdaBalance.value;
+  return bal;
+});
+
+// Convert available balance to selected asset
+const availableBalanceInAsset = computed(() => {
+  if (sizeAsset.value === 'USD') {
+    const mark = strikeRealtimeData.value?.lastPrice ?? 0;
+    return availableBalanceAda.value * mark;
+  }
+  return availableBalanceAda.value;
+});
+
+let _syncingFromSlider = false;
+let _syncingFromInput = false;
+
+// Slider → orderSize
+watch(_sizePercent, (pct) => {
+  if (_syncingFromInput) return;
+  _syncingFromSlider = true;
+  const total = availableBalanceInAsset.value;
+  if (total > 0) {
+    const size = (pct / 100) * total;
+    orderSize.value = size > 0 ? size.toFixed(2) : '';
+  }
+  nextTick(() => { _syncingFromSlider = false; });
+});
+
+// orderSize → slider
+watch(orderSize, (val) => {
+  if (_syncingFromSlider) return;
+  _syncingFromInput = true;
+  const total = availableBalanceInAsset.value;
+  if (total > 0) {
+    const size = parseFloat(val) || 0;
+    _sizePercent.value = Math.min((size / total) * 100, 100);
+  }
+  nextTick(() => { _syncingFromInput = false; });
+});
 const reduceOnly = ref(false);
 const showTpSl = ref(false);
+const showMarginDialog = ref(false);
+const showLeverageDialog = ref(false);
+const showPosModeDialog = ref(false);
+const pendingMarginMode = ref<MarginMode>('cross');
+const pendingLeverage = ref(20);
 const takeProfitPrice = ref<string>('');
 const stopLossPrice = ref<string>('');
 const placingOrder = ref(false);
@@ -1163,18 +1600,88 @@ const placingOrder = ref(false);
 // Update sizeAsset when symbol changes
 watch(baseAsset, (v) => { sizeAsset.value = v; });
 
+// Entry price for estimates: mark price for market orders, limit price for limit orders
+const estEntryPrice = computed(() => {
+  if (orderType.value === 'market') {
+    return strikeRealtimeData.value?.lastPrice ?? parseFloat(currentTicker.value?.lastPrice ?? '0');
+  }
+  return parseFloat(limitPrice.value || '0');
+});
+
 const notionalValue = computed(() => {
   const size = parseFloat(orderSize.value);
-  const price = orderType.value === 'market'
-    ? parseFloat(currentTicker.value?.lastPrice ?? '0')
-    : parseFloat(limitPrice.value || '0');
-  if (!size || !price) return '$0.00';
+  const price = estEntryPrice.value;
+  if (!size || !price) return '—';
   return `$${(size * price).toFixed(2)}`;
+});
+
+// Margin = notional / leverage
+const estMargin = computed(() => {
+  const size = parseFloat(orderSize.value);
+  const price = estEntryPrice.value;
+  if (!size || !price) return '—';
+  const notional = size * price;
+  return `$${(notional / leverage.value).toFixed(2)}`;
+});
+
+// Estimated fee = notional × taker fee rate (0.1%)
+const TAKER_FEE_RATE = 0.001;
+const estFee = computed(() => {
+  const size = parseFloat(orderSize.value);
+  const price = estEntryPrice.value;
+  if (!size || !price) return '—';
+  return `$${(size * price * TAKER_FEE_RATE).toFixed(2)}`;
+});
+
+// Est. liquidation price (simplified)
+// Long: entryPrice × (1 - 1/leverage + maintenanceMarginRate)
+// Short: entryPrice × (1 + 1/leverage - maintenanceMarginRate)
+const MAINTENANCE_MARGIN_RATE = 0.005; // 0.5%
+const estLiquidationPrice = computed(() => {
+  const size = parseFloat(orderSize.value);
+  const price = estEntryPrice.value;
+  if (!size || !price) return '—';
+  const liq = orderSide.value === 'buy'
+    ? price * (1 - 1 / leverage.value + MAINTENANCE_MARGIN_RATE)
+    : price * (1 + 1 / leverage.value - MAINTENANCE_MARGIN_RATE);
+  return liq.toFixed(5);
+});
+
+const MIN_ORDER_USD = 10;
+const MAX_ORDER_USD = 100_000;
+
+const orderValueUsd = computed(() => {
+  const size = parseFloat(orderSize.value) || 0;
+  if (size <= 0) return 0;
+  if (sizeAsset.value === 'USD') return size;
+  const mark = strikeRealtimeData.value?.lastPrice ?? 0;
+  return size * mark;
+});
+
+const insufficientBalance = computed(() => {
+  const size = parseFloat(orderSize.value);
+  if (!size || size <= 0) return false;
+  return size > availableBalanceInAsset.value;
+});
+
+const belowMinOrder = computed(() => {
+  const size = parseFloat(orderSize.value);
+  if (!size || size <= 0) return false;
+  return orderValueUsd.value < MIN_ORDER_USD;
+});
+
+const aboveMaxOrder = computed(() => {
+  const size = parseFloat(orderSize.value);
+  if (!size || size <= 0) return false;
+  return orderValueUsd.value > MAX_ORDER_USD;
 });
 
 const canPlaceOrder = computed(() => {
   const size = parseFloat(orderSize.value);
   if (!size || size <= 0) return false;
+  if (insufficientBalance.value) return false;
+  if (belowMinOrder.value) return false;
+  if (aboveMaxOrder.value) return false;
   if (orderType.value === 'limit' || orderType.value === 'stop_limit') {
     const price = parseFloat(limitPrice.value);
     if (!price || price <= 0) return false;
@@ -1196,9 +1703,9 @@ const marginRatioDisplay = computed(() => {
 async function applyLeverage() {
   try {
     await apiSetLeverage(selectedSymbol.value, leverage.value);
-    snackbar.show({ message: `Leverage set to ${leverage.value}x`, color: 'success' });
+    snackbar.fireSuccess(`Leverage set to ${leverage.value}x`);
   } catch (e) {
-    snackbar.show({ message: e instanceof Error ? e.message : String(e), color: 'error' });
+    snackbar.setError(e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -1249,13 +1756,12 @@ async function placeOrderAction() {
       order = await strikeTradeApi.createOrder(params);
     }
 
-    snackbar.show({ message: `Order placed: ${order.ID ?? order.ClientOrderID}`, color: 'success' });
+    snackbar.fireSuccess(`Order placed: ${order.ID ?? order.ClientOrderID}`);
     orderSize.value = '';
     limitPrice.value = '';
     stopPrice.value = '';
     takeProfitPrice.value = '';
     stopLossPrice.value = '';
-    sizePercent.value = 0;
     await Promise.all([loadOpenOrders(selectedSymbol.value), loadAccount()]);
   } catch (e) {
     tradingError.value = e instanceof Error ? e.message : String(e);
@@ -1281,10 +1787,10 @@ async function closePosition(position: Position) {
       reduce_only: true,
       close_position: true,
     });
-    snackbar.show({ message: 'Position closed', color: 'success' });
+    snackbar.fireSuccess('Position closed');
     await loadPositions(selectedSymbol.value);
   } catch (e) {
-    snackbar.show({ message: e instanceof Error ? e.message : String(e), color: 'error' });
+    snackbar.setError(e instanceof Error ? e.message : String(e));
   } finally {
     closingPosition.value = null;
   }
@@ -1301,9 +1807,9 @@ async function cancelOrderAction(order: Order) {
   cancellingOrder.value = order.ID;
   try {
     await cancelOrder(order.ID, order.Symbol);
-    snackbar.show({ message: 'Order cancelled', color: 'success' });
+    snackbar.fireSuccess('Order cancelled');
   } catch (e) {
-    snackbar.show({ message: e instanceof Error ? e.message : String(e), color: 'error' });
+    snackbar.setError(e instanceof Error ? e.message : String(e));
   } finally {
     cancellingOrder.value = null;
   }
@@ -1313,9 +1819,9 @@ async function cancelAllOrdersAction() {
   cancellingAll.value = true;
   try {
     await cancelAllOrders(selectedSymbol.value);
-    snackbar.show({ message: 'All orders cancelled', color: 'success' });
+    snackbar.fireSuccess('All orders cancelled');
   } catch (e) {
-    snackbar.show({ message: e instanceof Error ? e.message : String(e), color: 'error' });
+    snackbar.setError(e instanceof Error ? e.message : String(e));
   } finally {
     cancellingAll.value = false;
   }
@@ -1354,7 +1860,7 @@ async function onTabChange(tab: number) {
     }
     tabLoaded.value[tab] = true;
   } catch (e) {
-    snackbar.show({ message: e instanceof Error ? e.message : String(e), color: 'error' });
+    snackbar.setError(e instanceof Error ? e.message : String(e));
   } finally {
     tabLoading.value[tab] = false;
   }
@@ -1363,12 +1869,15 @@ async function onTabChange(tab: number) {
 watch(selectedSymbol, () => {
   tabLoaded.value = { 0: false, 1: false, 2: false, 3: false, 4: false };
   onTabChange(activeTab.value);
+  loadChartData();
+  loadOpenInterest();
 });
 
 watch(dialogVisible, async (open) => {
   if (open) {
-    // Always load chart data (ADA/USD from Gero market API — no Strike auth needed)
+    // Load chart candles + open interest from Strike API (public, no auth needed)
     loadChartData();
+    loadOpenInterest();
     await checkConnection();
     if (isConnected.value) {
       await Promise.all([loadAccount(), onTabChange(0), onTabChange(1)]);
@@ -1447,23 +1956,14 @@ function formatPrice(val: string | number | undefined): string {
   if (val === undefined || val === null || val === '') return '—';
   const n = parseFloat(String(val));
   if (isNaN(n)) return '—';
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 });
 }
 
-function formatSize(val: string | number | undefined): string {
+function formatFullNumber(val: string | number | undefined): string {
   if (val === undefined || val === null || val === '') return '—';
   const n = parseFloat(String(val));
   if (isNaN(n)) return '—';
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-}
-
-function formatVolume(val: string | number | undefined): string {
-  if (val === undefined || val === null || val === '') return '—';
-  const n = parseFloat(String(val));
-  if (isNaN(n)) return '—';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatChange(val: string | undefined): string {
@@ -1572,10 +2072,25 @@ function onLogoError(e: Event) {
   overflow-x: auto;
 }
 
-.symbol-dropdown {
-  max-width: 140px;
+.symbol-pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
-  font-weight: 600;
+  padding: 4px 0;
+}
+
+.symbol-pair__icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.symbol-pair__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #eaecef;
+  letter-spacing: 0.3px;
 }
 
 .price-info-item {
@@ -1590,54 +2105,94 @@ function onLogoError(e: Event) {
   line-height: 1.2;
 }
 
+.price-info-label--dashed {
+  text-decoration: underline dotted #848e9c;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .price-info-value {
   font-size: 12px;
   font-weight: 600;
   color: #eaecef;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   line-height: 1.3;
+  transition: color 0.15s ease;
+}
+
+.price-flash-up {
+  color: #0ecb81 !important;
+}
+
+.price-flash-down {
+  color: #f6465d !important;
+}
+
+.funding-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
 }
 
 .price-info-countdown {
-  font-size: 10px;
-  color: #848e9c;
+  font-size: 11px;
+  color: #eaecef;
+  font-weight: 600;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  line-height: 1.3;
 }
 
 /* ── Main 3-column body ──────────────────────────────────────────────── */
 
 .terminal-body {
-  display: flex;
+  display: grid;
+  grid-template-rows: 1fr auto;
   flex: 1;
   overflow: hidden;
 }
 
-/* Left column: chart + positions */
+/* Left column: chart */
 .col-left {
-  flex: 3;
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   border-right: 1px solid #2b2f36;
   min-width: 0;
+  overflow: hidden;
 }
 
 /* Center column: order book */
 .col-center {
-  flex: 1;
-  min-width: 220px;
-  max-width: 280px;
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   border-right: 1px solid #2b2f36;
+  min-width: 210px;
+  overflow: hidden;
 }
 
-/* Right column: order form */
+/* Right column: order form — row 1 only */
 .col-right {
-  flex: 1;
-  min-width: 260px;
-  max-width: 320px;
+  grid-column: 3;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
+  max-width: 230px;
+  overflow-y: auto;
+}
+
+/* Account section — below order form, right of positions */
+.col-account {
+  grid-column: 3;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border-top: 1px solid #2b2f36;
+  overflow-y: auto;
+  max-width: 230px;
 }
 
 /* ── Chart area ───────────────────────────────────────────────────────── */
@@ -1646,7 +2201,6 @@ function onLogoError(e: Event) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid #2b2f36;
   min-height: 300px;
 }
 
@@ -1670,25 +2224,102 @@ function onLogoError(e: Event) {
   background: rgba(38, 250, 176, 0.08);
 }
 
-.chart-subtabs-spacer {
-  flex: 1;
+/* ── Chart toolbar ────────────────────────────────────────────────────── */
+
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.chart-toolbar__tf {
+  font-size: 12px;
+  font-weight: 600;
+  color: #848e9c;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.chart-toolbar__tf:hover {
+  color: #eaecef;
+}
+
+.chart-toolbar__tf--active {
+  color: #eaecef;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chart-toolbar__price-trigger {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: #eaecef;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+}
+
+.chart-toolbar__price-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chart-toolbar__price-trigger .v-icon {
+  color: #848e9c !important;
+}
+
+.chart-price-menu {
+  min-width: 160px !important;
+}
+
+.chart-price-list {
+  background: #1b1d23 !important;
+  padding: 4px 0 !important;
+}
+
+.chart-price-list .v-list-item {
+  min-height: 32px !important;
+}
+
+.chart-price-list .v-list-item__title {
+  font-size: 12px !important;
+  font-weight: 500;
+  color: #eaecef;
+}
+
+.chart-price-list__item--active .v-list-item__title {
+  color: #26FAB0;
+  font-weight: 600;
 }
 
 .chart-area >>> .trading-view-chart-container {
   flex: 1;
   min-height: 300px;
-  background: #1b1d23;
+  background: transparent;
 }
 
 /* ── Positions area ───────────────────────────────────────────────────── */
 
 .positions-area {
-  flex-shrink: 0;
+  grid-column: 1 / 3;
+  grid-row: 2;
   min-height: 180px;
   max-height: 300px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  border-top: 1px solid #2b2f36;
+  border-right: 1px solid #2b2f36;
+}
+
+.positions-area >>> .v-tabs {
+  flex: 0 0 auto;
 }
 
 .positions-tabs-items {
@@ -1700,10 +2331,98 @@ function onLogoError(e: Event) {
 
 .ob-header {
   display: flex;
+  align-items: center;
   gap: 4px;
-  padding: 6px 8px;
+  padding: 4px 10px;
   border-bottom: 1px solid #2b2f36;
+  flex-shrink: 0;
+  height: 31.5px;
 }
+
+.ob-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.ob-filter-icons {
+  display: flex;
+  gap: 6px;
+}
+
+.ob-filter-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.ob-filter-icon--active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ob-filter-bar {
+  display: block;
+  width: 14px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+.ob-filter-bar--green { background: #0ecb81; }
+.ob-filter-bar--red { background: #f6465d; }
+.ob-filter-bar--big { height: 8px; }
+
+.ob-tick-trigger {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #eaecef;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.ob-tick-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ob-tick-trigger .v-icon {
+  color: #848e9c !important;
+}
+
+.ob-tick-menu {
+  min-width: 100px !important;
+}
+
+.ob-tick-list {
+  background: #1b1d23 !important;
+  padding: 4px 0 !important;
+}
+
+.ob-tick-list .v-list-item {
+  min-height: 28px !important;
+}
+
+.ob-tick-list .v-list-item__title {
+  font-size: 11px !important;
+  font-weight: 500;
+  color: #eaecef;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.ob-tick-list__item--active .v-list-item__title {
+  color: #26FAB0;
+  font-weight: 600;
+}
+
 
 .ob-tab {
   font-size: 11px;
@@ -1729,16 +2448,27 @@ function onLogoError(e: Event) {
   display: flex;
   justify-content: space-between;
   padding: 4px 8px;
-  font-size: 10px;
+  font-size: 9px;
   color: #5e6673;
   border-bottom: 1px solid #1b1d23;
 }
 
-.ob-asks, .ob-bids, .ob-trades-list {
+.ob-asks, .ob-bids {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ob-trades-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.ob-asks {
+  justify-content: flex-end;
 }
 
 .ob-row {
@@ -1747,6 +2477,11 @@ function onLogoError(e: Event) {
   padding: 1px 8px;
   position: relative;
   line-height: 18px;
+  transition: background-color 0.15s ease-out;
+}
+
+.ob-row:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .ob-row-bg {
@@ -1755,9 +2490,22 @@ function onLogoError(e: Event) {
   bottom: 0;
   right: 0;
   pointer-events: none;
+  transition: width 0.2s ease-out;
 }
-.ob-row-bg--ask { background: rgba(246, 70, 93, 0.08); }
-.ob-row-bg--bid { background: rgba(38, 250, 176, 0.08); }
+
+.ob-row-bg--ask {
+  background: linear-gradient(to left, rgba(246, 70, 93, 0.20), rgba(246, 70, 93, 0.05));
+}
+
+.ob-row-bg--bid {
+  background: linear-gradient(to left, rgba(14, 203, 129, 0.20), rgba(14, 203, 129, 0.05));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-row-bg {
+    transition: none;
+  }
+}
 
 .ob-cell {
   position: relative;
@@ -1768,6 +2516,9 @@ function onLogoError(e: Event) {
   text-align: right;
 }
 .ob-cell:first-child { text-align: left; }
+.ob-cell.ob-cell--left { text-align: left; }
+.ob-cell.ob-cell--center { text-align: center; }
+.ob-cell.ob-cell--right { text-align: right; }
 
 .ob-price { font-weight: 600; }
 
@@ -1787,13 +2538,13 @@ function onLogoError(e: Event) {
 }
 
 .ob-spread__price {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .ob-spread__info {
-  font-size: 10px;
+  font-size: 9px;
   color: #5e6673;
 }
 
@@ -1834,15 +2585,113 @@ function onLogoError(e: Event) {
   margin-bottom: 8px;
 }
 
-.of-toggle--margin {
-  height: 24px !important;
-}
-.of-toggle--margin .v-btn {
-  height: 24px !important;
-  font-size: 10px !important;
+.of-top-btn {
+  flex: 1;
+  font-size: 11px !important;
+  font-weight: 600 !important;
   text-transform: none !important;
-  padding: 0 8px !important;
-  min-width: auto !important;
+  border-color: #2b2f36 !important;
+  color: #eaecef !important;
+  letter-spacing: 0 !important;
+}
+
+/* ── Perps modal dialogs ──────────────────────────────────────────────── */
+
+.perps-modal {
+  background: #1b1d23 !important;
+  border-radius: 12px !important;
+  padding: 20px !important;
+  border: 1px solid #2b2f36;
+}
+
+.perps-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.perps-modal__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #eaecef;
+}
+
+.perps-modal__close {
+  color: #848e9c !important;
+  cursor: pointer;
+}
+
+.perps-modal__body {
+  margin-bottom: 16px;
+}
+
+.perps-modal__option {
+  display: flex;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid #2b2f36;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: border-color 0.15s ease-out;
+}
+
+.perps-modal__option:hover {
+  border-color: #3b3f46;
+}
+
+.perps-modal__option--active {
+  border-color: #26FAB0;
+}
+
+.perps-modal__option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #eaecef;
+  margin-bottom: 4px;
+}
+
+.perps-modal__option-desc {
+  font-size: 12px;
+  color: #848e9c;
+  line-height: 1.5;
+}
+
+.perps-modal__confirm {
+  color: #0b0e11 !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
+  border-radius: 8px !important;
+  height: 44px !important;
+}
+
+.leverage-display {
+  font-size: 36px;
+  font-weight: 700;
+  color: #26FAB0;
+  margin-top: 8px;
+}
+
+.leverage-max {
+  font-size: 12px;
+  color: #848e9c;
+  margin-top: 4px;
+}
+
+.leverage-warning {
+  background: rgba(246, 190, 66, 0.08);
+  border: 1px solid rgba(246, 190, 66, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #F6BE42;
+  line-height: 1.5;
+}
+
+.leverage-max-size {
+  font-size: 12px;
+  color: #848e9c;
 }
 
 .of-leverage-btn {
@@ -1863,60 +2712,53 @@ function onLogoError(e: Event) {
 
 /* Order type tabs */
 .of-type-tabs {
-  display: flex;
-  gap: 2px;
   margin-bottom: 8px;
 }
 
 .of-type-tab {
-  font-size: 11px;
-  color: #848e9c;
-  padding: 3px 10px;
-  cursor: pointer;
-  border-radius: 3px;
-  font-weight: 500;
-}
-.of-type-tab:hover { background: rgba(255,255,255,0.04); }
-.of-type-tab--active {
-  color: #eaecef;
-  background: rgba(255,255,255,0.08);
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  min-width: auto !important;
+  padding: 0 12px !important;
 }
 
 /* Side toggle */
 .of-side-toggle {
-  display: flex;
-  gap: 4px;
+  width: 100%;
   margin-bottom: 10px;
+  border-radius: 4px !important;
+  overflow: hidden;
 }
 
 .of-side-btn {
-  flex: 1;
-  text-align: center;
-  padding: 6px 0;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
+  flex: 1 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  height: 32px !important;
+  border: none !important;
+  opacity: 1 !important;
 }
 
 .of-side-btn--buy {
-  color: #0b0e11;
-  background: rgba(38, 250, 176, 0.15);
-  color: #26FAB0;
+  background: rgba(38, 250, 176, 0.15) !important;
+  color: #26FAB0 !important;
 }
-.of-side-btn--buy.of-side-btn--active {
-  background: #26FAB0;
-  color: #0b0e11;
+.of-side-btn--buy.v-btn--active {
+  background: #26FAB0 !important;
+  color: #0b0e11 !important;
 }
 
 .of-side-btn--sell {
-  background: rgba(246, 70, 93, 0.15);
-  color: #F6465D;
+  background: rgba(246, 70, 93, 0.15) !important;
+  color: #F6465D !important;
 }
-.of-side-btn--sell.of-side-btn--active {
-  background: #F6465D;
-  color: #ffffff;
+.of-side-btn--sell.v-btn--active {
+  background: #F6465D !important;
+  color: #ffffff !important;
 }
 
 /* Info rows */
@@ -1955,7 +2797,119 @@ function onLogoError(e: Event) {
   color: #eaecef !important;
 }
 
-/* Size row */
+/* Custom field */
+.of-field {
+  display: flex;
+  align-items: center;
+  border: 1px solid #2b2f36;
+  border-radius: 4px;
+  padding: 0 6px 0 10px;
+  height: 36px;
+  background: transparent;
+  transition: border-color 0.15s ease-out;
+}
+
+.of-field:focus-within {
+  border-color: #26FAB0;
+}
+
+.of-field__label {
+  font-size: 11px;
+  color: #848e9c;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.of-field__input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #eaecef;
+  min-width: 0;
+  text-align: left;
+}
+
+/* Hide number input spinners */
+.of-field__input::-webkit-outer-spin-button,
+.of-field__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.of-field__suffix {
+  font-size: 12px;
+  color: #848e9c;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.of-field__divider {
+  width: 1px;
+  height: 18px;
+  background: #2b2f36;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.of-field__asset-trigger {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: #eaecef;
+  cursor: pointer;
+  padding: 2px 2px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.of-field__asset-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.of-field__asset-trigger .v-icon {
+  color: #848e9c !important;
+}
+
+.of-asset-menu {
+  border: 1px solid #2b2f36;
+  border-radius: 4px;
+}
+
+.of-asset-list {
+  background: #1b1d23 !important;
+  padding: 2px 0 !important;
+}
+
+.of-asset-list .v-list-item {
+  min-height: 28px !important;
+  padding: 0 12px !important;
+}
+
+.of-asset-list .v-list-item__title {
+  font-size: 12px !important;
+  font-weight: 500;
+  color: #848e9c;
+  text-align: right;
+}
+
+.of-asset-list .v-list-item:hover .v-list-item__title {
+  color: #eaecef;
+}
+
+.of-asset-list__current-item {
+  opacity: 1 !important;
+}
+
+.of-asset-list__current-item .v-list-item__title {
+  color: #eaecef !important;
+  font-weight: 600 !important;
+}
+
+/* Size row (legacy) */
 .of-size-row {
   display: flex;
   gap: 4px;
@@ -1984,19 +2938,24 @@ function onLogoError(e: Event) {
 }
 
 .of-slider { flex: 1; }
-.of-slider-pct {
+.of-slider-pct-box {
   font-size: 11px;
   color: #26FAB0;
   font-weight: 600;
-  min-width: 32px;
-  text-align: right;
+  min-width: 46px;
+  text-align: center;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  border: 1px solid #2b2f36;
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: transparent;
 }
 
 /* Checkboxes */
 .of-checkboxes {
   display: flex;
-  gap: 12px;
-  margin-bottom: 4px;
+  flex-flow: column;
 }
 
 .of-checkbox {
@@ -2004,8 +2963,9 @@ function onLogoError(e: Event) {
   padding: 0 !important;
 }
 .of-checkbox >>> .v-label {
-  font-size: 11px !important;
-  color: #848e9c !important;
+  font-size: 10px !important;
+  color: #fff !important;
+  font-weight: 700 !important;
 }
 .of-checkbox >>> .v-input--selection-controls__input {
   margin-right: 4px !important;
@@ -2145,6 +3105,8 @@ function onLogoError(e: Event) {
   padding: 24px;
   color: #5e6673;
   font-size: 12px;
+  flex: 1;
+  min-height: 206px;
 }
 
 /* Action buttons */
@@ -2169,8 +3131,7 @@ function onLogoError(e: Event) {
 .terminal-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 3px 0;
+  padding: 3px 12px;
   border-top: 1px solid #2b2f36;
   background: #0b0e11;
   flex-shrink: 0;
@@ -2185,5 +3146,35 @@ function onLogoError(e: Event) {
 .strike-logo {
   height: 14px;
   opacity: 0.6;
+}
+
+.footer-spacer {
+  flex: 1;
+}
+
+.footer-link {
+  font-size: 11px;
+  color: #848e9c;
+  text-decoration: none;
+  margin-left: 16px;
+  cursor: pointer;
+}
+
+.footer-link:hover {
+  color: #eaecef;
+}
+
+.custom-slider >>> .v-slider__tick {
+  background-color: rgb(255 255 255 / 20%)!important;
+  border-radius: 50%;
+}
+.custom-slider >>> .v-slider__thumb {
+  background-color: #000 !important;
+  border: 1px solid #4efab0 !important;
+  width: 14px!important;
+  height: 14px!important;
+}
+.custom-slider >>> .v-slider--horizontal .v-slider__track-container {
+  height: 6px !important;
 }
 </style>
