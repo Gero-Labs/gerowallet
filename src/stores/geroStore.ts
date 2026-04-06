@@ -166,6 +166,8 @@ export default {
 
     // Check non-locale keys for changes
     Object.keys(config).forEach(key => {
+      // openMiniGeroOnClick is stored under its own chrome.storage key (not in geroStore),
+      // so skip it here to avoid accidental overwrite if it somehow ends up in a persisted config snapshot.
       if (key !== 'locale' && key !== 'openMiniGeroOnClick' && geroStore.config[key] !== config[key]) {
         geroStore.config[key] = config[key];
         hasChanges = true;

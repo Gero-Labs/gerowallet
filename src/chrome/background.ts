@@ -53,7 +53,7 @@ loadConfig().then(() => {
 // Restore side panel behavior from its own chrome.storage key
 chrome.storage.local.get('openMiniGeroOnClick', (result) => {
   if (result['openMiniGeroOnClick']) {
-    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
   }
 });
 loadWallets().then(async () => {
@@ -3116,10 +3116,10 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
   }
 });
 
-app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, (request, sendResponse) => {
+app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, async (request, sendResponse) => {
   try {
     // Only update panel behavior — storage is written directly by the component
-    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: !!request.data.value });
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: !!request.data.value });
     sendResponse({
       id: request.id,
       data: { success: true },
