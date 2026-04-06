@@ -72,6 +72,9 @@ npm run pack             # Package .zip/.crx/.xpi
 
 ## Key Rules
 
+### ESLint
+- **Fix ESLint issues in every file you touch** — resolve any existing or newly introduced ESLint errors/warnings before moving on
+
 ### i18n
 - **Always use `$t()` for user-facing text** — never hardcode strings
 - Translation files: `src/plugins/i18n/us.ts` (English), `de.ts` (German)

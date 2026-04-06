@@ -100,4 +100,32 @@ export const strikeUserApi = {
     const { data } = await strikeClient.get('/v2/history/transaction', { params });
     return data;
   },
+
+  // Deposit
+  async getDepositQuote(req: import('./strike-v2.types').DepositQuoteRequest): Promise<import('./strike-v2.types').DepositQuoteResponse> {
+    const { data } = await strikeClient.post('/v2/deposit/quote', req);
+    return data;
+  },
+
+  async confirmDeposit(requestId: string, txHash: string): Promise<{ request_id: string; status: string }> {
+    const { data } = await strikeClient.post('/v2/deposit', { request_id: requestId, tx_hash: txHash });
+    return data;
+  },
+
+  // Withdraw
+  async getWithdrawQuote(req: import('./strike-v2.types').WithdrawQuoteRequest): Promise<import('./strike-v2.types').WithdrawQuoteResponse> {
+    const { data } = await strikeClient.post('/v2/withdraw/quote', req);
+    return data;
+  },
+
+  async executeWithdraw(withdrawId: string, walletSignature: string): Promise<{ request_id: string; status: string }> {
+    const { data } = await strikeClient.post('/v2/withdraw', { withdraw_id: withdrawId, wallet_signature: walletSignature });
+    return data;
+  },
+
+  // Transaction status
+  async getTransactionStatus(requestId: string, type: 'deposit' | 'withdraw'): Promise<import('./strike-v2.types').TransactionStatusResponse> {
+    const { data } = await strikeClient.get('/v2/transaction/status', { params: { request_id: requestId, type } });
+    return data;
+  },
 };

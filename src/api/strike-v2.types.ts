@@ -611,6 +611,87 @@ export interface OpenInterestResponse {
   time: number;
 }
 
+// ---------------------------------------------------------------------------
+// Market Configuration
+// ---------------------------------------------------------------------------
+
+export interface MarginTier {
+  max_notional: string;
+  max_leverage: number;
+  maintenance_margin_rate: string;
+  maintenance_amount: string;
+}
+
+export interface StrikeMarketConfig {
+  symbol: string;
+  name: string;
+  base_asset: string;
+  status: string;
+  base_prec: number;
+  quote_prec: number;
+  default_leverage: number;
+  order_tick_price: string;
+  order_min_price: string;
+  order_max_price: string;
+  order_limit_step_size: string;
+  order_limit_min_size: string;
+  order_limit_max_size: string;
+  order_market_step_size: string;
+  order_market_min_size: string;
+  order_market_max_size: string;
+  order_min_notional: string;
+  margin_tiers: MarginTier[];
+  liquidation_fee_rate: string;
+  mark_price?: string;
+  index_price?: string;
+  last_price?: string;
+  funding_rate?: string;
+  next_funding_time?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Deposit & Withdrawal
+// ---------------------------------------------------------------------------
+
+export interface DepositQuoteRequest {
+  blockchain: string;
+  asset_symbol: string;
+  asset_amount: string;
+}
+
+export interface DepositQuoteResponse {
+  request_id: string;
+  quote: {
+    asset_symbol: string;
+    asset_amount: string;
+    usd_value: string;
+    exchange_rate: string;
+    expiration_at: number;
+  };
+  deposit_address: string;
+  confirmations_required: number;
+}
+
+export interface WithdrawQuoteRequest {
+  usd_value: string;
+  blockchain: string;
+  recipient_address: string;
+  asset: string;
+}
+
+export interface WithdrawQuoteResponse {
+  withdraw_id: string;
+  message_to_sign: string;
+}
+
+export interface TransactionStatusResponse {
+  status: 'pending' | 'completed' | 'failed';
+}
+
+export interface StrikeMarketsResponse {
+  markets: Record<string, StrikeMarketConfig>;
+}
+
 export interface StrikeKline {
   /** Open time (Unix ms) */
   openTime: number;

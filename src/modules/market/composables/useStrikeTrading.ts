@@ -3,8 +3,10 @@ import { strikeTradeApi } from '@/api/strike-v2.trade';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import type {
   CreateOrderRequest,
-  Order,
+  CreateOrderResponse,
+  CreateStrategyOrderRequest,
   AccountResponse,
+  Order,
   Position,
   MarginMode,
 } from '@/api/strike-v2.types';
@@ -31,7 +33,8 @@ async function loadOpenOrders(symbol?: string): Promise<void> {
   try {
     loading.value = true;
     error.value = null;
-    openOrders.value = await strikeTradeApi.getOpenOrders(symbol);
+    const res = await strikeTradeApi.getOpenOrders(symbol);
+    openOrders.value = res.orders;
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -43,7 +46,8 @@ async function loadPositions(symbol?: string): Promise<void> {
   try {
     loading.value = true;
     error.value = null;
-    positions.value = await strikeUserApi.getPositions(symbol);
+    const res = await strikeUserApi.getPositions(symbol);
+    positions.value = res.positions;
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -51,15 +55,13 @@ async function loadPositions(symbol?: string): Promise<void> {
   }
 }
 
-async function placeOrder(params: CreateOrderRequest): Promise<Order | null> {
+async function placeOrder(params: CreateOrderRequest): Promise<CreateOrderResponse | null> {
   try {
     loading.value = true;
     error.value = null;
-    let order: Order;
-    const hasTPSL =
-      params.takeProfitPrice !== undefined || params.stopLossPrice !== undefined;
-    if (hasTPSL) {
-      order = await strikeTradeApi.createStrategyOrder(params);
+    let order: CreateOrderResponse;
+    if ('strategy_id' in params) {
+      order = await strikeTradeApi.createStrategyOrder(params as CreateStrategyOrderRequest);
     } else {
       order = await strikeTradeApi.createOrder(params);
     }
@@ -77,7 +79,7 @@ async function cancelOrder(orderId: string, symbol: string): Promise<void> {
   try {
     loading.value = true;
     error.value = null;
-    await strikeTradeApi.cancelOrder(orderId, symbol);
+    await strikeTradeApi.cancelOrder({ order_id: orderId, symbol });
     await loadOpenOrders(symbol);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -90,7 +92,7 @@ async function cancelAllOrders(symbol?: string): Promise<void> {
   try {
     loading.value = true;
     error.value = null;
-    await strikeTradeApi.cancelAllOrders(symbol);
+    await strikeTradeApi.cancelAllOrders({ symbol: symbol ?? '' });
     await loadOpenOrders(symbol);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -103,7 +105,7 @@ async function setLeverage(symbol: string, leverage: number): Promise<void> {
   try {
     loading.value = true;
     error.value = null;
-    await strikeTradeApi.setLeverage(symbol, leverage);
+    await strikeTradeApi.setLeverage({ symbol, leverage });
     await loadAccount();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -116,7 +118,7 @@ async function setMarginMode(symbol: string, mode: MarginMode): Promise<void> {
   try {
     loading.value = true;
     error.value = null;
-    await strikeTradeApi.setMarginMode(symbol, mode);
+    await strikeTradeApi.setMarginMode({ symbol, marginMode: mode });
     await loadAccount();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -126,11 +128,11 @@ async function setMarginMode(symbol: string, mode: MarginMode): Promise<void> {
 }
 
 const availableBalance = computed<string | null>(() => {
-  return account.value?.availableBalance ?? null;
+  return account.value?.available_balance ?? null;
 });
 
 const walletBalance = computed<string | null>(() => {
-  return account.value?.walletBalance ?? null;
+  return account.value?.wallet_balance ?? null;
 });
 
 export function useStrikeTrading() {
