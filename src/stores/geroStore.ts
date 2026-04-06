@@ -166,7 +166,7 @@ export default {
 
     // Check non-locale keys for changes
     Object.keys(config).forEach(key => {
-      if (key !== 'locale' && geroStore.config[key] !== config[key]) {
+      if (key !== 'locale' && key !== 'openMiniGeroOnClick' && geroStore.config[key] !== config[key]) {
         geroStore.config[key] = config[key];
         hasChanges = true;
       }

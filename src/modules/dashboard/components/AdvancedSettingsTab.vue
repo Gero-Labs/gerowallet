@@ -7,7 +7,7 @@
           <span class="helper my-0">{{ $t('settings.shopEarnPopupsHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <v-switch dense inset v-model="cashbackPopups" hide-details style="margin: auto"></v-switch>
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="cashbackPopups" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -16,7 +16,16 @@
           <span class="helper my-0">{{ $t('settings.txAutoSubmitHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <v-switch dense inset v-model="txAutoSubmit" hide-details style="margin: auto"></v-switch>
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="txAutoSubmit" style="margin: auto" />
+        </v-col>
+      </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="9" class="text-left">
+          <h3 style="color: white">{{ $t('settings.extensionClickAction') }}</h3>
+          <span class="helper my-0">{{ $t('settings.extensionClickActionHelper') }}</span>
+        </v-col>
+        <v-col cols="3" style="display: flex;">
+          <ToggleSwitch text-left="FULL" text-right="MINI" font-size="10px" v-model="openMiniGeroOnClick" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -25,7 +34,7 @@
           <span class="helper my-0">{{ $t('settings.promptDisplayModeHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="POPUP" text-right="SIDEPANEL" font-size="10px" v-model="useSidePanel" />
+          <ToggleSwitch text-left="POPUP" text-right="SIDEPANEL" font-size="10px" v-model="useSidePanel" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -157,6 +166,20 @@ const useSidePanel = computed({
   }
 });
 
+const openMiniGeroOnClick = ref(false);
+const openMiniGeroInitialized = ref(false);
+
+watch(openMiniGeroOnClick, (val) => {
+  if (!openMiniGeroInitialized.value) return;
+  // Write directly to chrome.storage from here — no intermediaries
+  chrome.storage.local.set({ openMiniGeroOnClick: val });
+  // Message background only for setPanelBehavior
+  Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK,
+    data: { value: val },
+  });
+});
+
 const cashbackPopups = computed({
   get() {
     return !cashbackPopupsDisabled.value;
@@ -233,6 +256,11 @@ const deleteWalletConfirm = async () => {
 // Lifecycle
 onMounted(() => {
   loadCashbackPopups();
+  // Read from its own chrome.storage key (independent of geroStore)
+  chrome.storage.local.get('openMiniGeroOnClick', (result) => {
+    openMiniGeroOnClick.value = !!result['openMiniGeroOnClick'];
+    openMiniGeroInitialized.value = true;
+  });
 });
 </script>
 <style scoped>
