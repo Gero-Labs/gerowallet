@@ -19,6 +19,7 @@ class WebSocketService {
   private reconnectAttempt: number = 0;
   private tipCache = new FIFOCache(10);
   private intentionallyClosed = false;
+  private token: string | null = null;
 
   private readonly RECONNECT_DELAYS = [3000, 5000, 10000, 30000];
   private readonly SYNC_CHECK_INTERVAL = 120_000; // 2 minutes
@@ -29,6 +30,7 @@ class WebSocketService {
     network: string,
     stakeAddress: string,
     lastSyncedBlock: number,
+    token: string,
     handlers: WsHandlers
   ): void {
     this.close();
@@ -36,6 +38,7 @@ class WebSocketService {
     this.network = network;
     this.stakeAddress = stakeAddress;
     this.lastSyncedBlock = lastSyncedBlock;
+    this.token = token;
     this.handlers = handlers;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
@@ -46,7 +49,7 @@ class WebSocketService {
     if (this.intentionallyClosed) return;
 
     LoadingState.setConnecting(true);
-    const url = `${this.WS_BASE_URL}/ws/sync`;
+    const url = `${this.WS_BASE_URL}/ws/sync?token=${encodeURIComponent(this.token || '')}`;
     debugLog('WebSocket connecting to', url);
 
     try {
@@ -181,6 +184,7 @@ class WebSocketService {
     this.stakeAddress = null;
     this.chain = null;
     this.network = null;
+    this.token = null;
   }
 
   updateLastSyncedBlock(block: number): void {
