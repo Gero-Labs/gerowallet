@@ -267,7 +267,7 @@ export class SyncService {
    * @param syncObject - Sync data object containing various blockchain data
    */
   async setSync(syncObject) {
-    if (syncObject && syncObject.success) {
+    if (syncObject && (syncObject.success || syncObject.type === 'SYNC')) {
       const promises: any[] = [];
       if (syncObject.account) {
         promises.push(this.walletBg.setAccountInfo(syncObject.account));
