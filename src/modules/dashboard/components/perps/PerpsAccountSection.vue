@@ -29,9 +29,9 @@
               </template>
               <v-list dense dark class="of-asset-list">
                 <v-list-item
-                  v-for="t in ['ADA', 'USDM']"
+                  v-for="t in depositTokenOptions"
                   :key="t"
-                  @click="depositToken = (t as 'ADA' | 'USDM')"
+                  @click="depositToken = t"
                   :class="{ 'of-asset-list__current-item': depositToken === t }"
                 >
                   <v-list-item-title>{{ t }}</v-list-item-title>
@@ -185,6 +185,7 @@ const props = defineProps<{
 const showDepositDialog = ref(false);
 const showWithdrawDialog = ref(false);
 const depositAmount = ref('');
+const depositTokenOptions: ('ADA' | 'USDM')[] = ['ADA', 'USDM'];
 const depositToken = ref<'ADA' | 'USDM'>('ADA');
 const withdrawAmount = ref('');
 const depositLoading = ref(false);
