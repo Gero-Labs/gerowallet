@@ -2,9 +2,15 @@ import { debugLog } from '@/utils/debug';
 import LoadingState from '@/stores/loading';
 import FIFOCache from 'tiny-fifo-cache';
 
+interface WsSyncMessage {
+  type: string;
+  block?: { hash: string; height: number };
+  [key: string]: unknown;
+}
+
 interface WsHandlers {
-  onSync?: (data: any) => Promise<void>;
-  onRollback?: (data: any) => Promise<void>;
+  onSync?: (data: WsSyncMessage) => Promise<void>;
+  onRollback?: (data: WsSyncMessage) => Promise<void>;
 }
 
 class WebSocketService {
@@ -101,7 +107,7 @@ class WebSocketService {
 
   private handleMessage(raw: string): void {
     try {
-      const data = JSON.parse(raw);
+      const data: WsSyncMessage = JSON.parse(raw);
       const type = data.type;
 
       switch (type) {
@@ -110,7 +116,7 @@ class WebSocketService {
             return;
           }
           if (data.block?.hash) {
-            this.tipCache.set(data.block.hash, true);
+            this.tipCache.put(data.block.hash, true);
           }
           if (data.block?.height) {
             this.lastSyncedBlock = data.block.height;
