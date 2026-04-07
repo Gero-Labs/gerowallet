@@ -218,6 +218,51 @@ export class SyncService {
   }
 
   /**
+   * Handle a chain rollback by deleting transactions above the rollback point
+   * and resetting the sync checkpoint.
+   */
+  async handleRollback(rollbackToSlot: number): Promise<void> {
+    debugLog(`Handling rollback to slot ${rollbackToSlot}`);
+
+    const db = await this.walletBg.getDb();
+
+    // Delete transactions that are above the rollback point
+    const txTable = db.table('transactions');
+    const allTxs = await txTable.toArray();
+    const invalidTxIds = allTxs
+      .filter((tx: any) => tx.absolute_slot && tx.absolute_slot > rollbackToSlot)
+      .map((tx: any) => tx.id);
+
+    if (invalidTxIds.length > 0) {
+      await txTable.bulkDelete(invalidTxIds);
+      debugLog(`Deleted ${invalidTxIds.length} invalidated transactions`);
+    }
+
+    // Reset sync checkpoint to before the rollback point
+    const syncInfo = await this.walletBg.getLastSyncInfo();
+    if (syncInfo && syncInfo.slot > rollbackToSlot) {
+      await db.table('sync').put({
+        id: 1,
+        height: 0,
+        hash: '',
+        slot: rollbackToSlot,
+        time: syncInfo.time,
+        epoch: syncInfo.epoch,
+        epoch_slot: 0,
+      });
+      debugLog(`Reset sync checkpoint to slot ${rollbackToSlot}`);
+    }
+
+    // Trigger a REST sync to re-fetch correct data from the new fork
+    try {
+      await this.syncViaRest();
+      debugLog('Post-rollback REST sync completed');
+    } catch (e) {
+      debugLog('Post-rollback REST sync failed, will retry on next connection:', e);
+    }
+  }
+
+  /**
    * Process sync object received from sync channel
    * @param syncObject - Sync data object containing various blockchain data
    */

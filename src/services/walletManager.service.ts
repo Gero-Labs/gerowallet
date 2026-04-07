@@ -315,6 +315,9 @@ export class WalletManager {
         },
         onRollback: async (data: any) => {
           debugLog('Rollback received:', data);
+          if (data.rollbackToSlot !== undefined) {
+            await walletBg.syncService.handleRollback(data.rollbackToSlot);
+          }
         },
       });
     } else {
