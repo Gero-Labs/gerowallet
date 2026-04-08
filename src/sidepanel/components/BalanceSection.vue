@@ -165,7 +165,7 @@ const changeColor = computed(() => {
 
 .balance-fade-enter-active,
 .balance-fade-leave-active {
-  transition: opacity 0.25s ease, filter 0.25s ease;
+  transition: opacity 0.22s ease, filter 0.22s ease;
 }
 
 .balance-fade-enter,
