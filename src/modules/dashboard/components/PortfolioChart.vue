@@ -218,7 +218,6 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import WalletStore from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { themes } from '@/config/themes';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -264,8 +263,12 @@ const { loggedWallet, account } = toRefs(walletStore);
 
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
-const toggleHideBalances = () => {
-  WalletStore.setHideBalances(!hideBalances.value);
+const priceFormatter = (price: number) => {
+  if (hideBalances.value) return '••••••';
+  if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
+  if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
+  if (price >= 1) return price.toFixed(0);
+  return price.toFixed(2);
 };
 
 const isApex = computed(() => {
@@ -773,13 +776,7 @@ const initChart = () => {
       lastValueVisible: false,
       priceFormat: {
         type: 'custom',
-        formatter: (price: number) => {
-          if (hideBalances.value) return '••••••';
-          if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
-          if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
-          if (price >= 1) return price.toFixed(0);
-          return price.toFixed(2);
-        },
+        formatter: priceFormatter,
         minMove: 1,
       },
     });
@@ -830,7 +827,9 @@ const initChart = () => {
       const formattedVal = val >= 1000
         ? val.toLocaleString(undefined, { maximumFractionDigits: 0 })
         : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      el.children[1].textContent = currentCurrencyConfig.value.symbol + formattedVal;
+      el.children[1].textContent = hideBalances.value
+        ? '••••••'
+        : currentCurrencyConfig.value.symbol + formattedVal;
 
       // Position via transform3d (GPU composited, no layout thrash)
       if (param.point && chartContainerRef.value) {
@@ -1045,13 +1044,7 @@ watch(hideBalances, () => {
     areaSeries.applyOptions({
       priceFormat: {
         type: 'custom',
-        formatter: (price: number) => {
-          if (hideBalances.value) return '••••••';
-          if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
-          if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
-          if (price >= 1) return price.toFixed(0);
-          return price.toFixed(2);
-        },
+        formatter: priceFormatter,
         minMove: 1,
       },
     });
