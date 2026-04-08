@@ -70,10 +70,10 @@
       <v-tooltip top :open-delay="500" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
-            {{ filters.toCurrency(item.quantity, false, 3, '', '', true, item.metadata?.decimals) }}
+            {{ hideBalances ? '••••••' : filters.toCurrency(item.quantity, false, 3, '', '', true, item.metadata?.decimals) }}
           </span>
         </template>
-        {{ filters.toCurrency(item.quantity, false, 6, '', '', false, item.metadata?.decimals) }}
+        {{ hideBalances ? '••••••' : filters.toCurrency(item.quantity, false, 6, '', '', false, item.metadata?.decimals) }}
       </v-tooltip>
     </template>
     <template v-slot:[`item.price`]="{ item }">
@@ -85,10 +85,10 @@
               <v-tooltip top :open-delay="500" content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ filters.toCurrency(item.price, false, 4, getCurrencySymbol(), '', true, 0) }}
+                    {{ hideBalances ? '••••••' : filters.toCurrency(item.price, false, 4, getCurrencySymbol(), '', true, 0) }}
                   </span>
                 </template>
-                {{ filters.toCurrency(item.price, false, 6, getCurrencySymbol(), '', false, 0) }}
+                {{ hideBalances ? '••••••' : filters.toCurrency(item.price, false, 6, getCurrencySymbol(), '', false, 0) }}
               </v-tooltip>
             </span>
           </v-list-item-title>
@@ -119,10 +119,10 @@
         <v-tooltip top :open-delay="500" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <span v-bind="attrs" v-on="on">
-              {{ filters.toCurrency(item.value, false, 3, getCurrencySymbol(), '', true, 0) }}
+              {{ hideBalances ? '••••••' : filters.toCurrency(item.value, false, 3, getCurrencySymbol(), '', true, 0) }}
             </span>
           </template>
-          {{ filters.toCurrency(item.value, false, 6, getCurrencySymbol(), '', false, 0) }}
+          {{ hideBalances ? '••••••' : filters.toCurrency(item.value, false, 6, getCurrencySymbol(), '', false, 0) }}
         </v-tooltip>
       </span>
     </template>
@@ -130,10 +130,10 @@
       <v-tooltip v-if="item.mcap" top :open-delay="500" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
-            {{ filters.toCurrency(Number(item.mcap), false, 2, getCurrencySymbol(), '', true, 0) }}
+            {{ hideBalances ? '••••••' : filters.toCurrency(Number(item.mcap), false, 2, getCurrencySymbol(), '', true, 0) }}
           </span>
         </template>
-        {{ filters.toCurrency(Number(item.mcap), false, 4, getCurrencySymbol(), '', false, 0) }}
+        {{ hideBalances ? '••••••' : filters.toCurrency(Number(item.mcap), false, 4, getCurrencySymbol(), '', false, 0) }}
       </v-tooltip>
       <span v-else>N/A</span>
     </template>
@@ -211,6 +211,8 @@ const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 // Headers for the data table
 const headers = ref<any[]>([
