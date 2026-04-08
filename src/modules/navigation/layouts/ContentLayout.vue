@@ -185,7 +185,7 @@
                   <v-tooltip bottom content-class="custom-tooltip">
                     <template v-slot:activator="{ on }">
                       <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
-                        <v-icon size="20">mdi-cellphone</v-icon>
+                        <v-icon size="23">mdi-fullscreen-exit</v-icon>
                       </v-btn>
                     </template>
                     <span>{{ t('miniGero.miniMode') }}</span>
@@ -324,6 +324,7 @@ watch(settingsNavRequest, (req) => {
     settingsNavRequest.value = null;
   }
 });
+
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
@@ -509,6 +510,16 @@ const preloadBackgroundImage = () => {
   };
   img.src = imageUrl;
 };
+
+// Open settings dialog if launched from Mini Gero "All Settings" button
+onMounted(() => {
+  chrome.storage.local.get('openSettingsOnLoad', (result) => {
+    if (result.openSettingsOnLoad) {
+      currentDialog.value = dialogs.SETTINGS;
+      chrome.storage.local.remove('openSettingsOnLoad');
+    }
+  });
+});
 
 // Lifecycle
 onMounted(async () => {
