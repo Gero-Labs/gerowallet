@@ -27,6 +27,8 @@ class WebSocketService {
   private tipCache = new FIFOCache(10);
   private intentionallyClosed = false;
   private syncResolve: (() => void) | null = null;
+  private catchingUp = false;
+  private pendingTxBatches: WsSyncMessage[] = [];
 
   private readonly RECONNECT_DELAYS = [3000, 5000, 10000, 30000];
   private readonly SYNC_CHECK_INTERVAL = 120_000; // 2 minutes
@@ -115,24 +117,52 @@ class WebSocketService {
           const txCount = Array.isArray(data.transactions) ? data.transactions.length : 0;
           const blockHeight = data.block?.height || 0;
           debugLog(`📥 SYNC received: ${txCount} tx(s), block ${blockHeight}`);
-          if (data.block?.hash && this.tipCache.get(data.block.hash)) {
-            debugLog('⏭️ Duplicate block hash, skipping');
-            return;
+
+          if (this.catchingUp) {
+            // During catch-up, accumulate batches — don't write to DB yet
+            this.pendingTxBatches.push(data);
+            debugLog(`📦 Accumulated batch (${this.pendingTxBatches.length} batches so far)`);
+          } else {
+            // Normal real-time sync — process immediately
+            if (data.block?.hash && this.tipCache.get(data.block.hash)) {
+              debugLog('⏭️ Duplicate block hash, skipping');
+              return;
+            }
+            if (data.block?.hash) {
+              this.tipCache.put(data.block.hash, true);
+            }
+            if (data.block?.height) {
+              this.lastSyncedBlock = data.block.height;
+            }
+            this.handlers.onSync?.(data);
           }
-          if (data.block?.hash) {
-            this.tipCache.put(data.block.hash, true);
-          }
-          if (data.block?.height) {
-            this.lastSyncedBlock = data.block.height;
-          }
-          this.handlers.onSync?.(data);
           break;
         }
 
-        case 'CATCH_UP_COMPLETE':
+        case 'CATCH_UP_COMPLETE': {
           debugLog(`✅ Catch-up complete: ${data.totalTransactions} transactions up to block ${data.blockHeight}`);
+
+          // Combine all accumulated batches into one SYNC payload
+          if (this.pendingTxBatches.length > 0) {
+            const allTransactions = this.pendingTxBatches.flatMap(batch =>
+              Array.isArray(batch.transactions) ? batch.transactions : []
+            );
+            const lastBatch = this.pendingTxBatches[this.pendingTxBatches.length - 1];
+            const combinedPayload: WsSyncMessage = {
+              ...lastBatch,
+              transactions: allTransactions,
+              block: { height: data.blockHeight as number, hash: '' },
+            };
+            debugLog(`📤 Processing ${allTransactions.length} transactions in one batch`);
+            this.lastSyncedBlock = (data.blockHeight as number) || 0;
+            this.handlers.onSync?.(combinedPayload);
+            this.pendingTxBatches = [];
+          }
+
+          this.catchingUp = false;
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
+        }
 
         case 'ROLLBACK':
           debugLog(`⚠️ ROLLBACK to slot ${data.rollbackToSlot}`);
@@ -215,11 +245,28 @@ class WebSocketService {
    */
   waitForSync(timeoutMs = 30000): Promise<void> {
     debugLog(`⏳ Waiting for sync (timeout: ${timeoutMs / 1000}s)...`);
+    this.catchingUp = true;
+    this.pendingTxBatches = [];
     return new Promise<void>((resolve) => {
       this.syncResolve = resolve;
       setTimeout(() => {
         if (this.syncResolve === resolve) {
           debugLog('⏰ waitForSync timed out');
+          // Flush any pending batches accumulated during catch-up
+          if (this.pendingTxBatches.length > 0) {
+            const allTransactions = this.pendingTxBatches.flatMap(batch =>
+              Array.isArray(batch.transactions) ? batch.transactions : []
+            );
+            const lastBatch = this.pendingTxBatches[this.pendingTxBatches.length - 1];
+            const combinedPayload: WsSyncMessage = {
+              ...lastBatch,
+              transactions: allTransactions,
+            };
+            debugLog(`📤 Timeout flush: processing ${allTransactions.length} transactions`);
+            this.handlers.onSync?.(combinedPayload);
+            this.pendingTxBatches = [];
+          }
+          this.catchingUp = false;
           this.syncResolve = null;
           resolve();
         }
@@ -243,7 +290,8 @@ class WebSocketService {
     this.stakeAddress = null;
     this.chain = null;
     this.network = null;
-
+    this.catchingUp = false;
+    this.pendingTxBatches = [];
   }
 
   updateLastSyncedBlock(block: number): void {
