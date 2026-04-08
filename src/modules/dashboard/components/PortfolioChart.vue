@@ -79,7 +79,7 @@
                     :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    ~{{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
+                    {{ hideBalances ? '••••••' : '~' + ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -87,9 +87,9 @@
               <span
                 v-else
                 class="pnl-value"
-                :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
+                {{ hideBalances ? '••••••' : ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
               </span>
             </div>
             <div class="pnl-item">
@@ -98,10 +98,10 @@
                 <template v-slot:activator="{ on }">
                   <span
                     class="pnl-value"
-                    :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                    :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    ~{{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
+                    {{ hideBalances ? '••••••' : '~' + ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -109,9 +109,9 @@
               <span
                 v-else
                 class="pnl-value"
-                :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
+                {{ hideBalances ? '••••••' : ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
               </span>
             </div>
           </template>
@@ -143,7 +143,7 @@
                 class="pnl-value"
                 :style="{ color: hasWithdrawableRewards ? '#47CD89' : 'rgba(255,255,255,0.35)' }"
               >
-                {{ hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' \u20B3' : '—' }}
+                {{ hideBalances ? '••••••' : (hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' \u20B3' : '—') }}
               </span>
             </div>
           </template>
