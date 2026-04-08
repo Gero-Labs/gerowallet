@@ -66,12 +66,13 @@ class WebSocketService {
     }
 
     this.ws.onopen = () => {
-      debugLog('WebSocket connected');
+      debugLog('🔌 WebSocket connected');
       LoadingState.setConnected(true);
       LoadingState.setConnecting(false);
       LoadingState.setText('');
       this.reconnectAttempt = 0;
 
+      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock}`);
       this.send({
         type: 'SUBSCRIBE',
         chain: this.chain,
@@ -110,8 +111,12 @@ class WebSocketService {
       const type = data.type;
 
       switch (type) {
-        case 'SYNC':
+        case 'SYNC': {
+          const txCount = Array.isArray(data.transactions) ? data.transactions.length : 0;
+          const blockHeight = data.block?.height || 0;
+          debugLog(`📥 SYNC received: ${txCount} tx(s), block ${blockHeight}`);
           if (data.block?.hash && this.tipCache.get(data.block.hash)) {
+            debugLog('⏭️ Duplicate block hash, skipping');
             return;
           }
           if (data.block?.hash) {
@@ -122,29 +127,31 @@ class WebSocketService {
           }
           this.handlers.onSync?.(data);
           break;
+        }
 
         case 'CATCH_UP_COMPLETE':
-          debugLog(`Catch-up complete: ${data.totalTransactions} transactions up to block ${data.blockHeight}`);
+          debugLog(`✅ Catch-up complete: ${data.totalTransactions} transactions up to block ${data.blockHeight}`);
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
         case 'ROLLBACK':
+          debugLog(`⚠️ ROLLBACK to slot ${data.rollbackToSlot}`);
           this.handlers.onRollback?.(data);
           break;
 
         case 'SYNC_CHECK_OK':
-          debugLog('SYNC_CHECK: caught up');
+          debugLog('✅ SYNC_CHECK: caught up');
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
         case 'FORCE_RESYNC':
-          debugLog('Force resync requested by admin');
+          debugLog('🔄 Force resync requested by admin');
           this.lastSyncedBlock = 0;
           this.handlers.onForceResync?.();
           break;
 
         default:
-          debugLog('Unknown WebSocket message type:', type);
+          debugLog('❓ Unknown WebSocket message type:', type);
       }
     } catch (e) {
       debugLog('Failed to parse WebSocket message:', e);
@@ -190,6 +197,7 @@ class WebSocketService {
    * Used for force resync (lastSyncedBlock=0) to trigger full catch-up via gero-sync.
    */
   resubscribe(lastSyncedBlock: number): void {
+    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock}`);
     this.lastSyncedBlock = lastSyncedBlock;
     this.send({
       type: 'SUBSCRIBE',
@@ -206,12 +214,14 @@ class WebSocketService {
    * Times out after the specified ms (default 30s).
    */
   waitForSync(timeoutMs = 30000): Promise<void> {
+    debugLog(`⏳ Waiting for sync (timeout: ${timeoutMs / 1000}s)...`);
     return new Promise<void>((resolve) => {
       this.syncResolve = resolve;
       setTimeout(() => {
         if (this.syncResolve === resolve) {
+          debugLog('⏰ waitForSync timed out');
           this.syncResolve = null;
-          resolve(); // Resolve on timeout — don't block login forever
+          resolve();
         }
       }, timeoutMs);
     });
