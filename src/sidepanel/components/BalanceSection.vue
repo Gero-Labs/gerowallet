@@ -5,12 +5,12 @@
     </div>
     <div class="balance-row">
       <span class="balance-amount text-h5 white--text font-weight-bold">
-        {{ formattedBalance }}
+        {{ hideBalances ? '$•••' : formattedBalance }}
       </span>
     </div>
     <div class="balance-sub text-caption" :class="changeColor">
       <span v-if="adaBalance !== null">
-        {{ formattedAdaBalance }} ADA
+        {{ hideBalances ? '••••••' : formattedAdaBalance }} ADA
       </span>
       <span v-if="priceChange !== null" class="ml-2">
         <v-icon x-small :color="priceChange >= 0 ? '#47CD89' : '#F97066'">
@@ -44,6 +44,7 @@ defineEmits<{
 }>();
 
 const { utxos, collateral } = toRefs(walletStore);
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 const { allTokens: marketTokens, adaData } = useMarketData();
 
 const adaBalance = computed<number | null>(() => {
