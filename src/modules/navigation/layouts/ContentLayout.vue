@@ -174,6 +174,15 @@
                   </v-menu>
 
                   <v-tooltip bottom content-class="custom-tooltip">
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-btn icon class="ml-3 toolbar-icon-btn" v-bind="attrs" v-on="on" @click="toggleHideBalances()">
+                        <v-icon size="20">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
+                      </v-btn>
+                    </template>
+                    <span>{{ hideBalances ? t('dashboard.showBalances') : t('dashboard.hideBalances') }}</span>
+                  </v-tooltip>
+
+                  <v-tooltip bottom content-class="custom-tooltip">
                     <template v-slot:activator="{ on }">
                       <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
                         <v-icon size="20">mdi-cellphone</v-icon>
@@ -272,6 +281,7 @@ import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
@@ -343,6 +353,12 @@ const isWalletEmpty = computed(() => {
 });
 // Notifications menu
 const notificationsMenu = ref(false);
+
+// Hide/show balances toggle
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+const toggleHideBalances = () => {
+  WalletStore.setHideBalances(!hideBalances.value);
+};
 
 // KES rotation warning — shows globally when BP node reports low KES remaining
 const kesRemainingGlobal = computed(() => {

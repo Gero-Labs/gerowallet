@@ -24,14 +24,6 @@
             </template>
             <span>{{ portfolioMode === 'ada-only' ? $t('dashboard.adaOnlyTooltip') : $t('dashboard.fullPortfolioTooltip') }}</span>
           </v-tooltip>
-          <v-tooltip bottom content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn icon x-small v-bind="attrs" v-on="on" @click="toggleHideBalances()">
-                <v-icon small>{{ hideBalances ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
-              </v-btn>
-            </template>
-            <span>{{ hideBalances ? $t('dashboard.showBalances') : $t('dashboard.hideBalances') }}</span>
-          </v-tooltip>
           <v-btn icon x-small @click="handleRefresh" :disabled="isRefreshing">
             <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
           </v-btn>
