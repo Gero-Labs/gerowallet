@@ -21,7 +21,12 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
-          <h3 style="color: white">{{ $t('settings.extensionClickAction') }}</h3>
+          <h3 style="color: white">
+            {{ $t('settings.extensionClickAction') }}
+            <v-icon color="error" x-small class="ml-1" v-if="isDefaultExtensionModeNew">
+              mdi-circle
+            </v-icon>
+          </h3>
           <span class="helper my-0">{{ $t('settings.extensionClickActionHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
@@ -121,6 +126,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
 import GeroStore from '@/stores/geroStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import cardStore from '@/stores/modules/card';
@@ -165,6 +171,8 @@ const useSidePanel = computed({
     }
   }
 });
+
+const isDefaultExtensionModeNew = computed(() => isFeatureNew('settings.advanced.defaultExtensionMode'));
 
 const openMiniGeroOnClick = ref(false);
 const openMiniGeroInitialized = ref(false);
