@@ -26,6 +26,7 @@ class WebSocketService {
   private reconnectAttempt: number = 0;
   private tipCache = new FIFOCache(10);
   private intentionallyClosed = false;
+  private syncResolve: (() => void) | null = null;
 
   private readonly RECONNECT_DELAYS = [3000, 5000, 10000, 30000];
   private readonly SYNC_CHECK_INTERVAL = 120_000; // 2 minutes
@@ -120,6 +121,7 @@ class WebSocketService {
             this.lastSyncedBlock = data.block.height;
           }
           this.handlers.onSync?.(data);
+          if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
         case 'ROLLBACK':
@@ -128,6 +130,7 @@ class WebSocketService {
 
         case 'SYNC_CHECK_OK':
           debugLog('SYNC_CHECK: caught up');
+          if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
         case 'FORCE_RESYNC':
@@ -176,6 +179,38 @@ class WebSocketService {
     this.reconnectAttempt++;
     debugLog(`WebSocket reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
     this.reconnectTimer = setTimeout(() => this.openConnection(), delay);
+  }
+
+  /**
+   * Re-send SUBSCRIBE with a new lastSyncedBlock.
+   * Used for force resync (lastSyncedBlock=0) to trigger full catch-up via gero-sync.
+   */
+  resubscribe(lastSyncedBlock: number): void {
+    this.lastSyncedBlock = lastSyncedBlock;
+    this.send({
+      type: 'SUBSCRIBE',
+      chain: this.chain,
+      network: this.network,
+      address: this.stakeAddress,
+      lastSyncedBlock,
+    });
+  }
+
+  /**
+   * Returns a promise that resolves when the next SYNC or SYNC_CHECK_OK message arrives.
+   * Used to await initial sync on login or after force resync.
+   * Times out after the specified ms (default 30s).
+   */
+  waitForSync(timeoutMs = 30000): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.syncResolve = resolve;
+      setTimeout(() => {
+        if (this.syncResolve === resolve) {
+          this.syncResolve = null;
+          resolve(); // Resolve on timeout — don't block login forever
+        }
+      }, timeoutMs);
+    });
   }
 
   close(): void {

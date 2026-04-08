@@ -193,16 +193,11 @@ export class WalletManager {
         this.walletBg = walletBg;
         this.currentWalletId = wallet.id;
 
-        // OPTIMIZATION: Use REST sync on login to get tip immediately
-        // This prevents "Cannot read properties of null (reading 'slot')" errors
-        // when trying to send transactions before WebSocket sync completes
-        // Skip for Bitcoin wallets — the Gero backend has no BITCOIN chain enum
+        // Wait for initial sync via WebSocket (gero-sync catch-up via Nexus)
+        // The SUBSCRIBE message was sent on connect — gero-sync pushes data back
         if (walletBg.chain !== Blockchain.BITCOIN) {
           LoadingState.setText('Syncing wallet data...');
-          await this.walletBg.syncService.syncViaRest().catch(err => {
-            console.warn('REST sync failed during login (non-critical):', err);
-            // Fall back to regular WebSocket sync if REST fails
-          });
+          await webSocketService.waitForSync(30000);
         }
 
         LoadingState.setText('Wallet ready');
@@ -320,14 +315,22 @@ export class WalletManager {
           }
         },
         onForceResync: async () => {
-          debugLog('Force resync: clearing sync state and restoring');
-          const db = await walletBg.getDb();
-          // Clear all sync-related tables to force full restore
-          await db.table('sync').clear();
-          await db.table('transactions').clear();
-          await db.table('account').clear();
-          // Trigger full restore via REST
-          await walletBg.syncService.syncViaRest();
+          debugLog('Force resync: clearing sync state and resubscribing via gero-sync');
+          LoadingState.setRestoring(true);
+          LoadingState.setText('Resyncing wallet...');
+          try {
+            const db = await walletBg.getDb();
+            // Clear all sync-related tables
+            await db.table('sync').clear();
+            await db.table('transactions').clear();
+            await db.table('account').clear();
+            // Re-subscribe with lastSyncedBlock=0 → gero-sync catch-up fetches everything via Nexus
+            webSocketService.resubscribe(0);
+            await webSocketService.waitForSync(60000);
+          } finally {
+            LoadingState.setRestoring(false);
+            LoadingState.setText('');
+          }
           debugLog('Force resync complete');
         },
       });
