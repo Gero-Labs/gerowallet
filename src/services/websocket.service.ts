@@ -121,6 +121,10 @@ class WebSocketService {
             this.lastSyncedBlock = data.block.height;
           }
           this.handlers.onSync?.(data);
+          break;
+
+        case 'CATCH_UP_COMPLETE':
+          debugLog(`Catch-up complete: ${data.totalTransactions} transactions up to block ${data.blockHeight}`);
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
