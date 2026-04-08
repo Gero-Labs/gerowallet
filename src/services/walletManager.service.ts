@@ -319,6 +319,17 @@ export class WalletManager {
             await walletBg.syncService.handleRollback(data.rollbackToSlot);
           }
         },
+        onForceResync: async () => {
+          debugLog('Force resync: clearing sync state and restoring');
+          const db = await walletBg.getDb();
+          // Clear sync checkpoint
+          await db.table('sync').clear();
+          // Clear transactions
+          await db.table('transactions').clear();
+          // Trigger full restore via REST
+          await walletBg.syncService.syncViaRest();
+          debugLog('Force resync complete');
+        },
       });
     } else {
       debugLog('Skipping WebSocket connection for Bitcoin wallet');
