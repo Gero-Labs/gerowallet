@@ -34,14 +34,14 @@
           @click="!hideBalances && toggleCurrency()"
           :class="{ clickable: !hideBalances && availableCurrencies.length > 1 }"
         >
-          <template v-if="hideBalances">
-            <span class="portfolio-amount-masked">••••••</span>
-          </template>
-          <template v-else>
-            <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
-            <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
-            <span v-else class="portfolio-amount-placeholder">—</span>
-          </template>
+          <transition name="balance-fade" mode="out-in">
+            <span v-if="hideBalances" key="masked" class="portfolio-amount-masked">••••••</span>
+            <span v-else key="visible" class="portfolio-amount-visible">
+              <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
+              <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
+              <span v-else class="portfolio-amount-placeholder">—</span>
+            </span>
+          </transition>
         </div>
 
         <div class="address-section" v-if="shortenAddress">
@@ -1173,6 +1173,22 @@ onBeforeUnmount(() => {
   font-size: inherit;
   letter-spacing: 2px;
   opacity: 0.5;
+}
+
+.portfolio-amount-visible {
+  display: inline;
+}
+
+/* Balance fade transition */
+.balance-fade-enter-active,
+.balance-fade-leave-active {
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.balance-fade-enter,
+.balance-fade-leave-to {
+  opacity: 0;
+  filter: blur(4px);
 }
 
 .currency-symbol {

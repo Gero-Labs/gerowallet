@@ -4,9 +4,10 @@
       {{ $t('miniGero.portfolioValue') }}
     </div>
     <div class="balance-row">
-      <span class="balance-amount text-h5 white--text font-weight-bold">
-        {{ hideBalances ? '$•••' : formattedBalance }}
-      </span>
+      <transition name="balance-fade" mode="out-in">
+        <span v-if="hideBalances" key="masked" class="balance-amount text-h5 white--text font-weight-bold" style="opacity: 0.5">$•••</span>
+        <span v-else key="visible" class="balance-amount text-h5 white--text font-weight-bold">{{ formattedBalance }}</span>
+      </transition>
     </div>
     <div class="balance-sub text-caption" :class="changeColor">
       <span v-if="adaBalance !== null">
@@ -160,5 +161,16 @@ const changeColor = computed(() => {
   letter-spacing: 0;
   font-size: 13px;
   padding: 0 20px !important;
+}
+
+.balance-fade-enter-active,
+.balance-fade-leave-active {
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.balance-fade-enter,
+.balance-fade-leave-to {
+  opacity: 0;
+  filter: blur(4px);
 }
 </style>
