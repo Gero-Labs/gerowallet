@@ -307,7 +307,7 @@ export class WalletManager {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
 
-      webSocketService.connect(chain, network, address, lastSyncedBlock, walletBg.token || '', {
+      webSocketService.connect(chain, network, address, lastSyncedBlock, {
         onSync: async (data: any) => {
           await this.tipMutex.runExclusive(async () => {
             await walletBg.syncService.setSync(data);
