@@ -11,6 +11,7 @@ interface WsSyncMessage {
 interface WsHandlers {
   onSync?: (data: WsSyncMessage) => Promise<void>;
   onRollback?: (data: WsSyncMessage) => Promise<void>;
+  onForceResync?: () => Promise<void>;
 }
 
 class WebSocketService {
@@ -127,6 +128,12 @@ class WebSocketService {
 
         case 'SYNC_CHECK_OK':
           debugLog('SYNC_CHECK: caught up');
+          break;
+
+        case 'FORCE_RESYNC':
+          debugLog('Force resync requested by admin');
+          this.lastSyncedBlock = 0;
+          this.handlers.onForceResync?.();
           break;
 
         default:
