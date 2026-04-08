@@ -782,6 +782,7 @@ const initChart = () => {
       priceFormat: {
         type: 'custom',
         formatter: (price: number) => {
+          if (hideBalances.value) return '••••••';
           if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
           if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
           if (price >= 1) return price.toFixed(0);
@@ -1042,6 +1043,33 @@ watch(isReadyToRender, (ready) => {
     nextTick(() => {
       // Small delay to ensure DOM is updated
       setTimeout(() => initChart(), 50);
+    });
+  }
+});
+
+// Watch hideBalances — re-apply price formatter and crosshair label visibility
+watch(hideBalances, () => {
+  if (areaSeries && chart) {
+    areaSeries.applyOptions({
+      priceFormat: {
+        type: 'custom',
+        formatter: (price: number) => {
+          if (hideBalances.value) return '••••••';
+          if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
+          if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
+          if (price >= 1) return price.toFixed(0);
+          return price.toFixed(2);
+        },
+        minMove: 1,
+      },
+    });
+    // Also hide crosshair price label when balances hidden
+    chart.applyOptions({
+      crosshair: {
+        horzLine: {
+          labelVisible: !hideBalances.value,
+        },
+      },
     });
   }
 });
