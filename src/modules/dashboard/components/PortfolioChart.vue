@@ -24,6 +24,14 @@
             </template>
             <span>{{ portfolioMode === 'ada-only' ? $t('dashboard.adaOnlyTooltip') : $t('dashboard.fullPortfolioTooltip') }}</span>
           </v-tooltip>
+          <v-tooltip bottom content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn icon x-small v-bind="attrs" v-on="on" @click="toggleHideBalances()">
+                <v-icon small>{{ hideBalances ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+              </v-btn>
+            </template>
+            <span>{{ hideBalances ? $t('dashboard.showBalances') : $t('dashboard.hideBalances') }}</span>
+          </v-tooltip>
           <v-btn icon x-small @click="handleRefresh" :disabled="isRefreshing">
             <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
           </v-btn>
@@ -31,12 +39,17 @@
 
         <div
           class="portfolio-amount"
-          @click="toggleCurrency"
-          :class="{ clickable: availableCurrencies.length > 1 }"
+          @click="!hideBalances && toggleCurrency()"
+          :class="{ clickable: !hideBalances && availableCurrencies.length > 1 }"
         >
-          <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
-          <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
-          <span v-else class="portfolio-amount-placeholder">—</span>
+          <template v-if="hideBalances">
+            <span class="portfolio-amount-masked">••••••</span>
+          </template>
+          <template v-else>
+            <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
+            <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
+            <span v-else class="portfolio-amount-placeholder">—</span>
+          </template>
         </div>
 
         <div class="address-section" v-if="shortenAddress">
@@ -213,6 +226,7 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { themes } from '@/config/themes';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -255,6 +269,12 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
 };
 
 const { loggedWallet, account } = toRefs(walletStore);
+
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+
+const toggleHideBalances = () => {
+  WalletStore.setHideBalances(!hideBalances.value);
+};
 
 const isApex = computed(() => {
   const chain = loggedWallet.value?.chain;
@@ -1127,6 +1147,12 @@ onBeforeUnmount(() => {
 
 .portfolio-amount-placeholder {
   opacity: 0.3;
+}
+
+.portfolio-amount-masked {
+  font-size: inherit;
+  letter-spacing: 2px;
+  opacity: 0.5;
 }
 
 .currency-symbol {
