@@ -322,10 +322,10 @@ export class WalletManager {
         onForceResync: async () => {
           debugLog('Force resync: clearing sync state and restoring');
           const db = await walletBg.getDb();
-          // Clear sync checkpoint
+          // Clear all sync-related tables to force full restore
           await db.table('sync').clear();
-          // Clear transactions
           await db.table('transactions').clear();
+          await db.table('account').clear();
           // Trigger full restore via REST
           await walletBg.syncService.syncViaRest();
           debugLog('Force resync complete');
