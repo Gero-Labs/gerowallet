@@ -74,7 +74,7 @@ class WebSocketService {
         type: 'SUBSCRIBE',
         chain: this.chain,
         network: this.network,
-        stakeAddress: this.stakeAddress,
+        address: this.stakeAddress,
         lastSyncedBlock: this.lastSyncedBlock,
       });
 
@@ -148,7 +148,7 @@ class WebSocketService {
     this.syncCheckTimer = setInterval(() => {
       this.send({
         type: 'SYNC_CHECK',
-        stakeAddress: this.stakeAddress,
+        address: this.stakeAddress,
         lastSyncedBlock: this.lastSyncedBlock,
       });
     }, this.SYNC_CHECK_INTERVAL);
