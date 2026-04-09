@@ -55,6 +55,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.7.0',
     path: ['navigation', 'market']
   },
+  // Transactions > UTxOs tab
+  {
+    id: 'transactions.utxos',
+    version: '2.7.0',
+    path: ['transactions', 'utxos']
+  },
   // Add more features here as needed
 ];
 

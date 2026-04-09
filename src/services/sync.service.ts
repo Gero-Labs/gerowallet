@@ -203,8 +203,16 @@ export class SyncService {
     LoadingState.setRestoring(true);
     LoadingState.setText('Resyncing wallet...');
     try {
-      // Lightweight resync: just re-subscribe to get fresh UTxOs + account.
-      // Transactions stay in DB — no need to re-download 680+ txs.
+      // Clear transactions so they get re-processed with latest conversion logic
+      if (this.walletBg) {
+        const db = await this.walletBg.getDb();
+        const txTable = db.table('transactions');
+        if (txTable) {
+          await txTable.clear();
+          debugLog('Resync: cleared transactions table');
+        }
+      }
+
       if (webSocketService.isConnected()) {
         webSocketService.resubscribe(0);
         await webSocketService.waitForSync(30000);

@@ -5,12 +5,14 @@
         <v-card class="transparent" flat>
           <v-tabs v-model="activeTab" centered icons-and-text background-color="transparent" class="mb-4">
             <v-tab>
-              {{ $t('transactions.history') }}
+              {{ $t('transactions.history') }} ({{ txCount }})
               <v-icon>mdi-history</v-icon>
             </v-tab>
-            <v-tab>
+            <v-tab @click="markUtxosSeen()">
               {{ $t('transactions.utxos') }} ({{ utxoCount }})
-              <v-icon>mdi-cube-outline</v-icon>
+              <NotificationDot :show="isFeatureNew('transactions.utxos')" color="error" overlap bordered>
+                <v-icon>mdi-cube-outline</v-icon>
+              </NotificationDot>
             </v-tab>
           </v-tabs>
           <v-tabs-items v-model="activeTab" class="transparent">
@@ -65,7 +67,9 @@ import TransactionDetails from '@/shared/components/TransactionDetails.vue';
 import UtxosTable from '@/modules/transactions/components/UtxosTable.vue';
 import UtxoDetail from '@/modules/transactions/components/UtxoDetail.vue';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
+import NotificationDot from '@/shared/components/NotificationDot.vue';
 import { walletStore } from '@/stores/walletStore';
+import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 const vmProxy = getCurrentInstance()!.proxy;
 const route = vmProxy.$route;
@@ -77,12 +81,18 @@ const selectedUtxo = ref<any>(null);
 const reportSite = ref('');
 const transactionsCard = ref<any>(null);
 
+const txCount = computed(() => walletStore.transactions?.length || 0);
+
 const utxoCount = computed(() => {
   const utxos = walletStore.utxos;
   if (!utxos || utxos.length === 0) return 0;
   if (Array.isArray(utxos[0]) && (utxos[0] as any[]).length === 2) return utxos.length;
   return 0;
 });
+
+function markUtxosSeen() {
+  markFeatureAsSeen('transactions.utxos');
+}
 
 const handleOnTransactionsRowClick = (row: any) => {
   transactionInfo.value = row;

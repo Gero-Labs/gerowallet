@@ -33,24 +33,186 @@
     </v-card-title>
 
     <!-- Cardano/Apex header (original) -->
-    <v-card-title v-else class="pb-2 flex-grow-0">
+    <v-card-title v-else class="pb-0 flex-grow-0">
       <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white">
         {{ $t('transactions.title') }}
       </router-link>
       <span v-else>{{ $t('transactions.title') }}</span>
       <v-spacer />
-      <v-text-field
-        v-model="search"
-        dense
-        flat
-        solo
-        hide-details
-        :placeholder="$t('common.search')"
-        prepend-inner-icon="mdi-magnify"
-        clearable
-        style="max-width: 200px"
-        class="top-level-search"
-      ></v-text-field>
+
+      <!-- Expandable search (grows to the left) -->
+      <div class="expanding-search-wrap">
+        <input
+          ref="searchField"
+          v-model="search"
+          type="text"
+          class="expanding-search-input"
+          :placeholder="t('common.search')"
+          @keydown.esc="searchField?.blur()"
+        />
+        <v-icon small class="expanding-search-icon" color="white">mdi-magnify</v-icon>
+      </div>
+
+      <!-- Filter menu -->
+      <v-menu
+        v-if="props.isFullList"
+        v-model="filterMenuOpen"
+        :close-on-content-click="false"
+        offset-y
+        nudge-left="150"
+        nudge-bottom="4"
+        min-width="240"
+        max-width="300"
+        content-class="filter-menu"
+        transition="none"
+      >
+        <template v-slot:activator="{ on, attrs }">
+          <v-btn icon small v-bind="attrs" v-on="on" class="ml-1">
+            <v-badge color="transparent" avatar :value="activeFilterCount > 0" :content="activeFilterCount" overlap>
+              <template v-slot:badge>
+                <v-avatar size="14" height="14" style="height: 14px!important;" color="primary">
+                  <span style="font-size: 10px; color: black">{{ activeFilterCount }}</span>
+                </v-avatar>
+              </template>
+              <v-icon small>mdi-tune-variant</v-icon>
+            </v-badge>
+          </v-btn>
+        </template>
+        <v-card class="liquid-glass-compact" dark>
+          <v-card-text class="pa-3">
+            <!-- Date range -->
+            <div class="filter-section-label">{{ $t('transactions.dateRange') }}</div>
+            <div class="d-flex align-center" style="gap: 6px">
+              <v-menu
+                v-model="dateFromMenu"
+                :close-on-content-click="false"
+                offset-y
+                min-width="auto"
+                content-class="date-picker-menu"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-text-field
+                    :value="filterDateFrom || ''"
+                    :placeholder="$t('transactions.from')"
+                    dense
+                    outlined
+                    hide-details
+                    readonly
+                    v-bind="attrs"
+                    v-on="on"
+                    class="filter-date-field"
+                    clearable
+                    @click:clear="filterDateFrom = null"
+                  >
+                    <template v-slot:prepend-inner>
+                      <v-icon small class="mt-1" style="opacity: 0.5">mdi-calendar</v-icon>
+                    </template>
+                  </v-text-field>
+                </template>
+                <v-date-picker
+                  :value="filterDateFrom"
+                  @input="filterDateFrom = $event; dateFromMenu = false"
+                  :min="earliestTxDate"
+                  :max="filterDateTo || latestTxDate"
+                  :events="transactionDates"
+                  event-color="#00DFF3"
+                  no-title
+                  dark
+                  color="#00DFF3"
+                  class="filter-date-picker"
+                  @click:clear="filterDateTo = null"
+                />
+              </v-menu>
+              <v-menu
+                v-model="dateToMenu"
+                :close-on-content-click="false"
+                offset-y
+                min-width="auto"
+                content-class="date-picker-menu"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-text-field
+                    :value="filterDateTo || ''"
+                    :placeholder="$t('transactions.to')"
+                    dense
+                    outlined
+                    hide-details
+                    readonly
+                    v-bind="attrs"
+                    v-on="on"
+                    class="filter-date-field"
+                    clearable
+                  >
+                    <template v-slot:prepend-inner>
+                      <v-icon small class="mt-1" style="opacity: 0.5">mdi-calendar</v-icon>
+                    </template>
+                  </v-text-field>
+                </template>
+                <v-date-picker
+                  :value="filterDateTo"
+                  @input="filterDateTo = $event; dateToMenu = false"
+                  :min="filterDateFrom || earliestTxDate"
+                  :max="latestTxDate"
+                  :events="transactionDates"
+                  event-color="#00DFF3"
+                  no-title
+                  dark
+                  color="#00DFF3"
+                  class="filter-date-picker"
+                />
+              </v-menu>
+            </div>
+
+            <v-divider class="my-2" style="opacity: 0.1" />
+
+            <!-- Transaction type -->
+            <div class="filter-section-label">{{ $t('transactions.type') }}</div>
+            <v-chip-group v-model="filterTypes" multiple column>
+              <v-chip
+                v-for="ft in typeFilterOptions"
+                :key="ft.value"
+                :value="ft.value"
+                small
+                outlined
+                filter
+                class="filter-type-chip"
+              >{{ ft.text }}</v-chip>
+            </v-chip-group>
+
+            <v-divider class="my-2" style="opacity: 0.1" />
+
+            <!-- Token filter -->
+            <div class="filter-section-label">{{ $t('transactions.tokens') }}</div>
+            <v-chip-group v-model="filterTokenMode" column>
+              <v-chip value="all" small outlined filter class="filter-type-chip">{{ $t('common.all') }}</v-chip>
+              <v-chip value="ada_only" small outlined filter class="filter-type-chip">ADA {{ $t('common.only') }}</v-chip>
+              <v-chip value="with_tokens" small outlined filter class="filter-type-chip">{{ $t('transactions.withTokens') }}</v-chip>
+            </v-chip-group>
+
+            <v-divider class="my-2" style="opacity: 0.1" />
+
+            <!-- Export CSV -->
+            <v-btn text block small class="justify-start" @click="exportToCsv()">
+              <v-icon small class="mr-2">mdi-download</v-icon>
+              {{ $t('transactions.exportCsv') }}
+            </v-btn>
+
+            <!-- Clear all -->
+            <v-btn
+              :disabled="activeFilterCount === 0"
+              text
+              block
+              small
+              class="justify-start mt-1"
+              color="error"
+              @click="clearAllFilters()"
+            >
+              <v-icon small class="mr-2">mdi-close-circle-outline</v-icon>
+              {{ $t('transactions.clearFilters') }}
+            </v-btn>
+          </v-card-text>
+        </v-card>
+      </v-menu>
     </v-card-title>
     <v-card-text class="pa-0 text-center flex-grow-1 d-flex flex-column">
       <div :class="{ 'table-container': props.isFullList }" class="flex-grow-1">
@@ -330,7 +492,7 @@ import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import debounce from 'lodash/debounce';
-import { StoredTransaction, CardanoTx, isCardanoTx } from '@/models/transaction.types';
+import { CardanoTx, isCardanoTx, StoredTransaction } from '@/models/transaction.types';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -369,6 +531,8 @@ const transactionInfo = ref<StoredTransaction | null>(null);
 const sortBy = ref<string>('tx_timestamp');
 const sortDesc = ref<boolean>(true);
 
+const searchField = ref<HTMLInputElement | null>(null);
+
 // Search input and debounced search value
 const searchInput = ref<string>('');
 const debouncedSearch = ref<string>('');
@@ -394,6 +558,84 @@ const search = computed({
     searchInput.value = value || '';
   },
 });
+
+// ---------------------------------------------------------------------------
+// Filter state
+// ---------------------------------------------------------------------------
+const filterMenuOpen = ref(false);
+const dateFromMenu = ref(false);
+const dateToMenu = ref(false);
+const filterDateFrom = ref<string | null>(null);
+
+const toDateString = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
+
+const earliestTxDate = computed(() => {
+  const all = txs.value as StoredTransaction[];
+  if (!all?.length) return undefined;
+  const earliest = all.reduce((min, tx) => tx.tx_timestamp < min ? tx.tx_timestamp : min, all[0].tx_timestamp);
+  return toDateString(earliest);
+});
+
+const latestTxDate = computed(() => {
+  return toDateString(Math.floor(Date.now() / 1000));
+});
+
+// Dates that have transactions — shown as dots on the date picker
+const transactionDates = computed(() => {
+  const all = txs.value as StoredTransaction[];
+  if (!all?.length) return [];
+  const dates = new Set<string>();
+  for (const tx of all) {
+    dates.add(toDateString(tx.tx_timestamp));
+  }
+  return Array.from(dates);
+});
+const filterDateTo = ref<string | null>(null);
+const filterTypes = ref<string[]>([]);
+const filterTokenMode = ref<string>('all');
+
+const typeFilterOptions = [
+  { value: 'sent', text: t('transactions.sentFunds') },
+  { value: 'received', text: t('transactions.receivedFunds') },
+  { value: 'delegation', text: t('transactions.delegatingToPool') },
+  { value: 'withdrawal', text: t('transactions.withdrawal') },
+  { value: 'internal', text: t('common.internal') },
+];
+
+const activeFilterCount = computed(() => {
+  let count = 0;
+  if (filterDateFrom.value || filterDateTo.value) count++;
+  count += filterTypes.value.length;
+  if (filterTokenMode.value && filterTokenMode.value !== 'all') count++;
+  return count;
+});
+
+function clearAllFilters() {
+  filterDateFrom.value = null;
+  filterDateTo.value = null;
+  filterTypes.value = [];
+  filterTokenMode.value = 'all';
+}
+
+function exportToCsv() {
+  filterMenuOpen.value = false;
+  const rows = transactions.value;
+  const csvHeaders = ['Date', 'Type', 'Amount (ADA)', 'Transaction ID'];
+  const csvRows = rows.map(tx => {
+    const date = new Date(tx.tx_timestamp * 1000).toISOString();
+    const status = transactionStatuses.value[tx.id] || buildBasicStatus(tx);
+    const ada = (tx.ada / 1_000_000).toFixed(6);
+    return [date, `"${status}"`, ada, tx.id].join(',');
+  });
+  const csv = [csvHeaders.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // Version counter to detect and cancel stale async loads (prevents race conditions when typing fast)
 const loadVersion = ref(0);
@@ -425,7 +667,8 @@ const vmProxy = getCurrentInstance()!.proxy as { $route: { path: string } };
 const state = computed(() => vmProxy.$route.path);
 
 const transactions = computed<StoredTransaction[]>(() => {
-  const filtered = (txs.value as StoredTransaction[]).filter((tx) => {
+  // Apply date range filter
+  let result = (txs.value as StoredTransaction[]).filter((tx) => {
     if (debouncedSearch.value) {
       const searchLower = debouncedSearch.value.toLowerCase();
 
@@ -473,9 +716,44 @@ const transactions = computed<StoredTransaction[]>(() => {
     }
     return true;
   });
+  if (filterDateFrom.value) {
+    const from = new Date(filterDateFrom.value).getTime() / 1000;
+    result = result.filter(tx => tx.tx_timestamp >= from);
+  }
+  if (filterDateTo.value) {
+    const to = new Date(filterDateTo.value).getTime() / 1000 + 86400; // end of day
+    result = result.filter(tx => tx.tx_timestamp < to);
+  }
+
+  // Apply type filters
+  if (filterTypes.value.length > 0) {
+    result = result.filter(tx => {
+      const net = tx.receivedAmount - tx.sentAmount;
+      return filterTypes.value.some(type => {
+        switch (type) {
+          case 'sent': return net < 0;
+          case 'received': return net > 0;
+          case 'delegation': return isCardanoTx(tx) && tx.body.certificates?.some(
+            c => c.__typename === Cardano.CertificateType.StakeDelegation ||
+                 c.__typename === Cardano.CertificateType.StakeRegistrationDelegation
+          );
+          case 'withdrawal': return isWithdrawal(tx);
+          case 'internal': return isInternalTransfer(tx);
+          default: return false;
+        }
+      });
+    });
+  }
+
+  // Apply token mode filter
+  if (filterTokenMode.value === 'ada_only') {
+    result = result.filter(tx => !tx.assets?.some(a => a.unit !== 'lovelace' && a.quantity !== 0));
+  } else if (filterTokenMode.value === 'with_tokens') {
+    result = result.filter(tx => tx.assets?.some(a => a.unit !== 'lovelace' && a.quantity !== 0));
+  }
 
   // Sort by timestamp descending (most recent first)
-  return filtered.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
+  return result.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 });
 
 // Store for transaction statuses with loaded pool data
@@ -721,7 +999,6 @@ const resetInfiniteScroll = async () => {
   loadVersion.value++;
   isLoadingMore.value = false;
 
-  displayedTransactions.value = [];
   currentIndex.value = 0;
   hasReachedEnd.value = false;
   currentPage.value = 1;
@@ -729,12 +1006,33 @@ const resetInfiniteScroll = async () => {
   // Clear cached transaction statuses
   transactionStatuses.value = {};
 
-  await loadMoreTransactions();
+  // Load first batch and replace atomically to prevent flicker
+  const endIndex = itemsPerBatch.value;
+  const firstBatch = transactions.value.slice(0, endIndex);
+  currentIndex.value = endIndex;
+  if (endIndex >= transactions.value.length) {
+    hasReachedEnd.value = true;
+  }
+  if (firstBatch.length > 0) {
+    await preloadTransactionStatuses(firstBatch);
+  }
+  displayedTransactions.value = firstBatch;
+  isLoadingMore.value = false;
 };
 
 // Watch for debounced search term changes to reset infinite scroll
 watch(
   () => debouncedSearch.value,
+  async () => {
+    if (props.isFullList) {
+      await resetInfiniteScroll();
+    }
+  }
+);
+
+// Watch for filter changes to reset infinite scroll
+watch(
+  [filterDateFrom, filterDateTo, filterTypes, filterTokenMode],
   async () => {
     if (props.isFullList) {
       await resetInfiniteScroll();
@@ -1390,7 +1688,165 @@ onUnmounted(() => {
 }
 
 .tx-search-field {
+  max-height: 28px;
   max-width: 170px !important;
+}
+
+.filter-section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.filter-date-field {
+  font-size: 12px !important;
+}
+
+.filter-date-field >>> .v-input__slot {
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  align-items: center !important;
+}
+
+.filter-date-field >>> .v-input__prepend-inner {
+  margin-top: 4px !important;
+  margin-right: 4px !important;
+  padding-right: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  height: 100% !important;
+}
+
+.filter-date-field >>> .v-input__append-inner {
+  margin-top: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.filter-date-field >>> .v-input__append-inner .v-icon {
+  font-size: 14px !important;
+}
+
+/* Date picker menu styling */
+.date-picker-menu {
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(45, 240, 247, 0.1) !important;
+}
+
+.filter-date-picker {
+  background: linear-gradient(135deg, #13161b 0%, #1a1e26 100%) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.filter-date-picker >>> .v-date-picker-header {
+  padding: 8px 16px !important;
+  background: transparent !important;
+}
+
+.filter-date-picker >>> .v-date-picker-header .v-btn {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table {
+  padding: 0 8px 8px !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table .v-btn {
+  border-radius: 8px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table .v-btn:hover {
+  background: rgba(45, 240, 247, 0.08) !important;
+}
+
+.filter-date-picker >>> .v-btn--active {
+  background-color: #00DFF3 !important;
+  color: #0d0f12 !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table--date .v-btn--disabled {
+  opacity: 0.25 !important;
+}
+
+/* Expanding search — grows to the left */
+.expanding-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.expanding-search-icon {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+  color: white !important;
+  z-index: 1;
+  transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease;
+}
+
+.expanding-search-input {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 28px;
+  padding: 6px;
+  background-color: transparent;
+  outline: none;
+  font-size: 13px;
+  color: transparent;
+  cursor: pointer;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.3s ease,
+              color 0.2s ease;
+  overflow: hidden;
+}
+
+.expanding-search-input::placeholder {
+  color: transparent;
+  transition: color 0.2s ease;
+}
+
+.expanding-search-input:focus {
+  width: 180px;
+  padding: 6px 12px 6px 30px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: text;
+}
+
+.expanding-search-input:focus::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.expanding-search-wrap:focus-within .expanding-search-icon {
+  right: calc(100% - 22px);
+  opacity: 0.4;
+}
+
+/* Filter type chips */
+.filter-type-chip {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.filter-type-chip.v-chip--active {
+  background: rgba(0, 223, 243, 0.12) !important;
+  border-color: rgba(0, 223, 243, 0.4) !important;
+  color: #00DFF3 !important;
+}
+
+.filter-menu .v-chip--active {
+  background: rgba(0, 223, 243, 0.12) !important;
+  border-color: rgba(0, 223, 243, 0.4) !important;
+  color: #00DFF3 !important;
 }
 
 /* ─── Data Table Glass Overrides ────────────────────────────── */
