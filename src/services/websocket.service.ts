@@ -18,6 +18,7 @@ class WebSocketService {
   private ws: WebSocket | null = null;
   private handlers: WsHandlers = {};
   private stakeAddress: string | null = null;
+  private credentials: string[] | null = null;
   private chain: string | null = null;
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
@@ -39,7 +40,8 @@ class WebSocketService {
     network: string,
     stakeAddress: string,
     lastSyncedBlock: number,
-    handlers: WsHandlers
+    handlers: WsHandlers,
+    credentials?: string[]
   ): void {
     this.close();
     this.chain = chain;
@@ -47,6 +49,7 @@ class WebSocketService {
     this.stakeAddress = stakeAddress;
     this.lastSyncedBlock = lastSyncedBlock;
     this.handlers = handlers;
+    this.credentials = credentials || null;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
     this.openConnection();
@@ -81,13 +84,35 @@ class WebSocketService {
         network: this.network,
         address: this.stakeAddress,
         lastSyncedBlock: this.lastSyncedBlock,
+        credentials: this.credentials,
       });
 
       this.startSyncCheck();
     };
 
-    this.ws.onmessage = (event: MessageEvent) => {
-      this.handleMessage(event.data);
+    this.ws.binaryType = 'arraybuffer';
+    this.ws.onmessage = async (event: MessageEvent) => {
+      if (event.data instanceof ArrayBuffer) {
+        // Gzip-compressed binary frame — decompress
+        const ds = new DecompressionStream('gzip');
+        const writer = ds.writable.getWriter();
+        writer.write(new Uint8Array(event.data));
+        writer.close();
+        const reader = ds.readable.getReader();
+        const chunks: Uint8Array[] = [];
+        let done = false;
+        while (!done) {
+          const result = await reader.read();
+          if (result.value) chunks.push(result.value);
+          done = result.done;
+        }
+        const decoded = new TextDecoder().decode(
+          chunks.length === 1 ? chunks[0] : await new Blob(chunks).arrayBuffer().then(b => new Uint8Array(b))
+        );
+        this.handleMessage(decoded);
+      } else {
+        this.handleMessage(event.data);
+      }
     };
 
     this.ws.onclose = (event: CloseEvent) => {
@@ -114,7 +139,7 @@ class WebSocketService {
 
       switch (type) {
         case 'SYNC': {
-          const txCount = Array.isArray(data.transactions) ? data.transactions.length : 0;
+          const txCount = Array.isArray(data['transactions']) ? data['transactions'].length : 0;
           const blockHeight = data.block?.height || 0;
           debugLog(`📥 SYNC received: ${txCount} tx(s), block ${blockHeight}`);
 
@@ -140,24 +165,29 @@ class WebSocketService {
         }
 
         case 'CATCH_UP_COMPLETE': {
-          debugLog(`✅ Catch-up complete: ${data.totalTransactions} transactions up to block ${data.blockHeight}`);
+          const block = data.block as { height: number; hash: string; slot: number; epoch: number; time: number } | undefined;
+          debugLog(`✅ Catch-up complete: ${data['totalTransactions']} transactions up to block ${block?.height}`);
 
-          // Combine all accumulated batches into one SYNC payload
-          if (this.pendingTxBatches.length > 0) {
-            const allTransactions = this.pendingTxBatches.flatMap(batch =>
-              Array.isArray(batch.transactions) ? batch.transactions : []
-            );
-            const lastBatch = this.pendingTxBatches[this.pendingTxBatches.length - 1];
-            const combinedPayload: WsSyncMessage = {
-              ...lastBatch,
-              transactions: allTransactions,
-              block: { height: data.blockHeight as number, hash: '' },
-            };
-            debugLog(`📤 Processing ${allTransactions.length} transactions in one batch`);
-            this.lastSyncedBlock = (data.blockHeight as number) || 0;
-            this.handlers.onSync?.(combinedPayload);
-            this.pendingTxBatches = [];
-          }
+          // Combine accumulated batches (if any) into one SYNC payload
+          const allTransactions = this.pendingTxBatches.flatMap(batch =>
+            Array.isArray(batch['transactions']) ? batch['transactions'] : []
+          );
+          const lastBatch = this.pendingTxBatches[this.pendingTxBatches.length - 1];
+
+          // Always pass through UTxOs, addresses, account from CATCH_UP_COMPLETE
+          const combinedPayload: WsSyncMessage = {
+            ...(lastBatch || {}),
+            type: 'SYNC',
+            transactions: allTransactions.length > 0 ? allTransactions : undefined,
+            block: block || { height: (data['blockHeight'] as number) || 0, hash: '' },
+            utxos: data['utxos'],
+            addresses: data['addresses'],
+            account: data['account'],
+          };
+          debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as any[])?.length || 0} UTxOs`);
+          this.lastSyncedBlock = block?.height || (data['blockHeight'] as number) || 0;
+          this.handlers.onSync?.(combinedPayload);
+          this.pendingTxBatches = [];
 
           this.catchingUp = false;
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
@@ -165,12 +195,16 @@ class WebSocketService {
         }
 
         case 'ROLLBACK':
-          debugLog(`⚠️ ROLLBACK to slot ${data.rollbackToSlot}`);
+          debugLog(`⚠️ ROLLBACK to slot ${data['rollbackToSlot']}`);
           this.handlers.onRollback?.(data);
           break;
 
         case 'SYNC_CHECK_OK':
           debugLog('✅ SYNC_CHECK: caught up');
+          // SYNC_CHECK_OK may include utxos, addresses, account (on initial connect)
+          if (data['utxos'] || data['addresses'] || data['account']) {
+            this.handlers.onSync?.({ type: 'SYNC', ...data } as WsSyncMessage);
+          }
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
@@ -226,8 +260,11 @@ class WebSocketService {
    * Re-send SUBSCRIBE with a new lastSyncedBlock.
    * Used for force resync (lastSyncedBlock=0) to trigger full catch-up via gero-sync.
    */
-  resubscribe(lastSyncedBlock: number): void {
-    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock}`);
+  resubscribe(lastSyncedBlock: number, expandedCredentials?: string[]): void {
+    if (expandedCredentials) {
+      this.credentials = expandedCredentials;
+    }
+    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock} credentials=${this.credentials?.length || 0}`);
     this.lastSyncedBlock = lastSyncedBlock;
     this.send({
       type: 'SUBSCRIBE',
@@ -235,6 +272,7 @@ class WebSocketService {
       network: this.network,
       address: this.stakeAddress,
       lastSyncedBlock,
+      credentials: this.credentials,
     });
   }
 
@@ -255,12 +293,13 @@ class WebSocketService {
           // Flush any pending batches accumulated during catch-up
           if (this.pendingTxBatches.length > 0) {
             const allTransactions = this.pendingTxBatches.flatMap(batch =>
-              Array.isArray(batch.transactions) ? batch.transactions : []
+              Array.isArray(batch['transactions']) ? batch['transactions'] : []
             );
             const lastBatch = this.pendingTxBatches[this.pendingTxBatches.length - 1];
             const combinedPayload: WsSyncMessage = {
               ...lastBatch,
               transactions: allTransactions,
+              block: lastBatch.block,
             };
             debugLog(`📤 Timeout flush: processing ${allTransactions.length} transactions`);
             this.handlers.onSync?.(combinedPayload);
@@ -288,6 +327,7 @@ class WebSocketService {
     }
     this.handlers = {};
     this.stakeAddress = null;
+    this.credentials = null;
     this.chain = null;
     this.network = null;
     this.catchingUp = false;

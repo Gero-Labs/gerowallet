@@ -193,11 +193,14 @@ export class WalletManager {
         this.walletBg = walletBg;
         this.currentWalletId = wallet.id;
 
-        // Wait for initial sync via WebSocket (gero-sync catch-up via Nexus)
-        // The SUBSCRIBE message was sent on connect — gero-sync pushes data back
+        // WebSocket sync is non-blocking — data arrives and gets processed in background.
+        // Only wait for initial sync if the wallet has no cached data (first login / after clear).
         if (walletBg.chain !== Blockchain.BITCOIN) {
-          LoadingState.setText('Syncing wallet data...');
-          await webSocketService.waitForSync(30000);
+          const lastSyncInfo = await walletBg.getLastSyncInfo();
+          if (!lastSyncInfo) {
+            LoadingState.setText('Syncing wallet data...');
+            await webSocketService.waitForSync(30000);
+          }
         }
 
         LoadingState.setText('Wallet ready');
@@ -278,6 +281,9 @@ export class WalletManager {
 
       LoadingState.setText('Loading wallet data...');
 
+      // Load holdings from cached UTxOs immediately — no need to wait for transactions or gero-sync
+      await walletBg.loadCachedUtxos();
+
       promises.push(
         walletBg.startSync(),
         walletBg.loadConfig(),
@@ -301,6 +307,7 @@ export class WalletManager {
     if (walletBg.chain !== Blockchain.BITCOIN) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
+      const credentials = walletBg.derivePaymentCredentials();
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
         onSync: async (data: any) => {
@@ -333,7 +340,7 @@ export class WalletManager {
           }
           debugLog('Force resync complete');
         },
-      });
+      }, credentials);
     } else {
       debugLog('Skipping WebSocket connection for Bitcoin wallet');
     }

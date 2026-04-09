@@ -10,6 +10,7 @@ node_modules/
 extension/
 *.d.ts
 !components.d.ts
+!src/types/*.d.ts
 
 # Environment files (keep only .env.example)
 .env

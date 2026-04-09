@@ -4,7 +4,6 @@
     :outlined="!isBitcoin"
     :loading="loadingTxs"
   >
-
     <!-- Bitcoin header -->
     <v-card-title v-if="isBitcoin" class="px-3 pt-3 pb-2 flex-grow-0 tx-card-title">
       <div class="tx-icon-box">
@@ -26,7 +25,7 @@
         flat
         solo
         hide-details
-        :placeholder="$t('transactions.search')"
+        :placeholder="$t('common.search')"
         prepend-inner-icon="mdi-magnify"
         clearable
         class="top-level-search tx-search-field"
@@ -46,7 +45,7 @@
         flat
         solo
         hide-details
-        :placeholder="$t('transactions.search')"
+        :placeholder="$t('common.search')"
         prepend-inner-icon="mdi-magnify"
         clearable
         style="max-width: 200px"
@@ -101,7 +100,7 @@
                     </span>
                   </v-tooltip>
                 </v-list-item-subtitle>
-                <v-list-item-subtitle>
+                <v-list-item-subtitle class="chips-row">
                   <v-chip
                     v-if="isStakeRegistration(item)"
                     x-small
@@ -362,8 +361,8 @@ const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.las
 
 const activityHeaders = computed(() => [
   { text: t('transactions.activity'), align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
-  { text: t('transactions.amount'), align: 'center text-nowrap', sortable: false, value: 'amount' },
-  { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: 110 },
+  { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: '78px' },
+  { text: t('transactions.amount'), align: 'end text-nowrap', sortable: false, value: 'amount', width: '90px' },
 ]);
 
 const transactionInfo = ref<StoredTransaction | null>(null);
@@ -579,14 +578,32 @@ const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): voi
   }
   const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
   const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
-  const hasReceivedTokens = item.assets?.some((asset) => asset.unit !== 'lovelace' && asset.quantity > 0);
-  const hasSentTokens = item.assets?.some((asset) => asset.unit !== 'lovelace' && asset.quantity < 0);
+  const receivedTokenCount = item.assets?.filter((asset) => asset.unit !== 'lovelace' && asset.quantity > 0).length ?? 0;
+  const sentTokenCount = item.assets?.filter((asset) => asset.unit !== 'lovelace' && asset.quantity < 0).length ?? 0;
+  const hasReceivedTokens = receivedTokenCount > 0;
+  const hasSentTokens = sentTokenCount > 0;
+
+  // When tokens are present, a small ADA amount is just the min UTxO locked with the tokens.
+  // In that case, label as token-only (e.g. "Received Tokens" instead of "Received Funds & Tokens").
+  // TODO: min UTxO threshold (currently 2 ADA) should be derived from protocol params
+  // (coinsPerUtxoByte) rather than hardcoded, as it can change with protocol updates.
+  const netAdaAbs = Math.abs(item.receivedAmount - item.sentAmount) / 1_000_000;
+  const isMinUtxoOnly = netAdaAbs <= 2;
+
+  const receivedTokenLabel = receivedTokenCount === 1 ? t('transactions.receivedToken') : t('transactions.receivedTokens');
+  const sentTokenLabel = sentTokenCount === 1 ? t('transactions.sentToken') : t('transactions.sentTokens');
+  const receivedFundsAndTokensLabel = receivedTokenCount === 1 ? t('transactions.receivedFundsAndToken') : t('transactions.receivedFundsAndTokens');
+  const sentFundsAndTokensLabel = sentTokenCount === 1 ? t('transactions.sentFundsAndToken') : t('transactions.sentFundsAndTokens');
 
   // Build smart status message
-  if (hasReceivedFunds && hasReceivedTokens) {
-    statuses.push(t('transactions.receivedFundsAndTokens'));
+  if (hasReceivedFunds && hasReceivedTokens && isMinUtxoOnly) {
+    statuses.push(receivedTokenLabel);
+  } else if (hasSentFunds && hasSentTokens && isMinUtxoOnly) {
+    statuses.push(sentTokenLabel);
+  } else if (hasReceivedFunds && hasReceivedTokens) {
+    statuses.push(receivedFundsAndTokensLabel);
   } else if (hasSentFunds && hasSentTokens) {
-    statuses.push(t('transactions.sentFundsAndTokens'));
+    statuses.push(sentFundsAndTokensLabel);
   } else if (hasReceivedFunds && hasSentTokens) {
     statuses.push(t('transactions.receivedFundsAndSentTokens'));
   } else if (hasSentFunds && hasReceivedTokens) {
@@ -596,9 +613,9 @@ const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): voi
   } else if (hasSentFunds) {
     statuses.push(t('transactions.sentFunds'));
   } else if (hasReceivedTokens) {
-    statuses.push(t('transactions.receivedTokens'));
+    statuses.push(receivedTokenLabel);
   } else if (hasSentTokens) {
-    statuses.push(t('transactions.sentTokens'));
+    statuses.push(sentTokenLabel);
   }
 };
 
@@ -659,41 +676,43 @@ const loadMoreTransactions = async () => {
     if (version !== loadVersion.value) return;
   }
 
-  let newTransactions: StoredTransaction[];
+  try {
+    let newTransactions: StoredTransaction[];
 
-  if (props.isFullList) {
-    // Infinite scroll mode
-    const endIndex = currentIndex.value + itemsPerBatch.value;
-    newTransactions = transactions.value.slice(currentIndex.value, endIndex);
+    if (props.isFullList) {
+      // Infinite scroll mode
+      const endIndex = currentIndex.value + itemsPerBatch.value;
+      newTransactions = transactions.value.slice(currentIndex.value, endIndex);
 
-    displayedTransactions.value.push(...newTransactions);
-    currentIndex.value = endIndex;
+      displayedTransactions.value.push(...newTransactions);
+      currentIndex.value = endIndex;
 
-    // Check if we've reached the end
-    if (endIndex >= transactions.value.length) {
-      hasReachedEnd.value = true;
+      // Check if we've reached the end
+      if (endIndex >= transactions.value.length) {
+        hasReachedEnd.value = true;
+      }
+    } else {
+      // Pagination mode
+      const start = (currentPage.value - 1) * itemsPerPage.value;
+      const end = start + itemsPerPage.value;
+      newTransactions = transactions.value.slice(start, end);
+      displayedTransactions.value = newTransactions;
+
+      // Check if we've reached the end
+      if (end >= transactions.value.length) {
+        hasReachedEnd.value = true;
+      }
     }
-  } else {
-    // Pagination mode
-    const start = (currentPage.value - 1) * itemsPerPage.value;
-    const end = start + itemsPerPage.value;
-    newTransactions = transactions.value.slice(start, end);
-    displayedTransactions.value = newTransactions;
 
-    // Check if we've reached the end
-    if (end >= transactions.value.length) {
-      hasReachedEnd.value = true;
+    // Preload statuses for new transactions and wait for completion
+    if (newTransactions.length > 0) {
+      await preloadTransactionStatuses(newTransactions);
+      // Bail out if a new search/reset happened during preload
+      if (version !== loadVersion.value) return;
     }
+  } finally {
+    isLoadingMore.value = false;
   }
-
-  // Preload statuses for new transactions and wait for completion
-  if (newTransactions.length > 0) {
-    await preloadTransactionStatuses(newTransactions);
-    // Bail out if a new search/reset happened during preload
-    if (version !== loadVersion.value) return;
-  }
-
-  isLoadingMore.value = false;
 };
 
 // Reset infinite scroll when search changes
@@ -1400,23 +1419,32 @@ onUnmounted(() => {
 .text-nowrap {
   text-wrap: nowrap;
 }
-.no-padding {
+
+.transactions-table >>> .no-padding {
   padding: 0 !important;
 }
-.selected-transaction {
-  background-color: rgba(33, 150, 243, 0.1) !important;
-  border-left: 3px solid #2196f3 !important;
-}
-.selected-transaction:hover {
-  background-color: rgba(33, 150, 243, 0.15) !important;
+.chips-row {
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
 }
 
-.transactions-table tbody tr {
+.transactions-table >>> table {
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+
+.transactions-table >>> tr.selected-transaction {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.transactions-table >>> tr {
   cursor: pointer;
 }
 
-.transactions-table tbody tr:hover:not(.selected-transaction) {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+.transactions-table >>> tr:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .transactions-table tbody tr {
@@ -1507,7 +1535,7 @@ onUnmounted(() => {
 
 /* Table container styling */
 .table-container {
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 227px);
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
