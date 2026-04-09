@@ -980,7 +980,12 @@ const getAssetChip = (asset: { quantity: number; name: string; metadata?: { deci
 
 const getMint = (transactionInfo: { body?: { mint?: Cardano.TokenMap } }) => {
   if (transactionInfo.body?.mint) {
-    return Array.from(transactionInfo.body.mint.entries()).map(([assetId, quantity]) => {
+    const mint = transactionInfo.body.mint;
+    // Handle both Map (from CBOR deserialization) and plain object (from chrome.storage.local)
+    const entries: [string, any][] = mint instanceof Map
+      ? Array.from(mint.entries())
+      : Object.entries(mint);
+    return entries.map(([assetId, quantity]) => {
       const policyId = Cardano.AssetId.getPolicyId(assetId);
       const assetNameHex = Cardano.AssetId.getAssetName(assetId);
       const resolved = txAssets.value[assetId];
