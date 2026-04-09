@@ -48,16 +48,18 @@
           :key="index"
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
-            <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="white">{{ item.icon }}</v-icon>
-            <v-img
-              v-else
-              width="18"
-              height="18"
-              :src="item.icon"
-              :alt="item.title"
-              contain
-              style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
-            />
+            <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
+              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="white">{{ item.icon }}</v-icon>
+              <v-img
+                v-else
+                width="18"
+                height="18"
+                :src="item.icon"
+                :alt="item.title"
+                contain
+                style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
+              />
+            </v-badge>
           </v-list-item-avatar>
 
           <v-list-item-content>
@@ -204,6 +206,7 @@ import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { debugLog } from '@/utils/debug';
+import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 
 interface NavigationItem {
   title?: string;
@@ -214,6 +217,7 @@ interface NavigationItem {
   enabled?: boolean;
   soon?: boolean;
   new?: boolean;
+  notificationDot?: boolean;
   underMaintenance?: boolean;
   loading?: boolean;
 }
@@ -301,7 +305,7 @@ const items = computed((): NavigationItemUnion[] => {
       underMaintenance: !isBlogEnabledByFeatureFlag.value,
     },
     { header: t('navigation.financialHub'), enabled: true },
-    { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
+    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
@@ -539,6 +543,19 @@ onUnmounted(() => {
 .menuItem {
   border: 1px solid transparent;
 }
+
+.menuItem ::v-deep .v-list-item__avatar {
+  overflow: visible !important;
+}
+
+.menuItem ::v-deep .v-avatar {
+  overflow: visible !important;
+}
+
+.menuItem ::v-deep .v-badge {
+  overflow: visible !important;
+}
+
 
 .activePage {
   background: linear-gradient(45deg, #00c7f3, #00ffd1);

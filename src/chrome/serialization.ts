@@ -1006,7 +1006,7 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
           block_height: tx.block_height || 0,
           absolute_slot: tx.absolute_slot || 0,
           tx_timestamp: tx.tx_timestamp || Math.floor(Date.now() / 1000),
-          tx_size: tx.tx_size || 0,
+          tx_size: tx.tx_size || (tx.cbor ? tx.cbor.length / 2 : 0),
           epoch_no: tx.epoch_no || 0,
           cbor: tx.cbor,
           body: txDeserialized.body,
