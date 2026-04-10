@@ -2214,6 +2214,8 @@ export default {
   'settings.spendingSecuritySettings': 'Sicherheitseinstellungen für Ausgaben',
   'settings.txAutoSubmit': 'Transaktionen automatisch einreichen',
   'settings.txAutoSubmitHelper': 'Signierte Transaktionen automatisch ohne zusätzliche Bestätigung einreichen',
+  'settings.extensionClickAction': 'Erweiterung-Klickaktion',
+  'settings.extensionClickActionHelper': 'Wählen Sie, was beim Klicken auf das GeroWallet-Erweiterungssymbol geöffnet wird',
   'settings.uploadPicture': 'Bild hochladen',
   'settings.utxo': 'UTxO',
   'settings.walletBackupRequired': 'Wallet-Backup erforderlich',
