@@ -49,6 +49,13 @@ if (import.meta.hot) {
 loadConfig().then(() => {
   // Config loaded
 })
+
+// Restore side panel behavior from its own chrome.storage key
+chrome.storage.local.get('openMiniGeroOnClick', (result) => {
+  if (result['openMiniGeroOnClick']) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
+  }
+});
 loadWallets().then(async () => {
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
@@ -147,7 +154,7 @@ export async function openSidebar(tabId: number, path: string) {
   return tabId;
 }
 
-// Mini-gero: side panel available but not the default action
+// Mini-gero: default to dashboard on icon click, restored from config after loadConfig()
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 
 // Mini-gero DApp channel — per-tab port routing
@@ -3106,7 +3113,30 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
   }
 });
 
+app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, async (request, sendResponse) => {
+  try {
+    // Only update panel behavior — storage is written directly by the component
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: !!request.data.value });
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 const openUI = async () => {
+  // When openPanelOnActionClick is true, Chrome opens the side panel automatically
+  // and onClicked does NOT fire. So if we're here, we always open the dashboard.
   await openDashboard();
 };
 
