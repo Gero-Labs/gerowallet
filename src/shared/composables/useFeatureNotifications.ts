@@ -55,6 +55,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.7.0',
     path: ['navigation', 'market']
   },
+  // Settings > Advanced > Default Extension Mode (Full/Mini Gero toggle)
+  {
+    id: 'settings.advanced.defaultExtensionMode',
+    version: '2.7.0',
+    path: ['settings', 'advanced', 'defaultExtensionMode']
+  },
   // Add more features here as needed
 ];
 
