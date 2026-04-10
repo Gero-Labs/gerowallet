@@ -37,11 +37,11 @@ chrome.storage.local.get(['walletStore', 'geroStore'], async ({ walletStore: sav
     render: h => h(App),
   }).$mount('#app');
 
-  // Initialize feature flags (non-blocking, same as options/main.ts)
+  // Initialize feature flags (non-blocking, same as options/main.ts).
   //@ts-ignore
-  const ldClientId = import.meta.env.VITE_LD_CLIENT_SIDE_ID;
-  if (ldClientId) {
-    featureFlagsStore.initialize(ldClientId).catch(err =>
+  const flagsBaseUrl = import.meta.env.VITE_FLAGS_BASE_URL;
+  if (flagsBaseUrl) {
+    featureFlagsStore.initialize(flagsBaseUrl).catch(err =>
       console.error('Failed to initialize feature flags:', err)
     );
   }

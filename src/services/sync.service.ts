@@ -11,6 +11,7 @@ import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService from '@/services/websocket.service';
+import WalletStore from '@/stores/walletStore';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -200,10 +201,11 @@ export class SyncService {
    */
   async resync() {
     debugLog('Resync: refreshing UTxOs and account from server');
+    const startTime = Date.now();
     LoadingState.setRestoring(true);
-    LoadingState.setText('Resyncing wallet...');
+    LoadingState.setProgress(5);
+    LoadingState.setText('Syncing wallet data...');
     try {
-      // Clear transactions so they get re-processed with latest conversion logic
       if (this.walletBg) {
         const db = await this.walletBg.getDb();
         const txTable = db.table('transactions');
@@ -214,8 +216,16 @@ export class SyncService {
       }
 
       if (webSocketService.isConnected()) {
+        webSocketService.pauseSyncCheck();
+        const syncPromise = webSocketService.waitForSync();
         webSocketService.resubscribe(0);
-        await webSocketService.waitForSync(30000);
+        await syncPromise;
+        webSocketService.resumeSyncCheck();
+        // Ensure overlay is visible for at least 1.5s
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 1500) {
+          await new Promise(r => setTimeout(r, 1500 - elapsed));
+        }
         debugLog('Resync: complete');
       } else {
         debugLog('Resync: WebSocket not connected, falling back to REST sync');
@@ -224,6 +234,7 @@ export class SyncService {
     } catch (err) {
       console.error('Resync error:', err);
     } finally {
+      LoadingState.setProgress(0);
       LoadingState.setRestoring(false);
       LoadingState.setText('');
     }
@@ -495,6 +506,7 @@ export class SyncService {
           resolvedKeys
         });
       });
+      WalletStore.setKeys(resolvedKeys);
       return resolvedKeys;
     } catch (err) {
       console.error(`Failed to open database: ${err}`);

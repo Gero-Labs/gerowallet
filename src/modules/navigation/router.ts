@@ -350,8 +350,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
   const isLocked: boolean = WalletStore.state.isLocked;
+  const isSyncing: boolean = WalletStore.state.isSyncing;
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
+  console.log(`[ROUTER] ${from.path} → ${to.path} | loggedIn=${isLoggedIn} locked=${isLocked} syncing=${isSyncing} welcome=${isWelcome}`);
 
   // Prevent redirect loops: if we're already being redirected to welcome, just allow it
   if (isWelcome && from.path === '/') {
@@ -366,9 +368,13 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn && !isLocked) {
-    // already logged in and NOT locked → don't show welcome again
+  if (isWelcome && isLoggedIn && !isLocked && !isSyncing) {
+    // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
+  }
+  if (needsAuth && isSyncing) {
+    // Syncing wallet — stay on welcome until done
+    return next({ path: '/welcome' });
   }
   if (needsAuth && isLocked) {
     // wallet is locked → send to /welcome to unlock

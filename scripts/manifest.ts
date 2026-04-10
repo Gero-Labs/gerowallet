@@ -74,9 +74,9 @@ function buildCSP(dev: boolean): string {
     'https://api.strikefinance.org',
     'https://api-v2.strikefinance.org',
     'wss://*.strikefinance.org',
-    // LaunchDarkly (feature flags)
-    'https://*.launchdarkly.com',
-    'wss://*.launchdarkly.com',
+    // Feature flags (self-hosted gero-sync)
+    'https://sync.gerowallet.io',
+    'https://dev-sync.gerowallet.io',
     // Dev-only
     ...(dev
       ? [

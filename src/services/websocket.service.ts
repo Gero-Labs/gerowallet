@@ -85,6 +85,7 @@ class WebSocketService {
         address: this.stakeAddress,
         lastSyncedBlock: this.lastSyncedBlock,
         credentials: this.credentials,
+        platform: 'extension',
       });
 
       this.startSyncCheck();
@@ -107,7 +108,7 @@ class WebSocketService {
           done = result.done;
         }
         const decoded = new TextDecoder().decode(
-          chunks.length === 1 ? chunks[0] : await new Blob(chunks).arrayBuffer().then(b => new Uint8Array(b))
+          chunks.length === 1 ? chunks[0] : await new Blob(chunks as unknown as BlobPart[]).arrayBuffer().then(b => new Uint8Array(b))
         );
         this.handleMessage(decoded);
       } else {
@@ -146,6 +147,15 @@ class WebSocketService {
           if (this.catchingUp) {
             // During catch-up, accumulate batches — don't write to DB yet
             this.pendingTxBatches.push(data);
+            // Update progress bar
+            const total = data['catch_up_total'] as number;
+            const sent = data['catch_up_sent'] as number;
+            debugLog(`📊 Progress: ${sent}/${total}`);
+            if (total && sent) {
+              const pct = Math.round((sent / total) * 90); // 0-90%, last 10% for processing
+              LoadingState.setProgress(pct);
+              LoadingState.setText(`Syncing wallet data...<br><span style="font-size: 12px; opacity: 0.7">${sent}/${total} transactions</span>`);
+            }
             debugLog(`📦 Accumulated batch (${this.pendingTxBatches.length} batches so far)`);
           } else {
             // Normal real-time sync — process immediately
@@ -165,6 +175,8 @@ class WebSocketService {
         }
 
         case 'CATCH_UP_COMPLETE': {
+          LoadingState.setProgress(95);
+          LoadingState.setText('Processing transactions...');
           const block = data.block as { height: number; hash: string; slot: number; epoch: number; time: number } | undefined;
           debugLog(`✅ Catch-up complete: ${data['totalTransactions']} transactions up to block ${block?.height}`);
 
@@ -190,6 +202,7 @@ class WebSocketService {
           this.pendingTxBatches = [];
 
           this.catchingUp = false;
+          LoadingState.setProgress(100);
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
         }
@@ -239,6 +252,14 @@ class WebSocketService {
     }, this.SYNC_CHECK_INTERVAL);
   }
 
+  pauseSyncCheck(): void {
+    this.stopSyncCheck();
+  }
+
+  resumeSyncCheck(): void {
+    this.startSyncCheck();
+  }
+
   private stopSyncCheck(): void {
     if (this.syncCheckTimer) {
       clearInterval(this.syncCheckTimer);
@@ -273,16 +294,16 @@ class WebSocketService {
       address: this.stakeAddress,
       lastSyncedBlock,
       credentials: this.credentials,
+      platform: 'extension',
     });
   }
 
   /**
-   * Returns a promise that resolves when the next SYNC or SYNC_CHECK_OK message arrives.
-   * Used to await initial sync on login or after force resync.
-   * Times out after the specified ms (default 30s).
+   * Returns a promise that resolves when CATCH_UP_COMPLETE or SYNC_CHECK_OK arrives.
+   * Safety timeout prevents infinite wait if connection drops silently.
    */
-  waitForSync(timeoutMs = 30000): Promise<void> {
-    debugLog(`⏳ Waiting for sync (timeout: ${timeoutMs / 1000}s)...`);
+  waitForSync(timeoutMs = 300000): Promise<void> {
+    debugLog(`⏳ Waiting for sync...`);
     this.catchingUp = true;
     this.pendingTxBatches = [];
     return new Promise<void>((resolve) => {

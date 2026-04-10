@@ -23,6 +23,7 @@ export class WalletManager {
   private static instance: WalletManager;
   private walletBg: WalletBg | null = null;
   private currentWalletId: number | null = null;
+  private pendingSyncPromise: Promise<void> | null = null;
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
@@ -131,6 +132,9 @@ export class WalletManager {
    */
   async login(wallet): Promise<WalletBg | null> {
     debugLog('WalletManager: Starting login process');
+    // Set syncing flag BEFORE setLoggedWallet — prevents router from navigating to dashboard
+    WalletStore.setSyncing(true);
+    LoadingState.setRestoring(true);
     LoadingState.setText('Creating wallet instance...');
     LoadingState.setLoading(true);
 
@@ -188,21 +192,41 @@ export class WalletManager {
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
         });
         LoadingState.setText('Initializing wallet...');
+
+        // Check if this is a first-time restore (no cached data)
+        const lastSyncInfo = walletBg.chain !== Blockchain.BITCOIN
+            ? await walletBg.getLastSyncInfo() : {};
+        const isFirstRestore = !lastSyncInfo;
+
+        // If first restore, prepare sync promise BEFORE connecting WebSocket (avoids race)
+        if (isFirstRestore) {
+          webSocketService.pauseSyncCheck();
+          this.pendingSyncPromise = webSocketService.waitForSync();
+        }
+
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
         this.currentWalletId = wallet.id;
 
-        // WebSocket sync is non-blocking — data arrives and gets processed in background.
-        // Only wait for initial sync if the wallet has no cached data (first login / after clear).
-        if (walletBg.chain !== Blockchain.BITCOIN) {
-          const lastSyncInfo = await walletBg.getLastSyncInfo();
-          if (!lastSyncInfo) {
-            LoadingState.setText('Syncing wallet data...');
-            await webSocketService.waitForSync(30000);
+        // Wait for gero-sync catch-up to complete on first restore
+        if (isFirstRestore && this.pendingSyncPromise) {
+          const startTime = Date.now();
+          LoadingState.setProgress(5);
+          LoadingState.setText('Restoring wallet data...');
+          await this.pendingSyncPromise;
+          this.pendingSyncPromise = null;
+          webSocketService.resumeSyncCheck();
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 1500) {
+            await new Promise(r => setTimeout(r, 1500 - elapsed));
           }
+          LoadingState.setProgress(0);
         }
 
+        // Clear syncing/restoring — allows router + WalletsListLogin to navigate
+        WalletStore.setSyncing(false);
+        LoadingState.setRestoring(false);
         LoadingState.setText('Wallet ready');
 
         // Initialize lastActivityTimestamp for auto-lock functionality
@@ -281,8 +305,8 @@ export class WalletManager {
 
       LoadingState.setText('Loading wallet data...');
 
-      // Load holdings from cached UTxOs immediately — no need to wait for transactions or gero-sync
-      await walletBg.loadCachedUtxos();
+      // Load holdings from cached UTxOs and keys immediately — no need to wait for transactions or gero-sync
+      await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys()]);
 
       promises.push(
         walletBg.startSync(),
@@ -323,20 +347,29 @@ export class WalletManager {
         },
         onForceResync: async () => {
           debugLog('Force resync: clearing sync state and resubscribing via gero-sync');
+          const startTime = Date.now();
           LoadingState.setRestoring(true);
-          LoadingState.setText('Resyncing wallet...');
+          LoadingState.setProgress(5);
+          LoadingState.setText('Syncing wallet data...');
+          webSocketService.pauseSyncCheck();
           try {
             const db = await walletBg.getDb();
-            // Clear all sync-related tables
             await db.table('sync').clear();
             await db.table('transactions').clear();
             await db.table('account').clear();
-            // Re-subscribe with lastSyncedBlock=0 → gero-sync catch-up fetches everything via Nexus
+            const syncPromise = webSocketService.waitForSync();
             webSocketService.resubscribe(0);
-            await webSocketService.waitForSync(60000);
+            await syncPromise;
+            // Ensure overlay is visible for at least 1.5s so user sees progress
+            const elapsed = Date.now() - startTime;
+            if (elapsed < 1500) {
+              await new Promise(r => setTimeout(r, 1500 - elapsed));
+            }
           } finally {
+            LoadingState.setProgress(0);
             LoadingState.setRestoring(false);
             LoadingState.setText('');
+            webSocketService.resumeSyncCheck();
           }
           debugLog('Force resync complete');
         },
