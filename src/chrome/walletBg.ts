@@ -322,6 +322,23 @@ export class WalletBg {
   }
 
   /**
+   * Load persisted keys from per-wallet DB so the receive dialog works before first sync.
+   */
+  public async loadCachedKeys() {
+    try {
+      const db = await this.getDb();
+      const table = db.table('addresses');
+      const row = await table.where({ address: this.publicKey }).first();
+      if (row?.resolvedKeys) {
+        debugLog('🔑 Loading cached keys from DB');
+        WalletStore.setKeys(row.resolvedKeys);
+      }
+    } catch (e) {
+      debugLog('Failed to load cached keys:', e);
+    }
+  }
+
+  /**
    * Dexie subscription callback — kept for Bitcoin wallets only.
    * Cardano UTxOs come from server via applyUtxos().
    */

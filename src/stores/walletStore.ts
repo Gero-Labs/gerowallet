@@ -48,6 +48,7 @@ export interface Account {
 export interface WalletStore {
   loggedWallet: any;
   isLocked: boolean;
+  isSyncing: boolean;
   account: Account;
   transactions: any[];
   utxos: Cardano.Utxo[] | IUnifiedUtxo[];  // Support both Cardano and Bitcoin UTXOs
@@ -69,6 +70,7 @@ export interface WalletStore {
 export const walletStore = Vue.observable<WalletStore>({
   loggedWallet: null,
   isLocked: false,
+  isSyncing: false,  // true during first restore sync — prevents navigation to dashboard
   account: null,
   transactions: [],
   utxos: [],
@@ -194,6 +196,11 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
 }
 
 export default {
+  setSyncing(isSyncing: boolean) {
+    walletStore.isSyncing = isSyncing;
+    broadcastFromBackground({ isSyncing });
+  },
+
   setLoggedWallet(loggedWallet: any) {
     walletStore.loggedWallet = loggedWallet;
     broadcastFromBackground({ loggedWallet });

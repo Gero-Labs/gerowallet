@@ -61,6 +61,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.7.0',
     path: ['transactions', 'utxos']
   },
+  // Settings > Profile > Profile Picture (upload / NFT picker)
+  {
+    id: 'settings.profile.profilePicture',
+    version: '2.7.0',
+    path: ['settings', 'profile', 'profilePicture']
+  },
   // Add more features here as needed
 ];
 

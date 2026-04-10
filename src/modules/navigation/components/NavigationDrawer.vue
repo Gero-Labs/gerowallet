@@ -151,8 +151,26 @@
         </v-list-item-avatar>
 
         <v-list-item-content class="py-0" style="align-self: initial">
-          <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account">
-            {{ account.name }}
+          <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account && !editingName">
+            <span
+              class="editable-name"
+              @click="startEditingName"
+              :title="t('settings.editWalletName')"
+            >{{ account.name }}<v-icon x-small class="ml-1 edit-icon">mdi-pencil</v-icon></span>
+          </v-list-item-title>
+          <v-list-item-title class="mb-0" style="font-size: 14px; display: flex; align-items: center;" v-if="account && editingName">
+            <input
+              ref="nameInput"
+              v-model="editNameValue"
+              class="name-edit-input"
+              maxlength="40"
+              @keydown.enter="saveWalletName"
+              @keydown.esc="cancelEditingName"
+              @blur="onNameInputBlur"
+            />
+            <v-btn icon x-small @mousedown.prevent="saveWalletName" :disabled="!isNameValid" color="success" class="ml-1" style="width: 16px; height: 16px;">
+              <v-icon style="font-size: 12px;">mdi-check</v-icon>
+            </v-btn>
           </v-list-item-title>
           <v-list-item-subtitle class="mb-0" style="font-size: 10px" v-if="account">
             {{ account.chain }}
@@ -190,7 +208,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
 import MusicStoreModule from '@/stores/musicStore'
@@ -198,6 +216,9 @@ import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
+import geroStoreDefault from '@/stores/geroStore';
+import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardStore from '@/stores/modules/card';
@@ -227,6 +248,7 @@ type NavigationHrefItem = NavigationItem & { href: string };
 type NavigationHeaderItem = NavigationItem & { header: string };
 type NavigationItemUnion = NavigationLinkItem | NavigationHrefItem | NavigationHeaderItem;
 
+const { t } = useTranslation();
 const changeLogRef = ref(changeLog)
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
 // Define props and emit
@@ -386,7 +408,7 @@ const loadingFFs = computed(() => {
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
 
-// Check if swap is enabled by LaunchDarkly feature flag
+// Check if Gero Card is enabled by feature flag
 const isGeroCardEnabledByFeatureFlag = computed(() => {
   return featureFlagsStore.isGeroCardEnabled();
 });
@@ -417,6 +439,48 @@ watch(() => breakpoint.mobile,
     }
   }
 )
+
+// Wallet name editing
+const { wallets } = toRefs(geroStore);
+const editingName = ref(false)
+const editNameValue = ref('')
+const nameInput = ref<HTMLInputElement | null>(null)
+
+const isNameValid = computed(() => {
+  const v = editNameValue.value.trim()
+  if (!v || v.length < 3 || v.length > 40) return false
+  if (v === account.value?.name) return false
+  const otherNames = Object.values(wallets.value)
+    .filter((w) => w.name !== account.value?.name)
+    .map((w) => w.name)
+  return !otherNames.includes(v)
+})
+
+function startEditingName() {
+  editNameValue.value = account.value?.name || ''
+  editingName.value = true
+  nextTick(() => {
+    nameInput.value?.focus()
+  })
+}
+
+function cancelEditingName() {
+  editingName.value = false
+}
+
+function onNameInputBlur() {
+  // Small delay so mousedown on check button fires first
+  setTimeout(() => { editingName.value = false }, 150)
+}
+
+function saveWalletName() {
+  if (!isNameValid.value) return
+  const newName = editNameValue.value.trim()
+  geroStoreDefault.setWalletName(loggedWallet.value.id, newName)
+  loggedWallet.value.name = newName
+  snackbar.fireSuccess(t('settings.walletNameUpdated'))
+  editingName.value = false
+}
 
 // Methods
 function toggleMiniPlayer() {
@@ -678,5 +742,49 @@ onUnmounted(() => {
   width: 100%;
   position: relative;
   z-index: 1;
+}
+
+.editable-name {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 0;
+  margin-left: -2px;
+  padding-left: 2px;
+  padding-right: 2px;
+  transition: background 0.15s;
+
+  .edit-icon {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+
+    .edit-icon {
+      opacity: 0.6;
+    }
+  }
+}
+
+.name-edit-input {
+  font-size: 14px;
+  line-height: 20px;
+  height: 20px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  padding: 0 4px;
+  width: 100%;
+  font-family: inherit;
+
+  &:focus {
+    border-bottom-color: #00c7f3;
+  }
 }
 </style>
