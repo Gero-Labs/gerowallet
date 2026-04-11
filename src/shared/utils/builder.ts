@@ -15,7 +15,9 @@ import {
 } from '@cardano-sdk/tx-construction';
 import type { BuildTx } from '@cardano-sdk/tx-construction';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
+import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
 
 /** CIP-0149 metadata label for voluntary DRep compensation */
 export const CIP149_METADATA_LABEL = BigInt(3692);
@@ -287,11 +289,15 @@ export async function buildCardanoTransaction({
   // (e.g. CollateralTab.vue's "Set Collateral" flow) pass excludeCollateral: false.
   let inputUtxos = utxos;
   if (excludeCollateral && walletStore.collateral) {
-    const collateralRef = `${walletStore.collateral[0].txId}#${walletStore.collateral[0].index}`;
-    const filtered = utxos.filter(u => `${u[0].txId}#${u[0].index}` !== collateralRef);
+    const filtered = filterOutCollateralFromUTxOs(utxos, walletStore.collateral);
     // Edge case: if filtering leaves no UTxOs (e.g. wallet has only the collateral
     // UTxO), fall back to the unfiltered list so the tx can still be built.
-    inputUtxos = filtered.length > 0 ? filtered : utxos;
+    if (filtered.length === 0) {
+      debugLog('[builder] Only UTxO is collateral; falling back to unfiltered set');
+      inputUtxos = utxos;
+    } else {
+      inputUtxos = filtered;
+    }
   }
 
   // Convert UTXOs to proper format with BigInt values and ensure assets is always a Map
