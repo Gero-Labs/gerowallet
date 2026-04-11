@@ -93,6 +93,9 @@ const hasNewProfileFeatures = computed(() => hasNewFeaturesInPath(['settings', '
 // Check if there are new features in the advanced section (e.g., default extension mode)
 const hasNewAdvancedFeatures = computed(() => hasNewFeaturesInPath(['settings', 'advanced']))
 
+// Check if there are new features in the collateral section (e.g., auto-detect banner)
+const hasNewCollateralFeatures = computed(() => hasNewFeaturesInPath(['settings', 'collateral']))
+
 // Local reactive state
 const tab     = ref<string | null>(null)
 const loading = ref(false)
@@ -102,7 +105,7 @@ const visitedAdvancedTab = ref(false)
 const tabs = computed(() => [
   { label: t('settings.profile'), value: 'profile', badge: hasNewProfileFeatures.value },
   // { label: 'Password', value: 'password' },
-  { label: t('settings.collateral'), value: 'collateral', disabled: false },
+  { label: t('settings.collateral'), value: 'collateral', disabled: false, badge: hasNewCollateralFeatures.value },
   { label: t('settings.contacts'), value: 'contacts', disabled: false },
   { label: t('settings.dapps'), value: 'connectedDapps', disabled: false },
   { label: t('settings.security'), value: 'security', disabled: false, badge: shouldBackup.value || hasNewSecurityFeatures.value },
