@@ -74,7 +74,8 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, toRefs } from 'vue';
+import { ref, toRefs, computed, onMounted } from 'vue';
+import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
@@ -100,6 +101,14 @@ const { tip, epochParams } = toRefs(networkStore);
 const { t } = useTranslation();
 
 const isCreating = ref(false);
+
+const hasNewCollateralFeature = computed(() => isFeatureNew('settings.collateral.autoDetect'));
+
+onMounted(() => {
+  if (hasNewCollateralFeature.value) {
+    markFeatureAsSeen('settings.collateral.autoDetect');
+  }
+});
 
 // Methods
 const setCollateral = async () => {

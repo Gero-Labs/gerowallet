@@ -73,6 +73,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.7.0',
     path: ['settings', 'profile', 'profilePicture']
   },
+  // Settings > Collateral > Auto-detect status banner
+  {
+    id: 'settings.collateral.autoDetect',
+    version: '2.7.0',
+    path: ['settings', 'collateral', 'autoDetect']
+  },
   // Add more features here as needed
 ];
 
