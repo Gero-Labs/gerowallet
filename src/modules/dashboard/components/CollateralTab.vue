@@ -1,48 +1,80 @@
 <template>
   <v-tab-item>
     <v-card flat class="transparent">
-      <v-card-title class="px-0 text-left">
-        {{ $t('settings.whatIsCollateral') }}
+      <v-card-title class="px-0 text-left d-flex align-center">
+        <span>{{ $t('settings.whatIsCollateral') }}</span>
+        <v-tooltip right max-width="320" content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <v-icon small class="ml-2" color="grey lighten-1" v-bind="attrs" v-on="on">
+              mdi-information-outline
+            </v-icon>
+          </template>
+          <span>{{ $t('settings.collateralTooltip') }}</span>
+        </v-tooltip>
       </v-card-title>
       <v-card-subtitle class="px-0 text-left">
         {{ $t('settings.collateralDescription') }}
       </v-card-subtitle>
+
       <v-card-text class="text-left px-0">
-        <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer disable-pagination :header-props="{ 'sort-icon': 'mdi-menu-up' }">
-          <template v-slot:[`item.utxo`]="{ item }">
-            <span class="mr-1">{{ filters.truncate(`${item.utxo}`) }}</span>
-            <CopyButton x-small :value="`${item.utxo}`"></CopyButton>
-          </template>
-          <template v-slot:[`item.address`]="{ item }">
-            <span class="mr-1">{{ filters.truncate(`${item.address}`) }}</span>
-            <CopyButton x-small :value="`${item.address}`"></CopyButton>
-          </template>
-          <template v-slot:[`item.balance`]="{ item }">
-            <span>{{ filters.toCurrency(`${item.balance}`, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}</span>
-          </template>
-        </v-data-table>
-        <v-row no-gutters class="mt-4">
-          <v-col cols="9" class="text-left">
-          </v-col>
-          <v-col cols="3" class="text-right">
+        <!-- Status: auto-detected (success) -->
+        <v-alert
+          v-if="collateral"
+          dense
+          outlined
+          color="success"
+          icon="mdi-check-circle-outline"
+          class="mb-4"
+        >
+          <div class="font-weight-bold">{{ $t('settings.collateralAutoDetected') }}</div>
+          <div class="caption mt-1">{{ $t('settings.collateralAutoDetectedDesc') }}</div>
+          <v-row no-gutters class="mt-3" align="center">
+            <v-col cols="auto" class="caption mr-2">{{ $t('settings.collateralAmount') }}:</v-col>
+            <v-col cols="auto" class="font-weight-medium">
+              {{ filters.toCurrency(collateral[1].value.coins.toString(), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}
+            </v-col>
+          </v-row>
+          <v-row no-gutters class="mt-1" align="center">
+            <v-col cols="auto" class="caption mr-2">{{ $t('settings.collateralUtxoRef') }}:</v-col>
+            <v-col cols="auto" class="caption">
+              {{ filters.truncate(`${collateral[0].txId}#${collateral[0].index}`) }}
+            </v-col>
+            <v-col cols="auto" class="ml-1">
+              <CopyButton x-small :value="`${collateral[0].txId}#${collateral[0].index}`" />
+            </v-col>
+          </v-row>
+        </v-alert>
+
+        <!-- Status: not found (warning + setup action) -->
+        <v-alert
+          v-else
+          dense
+          outlined
+          color="warning"
+          icon="mdi-alert-circle-outline"
+          class="mb-4"
+        >
+          <div class="font-weight-bold">{{ $t('settings.collateralNotFound') }}</div>
+          <div class="caption mt-1">{{ $t('settings.collateralNotFoundDesc') }}</div>
+          <div class="mt-3">
             <v-btn
-              large
+              small
               class="geroButton"
               style="color: black!important;"
-              :disabled="collateralCandidate.length !== 0"
+              :loading="isCreating"
               @click="setCollateral"
             >
               {{ $t('settings.setCollateral') }}
             </v-btn>
-          </v-col>
-        </v-row>
+          </div>
+        </v-alert>
       </v-card-text>
     </v-card>
   </v-tab-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, toRefs } from 'vue';
+import { ref, toRefs } from 'vue';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
@@ -67,25 +99,11 @@ const { tip, epochParams } = toRefs(networkStore);
 // Reactive data
 const { t } = useTranslation();
 
-const headers = ref([
-  {text: t('settings.utxo'), sortable: false, value: 'utxo'},
-  {text: t('common.address'), sortable: false, value: 'address'},
-  {text: t('common.balance'), sortable: false, value: 'balance'},
-]);
-
-const collateralCandidate = computed<any>(() => {
-  if (collateral.value) {
-    return [collateral.value].map((utxo: Cardano.Utxo) => ({
-      utxo: `${utxo[0].txId}#${utxo[0].index}`,
-      address: utxo[1].address,
-      balance: utxo[1].value.coins.toString()
-    }));
-  }
-  return [];
-});
+const isCreating = ref(false);
 
 // Methods
 const setCollateral = async () => {
+  isCreating.value = true;
   try {
     // Check if we have epoch parameters
     if (!epochParams.value) {
@@ -139,6 +157,8 @@ const setCollateral = async () => {
     } else {
       snackbar.setError(t('settings.failedToBuildCollateral'));
     }
+  } finally {
+    isCreating.value = false;
   }
 };
 
