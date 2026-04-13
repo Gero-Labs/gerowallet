@@ -37,9 +37,7 @@ function buildCSP(dev: boolean): string {
     // Gero backend
     ...(dev
       ? ['https://dev.gerowallet.io']
-      : ['https://api.gerowallet.io', 'wss://api.gerowallet.io']),
-    // Market data (REST + WebSocket)
-    'https://market.gerowallet.io',
+      : ['https://*.gerowallet.io', 'wss://api.gerowallet.io']),
     'wss://market.gerowallet.io',
     // Bitcoin APIs
     'https://blockstream.info',
@@ -74,9 +72,7 @@ function buildCSP(dev: boolean): string {
     'https://api.strikefinance.org',
     'https://api-v2.strikefinance.org',
     'wss://*.strikefinance.org',
-    // Feature flags (self-hosted gero-sync)
-    'https://sync.gerowallet.io',
-    'https://dev-sync.gerowallet.io',
+    'https://*.gerowallet.io',
     // Dev-only
     ...(dev
       ? [
@@ -117,7 +113,7 @@ function buildCSP(dev: boolean): string {
   ];
 
   const mediaSrc = [
-    ...(dev ? ['https://dev.gerowallet.io', 'http://localhost:*'] : ['https://api.gerowallet.io', 'https://dev.gerowallet.io']),
+    ...(dev ? ['https://*.gerowallet.io', 'http://localhost:*'] : ['https://*.gerowallet.io']),
     'data:',
   ];
 

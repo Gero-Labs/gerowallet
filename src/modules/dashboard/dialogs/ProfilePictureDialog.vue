@@ -12,15 +12,15 @@
   >
     <v-card-text class="pt-0 px-5 d-flex flex-column" style="flex: 1; overflow: hidden;">
       <!-- Current avatar preview -->
-      <div class="current-preview d-flex align-center mb-4">
-        <v-avatar size="56" rounded class="current-avatar">
+      <div class="current-preview d-flex align-center mb-5">
+        <v-avatar size="64" rounded class="current-avatar">
           <v-img :src="displayAvatar" />
         </v-avatar>
-        <div class="ml-3">
-          <div style="font-size: 13px; font-weight: 600; color: #f5f5f6;">
+        <div class="ml-4">
+          <div style="font-size: 14px; font-weight: 600; color: #f5f5f6; line-height: 1.3;">
             {{ loggedWallet?.name }}
           </div>
-          <div style="font-size: 11px; color: #94969c;">
+          <div style="font-size: 11px; color: #94969c; margin-top: 2px;">
             {{ hasSelection ? t('settings.newPictureSelected') : t('settings.currentPicture') }}
           </div>
         </div>
@@ -37,8 +37,6 @@
           {{ $t('common.confirm') }}
         </v-btn>
       </div>
-
-      <v-divider class="mb-4" style="border-color: rgba(255,255,255,0.06);" />
 
       <!-- Tab selector -->
       <v-btn-toggle v-model="activeTab" mandatory dense class="tab-toggle mb-4">
@@ -70,10 +68,10 @@
 
         <!-- Preview state -->
         <div v-if="previewImage" class="drop-zone-preview">
-          <v-avatar size="96" rounded>
+          <v-avatar size="120" rounded>
             <v-img :src="previewImage" />
           </v-avatar>
-          <div class="drop-zone-change-hint">
+          <div class="drop-zone-change-hint mt-3">
             <v-icon x-small color="white" class="mr-1">mdi-swap-horizontal</v-icon>
             {{ $t('settings.clickToChange') }}
           </div>
@@ -82,20 +80,18 @@
         <!-- Empty state -->
         <div v-else class="drop-zone-empty">
           <div class="drop-zone-icon-ring">
-            <v-icon size="28" :color="isDragging ? '#00c7f3' : '#666'">
+            <v-icon size="34" :color="isDragging ? '#00c7f3' : '#666'">
               {{ isDragging ? 'mdi-tray-arrow-down' : 'mdi-cloud-upload-outline' }}
             </v-icon>
           </div>
-          <div class="drop-zone-text mt-3">
+          <div class="drop-zone-text mt-4">
             <span v-if="isDragging" style="color: #00c7f3;">{{ $t('common.drop') }}</span>
             <template v-else>
               <span style="color: #00c7f3; font-weight: 500;">{{ $t('settings.clickToUpload') }}</span>
               <span style="color: #94969c;"> {{ $t('settings.orDragAndDrop') }}</span>
             </template>
           </div>
-          <div style="font-size: 11px; color: #666; margin-top: 4px;">
-            PNG, JPG, GIF, SVG
-          </div>
+          <div class="drop-zone-formats">PNG · JPG · GIF · SVG</div>
         </div>
       </div>
 
@@ -442,14 +438,15 @@ defineExpose({ open });
 
 /* ── Current preview bar ── */
 .current-preview {
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .current-avatar {
-  border: 2px solid rgba(0, 199, 243, 0.3);
+  border: 2px solid rgba(0, 199, 243, 0.35);
+  box-shadow: 0 0 0 4px rgba(0, 199, 243, 0.06);
 }
 
 .confirm-btn {
@@ -488,8 +485,8 @@ defineExpose({ open });
 /* ── Drop zone ── */
 .drop-zone {
   border: 2px dashed rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 32px 16px;
+  border-radius: 14px;
+  padding: 24px 20px;
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: center;
@@ -497,6 +494,7 @@ defineExpose({ open });
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .drop-zone:hover {
@@ -518,7 +516,6 @@ defineExpose({ open });
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
 }
 
 .drop-zone-change-hint {
@@ -537,11 +534,12 @@ defineExpose({ open });
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 8px 0;
 }
 
 .drop-zone-icon-ring {
-  width: 52px;
-  height: 52px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.08);
   display: flex;
@@ -558,7 +556,17 @@ defineExpose({ open });
 }
 
 .drop-zone-text {
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.drop-zone-formats {
+  font-size: 10px;
+  font-weight: 500;
+  color: #666;
+  margin-top: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 /* ── Breadcrumb ── */

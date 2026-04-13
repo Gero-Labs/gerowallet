@@ -76,7 +76,6 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs, computed, onMounted } from 'vue';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -84,17 +83,16 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import { HexBlob } from '@cardano-sdk/util';
+import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest } from '@/api/nexus-tx-api';
 
 // Define emits
 const emit = defineEmits(['close']);
 
 // Get reactive store properties
 const { loggedWallet, utxos, collateral, keys } = toRefs(walletStore);
-const { tip, epochParams } = toRefs(networkStore);
 
 
 // Reactive data
@@ -114,54 +112,59 @@ onMounted(() => {
 const setCollateral = async () => {
   isCreating.value = true;
   try {
-    // Check if we have epoch parameters
-    if (!epochParams.value) {
-      throw new Error(t('common.epochParametersNotAvailable'));
-    }
-
-    // Create a collateral output of 5 ADA
-    const collateralOutput: Cardano.TxOut = {
-      address: loggedWallet.value.baseAddress as Cardano.PaymentAddress,
-      value: {
-        coins: BigInt(5000000) // 5 ADA
-      }
+    // Build the request for nexus's /v1/tx/build endpoint.
+    // Server-side building means: nexus owns coin selection, fresh protocol params,
+    // and canonical fee calculation. The wallet only signs and submits.
+    const request: BuildTxRequest = {
+      outputs: [
+        {
+          address: loggedWallet.value.baseAddress as string,
+          lovelace: '5000000', // 5 ADA collateral
+        },
+      ],
+      changeAddress: keys.value.payment[0].address,
+      utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
     };
 
-    // Build the transaction using the modern SDK with wallet context for accurate fee calculation
-    const txData = await buildCardanoTransaction({
-      outputs: [collateralOutput],
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-      walletContext: {
-        keys: keys.value,
-        stakeAddress: loggedWallet.value.stakeAddress,
-        accountIndex: 0
-      },
-      excludeCollateral: false
-    });
+    const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(
+      request,
+      loggedWallet.value.network
+    );
 
-    // Convert to CBOR for signing
-    const transaction: Serialization.Transaction = Serialization.Transaction.fromCore(txData)
-    const txCbor = transaction.toCbor();
+    // Reconstruct the unsigned transaction from the CBOR returned by nexus,
+    // then follow the same sign + merge-witness + submit flow as before.
+    const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
 
-    const signaturesRes: any = await Messaging.sendToBackground({
+    const signaturesRes = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
-    });
-    console.log('signaturesRes', signaturesRes)
+      data: { tx: txCborHex, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
+    }) as { data?: string; error?: { info?: string; code?: number | string } };
     if (signaturesRes.error) {
-      snackbar.setError(signaturesRes.error.info)
-    } else {
-      console.log(signaturesRes)
+      // Detect user rejection (no info / "user_rejected" reason) and stay silent — clicking
+      // Reject in the sign popup is an intentional action, not an error to surface.
+      const info = signaturesRes.error.info;
+      const isUserReject =
+        !info ||
+        /reject|cancel|denied|user_rejected/i.test(String(info)) ||
+        signaturesRes.error.code === 2; // CIP-30 UserDeclined
+      if (!isUserReject) {
+        snackbar.setError(info || t('settings.failedToBuildCollateral'));
+      }
+    } else if (signaturesRes.data) {
       const witnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
       const newTx: Serialization.Transaction = new Serialization.Transaction(transaction.body(), witnessSet)
       await submit(newTx.toCbor())
     }
-  } catch (error: any) {
-    console.error('Error building collateral transaction:', error);
-    if (error.message?.includes('UTxO Balance Insufficient')) {
+  } catch (error) {
+    console.error('Error building collateral transaction via nexus:', error);
+    const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
+    const status = err.response?.status;
+    const serverMsg = err.response?.data?.error || err.response?.data?.message;
+    if (status === 401 || status === 429) {
+      snackbar.setError(t('settings.failedToBuildCollateral'));
+    } else if (serverMsg && /insufficient/i.test(serverMsg)) {
+      snackbar.setError(t('settings.insufficientAdaForCollateral'));
+    } else if (err.message?.includes('UTxO Balance Insufficient')) {
       snackbar.setError(t('settings.insufficientAdaForCollateral'));
     } else {
       snackbar.setError(t('settings.failedToBuildCollateral'));
