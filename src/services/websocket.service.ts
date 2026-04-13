@@ -2,9 +2,22 @@ import { debugLog } from '@/utils/debug';
 import LoadingState from '@/stores/loading';
 import FIFOCache from 'tiny-fifo-cache';
 
+interface WsSyncBlock {
+  hash: string;
+  height: number;
+  // Cardano-only fields. Bitcoin block payloads omit these (or send 0).
+  // gero-sync populates them via EpochSlotCalculator on the server side, so the wallet
+  // can render the dashboard top bar progress and the sign popup TTL relative time
+  // without needing a separate tip query.
+  slot?: number;
+  epoch?: number;
+  epoch_slot?: number;
+  time?: number;
+}
+
 interface WsSyncMessage {
   type: string;
-  block?: { hash: string; height: number };
+  block?: WsSyncBlock;
   [key: string]: unknown;
 }
 
@@ -215,8 +228,14 @@ class WebSocketService {
         case 'SYNC_CHECK_OK':
           debugLog('✅ SYNC_CHECK: caught up');
           // SYNC_CHECK_OK may include utxos, addresses, account (on initial connect)
-          if (data['utxos'] || data['addresses'] || data['account']) {
-            this.handlers.onSync?.({ type: 'SYNC', ...data } as WsSyncMessage);
+          // and/or block (always, post tip-cache fix in gero-sync). Forward whenever
+          // there's anything actionable so the dashboard tooltip can update from the
+          // periodic keep-alive even when no UTxOs are attached.
+          //
+          // IMPORTANT: type goes AFTER the spread — otherwise data.type ('SYNC_CHECK_OK')
+          // overwrites it and setSync's `type === 'SYNC'` guard rejects the message.
+          if (data['utxos'] || data['addresses'] || data['account'] || data['block']) {
+            this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage);
           }
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
