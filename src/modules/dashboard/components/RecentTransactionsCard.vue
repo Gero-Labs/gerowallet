@@ -39,8 +39,13 @@
       </div>
     </v-card-text>
 
+    <BitcoinTransactionDetailsDialog
+      v-if="transactionInfo && isBitcoin"
+      :transactionInfo="transactionInfo"
+      @close="closeDetails"
+    />
     <TransactionDetailsDialog
-      v-if="transactionInfo"
+      v-if="transactionInfo && !isBitcoin"
       :transactionInfo="transactionInfo"
       @close="closeDetails"
     />
@@ -51,7 +56,9 @@
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { StoredTransaction } from '@/models/transaction.types';
+import { Blockchain } from '@/models/types';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
+import BitcoinTransactionDetailsDialog from '@/modules/dashboard/dialogs/BitcoinTransactionDetailsDialog.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -60,6 +67,8 @@ import { buildBasicStatus, getTransactionColor } from '@/modules/dashboard/utils
 
 const { t } = useTranslation();
 const { transactions, loggedWallet } = toRefs(walletStore);
+
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 
 const recent = computed<StoredTransaction[]>(() =>
   [...(transactions.value ?? [])]
