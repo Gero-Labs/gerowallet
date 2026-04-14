@@ -7,7 +7,9 @@ export async function openFullDashboard(hash = ''): Promise<void> {
     const tabs = await chrome.tabs.query({ url: matchPattern });
     const existing = tabs[0];
     if (existing?.id != null) {
-      await chrome.tabs.update(existing.id, { active: true, ...(hash ? { url: targetUrl } : {}) });
+      const existingHash = existing.url ? new URL(existing.url).hash : '';
+      const shouldNavigate = hash && !existingHash;
+      await chrome.tabs.update(existing.id, { active: true, ...(shouldNavigate ? { url: targetUrl } : {}) });
       if (existing.windowId != null) {
         await chrome.windows.update(existing.windowId, { focused: true });
       }
@@ -17,5 +19,5 @@ export async function openFullDashboard(hash = ''): Promise<void> {
     console.warn('openFullDashboard: failed to focus existing tab', error);
   }
 
-  chrome.tabs.create({ url: targetUrl });
+  await chrome.tabs.create({ url: targetUrl });
 }
