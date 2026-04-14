@@ -125,6 +125,7 @@ import cardHelpers from '@/stores/modules/card';
 import { cardStore } from '@/stores/modules/card';
 import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import type { CardTransactionHistory } from '@/models/card';
+import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
 
 const showTopUp = ref(false);
 const showManage = ref(false);
@@ -174,7 +175,7 @@ function formatAmount(amount: number): string {
 }
 
 function openFullDashboard() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/card') });
+  openFullDashboardTab('#/card');
 }
 
 async function handleLogout() {

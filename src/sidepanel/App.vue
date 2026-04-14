@@ -44,6 +44,7 @@ import DAppOverlay from './components/DAppOverlay.vue';
 import BottomSheet from './components/BottomSheet.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Wallet } from '@/models/types';
+import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
 
 const { t } = useTranslation();
 const showWalletSwitcher = ref(false);
@@ -88,7 +89,7 @@ function onWalletSwitch(wallet: Wallet) {
 }
 
 function openFullDashboard() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+  openFullDashboardTab();
 }
 </script>
 <style>
