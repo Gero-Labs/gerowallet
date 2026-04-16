@@ -8,7 +8,6 @@ import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 // Critical parts loaded immediately
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import PortfolioPage from '@/modules/portfolio/PortfolioPage.vue';
-import Login from '@/popup/modules/views/Login.vue';
 
 // Lazy loading for other components (saves ~5MB initial load)
 const Staking = () => import("@/modules/staking/Staking.vue");
@@ -207,15 +206,6 @@ const routes = [
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
-    },
-  },
-  {
-    path: '/plogin',
-    name: 'plogin',
-    component: Login,
-    meta: {
-      layout: PopupLayout,
-      requiresAuth: false,
     },
   },
   // MultiSig route disabled - under maintenance

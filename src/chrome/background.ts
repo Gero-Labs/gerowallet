@@ -1,29 +1,21 @@
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import {
-  APIError,
-  BITCOIN_METHOD,
-  METHOD,
-  POPUP,
-  SENDER,
-  TARGET,
-  TxSendError,
-} from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
-  getPublicKey,
-  submitTx,
   focusOrCreatePopup,
-  getUsedAddresses,
-  getCollateral,
-  getUtxos,
   getBalance,
+  getCollateral,
+  getDrepKey,
+  getPublicKey,
   getRewardAddress,
   getStakeKey,
-  getDrepKey,
-  urlScan,
   getUnusedAddresses,
+  getUsedAddresses,
+  getUtxos,
+  submitTx,
+  urlScan,
 } from '@/chrome/serialization';
 import { Blockchain, coin_type, ERROR, purpose } from '@/models/types';
 import networks from '@/utils/networks';
@@ -31,13 +23,16 @@ import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
-import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
+import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
+
+type WalletConnectServiceInstance = typeof walletConnectService;
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -133,6 +128,34 @@ if (!isBeta) {
   });
 }
 
+// Shared shapes used throughout the dApp pipeline. Handlers receive `request`
+// objects with a loose shape from `Messaging`/`app.add`, and they routinely
+// build replies via helpers that only ever send `{ data?, error? }`.
+interface BackgroundResponse {
+  data?: unknown;
+  error?: unknown;
+  method?: string;
+  tabId?: number;
+  target?: string;
+  sender?: string;
+  id?: string;
+}
+interface ReplyOpts {
+  data?: unknown;
+  error?: unknown;
+}
+type DAppRequestResolver = (response: BackgroundResponse) => void;
+
+function errorMessage(err: unknown): string | undefined {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object' && 'message' in err) {
+    const m = (err as { message?: unknown }).message;
+    return typeof m === 'string' ? m : undefined;
+  }
+  return undefined;
+}
+
 export async function openSidebar(tabId: number, path: string) {
   if (typeof tabId !== 'number') {
     return null;
@@ -149,7 +172,8 @@ export async function openSidebar(tabId: number, path: string) {
     await chrome.sidePanel.open({ tabId });
   } catch (e) {
     // sidePanel.open() requires a user gesture; silently ignore when called programmatically
-    console.debug('sidePanel.open skipped (no user gesture):', e?.message || e);
+    const message = e instanceof Error ? e.message : String(e);
+    console.debug('sidePanel.open skipped (no user gesture):', message);
   }
   return tabId;
 }
@@ -160,7 +184,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 // Mini-gero DApp channel — per-tab port routing
 // Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
 const miniGeroPorts = new Map<number, chrome.runtime.Port>();
-const pendingDAppRequests = new Map<string, (response: any) => void>();
+const pendingDAppRequests = new Map<string, DAppRequestResolver>();
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name.startsWith('mini-gero-dapp-channel')) {
@@ -197,7 +221,7 @@ chrome.runtime.onConnect.addListener((port) => {
   }
 });
 
-function sendToMiniGero(method: string, payload: any, tabId?: number): Promise<any> {
+function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promise<BackgroundResponse> {
   // Find the correct port: prefer exact tab, fall back to any connected port
   const port = (typeof tabId === 'number' && miniGeroPorts.get(tabId)) || miniGeroPorts.values().next().value;
   if (!port) return Promise.reject(new Error('mini-gero not connected'));
@@ -206,7 +230,7 @@ function sendToMiniGero(method: string, payload: any, tabId?: number): Promise<a
     // No timeout — user interaction can take as long as needed.
     // Cleanup happens via port disconnect or explicit user response.
     pendingDAppRequests.set(requestId, (response) => {
-      if (response.error) reject(new Error(response.error));
+      if (response.error) reject(new Error(String(response.error)));
       else resolve(response);
     });
     port.postMessage({
@@ -347,7 +371,7 @@ let lastFullscreenTabId = -1;
 
 const app = Messaging.createBackgroundController();
 
-async function handleBlacklisted(request: any, tabId: number) {
+async function handleBlacklisted(request: { id: string; origin: string }, tabId: number) {
   // Check if website protection is enabled
   const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
     ? walletStore.config.websiteProtection
@@ -367,10 +391,8 @@ async function handleBlacklisted(request: any, tabId: number) {
       await chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
 
       const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?website=${encodeURIComponent(request.origin)}`);
-      const popupResponse: any = await focusOrCreatePopup(popupURL, 470, 600)
-        .then(tab => Messaging.sendToPopupInternal(tab.id, request))
-        .then(response => response);
-      return popupResponse;
+      return (await focusOrCreatePopup(popupURL, 470, 600)
+        .then(tab => Messaging.sendToPopupInternal(tab.id, request))) as BackgroundResponse;
     }
     return 'approved';
   } catch (error) {
@@ -437,7 +459,7 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
 app.add(METHOD.enable, (request, sendResponse) => {
   const { id, origin, send } = request;
   const tabId = send.tab?.id;
-  const reply = (opts: { data?: any; error?: any }) => {
+  const reply = (opts: ReplyOpts) => {
     sendResponse({
       id,
       ...opts,
@@ -481,7 +503,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
         );
         focusOrCreatePopup(popupURL, 470, 600)
           .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
-          .then((response: any) => {
+          .then((response: BackgroundResponse) => {
             if (response.data) reply({ data: response.data });
             else if (response.error) reply({ error: response.error });
             else reply({ error: APIError.InternalError });
@@ -493,8 +515,8 @@ app.add(METHOD.enable, (request, sendResponse) => {
   // Primary: route through mini-gero side panel drawer
   if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroEnable()
-      .catch((err: any) => {
-        reply({ error: err.message || APIError.InternalError });
+      .catch((err: unknown) => {
+        reply({ error: errorMessage(err) || APIError.InternalError });
       });
   } else {
     openSidePanelAndSend();
@@ -556,7 +578,7 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
-  const loggedWallet = WalletStore.state.loggedWallet
+  const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.baseAddress) {
     sendResponse({
       id: request.id,
@@ -564,6 +586,7 @@ app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+    return;
   }
   sendResponse({
     id: request.id,
@@ -604,31 +627,9 @@ interface WhitelistedEntry {
   id: number;
 }
 
-// In-memory cache for bringDomains with 4-hour TTL
-let bringDomainsCache: { data: string[] | null; timestamp: number } = { data: null, timestamp: 0 };
-const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
-
 async function isWhitelisted(origin: string): Promise<boolean> {
   const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps || [];
-  if (whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1)) return true;
-
-  // Only check bringDomains for Cardano Mainnet
-  const loggedWallet = WalletStore.state.loggedWallet;
-  if (!networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)) {
-    return false;
-  }
-
-  // Check if cached data is still valid
-  const now = Date.now();
-  let bringDomains = bringDomainsCache.data;
-
-  if (!bringDomains || (now - bringDomainsCache.timestamp) > BRING_DOMAINS_CACHE_TTL) {
-    // Cache expired or doesn't exist, fetch new data
-    bringDomains = await (globalThis as any).bringCache?.getReadable('relevantDomains');
-    bringDomainsCache = { data: bringDomains, timestamp: now };
-  }
-
-  return !!(bringDomains && bringDomains.find((el: string) => origin.indexOf(String(el)) !== -1));
+  return !!whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1);
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
@@ -777,51 +778,68 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
   }
 });
 
+/**
+ * popupLogin — open the side panel so the user can pick a wallet.
+ *
+ * The side panel's own SPA (`sidepanel/index.html`) already renders
+ * `WalletSelector` whenever no wallet is active, and auto-flips to the
+ * mini-Gero UI once one becomes active. Rather than route to a bespoke
+ * `Login.vue` page and round-trip through a port, we simply open the
+ * side panel and poll `WalletStore.loggedWallet` until it is set (or the
+ * user walks away and we time out).
+ */
 app.add(METHOD.popupLogin, async (request, sendResponse) => {
-  let responsePromise: Promise<any>;
-  if (WalletStore.state.config.useSidePanel && request.data.userGesture) {
-    const url =
-      `index.html#/${POPUP.login}` +
-      `&tabId=${request.send.tab.id}`;
-    responsePromise = openSidebar(request.send.tab.id, url).then((tabId) =>
-      Messaging.sendToSidePanelInternal(tabId, request)
-    );
-  } else {
-    const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.login}}`);
-    responsePromise = focusOrCreatePopup(popupURL, 470, 600).then((tab) =>
-      Messaging.sendToPopupInternal(tab.id, request)
-    );
+  const reply = (opts: ReplyOpts) =>
+    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+
+  // If somehow already logged in, resolve immediately.
+  if (WalletStore.state.loggedWallet) {
+    return reply({ data: 'login' });
   }
-  responsePromise
-    .then((response: any) => {
-      if (response.data) {
-        sendResponse({
-          id: request.id,
-          data: response.data,
-          target: TARGET,
-          sender: SENDER.extension,
-        });
-      } else {
-        sendResponse({
-          id: request.id,
-          error: APIError.InternalError,
-          target: TARGET,
-          sender: SENDER.extension,
-        });
+
+  const tabId = request.send?.tab?.id;
+  const canUseSidePanel = !!request.data?.userGesture && typeof tabId === 'number';
+
+  try {
+    if (canUseSidePanel) {
+      await openSidebar(tabId as number, 'sidepanel/index.html');
+    } else {
+      // Fallback: open the side-panel SPA in a popup window when no user
+      // gesture is present (chrome.sidePanel.open requires one).
+      const popupURL = chrome.runtime.getURL('sidepanel/index.html');
+      await focusOrCreatePopup(popupURL, 470, 600);
+    }
+  } catch (e) {
+    console.error('[popupLogin] failed to open side panel', e);
+    return reply({ error: APIError.InternalError });
+  }
+
+  // Wait for the user to pick a wallet. Resolves once `loggedWallet` flips
+  // from null to a wallet, rejects after 5 minutes of inactivity.
+  const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+  const POLL_MS = 250;
+  const ok = await new Promise<boolean>((resolve) => {
+    const started = Date.now();
+    const interval = setInterval(() => {
+      if (WalletStore.state.loggedWallet) {
+        clearInterval(interval);
+        resolve(true);
+      } else if (Date.now() - started >= LOGIN_TIMEOUT_MS) {
+        clearInterval(interval);
+        resolve(false);
       }
-    })
-    .catch((e) => {
-      sendResponse({
-        id: request.id,
-        error: e,
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    });
+    }, POLL_MS);
+  });
+
+  if (ok) {
+    reply({ data: 'login' });
+  } else {
+    reply({ error: APIError.Refused });
+  }
 });
 
 app.add(METHOD.signData, (request, sendResponse) => {
-  const signDataReply = (opts: { data?: any; error?: any }) => {
+  const signDataReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
 
@@ -845,7 +863,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
         const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
         focusOrCreatePopup(popupURL, 470, 600)
           .then((tab) => Messaging.sendToPopupInternal(tab.id, request))
-          .then((response: any) => {
+          .then((response: BackgroundResponse) => {
             if (response.data) signDataReply({ data: response.data });
             else if (response.error) signDataReply({ error: response.error });
             else signDataReply({ error: APIError.InternalError });
@@ -857,8 +875,8 @@ app.add(METHOD.signData, (request, sendResponse) => {
   // Primary: route through mini-gero side panel drawer
   if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroSignData()
-      .catch((err: any) => {
-        signDataReply({ error: err.message || APIError.InternalError });
+      .catch((err: unknown) => {
+        signDataReply({ error: errorMessage(err) || APIError.InternalError });
       });
   } else {
     openSidePanelForSignData();
@@ -866,7 +884,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
-  const signTxReply = (opts: { data?: any; error?: any }) => {
+  const signTxReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
 
@@ -907,7 +925,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
         );
         focusOrCreatePopup(popupURL, 470, 852)
           .then((tab) => Messaging.sendToPopupInternal(tab.id, requestCopy))
-          .then((response: any) => {
+          .then((response: BackgroundResponse) => {
             if (response.data) signTxReply({ data: response.data });
             else if (response.error) signTxReply({ error: response.error });
             else signTxReply({ error: APIError.InternalError });
@@ -919,8 +937,8 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   // Primary: route through mini-gero side panel drawer
   if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroSignTx()
-      .catch((err: any) => {
-        signTxReply({ error: err.message || APIError.InternalError });
+      .catch((err: unknown) => {
+        signTxReply({ error: errorMessage(err) || APIError.InternalError });
       });
   } else {
     openSidePanelForSignTx();
@@ -940,7 +958,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
-      let error: any;
+      let error: unknown;
       switch (response.status) {
         case 400:
           error = { ...TxSendError.Failure, message: response.statusText };
@@ -1745,10 +1763,10 @@ app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     sendResponse({
       id: request.id,
-      data: { success: false, error: error.message || 'Fetch failed' },
+      data: { success: false, error: errorMessage(error) || 'Fetch failed' },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -2494,7 +2512,7 @@ app.addToOptions(MessageTypes.OPEN_SIDE_PANEL, async (request, sendResponse) => 
 app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
   const { id, origin, send } = request;
   const tabId = send.tab?.id;
-  const reply = (opts: { data?: any; error?: any }) =>
+  const reply = (opts: ReplyOpts) =>
     sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
 
   const currentWallet = walletManager.getWallet();
@@ -2510,7 +2528,7 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
     return reply({ error: APIError.InternalError });
   }
 
-  const handleResponse = (response: any) => {
+  const handleResponse = (response: BackgroundResponse) => {
     if (response.data) {
       // Immediately update the background's in-memory whitelist so that subsequent
       // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
@@ -2538,11 +2556,11 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
         }
         handleResponse(response);
       })
-      .catch((err: any) => reply({ error: err.message || APIError.InternalError }));
+      .catch((err: unknown) => reply({ error: errorMessage(err) || APIError.InternalError }));
   };
 
   // Primary: route through mini-gero side panel drawer
-  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+  if (miniGeroPorts.has(tabId)) {
     handleMiniGeroBtcEnable();
   } else {
     openSidebar(tabId, 'sidepanel/index.html')
@@ -2663,7 +2681,7 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
   );
   focusOrCreatePopup(popupURL, 470, 600)
     .then(tab => Messaging.sendToPopupInternal(tab.id, request))
-    .then((response: any) => {
+    .then((response: BackgroundResponse) => {
       if (response.data !== undefined) {
         sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
       } else {
@@ -2693,9 +2711,9 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
         `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
       );
       const tab = await focusOrCreatePopup(popupURL, 470, 600);
-      const response: any = await Messaging.sendToPopupInternal(tab.id, singleRequest);
+      const response = await Messaging.sendToPopupInternal(tab.id, singleRequest) as BackgroundResponse;
       if (response.error) throw response.error;
-      signedHexs.push(response.data);
+      signedHexs.push(response.data as string);
     }
     sendResponse({ id: request.id, data: signedHexs, target: TARGET, sender: SENDER.extension });
   } catch (err) {
@@ -2718,7 +2736,7 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
   );
   focusOrCreatePopup(popupURL, 470, 600)
     .then(tab => Messaging.sendToPopupInternal(tab.id, request))
-    .then((response: any) => {
+    .then((response: BackgroundResponse) => {
       if (response.data !== undefined) {
         sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
       } else {
@@ -2761,13 +2779,13 @@ app.add(BITCOIN_METHOD.pushPsbt, async (request, sendResponse) => {
     const bitcoin = await import('bitcoinjs-lib');
     const { getBitcoinNetwork } = await import('@/chains/bitcoin/bitcoinPsbtBuilder');
     const network = getBitcoinNetwork(walletBg.network);
-    let psbt: any;
+    let psbt: InstanceType<typeof bitcoin.Psbt>;
     try { psbt = bitcoin.Psbt.fromHex(request.data.psbtHex, { network }); }
     catch { psbt = bitcoin.Psbt.fromBase64(request.data.psbtHex, { network }); }
     // Only finalize if inputs are not already finalized (prevents double-finalize crash
     // when signAndSendTransaction passes an already-finalized PSBT from btcSignPsbt)
     const alreadyFinalized = psbt.data.inputs.every(
-      (input: any) => input.finalScriptSig || input.finalScriptWitness
+      (input) => input.finalScriptSig || input.finalScriptWitness,
     );
     if (!alreadyFinalized) {
       psbt.finalizeAllInputs();
@@ -2829,7 +2847,7 @@ chrome.alarms.create('wc-keepalive', {
  * Wire up WalletConnect event callbacks after SDK initialization.
  * Handles session proposals, session requests (signing + read-only), and session deletions.
  */
-function setupWalletConnectCallbacks(wcService: any) {
+function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
   // Import store lazily (only needed in background)
   const updateStore = async () => {
     const { default: WCStore } = await import('@/stores/walletConnectStore');
@@ -2840,12 +2858,12 @@ function setupWalletConnectCallbacks(wcService: any) {
   updateStore().catch(() => {});
 
   // ---- Session Proposal → open approval popup ----
-  wcService.onSessionProposal = async (proposal: any) => {
+  wcService.onSessionProposal = async (proposal) => {
     try {
       const proposalData = proposal.params;
       const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}`);
       const tab = await focusOrCreatePopup(popupURL, 470, 600);
-      const response: any = await Messaging.sendToPopupInternal(tab.id, { data: proposalData });
+      const response = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
 
       if (response?.data?.approved) {
         // Build accounts from current wallet
@@ -2874,7 +2892,7 @@ function setupWalletConnectCallbacks(wcService: any) {
   };
 
   // ---- Session Request → route to appropriate handler ----
-  wcService.onSessionRequest = async (event: any) => {
+  wcService.onSessionRequest = async (event) => {
     const { topic, params, id } = event;
     const { request: wcRequest, chainId } = params;
     const method = wcRequest.method;
@@ -2894,7 +2912,7 @@ function setupWalletConnectCallbacks(wcService: any) {
           case 'cardano_getBalance': {
             const collateral = WalletStore.state.collateral;
             const utxos = WalletStore.state.utxos;
-            const balance = getBalance(utxos as any, collateral);
+            const balance = getBalance(utxos as Cardano.Utxo[], collateral);
             await wcService.respondSuccess(topic, id, balance.toCbor());
             return;
           }
@@ -2961,11 +2979,11 @@ function setupWalletConnectCallbacks(wcService: any) {
               `index.html#/${POPUP.signTx}?website=${encodeURIComponent('WalletConnect')}`
             );
             const tab = await focusOrCreatePopup(popupURL, 470, 852);
-            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
             if (response.data) {
               await wcService.respondSuccess(topic, id, response.data);
             } else {
-              await wcService.respondError(topic, id, 4001, response.error?.info || 'User rejected');
+              await wcService.respondError(topic, id, 4001, (response.error as { info?: string } | undefined)?.info || 'User rejected');
             }
             return;
           }
@@ -2981,11 +2999,11 @@ function setupWalletConnectCallbacks(wcService: any) {
               `index.html#/${POPUP.dappSignData}?website=${encodeURIComponent('WalletConnect')}`
             );
             const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
             if (response.data) {
               await wcService.respondSuccess(topic, id, response.data);
             } else {
-              await wcService.respondError(topic, id, 4001, response.error?.info || 'User rejected');
+              await wcService.respondError(topic, id, 4001, (response.error as { info?: string } | undefined)?.info || 'User rejected');
             }
             return;
           }
@@ -3012,7 +3030,7 @@ function setupWalletConnectCallbacks(wcService: any) {
               `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent('WalletConnect')}`
             );
             const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
             if (response.data !== undefined) {
               await wcService.respondSuccess(topic, id, response.data);
             } else {
@@ -3032,7 +3050,7 @@ function setupWalletConnectCallbacks(wcService: any) {
               `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent('WalletConnect')}`
             );
             const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response: any = await Messaging.sendToPopupInternal(tab.id, fakeRequest);
+            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
             if (response.data !== undefined) {
               await wcService.respondSuccess(topic, id, response.data);
             } else {

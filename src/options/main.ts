@@ -11,26 +11,26 @@ import vuetify from '../plugins/vuetify';
 import router from '../modules/navigation/router';
 import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
-import walletStore from '@/stores/geroStore';
+import { geroStore } from '@/stores/geroStore';
 import Notifications from '@voerro/vue-notifications';
 import featureFlagsStore from '@/stores/featureFlagsStore';
-import { walletStore as walletStoreState } from '@/stores/walletStore';
+import { walletStore as walletStoreState, hydrateWalletStore } from '@/stores/walletStore';
 import { activityTracker } from '@/services/activityTracker.service';
 
-function loadPersistedWallet(): Promise<void> {
+function loadPersistedGero(): Promise<void> {
   return new Promise(resolve => {
     try {
-      chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
+      chrome.storage.local.get('geroStore', ({ geroStore: saved }) => {
         if (chrome.runtime.lastError) {
           console.warn('Chrome storage error:', chrome.runtime.lastError.message);
           resolve();
           return;
         }
-        if (saved) Object.assign(walletStore, saved);
+        if (saved) Object.assign(geroStore, saved);
         resolve();
       });
     } catch (error) {
-      console.warn('Error loading persisted wallet:', error);
+      console.warn('Error loading persisted gero store:', error);
       resolve();
     }
   });
@@ -50,7 +50,13 @@ async function initializeFeatureFlags(): Promise<void> {
   }
 }
 
-loadPersistedWallet().then(() => {
+// Hydrate BOTH stores from chrome.storage before mounting Vue. Without this,
+// the router's beforeEach runs with a null loggedWallet and redirects to
+// /welcome; the later async side-effect hydration in walletStore.ts completes
+// *after* the watcher is registered, but `$watch` only fires on changes from
+// that point forward, so the initial /welcome redirect is never corrected
+// when a wallet was actually logged in (e.g., via the side panel).
+Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
   // Initialize feature flags in background (non-blocking)
   // This prevents delaying app startup if the flag service is slow/down
   initializeFeatureFlags().catch((error) => {
@@ -123,12 +129,23 @@ loadPersistedWallet().then(() => {
       }
     );
 
-    // Redirect to dashboard when wallet is logged in from another context (e.g., mini gero)
+    // Redirect to dashboard when the wallet becomes fully "ready" (logged in,
+    // unlocked, and not syncing) from another context (e.g., side-panel
+    // login). Must watch all three flags — not just `loggedWallet` — because:
+    //   1. Login sets `isSyncing = true` *before* broadcasting the wallet.
+    //   2. When the wallet arrives, the router's beforeEach still sees
+    //      `isSyncing === true` and bounces the navigation back to /welcome.
+    //   3. A few seconds later sync completes and `isSyncing` flips to false —
+    //      if we only watch `loggedWallet`, nothing re-attempts the redirect
+    //      and the UI is stranded on /welcome.
     app.$watch(
-      () => walletStoreState.loggedWallet,
-      (wallet, oldWallet) => {
-        if (wallet && !oldWallet && !walletStoreState.isLocked && router.currentRoute.path === '/welcome') {
-          router.push('/');
+      () => [walletStoreState.loggedWallet, walletStoreState.isLocked, walletStoreState.isSyncing] as const,
+      () => {
+        const ready = walletStoreState.loggedWallet
+          && !walletStoreState.isLocked
+          && !walletStoreState.isSyncing;
+        if (ready && router.currentRoute.path === '/welcome') {
+          router.push('/').catch(() => { /* swallow redundant-nav errors */ });
         }
       }
     );
