@@ -954,6 +954,7 @@ export default {
   'dashboard.updatePassword': 'PASSWORT AKTUALISIEREN',
   'dashboard.usDollar': 'US-Dollar',
   'dashboard.usb': 'USB',
+  'dashboard.viewAll': 'Alle anzeigen',
   'dashboard.viewMultipleCurrenciesTip': 'Sie können Ihr Guthaben in mehreren Währungen anzeigen lassen.',
   'dashboard.vsLastMonth': 'gegenüber dem Vormonat',
   'dashboard.vsLastQuarter': 'Im Vergleich zum letzten Quartal',

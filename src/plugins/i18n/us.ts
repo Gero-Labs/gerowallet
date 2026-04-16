@@ -846,6 +846,7 @@ export default {
   'dashboard.updatePassword': 'UPDATE PASSWORD',
   'dashboard.usDollar': 'US Dollar',
   'dashboard.usb': 'USB',
+  'dashboard.viewAll': 'View all',
   'dashboard.viewMultipleCurrenciesTip': 'You can view your balance in multiple currencies',
   'dashboard.vsLastMonth': 'vs last month',
   'dashboard.vsLastQuarter': 'vs last quarter',
