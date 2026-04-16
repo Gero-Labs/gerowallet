@@ -218,7 +218,7 @@ const submitLogin = async (walletId: number): Promise<void> => {
 
     // Trust the background response
     if (!response || response['error']) {
-      console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+      console.error('❌ Login failed:', (response as { error?: unknown })?.error || 'Unknown error');
       return;
     }
 
@@ -338,7 +338,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
       });
 
       if (!response || response['error']) {
-        console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+        console.error('❌ Login failed:', (response as { error?: unknown })?.error || 'Unknown error');
     
         return;
       }
@@ -388,7 +388,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
       await navigateAfterLogin();
     } catch (error) {
       console.error('❌ Login error after pre-login unlock:', error);
-  
+
     }
     return;
   }

@@ -202,8 +202,31 @@ export default {
   },
 
   setLoggedWallet(loggedWallet: any) {
+    const prevAddress = walletStore.loggedWallet?.baseAddress;
+    const newAddress = loggedWallet?.baseAddress;
     walletStore.loggedWallet = loggedWallet;
     broadcastFromBackground({ loggedWallet });
+
+    // Notify every tab's content script that the active wallet address
+    // changed, so the Bring SDK (listening for `gero:login` / `gero:logout`)
+    // can refresh its cached walletAddress and trigger a fresh cashback token
+    // fetch. Without this, tabs loaded before login keep Bring's cache at
+    // null and cashback tokens are generated with walletAddress=null.
+    // Fires on login (null → addr), logout (addr → null), and wallet switch
+    // (addrA → addrB), but not on repeated sets with the same address.
+    if (typeof chrome !== 'undefined' && chrome.tabs?.query && prevAddress !== newAddress) {
+      chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id !== 'number') continue;
+          chrome.tabs.sendMessage(
+            tab.id,
+            { action: 'geroLoggedWalletChanged', loggedIn: !!newAddress },
+            // Swallow "Receiving end does not exist" — many tabs have no content script
+            () => void chrome.runtime.lastError,
+          );
+        }
+      });
+    }
 
     // Initialize price service when wallet is set (chain-aware)
     if (loggedWallet && (loggedWallet.chain === 'Cardano' || loggedWallet.chain === 'Bitcoin')) {
