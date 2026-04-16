@@ -31,12 +31,17 @@
 
         <div
           class="portfolio-amount"
-          @click="toggleCurrency"
-          :class="{ clickable: availableCurrencies.length > 1 }"
+          @click="!hideBalances && toggleCurrency()"
+          :class="{ clickable: !hideBalances && availableCurrencies.length > 1 }"
         >
-          <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
-          <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
-          <span v-else class="portfolio-amount-placeholder">—</span>
+          <transition name="balance-fade" mode="out-in">
+            <span v-if="hideBalances" key="masked" class="portfolio-amount-masked">••••••</span>
+            <span v-else key="visible" class="portfolio-amount-visible">
+              <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
+              <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
+              <span v-else class="portfolio-amount-placeholder">—</span>
+            </span>
+          </transition>
         </div>
 
         <div class="address-section" v-if="shortenAddress">
@@ -74,7 +79,7 @@
                     :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    ~{{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
+                    {{ hideBalances ? '••••••' : '~' + ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -82,9 +87,9 @@
               <span
                 v-else
                 class="pnl-value"
-                :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ (totalUnrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalUnrealizedPnl || 0) }} &#x20B3;
+                {{ hideBalances ? '••••••' : ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
               </span>
             </div>
             <div class="pnl-item">
@@ -93,10 +98,10 @@
                 <template v-slot:activator="{ on }">
                   <span
                     class="pnl-value"
-                    :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                    :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    ~{{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
+                    {{ hideBalances ? '••••••' : '~' + ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -104,9 +109,9 @@
               <span
                 v-else
                 class="pnl-value"
-                :style="{ color: (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
+                :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ (totalRealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatPnl(totalRealizedPnl || 0) }} &#x20B3;
+                {{ hideBalances ? '••••••' : ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
               </span>
             </div>
           </template>
@@ -138,7 +143,7 @@
                 class="pnl-value"
                 :style="{ color: hasWithdrawableRewards ? '#47CD89' : 'rgba(255,255,255,0.35)' }"
               >
-                {{ hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' \u20B3' : '—' }}
+                {{ hideBalances ? '••••••' : (hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' \u20B3' : '—') }}
               </span>
             </div>
           </template>
@@ -255,6 +260,16 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
 };
 
 const { loggedWallet, account } = toRefs(walletStore);
+
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+
+const priceFormatter = (price: number) => {
+  if (hideBalances.value) return '••••••';
+  if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
+  if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
+  if (price >= 1) return price.toFixed(0);
+  return price.toFixed(2);
+};
 
 const isApex = computed(() => {
   const chain = loggedWallet.value?.chain;
@@ -761,12 +776,7 @@ const initChart = () => {
       lastValueVisible: false,
       priceFormat: {
         type: 'custom',
-        formatter: (price: number) => {
-          if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
-          if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
-          if (price >= 1) return price.toFixed(0);
-          return price.toFixed(2);
-        },
+        formatter: priceFormatter,
         minMove: 1,
       },
     });
@@ -817,7 +827,9 @@ const initChart = () => {
       const formattedVal = val >= 1000
         ? val.toLocaleString(undefined, { maximumFractionDigits: 0 })
         : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      el.children[1].textContent = currentCurrencyConfig.value.symbol + formattedVal;
+      el.children[1].textContent = hideBalances.value
+        ? '••••••'
+        : currentCurrencyConfig.value.symbol + formattedVal;
 
       // Position via transform3d (GPU composited, no layout thrash)
       if (param.point && chartContainerRef.value) {
@@ -1026,6 +1038,27 @@ watch(isReadyToRender, (ready) => {
   }
 });
 
+// Watch hideBalances — re-apply price formatter and crosshair label visibility
+watch(hideBalances, () => {
+  if (areaSeries && chart) {
+    areaSeries.applyOptions({
+      priceFormat: {
+        type: 'custom',
+        formatter: priceFormatter,
+        minMove: 1,
+      },
+    });
+    // Also hide crosshair price label when balances hidden
+    chart.applyOptions({
+      crosshair: {
+        horzLine: {
+          labelVisible: !hideBalances.value,
+        },
+      },
+    });
+  }
+});
+
 // --- Lifecycle ---
 
 onMounted(() => {
@@ -1127,6 +1160,28 @@ onBeforeUnmount(() => {
 
 .portfolio-amount-placeholder {
   opacity: 0.3;
+}
+
+.portfolio-amount-masked {
+  font-size: inherit;
+  letter-spacing: 2px;
+  opacity: 0.5;
+}
+
+.portfolio-amount-visible {
+  display: inline;
+}
+
+/* Balance fade transition */
+.balance-fade-enter-active,
+.balance-fade-leave-active {
+  transition: opacity 0.22s ease, filter 0.22s ease;
+}
+
+.balance-fade-enter,
+.balance-fade-leave-to {
+  opacity: 0;
+  filter: blur(4px);
 }
 
 .currency-symbol {

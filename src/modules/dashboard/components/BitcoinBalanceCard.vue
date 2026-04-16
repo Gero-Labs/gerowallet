@@ -37,7 +37,7 @@
           <div class="balance-field-label">Available Balance</div>
 
           <div class="balance-primary">
-            <span class="balance-number">{{ formatBtc(availableBalance) }}</span>
+            <span class="balance-number">{{ hideBalances ? '••••••' : formatBtc(availableBalance) }}</span>
             <span class="balance-unit">BTC</span>
           </div>
 
@@ -45,12 +45,12 @@
             <svg class="sat-bolt" viewBox="0 0 10 16" fill="#F7931A" width="7" height="11" style="opacity:0.65;flex-shrink:0">
               <polygon points="6,0 0,9 5,9 4,16 10,7 5,7"/>
             </svg>
-            <span class="sats-num">{{ Number(availableBalance).toLocaleString() }}</span>
+            <span class="sats-num">{{ hideBalances ? '••••••' : Number(availableBalance).toLocaleString() }}</span>
             <span class="sats-label">sats</span>
           </div>
 
           <div class="balance-usd" v-if="btcPrice">
-            <span class="usd-amount">${{ formatUsdRaw(usdValue) }}</span>
+            <span class="usd-amount">{{ hideBalances ? '$•••' : '$' + formatUsdRaw(usdValue) }}</span>
             <span class="usd-label">USD</span>
           </div>
         </div>
@@ -117,6 +117,8 @@ const usdValue = computed<number>(() => {
   if (!btcPrice.value) return 0;
   return (Number(availableBalance.value) / 1e8) * btcPrice.value;
 });
+
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 function formatBtc(satoshis: bigint): string {
   return (Number(satoshis) / 1e8).toFixed(8);

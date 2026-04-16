@@ -50,19 +50,9 @@
             @delegate-gero="handleDelegateGero"
           />
         </v-col>
-        <v-col xl="3" lg="3" md="4" class="pa-2 hidden-sm-and-down hero-carousel-col">
-          <div class="carousel-fixed-container">
-            <FeatureCarousel
-              :model-value="currentCarouselIndex"
-              @update:modelValue="currentCarouselIndex = $event"
-              :items="carouselItems"
-              :paused="carouselPaused"
-              :is-loading="false"
-              :show-progress-bar="carouselItems.length > 1"
-              carousel-class="feature-carousel dashboard-card feature-card-full-height"
-              @item-click="handleCarouselClick"
-            />
-          </div>
+        <!-- Recent Transactions compact card (replaces the old FeatureCarousel slot) -->
+        <v-col xl="3" lg="3" md="4" class="pa-2 hidden-sm-and-down hero-tx-col">
+          <RecentTransactionsCard />
         </v-col>
       </v-row>
 
@@ -278,13 +268,13 @@ import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateC
 
 // Components
 import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
+import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransactionsCard.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import NftCollectionTable from '@/modules/market/components/NftCollectionTable.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
-import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
@@ -377,58 +367,6 @@ const panelOpen = ref(false);
 const swapDialogOpen = ref(false);
 const swapToken = ref<MarketToken | null>(null);
 const currentTimestamp = ref(Date.now());
-
-// Carousel state
-const currentCarouselIndex = ref(0);
-const carouselPaused = ref(false);
-const carouselItems = computed<CarouselItem[]>(() => {
-  const chain = walletStore.loggedWallet?.chain;
-  const network = walletStore.loggedWallet?.network;
-
-  // Apex wallets get their own carousel
-  if (chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR) {
-    return [
-      {
-        id: 'apex-welcome',
-        title: t('dashboard.apexFusion'),
-        subtitle: t('dashboard.nextGenerationBlockchain'),
-        logo: assets.geroDashboardApex,
-        logoAlt: 'Apex Fusion Logo',
-        backgroundImage: assets.apexBgDashboard,
-        action: 'showApexWelcome',
-      },
-    ];
-  }
-
-  // Cardano wallets
-  const items: CarouselItem[] = [
-    {
-      id: 'gero-debit-card',
-      title: t('card.geroCard'),
-      subtitle: t('card.topUpAdaInstantly'),
-      logoAlt: 'Gero Logo',
-      backgroundImage: assets.debitCardBgImage,
-      cardImage: assets.debitCardImage,
-      action: 'showDebitCardInfo',
-      type: 'debit-card' as const,
-    },
-  ];
-
-  if (chain && network && networks.resolveCashbackSupport(chain, network)) {
-    items.push({
-      id: 'ada-cashback',
-      title: t('cashback.adaCashback'),
-      subtitle: `${t('cashback.payOnlineReceiveCashback')} \n ${t('cashback.clickToSeeDeals')}`,
-      logoAlt: 'Gero Logo',
-      backgroundImage: assets.cashbackCarouselImage,
-      cardImage: assets.cashbackImage,
-      action: 'navigateToCashback',
-      type: 'ada-cashback' as const,
-    });
-  }
-
-  return items;
-});
 
 // ── Debounced search ──────────────────────────────────────────────────────────
 
@@ -738,17 +676,6 @@ function openSwap(token: MarketToken) {
   swapDialogOpen.value = true;
 }
 
-function handleCarouselClick(item: CarouselItem) {
-  const proxy = instance?.proxy;
-  if (item.action === 'showDebitCardInfo' && proxy?.$router && proxy.$route.path !== '/card') {
-    proxy.$router.push('/card');
-  } else if (item.action === 'navigateToCashback' && proxy?.$router && proxy.$route.path !== '/cashback') {
-    proxy.$router.push('/cashback');
-  } else if (item.action === 'showApexWelcome') {
-    window.open('https://apexfusion.org', '_blank');
-  }
-}
-
 function handleOutsideClick(e: MouseEvent) {
   if (!panelOpen.value) return;
   if (skipNextOutsideClose) {
@@ -965,7 +892,7 @@ watch(
   opacity: 0.8;
 }
 
-/* ── Hero Row: Portfolio + Carousel same height ────────────────────────────── */
+/* ── Hero Row: Portfolio + Transactions same height ──────────────────────────── */
 
 .hero-row {
   align-items: stretch;
@@ -975,47 +902,11 @@ watch(
   height: 210px;
 }
 
-.hero-carousel-col {
+.hero-tx-col {
   height: 210px;
   overflow: hidden;
 }
 
-.carousel-fixed-container {
-  overflow: hidden;
-  border-radius: 12px;
-  height: 100%;
-}
-
-.feature-card-full-height {
-  height: 100% !important;
-}
-
-/* Constrain carousel to match chart card height */
-.carousel-fixed-container ::v-deep .carousel-wrapper {
-  height: 100%;
-}
-
-.carousel-fixed-container ::v-deep .carousel-centered-layout {
-  justify-content: center;
-}
-
-.carousel-fixed-container ::v-deep .debit-card-container {
-  margin-bottom: 8px;
-}
-
-.carousel-fixed-container ::v-deep .debit-card-floating {
-  width: 140px;
-}
-
-.carousel-fixed-container ::v-deep .cashback-floating {
-  width: 130px;
-}
-
-.carousel-fixed-container ::v-deep .carousel-overlay {
-  padding: 12px;
-}
-
-/* ── Hero row alignment ──────────────────────────────────────────────────────── */
 
 /* ── Holdings table card ──────────────────────────────────────────────────────── */
 
