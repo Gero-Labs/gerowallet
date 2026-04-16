@@ -12,13 +12,13 @@
             <v-icon x-small color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
           </div>
           <div class="token-amount text-caption grey--text">
-            {{ formattedAdaBalance }}
+            {{ hideBalances ? '••••••' : formattedAdaBalance }}
           </div>
         </div>
       </div>
       <div class="token-right">
         <div class="token-value text-body-2 white--text" v-if="adaFiatValue">
-          {{ formattedAdaFiat }}
+          {{ hideBalances ? '$•••' : formattedAdaFiat }}
         </div>
         <div class="token-value text-body-2 grey--text" v-else>--</div>
         <div
@@ -61,13 +61,13 @@
               >mdi-check-decagram</v-icon>
             </div>
             <div class="token-amount text-caption grey--text">
-              {{ formatTokenAmount(token) }}
+              {{ hideBalances ? '••••••' : formatTokenAmount(token) }}
             </div>
           </div>
         </div>
         <div class="token-right">
           <div class="token-value text-body-2 white--text" v-if="getTokenPrice(token)">
-            {{ formatFiatValue(token) }}
+            {{ hideBalances ? '$•••' : formatFiatValue(token) }}
           </div>
           <div class="token-value text-body-2 grey--text" v-else>--</div>
           <div
@@ -105,6 +105,7 @@ const emit = defineEmits<{
 }>();
 
 const { tokens: rawTokens, utxos, collateral } = toRefs(walletStore);
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 const { allTokens: marketTokens, adaData } = useMarketData();
 
 const adaPrice = computed(() => adaData.value?.priceUsd || priceStore.adaUsd?.lastPrice || 0);

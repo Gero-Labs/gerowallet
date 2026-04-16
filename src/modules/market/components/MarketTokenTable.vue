@@ -183,9 +183,9 @@
     <template v-slot:[`item.balance`]="{ item }">
       <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ formatBalance(item.balance) }}</span>
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '••••••' : formatBalance(item.balance) }}</span>
         </template>
-        {{ item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
+        {{ hideBalances ? '••••••' : item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
       </v-tooltip>
       <span v-else style="font-size: 12px">—</span>
     </template>
@@ -193,9 +193,9 @@
     <template v-slot:[`item.value`]="{ item }">
       <v-tooltip v-if="item.value" top content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatBalance(item.value) }}</span>
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '$•••' : '$' + formatBalance(item.value) }}</span>
         </template>
-        ${{ item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
+        {{ hideBalances ? '••••••' : '$' + item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
       </v-tooltip>
       <span v-else style="font-size: 12px">—</span>
     </template>
@@ -223,7 +223,7 @@
       <span v-if="item.isNative" style="font-size: 12px">—</span>
       <span v-else-if="pnlLoading && item.avgCostBasis == null" class="pnl-skeleton"></span>
       <span v-else style="font-size: 12px">
-        {{ item.avgCostBasis != null ? item.avgCostBasis.toFixed(item.avgCostBasis < 1 ? 4 : 2) + ' ' + nativeSymbol : '—' }}
+        {{ item.avgCostBasis != null ? (hideBalances ? '••••••' : item.avgCostBasis.toFixed(item.avgCostBasis < 1 ? 4 : 2) + ' ' + nativeSymbol) : '—' }}
       </span>
     </template>
 
@@ -236,19 +236,20 @@
           <span
             v-bind="attrs"
             v-on="on"
-            :style="{ color: pnlColor(item.totalPnl), fontSize: '12px', fontWeight: '500', whiteSpace: 'nowrap' }"
+            :style="{ color: hideBalances ? undefined : pnlColor(item.totalPnl), fontSize: '12px', fontWeight: '500', whiteSpace: 'nowrap' }"
           >
-            <v-avatar tile size="10" class="mr-1">
+            <v-avatar v-if="!hideBalances" tile size="10" class="mr-1">
               <v-img :src="changeIcon(item.totalPnl)" alt="pnl" />
             </v-avatar>
-            {{ item.totalPnl >= 0 ? '+' : '' }}{{ item.totalPnl.toFixed(2) }} {{ nativeSymbol }}
+            {{ hideBalances ? '••••••' : (item.totalPnl >= 0 ? '+' : '') + item.totalPnl.toFixed(2) + ' ' + nativeSymbol }}
           </span>
         </template>
-        <div>
+        <div v-if="!hideBalances">
           <div>{{ $t('market.totalPnl') }}: {{ item.totalPnl >= 0 ? '+' : '' }}{{ item.totalPnl.toFixed(4) }} {{ nativeSymbol }}</div>
           <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? (item.unrealizedPnl >= 0 ? '+' : '') + item.unrealizedPnl.toFixed(4) + ' ' + nativeSymbol : '—' }}</div>
           <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? (item.realizedPnl >= 0 ? '+' : '') + item.realizedPnl.toFixed(4) + ' ' + nativeSymbol : '—' }}</div>
         </div>
+        <div v-else>••••••</div>
       </v-tooltip>
       <span v-else style="font-size: 12px">—</span>
     </template>
@@ -376,6 +377,8 @@ import networks from '@/utils/networks';
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
 );
+
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 const props = withDefaults(defineProps<{
   tokens: MarketToken[];
