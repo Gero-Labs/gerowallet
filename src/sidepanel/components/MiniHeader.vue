@@ -42,6 +42,7 @@ import { computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
+import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
 
 const ADA_HANDLE_POLICY = 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a';
 
@@ -62,7 +63,7 @@ const networkIcon = computed(() => {
 });
 
 function openFullDashboard() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+  openFullDashboardTab();
 }
 </script>
 
