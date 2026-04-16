@@ -406,19 +406,25 @@
                   textWrap: 'nowrap',
                 }"
               >
-                {{
-                  filters.toCurrency(
-                    item.ada ?? 0,
-                    true,
-                    0,
-                    networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
-                    '',
-                    false
-                  )
-                }}
+                <template v-if="hideBalances">••••••</template>
+                <template v-else>
+                  {{
+                    filters.toCurrency(
+                      item.ada ?? 0,
+                      true,
+                      0,
+                      networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
+                      '',
+                      false
+                    )
+                  }}
+                </template>
               </div>
               <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
-                {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
+                <template v-if="hideBalances">$•••</template>
+                <template v-else>
+                  {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
+                </template>
               </div>
             </div>
           </template>
@@ -517,6 +523,8 @@ const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);

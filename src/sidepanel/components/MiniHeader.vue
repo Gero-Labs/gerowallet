@@ -24,6 +24,14 @@
     <div class="header-right">
       <v-tooltip bottom content-class="custom-tooltip">
         <template v-slot:activator="{ on }">
+          <v-btn icon x-small @click="toggleHideBalances()" class="toolbar-btn" v-on="on">
+            <v-icon size="18" color="#888">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
+          </v-btn>
+        </template>
+        <span>{{ hideBalances ? $t('dashboard.showBalances') : $t('dashboard.hideBalances') }}</span>
+      </v-tooltip>
+      <v-tooltip bottom content-class="custom-tooltip">
+        <template v-slot:activator="{ on }">
           <v-btn icon x-small @click="openFullDashboard" class="toolbar-btn" v-on="on">
             <v-icon size="18" color="#888">mdi-arrow-expand</v-icon>
           </v-btn>
@@ -40,8 +48,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
+import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
 
 const ADA_HANDLE_POLICY = 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a';
 
@@ -61,8 +71,14 @@ const networkIcon = computed(() => {
   return network ? network.icon : '';
 });
 
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+
+function toggleHideBalances() {
+  WalletStore.setHideBalances(!hideBalances.value);
+}
+
 function openFullDashboard() {
-  chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+  openFullDashboardTab();
 }
 </script>
 
