@@ -58,108 +58,97 @@
 
       <!-- Card body -->
       <div :class="showHeader ? 'recipient-card__body' : ''">
-        <!-- Action buttons row (Contacts + QR) -->
-        <v-row no-gutters class="action-row">
-          <v-col cols="6" class="pr-1">
-            <v-menu
-              v-model="contactsMenu"
-              :close-on-content-click="false"
-              offset-y
-              min-width="400"
-              max-height="340"
-              transition="fade-transition"
-              attach
-            >
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn
-                  outlined
-                  block
-                  color="#272930"
-                  class="action-btn"
-                  :disabled="!contacts || Object.values(contacts).length === 0"
-                  v-bind="attrs"
-                  v-on="on"
-                >
-                  <v-avatar size="28" class="mr-2">
-                    <v-icon small color="#00DFF3">mdi-book-open-variant-outline</v-icon>
-                  </v-avatar>
-                  <span class="action-btn__label">{{ $t('wallet.contacts') }}</span>
+        <!-- Address row: [Contacts] [Address field] [QR] -->
+        <div class="address-row">
+          <!-- Contact book button -->
+          <v-menu
+            v-model="contactsMenu"
+            :close-on-content-click="false"
+            offset-y
+            min-width="400"
+            max-height="340"
+            transition="fade-transition"
+            attach
+          >
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn
+                icon
+                small
+                v-bind="attrs"
+                v-on="on"
+                :disabled="!contacts || Object.values(contacts).length === 0"
+                class="address-row__icon-btn"
+              >
+                <v-icon small color="#00DFF3">mdi-book-open-variant-outline</v-icon>
+              </v-btn>
+            </template>
+            <v-card outlined class="contacts-dropdown">
+              <v-card-title class="py-2 px-4">
+                {{ $t('wallet.contacts') }}
+                <v-spacer />
+                <v-btn icon small @click="contactsMenu = false">
+                  <v-icon>mdi-window-close</v-icon>
                 </v-btn>
-              </template>
-              <v-card outlined class="contacts-dropdown">
-                <v-card-title class="py-2 px-4">
-                  {{ $t('wallet.contacts') }}
-                  <v-spacer />
-                  <v-btn icon small @click="contactsMenu = false">
-                    <v-icon>mdi-window-close</v-icon>
-                  </v-btn>
-                </v-card-title>
-                <v-card-text class="pa-0">
-                  <v-data-table
-                    dense
-                    class="transparent"
-                    :headers="contactsHeaders"
-                    :items="contacts ? Object.values(contacts) : []"
-                    hide-default-footer
-                    disable-pagination
-                    @click:row="selectContact"
-                  >
-                    <template v-slot:[`item.address`]="{ item }">
-                      {{ filters.truncate(item.address) }}
-                    </template>
-                  </v-data-table>
-                </v-card-text>
-              </v-card>
-            </v-menu>
-          </v-col>
-          <v-col cols="6" class="pl-1">
-            <v-btn
-              outlined
-              block
-              color="#272930"
-              class="action-btn"
-              @click="qrScanDialog = true"
-            >
-              <v-avatar size="28" class="mr-2">
-                <v-icon small color="#00DFF3">mdi-qrcode</v-icon>
-              </v-avatar>
-              <span class="action-btn__label">{{ $t('wallet.qrScan') }}</span>
-            </v-btn>
-            <QRAddressScannerDialog
-              :isOpen="qrScanDialog"
-              :chain="loggedWallet && loggedWallet.chain"
-              :network="loggedWallet && loggedWallet.network"
-              @close="qrScanDialog = false"
-              @scan="onQRScan"
-            />
-          </v-col>
-        </v-row>
+              </v-card-title>
+              <v-card-text class="pa-0">
+                <v-data-table
+                  dense
+                  class="transparent"
+                  :headers="contactsHeaders"
+                  :items="contacts ? Object.values(contacts) : []"
+                  hide-default-footer
+                  disable-pagination
+                  @click:row="selectContact"
+                >
+                  <template v-slot:[`item.address`]="{ item }">
+                    {{ filters.truncate(item.address) }}
+                  </template>
+                </v-data-table>
+              </v-card-text>
+            </v-card>
+          </v-menu>
 
-        <!-- Address textarea -->
-        <v-textarea
-          v-if="loggedWallet"
-          v-model="localAddress"
-          :label="$t('wallet.recipientAddress')"
-          :placeholder="isMainnetCardano ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
-          rows="3"
-          outlined
-          :rules="[rules.recipientRules(loggedWallet.chain, loggedWallet.network)]"
-          class="recipient-address mt-3"
-          :loading="resolving"
-          hide-details
-          dense
-          clearable
-          @input="resolveAddress"
-        >
-          <template v-slot:append>
-            <v-progress-circular v-if="resolving" color="white" size="20" indeterminate />
-            <v-icon v-else-if="resolvedFailed" color="#F97066" small>mdi-alert</v-icon>
-          </template>
-        </v-textarea>
+          <!-- Address text field (single line) -->
+          <v-text-field
+            v-if="loggedWallet"
+            v-model="localAddress"
+            :placeholder="isMainnetCardano ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
+            outlined
+            dense
+            hide-details="auto"
+            class="address-input"
+            :rules="[rules.recipientRules(loggedWallet.chain, loggedWallet.network)]"
+            :loading="resolving"
+            clearable
+            @input="resolveAddress"
+          >
+            <template v-slot:append>
+              <v-progress-circular v-if="resolving" color="white" size="16" width="2" indeterminate />
+              <v-icon v-else-if="resolvedFailed" color="#F97066" small>mdi-alert</v-icon>
+            </template>
+          </v-text-field>
+
+          <!-- QR scan button -->
+          <v-btn
+            icon
+            small
+            class="address-row__icon-btn"
+            @click="qrScanDialog = true"
+          >
+            <v-icon small color="#00DFF3">mdi-qrcode</v-icon>
+          </v-btn>
+          <QRAddressScannerDialog
+            :isOpen="qrScanDialog"
+            :chain="loggedWallet && loggedWallet.chain"
+            :network="loggedWallet && loggedWallet.network"
+            @close="qrScanDialog = false"
+            @scan="onQRScan"
+          />
+        </div>
 
         <!-- Handle resolution preview -->
         <v-list-item v-if="handleAsset" class="px-0 mt-1" style="min-height: 36px;">
-          <v-list-item-avatar v-if="handleAsset.img" size="36" rounded>
+          <v-list-item-avatar v-if="handleAsset.img" size="28" rounded>
             <v-img :src="handleAsset.img" contain />
           </v-list-item-avatar>
           <v-list-item-subtitle class="resolved-address-text">
@@ -168,7 +157,7 @@
         </v-list-item>
 
         <!-- Assets section (shown only when address is valid) -->
-        <div v-if="isAddressValid" class="mt-3">
+        <div v-if="isAddressValid" class="assets-section">
           <AssetsToSendStep
             ref="assetsStepRef"
             :value="assetsModel"
@@ -457,44 +446,47 @@ watch(() => props.recipient.address, (newVal) => {
   padding: 0 14px 14px;
 }
 
-/* ─── Action buttons row ─── */
-.action-row {
-  margin-bottom: 0;
+/* ─── Address row ─── */
+.address-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.action-btn {
-  text-transform: none !important;
-  letter-spacing: 0 !important;
-  background-color: #0F0F0F !important;
-  height: 36px !important;
-  border-radius: 8px !important;
+.address-row__icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  flex-shrink: 0;
 }
 
-.action-btn__label {
-  color: white;
-  font-size: 11px;
-  font-weight: 500;
+.address-input {
+  flex: 1;
+  min-width: 0;
 }
 
-/* ─── Contacts dropdown ─── */
-.contacts-dropdown {
-  background: #0c0e12 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 16px !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-}
-
-/* ─── Address textarea ─── */
-.recipient-address :deep(.v-input__control .v-input__slot) {
-  background-color: #292929;
+.address-input :deep(.v-input__slot) {
+  background-color: #292929 !important;
   border-radius: 8px;
-  padding: 6px 12px;
+  min-height: 32px !important;
+  padding: 0 8px !important;
 }
 
-.recipient-address :deep(textarea) {
-  resize: none;
+.address-input :deep(input) {
   font-size: 12px;
-  line-height: 1.5;
+  padding: 4px 0;
+}
+
+.address-input :deep(fieldset) {
+  border-color: transparent !important;
+}
+
+.address-input :deep(.v-input__slot:hover fieldset) {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.address-input :deep(.v-input--is-focused fieldset) {
+  border-color: #00DFF3 !important;
+  border-width: 1px !important;
 }
 
 /* ─── Handle resolved address ─── */
@@ -503,5 +495,18 @@ watch(() => props.recipient.address, (newVal) => {
   font-size: 11px;
   word-break: break-all;
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* ─── Assets section ─── */
+.assets-section {
+  margin-top: 12px;
+}
+
+/* ─── Contacts dropdown ─── */
+.contacts-dropdown {
+  background: #0c0e12 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 </style>
