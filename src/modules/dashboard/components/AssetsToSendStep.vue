@@ -188,17 +188,6 @@
       </v-chip>
     </div>
 
-    <!-- Total line -->
-    <div
-      v-if="totalAmounts.totalAdaAll > 0 || totalAmounts.totalUsd > 0"
-      class="total-line"
-    >
-      <span class="total-label">{{ $t('common.total') }}</span>
-      <div class="total-values">
-        <span class="total-ada">{{ totalAmounts.formattedAda }}</span>
-        <span class="total-fiat">{{ totalAmounts.formattedUsd }}</span>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -571,7 +560,7 @@ onMounted(() => {
 });
 
 // Expose for parent access
-defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens });
+defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens, totalAmounts });
 </script>
 
 <style scoped>

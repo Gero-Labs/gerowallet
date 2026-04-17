@@ -93,6 +93,15 @@
                     {{ $t('wallet.addAnotherRecipient') }}
                   </v-btn>
                 </div>
+
+                <!-- Global total -->
+                <div v-if="globalTotal.ada > 0 || globalTotal.usd > 0" class="global-total">
+                  <span class="global-total__label">{{ $t('common.total') }}</span>
+                  <div class="global-total__values">
+                    <span class="global-total__ada">{{ globalTotal.formattedAda }}</span>
+                    <span class="global-total__fiat">{{ '\u2248' }} {{ globalTotal.formattedUsd }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </v-stepper-content>
@@ -430,6 +439,38 @@ const showAddLink = computed(() => {
   return !!(last.resolvedAddress || isPaymentAddress(last.address));
 });
 
+/** Aggregate total across all recipients for the global total line. */
+const globalTotal = computed(() => {
+  let totalAda = 0;
+  let totalUsd = 0;
+
+  recipients.value.forEach((r: SendRecipient) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    r.selectedTokens.forEach((token: any) => {
+      const qty = parseFloat(String(token.quantity || '0').replace(/,/g, ''));
+      if (!qty || isNaN(qty)) return;
+      if (token.ticker === nativeTicker.value) {
+        totalAda += qty;
+      }
+    });
+  });
+
+  // Simple USD estimate from ADA price
+  const adaPrice = Number(walletStore.price?.lastPrice || 0);
+  totalUsd = totalAda * adaPrice;
+
+  return {
+    ada: totalAda,
+    usd: totalUsd,
+    formattedAda: totalAda > 0
+      ? filters.toCurrency(totalAda * 1e6, false, 6, '\u20B3', '', false, 6)
+      : '\u20B30',
+    formattedUsd: totalUsd > 0
+      ? `$${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '$0.00',
+  };
+});
+
 async function buildTx() {
   const allValid = recipients.value.every((r: SendRecipient) =>
     isPaymentAddress(r.resolvedAddress ?? r.address)
@@ -710,6 +751,40 @@ onMounted(() => {
 .add-recipient-link {
   text-align: center;
   padding: 8px 0 4px;
+}
+
+/* ─── Global total ─── */
+.global-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.global-total__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #CECFD2;
+}
+
+.global-total__values {
+  text-align: right;
+}
+
+.global-total__ada {
+  font-size: 14px;
+  font-weight: 600;
+  color: #00DFF3;
+}
+
+.global-total__fiat {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: 6px;
 }
 
 /* ─── Empty wallet ─── */
