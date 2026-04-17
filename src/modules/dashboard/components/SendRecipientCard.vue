@@ -170,12 +170,21 @@
         <!-- Assets section (shown only when address is valid) -->
         <div v-if="isAddressValid" class="mt-3">
           <AssetsToSendStep
+            ref="assetsStepRef"
             :value="assetsModel"
             :tokens="availableTokens"
             :excluded-collectible-fingerprints="excludedCollectibleFingerprints"
             :compact="true"
             @input="onAssetsInput"
             @setMax="onSetMax"
+            @openCollectiblesDialog="collectiblesDialogOpen = true"
+          />
+          <SelectCollectiblesDialog
+            :isOpen="collectiblesDialogOpen"
+            :collections="assetsStepRef?.collections || []"
+            :selectedCollectibles="assetsStepRef?.selectedCollectibles || []"
+            @close="collectiblesDialogOpen = false"
+            @update:selectedCollectibles="onCollectiblesUpdate"
           />
         </div>
       </div>
@@ -189,6 +198,7 @@ import { ref, computed, watch } from 'vue';
 import { toRefs } from 'vue';
 import debounce from 'lodash/debounce';
 import AssetsToSendStep from './AssetsToSendStep.vue';
+import SelectCollectiblesDialog from '@/modules/dashboard/dialogs/SelectCollectiblesDialog.vue';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network } from '@/models/types';
@@ -222,6 +232,9 @@ const emit = defineEmits<{
 }>();
 
 const { loggedWallet, contacts } = toRefs(walletStore);
+
+const assetsStepRef = ref<InstanceType<typeof AssetsToSendStep> | null>(null);
+const collectiblesDialogOpen = ref<boolean>(false);
 
 const localAddress = ref<string>(props.recipient.address);
 const resolving = ref<boolean>(false);
@@ -287,6 +300,12 @@ function onAssetsInput(val: { selectedTokens?: SendRecipient['selectedTokens']; 
 
 function onSetMax(tokenIndex: number) {
   emit('setMax', { tokenIndex });
+}
+
+function onCollectiblesUpdate(collectibles: any[]) {
+  if (assetsStepRef.value) {
+    assetsStepRef.value.updateCollectibles(collectibles);
+  }
 }
 
 const resolveAdaHandle = debounce(async (val: string) => {
