@@ -96,16 +96,16 @@
 
                 <!-- Global total -->
                 <div v-if="globalTotal.ada > 0 || globalTotal.usd > 0" class="global-total">
-                  <div class="global-total__row">
-                    <span class="global-total__label">{{ $t('common.total') }}</span>
-                    <div>
-                      <span class="global-total__ada">{{ globalTotal.formattedAda }}</span>
-                      <span class="global-total__fiat">{{ '\u2248' }} {{ globalTotal.formattedUsd }}</span>
-                    </div>
-                  </div>
                   <div v-if="globalTotal.formattedFee" class="global-total__row global-total__fee-row">
                     <span class="global-total__fee-label">{{ $t('signTx.networkFee') }}</span>
-                    <span class="global-total__fee">{{ globalTotal.formattedFee }}</span>
+                    <span class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
+                  </div>
+                  <div class="global-total__row global-total__total-row">
+                    <span class="global-total__label">{{ $t('common.total') }}</span>
+                    <div>
+                      <span class="global-total__ada">{{ globalTotal.formattedTotal }}</span>
+                      <span class="global-total__fiat">{{ '\u2248' }} {{ globalTotal.formattedUsd }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -482,6 +482,9 @@ const globalTotal = computed(() => {
     formattedAda: totalAda > 0
       ? filters.toCurrency(totalAda * 1e6, false, 6, '\u20B3', '', false, 6)
       : '\u20B30',
+    formattedTotal: totalWithFee > 0
+      ? filters.toCurrency(totalWithFee * 1e6, false, 6, '\u20B3', '', false, 6)
+      : '\u20B30',
     formattedFee,
     formattedUsd: totalUsd > 0
       ? `$${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -803,9 +806,12 @@ onMounted(() => {
 }
 
 .global-total__fee-row {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 4px;
+}
+
+.global-total__total-row {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .global-total__fee-label {
