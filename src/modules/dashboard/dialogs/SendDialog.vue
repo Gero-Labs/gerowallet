@@ -617,10 +617,9 @@ async function setMax(recipientId: string, tokenIndex: number) {
     return;
   }
 
-  // ADA max: 2-step approach using Nexus.
-  // Step 1: build with half the balance (guarantees enough for change + fee).
-  //         Read actual fee + detect change min UTxO from success or error.
-  // Step 2: rebuild with balance - changeRequired - actualFee.
+  // ADA max: computed precisely from wallet data.
+  // changeMinUtxO = min ADA needed for native tokens staying in wallet (change output).
+  // Computed from the wallet's own token list — not from deserialized tx (which loses asset info).
   const otherAdaLovelace = recipients.value
     .filter((r: SendRecipient) => r.id !== recipientId)
     .reduce((sum: bigint, r: SendRecipient) => {
@@ -631,91 +630,88 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const totalBalanceLovelace = BigInt(selectedToken.balance) - otherAdaLovelace;
   if (totalBalanceLovelace <= BigInt(1_000_000)) { isCalculatingMax.value = false; return; }
 
-  // Step 1: send half the balance — always leaves enough for change + fee
-  const probe = totalBalanceLovelace / BigInt(2);
-  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(Number(probe) / 1_000_000) };
-  recipients.value.splice(recipientIdx, 1, { ...recipient, selectedTokens: sendTokensCopy });
+  // Build the change output's asset map from the wallet's token list.
+  // These are all the native tokens that will stay in the wallet (not being sent).
+  let changeMinUtxo = BigInt(0);
+  const changeAssets = new Map<Cardano.AssetId, bigint>();
 
-  let changeRequired = BigInt(0);
-  let actualFee = BigInt(0);
-  let probeSucceeded = false;
-
-  try {
-    await buildTx();
-    probeSucceeded = true;
-    actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(200_000);
-  } catch (err: unknown) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const errMsg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : '');
-    debugLog('setMax probe error:', errMsg);
-
-    // Parse: "required: 13016200 lovelace"
-    const match = errMsg.match(/required:\s*(\d+)\s*lovelace/);
-    if (match) {
-      changeRequired = BigInt(match[1]);
-      debugLog('setMax: change output needs', Number(changeRequired) / 1_000_000, 'ADA for native tokens');
+  // Add all non-ADA tokens from the wallet's token list
+  for (const token of tokens.value) {
+    if (token.ticker === nativeTicker.value || !token.unit || token.unit === '') continue;
+    const bal = BigInt(token.balance || 0);
+    if (bal > BigInt(0)) {
+      changeAssets.set(token.unit as Cardano.AssetId, bal);
     }
   }
 
-  // Step 2: calculate precise max
-  let maxLovelace: bigint;
-  if (probeSucceeded && tx.value) {
-    // Probe succeeded — read the change output to find how much ADA is locked for native tokens.
-    // The change output is the output sent back to our own address.
-    const changeAddr = keys.value.payment[0].address;
-    const txOutputs = tx.value.body?.outputs || [];
-    let changeHasAssets = false;
-    for (const out of txOutputs) {
-      if (String(out.address) === changeAddr) {
-        const assets = out.value?.assets;
-        changeHasAssets = assets instanceof Map ? assets.size > 0 : (!!assets && Object.keys(assets).length > 0);
-        break;
-      }
-    }
-
-    if (changeHasAssets) {
-      // Change has native tokens — compute min UTxO for the change output's assets.
-      // changeOutputCoins is NOT the min UTxO — it's the leftover ADA (much more).
-      // Use BrowserTxConstruction.minAdaRequired to get the exact min.
-      if (epochParams.value) {
-        try {
-          const changeOut = txOutputs.find(out => String(out.address) === changeAddr);
-          if (changeOut) {
-            const mockChange: Cardano.TxOut = {
-              address: changeOut.address,
-              value: { coins: BigInt(0) as Cardano.Lovelace, assets: changeOut.value.assets },
-            };
-            changeRequired = BrowserTxConstruction.minAdaRequired(mockChange, BigInt(epochParams.value.coinsPerUtxoByte));
+  // Subtract tokens being sent by ALL recipients
+  for (const r of recipients.value) {
+    for (const tk of r.selectedTokens) {
+      if (tk.unit && tk.unit !== '' && tk.ticker !== nativeTicker.value) {
+        const qty = BigInt(Math.floor(Number(tk.quantity || 0) * Math.pow(10, tk.decimals || 0)));
+        if (qty > BigInt(0)) {
+          const current = changeAssets.get(tk.unit as Cardano.AssetId) ?? BigInt(0);
+          const remaining = current - qty;
+          if (remaining > BigInt(0)) {
+            changeAssets.set(tk.unit as Cardano.AssetId, remaining);
+          } else {
+            changeAssets.delete(tk.unit as Cardano.AssetId);
           }
-        } catch {
-          // Fallback: use the error message approach on the next build
-          changeRequired = BigInt(0);
         }
       }
-      debugLog('setMax: change output min UTxO =', Number(changeRequired) / 1_000_000, 'ADA');
     }
-
-    maxLovelace = totalBalanceLovelace - actualFee - changeRequired;
-  } else if (changeRequired > BigInt(0)) {
-    // Probe failed with change error — we already know changeRequired.
-    // Use the fee from the probe amount as estimate (fee scales ~linearly with tx size).
-    maxLovelace = totalBalanceLovelace - changeRequired - BigInt(200_000);
-  } else {
-    // Unknown error — conservative estimate
-    maxLovelace = totalBalanceLovelace - BigInt(2_000_000);
+    for (const col of Object.values(r.selectedCollectibles)) {
+      const c = col as { unit: string };
+      if (c.unit) changeAssets.delete(c.unit as Cardano.AssetId);
+    }
   }
 
+  // Compute min UTxO for the change output
+  if (changeAssets.size > 0 && epochParams.value) {
+    const changeAddr = keys.value.payment[0].address as Cardano.PaymentAddress;
+    const mockChange: Cardano.TxOut = {
+      address: changeAddr,
+      value: { coins: BigInt(1_000_000) as Cardano.Lovelace, assets: changeAssets },
+    };
+    try {
+      changeMinUtxo = BrowserTxConstruction.minAdaRequired(mockChange, BigInt(epochParams.value.coinsPerUtxoByte));
+    } catch {
+      changeMinUtxo = BigInt(0);
+    }
+    debugLog('setMax: changeMinUtxo =', Number(changeMinUtxo) / 1_000_000, 'ADA for', changeAssets.size, 'token types');
+  }
+
+  // Step 1: build with balance - changeMinUtxo (half if changeMinUtxo is 0) to get fee
+  const probeAmount = changeMinUtxo > BigInt(0)
+    ? totalBalanceLovelace - changeMinUtxo - BigInt(500_000) // leave 0.5 ADA for fee
+    : totalBalanceLovelace / BigInt(2);
+
+  if (probeAmount <= BigInt(0)) { isCalculatingMax.value = false; return; }
+
+  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(Number(probeAmount) / 1_000_000) };
+  recipients.value.splice(recipientIdx, 1, { ...recipient, selectedTokens: sendTokensCopy });
+
+  let actualFee = BigInt(300_000); // default fee estimate
+  try {
+    await buildTx();
+    actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : actualFee;
+  } catch {
+    // Probe failed — use default fee estimate
+  }
+
+  // Step 2: precise max = balance - fee - changeMinUtxo
+  const maxLovelace = totalBalanceLovelace - actualFee - changeMinUtxo;
   if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
-  // Apply and build — then self-correct with actual fee if needed
+  // Apply and build
   const applyMax = (lovelace: bigint) => {
     const qty = Number(lovelace) / 1_000_000;
-    const tokens = [...recipients.value[recipientIdx].selectedTokens];
-    tokens[tokenIndex] = { ...tokens[tokenIndex], quantity: String(qty) };
-    const r = { ...recipients.value[recipientIdx], selectedTokens: tokens };
-    if (changeRequired > BigInt(0)) {
+    const tks = [...recipients.value[recipientIdx].selectedTokens];
+    tks[tokenIndex] = { ...tks[tokenIndex], quantity: String(qty) };
+    const r = { ...recipients.value[recipientIdx], selectedTokens: tks };
+    if (changeMinUtxo > BigInt(0)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (r as any).lockedForTokens = Number(changeRequired) / 1_000_000;
+      (r as any).lockedForTokens = Number(changeMinUtxo) / 1_000_000;
     }
     recipients.value.splice(recipientIdx, 1, r);
   };
@@ -723,32 +719,21 @@ async function setMax(recipientId: string, tokenIndex: number) {
   applyMax(maxLovelace);
   try {
     await buildTx();
-    // Success — now self-correct: read actual fee, recalculate if different
+    // Self-correct with actual fee from final build
     const finalFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : actualFee;
     if (finalFee !== actualFee) {
-      const corrected = totalBalanceLovelace - finalFee - changeRequired;
+      const corrected = totalBalanceLovelace - finalFee - changeMinUtxo;
       if (corrected > BigInt(0) && corrected !== maxLovelace) {
         applyMax(corrected);
-        try { await buildTx(); } catch { applyMax(maxLovelace); /* revert */ }
+        try { await buildTx(); } catch { applyMax(maxLovelace); }
       }
     }
   } catch {
-    // Failed — fee was higher than probe estimated. Subtract 0.5 ADA more and retry.
-    const retry = maxLovelace - BigInt(500_000);
+    // Final build failed — reduce by 1 ADA and retry
+    const retry = maxLovelace - BigInt(1_000_000);
     if (retry > BigInt(0)) {
       applyMax(retry);
-      try {
-        await buildTx();
-        // Self-correct with actual fee
-        const retryFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(0);
-        if (retryFee > BigInt(0)) {
-          const corrected = totalBalanceLovelace - retryFee - changeRequired;
-          if (corrected > BigInt(0) && corrected !== retry) {
-            applyMax(corrected);
-            try { await buildTx(); } catch { applyMax(retry); }
-          }
-        }
-      } catch { /* keep retry amount */ }
+      try { await buildTx(); } catch { /* keep amount */ }
     }
   }
 
