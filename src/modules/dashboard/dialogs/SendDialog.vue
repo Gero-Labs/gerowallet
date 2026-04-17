@@ -635,7 +635,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
   let changeMinUtxo = BigInt(0);
   const changeAssets = new Map<Cardano.AssetId, bigint>();
 
-  // Add all non-ADA tokens from the wallet's token list
+  // Add all non-ADA fungible tokens from the wallet's token list
   for (const token of tokens.value) {
     if (token.ticker === nativeTicker.value || !token.unit || token.unit === '') continue;
     const bal = BigInt(token.balance || 0);
@@ -643,6 +643,22 @@ async function setMax(recipientId: string, tokenIndex: number) {
       changeAssets.set(token.unit as Cardano.AssetId, bal);
     }
   }
+
+  // Add all NFTs/collectibles from the wallet's collections
+  // Each collection has { items: [{ unit, quantity, ... }] }
+  for (const collection of Object.values(resolvedCollections.value)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = (collection as any)?.items;
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      if (item.unit) {
+        const qty = BigInt(item.quantity || 1);
+        changeAssets.set(item.unit as Cardano.AssetId, (changeAssets.get(item.unit as Cardano.AssetId) ?? BigInt(0)) + qty);
+      }
+    }
+  }
+
+  debugLog('setMax: changeAssets has', changeAssets.size, 'unique assets (tokens + NFTs)');
 
   // Subtract tokens being sent by ALL recipients
   for (const r of recipients.value) {
