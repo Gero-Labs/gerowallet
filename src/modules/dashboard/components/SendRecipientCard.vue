@@ -1,63 +1,47 @@
 <template>
-  <div
-    class="recipient-card"
-    :class="{
-      'recipient-card--multi': showHeader,
-      'recipient-card--expanded': isExpanded && showHeader,
-    }"
+  <v-expansion-panels
+    :value="isExpanded ? 0 : undefined"
+    class="recipient-panel"
+    flat
+    @change="onPanelChange"
   >
-    <!-- ─── Collapsed view (multi-recipient only) ─── -->
-    <div
-      v-if="!isExpanded && showHeader"
-      class="recipient-card__collapsed"
-      @click="$emit('expand')"
-    >
-      <div class="collapsed-left">
-        <v-icon x-small color="#00DFF3" class="mr-2">mdi-account-outline</v-icon>
-        <span class="collapsed-label">
-          {{ $t('wallet.recipient') }} {{ index + 1 }}
-        </span>
-        <span v-if="displayAddress" class="collapsed-address">
-          {{ displayAddress }}
-        </span>
-      </div>
-      <div class="collapsed-right">
-        <v-chip v-if="totalAdaDisplay" x-small color="#00DFF330" text-color="#00DFF3">
-          {{ totalAdaDisplay }}
-        </v-chip>
-        <v-icon x-small class="ml-1" style="opacity: 0.25;">mdi-chevron-down</v-icon>
-      </div>
-    </div>
+    <v-expansion-panel class="recipient-panel__panel">
+      <!-- ─── Header ─── -->
+      <v-expansion-panel-header class="recipient-panel__header" disable-icon-rotate>
+        <div class="header-left">
+          <v-icon x-small color="#00DFF3" class="mr-2">mdi-account-outline</v-icon>
+          <span class="header-label">{{ $t('wallet.recipient') }} {{ index + 1 }}</span>
+          <span v-if="!isExpanded && displayAddress" class="collapsed-address ml-2">
+            {{ displayAddress }}
+          </span>
+        </div>
+        <template v-slot:actions>
+          <v-chip v-if="!isExpanded && totalAdaDisplay" x-small color="#00DFF330" text-color="#00DFF3" class="mr-1">
+            {{ totalAdaDisplay }}
+          </v-chip>
+          <!-- Action buttons (only when expanded) -->
+          <v-tooltip v-if="isExpanded" bottom content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn icon x-small v-bind="attrs" v-on="on" @click.stop="$emit('duplicate')">
+                <v-icon style="font-size: 13px;" color="rgba(255,255,255,0.3)">mdi-content-duplicate</v-icon>
+              </v-btn>
+            </template>
+            <span>{{ $t('wallet.duplicateRecipient') }}</span>
+          </v-tooltip>
+          <v-tooltip v-if="isExpanded && canDelete" bottom content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn icon x-small v-bind="attrs" v-on="on" @click.stop="$emit('remove')">
+                <v-icon style="font-size: 13px;" color="#F97066">mdi-trash-can-outline</v-icon>
+              </v-btn>
+            </template>
+            <span>{{ $t('wallet.removeRecipient') }}</span>
+          </v-tooltip>
+          <v-icon v-if="!isExpanded" x-small style="opacity: 0.25;">mdi-chevron-down</v-icon>
+        </template>
+      </v-expansion-panel-header>
 
-    <!-- ─── Expanded view ─── -->
-    <template v-if="isExpanded">
-      <!-- Header (multi-recipient only) -->
-      <div v-if="showHeader" class="recipient-card__header">
-        <v-icon x-small class="mr-1" color="#00DFF3">mdi-account-outline</v-icon>
-        <span class="header-label">
-          {{ $t('wallet.recipient') }} {{ index + 1 }}
-        </span>
-        <v-spacer />
-        <v-tooltip bottom content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon x-small v-bind="attrs" v-on="on" @click="$emit('duplicate')">
-              <v-icon style="font-size: 13px;" color="rgba(255,255,255,0.3)">mdi-content-duplicate</v-icon>
-            </v-btn>
-          </template>
-          <span>{{ $t('wallet.duplicateRecipient') }}</span>
-        </v-tooltip>
-        <v-tooltip v-if="canDelete" bottom content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon x-small v-bind="attrs" v-on="on" @click="$emit('remove')">
-              <v-icon style="font-size: 13px;" color="#F97066">mdi-trash-can-outline</v-icon>
-            </v-btn>
-          </template>
-          <span>{{ $t('wallet.removeRecipient') }}</span>
-        </v-tooltip>
-      </div>
-
-      <!-- Card body -->
-      <div :class="showHeader ? 'recipient-card__body' : ''">
+      <!-- ─── Body ─── -->
+      <v-expansion-panel-content class="recipient-panel__content">
         <!-- Address row: [Address field] [Contacts] [QR] -->
         <div class="address-row">
           <!-- Address text field (single line) -->
@@ -169,9 +153,9 @@
             @update:selectedCollectibles="onCollectiblesUpdate"
           />
         </div>
-      </div>
-    </template>
-  </div>
+      </v-expansion-panel-content>
+    </v-expansion-panel>
+  </v-expansion-panels>
 </template>
 
 <script setup lang="ts">
@@ -234,7 +218,7 @@ const nativeTicker = computed(() =>
   networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
 );
 
-const isAddressValid = computed(() => {
+const _isAddressValid = computed(() => {
   const addr = props.recipient.resolvedAddress || localAddress.value;
   if (!addr) return false;
   const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -354,64 +338,67 @@ watch(() => props.recipient.address, (newVal) => {
 
 const cardTotalAmounts = computed(() => assetsStepRef.value?.totalAmounts ?? null);
 
+function onPanelChange(val: number | undefined) {
+  if (val === 0 && !props.isExpanded) {
+    emit('expand');
+  } else if (val === undefined && props.isExpanded) {
+    // Panel closed — but we let parent control this via isExpanded prop
+    // Don't collapse on click — parent manages accordion
+  }
+}
+
 defineExpose({ cardTotalAmounts });
 </script>
 
 <style scoped>
-.recipient-card {
-  text-align: left;
+/* ─── Expansion panel ─── */
+.recipient-panel {
+  margin-bottom: 6px !important;
 }
 
-/* ─── Multi-recipient card wrapper ─── */
-.recipient-card--multi {
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  margin-bottom: 8px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+.recipient-panel__panel {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 12px !important;
+  transition: border-color 0.2s ease;
 }
 
-.recipient-card--expanded {
-  border-color: rgba(0, 223, 243, 0.15) !important;
-  box-shadow: 0 0 0 1px rgba(0, 223, 243, 0.06);
+.recipient-panel :deep(.v-expansion-panel--active) {
+  border-color: rgba(0, 223, 243, 0.12) !important;
 }
 
-/* ─── Collapsed ─── */
-.recipient-card__collapsed {
+.recipient-panel :deep(.v-expansion-panel::before) {
+  box-shadow: none !important;
+}
+
+.recipient-panel__header {
+  min-height: 40px !important;
+  padding: 0 12px !important;
+}
+
+.recipient-panel__header :deep(.v-expansion-panel-header__icon) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  cursor: pointer;
-  min-height: 42px;
-  border-radius: 12px;
-  transition: background-color 0.15s ease;
+  gap: 2px;
+  margin-left: 0 !important;
 }
 
-.recipient-card__collapsed:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+.recipient-panel__content :deep(.v-expansion-panel-content__wrap) {
+  padding: 0 12px 12px !important;
 }
 
-.collapsed-left {
+.header-left {
   display: flex;
   align-items: center;
   flex: 1;
   min-width: 0;
 }
 
-.collapsed-right {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-left: 8px;
-}
-
-.collapsed-label {
-  color: #CECFD2;
+.header-label {
+  color: #94969C;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
-  margin-right: 8px;
 }
 
 .collapsed-address {
@@ -420,24 +407,6 @@ defineExpose({ cardTotalAmounts });
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* ─── Expanded header ─── */
-.recipient-card__header {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px 4px;
-}
-
-.header-label {
-  color: #94969C;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* ─── Expanded body ─── */
-.recipient-card__body {
-  padding: 0 14px 14px;
 }
 
 /* ─── Address row ─── */
@@ -461,8 +430,8 @@ defineExpose({ cardTotalAmounts });
 }
 
 .address-input :deep(.v-input__slot) {
-  background-color: #292929 !important;
-  border-radius: 8px;
+  background-color: #161B26 !important;
+  border-radius: 10px;
   min-height: 32px !important;
   padding: 0 8px !important;
 }
@@ -477,7 +446,7 @@ defineExpose({ cardTotalAmounts });
 }
 
 .address-input :deep(.v-input__slot:hover fieldset) {
-  border-color: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .address-input :deep(.v-input--is-focused fieldset) {
@@ -495,7 +464,7 @@ defineExpose({ cardTotalAmounts });
 
 /* ─── Assets section ─── */
 .assets-section {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 /* ─── Contacts dialog ─── */
