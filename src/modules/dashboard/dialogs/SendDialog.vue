@@ -35,6 +35,7 @@
 
     <!-- Normal send flow -->
     <template v-else>
+      <!-- Stepper indicator -->
       <v-card-title style="display: block;" class="py-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
           <v-stepper-header>
@@ -50,8 +51,7 @@
                     :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
                     size="20"
                   >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
-                  </v-icon
-                  >
+                  </v-icon>
                 </div>
                 <span class="step-label">{{ item.label }}</span>
               </div>
@@ -61,11 +61,13 @@
           </v-stepper-header>
         </v-stepper>
       </v-card-title>
-      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content">
+
+      <!-- Content area -->
+      <v-card-text class="send-dialog-content pa-0">
         <CustomStepper :currentStep="currentStep" :steps="steps">
+          <!-- Step 1: Recipients -->
           <v-stepper-content step="1">
-            <div class="recipients-wrapper">
-            <div class="recipients-container">
+            <div class="step-recipients">
               <SendRecipientCard
                 v-for="(recipient, idx) in recipients"
                 :key="recipient.id"
@@ -82,15 +84,17 @@
                 @remove="removeRecipient(recipient.id)"
                 @setMax="setMax(recipient.id, $event.tokenIndex)"
               />
-              <div v-if="showAddLink" class="text-center mt-2">
-                <v-btn text small color="#00DFF3" @click="addRecipient()">
-                  <v-icon small class="mr-1">mdi-plus</v-icon>
+              <!-- Add recipient link -->
+              <div v-if="showAddLink" class="add-recipient-link">
+                <v-btn text x-small color="#00DFF3" @click="addRecipient()">
+                  <v-icon x-small class="mr-1">mdi-plus</v-icon>
                   {{ $t('wallet.addAnotherRecipient') }}
                 </v-btn>
               </div>
             </div>
-            </div>
           </v-stepper-content>
+
+          <!-- Step 2: Summary -->
           <v-stepper-content step="2">
             <SummaryStep
               ref="summaryRef"
@@ -667,16 +671,33 @@ onMounted(() => {
 });
 </script>
 <style scoped>
+/* ───────────────────────── Content area ───────────────────────── */
 .send-dialog-content {
   z-index: 1;
-  min-height: 200px;
-  align-content: start;
 }
 
 .send-dialog-content--empty {
-  min-height: 300px;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+/* ───────────────────────── Step 1: Recipients ───────────────────────── */
+.step-recipients {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 8px 0 4px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.add-recipient-link {
+  text-align: center;
+  padding: 4px 0 0;
+}
+
+/* ───────────────────────── Empty wallet ───────────────────────── */
 .empty-wallet-state {
   display: flex;
   flex-direction: column;
@@ -696,20 +717,7 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.titles {
-  align-items: center;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-}
-
-.arrow-left {
-  cursor: pointer;
-  position: absolute;
-  top: 10px;
-  left: 10px;
-}
-
+/* ───────────────────────── Buttons ───────────────────────── */
 .continue-button {
   background: linear-gradient(to right, #00c7f3, #00fad5);
   color: black;
@@ -718,8 +726,9 @@ onMounted(() => {
     opacity: 0.5;
     color: black !important;
   }
-
 }
+
+/* ───────────────────────── Stepper ───────────────────────── */
 .stepper-container {
   background-color: transparent;
 
@@ -778,21 +787,8 @@ onMounted(() => {
     }
   }
 }
+
 .v-stepper__content {
   padding: 0;
-}
-
-.recipients-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 16px 16px 0;
-  max-height: 440px;
-  overflow-y: auto;
-}
-
-.recipients-container {
-  width: 60%;
-  text-align: left;
 }
 </style>
