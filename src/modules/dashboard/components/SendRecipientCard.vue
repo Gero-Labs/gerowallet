@@ -545,8 +545,14 @@ defineExpose({ cardTotalAmounts });
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
+.address-input :deep(.v-input__icon--clear) {
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
 .address-input :deep(.v-input__icon--clear .v-icon) {
   font-size: 14px !important;
+  color: white !important;
 }
 
 .address-input :deep(.v-input--is-focused fieldset) {
