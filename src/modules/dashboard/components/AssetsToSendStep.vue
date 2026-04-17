@@ -459,8 +459,10 @@ function formatQuantityDisplay(quantity: string | number): string {
 }
 
 function onQuantityInput(index: number, val: string) {
-  // Strip commas from pasted/formatted input
-  const cleaned = val.replace(/,/g, '');
+  // Strip everything except digits and decimal point
+  const cleaned = val.replace(/[^0-9.]/g, '')
+    // Prevent multiple decimal points
+    .replace(/(\..*?)\./g, '$1');
   const updatedTokens = [...tokenModel.value];
   updatedTokens[index] = { ...updatedTokens[index], quantity: cleaned };
   tokenModel.value = updatedTokens;
