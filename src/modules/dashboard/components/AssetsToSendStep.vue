@@ -69,6 +69,8 @@
             <v-text-field
               :value="formatQuantityDisplay(token.quantity)"
               @input="onQuantityInput(index, $event)"
+              @keydown="blockNonNumeric"
+              @paste="onPasteNumeric"
               type="text"
               outlined
               dense
@@ -458,11 +460,40 @@ function formatQuantityDisplay(quantity: string | number): string {
   return parts.join('.');
 }
 
+/** Block non-numeric keys at keydown (before they reach the input) */
+function blockNonNumeric(e: KeyboardEvent) {
+  // Allow: navigation, delete, backspace, tab, escape, enter, arrows, home, end
+  if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+  // Allow Ctrl/Cmd + A/C/V/X
+  if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) return;
+  // Allow decimal point (only one)
+  if (e.key === '.') {
+    const target = e.target as HTMLInputElement;
+    if (target.value.includes('.')) e.preventDefault();
+    return;
+  }
+  // Block anything that's not a digit
+  if (!/^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+}
+
+/** Strip non-numeric chars from pasted content */
+function onPasteNumeric(e: ClipboardEvent) {
+  e.preventDefault();
+  const text = e.clipboardData?.getData('text') || '';
+  const cleaned = text.replace(/[^0-9.]/g, '').replace(/(\..*?)\./g, '$1');
+  const target = e.target as HTMLInputElement;
+  const start = target.selectionStart ?? 0;
+  const end = target.selectionEnd ?? 0;
+  const current = target.value;
+  const newVal = current.slice(0, start) + cleaned + current.slice(end);
+  target.value = newVal;
+  target.dispatchEvent(new Event('input'));
+}
+
 function onQuantityInput(index: number, val: string) {
-  // Strip everything except digits and decimal point
-  const cleaned = val.replace(/[^0-9.]/g, '')
-    // Prevent multiple decimal points
-    .replace(/(\..*?)\./g, '$1');
+  const cleaned = val.replace(/[^0-9.]/g, '').replace(/(\..*?)\./g, '$1');
   const updatedTokens = [...tokenModel.value];
   updatedTokens[index] = { ...updatedTokens[index], quantity: cleaned };
   tokenModel.value = updatedTokens;
