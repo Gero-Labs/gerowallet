@@ -745,12 +745,31 @@ async function setMax(recipientId: string, tokenIndex: number) {
         try { await buildTx(); } catch { applyMax(maxLovelace); }
       }
     }
-  } catch {
-    // Final build failed — reduce by 1 ADA and retry once
-    const retry = maxLovelace - BigInt(1_000_000);
-    if (retry > BigInt(0)) {
-      applyMax(retry);
-      try { await buildTx(); } catch { /* keep amount */ }
+  } catch (finalErr: unknown) {
+    // Final build failed — parse Nexus error to get exact required change amount
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const finalErrMsg = (finalErr as any)?.response?.data?.message || '';
+    debugLog('setMax: final build failed:', finalErrMsg);
+
+    const reqMatch = finalErrMsg.match(/required:\s*(\d+)\s*lovelace/);
+    if (reqMatch) {
+      // Nexus told us exact change requirement — use it instead of local calc
+      const nexusChangeRequired = BigInt(reqMatch[1]);
+      debugLog('setMax: Nexus requires', Number(nexusChangeRequired) / 1_000_000, 'ADA (local calc was', Number(changeMinUtxo) / 1_000_000, ')');
+      const corrected = totalBalanceLovelace - actualFee - nexusChangeRequired;
+      if (corrected > BigInt(0)) {
+        // Update locked amount with Nexus's number
+        changeMinUtxo = nexusChangeRequired;
+        applyMax(corrected);
+        try { await buildTx(); } catch { /* keep amount */ }
+      }
+    } else {
+      // Unknown error — reduce by 1 ADA and retry
+      const retry = maxLovelace - BigInt(1_000_000);
+      if (retry > BigInt(0)) {
+        applyMax(retry);
+        try { await buildTx(); } catch { /* keep amount */ }
+      }
     }
   }
 
