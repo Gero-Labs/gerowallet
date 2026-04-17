@@ -1,85 +1,164 @@
 <template>
   <div class="assets-to-send">
-    <!-- Token selectors -->
+    <!-- Token rows -->
     <div class="token-list">
-      <TokenSelector
+      <div
         v-for="(token, index) in tokenModel"
         :key="index"
-        class="token-row"
-        background-color="#161B26"
-        v-model="tokenModel[index]"
-        :available="getAvailableTokens(index)"
-        :index="index"
-        @remove="removeTokenSelector"
-        :price="getPrice(token)"
-        :minimum="index === 0 && value ? value.minAda : 0"
-        :ada-shortage="index === 0 && value ? value.adaShortage : 0"
-        @setMax="setMax"
-        :token-lock="index === 0"
-      />
+        class="token-row-wrapper"
+      >
+        <div class="token-row">
+          <div class="token-row__left">
+            <v-avatar size="24" class="mr-2">
+              <img
+                :src="token.img"
+                :alt="token.ticker"
+                @error="handleImageError($event, token)"
+              />
+            </v-avatar>
+            <span class="token-ticker">{{ token.ticker }}</span>
+            <v-icon
+              v-if="token.verified"
+              x-small
+              color="primary"
+              class="ml-1"
+              style="margin-top: -1px;"
+            >mdi-check-decagram</v-icon>
+          </div>
+          <div class="token-row__right">
+            <v-text-field
+              :value="token.quantity"
+              @input="onQuantityInput(index, $event)"
+              type="number"
+              outlined
+              dense
+              hide-details
+              class="amount-input"
+              placeholder="0"
+              min="0"
+              step="any"
+            />
+            <v-btn
+              text
+              x-small
+              color="#00DFF3"
+              class="max-btn"
+              @click="setMax(index)"
+            >MAX</v-btn>
+          </div>
+          <!-- Remove button (not for first/native token) -->
+          <v-btn
+            v-if="index > 0"
+            icon
+            x-small
+            class="remove-btn"
+            @click="removeTokenSelector(index)"
+          >
+            <v-icon x-small color="rgba(255,255,255,0.3)">mdi-close</v-icon>
+          </v-btn>
+        </div>
 
-      <!-- Add Token button -->
-      <div v-if="missingTokens?.length > 0" class="add-token-row">
-        <v-btn text class="add-token-button" @click="addToken()">
-          <v-icon class="plus-icon" color="#00c7f3" small>mdi-plus</v-icon>
-          {{ $t('assets.addToken') }}
-        </v-btn>
+        <!-- Balance + price meta row -->
+        <div class="token-meta">
+          <span>{{ $t('send.availableBalance') }}: {{ formatBalance(token) }}</span>
+          <span v-if="getTokenPriceInUsd(token) > 0" class="token-meta__price">
+            {{ '\u2248' }} ${{ formatTokenValue(token) }}
+          </span>
+        </div>
+
+        <!-- Validation: insufficient funds -->
+        <div
+          v-if="index === 0 && value && value.adaShortage > 0"
+          class="token-error"
+        >
+          {{ $t('send.insufficientBalance') }}
+        </div>
+
+        <!-- Validation: minimum ADA required -->
+        <div
+          v-else-if="index === 0 && value && value.minAda > 0 && value.minAda > Number(token.quantity)"
+          class="token-error token-error--clickable"
+          @click="setMinimum(token)"
+        >
+          {{ $t('assets.minRequired', { amount: value.minAda + ' ' + token.ticker }) }}
+        </div>
       </div>
+    </div>
+
+    <!-- Add token / NFT menu -->
+    <div class="add-asset-row">
+      <v-menu offset-y attach>
+        <template v-slot:activator="{ on, attrs }">
+          <v-btn
+            text
+            x-small
+            color="#00DFF3"
+            v-bind="attrs"
+            v-on="on"
+            class="add-asset-btn"
+          >
+            <v-icon x-small class="mr-1">mdi-plus</v-icon>
+            {{ $t('assets.addTokenOrNft') }}
+          </v-btn>
+        </template>
+        <v-list dense dark class="add-asset-menu">
+          <v-list-item
+            @click="addToken()"
+            :disabled="missingTokens.length === 0"
+          >
+            <v-list-item-icon class="mr-2">
+              <v-icon small>mdi-circle-multiple-outline</v-icon>
+            </v-list-item-icon>
+            <v-list-item-title>{{ $t('assets.addToken') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item
+            @click="$emit('openCollectiblesDialog')"
+            :disabled="collectiblesCount === 0"
+          >
+            <v-list-item-icon class="mr-2">
+              <v-icon small>mdi-image-multiple-outline</v-icon>
+            </v-list-item-icon>
+            <v-list-item-title>{{ $t('assets.addCollectibleLabel') }}</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
+    </div>
+
+    <!-- Selected NFT chips -->
+    <div v-if="selectedCollectibles.length > 0" class="nft-chips">
+      <v-chip
+        v-for="(nft, idx) in selectedCollectibles"
+        :key="nft.fingerprint || idx"
+        small
+        close
+        class="nft-chip"
+        @click:close="removeCollectible(idx)"
+      >
+        <v-avatar left size="20" v-if="nft.img">
+          <v-img :src="nft.img" />
+        </v-avatar>
+        {{ nft.name }}
+        <span v-if="nft.toSendQuantity > 1" class="nft-chip__qty ml-1">x{{ nft.toSendQuantity }}</span>
+      </v-chip>
     </div>
 
     <!-- Total line -->
     <div
-      v-if="tokenModel.length > 0 && (totalAmounts.totalAda > 0 || totalAmounts.totalUsd > 0)"
+      v-if="totalAmounts.totalAdaAll > 0 || totalAmounts.totalUsd > 0"
       class="total-line"
     >
       <span class="total-label">{{ $t('common.total') }}</span>
       <div class="total-values">
         <span class="total-ada">{{ totalAmounts.formattedAda }}</span>
-        <span class="total-fiat">{{ totalAmounts.formattedUsd }} &bull; {{ totalAmounts.formattedEur }}</span>
+        <span class="total-fiat">{{ totalAmounts.formattedUsd }}</span>
       </div>
-    </div>
-
-    <!-- Collectibles section -->
-    <div v-if="collectiblesCount > 0" class="collectibles-section">
-      <!-- Selected collectibles chips -->
-      <div v-if="selectedCollectibles.length > 0" class="selected-collectibles">
-        <div
-          v-for="(item, idx) in selectedCollectibles"
-          :key="`sel-${item.fingerprint || idx}`"
-          class="collectible-chip"
-        >
-          <v-avatar size="24" class="mr-1" tile>
-            <v-img :src="item.img" />
-          </v-avatar>
-          <span class="chip-name">{{ item.name }}</span>
-          <span v-if="item.toSendQuantity > 1" class="chip-qty">x{{ item.toSendQuantity }}</span>
-          <v-btn icon x-small class="chip-remove" @click="removeCollectible(idx)">
-            <v-icon x-small color="rgba(255,255,255,0.5)">mdi-close</v-icon>
-          </v-btn>
-        </div>
-      </div>
-
-      <!-- Open collectibles dialog button -->
-      <v-btn
-        text
-        class="add-collectibles-button"
-        @click="$emit('openCollectiblesDialog')"
-      >
-        <v-icon small color="#00c7f3" class="mr-1">mdi-image-multiple-outline</v-icon>
-        <span v-if="selectedCollectibles.length > 0" class="collectibles-btn-label">
-          {{ $t('assets.chooseCollectibles') }}
-        </span>
-        <span v-else class="collectibles-btn-label">
-          {{ $t('assets.addCollectibles', { count: collectiblesCount }) }}
-        </span>
-      </v-btn>
     </div>
   </div>
 </template>
+
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { toRefs, computed, watch, onMounted, ref } from 'vue';
-import TokenSelector from '@/shared/components/TokenSelector.vue';
 import networks from '@/utils/networks';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -171,7 +250,7 @@ const collections = computed(() => {
       .map(collection => {
         return {
           ...collection,
-          items: collection.items.filter(item => item.name.toLowerCase().includes(search.value.toLowerCase())),
+          items: collection.items.filter((item: any) => item.name.toLowerCase().includes(search.value.toLowerCase())),
         };
       })
       .filter(collection => collection.items.length > 0);
@@ -188,7 +267,7 @@ const collections = computed(() => {
   }
   if (cols) {
     return cols.map(collection => {
-      collection.items.map(item => {
+      collection.items.map((item: any) => {
         if (item['toSendQuantity'] === undefined) {
           item['toSendQuantity'] = 1;
         }
@@ -240,7 +319,7 @@ const totalAmounts = computed(() => {
   let totalUsd = 0;
 
   // Process all selected tokens
-  tokenModel.value.forEach(token => {
+  tokenModel.value.forEach((token: any) => {
     if (!token) return;
 
     // Parse quantity (may be string with formatting like commas)
@@ -289,15 +368,15 @@ const totalAmounts = computed(() => {
     totalAdaAll,
     totalUsd,
     totalEur,
-    formattedAda: totalAdaAll > 0 ? filters.toCurrency(totalAdaAll * 1e6, false, 6, '₳', '', false, 6) : '₳0',
+    formattedAda: totalAdaAll > 0 ? filters.toCurrency(totalAdaAll * 1e6, false, 6, '\u20B3', '', false, 6) : '\u20B30',
     formattedUsd:
       totalUsd > 0
-        ? `$${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : '$0.00',
+        ? `\u2248 $${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '\u2248 $0.00',
     formattedEur:
       totalEur > 0
-        ? `€${totalEur.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : '€0.00',
+        ? `\u20AC${totalEur.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '\u20AC0.00',
   };
 });
 
@@ -308,7 +387,7 @@ function getAvailableTokens(currentIndex: number) {
     .filter((token: any, index: number) => index !== currentIndex && token)
     .map((token: any) => token.ticker);
 
-  return props.tokens.filter(token => {
+  return props.tokens.filter((token: any) => {
     // Always include the token already selected in the current selector.
     if (currentSelected && token.ticker === currentSelected.ticker) {
       return true;
@@ -318,30 +397,37 @@ function getAvailableTokens(currentIndex: number) {
   });
 }
 
-function getPrice(token: any) {
-  if (!token) return '';
-
-  // Get token price per unit (same logic as getTokenPriceInUsd)
-  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-
-  // For native tokens (ADA)
-  if (token.ticker === nativeTicker || token.policy_id === '') {
-    const priceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
-    return priceUsd > 0 ? priceUsd.toString() : '';
+function formatBalance(token: any): string {
+  if (!token) return '0';
+  if (token.decimals) {
+    return filters.toCurrency(token.balance, false, 2, '', '', true, token.decimals);
   }
+  return String(token.balance || 0);
+}
 
-  // For other tokens: get price from DexHunter (in ADA), convert to USD
-  const unit = token.unit;
-  if (unit && dexHunterStore.dexHunterTokens[unit]) {
-    const priceInAda = dexHunterStore.dexHunterTokens[unit].price || 0;
-    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
-    const priceUsd = priceInAda * adaPriceUsd;
-    return priceUsd > 0 ? priceUsd.toString() : '';
+function formatTokenValue(token: any): string {
+  const quantityStr = String(token.quantity || '0').replace(/,/g, '').replace(/\s/g, '');
+  const qty = parseFloat(quantityStr);
+  if (!qty || qty <= 0 || isNaN(qty)) return '0.00';
+  const priceUsd = getTokenPriceInUsd(token);
+  const value = qty * priceUsd;
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function onQuantityInput(index: number, val: string) {
+  const updatedTokens = [...tokenModel.value];
+  updatedTokens[index] = { ...updatedTokens[index], quantity: val };
+  tokenModel.value = updatedTokens;
+}
+
+function setMinimum(token: any) {
+  if (!props.value?.minAda) return;
+  const updatedTokens = [...tokenModel.value];
+  const idx = updatedTokens.findIndex((t: any) => t.ticker === token.ticker);
+  if (idx >= 0) {
+    updatedTokens[idx] = { ...updatedTokens[idx], quantity: String(props.value.minAda) };
+    tokenModel.value = updatedTokens;
   }
-
-  // Fallback to last_price if available
-  const lastPrice = token.last_price || 0;
-  return lastPrice > 0 ? lastPrice.toString() : '';
 }
 
 function decreaseQuantityToSend(item: any) {
@@ -364,7 +450,7 @@ function removeTokenSelector(index: number) {
 
 function addToken() {
   const existingTickers = tokenModel.value.map((token: any) => token?.ticker);
-  const missing = props.tokens.filter(token => !existingTickers.includes(token.ticker));
+  const missing = props.tokens.filter((token: any) => !existingTickers.includes(token.ticker));
   if (missing.length > 0) {
     tokenModel.value = [...tokenModel.value, missing[0]];
   }
@@ -385,10 +471,18 @@ function updateCollectibles(newCollectibles: any[]) {
   selectedCollectibles.value = newCollectibles;
 }
 
+function handleImageError(event: Event, token: any) {
+  const target = event.target as HTMLImageElement;
+  target.onerror = null;
+  if (token.fallback_img) {
+    target.src = token.fallback_img;
+  }
+}
+
 watch(
   selectedCollectibles,
   (newVal) => {
-    newVal.forEach(collectible => {
+    newVal.forEach((collectible: any) => {
       if (collectible.toSendQuantity > collectible.quantity) {
         collectible.toSendQuantity = collectible.quantity;
       } else if (collectible.toSendQuantity < 1) {
@@ -407,7 +501,7 @@ watch(
 
 onMounted(() => {
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-  const foundAsset = props.tokens.find(token => token.ticker === currencyTicker);
+  const foundAsset = props.tokens.find((token: any) => token.ticker === currencyTicker);
   if (foundAsset) {
     foundAsset.verified = true;
     selectedTokens.value = [foundAsset];
@@ -415,43 +509,179 @@ onMounted(() => {
 });
 
 // Expose for parent access
-defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend });
+defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens });
 </script>
 
 <style scoped>
 .assets-to-send {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .token-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+}
+
+/* ─── Token row ─── */
+.token-row-wrapper {
+  margin-bottom: 6px;
 }
 
 .token-row {
-  padding-bottom: 0;
-}
-
-.add-token-row {
   display: flex;
-  justify-content: center;
-  padding: 2px 0;
+  align-items: center;
+  background: #161B26;
+  border-radius: 10px;
+  padding: 8px 12px;
+  gap: 8px;
 }
 
-.add-token-button {
+.token-row__left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.token-ticker {
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
+
+.token-row__right {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.amount-input {
+  max-width: 140px;
+  flex-shrink: 1;
+}
+
+.amount-input :deep(.v-input__slot) {
+  background-color: transparent !important;
+  border: none !important;
+  min-height: 28px !important;
+  padding: 0 4px !important;
+}
+
+.amount-input :deep(input) {
+  text-align: right;
+  font-size: 16px;
+  font-weight: 500;
+  color: white;
+  padding: 0;
+}
+
+/* Hide number input spinners */
+.amount-input :deep(input::-webkit-outer-spin-button),
+.amount-input :deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.amount-input :deep(input[type='number']) {
+  -moz-appearance: textfield;
+}
+
+.amount-input :deep(fieldset) {
+  border: none !important;
+}
+
+.max-btn {
   text-transform: none !important;
   letter-spacing: 0 !important;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  min-width: 0 !important;
+  padding: 0 4px !important;
+  height: 22px !important;
+}
 
-  .plus-icon {
-    border: 2px solid #00c7f3;
-    border-radius: 5px;
-    margin-right: 8px;
-  }
+.remove-btn {
+  flex-shrink: 0;
+  margin-left: -4px;
+}
+
+/* ─── Token meta (balance + price) ─── */
+.token-meta {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 12px 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.token-meta__price {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ─── Validation errors ─── */
+.token-error {
+  font-size: 11px;
+  color: #F97066;
+  padding: 2px 12px 0;
+}
+
+.token-error--clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.token-error--clickable:hover {
+  color: #fb8a80;
+}
+
+/* ─── Add asset row ─── */
+.add-asset-row {
+  display: flex;
+  justify-content: flex-start;
+  padding: 4px 0 2px;
+}
+
+.add-asset-btn {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 12px !important;
+  padding: 0 6px !important;
+  height: 26px !important;
+}
+
+.add-asset-menu {
+  background: #0c0e12 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 10px !important;
+}
+
+/* ─── NFT chips ─── */
+.nft-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.nft-chip {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  color: #CECFD2;
+}
+
+.nft-chip__qty {
+  color: #00DFF3;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 /* ─── Total line ─── */
@@ -459,9 +689,9 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  margin-top: 2px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 4px;
 }
 
 .total-label {
@@ -478,7 +708,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .total-ada {
   font-size: 13px;
   font-weight: 600;
-  color: #00c7f3;
+  color: #00DFF3;
   display: block;
   line-height: 1.2;
 }
@@ -486,63 +716,5 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .total-fiat {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
-}
-
-/* ─── Collectibles section ─── */
-.collectibles-section {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 6px;
-  margin-top: 2px;
-}
-
-.selected-collectibles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 4px 6px;
-}
-
-.collectible-chip {
-  display: inline-flex;
-  align-items: center;
-  background-color: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  padding: 3px 4px 3px 3px;
-  max-width: 160px;
-}
-
-.chip-name {
-  font-size: 11px;
-  color: #CECFD2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 80px;
-}
-
-.chip-qty {
-  font-size: 10px;
-  color: #00c7f3;
-  margin-left: 2px;
-  flex-shrink: 0;
-}
-
-.chip-remove {
-  margin-left: 2px;
-  flex-shrink: 0;
-}
-
-.add-collectibles-button {
-  text-transform: none !important;
-  letter-spacing: 0 !important;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  padding: 0 8px !important;
-  height: 28px !important;
-}
-
-.collectibles-btn-label {
-  color: rgba(255, 255, 255, 0.6);
 }
 </style>
