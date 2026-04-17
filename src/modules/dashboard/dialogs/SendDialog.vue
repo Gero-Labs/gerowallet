@@ -410,13 +410,14 @@ function updateRecipient(id: string, updated: SendRecipient) {
   }
 }
 
-function addRecipient() {
+async function addRecipient() {
   const r = createEmptyRecipient();
   recipients.value.push(r);
+  await nextTick();
   expandedRecipientId.value = r.id;
 }
 
-function duplicateRecipient(id: string) {
+async function duplicateRecipient(id: string) {
   const src = recipients.value.find((r: SendRecipient) => r.id === id);
   if (!src) return;
   const duped: SendRecipient = {
@@ -426,6 +427,7 @@ function duplicateRecipient(id: string) {
   };
   const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
   recipients.value.splice(idx + 1, 0, duped);
+  await nextTick();
   expandedRecipientId.value = duped.id;
 }
 
