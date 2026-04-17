@@ -616,7 +616,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
     return;
   }
 
-  // ADA max: balance - otherRecipients - fee - changeMinUtxo (for native tokens left in wallet)
+  // ADA max: let Nexus tell us the exact fee and change requirements.
+  // Strategy: try sending entire balance, parse Nexus response for exact numbers.
   const otherAdaLovelace = recipients.value
     .filter((r: SendRecipient) => r.id !== recipientId)
     .reduce((sum: bigint, r: SendRecipient) => {
@@ -627,120 +628,77 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const totalBalanceLovelace = BigInt(selectedToken.balance) - otherAdaLovelace;
   if (totalBalanceLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
-  // Calculate min UTxO needed for change output (native tokens staying in wallet)
-  let changeMinUtxo = BigInt(0);
-  if (epochParams.value) {
-    // Collect all native token assets across wallet UTxOs
-    // Handles all storage formats: Map, Array [{unit,quantity}], plain Object {unit: qty}
-    const allWalletAssets = new Map<Cardano.AssetId, bigint>();
-    for (const utxo of (utxos.value as Cardano.Utxo[])) {
-      const rawAssets = utxo[1]?.value?.assets as unknown;
-      if (!rawAssets) continue;
-
-      const addAsset = (unit: string, quantity: unknown) => {
-        if (!unit) return;
-        allWalletAssets.set(
-          unit as Cardano.AssetId,
-          (allWalletAssets.get(unit as Cardano.AssetId) ?? BigInt(0)) + BigInt(String(quantity))
-        );
-      };
-
-      if (rawAssets instanceof Map) {
-        rawAssets.forEach((qty, unit) => addAsset(String(unit), qty));
-      } else if (Array.isArray(rawAssets)) {
-        for (const a of rawAssets as { unit: string; quantity: unknown }[]) {
-          addAsset(String(a.unit), a.quantity);
-        }
-      } else if (typeof rawAssets === 'object') {
-        for (const [unit, qty] of Object.entries(rawAssets as Record<string, unknown>)) {
-          addAsset(unit, qty);
-        }
-      }
-    }
-
-    debugLog('setMax: wallet has', allWalletAssets.size, 'unique native token assets');
-
-    // Subtract tokens being sent by ALL recipients
-    for (const r of recipients.value) {
-      for (const tk of r.selectedTokens) {
-        if (tk.unit && tk.ticker !== nativeTicker.value) {
-          const qty = BigInt(Math.floor(Number(tk.quantity || 0) * Math.pow(10, tk.decimals || 0)));
-          if (qty > BigInt(0)) {
-            const current = allWalletAssets.get(tk.unit as Cardano.AssetId) ?? BigInt(0);
-            const remaining = current - qty;
-            if (remaining > BigInt(0)) {
-              allWalletAssets.set(tk.unit as Cardano.AssetId, remaining);
-            } else {
-              allWalletAssets.delete(tk.unit as Cardano.AssetId);
-            }
-          }
-        }
-      }
-      // Also subtract collectibles
-      for (const col of Object.values(r.selectedCollectibles)) {
-        const c = col as { unit: string; toSendQuantity?: number };
-        if (c.unit) allWalletAssets.delete(c.unit as Cardano.AssetId);
-      }
-    }
-
-    // If change will have native tokens, compute its min UTxO
-    if (allWalletAssets.size > 0) {
-      try {
-        const changeAddress = keys.value.payment[0].address as Cardano.PaymentAddress;
-        const mockChange: Cardano.TxOut = {
-          address: changeAddress,
-          value: { coins: BigInt(0) as Cardano.Lovelace, assets: allWalletAssets },
-        };
-        changeMinUtxo = BrowserTxConstruction.minAdaRequired(mockChange, BigInt(epochParams.value.coinsPerUtxoByte));
-        debugLog('setMax: changeMinUtxo =', Number(changeMinUtxo) / 1_000_000, 'ADA for', allWalletAssets.size, 'remaining assets');
-      } catch (e) {
-        debugLog('setMax: minAdaRequired failed, using 15 ADA fallback:', e);
-        changeMinUtxo = BigInt(15_000_000); // 15 ADA safe fallback
-      }
-    }
-  }
-
-  // Reserve: fee estimate (0.5 ADA) + change min UTxO + 10% margin
-  const FEE_ESTIMATE = BigInt(500_000);
-  const margin = changeMinUtxo / BigInt(10); // 10% margin on change min
-  const reserve = FEE_ESTIMATE + changeMinUtxo + margin;
-  debugLog('setMax: totalBalance =', Number(totalBalanceLovelace) / 1_000_000, 'reserve =', Number(reserve) / 1_000_000, '(fee:', Number(FEE_ESTIMATE) / 1_000_000, '+ changeMin:', Number(changeMinUtxo) / 1_000_000, '+ margin:', Number(margin) / 1_000_000, ')');
-  const maxLovelace = totalBalanceLovelace - reserve;
-
-  if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
-
-  // Set the max amount and build
-  const maxQty = Number(maxLovelace) / 1_000_000;
-  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(maxQty) };
+  // Attempt 1: try sending the full balance — Nexus will either succeed or
+  // tell us exactly how much is needed for the change output.
+  const fullQty = Number(totalBalanceLovelace) / 1_000_000;
+  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(fullQty) };
   recipients.value.splice(recipientIdx, 1, { ...recipient, selectedTokens: sendTokensCopy });
 
   try {
     await buildTx();
-
-    // Fine-tune: read actual fee from built tx and adjust
-    if (tx.value?.body?.fee) {
-      const actualFee = BigInt(tx.value.body.fee);
-      if (actualFee > FEE_ESTIMATE) {
-        const adjustment = actualFee - FEE_ESTIMATE;
-        const adjustedLovelace = maxLovelace - adjustment;
-        if (adjustedLovelace > BigInt(0)) {
-          const adjustedQty = Number(adjustedLovelace) / 1_000_000;
-          const adjTokens = [...recipients.value[recipientIdx].selectedTokens];
-          adjTokens[tokenIndex] = { ...adjTokens[tokenIndex], quantity: String(adjustedQty) };
-          recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: adjTokens });
-          try { await buildTx(); } catch { /* keep first estimate */ }
-        }
-      }
+    // Success — the entire balance fit (no change output needed, or change was ADA-only).
+    // Now subtract the actual fee for precision.
+    const actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(0);
+    if (actualFee > BigInt(0)) {
+      const preciseMax = totalBalanceLovelace - actualFee;
+      const preciseQty = Number(preciseMax) / 1_000_000;
+      const tokens2 = [...recipients.value[recipientIdx].selectedTokens];
+      tokens2[tokenIndex] = { ...tokens2[tokenIndex], quantity: String(preciseQty) };
+      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: tokens2 });
+      try { await buildTx(); } catch { /* keep full-balance build */ }
     }
-  } catch {
-    // Build failed — try with extra 2 ADA buffer on top
-    const fallbackLovelace = maxLovelace - BigInt(2_000_000);
-    if (fallbackLovelace > BigInt(0)) {
-      const fallbackQty = Number(fallbackLovelace) / 1_000_000;
-      const fbTokens = [...recipients.value[recipientIdx].selectedTokens];
-      fbTokens[tokenIndex] = { ...fbTokens[tokenIndex], quantity: String(fallbackQty) };
-      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: fbTokens });
-      try { await buildTx(); } catch { /* give up */ }
+  } catch (err: unknown) {
+    // Parse Nexus error to get the exact required amount for change output
+    let changeRequired = BigInt(0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const axiosErr = err as { response?: { data?: { message?: string } } };
+    const errMsg = axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '');
+
+    // Pattern: "Available: 1519026 lovelace, required: 13016200 lovelace"
+    const match = errMsg.match(/required:\s*(\d+)\s*lovelace/);
+    if (match) {
+      changeRequired = BigInt(match[1]);
+      debugLog('setMax: Nexus requires', Number(changeRequired) / 1_000_000, 'ADA for change output (native tokens)');
+    }
+
+    if (changeRequired > BigInt(0)) {
+      // Store locked amount for UI display
+      const lockedAda = Number(changeRequired) / 1_000_000;
+
+      // Precise calculation: balance - changeRequired - estimated fee
+      const reducedLovelace = totalBalanceLovelace - changeRequired;
+      if (reducedLovelace <= BigInt(0)) {
+        recipients.value[recipientIdx].adaShortage = lockedAda;
+        isCalculatingMax.value = false;
+        return;
+      }
+
+      const reducedQty = Number(reducedLovelace) / 1_000_000;
+      const tokens3 = [...recipients.value[recipientIdx].selectedTokens];
+      tokens3[tokenIndex] = { ...tokens3[tokenIndex], quantity: String(reducedQty) };
+      const updatedRecipient3 = { ...recipients.value[recipientIdx], selectedTokens: tokens3 };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (updatedRecipient3 as any).lockedForTokens = lockedAda;
+      recipients.value.splice(recipientIdx, 1, updatedRecipient3);
+
+      try {
+        await buildTx();
+        // Now subtract the actual fee
+        const actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(0);
+        if (actualFee > BigInt(0)) {
+          const finalLovelace = totalBalanceLovelace - changeRequired - actualFee;
+          if (finalLovelace > BigInt(0)) {
+            const finalQty = Number(finalLovelace) / 1_000_000;
+            const tokens4 = [...recipients.value[recipientIdx].selectedTokens];
+            tokens4[tokenIndex] = { ...tokens4[tokenIndex], quantity: String(finalQty) };
+            const updatedRecipient4 = { ...recipients.value[recipientIdx], selectedTokens: tokens4 };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (updatedRecipient4 as any).lockedForTokens = lockedAda;
+            recipients.value.splice(recipientIdx, 1, updatedRecipient4);
+            try { await buildTx(); } catch { /* keep previous */ }
+          }
+        }
+      } catch { /* keep reduced amount */ }
     }
   }
 

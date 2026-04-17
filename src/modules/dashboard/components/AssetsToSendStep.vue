@@ -117,6 +117,15 @@
         >
           {{ $t('assets.minRequired', { amount: value.minAda + ' ' + token.ticker }) }}
         </div>
+
+        <!-- Info: ADA locked for native tokens in wallet -->
+        <div
+          v-if="index === 0 && lockedAdaForTokens > 0 && Number(token.quantity) > 0"
+          class="token-info"
+        >
+          <v-icon x-small color="#FEC84B" style="margin-top: -1px;" class="mr-1">mdi-lock-outline</v-icon>
+          {{ lockedAdaForTokens.toFixed(2) }} {{ token.ticker }} {{ $t('wallet.lockedForTokens') }}
+        </div>
       </div>
     </div>
 
@@ -342,6 +351,9 @@ function getTokenPriceInAda(token: any): number {
 }
 
 // Calculate total amounts being sent
+/** ADA locked as min UTxO for native tokens remaining in wallet change output */
+const lockedAdaForTokens = computed(() => props.value?.lockedForTokens || 0);
+
 const totalAmounts = computed(() => {
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
   let totalAda = 0; // Native ADA amount
@@ -589,7 +601,7 @@ onMounted(() => {
 });
 
 // Expose for parent access
-defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens, totalAmounts });
+defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens, totalAmounts, lockedAdaForTokens });
 </script>
 
 <style scoped>
@@ -697,6 +709,15 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .remove-btn {
   flex-shrink: 0;
   margin-left: -4px;
+}
+
+/* ─── Info: locked ADA ─── */
+.token-info {
+  font-size: 10px;
+  color: #FEC84B;
+  padding: 2px 10px 0;
+  display: flex;
+  align-items: center;
 }
 
 /* ─── Validation errors ─── */

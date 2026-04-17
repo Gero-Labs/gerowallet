@@ -2691,6 +2691,7 @@ export default {
   'wallet.duplicateRecipient': 'Empfänger duplizieren',
   'wallet.removeRecipient': 'Empfänger entfernen',
   'wallet.noContacts': 'Noch keine Kontakte gespeichert',
+  'wallet.lockedForTokens': 'gesperrt für Native Tokens in der Wallet',
   'wallet.tooManyRecipients': 'Zu viele Empfänger oder Assets für eine Transaktion. Bitte Empfänger oder Assets reduzieren.',
   'wallet.recipientAddress': 'Empfängeradresse',
   'wallet.recipientDetails': 'Empfängerdetails',
