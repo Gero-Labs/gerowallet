@@ -705,6 +705,16 @@ watch(
       }
     }
 
+    // Only call buildTx when at least one recipient has a non-zero ADA or token amount
+    const hasAnyAmount = recipients.value.some((r: SendRecipient) =>
+      r.selectedTokens.some((t: Token) => Number(t.quantity) > 0) ||
+      Object.keys(r.selectedCollectibles).length > 0
+    );
+    if (!hasAnyAmount) {
+      txValid.value = false;
+      return;
+    }
+
     try {
       await buildTx();
       txValid.value = true;
