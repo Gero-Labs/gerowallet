@@ -150,7 +150,7 @@
         </div>
 
         <!-- Assets section (shown only when address is valid) -->
-        <div v-if="isAddressValid" class="assets-section">
+        <div class="assets-section">
           <AssetsToSendStep
             ref="assetsStepRef"
             :value="assetsModel"
