@@ -166,6 +166,8 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 interface Props {
   value: any;
   tokens: any[];
+  /** Fingerprints of NFTs fully allocated to other recipient cards — hidden from picker */
+  excludedCollectibleFingerprints?: Set<string>;
 }
 
 const props = defineProps<Props>();
@@ -246,6 +248,17 @@ const collections = computed(() => {
         };
       })
       .filter(collection => collection.items.length > 0);
+  }
+  // Filter out NFTs already committed to other recipient cards
+  const excluded = props.excludedCollectibleFingerprints ?? new Set<string>();
+  if (excluded.size > 0) {
+    collections = collections.map(collection => ({
+      ...collection,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items: collection.items.filter((item: any) =>
+        !excluded.has(item.fingerprint)
+      ),
+    })).filter(collection => collection.items.length > 0);
   }
   if (collections) {
     return collections.map(collection => {
