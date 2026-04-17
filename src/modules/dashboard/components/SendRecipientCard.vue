@@ -87,57 +87,49 @@
           </v-text-field>
 
           <!-- Contact book button -->
-          <v-menu
-            v-model="contactsMenu"
-            :close-on-content-click="false"
-            offset-y
-            nudge-left="200"
-            min-width="400"
-            max-height="340"
-            transition="fade-transition"
-            attach
+          <v-btn
+            icon
+            small
+            class="address-row__icon-btn"
+            @click="contactsDialog = true"
           >
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn
-                icon
-                small
-                v-bind="attrs"
-                v-on="on"
-                class="address-row__icon-btn"
-              >
-                <v-icon small color="#00DFF3">mdi-book-open-variant-outline</v-icon>
-              </v-btn>
-            </template>
-            <v-card outlined class="contacts-dropdown">
-              <v-card-title class="py-2 px-4">
+            <v-icon small color="#00DFF3">mdi-book-open-variant-outline</v-icon>
+          </v-btn>
+
+          <!-- Contacts dialog -->
+          <v-dialog v-model="contactsDialog" max-width="480" overlay-color="#1f242f" overlay-opacity="0.7">
+            <v-card class="contacts-dialog-card">
+              <v-card-title class="contacts-dialog-header">
+                <v-icon small color="#00DFF3" class="mr-2">mdi-book-open-variant-outline</v-icon>
                 {{ $t('wallet.contacts') }}
                 <v-spacer />
-                <v-btn icon small @click="contactsMenu = false">
+                <v-btn icon small @click="contactsDialog = false">
                   <v-icon>mdi-window-close</v-icon>
                 </v-btn>
               </v-card-title>
-              <v-card-text class="pa-0">
+
+              <v-card-text class="contacts-dialog-body">
                 <template v-if="contacts && Object.values(contacts).length > 0">
-                  <v-data-table
-                    dense
-                    class="transparent"
-                    :headers="contactsHeaders"
-                    :items="Object.values(contacts)"
-                    hide-default-footer
-                    disable-pagination
-                    @click:row="selectContact"
+                  <div
+                    v-for="contact in Object.values(contacts)"
+                    :key="contact.address"
+                    class="contact-item"
+                    @click="selectContact(contact)"
                   >
-                    <template v-slot:[`item.address`]="{ item }">
-                      {{ filters.truncate(item.address) }}
-                    </template>
-                  </v-data-table>
+                    <div class="contact-item__info">
+                      <span class="contact-item__name">{{ contact.name || $t('wallet.unnamed') }}</span>
+                      <span class="contact-item__address">{{ filters.truncate(contact.address, 20) }}</span>
+                    </div>
+                    <v-icon x-small style="opacity: 0.3;">mdi-chevron-right</v-icon>
+                  </div>
                 </template>
-                <div v-else class="text-center py-6" style="color: rgba(255,255,255,0.4); font-size: 12px;">
-                  {{ $t('wallet.noContacts') }}
+                <div v-else class="contacts-empty">
+                  <v-icon size="40" color="rgba(255,255,255,0.15)" class="mb-3">mdi-book-open-variant-outline</v-icon>
+                  <div>{{ $t('wallet.noContacts') }}</div>
                 </div>
               </v-card-text>
             </v-card>
-          </v-menu>
+          </v-dialog>
 
           <!-- QR scan button -->
           <v-btn
@@ -230,13 +222,8 @@ const localAddress = ref<string>(props.recipient.address);
 const resolving = ref<boolean>(false);
 const resolvedFailed = ref<boolean>(false);
 const handleAsset = ref<{ name?: string; img?: string } | null>(null);
-const contactsMenu = ref<boolean>(false);
+const contactsDialog = ref<boolean>(false);
 const qrScanDialog = ref<boolean>(false);
-
-const contactsHeaders = [
-  { text: 'Name', value: 'name' },
-  { text: 'Address', value: 'address' },
-];
 
 const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO &&
@@ -345,7 +332,7 @@ function onQRScan(address: string) {
 }
 
 function selectContact(item: { handle?: string; address: string; name?: string }) {
-  contactsMenu.value = false;
+  contactsDialog.value = false;
   if (item.handle && isMainnetCardano.value) {
     localAddress.value = item.handle;
     resolveAdaHandle(item.handle);
@@ -511,11 +498,61 @@ defineExpose({ cardTotalAmounts });
   margin-top: 12px;
 }
 
-/* ─── Contacts dropdown ─── */
-.contacts-dropdown {
+/* ─── Contacts dialog ─── */
+.contacts-dialog-card {
   background: #0c0e12 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 16px !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.contacts-dialog-header {
+  font-size: 16px !important;
+  font-weight: 600;
+  padding: 16px 20px 8px !important;
+}
+
+.contacts-dialog-body {
+  padding: 8px 12px 16px !important;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.contact-item:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.contact-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contact-item__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+}
+
+.contact-item__address {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: monospace;
+}
+
+.contacts-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 13px;
 }
 </style>
