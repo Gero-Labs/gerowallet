@@ -61,7 +61,7 @@
           </v-stepper-header>
         </v-stepper>
       </v-card-title>
-      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content" :style="currentStep === 2 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
+      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content">
         <CustomStepper :currentStep="currentStep" :steps="steps">
           <v-stepper-content step="1">
             <div class="recipients-wrapper">
@@ -669,14 +669,12 @@ onMounted(() => {
 <style scoped>
 .send-dialog-content {
   z-index: 1;
-  min-height: 0;
-  height: 490px;
+  min-height: 200px;
   align-content: start;
 }
 
-/* 490px content + ~52px stepper header + ~48px card-actions = ~590px total */
 .send-dialog-content--empty {
-  height: 590px;
+  min-height: 300px;
 }
 
 .empty-wallet-state {
