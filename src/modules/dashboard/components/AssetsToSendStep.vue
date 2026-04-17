@@ -11,7 +11,7 @@
             flat
             outlined
             class="pa-2 fill-height transparent"
-            :style="{ height: compact ? 'auto' : '487px', overflow: 'auto', maxWidth: '350px' }"
+            :style="{ height: compact ? 'auto' : '487px', overflow: 'auto', maxWidth: compact ? 'none' : '350px' }"
           >
             <TokenSelector
               v-for="(token, index) in tokenModel"
