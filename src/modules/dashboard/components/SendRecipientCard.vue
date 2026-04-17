@@ -58,13 +58,40 @@
 
       <!-- Card body -->
       <div :class="showHeader ? 'recipient-card__body' : ''">
-        <!-- Address row: [Contacts] [Address field] [QR] -->
+        <!-- Address row: [Address field] [Contacts] [QR] -->
         <div class="address-row">
+          <!-- Address text field (single line) -->
+          <v-text-field
+            v-if="loggedWallet"
+            v-model="localAddress"
+            :placeholder="isMainnetCardano ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
+            outlined
+            dense
+            hide-details="auto"
+            class="address-input"
+            :rules="[rules.recipientRules(loggedWallet.chain, loggedWallet.network)]"
+            :loading="resolving"
+            clearable
+            @input="resolveAddress"
+          >
+            <!-- Handle image prepended inside input when resolved -->
+            <template v-slot:prepend-inner>
+              <v-avatar v-if="handleAsset && handleAsset.img" size="20" class="mr-1" style="margin-top: -2px;">
+                <v-img :src="handleAsset.img" contain />
+              </v-avatar>
+            </template>
+            <template v-slot:append>
+              <v-progress-circular v-if="resolving" color="white" size="16" width="2" indeterminate />
+              <v-icon v-else-if="resolvedFailed" color="#F97066" small>mdi-alert</v-icon>
+            </template>
+          </v-text-field>
+
           <!-- Contact book button -->
           <v-menu
             v-model="contactsMenu"
             :close-on-content-click="false"
             offset-y
+            nudge-left="200"
             min-width="400"
             max-height="340"
             transition="fade-transition"
@@ -108,26 +135,6 @@
             </v-card>
           </v-menu>
 
-          <!-- Address text field (single line) -->
-          <v-text-field
-            v-if="loggedWallet"
-            v-model="localAddress"
-            :placeholder="isMainnetCardano ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
-            outlined
-            dense
-            hide-details="auto"
-            class="address-input"
-            :rules="[rules.recipientRules(loggedWallet.chain, loggedWallet.network)]"
-            :loading="resolving"
-            clearable
-            @input="resolveAddress"
-          >
-            <template v-slot:append>
-              <v-progress-circular v-if="resolving" color="white" size="16" width="2" indeterminate />
-              <v-icon v-else-if="resolvedFailed" color="#F97066" small>mdi-alert</v-icon>
-            </template>
-          </v-text-field>
-
           <!-- QR scan button -->
           <v-btn
             icon
@@ -145,16 +152,6 @@
             @scan="onQRScan"
           />
         </div>
-
-        <!-- Handle resolution preview -->
-        <v-list-item v-if="handleAsset" class="px-0 mt-1" style="min-height: 36px;">
-          <v-list-item-avatar v-if="handleAsset.img" size="28" rounded>
-            <v-img :src="handleAsset.img" contain />
-          </v-list-item-avatar>
-          <v-list-item-subtitle class="resolved-address-text">
-            {{ recipient.resolvedAddress }}
-          </v-list-item-subtitle>
-        </v-list-item>
 
         <!-- Assets section (shown only when address is valid) -->
         <div v-if="isAddressValid" class="assets-section">
@@ -308,7 +305,9 @@ const resolveAdaHandle = debounce(async (val: string) => {
     if (res.status === 200 && res.data?.resolved_addresses?.ada) {
       handleAsset.value = { name: res.data.name, img: assets.resolveIcon(res.data.image) };
       resolvedFailed.value = false;
-      emitAddress(res.data.resolved_addresses.ada, val, true);
+      const resolved = res.data.resolved_addresses.ada;
+      localAddress.value = `${val} (${filters.truncate(resolved)})`;
+      emitAddress(resolved, val, true);
     } else {
       resolvedFailed.value = true;
       handleAsset.value = null;

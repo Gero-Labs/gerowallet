@@ -45,17 +45,21 @@
                 </template>
                 <v-list dense dark class="token-picker-list">
                   <v-list-item
-                    v-for="available in getAvailableTokens(index)"
-                    :key="available.ticker"
+                    v-for="(available, aidx) in getAvailableTokens(index)"
+                    :key="available.unit || `avail-${aidx}`"
                     @click="swapToken(index, available)"
                   >
-                    <v-avatar size="20" class="mr-2">
+                    <v-avatar size="24" class="mr-2">
                       <img :src="available.img" :alt="available.ticker" />
                     </v-avatar>
-                    <v-list-item-title style="font-size: 13px;">{{ available.ticker }}</v-list-item-title>
-                    <v-list-item-subtitle style="font-size: 11px; text-align: right;">
-                      {{ formatTokenBalance(available) }}
-                    </v-list-item-subtitle>
+                    <v-list-item-content>
+                      <v-list-item-title style="font-size: 13px;">{{ available.ticker }}</v-list-item-title>
+                    </v-list-item-content>
+                    <v-list-item-action style="margin: 0; min-width: auto;">
+                      <span style="font-size: 11px; color: rgba(255,255,255,0.4);">
+                        {{ formatTokenBalance(available) }}
+                      </span>
+                    </v-list-item-action>
                   </v-list-item>
                 </v-list>
               </v-menu>
@@ -124,7 +128,7 @@
     <!-- Add token / NFT row -->
     <div class="add-asset-row">
       <!-- Add token picker -->
-      <v-menu offset-y attach max-height="280" v-if="missingTokens.length > 0">
+      <v-menu offset-y attach max-height="320" min-width="280" v-if="missingTokens.length > 0">
         <template v-slot:activator="{ on, attrs }">
           <v-btn text x-small color="#00DFF3" v-bind="attrs" v-on="on" class="add-asset-btn">
             <v-icon x-small class="mr-1">mdi-plus</v-icon>
@@ -133,17 +137,24 @@
         </template>
         <v-list dense dark class="token-picker-list">
           <v-list-item
-            v-for="token in missingTokens"
-            :key="token.ticker"
+            v-for="(token, idx) in missingTokens"
+            :key="token.unit || `missing-${idx}`"
             @click="addSpecificToken(token)"
           >
-            <v-avatar size="20" class="mr-2">
+            <v-avatar size="24" class="mr-2">
               <img :src="token.img" :alt="token.ticker" />
             </v-avatar>
-            <v-list-item-title style="font-size: 13px;">{{ token.ticker }}</v-list-item-title>
-            <v-list-item-subtitle style="font-size: 11px; text-align: right;">
-              {{ formatTokenBalance(token) }}
-            </v-list-item-subtitle>
+            <v-list-item-content>
+              <v-list-item-title style="font-size: 13px;">{{ token.ticker }}</v-list-item-title>
+              <v-list-item-subtitle style="font-size: 11px;">
+                {{ token.name || '' }}
+              </v-list-item-subtitle>
+            </v-list-item-content>
+            <v-list-item-action style="margin: 0; min-width: auto;">
+              <span style="font-size: 11px; color: rgba(255,255,255,0.4);">
+                {{ formatTokenBalance(token) }}
+              </span>
+            </v-list-item-action>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -727,7 +738,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   background: #0c0e12 !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 10px !important;
-  max-width: 260px;
+  min-width: 240px;
 }
 
 /* ─── NFT chips ─── */
