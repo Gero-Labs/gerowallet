@@ -616,7 +616,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
     return;
   }
 
-  // ADA max: calculate from balance minus other recipients and fee
+  // ADA max: balance - otherRecipients - fee - changeMinUtxo (for native tokens left in wallet)
   const otherAdaLovelace = recipients.value
     .filter((r: SendRecipient) => r.id !== recipientId)
     .reduce((sum: bigint, r: SendRecipient) => {
@@ -627,44 +627,100 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const totalBalanceLovelace = BigInt(selectedToken.balance) - otherAdaLovelace;
   if (totalBalanceLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
-  // Step 1: Build with balance minus 2 ADA fee buffer to get actual fee
-  const FEE_BUFFER = BigInt(2_000_000); // 2 ADA generous buffer
-  const firstAttempt = totalBalanceLovelace - FEE_BUFFER;
-  if (firstAttempt <= BigInt(0)) { isCalculatingMax.value = false; return; }
+  // Calculate min UTxO needed for change output (native tokens staying in wallet)
+  let changeMinUtxo = BigInt(0);
+  if (epochParams.value) {
+    // Collect all native token assets across wallet UTxOs
+    const allWalletAssets = new Map<Cardano.AssetId, bigint>();
+    for (const utxo of (utxos.value as Cardano.Utxo[])) {
+      const rawAssets = utxo[1].value.assets as unknown;
+      if (rawAssets instanceof Map) {
+        rawAssets.forEach((qty: bigint, unit: Cardano.AssetId) => {
+          allWalletAssets.set(unit, (allWalletAssets.get(unit) ?? BigInt(0)) + BigInt(qty));
+        });
+      } else if (rawAssets && typeof rawAssets === 'object') {
+        for (const [unit, qty] of Object.entries(rawAssets as Record<string, unknown>)) {
+          allWalletAssets.set(unit as Cardano.AssetId, (allWalletAssets.get(unit as Cardano.AssetId) ?? BigInt(0)) + BigInt(String(qty)));
+        }
+      }
+    }
 
-  const firstQty = Number(firstAttempt) / 1_000_000;
-  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(firstQty) };
-  const updated1 = { ...recipient, selectedTokens: sendTokensCopy };
-  recipients.value.splice(recipientIdx, 1, updated1);
+    // Subtract tokens being sent by ALL recipients
+    for (const r of recipients.value) {
+      for (const tk of r.selectedTokens) {
+        if (tk.unit && tk.ticker !== nativeTicker.value) {
+          const qty = BigInt(Math.floor(Number(tk.quantity || 0) * Math.pow(10, tk.decimals || 0)));
+          if (qty > BigInt(0)) {
+            const current = allWalletAssets.get(tk.unit as Cardano.AssetId) ?? BigInt(0);
+            const remaining = current - qty;
+            if (remaining > BigInt(0)) {
+              allWalletAssets.set(tk.unit as Cardano.AssetId, remaining);
+            } else {
+              allWalletAssets.delete(tk.unit as Cardano.AssetId);
+            }
+          }
+        }
+      }
+      // Also subtract collectibles
+      for (const col of Object.values(r.selectedCollectibles)) {
+        const c = col as { unit: string; toSendQuantity?: number };
+        if (c.unit) allWalletAssets.delete(c.unit as Cardano.AssetId);
+      }
+    }
+
+    // If change will have native tokens, compute its min UTxO
+    if (allWalletAssets.size > 0) {
+      try {
+        const changeAddress = keys.value.payment[0].address as Cardano.PaymentAddress;
+        const mockChange: Cardano.TxOut = {
+          address: changeAddress,
+          value: { coins: BigInt(0) as Cardano.Lovelace, assets: allWalletAssets },
+        };
+        changeMinUtxo = BrowserTxConstruction.minAdaRequired(mockChange, BigInt(epochParams.value.coinsPerUtxoByte));
+      } catch {
+        changeMinUtxo = BigInt(15_000_000); // 15 ADA safe fallback
+      }
+    }
+  }
+
+  // Reserve: fee estimate (0.5 ADA) + change min UTxO + small margin
+  const FEE_ESTIMATE = BigInt(500_000);
+  const reserve = FEE_ESTIMATE + changeMinUtxo;
+  const maxLovelace = totalBalanceLovelace - reserve;
+
+  if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
+
+  // Set the max amount and build
+  const maxQty = Number(maxLovelace) / 1_000_000;
+  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(maxQty) };
+  recipients.value.splice(recipientIdx, 1, { ...recipient, selectedTokens: sendTokensCopy });
 
   try {
     await buildTx();
 
-    // Step 2: Read actual fee from built tx, recalculate exact max
-    const actualFeeLovelace = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : FEE_BUFFER;
-    // Add small margin (10%) to account for fee variance when amount changes
-    const feeWithMargin = actualFeeLovelace + (actualFeeLovelace / BigInt(10));
-    const maxLovelace = totalBalanceLovelace - feeWithMargin;
-
-    if (maxLovelace > BigInt(0)) {
-      const maxQty = Number(maxLovelace) / 1_000_000;
-      const finalTokens = [...recipients.value[recipientIdx].selectedTokens];
-      finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: String(maxQty) };
-      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: finalTokens });
-
-      // Rebuild with exact amount
-      try {
-        await buildTx();
-      } catch { /* keep the estimate */ }
+    // Fine-tune: read actual fee from built tx and adjust
+    if (tx.value?.body?.fee) {
+      const actualFee = BigInt(tx.value.body.fee);
+      if (actualFee > FEE_ESTIMATE) {
+        const adjustment = actualFee - FEE_ESTIMATE;
+        const adjustedLovelace = maxLovelace - adjustment;
+        if (adjustedLovelace > BigInt(0)) {
+          const adjustedQty = Number(adjustedLovelace) / 1_000_000;
+          const adjTokens = [...recipients.value[recipientIdx].selectedTokens];
+          adjTokens[tokenIndex] = { ...adjTokens[tokenIndex], quantity: String(adjustedQty) };
+          recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: adjTokens });
+          try { await buildTx(); } catch { /* keep first estimate */ }
+        }
+      }
     }
   } catch {
-    // First attempt failed — try with larger buffer
-    const fallbackLovelace = totalBalanceLovelace - FEE_BUFFER * BigInt(2);
+    // Build failed — try with extra 2 ADA buffer on top
+    const fallbackLovelace = maxLovelace - BigInt(2_000_000);
     if (fallbackLovelace > BigInt(0)) {
       const fallbackQty = Number(fallbackLovelace) / 1_000_000;
-      const fallbackTokens = [...recipients.value[recipientIdx].selectedTokens];
-      fallbackTokens[tokenIndex] = { ...fallbackTokens[tokenIndex], quantity: String(fallbackQty) };
-      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: fallbackTokens });
+      const fbTokens = [...recipients.value[recipientIdx].selectedTokens];
+      fbTokens[tokenIndex] = { ...fbTokens[tokenIndex], quantity: String(fallbackQty) };
+      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: fbTokens });
       try { await buildTx(); } catch { /* give up */ }
     }
   }
