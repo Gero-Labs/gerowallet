@@ -617,8 +617,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
   }
 
   // ADA max: 2-step approach using Nexus.
-  // Step 1: build with balance - 1 ADA (minimal reserve for fee).
-  //         If it fails with change output error, parse exact requirement.
+  // Step 1: build with half the balance (guarantees enough for change + fee).
+  //         Read actual fee + detect change min UTxO from success or error.
   // Step 2: rebuild with balance - changeRequired - actualFee.
   const otherAdaLovelace = recipients.value
     .filter((r: SendRecipient) => r.id !== recipientId)
@@ -630,8 +630,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const totalBalanceLovelace = BigInt(selectedToken.balance) - otherAdaLovelace;
   if (totalBalanceLovelace <= BigInt(1_000_000)) { isCalculatingMax.value = false; return; }
 
-  // Step 1: send balance - 1 ADA to get fee or change error
-  const probe = totalBalanceLovelace - BigInt(1_000_000);
+  // Step 1: send half the balance — always leaves enough for change + fee
+  const probe = totalBalanceLovelace / BigInt(2);
   sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(Number(probe) / 1_000_000) };
   recipients.value.splice(recipientIdx, 1, { ...recipient, selectedTokens: sendTokensCopy });
 
@@ -658,31 +658,37 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
   // Step 2: calculate precise max
   let maxLovelace: bigint;
-  if (probeSucceeded) {
-    // No change issue — max = balance - fee
-    maxLovelace = totalBalanceLovelace - actualFee;
+  if (probeSucceeded && tx.value) {
+    // Probe succeeded — read the change output to find how much ADA is locked for native tokens.
+    // The change output is the output sent back to our own address.
+    const changeAddr = keys.value.payment[0].address;
+    const txOutputs = tx.value.body?.outputs || [];
+    let changeOutputCoins = BigInt(0);
+    let changeHasAssets = false;
+    for (const out of txOutputs) {
+      if (String(out.address) === changeAddr) {
+        changeOutputCoins = BigInt(out.value?.coins || 0);
+        const assets = out.value?.assets;
+        changeHasAssets = assets instanceof Map ? assets.size > 0 : (!!assets && Object.keys(assets).length > 0);
+        break;
+      }
+    }
+
+    if (changeHasAssets && changeOutputCoins > BigInt(0)) {
+      // Change has native tokens — the coins in change are the min UTxO requirement.
+      // We can send: totalBalance - fee - changeMinUtxo
+      // The changeOutputCoins IS the min UTxO (Nexus sets it to exactly that).
+      changeRequired = changeOutputCoins;
+      debugLog('setMax: change output has native tokens, locked ADA =', Number(changeRequired) / 1_000_000);
+    }
+
+    maxLovelace = totalBalanceLovelace - actualFee - changeRequired;
   } else if (changeRequired > BigInt(0)) {
-    // Change needs ADA for tokens — first get fee with reduced amount
-    const reduced = totalBalanceLovelace - changeRequired - BigInt(1_000_000);
-    if (reduced <= BigInt(0)) {
-      // Not enough ADA even after reserving for change
-      const lockedAda = Number(changeRequired) / 1_000_000;
-      recipients.value[recipientIdx].adaShortage = lockedAda;
-      isCalculatingMax.value = false;
-      return;
-    }
-    const tokens3 = [...recipients.value[recipientIdx].selectedTokens];
-    tokens3[tokenIndex] = { ...tokens3[tokenIndex], quantity: String(Number(reduced) / 1_000_000) };
-    recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: tokens3 });
-    try {
-      await buildTx();
-      actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(200_000);
-    } catch {
-      actualFee = BigInt(300_000); // fallback fee estimate
-    }
-    maxLovelace = totalBalanceLovelace - changeRequired - actualFee;
+    // Probe failed with change error — we already know changeRequired.
+    // Use the fee from the probe amount as estimate (fee scales ~linearly with tx size).
+    maxLovelace = totalBalanceLovelace - changeRequired - BigInt(200_000);
   } else {
-    // Unknown error — use conservative estimate
+    // Unknown error — conservative estimate
     maxLovelace = totalBalanceLovelace - BigInt(2_000_000);
   }
 
