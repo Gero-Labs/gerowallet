@@ -153,6 +153,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { toRefs, computed, watch, onMounted, ref } from 'vue';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import networks from '@/utils/networks';
