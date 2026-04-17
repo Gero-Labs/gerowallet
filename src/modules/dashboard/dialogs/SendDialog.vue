@@ -698,9 +698,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
   }
 
   // Step 1: probe build to get the actual fee.
-  // Send balance - changeMinUtxo - 2 ADA (generous fee buffer so probe succeeds).
-  const FEE_BUFFER = BigInt(2_000_000);
-  const probeAmount = totalBalanceLovelace - changeMinUtxo - FEE_BUFFER;
+  // Use half balance — guarantees success regardless of change output size.
+  const probeAmount = totalBalanceLovelace / BigInt(2);
 
   if (probeAmount <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
