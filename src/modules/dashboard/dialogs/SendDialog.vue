@@ -49,7 +49,7 @@
                   <v-icon
                     class="step-icon"
                     :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
-                    size="20"
+                    size="16"
                   >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
                   </v-icon>
                 </div>
@@ -776,7 +776,7 @@ onMounted(() => {
 .step-recipients-wrapper {
   display: flex;
   justify-content: center;
-  padding: 16px 16px 8px;
+  padding: 8px 16px 4px;
 }
 
 .step-recipients-inner {
@@ -790,7 +790,7 @@ onMounted(() => {
 
 .add-recipient-link {
   text-align: center;
-  padding: 8px 0 4px;
+  padding: 4px 0 2px;
 }
 
 /* ─── Global total ─── */
@@ -895,11 +895,11 @@ onMounted(() => {
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 5px;
-    width: 150px;
+    padding: 2px;
+    width: 120px;
 
     &.active .icon-container {
-      box-shadow: 0 0 0 5px #00dff327;
+      box-shadow: 0 0 0 4px #00dff327;
     }
 
     &.next .icon-container {
@@ -912,16 +912,16 @@ onMounted(() => {
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 24px;
-      width: 24px;
+      height: 20px;
+      width: 20px;
       padding-left: 1px;
     }
   }
 
   .step-label {
-    margin-top: 10px;
-    font-size: 14px;
-    line-height: 20px;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 16px;
     text-align: center;
     font-weight: 600;
     color: #CECFD2;
@@ -931,8 +931,8 @@ onMounted(() => {
     flex: 1;
     height: 2px;
     width: 100%;
-    margin-left: -75px;
-    margin-right: -75px;
+    margin-left: -60px;
+    margin-right: -60px;
     margin-top: 16px;
     background-color: #292929;
 

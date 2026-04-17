@@ -11,7 +11,7 @@
           <div class="token-row__left">
             <!-- Native token (locked, no picker) -->
             <template v-if="index === 0">
-              <v-avatar size="24" class="mr-2">
+              <v-avatar size="20" class="mr-1">
                 <img
                   :src="token.img"
                   :alt="token.ticker"
@@ -24,15 +24,16 @@
                 x-small
                 color="primary"
                 class="ml-1"
-                style="margin-top: -1px;"
+                style="margin-top: -1px; font-size: 10px;"
               >mdi-check-decagram</v-icon>
+              <span class="token-balance">{{ formatBalance(token) }}</span>
             </template>
             <!-- Non-native token (clickable to swap) -->
             <template v-else>
               <v-menu offset-y max-height="240" min-width="240">
                 <template v-slot:activator="{ on, attrs }">
                   <div class="token-selector-trigger" v-bind="attrs" v-on="on">
-                    <v-avatar size="24" class="mr-2">
+                    <v-avatar size="20" class="mr-1">
                       <img
                         :src="token.img"
                         :alt="token.ticker"
@@ -40,7 +41,7 @@
                       />
                     </v-avatar>
                     <span class="token-ticker">{{ token.ticker }}</span>
-                    <v-icon x-small class="ml-1" style="opacity: 0.4;">mdi-chevron-down</v-icon>
+                    <v-icon x-small class="ml-1" style="opacity: 0.4; font-size: 10px;">mdi-chevron-down</v-icon>
                   </div>
                 </template>
                 <v-list dense dark class="token-picker-list">
@@ -49,20 +50,21 @@
                     :key="available.unit || `avail-${aidx}`"
                     @click="swapToken(index, available)"
                   >
-                    <v-avatar size="24" class="mr-2">
+                    <v-avatar size="20" class="mr-2">
                       <img :src="available.img" :alt="available.ticker" />
                     </v-avatar>
                     <v-list-item-content>
-                      <v-list-item-title style="font-size: 13px;">{{ available.ticker }}</v-list-item-title>
+                      <v-list-item-title style="font-size: 12px;">{{ available.ticker }}</v-list-item-title>
                     </v-list-item-content>
                     <v-list-item-action style="margin: 0; min-width: auto;">
-                      <span style="font-size: 11px; color: rgba(255,255,255,0.4);">
+                      <span style="font-size: 10px; color: rgba(255,255,255,0.4);">
                         {{ formatTokenBalance(available) }}
                       </span>
                     </v-list-item-action>
                   </v-list-item>
                 </v-list>
               </v-menu>
+              <span class="token-balance">{{ formatBalance(token) }}</span>
             </template>
           </div>
           <div class="token-row__right">
@@ -97,14 +99,6 @@
           >
             <v-icon x-small color="rgba(255,255,255,0.3)">mdi-close</v-icon>
           </v-btn>
-        </div>
-
-        <!-- Balance + price meta row -->
-        <div class="token-meta">
-          <span>{{ $t('send.availableBalance') }}: {{ formatBalance(token) }}</span>
-          <span v-if="getTokenPriceInUsd(token) > 0" class="token-meta__price">
-            {{ '\u2248' }} ${{ formatTokenValue(token) }}
-          </span>
         </div>
 
         <!-- Validation: insufficient funds -->
@@ -622,16 +616,16 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 
 /* ─── Token row ─── */
 .token-row-wrapper {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .token-row {
   display: flex;
   align-items: center;
   background: #161B26;
-  border-radius: 10px;
-  padding: 8px 12px;
-  gap: 8px;
+  border-radius: 8px;
+  padding: 6px 10px;
+  gap: 6px;
 }
 
 .token-row__left {
@@ -642,9 +636,16 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 }
 
 .token-ticker {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: white;
+  white-space: nowrap;
+}
+
+.token-balance {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  margin-left: 6px;
   white-space: nowrap;
 }
 
@@ -671,7 +672,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 
 .amount-input :deep(input) {
   text-align: right;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   color: white;
   padding: 0;
@@ -705,19 +706,6 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .remove-btn {
   flex-shrink: 0;
   margin-left: -4px;
-}
-
-/* ─── Token meta (balance + price) ─── */
-.token-meta {
-  display: flex;
-  justify-content: space-between;
-  padding: 2px 12px 0;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.token-meta__price {
-  color: rgba(255, 255, 255, 0.35);
 }
 
 /* ─── Validation errors ─── */
