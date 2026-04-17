@@ -360,6 +360,10 @@ watch(() => props.recipient.address, (newVal) => {
     }
   }
 });
+
+const cardTotalAmounts = computed(() => assetsStepRef.value?.totalAmounts ?? null);
+
+defineExpose({ cardTotalAmounts });
 </script>
 
 <style scoped>
