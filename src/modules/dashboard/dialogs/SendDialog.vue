@@ -61,24 +61,41 @@
           </v-stepper-header>
         </v-stepper>
       </v-card-title>
-      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
+      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content" :style="currentStep === 2 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
         <CustomStepper :currentStep="currentStep" :steps="steps">
           <v-stepper-content step="1">
-            <SendRecipientDetailsStep
-              :sendData="sendData"
-              @updateRecipientAddress="updateRecipientAddress"
-            ></SendRecipientDetailsStep>
+            <div class="recipients-container" style="max-height: 440px; overflow-y: auto; padding: 4px 2px;">
+              <SendRecipientCard
+                v-for="(recipient, idx) in recipients"
+                :key="recipient.id"
+                :recipient="recipient"
+                :index="idx"
+                :is-expanded="expandedRecipientId === recipient.id"
+                :can-delete="recipients.length > 1"
+                :available-tokens="availableTokensFor(recipient.id)"
+                :excluded-collectible-fingerprints="excludedFingerprintsFor(recipient.id)"
+                @expand="expandRecipient(recipient.id)"
+                @update:recipient="updateRecipient(recipient.id, $event)"
+                @duplicate="duplicateRecipient(recipient.id)"
+                @remove="removeRecipient(recipient.id)"
+                @setMax="setMax(recipient.id, $event.tokenIndex)"
+              />
+              <div v-if="showAddLink" class="text-center mt-2">
+                <v-btn text small color="#00DFF3" @click="addRecipient()">
+                  <v-icon small class="mr-1">mdi-plus</v-icon>
+                  {{ $t('wallet.addAnotherRecipient') }}
+                </v-btn>
+              </div>
+            </div>
           </v-stepper-content>
           <v-stepper-content step="2">
-            <AssetsToSendStep
-              v-model="sendData"
-              @select="selectCollectible"
-              :tokens="tokens"
-              @setMax="setMax"
-            ></AssetsToSendStep>
-          </v-stepper-content>
-          <v-stepper-content step="3">
-            <SummaryStep ref="summaryRef" :sendData="sendData" :tx-data="tx" @next="handleSign" @prev="prevStep"></SummaryStep>
+            <SummaryStep
+              ref="summaryRef"
+              :recipients="recipients"
+              :tx-data="tx"
+              @next="handleSign"
+              @prev="prevStep"
+            />
           </v-stepper-content>
         </CustomStepper>
 
@@ -94,8 +111,8 @@
         />
       </v-card-text>
       <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
-        <!-- Transaction Authentication Section (step 3 only) -->
-        <div v-if="currentStep === 3">
+        <!-- Transaction Authentication Section (step 2 only) -->
+        <div v-if="currentStep === 2">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
@@ -131,9 +148,9 @@
           >
             <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
           </v-btn>
-          <!-- Steps 1-2: Continue button -->
+          <!-- Step 1: Continue button -->
           <v-btn
-            v-if="currentStep !== 3"
+            v-if="currentStep !== 2"
             class="continue-button"
             @click="nextStep"
             :disabled="!isValid || txSignLoading"
@@ -141,7 +158,7 @@
           >{{ $t('common.continue') + ' ' }}
             <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
-          <!-- Step 3: Sign/Confirm button for non-PRF wallets -->
+          <!-- Step 2: Sign/Confirm button for non-PRF wallets -->
           <v-btn
             v-else-if="!isPrfWallet"
             class="continue-button"
@@ -163,12 +180,11 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
-import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
-import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
+import SendRecipientCard from '../components/SendRecipientCard.vue';
 import rules from '@/utils/rules';
-import { WalletType, Wallet } from '@/models/types';
-import { Token, Collectible } from '@/models/send-flow.types';
+import { WalletType } from '@/models/types';
+import { Token, Collectible, SendRecipient } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import { isPaymentAddress } from '@/chrome/serialization';
@@ -208,38 +224,32 @@ async function openReceiveDialog() {
 }
 
 const currentStep = ref<number>(1);
-const sendData = ref<{
-  selectedTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
-  selectedCollectibles: Record<string, Collectible & { unit: string }>;
-  recipientAddress: string;
-  selectedWallet: Wallet | Record<string, never>;
-  minAda: number;
-  adaShortage: number;
-}>({
-  selectedTokens: [],
-  selectedCollectibles: {},
-  recipientAddress: '',
-  selectedWallet: {},
-  minAda: 0,
-  adaShortage: 0
-});
+const expandedRecipientId = ref<string | null>(null);
 const txValid = ref<boolean>(false);
-const steps = ref([
-  {
-    name: 'recipientDetails',
-    label: t('wallet.recipientDetails'),
-  },
-  {
-    name: 'assetsToSend',
-    label: t('wallet.assetsToSend'),
-  },
-  {
-    name: 'summary',
-    label: t('wallet.summary'),
-  },
-]);
-const tx = ref<Cardano.Tx | undefined>(undefined);
 const isCalculatingMax = ref<boolean>(false);
+
+function createEmptyRecipient(): SendRecipient {
+  const nativeAsset = tokens.value.find((t: Token & { balance?: string | number; name?: string; img?: string; ticker: string }) => t.ticker === nativeTicker.value);
+  const adaToken = nativeAsset ? { ...nativeAsset, quantity: '0', verified: true } : null;
+  return {
+    id: crypto.randomUUID(),
+    address: '',
+    resolvedAddress: null,
+    selectedTokens: adaToken ? [adaToken] : [],
+    selectedCollectibles: {},
+    minAda: 0,
+    adaShortage: 0,
+  };
+}
+
+const recipients = ref<SendRecipient[]>([]);
+
+const steps = ref([
+  { name: 'recipients', label: t('wallet.recipients') },
+  { name: 'summary', label: t('wallet.summary') },
+]);
+
+const tx = ref<Cardano.Tx | undefined>(undefined);
 
 // Transaction signing composable (handles sign, submit, password, hardware wallets, Keystone)
 const {
@@ -271,7 +281,7 @@ const {
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
-    const tokens = (Object.values(resolvedAssets.value) as (Token & { metadata: { name: string; ticker: string; decimals: number }; img: string })[]).map(token => {
+    const tokenList = (Object.values(resolvedAssets.value) as (Token & { metadata: { name: string; ticker: string; decimals: number }; img: string })[]).map(token => {
       return {
         ...token,
         name: token.metadata.name,
@@ -284,14 +294,13 @@ const tokens = computed(() => {
         verified: token.verified
       }
     })
-    tokens.sort((a,_b) => {
+    tokenList.sort((a, _b) => {
       if (a.ticker === nativeTicker.value) {
         return -1
       }
       return 0;
-      // return (this.pinnedTokens.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker) TODO
     })
-    return tokens
+    return tokenList
   }
   return []
 })
@@ -309,21 +318,19 @@ const isWalletEmpty = computed(() => {
 
 const isValid = computed(() => {
   if (currentStep.value === 1) {
-    const fn = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
-    return fn(sendData.value.recipientAddress) !== 'Invalid Payment Address'
+    if (!txValid.value) return false;
+    return recipients.value.every((r: SendRecipient) => {
+      const addr = r.resolvedAddress ?? r.address;
+      const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
+      if (rule(addr) !== true) return false;
+      const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
+        Object.keys(r.selectedCollectibles).length > 0;
+      if (!hasAsset) return false;
+      if (r.adaShortage > 0) return false;
+      return true;
+    });
   }
   if (currentStep.value === 2) {
-    if (!txValid.value) {
-      return false;
-    }
-    const hasZeroQuantity = (items: Token[] | Record<string, Collectible & { unit: string }>) => {
-      // Handle both arrays and objects
-      const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-      return itemsArray.some((item: { quantity?: string | number; toSendQuantity?: number }) => Number(item.quantity) === 0 || Number(item.toSendQuantity) === 0);
-    };
-    return !(hasZeroQuantity(sendData.value.selectedTokens) || hasZeroQuantity(sendData.value.selectedCollectibles));
-  }
-  if (currentStep.value === 3) {
     if (isSubmit.value) return true; // Already signed, just need confirm click
     if (loggedWallet.value?.type === WalletType.Normal) {
       if (isPrfWallet.value) return true; // PRF handled by TransactionAuthSection
@@ -335,31 +342,89 @@ const isValid = computed(() => {
 });
 
 const resetData = () => {
-  resetState(); // Reset composable state (password, signing, loading, etc.)
+  resetState();
   currentStep.value = 1;
-  tx.value = undefined
-  txValid.value = false
-  const foundAsset = tokens.value.find(token => token.ticker === nativeTicker.value)
-  if (foundAsset) {
-    foundAsset.verified = true
-  }
-  sendData.value = {
-    selectedTokens: foundAsset ? [foundAsset] : [],
-    selectedCollectibles: {},
-    recipientAddress: '',
-    selectedWallet: loggedWallet.value,
-    minAda: 0,
-    adaShortage: 0
-  };
+  tx.value = undefined;
+  txValid.value = false;
+  recipients.value = [createEmptyRecipient()];
+  expandedRecipientId.value = recipients.value[0].id;
+};
+
+function availableTokensFor(recipientId: string) {
+  const others = recipients.value.filter((r: SendRecipient) => r.id !== recipientId);
+  return tokens.value.map((token: Token & { balance?: string | number; name?: string; img?: string; decimals: number }) => {
+    const committed = others.reduce((sum: number, r: SendRecipient) => {
+      const t2 = r.selectedTokens.find((tk: Token) => tk.unit === token.unit);
+      if (!t2) return sum;
+      return sum + Math.floor(Number(t2.quantity) * Math.pow(10, token.decimals ?? 6));
+    }, 0);
+    const rawBalance = Number(token.balance ?? 0);
+    const newBalance = rawBalance - committed;
+    return { ...token, balance: newBalance < 0 ? 0 : newBalance };
+  });
 }
 
-async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
-  if (!sendData.value.recipientAddress || !isPaymentAddress(sendData.value.recipientAddress)) {
-    return
+function excludedFingerprintsFor(recipientId: string): Set<string> {
+  const others = recipients.value.filter((r: SendRecipient) => r.id !== recipientId);
+  const fingerprints = new Set<string>();
+  others.forEach((r: SendRecipient) => {
+    Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
+      if (col.fingerprint) fingerprints.add(col.fingerprint);
+    });
+  });
+  return fingerprints;
+}
+
+function updateRecipient(id: string, updated: SendRecipient) {
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
+  if (idx !== -1) {
+    recipients.value.splice(idx, 1, updated);
   }
+}
+
+function addRecipient() {
+  const r = createEmptyRecipient();
+  recipients.value.push(r);
+  expandedRecipientId.value = r.id;
+}
+
+function duplicateRecipient(id: string) {
+  const src = recipients.value.find((r: SendRecipient) => r.id === id);
+  if (!src) return;
+  const duped: SendRecipient = {
+    ...JSON.parse(JSON.stringify(src)),
+    id: crypto.randomUUID(),
+    resolvedAddress: src.resolvedAddress,
+  };
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
+  recipients.value.splice(idx + 1, 0, duped);
+  expandedRecipientId.value = duped.id;
+}
+
+function removeRecipient(id: string) {
+  if (recipients.value.length <= 1) return;
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
+  recipients.value.splice(idx, 1);
+  expandedRecipientId.value = recipients.value[Math.max(0, idx - 1)]?.id ?? null;
+}
+
+function expandRecipient(id: string) {
+  expandedRecipientId.value = id;
+}
+
+const showAddLink = computed(() => {
+  const last = recipients.value[recipients.value.length - 1];
+  if (!last) return false;
+  return !!(last.resolvedAddress || isPaymentAddress(last.address));
+});
+
+async function buildTx() {
+  const allValid = recipients.value.every((r: SendRecipient) =>
+    isPaymentAddress(r.resolvedAddress ?? r.address)
+  );
+  if (!allValid) return;
 
   // Proactive network data sync: If tip or epochParams are missing, trigger a fast REST sync
-  // This prevents race condition when user tries to send immediately after login
   if (!tip.value || !epochParams.value) {
     debugLog('⏳ Network data not available, triggering sync...');
     txValid.value = false;
@@ -370,60 +435,38 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
         data: {}
       }) as BackgroundResponse<{ success: boolean; error?: string }>;
 
-      if (response.data.success) {
-        debugLog('✅ Network data synced successfully');
-        // Wait a moment for the store to be updated via messaging
-        await new Promise(resolve => setTimeout(resolve, 100));
+      if (!response.data.success) return;
+      // Wait a moment for the store to be updated via messaging
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (!tip.value || !epochParams.value) return;
+    } catch { return; }
+  }
 
-        // Check again if data is now available
-        if (!tip.value || !epochParams.value) {
-          console.warn('⚠️ Network data still not available after sync, will retry on next change');
-          return;
+  const outputs: Cardano.TxOut[] = recipients.value.map((r: SendRecipient) => {
+    const address = (r.resolvedAddress ?? r.address) as Cardano.PaymentAddress;
+    const assetsMap = new Map<Cardano.AssetId, bigint>();
+    let coinsAmount = BigInt(0);
+
+    r.selectedTokens
+      .filter((tk: Token) => tk && (tk.unit || tk.unit === '') && tk.decimals != null)
+      .forEach((token: Token) => {
+        const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
+        if (token.ticker === nativeTicker.value) {
+          coinsAmount = qty;
+        } else {
+          assetsMap.set(token.unit as Cardano.AssetId, qty);
         }
-      } else {
-        console.error('❌ Failed to sync network data:', response.data.error);
-        return;
-      }
-    } catch (error) {
-      console.error('❌ Error triggering sync:', error);
-      return;
-    }
-  }
+      });
 
-  const recipientAddress = sendData.value.recipientAddress;
-
-  // Build asset map for Cardano JS SDK
-  const assetsMap = new Map<Cardano.AssetId, bigint>();
-  let coinsAmount = BigInt(0);
-
-  if (sendTokens.length > 0) {
-    sendTokens.filter(token => token && (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
-      const quantity = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
-
-      if (token.ticker === nativeTicker.value) {
-        coinsAmount = quantity;
-      } else {
-        assetsMap.set(token.unit as Cardano.AssetId, quantity);
-      }
+    Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
+      assetsMap.set(col.unit as Cardano.AssetId, BigInt(col.toSendQuantity || 0));
     });
-  }
 
-  // selectedCollectibles is an object, convert to array
-  const collectiblesArray = Object.values(sendData.value.selectedCollectibles);
-  if (collectiblesArray.length > 0) {
-    collectiblesArray.forEach(collectible => {
-      assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity || 0));
-    });
-  }
-
-  // Create output using Cardano JS SDK format
-  const outputs: Cardano.TxOut[] = [{
-    address: recipientAddress as Cardano.PaymentAddress,
-    value: {
-      coins: coinsAmount as Cardano.Lovelace,
-      assets: assetsMap
-    }
-  }];
+    return {
+      address,
+      value: { coins: coinsAmount as Cardano.Lovelace, assets: assetsMap }
+    };
+  });
 
   try {
     tx.value = await buildCardanoTransaction({
@@ -438,13 +481,11 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
         accountIndex: 0
       }
     });
-
-    // Don't reset minAda here - it's set by the watch based on selected NFTs
-    sendData.value.adaShortage = 0;
     txValid.value = true;
-    debugLog('Built transaction:', tx.value);
+    debugLog('Built multi-output tx:', tx.value);
   } catch (e) {
-    debugLog(e);
+    debugLog('buildTx error:', e);
+    txValid.value = false;
     throw e;
   }
 }
@@ -452,188 +493,105 @@ async function buildTx(sendTokens: (Token & { balance?: string | number })[]) {
 const summaryRef = ref<InstanceType<typeof SummaryStep>>();
 
 async function nextStep() {
-  if (currentStep.value <= steps.value.length) {
-    if (currentStep.value === 1) {
-      currentStep.value++;
-    } else if (currentStep.value === 2) {
-      summaryRef.value?.scanTx(tx.value);
-      currentStep.value++;
-    } else if (currentStep.value === 3) {
-      if (!isValid.value) return; // Guard Enter-key path against empty password
-      await handleSign();
-    }
+  if (currentStep.value === 1) {
+    summaryRef.value?.scanTx(tx.value);
+    currentStep.value++;
+  } else if (currentStep.value === 2) {
+    if (!isValid.value) return;
+    await handleSign();
   }
 }
 
 function prevStep() {
-  if (currentStep.value > 1) {
-    currentStep.value--;
-  }
+  if (currentStep.value > 1) currentStep.value--;
 }
 
-function updateRecipientAddress(address: string) {
-  sendData.value.recipientAddress = address;
-}
+async function setMax(recipientId: string, tokenIndex: number) {
+  isCalculatingMax.value = true;
+  const recipientIdx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
+  if (recipientIdx === -1) { isCalculatingMax.value = false; return; }
 
-function selectCollectible(collectible: Collectible & { unit: string }) {
-  debugLog('selectCollectible called:', collectible.name);
-  if (collectible.name && sendData.value.selectedCollectibles[collectible.name]) {
-    const { [collectible.name]: _, ...rest } = sendData.value.selectedCollectibles;
-    sendData.value.selectedCollectibles = rest;
-    debugLog('Removed collectible:', collectible.name);
-  } else if (collectible.name) {
-    sendData.value.selectedCollectibles = {
-      ...sendData.value.selectedCollectibles,
-      [collectible.name]: collectible
-    };
-    debugLog('Added collectible:', collectible.name);
-  }
-  debugLog('Current selectedCollectibles:', sendData.value.selectedCollectibles);
-  debugLog('Object.values:', Object.values(sendData.value.selectedCollectibles));
-}
+  const recipient = recipients.value[recipientIdx];
+  const sendTokensCopy = JSON.parse(JSON.stringify(recipient.selectedTokens));
+  const selectedToken = sendTokensCopy[tokenIndex];
+  if (!selectedToken) { isCalculatingMax.value = false; return; }
 
-async function setMax(index: number) {
-  isCalculatingMax.value = true; // Disable watch while calculating max
+  const otherAda = recipients.value
+    .filter((r: SendRecipient) => r.id !== recipientId)
+    .reduce((sum: bigint, r: SendRecipient) => {
+      const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+      return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
+    }, BigInt(0));
 
-  const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
-  const selectedToken = sendTokensCopy[index];
-
-  // For non-ADA tokens, just use the full balance
   if (selectedToken.ticker !== nativeTicker.value) {
     if (selectedToken.decimals) {
-      selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
+      selectedToken.quantity = Number(
+        filters.toCurrency(sendTokensCopy[tokenIndex].balance, false, sendTokensCopy[tokenIndex].decimals, '', '', false, sendTokensCopy[tokenIndex].decimals).replaceAll(',', '')
+      );
     } else {
       selectedToken.quantity = Number(selectedToken.balance);
     }
-    await tryBuildMaxTx(sendTokensCopy, index);
+    try {
+      const updated = { ...recipient, selectedTokens: sendTokensCopy };
+      recipients.value.splice(recipientIdx, 1, updated);
+      await buildTx();
+    } catch { /* ignore build errors during max search */ }
     isCalculatingMax.value = false;
     return;
   }
 
-  // For ADA, use two-phase approach: coarse search (1 ADA) then fine-tune (1 lovelace)
-  const totalBalance = BigInt(selectedToken.balance);
-  const ADA_STEP = BigInt(1_000_000); // 1 ADA steps for coarse search
-  const MAX_BUFFER = BigInt(100_000_000); // Stop after 100 ADA buffer
+  const totalBalance = BigInt(selectedToken.balance) - otherAda;
+  if (totalBalance <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
+  const ADA_STEP = BigInt(1_000_000);
+  const MAX_BUFFER = BigInt(100_000_000);
   let buffer = BigInt(0);
   let coarseAmount = BigInt(0);
 
-  // Phase 1: Coarse search with 1 ADA steps
-  debugLog('Phase 1: Coarse search with 1 ADA steps...');
   while (buffer <= MAX_BUFFER) {
-    const attemptAmount = totalBalance - buffer;
-
-    if (attemptAmount <= BigInt(0)) {
-      break;
-    }
-
-    if (selectedToken.decimals) {
-      selectedToken.quantity = Number(filters.toCurrency(Number(attemptAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",",""));
-    } else {
-      selectedToken.quantity = Number(attemptAmount);
-    }
-
+    const attempt = totalBalance - buffer;
+    if (attempt <= BigInt(0)) break;
+    selectedToken.quantity = Number(
+      filters.toCurrency(Number(attempt), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(',', '')
+    );
     try {
-      await buildTx(sendTokensCopy);
-      // Success! Found a working amount
-      coarseAmount = attemptAmount;
-      debugLog(`✓ Coarse MAX found: ${Number(attemptAmount) / 1000000} ADA (buffer: ${Number(buffer) / 1000000} ADA)`);
+      const updated = { ...recipient, selectedTokens: sendTokensCopy };
+      recipients.value.splice(recipientIdx, 1, updated);
+      await buildTx();
+      coarseAmount = attempt;
       break;
-    } catch (e) {
-      // Failed - try 1 ADA less
-      buffer += ADA_STEP;
-    }
+    } catch { buffer += ADA_STEP; }
   }
 
-  if (coarseAmount === BigInt(0)) {
-    debugLog('Could not find working amount in coarse search');
-    isCalculatingMax.value = false;
-    return;
-  }
+  if (coarseAmount === BigInt(0)) { isCalculatingMax.value = false; return; }
 
-  // Phase 2: Binary search fine-tuning (try to add up to 1 ADA back)
-  debugLog('Phase 2: Binary search fine-tuning...');
   let low = coarseAmount;
   let high = coarseAmount + ADA_STEP;
-  if (high > totalBalance) {
-    high = totalBalance;
-  }
+  if (high > totalBalance) high = totalBalance;
   let finalAmount = coarseAmount;
 
-  // Binary search with up to 20 iterations (enough for 1 lovelace precision in 1 ADA range)
-  for (let iteration = 0; iteration < 20 && high - low > BigInt(1); iteration++) {
+  for (let i = 0; i < 20 && high - low > BigInt(1); i++) {
     const mid = (low + high) / BigInt(2);
-
-    if (selectedToken.decimals) {
-      selectedToken.quantity = Number(filters.toCurrency(Number(mid), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",",""));
-    } else {
-      selectedToken.quantity = Number(mid);
-    }
-
+    selectedToken.quantity = Number(
+      filters.toCurrency(Number(mid), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(',', '')
+    );
     try {
-      await buildTx(sendTokensCopy);
-      // Success! Try higher
+      const updated = { ...recipient, selectedTokens: sendTokensCopy };
+      recipients.value.splice(recipientIdx, 1, updated);
+      await buildTx();
       finalAmount = mid;
       low = mid;
-      debugLog(`✓ Binary search: ${Number(mid) / 1000000} ADA works (range: ${Number(high - low)} lovelace)`);
-    } catch (e) {
-      // Failed - try lower
-      high = mid;
-      debugLog(`✗ Binary search: ${Number(mid) / 1000000} ADA failed (range: ${Number(high - low)} lovelace)`);
-    }
+    } catch { high = mid; }
   }
 
-  debugLog(`✓ Final MAX found: ${Number(finalAmount) / 1000000} ADA (added ${Number(finalAmount - coarseAmount)} lovelace to coarse result)`);
+  const finalQty = filters.toCurrency(Number(finalAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(',', '');
+  const finalRecipient = recipients.value[recipientIdx];
+  const finalTokens = [...finalRecipient.selectedTokens];
+  finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: finalQty };
+  recipients.value.splice(recipientIdx, 1, { ...finalRecipient, selectedTokens: finalTokens });
 
-  // Update the quantity and then immediately re-enable the watch
-  // will run once with the final amount
-  // Convert to string to match CurrencyTextField prop type
-  if (selectedToken.decimals) {
-    sendData.value.selectedTokens[index].quantity = filters.toCurrency(Number(finalAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",","");
-  } else {
-    sendData.value.selectedTokens[index].quantity = String(Number(finalAmount));
-  }
-
-  // Re-enable watch AFTER setting the final amount
-  // Wait a tick to ensure the update is processed
   await new Promise(resolve => setTimeout(resolve, 0));
   isCalculatingMax.value = false;
-}
-
-async function tryBuildMaxTx(tokens: (Token & { balance?: string | number })[], index: number) {
-  try {
-    await buildTx(tokens)
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    debugLog('tryBuildMaxTx error:', errorMessage);
-
-    if (errorMessage.includes('Insufficient input in transaction.')) {
-      const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-      if (match) {
-        const maxBalance = Number(match[2]) - Number(match[3])
-        sendData.value.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-      }
-    } else if (errorMessage.includes('less than the minimum UTXO value')) {
-      const match = errorMessage.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
-      if (match) {
-        const adaMinBalance = match[2]
-        const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === nativeTicker.value)
-        if (nativeToken) {
-          nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-          sendData.value.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
-        }
-      }
-    } else if (errorMessage.includes('UTxO Fully Depleted')) {
-      // When all UTXOs are depleted, we can't send the full balance
-      // Reduce the amount by a small margin and try again
-      const currentQty = Number(tokens[index].quantity);
-      const reducedQty = currentQty * 0.95; // Reduce by 5%
-      sendData.value.selectedTokens[index].quantity = `${reducedQty.toFixed(6)}`;
-      debugLog('UTxO Fully Depleted - reduced amount to:', reducedQty);
-    } else {
-      console.error('Unhandled error in tryBuildMaxTx:', e);
-    }
-  }
 }
 
 watch(() => props.isOpen, (val) => {
@@ -642,134 +600,68 @@ watch(() => props.isOpen, (val) => {
   }
 })
 
-// Watch only the properties that should trigger recalculation, not minAda itself
-watch(() => ({
-  selectedTokens: sendData.value.selectedTokens,
-  selectedCollectibles: sendData.value.selectedCollectibles,
-  recipientAddress: sendData.value.recipientAddress
-}), async (val) => {
-  // Skip if we're calculating max - the setMax function handles building the tx
-  if (isCalculatingMax.value) {
-    return;
-  }
+watch(
+  () => recipients.value,
+  async () => {
+    if (isCalculatingMax.value) return;
 
-  try {
-    // selectedCollectibles is an object, not an array
-    const collectiblesArray = val.selectedCollectibles ? Object.values(val.selectedCollectibles) : [];
-    if (!val.recipientAddress) {
-      return;
-    }
-
-    // Calculate minimum ADA required for any assets (tokens or NFTs) if selected
-    // Only count non-native assets (exclude ADA/tADA)
-    const hasNonNativeAssets = collectiblesArray.length > 0 ||
-      val.selectedTokens.some(token => token?.unit && token.ticker !== nativeTicker.value);
-
-    if (hasNonNativeAssets && epochParams.value && val.recipientAddress) {
-      try {
-        debugLog('Calculating minAda for assets:', {
-          collectibles: collectiblesArray.length,
-          tokens: val.selectedTokens.filter(t => t?.unit).length
-        });
-
-        // Build the asset map for both collectibles and tokens
-        const assetsMap = new Map<Cardano.AssetId, bigint>();
-
-        // Add collectibles to assets map
-        collectiblesArray.forEach((collectible) => {
-          debugLog('Adding collectible:', collectible.unit, collectible.toSendQuantity);
-          assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity || 0));
-        });
-
-        // Add tokens (non-ADA) to assets map
-        // Only add tokens that are NOT the native currency (ADA/tADA)
-        val.selectedTokens.forEach(token => {
-          if (token?.unit && token.ticker !== nativeTicker.value) { // Skip ADA/native currency
-            const quantity = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
-            if (quantity > 0) {
-              debugLog('Adding token:', token.unit, quantity);
-              assetsMap.set(token.unit as Cardano.AssetId, BigInt(quantity));
-            }
-          }
-        });
-
-        debugLog('Assets map size:', assetsMap.size);
-        debugLog('Recipient address:', val.recipientAddress);
-        debugLog('coinsPerUtxoByte:', epochParams.value.coinsPerUtxoByte);
-
-        // Create a mock output with all assets to calculate min ADA
-        const mockOutput: Cardano.TxOut = {
-          address: val.recipientAddress as Cardano.PaymentAddress,
-          value: {
-            coins: BigInt(0) as Cardano.Lovelace, // We're calculating the minimum, so start with 0
-            assets: assetsMap
-          }
-        };
-
-        debugLog('Mock output created with assets:', assetsMap.size);
-
-        // Use the actual protocol function to calculate minimum ADA
-        const minAdaLovelace = BrowserTxConstruction.minAdaRequired(
-          mockOutput,
-          BigInt(epochParams.value.coinsPerUtxoByte)
-        );
-
-        sendData.value.minAda = Number(minAdaLovelace) / 1000000;
-        debugLog('Calculated minAda for all assets (accurate):', sendData.value.minAda, 'ADA');
-      } catch (error) {
-        console.error('Error calculating minAda:', error);
-        console.error('Error stack:', error instanceof Error ? error.stack : error);
-        sendData.value.minAda = 0;
+    for (const r of recipients.value) {
+      if (!epochParams.value) continue;
+      const addr = r.resolvedAddress ?? r.address;
+      if (!addr) continue;
+      const assetsMap = new Map<Cardano.AssetId, bigint>();
+      Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
+        assetsMap.set(col.unit as Cardano.AssetId, BigInt(col.toSendQuantity || 0));
+      });
+      r.selectedTokens.forEach((token: Token) => {
+        if (token?.unit && token.ticker !== nativeTicker.value) {
+          const qty = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
+          if (qty > 0) assetsMap.set(token.unit as Cardano.AssetId, BigInt(qty));
+        }
+      });
+      if (assetsMap.size > 0) {
+        try {
+          const mockOut: Cardano.TxOut = {
+            address: addr as Cardano.PaymentAddress,
+            value: { coins: BigInt(0) as Cardano.Lovelace, assets: assetsMap }
+          };
+          const minAdaLovelace = BrowserTxConstruction.minAdaRequired(mockOut, BigInt(epochParams.value.coinsPerUtxoByte));
+          r.minAda = Number(minAdaLovelace) / 1_000_000;
+        } catch { r.minAda = 0; }
+      } else {
+        r.minAda = 0;
       }
-    } else {
-      sendData.value.minAda = 0;
     }
 
-    await buildTx(val.selectedTokens)
-    txValid.value = true
-  } catch(e) {
-    console.error('Build tx error:', e)
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    debugLog('Error message:', errorMessage);
-
-    if (errorMessage.includes('less than the minimum UTXO value') || errorMessage.includes('OutputTooSmallUTxO')) {
-      const match = errorMessage.match(/minimum UTXO value (\d+)/);
-      const number = match ? parseInt(match[1], 10) : null;
-      if (number) {
-        const errorMinAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""));
-        debugLog('Transaction builder reported minAda:', errorMinAda, 'but we calculated:', sendData.value.minAda);
-        // Only update if the error value is higher (more conservative)
-        if (errorMinAda > sendData.value.minAda) {
-          sendData.value.minAda = errorMinAda;
-          debugLog('Updated minAda from error to:', sendData.value.minAda);
+    try {
+      await buildTx();
+      txValid.value = true;
+      recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('less than the minimum UTXO value') || msg.includes('OutputTooSmallUTxO')) {
+        const match = msg.match(/minimum UTXO value (\d+)/);
+        if (match) {
+          const errMin = Number(filters.toCurrency(parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+          if (recipients.value[0]) recipients.value[0].minAda = Math.max(recipients.value[0].minAda, errMin);
+        }
+      } else if (msg.includes('Insufficient input in transaction.')) {
+        const match = msg.match(/\{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+        if (match) {
+          const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+          if (recipients.value[0]) recipients.value[0].adaShortage = shortage;
         }
       }
-    } else if (errorMessage.includes('Insufficient input in transaction.')) {
-      const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-      if (match) {
-        const number = parseInt(match[2], 10) - parseInt(match[1], 10)
-        sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-        debugLog('Set adaShortage to:', sendData.value.adaShortage);
-      }
-    } else if (errorMessage.includes('UTxO Fully Depleted')) {
-      // This can happen when trying to send all ADA - just mark as invalid, user needs to reduce amount
-      debugLog('UTxO Fully Depleted - cannot build transaction with current amount');
-    } else if (errorMessage.includes('Maximum Input Count Exceeded')) {
-      // Wallet has too many small UTXOs - user needs to reduce the amount
-      debugLog('Maximum Input Count Exceeded - wallet has too many small UTXOs, reduce amount');
+      txValid.value = false;
     }
-    txValid.value = false
-  }
-}, { deep: true })
+  },
+  { deep: true }
+);
 
 onMounted(() => {
-  if (resolvedAssets.value) {
-    const adaAssetFound = (Object.values(resolvedAssets.value) as (Token & { metadata: { ticker: string } })[]).find(asset => asset.metadata.ticker === nativeTicker.value);
-    if (adaAssetFound) {
-      sendData.value.selectedTokens = [adaAssetFound];
-    }
-  }
-})
+  recipients.value = [createEmptyRecipient()];
+  expandedRecipientId.value = recipients.value[0]?.id ?? null;
+});
 </script>
 <style scoped>
 .send-dialog-content {
