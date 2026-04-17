@@ -174,6 +174,21 @@ export function cardanoUtxoToNexusInput(utxo: Cardano.Utxo): NexusTxInput {
 
 // ── Public API ──
 
+export interface MaxAdaRequest {
+  destinationAddress: string;
+  changeAddress: string;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+}
+
+export interface MaxAdaResponse {
+  max_lovelace: string;
+  estimated_fee: string;
+  change_min_utxo: string;
+  total_balance: string;
+}
+
 export const nexusTxApi = {
   /**
    * Build an unsigned transfer transaction (ADA + optional native tokens) via nexus.
@@ -186,6 +201,21 @@ export const nexusTxApi = {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/v1/tx/build?network=${nexusNetwork}` : '/v1/tx/build';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    return data;
+  },
+
+  /**
+   * Calculate the maximum sendable ADA given a set of UTxOs.
+   * Nexus selects ALL UTxOs, computes fee + change min UTxO for native tokens,
+   * and returns the precise maximum.
+   */
+  async calculateMaxAda(
+    request: MaxAdaRequest,
+    network?: string
+  ): Promise<MaxAdaResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork ? `/v1/tx/max-ada?network=${nexusNetwork}` : '/v1/tx/max-ada';
+    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, request);
     return data;
   },
 };
