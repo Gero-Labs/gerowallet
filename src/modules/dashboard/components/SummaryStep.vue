@@ -5,15 +5,28 @@
         <v-card flat class="transparent">
           <v-card-title class="text-left">
             <Select
-              :value="sendData?.selectedWallet"
-              :items="sendData?.selectedWallet ? [sendData.selectedWallet] : []"
+              :value="loggedWallet"
+              :items="loggedWallet ? [loggedWallet] : []"
               :label="t('wallet.from')"
               :readonly="true"
             ></Select>
           </v-card-title>
           <v-card-text>
             <v-icon>mdi-arrow-down-thin</v-icon>
-            <DappAddress class="mb-4" :address="primaryRecipientAddress" :risk="risks?.addressRisk" :with-bg="false" />
+            <div
+              v-for="(r, idx) in recipients"
+              :key="r.id"
+              class="mb-2"
+            >
+              <div class="caption mb-1" style="color: rgba(255,255,255,0.4)" v-if="recipients.length > 1">
+                {{ $t('wallet.recipient') }} {{ idx + 1 }}
+              </div>
+              <DappAddress
+                :address="r.resolvedAddress || r.address"
+                :risk="idx === 0 ? risks && risks.addressRisk : undefined"
+                :with-bg="false"
+              />
+            </div>
             <v-icon>mdi-arrow-down-thin</v-icon>
             <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true" :with-bg="false">
               {{ $t('wallet.youreGiving') }}
@@ -61,8 +74,7 @@ const { t } = useTranslation();
 import type { SendRecipient } from '@/models/send-flow.types';
 
 interface Props {
-  recipients?: SendRecipient[];
-  sendData?: Record<string, unknown>;
+  recipients: SendRecipient[];
   txData?: Cardano.Tx;
 }
 
@@ -82,12 +94,9 @@ const changeAddress = computed(() => {
   return loggedWallet.value?.baseAddress;
 });
 
-const primaryRecipientAddress = computed(() => {
-  if (props.recipients && props.recipients.length > 0) {
-    return props.recipients[0].resolvedAddress ?? props.recipients[0].address ?? '';
-  }
-  return props.sendData?.recipientAddress ?? '';
-});
+const primaryRecipientAddress = computed(() =>
+  props.recipients[0]?.resolvedAddress ?? props.recipients[0]?.address ?? ''
+);
 
 const recipient = computed(() => {
   if (tx.value && tx.value.body.outputs) {
@@ -200,7 +209,7 @@ async function scanTx(txData: Cardano.Tx) {
 
   // Make Cardano Shield scan non-blocking with 5-second timeout
   // Don't block the UI if the scan is slow or fails
-  const toAddress = props.recipients?.[0]?.resolvedAddress ?? props.recipients?.[0]?.address ?? props.sendData?.recipientAddress ?? '';
+  const toAddress = primaryRecipientAddress.value;
   const scanWithTimeout = Promise.race([
     cardanoShieldApi.scanTx({
       cborHex,
