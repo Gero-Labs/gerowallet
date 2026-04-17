@@ -217,10 +217,10 @@ import filters from '@/shared/utils/filters';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest, type NexusTxAsset } from '@/api/nexus-tx-api';
+import { Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { BackgroundResponse, Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
@@ -237,7 +237,7 @@ const emit = defineEmits(['close']);
 const { t } = useTranslation();
 
 const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolvedCollections } = toRefs(walletStore)
-const { tip, epochParams } = toRefs(networkStore)
+const { epochParams } = toRefs(networkStore)
 
 const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
 
@@ -489,71 +489,69 @@ const globalTotal = computed(() => {
   };
 });
 
+/**
+ * Build the transaction via Nexus backend (/v1/tx/build).
+ * Server-side building gives us fresh protocol params, canonical fee calculation,
+ * and coin selection without needing local tip/epochParams.
+ */
 async function buildTx() {
   const allValid = recipients.value.every((r: SendRecipient) =>
     isPaymentAddress(r.resolvedAddress ?? r.address)
   );
   if (!allValid) return;
 
-  // Proactive network data sync: If tip or epochParams are missing, trigger a fast REST sync
-  if (!tip.value || !epochParams.value) {
-    debugLog('⏳ Network data not available, triggering sync...');
-    txValid.value = false;
-
-    try {
-      const response = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SYNC_VIA_REST,
-        data: {}
-      }) as BackgroundResponse<{ success: boolean; error?: string }>;
-
-      if (!response.data.success) return;
-      // Wait a moment for the store to be updated via messaging
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (!tip.value || !epochParams.value) return;
-    } catch { return; }
-  }
-
-  const outputs: Cardano.TxOut[] = recipients.value.map((r: SendRecipient) => {
-    const address = (r.resolvedAddress ?? r.address) as Cardano.PaymentAddress;
-    const assetsMap = new Map<Cardano.AssetId, bigint>();
-    let coinsAmount = BigInt(0);
+  // Map recipients → Nexus output format
+  const nexusOutputs = recipients.value.map((r: SendRecipient) => {
+    const address = r.resolvedAddress ?? r.address;
+    let lovelace = '0';
+    const assets: NexusTxAsset[] = [];
 
     r.selectedTokens
       .filter((tk: Token) => tk && (tk.unit || tk.unit === '') && tk.decimals != null)
       .forEach((token: Token) => {
         const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
         if (token.ticker === nativeTicker.value) {
-          coinsAmount = qty;
-        } else {
-          assetsMap.set(token.unit as Cardano.AssetId, qty);
+          lovelace = qty.toString();
+        } else if (token.unit) {
+          assets.push({
+            policyId: token.unit.slice(0, 56),
+            assetName: token.unit.slice(56),
+            quantity: qty.toString(),
+          });
         }
       });
 
     Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
-      assetsMap.set(col.unit as Cardano.AssetId, BigInt(col.toSendQuantity || 0));
-    });
-
-    return {
-      address,
-      value: { coins: coinsAmount as Cardano.Lovelace, assets: assetsMap }
-    };
-  });
-
-  try {
-    tx.value = await buildCardanoTransaction({
-      outputs,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: loggedWallet.value.baseAddress,
-      tip: tip.value,
-      walletContext: {
-        keys: keys.value,
-        stakeAddress: loggedWallet.value.stakeAddress,
-        accountIndex: 0
+      if (col.unit) {
+        assets.push({
+          policyId: col.unit.slice(0, 56),
+          assetName: col.unit.slice(56),
+          quantity: String(col.toSendQuantity || 1),
+        });
       }
     });
+
+    return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
+  });
+
+  const request: BuildTxRequest = {
+    outputs: nexusOutputs,
+    changeAddress: keys.value.payment[0].address,
+    utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+    network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+  };
+
+  try {
+    const { tx_cbor: txCborHex, estimated_fee } = await nexusTxApi.buildTransferTx(
+      request,
+      loggedWallet.value.network
+    );
+
+    // Reconstruct the Cardano.Tx from CBOR for the signing composable
+    const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+    tx.value = transaction.toCore();
     txValid.value = true;
-    debugLog('Built multi-output tx:', tx.value);
+    debugLog('Built multi-output tx via Nexus:', { txHash: txCborHex.slice(0, 20) + '...', estimated_fee });
   } catch (e) {
     if (!isCalculatingMax.value) debugLog('buildTx error:', e);
     txValid.value = false;
