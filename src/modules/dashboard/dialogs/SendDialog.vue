@@ -217,6 +217,7 @@ import filters from '@/shared/utils/filters';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import debounce from 'lodash/debounce';
 import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest, type NexusTxAsset } from '@/api/nexus-tx-api';
 import { Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
@@ -672,11 +673,48 @@ watch(() => props.isOpen, (val) => {
   }
 })
 
+// Debounced build — avoids firing on every keystroke (e.g. typing "10" = "1" then "10")
+const debouncedBuild = debounce(async () => {
+  if (isCalculatingMax.value) return;
+
+  const hasAnyAmount = recipients.value.some((r: SendRecipient) =>
+    r.selectedTokens.some((t: Token) => Number(t.quantity) > 0) ||
+    Object.keys(r.selectedCollectibles).length > 0
+  );
+  if (!hasAnyAmount) {
+    txValid.value = false;
+    return;
+  }
+
+  try {
+    await buildTx();
+    txValid.value = true;
+    recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('less than the minimum UTXO value') || msg.includes('OutputTooSmallUTxO')) {
+      const match = msg.match(/minimum UTXO value (\d+)/);
+      if (match) {
+        const errMin = Number(filters.toCurrency(parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+        if (recipients.value[0]) recipients.value[0].minAda = Math.max(recipients.value[0].minAda, errMin);
+      }
+    } else if (msg.includes('Insufficient input in transaction.')) {
+      const match = msg.match(/\{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      if (match) {
+        const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+        if (recipients.value[0]) recipients.value[0].adaShortage = shortage;
+      }
+    }
+    txValid.value = false;
+  }
+}, 500);
+
 watch(
   () => recipients.value,
-  async () => {
+  () => {
     if (isCalculatingMax.value) return;
 
+    // Synchronous: update minAda per recipient (local, no network call)
     for (const r of recipients.value) {
       if (!epochParams.value) continue;
       const addr = r.resolvedAddress ?? r.address;
@@ -705,37 +743,8 @@ watch(
       }
     }
 
-    // Only call buildTx when at least one recipient has a non-zero ADA or token amount
-    const hasAnyAmount = recipients.value.some((r: SendRecipient) =>
-      r.selectedTokens.some((t: Token) => Number(t.quantity) > 0) ||
-      Object.keys(r.selectedCollectibles).length > 0
-    );
-    if (!hasAnyAmount) {
-      txValid.value = false;
-      return;
-    }
-
-    try {
-      await buildTx();
-      txValid.value = true;
-      recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('less than the minimum UTXO value') || msg.includes('OutputTooSmallUTxO')) {
-        const match = msg.match(/minimum UTXO value (\d+)/);
-        if (match) {
-          const errMin = Number(filters.toCurrency(parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
-          if (recipients.value[0]) recipients.value[0].minAda = Math.max(recipients.value[0].minAda, errMin);
-        }
-      } else if (msg.includes('Insufficient input in transaction.')) {
-        const match = msg.match(/\{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-        if (match) {
-          const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
-          if (recipients.value[0]) recipients.value[0].adaShortage = shortage;
-        }
-      }
-      txValid.value = false;
-    }
+    // Async: debounced network call to build tx
+    debouncedBuild();
   },
   { deep: true }
 );
