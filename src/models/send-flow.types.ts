@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Types for the shared send flow components
  * Used by dashboard and multisig modules
