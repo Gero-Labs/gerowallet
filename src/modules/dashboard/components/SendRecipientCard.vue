@@ -9,8 +9,7 @@
       <!-- ─── Header ─── -->
       <v-expansion-panel-header class="recipient-panel__header" disable-icon-rotate>
         <div class="header-left">
-          <v-icon x-small color="#00DFF3" class="mr-2">mdi-account-outline</v-icon>
-          <span class="header-label">{{ $t('wallet.recipient') }} {{ index + 1 }}</span>
+          <span class="header-number">#{{ index + 1 }}</span>
           <span v-if="!isExpanded && displayAddress" class="collapsed-address ml-2">
             {{ displayAddress }}
           </span>
@@ -394,11 +393,20 @@ defineExpose({ cardTotalAmounts });
   min-width: 0;
 }
 
-.header-label {
-  color: #94969C;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
+.header-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(0, 223, 243, 0.1);
+  color: #00DFF3;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  margin-right: 6px;
 }
 
 .collapsed-address {
