@@ -674,12 +674,26 @@ async function setMax(recipientId: string, tokenIndex: number) {
       }
     }
 
-    if (changeHasAssets && changeOutputCoins > BigInt(0)) {
-      // Change has native tokens — the coins in change are the min UTxO requirement.
-      // We can send: totalBalance - fee - changeMinUtxo
-      // The changeOutputCoins IS the min UTxO (Nexus sets it to exactly that).
-      changeRequired = changeOutputCoins;
-      debugLog('setMax: change output has native tokens, locked ADA =', Number(changeRequired) / 1_000_000);
+    if (changeHasAssets) {
+      // Change has native tokens — compute min UTxO for the change output's assets.
+      // changeOutputCoins is NOT the min UTxO — it's the leftover ADA (much more).
+      // Use BrowserTxConstruction.minAdaRequired to get the exact min.
+      if (epochParams.value) {
+        try {
+          const changeOut = txOutputs.find(out => String(out.address) === changeAddr);
+          if (changeOut) {
+            const mockChange: Cardano.TxOut = {
+              address: changeOut.address,
+              value: { coins: BigInt(0) as Cardano.Lovelace, assets: changeOut.value.assets },
+            };
+            changeRequired = BrowserTxConstruction.minAdaRequired(mockChange, BigInt(epochParams.value.coinsPerUtxoByte));
+          }
+        } catch {
+          // Fallback: use the error message approach on the next build
+          changeRequired = BigInt(0);
+        }
+      }
+      debugLog('setMax: change output min UTxO =', Number(changeRequired) / 1_000_000, 'ADA');
     }
 
     maxLovelace = totalBalanceLovelace - actualFee - changeRequired;
