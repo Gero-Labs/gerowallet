@@ -616,8 +616,10 @@ async function setMax(recipientId: string, tokenIndex: number) {
     return;
   }
 
-  // ADA max: let Nexus tell us the exact fee and change requirements.
-  // Strategy: try sending entire balance, parse Nexus response for exact numbers.
+  // ADA max: 2-step approach using Nexus.
+  // Step 1: build with balance - 1 ADA (minimal reserve for fee).
+  //         If it fails with change output error, parse exact requirement.
+  // Step 2: rebuild with balance - changeRequired - actualFee.
   const otherAdaLovelace = recipients.value
     .filter((r: SendRecipient) => r.id !== recipientId)
     .reduce((sum: bigint, r: SendRecipient) => {
@@ -626,81 +628,77 @@ async function setMax(recipientId: string, tokenIndex: number) {
     }, BigInt(0));
 
   const totalBalanceLovelace = BigInt(selectedToken.balance) - otherAdaLovelace;
-  if (totalBalanceLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
+  if (totalBalanceLovelace <= BigInt(1_000_000)) { isCalculatingMax.value = false; return; }
 
-  // Attempt 1: try sending the full balance — Nexus will either succeed or
-  // tell us exactly how much is needed for the change output.
-  const fullQty = Number(totalBalanceLovelace) / 1_000_000;
-  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(fullQty) };
+  // Step 1: send balance - 1 ADA to get fee or change error
+  const probe = totalBalanceLovelace - BigInt(1_000_000);
+  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(Number(probe) / 1_000_000) };
   recipients.value.splice(recipientIdx, 1, { ...recipient, selectedTokens: sendTokensCopy });
+
+  let changeRequired = BigInt(0);
+  let actualFee = BigInt(0);
+  let probeSucceeded = false;
 
   try {
     await buildTx();
-    // Success — the entire balance fit (no change output needed, or change was ADA-only).
-    // Now subtract the actual fee for precision.
-    const actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(0);
-    if (actualFee > BigInt(0)) {
-      const preciseMax = totalBalanceLovelace - actualFee;
-      const preciseQty = Number(preciseMax) / 1_000_000;
-      const tokens2 = [...recipients.value[recipientIdx].selectedTokens];
-      tokens2[tokenIndex] = { ...tokens2[tokenIndex], quantity: String(preciseQty) };
-      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: tokens2 });
-      try { await buildTx(); } catch { /* keep full-balance build */ }
-    }
+    probeSucceeded = true;
+    actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(200_000);
   } catch (err: unknown) {
-    // Parse Nexus error to get the exact required amount for change output
-    let changeRequired = BigInt(0);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const axiosErr = err as { response?: { data?: { message?: string } } };
-    const errMsg = axiosErr?.response?.data?.message || (err instanceof Error ? err.message : '');
+    const errMsg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : '');
+    debugLog('setMax probe error:', errMsg);
 
-    // Pattern: "Available: 1519026 lovelace, required: 13016200 lovelace"
+    // Parse: "required: 13016200 lovelace"
     const match = errMsg.match(/required:\s*(\d+)\s*lovelace/);
     if (match) {
       changeRequired = BigInt(match[1]);
-      debugLog('setMax: Nexus requires', Number(changeRequired) / 1_000_000, 'ADA for change output (native tokens)');
-    }
-
-    if (changeRequired > BigInt(0)) {
-      // Store locked amount for UI display
-      const lockedAda = Number(changeRequired) / 1_000_000;
-
-      // Precise calculation: balance - changeRequired - estimated fee
-      const reducedLovelace = totalBalanceLovelace - changeRequired;
-      if (reducedLovelace <= BigInt(0)) {
-        recipients.value[recipientIdx].adaShortage = lockedAda;
-        isCalculatingMax.value = false;
-        return;
-      }
-
-      const reducedQty = Number(reducedLovelace) / 1_000_000;
-      const tokens3 = [...recipients.value[recipientIdx].selectedTokens];
-      tokens3[tokenIndex] = { ...tokens3[tokenIndex], quantity: String(reducedQty) };
-      const updatedRecipient3 = { ...recipients.value[recipientIdx], selectedTokens: tokens3 };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (updatedRecipient3 as any).lockedForTokens = lockedAda;
-      recipients.value.splice(recipientIdx, 1, updatedRecipient3);
-
-      try {
-        await buildTx();
-        // Now subtract the actual fee
-        const actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(0);
-        if (actualFee > BigInt(0)) {
-          const finalLovelace = totalBalanceLovelace - changeRequired - actualFee;
-          if (finalLovelace > BigInt(0)) {
-            const finalQty = Number(finalLovelace) / 1_000_000;
-            const tokens4 = [...recipients.value[recipientIdx].selectedTokens];
-            tokens4[tokenIndex] = { ...tokens4[tokenIndex], quantity: String(finalQty) };
-            const updatedRecipient4 = { ...recipients.value[recipientIdx], selectedTokens: tokens4 };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (updatedRecipient4 as any).lockedForTokens = lockedAda;
-            recipients.value.splice(recipientIdx, 1, updatedRecipient4);
-            try { await buildTx(); } catch { /* keep previous */ }
-          }
-        }
-      } catch { /* keep reduced amount */ }
+      debugLog('setMax: change output needs', Number(changeRequired) / 1_000_000, 'ADA for native tokens');
     }
   }
+
+  // Step 2: calculate precise max
+  let maxLovelace: bigint;
+  if (probeSucceeded) {
+    // No change issue — max = balance - fee
+    maxLovelace = totalBalanceLovelace - actualFee;
+  } else if (changeRequired > BigInt(0)) {
+    // Change needs ADA for tokens — first get fee with reduced amount
+    const reduced = totalBalanceLovelace - changeRequired - BigInt(1_000_000);
+    if (reduced <= BigInt(0)) {
+      // Not enough ADA even after reserving for change
+      const lockedAda = Number(changeRequired) / 1_000_000;
+      recipients.value[recipientIdx].adaShortage = lockedAda;
+      isCalculatingMax.value = false;
+      return;
+    }
+    const tokens3 = [...recipients.value[recipientIdx].selectedTokens];
+    tokens3[tokenIndex] = { ...tokens3[tokenIndex], quantity: String(Number(reduced) / 1_000_000) };
+    recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: tokens3 });
+    try {
+      await buildTx();
+      actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(200_000);
+    } catch {
+      actualFee = BigInt(300_000); // fallback fee estimate
+    }
+    maxLovelace = totalBalanceLovelace - changeRequired - actualFee;
+  } else {
+    // Unknown error — use conservative estimate
+    maxLovelace = totalBalanceLovelace - BigInt(2_000_000);
+  }
+
+  if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
+
+  // Apply final max and build
+  const finalQty = Number(maxLovelace) / 1_000_000;
+  const finalTokens = [...recipients.value[recipientIdx].selectedTokens];
+  finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: String(finalQty) };
+  const finalRecipient = { ...recipients.value[recipientIdx], selectedTokens: finalTokens };
+  if (changeRequired > BigInt(0)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (finalRecipient as any).lockedForTokens = Number(changeRequired) / 1_000_000;
+  }
+  recipients.value.splice(recipientIdx, 1, finalRecipient);
+  try { await buildTx(); } catch { /* keep the calculated amount */ }
 
   isCalculatingMax.value = false;
 }
