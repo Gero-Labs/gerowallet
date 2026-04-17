@@ -3,6 +3,7 @@
     :value="isExpanded ? 0 : undefined"
     class="recipient-panel"
     flat
+    :readonly="!canDelete"
     @change="onPanelChange"
   >
     <v-expansion-panel class="recipient-panel__panel">
