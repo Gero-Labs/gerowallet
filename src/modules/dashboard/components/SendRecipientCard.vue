@@ -41,7 +41,7 @@
         <v-tooltip bottom content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn icon x-small v-bind="attrs" v-on="on" @click="$emit('duplicate')">
-              <v-icon style="font-size: 13px;" color="rgba(255,255,255,0.3)">mdi-content-copy</v-icon>
+              <v-icon style="font-size: 13px;" color="rgba(255,255,255,0.3)">mdi-content-duplicate</v-icon>
             </v-btn>
           </template>
           <span>{{ $t('wallet.duplicateRecipient') }}</span>
