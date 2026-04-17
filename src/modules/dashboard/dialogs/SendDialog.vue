@@ -431,11 +431,13 @@ async function duplicateRecipient(id: string) {
   expandedRecipientId.value = duped.id;
 }
 
-function removeRecipient(id: string) {
+async function removeRecipient(id: string) {
   if (recipients.value.length <= 1) return;
+  const targetId = recipients.value[Math.max(0, recipients.value.findIndex((r: SendRecipient) => r.id === id) - 1)]?.id ?? null;
   const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
   recipients.value.splice(idx, 1);
-  expandedRecipientId.value = recipients.value[Math.max(0, idx - 1)]?.id ?? null;
+  await nextTick();
+  expandedRecipientId.value = targetId;
 }
 
 function expandRecipient(id: string) {
