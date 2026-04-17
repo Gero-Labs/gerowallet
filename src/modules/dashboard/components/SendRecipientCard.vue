@@ -66,6 +66,19 @@
             <template v-slot:append>
               <v-progress-circular v-if="resolving" color="white" size="16" width="2" indeterminate />
               <v-icon v-else-if="resolvedFailed" color="#F97066" small>mdi-alert</v-icon>
+              <v-tooltip v-else-if="canSaveContact" bottom content-class="custom-tooltip">
+                <template v-slot:activator="{ on, attrs }">
+                  <v-icon
+                    small
+                    :color="isAlreadyContact ? '#00DFF3' : 'rgba(255,255,255,0.3)'"
+                    class="save-contact-icon"
+                    v-bind="attrs"
+                    v-on="on"
+                    @click.stop="isAlreadyContact ? null : saveCurrentAsContact()"
+                  >{{ isAlreadyContact ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline' }}</v-icon>
+                </template>
+                <span>{{ isAlreadyContact ? $t('wallet.contactSaved') : $t('wallet.saveContact') }}</span>
+              </v-tooltip>
             </template>
           </v-text-field>
 
@@ -92,18 +105,46 @@
               </v-card-title>
 
               <v-card-text class="contacts-dialog-body">
+                <!-- Add contact form -->
+                <div class="add-contact-form">
+                  <v-text-field
+                    v-model="newContactName"
+                    :placeholder="$t('wallet.contactName')"
+                    outlined dense hide-details
+                    class="add-contact-input mr-2"
+                  />
+                  <v-text-field
+                    v-model="newContactAddress"
+                    :placeholder="$t('wallet.address')"
+                    outlined dense hide-details
+                    class="add-contact-input mr-2"
+                  />
+                  <v-btn
+                    icon small
+                    color="#00DFF3"
+                    :disabled="!newContactName || !newContactAddress"
+                    @click="addNewContact()"
+                  >
+                    <v-icon small>mdi-plus</v-icon>
+                  </v-btn>
+                </div>
+
+                <v-divider class="my-2" style="border-color: rgba(255,255,255,0.06);" />
+
+                <!-- Contact list -->
                 <template v-if="contacts && Object.values(contacts).length > 0">
                   <div
                     v-for="contact in Object.values(contacts)"
                     :key="contact.address"
                     class="contact-item"
-                    @click="selectContact(contact)"
                   >
-                    <div class="contact-item__info">
+                    <div class="contact-item__info" @click="selectContact(contact)" style="flex: 1; cursor: pointer;">
                       <span class="contact-item__name">{{ contact.name || $t('wallet.unnamed') }}</span>
                       <span class="contact-item__address">{{ filters.truncate(contact.address, 20) }}</span>
                     </div>
-                    <v-icon x-small style="opacity: 0.3;">mdi-chevron-right</v-icon>
+                    <v-btn icon x-small @click.stop="deleteContact(contact.address)" class="ml-1">
+                      <v-icon x-small color="#F97066">mdi-trash-can-outline</v-icon>
+                    </v-btn>
                   </div>
                 </template>
                 <div v-else class="contacts-empty">
@@ -174,6 +215,7 @@ import filters from '@/shared/utils/filters';
 import { isPaymentAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
+import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
 
 interface Props {
   recipient: SendRecipient;
@@ -325,6 +367,52 @@ function selectContact(item: { handle?: string; address: string; name?: string }
   }
 }
 
+// ─── Contacts management ───
+
+const newContactName = ref('');
+const newContactAddress = ref('');
+
+/** The resolved payment address for the current input */
+const currentPaymentAddress = computed(() =>
+  props.recipient.resolvedAddress || (isPaymentAddress(localAddress.value) ? localAddress.value : '')
+);
+
+/** Whether the address field has a valid address that can be saved */
+const canSaveContact = computed(() => !!currentPaymentAddress.value);
+
+/** Whether the current address is already in contacts */
+const isAlreadyContact = computed(() =>
+  !!currentPaymentAddress.value && !!contacts.value?.[currentPaymentAddress.value]
+);
+
+/** Save the current recipient address as a contact */
+async function saveCurrentAsContact() {
+  const addr = currentPaymentAddress.value;
+  if (!addr || !loggedWallet.value) return;
+  const handle = localAddress.value.startsWith('$') ? localAddress.value : undefined;
+  const name = handleAsset.value?.name || '';
+  const contact = { address: addr, name, handle };
+  contacts.value[addr] = contact;
+  await addOrUpdateContact(loggedWallet.value.id, contact);
+}
+
+/** Add a new contact from the dialog form */
+async function addNewContact() {
+  if (!newContactName.value || !newContactAddress.value || !loggedWallet.value) return;
+  const contact = { address: newContactAddress.value, name: newContactName.value, handle: undefined };
+  contacts.value[newContactAddress.value] = contact;
+  await addOrUpdateContact(loggedWallet.value.id, contact);
+  newContactName.value = '';
+  newContactAddress.value = '';
+}
+
+/** Delete a contact */
+async function deleteContact(address: string) {
+  if (!loggedWallet.value) return;
+  delete contacts.value[address];
+  await removeContact(loggedWallet.value.id, address);
+}
+
 watch(() => props.recipient.address, (newVal) => {
   if (newVal !== localAddress.value) {
     localAddress.value = newVal;
@@ -457,6 +545,10 @@ defineExpose({ cardTotalAmounts });
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
+.address-input :deep(.v-input__icon--clear .v-icon) {
+  font-size: 14px !important;
+}
+
 .address-input :deep(.v-input--is-focused fieldset) {
   border-color: #00DFF3 !important;
   border-width: 1px !important;
@@ -531,5 +623,43 @@ defineExpose({ cardTotalAmounts });
   padding: 32px 16px;
   color: rgba(255, 255, 255, 0.35);
   font-size: 13px;
+}
+
+/* ─── Add contact form ─── */
+.add-contact-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.add-contact-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-contact-input :deep(.v-input__slot) {
+  background-color: #161B26 !important;
+  border-radius: 8px;
+  min-height: 32px !important;
+  padding: 0 8px !important;
+}
+
+.add-contact-input :deep(input) {
+  font-size: 12px;
+}
+
+.add-contact-input :deep(fieldset) {
+  border-color: transparent !important;
+}
+
+/* ─── Save contact icon ─── */
+.save-contact-icon {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.save-contact-icon:hover {
+  color: #00DFF3 !important;
 }
 </style>
