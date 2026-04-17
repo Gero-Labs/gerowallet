@@ -64,14 +64,17 @@
             </template>
             <template v-slot:append>
               <div class="address-append-icons">
-                <v-progress-circular v-if="resolving" color="white" size="14" width="2" indeterminate />
-                <v-icon v-else-if="resolvedFailed" color="#F97066" style="font-size: 14px;">mdi-alert</v-icon>
+                <!-- 1. Clear (always leftmost when visible) -->
                 <v-icon
                   v-if="localAddress && !resolving"
                   color="white"
                   style="font-size: 14px; cursor: pointer; opacity: 0.6;"
                   @click="localAddress = ''; resolveAddress('')"
                 >mdi-close</v-icon>
+                <!-- 2. Status: loading or error -->
+                <v-progress-circular v-if="resolving" color="white" size="14" width="2" indeterminate />
+                <v-icon v-else-if="resolvedFailed" color="#F97066" style="font-size: 14px;">mdi-alert</v-icon>
+                <!-- 3. Save to contacts (rightmost) -->
                 <v-tooltip v-if="canSaveContact && !resolving" bottom content-class="custom-tooltip">
                   <template v-slot:activator="{ on, attrs }">
                     <v-icon
