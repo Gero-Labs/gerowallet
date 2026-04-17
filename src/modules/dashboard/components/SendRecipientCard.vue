@@ -54,7 +54,6 @@
             class="address-input"
             :rules="[rules.recipientRules(loggedWallet.chain, loggedWallet.network)]"
             :loading="resolving"
-            clearable
             @input="resolveAddress"
           >
             <!-- Handle image prepended inside input when resolved -->
@@ -64,21 +63,28 @@
               </v-avatar>
             </template>
             <template v-slot:append>
-              <v-progress-circular v-if="resolving" color="white" size="16" width="2" indeterminate />
-              <v-icon v-else-if="resolvedFailed" color="#F97066" small>mdi-alert</v-icon>
-              <v-tooltip v-else-if="canSaveContact" bottom content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <v-icon
-                    small
-                    :color="isAlreadyContact ? '#00DFF3' : 'rgba(255,255,255,0.3)'"
-                    class="save-contact-icon"
-                    v-bind="attrs"
-                    v-on="on"
-                    @click.stop="isAlreadyContact ? null : saveCurrentAsContact()"
-                  >{{ isAlreadyContact ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline' }}</v-icon>
-                </template>
-                <span>{{ isAlreadyContact ? $t('wallet.contactSaved') : $t('wallet.saveContact') }}</span>
-              </v-tooltip>
+              <div class="address-append-icons">
+                <v-progress-circular v-if="resolving" color="white" size="14" width="2" indeterminate />
+                <v-icon v-else-if="resolvedFailed" color="#F97066" style="font-size: 14px;">mdi-alert</v-icon>
+                <v-icon
+                  v-if="localAddress && !resolving"
+                  color="white"
+                  style="font-size: 14px; cursor: pointer; opacity: 0.6;"
+                  @click="localAddress = ''; resolveAddress('')"
+                >mdi-close</v-icon>
+                <v-tooltip v-if="canSaveContact && !resolving" bottom content-class="custom-tooltip">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-icon
+                      :color="isAlreadyContact ? '#00DFF3' : 'rgba(255,255,255,0.3)'"
+                      style="font-size: 14px; cursor: pointer;"
+                      v-bind="attrs"
+                      v-on="on"
+                      @click.stop="isAlreadyContact ? null : saveCurrentAsContact()"
+                    >{{ isAlreadyContact ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline' }}</v-icon>
+                  </template>
+                  <span>{{ isAlreadyContact ? $t('wallet.contactSaved') : $t('wallet.saveContact') }}</span>
+                </v-tooltip>
+              </div>
             </template>
           </v-text-field>
 
@@ -545,14 +551,10 @@ defineExpose({ cardTotalAmounts });
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
-.address-input :deep(.v-input__icon--clear) {
-  height: 32px !important;
-  min-height: 32px !important;
-}
-
-.address-input :deep(.v-input__icon--clear .v-icon) {
-  font-size: 14px !important;
-  color: white !important;
+.address-append-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .address-input :deep(.v-input--is-focused fieldset) {
