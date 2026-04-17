@@ -9,21 +9,57 @@
       >
         <div class="token-row">
           <div class="token-row__left">
-            <v-avatar size="24" class="mr-2">
-              <img
-                :src="token.img"
-                :alt="token.ticker"
-                @error="handleImageError($event, token)"
-              />
-            </v-avatar>
-            <span class="token-ticker">{{ token.ticker }}</span>
-            <v-icon
-              v-if="token.verified"
-              x-small
-              color="primary"
-              class="ml-1"
-              style="margin-top: -1px;"
-            >mdi-check-decagram</v-icon>
+            <!-- Native token (locked, no picker) -->
+            <template v-if="index === 0">
+              <v-avatar size="24" class="mr-2">
+                <img
+                  :src="token.img"
+                  :alt="token.ticker"
+                  @error="handleImageError($event, token)"
+                />
+              </v-avatar>
+              <span class="token-ticker">{{ token.ticker }}</span>
+              <v-icon
+                v-if="token.verified"
+                x-small
+                color="primary"
+                class="ml-1"
+                style="margin-top: -1px;"
+              >mdi-check-decagram</v-icon>
+            </template>
+            <!-- Non-native token (clickable to swap) -->
+            <template v-else>
+              <v-menu offset-y attach max-height="240">
+                <template v-slot:activator="{ on, attrs }">
+                  <div class="token-selector-trigger" v-bind="attrs" v-on="on">
+                    <v-avatar size="24" class="mr-2">
+                      <img
+                        :src="token.img"
+                        :alt="token.ticker"
+                        @error="handleImageError($event, token)"
+                      />
+                    </v-avatar>
+                    <span class="token-ticker">{{ token.ticker }}</span>
+                    <v-icon x-small class="ml-1" style="opacity: 0.4;">mdi-chevron-down</v-icon>
+                  </div>
+                </template>
+                <v-list dense dark class="token-picker-list">
+                  <v-list-item
+                    v-for="available in getAvailableTokens(index)"
+                    :key="available.ticker"
+                    @click="swapToken(index, available)"
+                  >
+                    <v-avatar size="20" class="mr-2">
+                      <img :src="available.img" :alt="available.ticker" />
+                    </v-avatar>
+                    <v-list-item-title style="font-size: 13px;">{{ available.ticker }}</v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 11px; text-align: right;">
+                      {{ formatTokenBalance(available) }}
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
+            </template>
           </div>
           <div class="token-row__right">
             <v-text-field
@@ -85,43 +121,42 @@
       </div>
     </div>
 
-    <!-- Add token / NFT menu -->
+    <!-- Add token / NFT row -->
     <div class="add-asset-row">
-      <v-menu offset-y attach>
+      <!-- Add token picker -->
+      <v-menu offset-y attach max-height="280" v-if="missingTokens.length > 0">
         <template v-slot:activator="{ on, attrs }">
-          <v-btn
-            text
-            x-small
-            color="#00DFF3"
-            v-bind="attrs"
-            v-on="on"
-            class="add-asset-btn"
-          >
+          <v-btn text x-small color="#00DFF3" v-bind="attrs" v-on="on" class="add-asset-btn">
             <v-icon x-small class="mr-1">mdi-plus</v-icon>
-            {{ $t('assets.addTokenOrNft') }}
+            {{ $t('assets.addToken') }}
           </v-btn>
         </template>
-        <v-list dense dark class="add-asset-menu">
+        <v-list dense dark class="token-picker-list">
           <v-list-item
-            @click="addToken()"
-            :disabled="missingTokens.length === 0"
+            v-for="token in missingTokens"
+            :key="token.ticker"
+            @click="addSpecificToken(token)"
           >
-            <v-list-item-icon class="mr-2">
-              <v-icon small>mdi-circle-multiple-outline</v-icon>
-            </v-list-item-icon>
-            <v-list-item-title>{{ $t('assets.addToken') }}</v-list-item-title>
-          </v-list-item>
-          <v-list-item
-            @click="$emit('openCollectiblesDialog')"
-            :disabled="collectiblesCount === 0"
-          >
-            <v-list-item-icon class="mr-2">
-              <v-icon small>mdi-image-multiple-outline</v-icon>
-            </v-list-item-icon>
-            <v-list-item-title>{{ $t('assets.addCollectibleLabel') }}</v-list-item-title>
+            <v-avatar size="20" class="mr-2">
+              <img :src="token.img" :alt="token.ticker" />
+            </v-avatar>
+            <v-list-item-title style="font-size: 13px;">{{ token.ticker }}</v-list-item-title>
+            <v-list-item-subtitle style="font-size: 11px; text-align: right;">
+              {{ formatTokenBalance(token) }}
+            </v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-menu>
+      <!-- Add NFT button -->
+      <v-btn
+        v-if="collectiblesCount > 0"
+        text x-small color="#00DFF3"
+        class="add-asset-btn"
+        @click="$emit('openCollectiblesDialog')"
+      >
+        <v-icon x-small class="mr-1">mdi-plus</v-icon>
+        {{ $t('assets.addCollectibleLabel') }}
+      </v-btn>
     </div>
 
     <!-- Selected NFT chips -->
@@ -448,7 +483,23 @@ function removeTokenSelector(index: number) {
   tokenModel.value = updatedTokens;
 }
 
-function addToken() {
+function addSpecificToken(token: any) {
+  tokenModel.value = [...tokenModel.value, { ...token, quantity: '0' }];
+}
+
+function swapToken(index: number, newToken: any) {
+  const updatedTokens = [...tokenModel.value];
+  updatedTokens[index] = { ...newToken, quantity: updatedTokens[index]?.quantity || '0' };
+  tokenModel.value = updatedTokens;
+}
+
+function formatTokenBalance(token: any): string {
+  if (!token?.balance) return '0';
+  return filters.toCurrency(token.balance, false, 2, '', '', true, token.decimals);
+}
+
+// Legacy addToken — kept for backward compatibility with non-compact consumers
+function _addToken() {
   const existingTickers = tokenModel.value.map((token: any) => token?.ticker);
   const missing = props.tokens.filter((token: any) => !existingTickers.includes(token.ticker));
   if (missing.length > 0) {
@@ -646,6 +697,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .add-asset-row {
   display: flex;
   justify-content: flex-start;
+  gap: 8px;
   padding: 4px 0 2px;
 }
 
@@ -657,10 +709,25 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   height: 26px !important;
 }
 
-.add-asset-menu {
+/* ─── Token picker dropdown ─── */
+.token-selector-trigger {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.token-selector-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.token-picker-list {
   background: #0c0e12 !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 10px !important;
+  max-width: 260px;
 }
 
 /* ─── NFT chips ─── */
