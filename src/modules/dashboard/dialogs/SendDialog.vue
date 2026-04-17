@@ -441,9 +441,7 @@ function expandRecipient(id: string) {
 }
 
 const showAddLink = computed(() => {
-  const last = recipients.value[recipients.value.length - 1];
-  if (!last) return false;
-  return !!(last.resolvedAddress || isPaymentAddress(last.address));
+  return recipients.value.length > 0;
 });
 
 /** Aggregate total across all recipients for the global total line. */
