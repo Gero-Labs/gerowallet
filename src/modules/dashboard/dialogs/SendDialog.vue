@@ -663,11 +663,9 @@ async function setMax(recipientId: string, tokenIndex: number) {
     // The change output is the output sent back to our own address.
     const changeAddr = keys.value.payment[0].address;
     const txOutputs = tx.value.body?.outputs || [];
-    let changeOutputCoins = BigInt(0);
     let changeHasAssets = false;
     for (const out of txOutputs) {
       if (String(out.address) === changeAddr) {
-        changeOutputCoins = BigInt(out.value?.coins || 0);
         const assets = out.value?.assets;
         changeHasAssets = assets instanceof Map ? assets.size > 0 : (!!assets && Object.keys(assets).length > 0);
         break;
