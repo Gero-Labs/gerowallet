@@ -69,8 +69,6 @@
             <v-text-field
               :value="formatQuantityDisplay(token.quantity)"
               @input="onQuantityInput(index, $event)"
-              @focus="onAmountFocus(index)"
-              @blur="onAmountBlur(index)"
               type="text"
               outlined
               dense
@@ -450,27 +448,14 @@ function formatTokenValue(token: any): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const focusedIndex = ref<number>(-1);
-
 function formatQuantityDisplay(quantity: string | number): string {
   if (!quantity && quantity !== 0) return '';
   const raw = String(quantity).replace(/,/g, '');
   const num = parseFloat(raw);
   if (isNaN(num)) return String(quantity);
-  // When focused, show raw number without commas for easy editing
-  if (focusedIndex.value >= 0) return raw;
-  // When blurred, format with commas
   const parts = raw.split('.');
   parts[0] = Number(parts[0]).toLocaleString('en-US');
   return parts.join('.');
-}
-
-function onAmountFocus(index: number) {
-  focusedIndex.value = index;
-}
-
-function onAmountBlur(index: number) {
-  if (focusedIndex.value === index) focusedIndex.value = -1;
 }
 
 function onQuantityInput(index: number, val: string) {
