@@ -8,6 +8,7 @@
     :subtitle="t('wallet.quickSendSubtitle', { currency: nativeTicker })"
     :persistent="false"
     :img="assets.sendSvg"
+    :width="428"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <!-- Empty wallet state -->
@@ -706,17 +707,50 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
   if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
-  // Apply final max and build
-  const finalQty = Number(maxLovelace) / 1_000_000;
-  const finalTokens = [...recipients.value[recipientIdx].selectedTokens];
-  finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: String(finalQty) };
-  const finalRecipient = { ...recipients.value[recipientIdx], selectedTokens: finalTokens };
-  if (changeRequired > BigInt(0)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (finalRecipient as any).lockedForTokens = Number(changeRequired) / 1_000_000;
+  // Apply and build — then self-correct with actual fee if needed
+  const applyMax = (lovelace: bigint) => {
+    const qty = Number(lovelace) / 1_000_000;
+    const tokens = [...recipients.value[recipientIdx].selectedTokens];
+    tokens[tokenIndex] = { ...tokens[tokenIndex], quantity: String(qty) };
+    const r = { ...recipients.value[recipientIdx], selectedTokens: tokens };
+    if (changeRequired > BigInt(0)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (r as any).lockedForTokens = Number(changeRequired) / 1_000_000;
+    }
+    recipients.value.splice(recipientIdx, 1, r);
+  };
+
+  applyMax(maxLovelace);
+  try {
+    await buildTx();
+    // Success — now self-correct: read actual fee, recalculate if different
+    const finalFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : actualFee;
+    if (finalFee !== actualFee) {
+      const corrected = totalBalanceLovelace - finalFee - changeRequired;
+      if (corrected > BigInt(0) && corrected !== maxLovelace) {
+        applyMax(corrected);
+        try { await buildTx(); } catch { applyMax(maxLovelace); /* revert */ }
+      }
+    }
+  } catch {
+    // Failed — fee was higher than probe estimated. Subtract 0.5 ADA more and retry.
+    const retry = maxLovelace - BigInt(500_000);
+    if (retry > BigInt(0)) {
+      applyMax(retry);
+      try {
+        await buildTx();
+        // Self-correct with actual fee
+        const retryFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : BigInt(0);
+        if (retryFee > BigInt(0)) {
+          const corrected = totalBalanceLovelace - retryFee - changeRequired;
+          if (corrected > BigInt(0) && corrected !== retry) {
+            applyMax(corrected);
+            try { await buildTx(); } catch { applyMax(retry); }
+          }
+        }
+      } catch { /* keep retry amount */ }
+    }
   }
-  recipients.value.splice(recipientIdx, 1, finalRecipient);
-  try { await buildTx(); } catch { /* keep the calculated amount */ }
 
   isCalculatingMax.value = false;
 }
@@ -985,7 +1019,7 @@ onMounted(() => {
     width: 100%;
     margin-left: -60px;
     margin-right: -60px;
-    margin-top: 16px;
+    margin-top: 11px;
     background-color: #292929;
 
     &.active-divider {
