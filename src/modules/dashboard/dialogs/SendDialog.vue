@@ -64,7 +64,8 @@
       <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content" :style="currentStep === 2 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
         <CustomStepper :currentStep="currentStep" :steps="steps">
           <v-stepper-content step="1">
-            <div class="recipients-container" style="max-height: 440px; overflow-y: auto; padding: 4px 2px;">
+            <div class="recipients-wrapper">
+            <div class="recipients-container">
               <SendRecipientCard
                 v-for="(recipient, idx) in recipients"
                 :key="recipient.id"
@@ -87,6 +88,7 @@
                   {{ $t('wallet.addAnotherRecipient') }}
                 </v-btn>
               </div>
+            </div>
             </div>
           </v-stepper-content>
           <v-stepper-content step="2">
@@ -669,7 +671,7 @@ onMounted(() => {
   z-index: 1;
   min-height: 0;
   height: 490px;
-  align-content: center;
+  align-content: start;
 }
 
 /* 490px content + ~52px stepper header + ~48px card-actions = ~590px total */
@@ -780,5 +782,19 @@ onMounted(() => {
 }
 .v-stepper__content {
   padding: 0;
+}
+
+.recipients-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 16px 0;
+  max-height: 440px;
+  overflow-y: auto;
+}
+
+.recipients-container {
+  width: 60%;
+  text-align: left;
 }
 </style>
