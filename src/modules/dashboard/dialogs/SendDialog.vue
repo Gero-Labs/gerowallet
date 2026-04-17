@@ -690,6 +690,7 @@ onMounted(() => {
   padding: 8px 0 4px;
   max-height: 460px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .add-recipient-link {
