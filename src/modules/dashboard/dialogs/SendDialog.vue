@@ -631,19 +631,34 @@ async function setMax(recipientId: string, tokenIndex: number) {
   let changeMinUtxo = BigInt(0);
   if (epochParams.value) {
     // Collect all native token assets across wallet UTxOs
+    // Handles all storage formats: Map, Array [{unit,quantity}], plain Object {unit: qty}
     const allWalletAssets = new Map<Cardano.AssetId, bigint>();
     for (const utxo of (utxos.value as Cardano.Utxo[])) {
-      const rawAssets = utxo[1].value.assets as unknown;
+      const rawAssets = utxo[1]?.value?.assets as unknown;
+      if (!rawAssets) continue;
+
+      const addAsset = (unit: string, quantity: unknown) => {
+        if (!unit) return;
+        allWalletAssets.set(
+          unit as Cardano.AssetId,
+          (allWalletAssets.get(unit as Cardano.AssetId) ?? BigInt(0)) + BigInt(String(quantity))
+        );
+      };
+
       if (rawAssets instanceof Map) {
-        rawAssets.forEach((qty: bigint, unit: Cardano.AssetId) => {
-          allWalletAssets.set(unit, (allWalletAssets.get(unit) ?? BigInt(0)) + BigInt(qty));
-        });
-      } else if (rawAssets && typeof rawAssets === 'object') {
+        rawAssets.forEach((qty, unit) => addAsset(String(unit), qty));
+      } else if (Array.isArray(rawAssets)) {
+        for (const a of rawAssets as { unit: string; quantity: unknown }[]) {
+          addAsset(String(a.unit), a.quantity);
+        }
+      } else if (typeof rawAssets === 'object') {
         for (const [unit, qty] of Object.entries(rawAssets as Record<string, unknown>)) {
-          allWalletAssets.set(unit as Cardano.AssetId, (allWalletAssets.get(unit as Cardano.AssetId) ?? BigInt(0)) + BigInt(String(qty)));
+          addAsset(unit, qty);
         }
       }
     }
+
+    debugLog('setMax: wallet has', allWalletAssets.size, 'unique native token assets');
 
     // Subtract tokens being sent by ALL recipients
     for (const r of recipients.value) {
@@ -677,15 +692,19 @@ async function setMax(recipientId: string, tokenIndex: number) {
           value: { coins: BigInt(0) as Cardano.Lovelace, assets: allWalletAssets },
         };
         changeMinUtxo = BrowserTxConstruction.minAdaRequired(mockChange, BigInt(epochParams.value.coinsPerUtxoByte));
-      } catch {
+        debugLog('setMax: changeMinUtxo =', Number(changeMinUtxo) / 1_000_000, 'ADA for', allWalletAssets.size, 'remaining assets');
+      } catch (e) {
+        debugLog('setMax: minAdaRequired failed, using 15 ADA fallback:', e);
         changeMinUtxo = BigInt(15_000_000); // 15 ADA safe fallback
       }
     }
   }
 
-  // Reserve: fee estimate (0.5 ADA) + change min UTxO + small margin
+  // Reserve: fee estimate (0.5 ADA) + change min UTxO + 10% margin
   const FEE_ESTIMATE = BigInt(500_000);
-  const reserve = FEE_ESTIMATE + changeMinUtxo;
+  const margin = changeMinUtxo / BigInt(10); // 10% margin on change min
+  const reserve = FEE_ESTIMATE + changeMinUtxo + margin;
+  debugLog('setMax: totalBalance =', Number(totalBalanceLovelace) / 1_000_000, 'reserve =', Number(reserve) / 1_000_000, '(fee:', Number(FEE_ESTIMATE) / 1_000_000, '+ changeMin:', Number(changeMinUtxo) / 1_000_000, '+ margin:', Number(margin) / 1_000_000, ')');
   const maxLovelace = totalBalanceLovelace - reserve;
 
   if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
