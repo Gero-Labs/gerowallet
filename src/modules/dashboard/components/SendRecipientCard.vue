@@ -292,6 +292,8 @@ const assetsModel = computed(() => ({
   selectedCollectibles: props.recipient.selectedCollectibles,
   minAda: props.recipient.minAda,
   adaShortage: props.recipient.adaShortage,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  lockedForTokens: (props.recipient as any).lockedForTokens || 0,
 }));
 
 function emitAddress(paymentAddress: string, rawInput: string, resolved: boolean) {
