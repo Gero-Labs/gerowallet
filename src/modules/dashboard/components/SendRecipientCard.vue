@@ -1,62 +1,63 @@
 <template>
-  <v-card
-    outlined
-    class="recipient-card mb-3"
-    :class="{ 'recipient-card--expanded': isExpanded }"
+  <div
+    class="recipient-card"
+    :class="{
+      'recipient-card--multi': canDelete || showHeader,
+      'recipient-card--expanded': isExpanded && showHeader,
+      'mb-3': showHeader,
+    }"
   >
-    <!-- Collapsed view -->
-    <v-card-title
-      v-if="!isExpanded"
-      class="recipient-card__collapsed py-2 px-3"
-      style="cursor: pointer; display: flex; align-items: center; min-height: 52px;"
+    <!-- Collapsed view (multi-recipient only) -->
+    <div
+      v-if="!isExpanded && showHeader"
+      class="recipient-card__collapsed"
       @click="$emit('expand')"
     >
       <v-icon small class="mr-2" color="#00DFF3">mdi-account-outline</v-icon>
-      <span class="caption font-weight-medium mr-2" style="color: #CECFD2;">
+      <span class="caption font-weight-medium mr-1" style="color: #CECFD2;">
         {{ $t('wallet.recipient') }} {{ index + 1 }}
       </span>
-      <span class="caption" style="color: rgba(255,255,255,0.5); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+      <span class="collapsed-address">
         {{ displayAddress }}
       </span>
-      <v-chip v-if="totalAdaDisplay" x-small color="#00DFF330" text-color="#00DFF3" class="ml-2">
+      <v-chip v-if="totalAdaDisplay" x-small color="#00DFF330" text-color="#00DFF3" class="ml-auto">
         {{ totalAdaDisplay }}
       </v-chip>
-      <v-icon small class="ml-2" color="rgba(255,255,255,0.3)">mdi-pencil-outline</v-icon>
-    </v-card-title>
+      <v-icon small class="ml-2" style="opacity: 0.3;">mdi-pencil-outline</v-icon>
+    </div>
 
     <!-- Expanded view -->
     <template v-if="isExpanded">
-      <v-card-title class="py-2 px-3" style="display: flex; align-items: center; min-height: 52px;">
-        <v-icon small class="mr-2" color="#00DFF3">mdi-account-outline</v-icon>
-        <span class="caption font-weight-medium" style="color: #CECFD2;">
+      <!-- Card header (multi-recipient only) -->
+      <div v-if="showHeader" class="recipient-card__header">
+        <v-icon x-small class="mr-1" color="#00DFF3">mdi-account-outline</v-icon>
+        <span class="caption font-weight-medium" style="color: #94969C; font-size: 11px !important;">
           {{ $t('wallet.recipient') }} {{ index + 1 }}
         </span>
         <v-spacer />
-        <!-- Duplicate -->
         <v-tooltip bottom content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
-            <v-btn icon x-small class="mr-1" v-bind="attrs" v-on="on" @click="$emit('duplicate')">
-              <v-icon x-small color="rgba(255,255,255,0.4)">mdi-content-copy</v-icon>
+            <v-btn icon x-small class="mr-0" v-bind="attrs" v-on="on" @click="$emit('duplicate')">
+              <v-icon style="font-size: 13px;" color="rgba(255,255,255,0.35)">mdi-content-copy</v-icon>
             </v-btn>
           </template>
           <span>{{ $t('wallet.duplicateRecipient') }}</span>
         </v-tooltip>
-        <!-- Delete (hidden when only 1 card) -->
         <v-tooltip v-if="canDelete" bottom content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn icon x-small v-bind="attrs" v-on="on" @click="$emit('remove')">
-              <v-icon x-small color="#F97066">mdi-trash-can-outline</v-icon>
+              <v-icon style="font-size: 13px;" color="#F97066">mdi-trash-can-outline</v-icon>
             </v-btn>
           </template>
           <span>{{ $t('wallet.removeRecipient') }}</span>
         </v-tooltip>
-      </v-card-title>
+      </div>
 
-      <v-card-text class="px-3 pt-0">
-        <!-- Contact buttons row -->
+      <!-- Card content -->
+      <div :class="showHeader ? 'px-3 pb-3' : ''">
+        <!-- Contact/QR row -->
         <v-row no-gutters class="mb-2">
           <v-col cols="6" class="pr-1">
-            <!-- Browse contacts -->
             <v-menu
               v-model="contactsMenu"
               :close-on-content-click="false"
@@ -71,13 +72,13 @@
                   outlined
                   block
                   color="#272930"
-                  style="background-color: #0F0F0F;"
-                  class="pl-0"
+                  style="background-color: #0F0F0F; height: 36px;"
+                  class="pl-0 contact-btn"
                   :disabled="!contacts || Object.values(contacts).length === 0"
                   v-bind="attrs"
                   v-on="on"
                 >
-                  <v-list-item dense class="px-0">
+                  <v-list-item dense class="px-0" style="min-height: 36px;">
                     <v-avatar size="28" class="mx-0">
                       <v-icon small color="#00DFF3">mdi-book-open-variant-outline</v-icon>
                     </v-avatar>
@@ -87,7 +88,7 @@
                   </v-list-item>
                 </v-btn>
               </template>
-              <v-card outlined style="background: #0c0e12 !important; border: 1px solid rgba(255,255,255,0.15) !important; border-radius: 16px !important;">
+              <v-card outlined style="background: #0c0e12 !important; border: 1px solid rgba(255,255,255,0.15) !important; border-radius: 16px !important; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;">
                 <v-card-title class="py-2">
                   {{ $t('wallet.contacts') }}
                   <v-spacer />
@@ -112,9 +113,15 @@
             </v-menu>
           </v-col>
           <v-col cols="6" class="pl-1">
-            <!-- QR scan -->
-            <v-btn outlined block color="#272930" style="background-color: #0F0F0F" class="pl-0" @click="qrScanDialog = true">
-              <v-list-item dense class="px-0">
+            <v-btn
+              outlined
+              block
+              color="#272930"
+              style="background-color: #0F0F0F; height: 36px;"
+              class="pl-0 contact-btn"
+              @click="qrScanDialog = true"
+            >
+              <v-list-item dense class="px-0" style="min-height: 36px;">
                 <v-avatar size="28" class="mx-0">
                   <v-icon small color="#00DFF3">mdi-qrcode</v-icon>
                 </v-avatar>
@@ -139,12 +146,12 @@
           v-model="localAddress"
           :label="$t('wallet.recipientAddress')"
           :placeholder="isMainnetCardano ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
-          rows="2"
+          rows="3"
           outlined
           :rules="[rules.recipientRules(loggedWallet.chain, loggedWallet.network)]"
-          class="recipient-address mb-0"
+          class="recipient-address"
           :loading="resolving"
-          hide-details="auto"
+          hide-details
           dense
           clearable
           @input="resolveAddress"
@@ -156,7 +163,7 @@
         </v-textarea>
 
         <!-- Handle resolution preview -->
-        <v-list-item v-if="handleAsset" class="px-0 pt-1">
+        <v-list-item v-if="handleAsset" class="px-0 pt-1" style="min-height: 48px;">
           <v-list-item-avatar v-if="handleAsset.img" size="40" rounded>
             <v-img :src="handleAsset.img" contain />
           </v-list-item-avatar>
@@ -166,8 +173,7 @@
         </v-list-item>
 
         <!-- Assets section (shown only when address is valid) -->
-        <div v-if="isAddressValid" class="mt-3">
-          <v-divider class="mb-3" />
+        <div v-if="isAddressValid" class="mt-2">
           <AssetsToSendStep
             :value="assetsModel"
             :tokens="availableTokens"
@@ -176,12 +182,13 @@
             @setMax="onSetMax"
           />
         </div>
-      </v-card-text>
+      </div>
     </template>
-  </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ref, computed, watch } from 'vue';
 import { toRefs } from 'vue';
 import debounce from 'lodash/debounce';
@@ -202,13 +209,17 @@ interface Props {
   index: number;
   isExpanded: boolean;
   canDelete: boolean;
+  /** Whether to show the card header (Recipient N label + actions) — false for single-recipient */
+  showHeader: boolean;
   /** All wallet tokens with balances reduced by other cards' commitments */
   availableTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
   /** Fingerprints of NFTs fully committed by other cards */
   excludedCollectibleFingerprints?: Set<string>;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  showHeader: false,
+});
 const emit = defineEmits<{
   (e: 'expand'): void;
   (e: 'update:recipient', value: SendRecipient): void;
@@ -352,16 +363,73 @@ watch(() => props.recipient.address, (newVal) => {
 </script>
 
 <style scoped>
+/* Single recipient — no card wrapper, content flows directly */
 .recipient-card {
-  background-color: #0F0F0F !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 12px !important;
+  text-align: left;
 }
+
+/* Multi-recipient — card wrapper with subtle border */
+.recipient-card--multi {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  transition: border-color 0.2s ease;
+}
+
+.recipient-card--multi:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 .recipient-card--expanded {
-  border-color: rgba(0, 223, 243, 0.3) !important;
+  border-color: rgba(0, 223, 243, 0.15) !important;
 }
+
+/* Collapsed state */
+.recipient-card__collapsed {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background-color 0.15s ease;
+  border-radius: 12px;
+}
+
+.recipient-card__collapsed:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.collapsed-address {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Expanded header */
+.recipient-card__header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px 4px;
+  min-height: 32px;
+}
+
+/* Contact buttons */
+.contact-btn {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+/* Address textarea styling — matches existing SendRecipientDetailsStep */
 .recipient-address :deep(.v-input__control .v-input__slot) {
   background-color: #292929;
   border-radius: 6px;
+  padding: 5px 10px;
+}
+
+.recipient-address :deep(textarea) {
+  resize: none;
 }
 </style>
