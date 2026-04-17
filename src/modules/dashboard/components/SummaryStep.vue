@@ -1,64 +1,75 @@
 <template>
-  <v-card flat class="transparent">
-    <v-row no-gutters>
-      <v-col cols="6">
-        <v-card flat class="transparent">
-          <v-card-title class="text-left">
-            <Select
-              :value="loggedWallet"
-              :items="loggedWallet ? [loggedWallet] : []"
-              :label="t('wallet.from')"
-              :readonly="true"
-            ></Select>
-          </v-card-title>
-          <v-card-text>
-            <v-icon>mdi-arrow-down-thin</v-icon>
-            <div
-              v-for="(r, idx) in recipients"
-              :key="r.id"
-              class="mb-2"
-            >
-              <div class="caption mb-1" style="color: rgba(255,255,255,0.4)" v-if="recipients.length > 1">
-                {{ $t('wallet.recipient') }} {{ idx + 1 }}
-              </div>
-              <DappAddress
-                :address="r.resolvedAddress || r.address"
-                :risk="idx === 0 ? risks && risks.addressRisk : undefined"
-                :with-bg="false"
-              />
-            </div>
-            <v-icon>mdi-arrow-down-thin</v-icon>
-            <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true" :with-bg="false">
-              {{ $t('wallet.youreGiving') }}
-              <v-tooltip bottom>
-                <template v-slot:activator="{ on, attrs }">
-                  <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
-                    mdi-information-outline
-                  </v-icon>
-                </template>
-                <div>
-                  <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} {{ $t('common.andOrTokensShownHere') }}<br></span>
-                  <span style="color: #FF7777">{{ $t('common.sentFromYourWallet') }}<br></span>
-                  <span> {{ $t('common.toTheAddressListedAbove') }}<br /><br />{{ $t('common.onceSignedIrreversible') }}</span>
-                </div>
-              </v-tooltip>
-            </TransactionCard>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="6" style="align-content: center">
-        <TransactionRisk class="pb-8" :risk="risks?.score" :loading="loading" />
-        <div style="flex-flow: row; display: flex; justify-content: center;">
-          <CopyButton v-if="tx" x-small :value="getCborHex()" :title="t('wallet.copyCBOR')"></CopyButton>
-        </div>
-      </v-col>
-    </v-row>
+  <v-card flat class="summary-step transparent">
+    <!-- From wallet -->
+    <div class="summary-section">
+      <div class="section-label">{{ $t('wallet.from') }}</div>
+      <div class="from-wallet">
+        <v-avatar size="28" color="#161B26">
+          <v-icon size="18" color="#00DFF3">mdi-wallet-outline</v-icon>
+        </v-avatar>
+        <span class="wallet-name">{{ loggedWallet?.name || '' }}</span>
+      </div>
+    </div>
+
+    <div class="flow-arrow">
+      <v-icon color="rgba(255,255,255,0.4)" size="20">mdi-arrow-down-thin</v-icon>
+    </div>
+
+    <!-- Recipients -->
+    <div
+      v-for="(r, idx) in recipients"
+      :key="r.id"
+      class="summary-section"
+    >
+      <div
+        v-if="recipients.length > 1"
+        class="recipient-label"
+      >
+        {{ $t('wallet.recipient') }} {{ idx + 1 }}
+      </div>
+      <DappAddress
+        :address="r.resolvedAddress || r.address"
+        :risk="idx === 0 ? risks && risks.addressRisk : undefined"
+      />
+    </div>
+
+    <div class="flow-arrow">
+      <v-icon color="rgba(255,255,255,0.4)" size="20">mdi-arrow-down-thin</v-icon>
+    </div>
+
+    <!-- You're giving -->
+    <div class="summary-section">
+      <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
+        {{ $t('wallet.youreGiving') }}
+        <v-tooltip bottom content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
+              mdi-information-outline
+            </v-icon>
+          </template>
+          <div>
+            <span v-if="loggedWallet">{{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} {{ $t('common.andOrTokensShownHere') }}<br></span>
+            <span style="color: #FF7777">{{ $t('common.sentFromYourWallet') }}<br></span>
+            <span>{{ $t('common.toTheAddressListedAbove') }}<br /><br />{{ $t('common.onceSignedIrreversible') }}</span>
+          </div>
+        </v-tooltip>
+      </TransactionCard>
+    </div>
+
+    <!-- Transaction Risk -->
+    <div class="summary-section risk-section">
+      <TransactionRisk :risk="risks?.score" :loading="loading" />
+    </div>
+
+    <!-- Copy CBOR -->
+    <div v-if="tx" class="summary-section cbor-section">
+      <CopyButton x-small :value="getCborHex()" :title="t('wallet.copyCBOR')"></CopyButton>
+    </div>
   </v-card>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref } from 'vue';
-import Select from '@/shared/components/Select.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
@@ -237,34 +248,60 @@ async function scanTx(txData: Cardano.Tx) {
 </script>
 
 <style scoped>
-.recipient-box {
+.summary-step {
   display: flex;
-  gap: 10px;
-  padding: 10px;
-  word-break: break-all;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.summary-section {
+  width: 100%;
+}
+
+.section-label {
+  color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
-  background: linear-gradient(to right, #005d65, #0000003d);
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
-.continue-button {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  color: black!important;
-
-  &:disabled {
-    opacity: 0.5;
-    color: black!important;
-  }
-
+.from-wallet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background-color: #161B26;
+  border-radius: 10px;
+  border: 1px solid #272930;
 }
 
-.v-tooltip__content {
-  background: rgba(15, 19, 21, 1);
-  border:1px solid #C4C4C4;
-  line-height: 18px;
-  padding: 10px;
+.wallet-name {
+  color: white;
   font-size: 14px;
+  font-weight: 500;
 }
-.v-tooltip__content.menuable__content__active {
-  opacity: 1;
+
+.flow-arrow {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.recipient-label {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+
+.risk-section {
+  margin-top: 8px;
+  text-align: center;
+}
+
+.cbor-section {
+  display: flex;
+  justify-content: center;
 }
 </style>
