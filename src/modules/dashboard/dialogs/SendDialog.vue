@@ -76,7 +76,7 @@
                   :index="idx"
                   :is-expanded="expandedRecipientId === recipient.id"
                   :can-delete="recipients.length > 1"
-                  :show-header="recipients.length > 1"
+                  :show-header="true"
                   :available-tokens="availableTokensFor(recipient.id)"
                   :excluded-collectible-fingerprints="excludedFingerprintsFor(recipient.id)"
                   @expand="expandRecipient(recipient.id)"
@@ -679,6 +679,9 @@ onMounted(() => {
 /* ─── Content area ─── */
 .send-dialog-content {
   z-index: 1;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .send-dialog-content--empty {
