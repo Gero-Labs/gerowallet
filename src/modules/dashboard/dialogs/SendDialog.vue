@@ -581,6 +581,13 @@ function prevStep() {
   if (currentStep.value > 1) currentStep.value--;
 }
 
+/**
+ * Set max amount for a token. For ADA: uses a 2-call approach instead of
+ * binary search to avoid dozens of network round-trips to Nexus.
+ *
+ * 1. Build tx with a generous estimate (balance - 2 ADA fee buffer)
+ * 2. Read the actual fee from the response, adjust, rebuild once
+ */
 async function setMax(recipientId: string, tokenIndex: number) {
   isCalculatingMax.value = true;
   const recipientIdx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
@@ -591,13 +598,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const selectedToken = sendTokensCopy[tokenIndex];
   if (!selectedToken) { isCalculatingMax.value = false; return; }
 
-  const otherAda = recipients.value
-    .filter((r: SendRecipient) => r.id !== recipientId)
-    .reduce((sum: bigint, r: SendRecipient) => {
-      const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
-      return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
-    }, BigInt(0));
-
+  // For non-ADA tokens: just set to full balance, single build
   if (selectedToken.ticker !== nativeTicker.value) {
     if (selectedToken.decimals) {
       selectedToken.quantity = Number(
@@ -610,62 +611,64 @@ async function setMax(recipientId: string, tokenIndex: number) {
       const updated = { ...recipient, selectedTokens: sendTokensCopy };
       recipients.value.splice(recipientIdx, 1, updated);
       await buildTx();
-    } catch { /* ignore build errors during max search */ }
+    } catch { /* ignore */ }
     isCalculatingMax.value = false;
     return;
   }
 
-  const totalBalance = BigInt(selectedToken.balance) - otherAda;
-  if (totalBalance <= BigInt(0)) { isCalculatingMax.value = false; return; }
+  // ADA max: calculate from balance minus other recipients and fee
+  const otherAdaLovelace = recipients.value
+    .filter((r: SendRecipient) => r.id !== recipientId)
+    .reduce((sum: bigint, r: SendRecipient) => {
+      const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+      return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
+    }, BigInt(0));
 
-  const ADA_STEP = BigInt(1_000_000);
-  const MAX_BUFFER = BigInt(100_000_000);
-  let buffer = BigInt(0);
-  let coarseAmount = BigInt(0);
+  const totalBalanceLovelace = BigInt(selectedToken.balance) - otherAdaLovelace;
+  if (totalBalanceLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
-  while (buffer <= MAX_BUFFER) {
-    const attempt = totalBalance - buffer;
-    if (attempt <= BigInt(0)) break;
-    selectedToken.quantity = Number(
-      filters.toCurrency(Number(attempt), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(',', '')
-    );
-    try {
-      const updated = { ...recipient, selectedTokens: sendTokensCopy };
-      recipients.value.splice(recipientIdx, 1, updated);
-      await buildTx();
-      coarseAmount = attempt;
-      break;
-    } catch { buffer += ADA_STEP; }
+  // Step 1: Build with balance minus 2 ADA fee buffer to get actual fee
+  const FEE_BUFFER = BigInt(2_000_000); // 2 ADA generous buffer
+  const firstAttempt = totalBalanceLovelace - FEE_BUFFER;
+  if (firstAttempt <= BigInt(0)) { isCalculatingMax.value = false; return; }
+
+  const firstQty = Number(firstAttempt) / 1_000_000;
+  sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(firstQty) };
+  const updated1 = { ...recipient, selectedTokens: sendTokensCopy };
+  recipients.value.splice(recipientIdx, 1, updated1);
+
+  try {
+    await buildTx();
+
+    // Step 2: Read actual fee from built tx, recalculate exact max
+    const actualFeeLovelace = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : FEE_BUFFER;
+    // Add small margin (10%) to account for fee variance when amount changes
+    const feeWithMargin = actualFeeLovelace + (actualFeeLovelace / BigInt(10));
+    const maxLovelace = totalBalanceLovelace - feeWithMargin;
+
+    if (maxLovelace > BigInt(0)) {
+      const maxQty = Number(maxLovelace) / 1_000_000;
+      const finalTokens = [...recipients.value[recipientIdx].selectedTokens];
+      finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: String(maxQty) };
+      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: finalTokens });
+
+      // Rebuild with exact amount
+      try {
+        await buildTx();
+      } catch { /* keep the estimate */ }
+    }
+  } catch {
+    // First attempt failed — try with larger buffer
+    const fallbackLovelace = totalBalanceLovelace - FEE_BUFFER * BigInt(2);
+    if (fallbackLovelace > BigInt(0)) {
+      const fallbackQty = Number(fallbackLovelace) / 1_000_000;
+      const fallbackTokens = [...recipients.value[recipientIdx].selectedTokens];
+      fallbackTokens[tokenIndex] = { ...fallbackTokens[tokenIndex], quantity: String(fallbackQty) };
+      recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: fallbackTokens });
+      try { await buildTx(); } catch { /* give up */ }
+    }
   }
 
-  if (coarseAmount === BigInt(0)) { isCalculatingMax.value = false; return; }
-
-  let low = coarseAmount;
-  let high = coarseAmount + ADA_STEP;
-  if (high > totalBalance) high = totalBalance;
-  let finalAmount = coarseAmount;
-
-  for (let i = 0; i < 20 && high - low > BigInt(1); i++) {
-    const mid = (low + high) / BigInt(2);
-    selectedToken.quantity = Number(
-      filters.toCurrency(Number(mid), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(',', '')
-    );
-    try {
-      const updated = { ...recipient, selectedTokens: sendTokensCopy };
-      recipients.value.splice(recipientIdx, 1, updated);
-      await buildTx();
-      finalAmount = mid;
-      low = mid;
-    } catch { high = mid; }
-  }
-
-  const finalQty = filters.toCurrency(Number(finalAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(',', '');
-  const finalRecipient = recipients.value[recipientIdx];
-  const finalTokens = [...finalRecipient.selectedTokens];
-  finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: finalQty };
-  recipients.value.splice(recipientIdx, 1, { ...finalRecipient, selectedTokens: finalTokens });
-
-  await new Promise(resolve => setTimeout(resolve, 0));
   isCalculatingMax.value = false;
 }
 
