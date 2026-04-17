@@ -435,15 +435,6 @@ function formatBalance(token: any): string {
   return String(token.balance || 0);
 }
 
-function formatTokenValue(token: any): string {
-  const quantityStr = String(token.quantity || '0').replace(/,/g, '').replace(/\s/g, '');
-  const qty = parseFloat(quantityStr);
-  if (!qty || qty <= 0 || isNaN(qty)) return '0.00';
-  const priceUsd = getTokenPriceInUsd(token);
-  const value = qty * priceUsd;
-  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function formatQuantityDisplay(quantity: string | number): string {
   if (!quantity && quantity !== 0) return '';
   const raw = String(quantity).replace(/,/g, '');
