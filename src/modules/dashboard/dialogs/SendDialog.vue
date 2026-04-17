@@ -697,26 +697,28 @@ async function setMax(recipientId: string, tokenIndex: number) {
     debugLog('setMax: changeMinUtxo =', Number(changeMinUtxo) / 1_000_000, 'ADA for', changeAssets.size, 'token types');
   }
 
-  // Step 1: build with balance - changeMinUtxo (half if changeMinUtxo is 0) to get fee
-  const probeAmount = changeMinUtxo > BigInt(0)
-    ? totalBalanceLovelace - changeMinUtxo - BigInt(500_000) // leave 0.5 ADA for fee
-    : totalBalanceLovelace / BigInt(2);
+  // Step 1: probe build to get the actual fee.
+  // Send balance - changeMinUtxo - 2 ADA (generous fee buffer so probe succeeds).
+  const FEE_BUFFER = BigInt(2_000_000);
+  const probeAmount = totalBalanceLovelace - changeMinUtxo - FEE_BUFFER;
 
   if (probeAmount <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
   sendTokensCopy[tokenIndex] = { ...sendTokensCopy[tokenIndex], quantity: String(Number(probeAmount) / 1_000_000) };
   recipients.value.splice(recipientIdx, 1, { ...recipient, selectedTokens: sendTokensCopy });
 
-  let actualFee = BigInt(300_000); // default fee estimate
+  let actualFee = BigInt(300_000);
   try {
     await buildTx();
     actualFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : actualFee;
+    debugLog('setMax: probe fee =', Number(actualFee) / 1_000_000, 'ADA');
   } catch {
-    // Probe failed — use default fee estimate
+    debugLog('setMax: probe failed, using default fee estimate');
   }
 
-  // Step 2: precise max = balance - fee - changeMinUtxo
+  // Step 2: precise max = balance - actualFee - changeMinUtxo
   const maxLovelace = totalBalanceLovelace - actualFee - changeMinUtxo;
+  debugLog('setMax: max =', Number(maxLovelace) / 1_000_000, '(balance', Number(totalBalanceLovelace) / 1_000_000, '- fee', Number(actualFee) / 1_000_000, '- change', Number(changeMinUtxo) / 1_000_000, ')');
   if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
   // Apply and build
@@ -735,7 +737,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
   applyMax(maxLovelace);
   try {
     await buildTx();
-    // Self-correct with actual fee from final build
+    // Self-correct: the final tx may have a slightly different fee
     const finalFee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : actualFee;
     if (finalFee !== actualFee) {
       const corrected = totalBalanceLovelace - finalFee - changeMinUtxo;
@@ -745,7 +747,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
       }
     }
   } catch {
-    // Final build failed — reduce by 1 ADA and retry
+    // Final build failed — reduce by 1 ADA and retry once
     const retry = maxLovelace - BigInt(1_000_000);
     if (retry > BigInt(0)) {
       applyMax(retry);
