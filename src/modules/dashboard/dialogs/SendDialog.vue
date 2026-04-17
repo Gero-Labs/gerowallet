@@ -501,7 +501,7 @@ const globalTotal = computed(() => {
  * Server-side building gives us fresh protocol params, canonical fee calculation,
  * and coin selection without needing local tip/epochParams.
  */
-async function buildTx() {
+async function buildTx(options?: { selectAll?: boolean }) {
   const allValid = recipients.value.every((r: SendRecipient) =>
     isPaymentAddress(r.resolvedAddress ?? r.address)
   );
@@ -546,6 +546,7 @@ async function buildTx() {
     changeAddress: keys.value.payment[0].address,
     utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
     network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+    selectAll: options?.selectAll,
   };
 
   try {
@@ -656,8 +657,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
     }
     recipients.value.splice(recipientIdx, 1, finalRecipient);
 
-    // Build the actual tx with the max amount
-    try { await buildTx(); } catch { /* keep the amount — Nexus computed it, it should be valid */ }
+    // Build with selectAll to match the max-ada calculation (all UTxOs selected)
+    try { await buildTx({ selectAll: true }); } catch { /* amount is correct per Nexus */ }
   } catch (err) {
     debugLog('setMax: /v1/tx/max-ada failed:', err);
   }

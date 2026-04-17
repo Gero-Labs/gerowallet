@@ -71,6 +71,8 @@ export interface BuildTxRequest {
   network?: 'MAINNET' | 'PREPROD';
   ttl?: number;
   metadata?: Record<string, unknown>;
+  /** When true, forces selection of ALL UTxOs (used for send-max). */
+  selectAll?: boolean;
 }
 
 export interface BuildTxResponse {
