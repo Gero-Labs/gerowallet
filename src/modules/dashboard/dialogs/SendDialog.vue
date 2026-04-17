@@ -72,6 +72,7 @@
                 :index="idx"
                 :is-expanded="expandedRecipientId === recipient.id"
                 :can-delete="recipients.length > 1"
+                :show-header="recipients.length > 1"
                 :available-tokens="availableTokensFor(recipient.id)"
                 :excluded-collectible-fingerprints="excludedFingerprintsFor(recipient.id)"
                 @expand="expandRecipient(recipient.id)"
