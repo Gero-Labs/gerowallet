@@ -50,9 +50,9 @@
             :placeholder="isMainnetCardano ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
             outlined
             dense
-            hide-details="auto"
+            hide-details
             class="address-input"
-            :rules="[rules.recipientRules(loggedWallet.chain, loggedWallet.network)]"
+            :error="!!localAddress && !resolving && rules.recipientRules(loggedWallet.chain, loggedWallet.network)(localAddress) !== true"
             :loading="resolving"
             @input="resolveAddress"
           >
@@ -552,6 +552,11 @@ defineExpose({ cardTotalAmounts });
 
 .address-input :deep(.v-input__slot:hover fieldset) {
   border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.address-input.error--text :deep(fieldset) {
+  border-color: #F97066 !important;
+  border-width: 1px !important;
 }
 
 .address-append-icons {
