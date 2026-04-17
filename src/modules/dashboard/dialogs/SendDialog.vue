@@ -67,29 +67,32 @@
         <CustomStepper :currentStep="currentStep" :steps="steps">
           <!-- Step 1: Recipients -->
           <v-stepper-content step="1">
-            <div class="step-recipients">
-              <SendRecipientCard
-                v-for="(recipient, idx) in recipients"
-                :key="recipient.id"
-                :recipient="recipient"
-                :index="idx"
-                :is-expanded="expandedRecipientId === recipient.id"
-                :can-delete="recipients.length > 1"
-                :show-header="recipients.length > 1"
-                :available-tokens="availableTokensFor(recipient.id)"
-                :excluded-collectible-fingerprints="excludedFingerprintsFor(recipient.id)"
-                @expand="expandRecipient(recipient.id)"
-                @update:recipient="updateRecipient(recipient.id, $event)"
-                @duplicate="duplicateRecipient(recipient.id)"
-                @remove="removeRecipient(recipient.id)"
-                @setMax="setMax(recipient.id, $event.tokenIndex)"
-              />
-              <!-- Add recipient link -->
-              <div v-if="showAddLink" class="add-recipient-link">
-                <v-btn text x-small color="#00DFF3" @click="addRecipient()">
-                  <v-icon x-small class="mr-1">mdi-plus</v-icon>
-                  {{ $t('wallet.addAnotherRecipient') }}
-                </v-btn>
+            <div class="step-recipients-wrapper">
+              <div class="step-recipients-inner">
+                <SendRecipientCard
+                  v-for="(recipient, idx) in recipients"
+                  :key="recipient.id"
+                  :recipient="recipient"
+                  :index="idx"
+                  :is-expanded="expandedRecipientId === recipient.id"
+                  :can-delete="recipients.length > 1"
+                  :show-header="recipients.length > 1"
+                  :available-tokens="availableTokensFor(recipient.id)"
+                  :excluded-collectible-fingerprints="excludedFingerprintsFor(recipient.id)"
+                  @expand="expandRecipient(recipient.id)"
+                  @update:recipient="updateRecipient(recipient.id, $event)"
+                  @duplicate="duplicateRecipient(recipient.id)"
+                  @remove="removeRecipient(recipient.id)"
+                  @setMax="setMax(recipient.id, $event.tokenIndex)"
+                />
+
+                <!-- Add another recipient link -->
+                <div v-if="showAddLink" class="add-recipient-link">
+                  <v-btn text x-small color="#00DFF3" @click="addRecipient()">
+                    <v-icon x-small class="mr-1">mdi-plus</v-icon>
+                    {{ $t('wallet.addAnotherRecipient') }}
+                  </v-btn>
+                </div>
               </div>
             </div>
           </v-stepper-content>
@@ -117,7 +120,9 @@
           @progress="onKeystoneProgress"
         />
       </v-card-text>
-      <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+
+      <!-- Actions -->
+      <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
         <!-- Transaction Authentication Section (step 2 only) -->
         <div v-if="currentStep === 2">
           <TransactionAuthSection
@@ -671,7 +676,7 @@ onMounted(() => {
 });
 </script>
 <style scoped>
-/* ───────────────────────── Content area ───────────────────────── */
+/* ─── Content area ─── */
 .send-dialog-content {
   z-index: 1;
 }
@@ -683,22 +688,28 @@ onMounted(() => {
   justify-content: center;
 }
 
-/* ───────────────────────── Step 1: Recipients ───────────────────────── */
-.step-recipients {
-  max-width: 420px;
-  margin: 0 auto;
-  padding: 8px 0 4px;
-  max-height: 460px;
+/* ─── Step 1: Recipients ─── */
+.step-recipients-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 16px 16px 8px;
+}
+
+.step-recipients-inner {
+  width: 60%;
+  min-width: 340px;
+  max-width: 480px;
+  max-height: 480px;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
 .add-recipient-link {
   text-align: center;
-  padding: 4px 0 0;
+  padding: 8px 0 4px;
 }
 
-/* ───────────────────────── Empty wallet ───────────────────────── */
+/* ─── Empty wallet ─── */
 .empty-wallet-state {
   display: flex;
   flex-direction: column;
@@ -718,7 +729,13 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-/* ───────────────────────── Buttons ───────────────────────── */
+/* ─── Actions ─── */
+.send-dialog-actions {
+  text-align: center;
+  justify-content: center;
+}
+
+/* ─── Buttons ─── */
 .continue-button {
   background: linear-gradient(to right, #00c7f3, #00fad5);
   color: black;
@@ -729,7 +746,7 @@ onMounted(() => {
   }
 }
 
-/* ───────────────────────── Stepper ───────────────────────── */
+/* ─── Stepper ─── */
 .stepper-container {
   background-color: transparent;
 
