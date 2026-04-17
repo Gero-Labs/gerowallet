@@ -573,6 +573,32 @@ export class WalletBg {
       .catch(err => {
         console.error(`${err.stack || err}`);
       });
+
+    // Synthesize lovelace token from account when UTxOs aren't available (e.g. preprod/testnet)
+    const controlled = Number(accountInfo.controlled_amount);
+    if (controlled > 0 && WalletStore.state.utxos.length === 0) {
+      const network = networks.resolveNetwork(this.chain, this.network);
+      WalletStore.setTokens({
+        lovelace: {
+          unit: 'lovelace',
+          name: network?.currencyName,
+          policy_id: '',
+          img: network?.currencyImage,
+          quantity: accountInfo.controlled_amount,
+          metadata: {
+            name: network?.currencyName,
+            ticker: network?.currencyTicker,
+            description: network?.currencyDescription,
+            logo: network?.currencyImage,
+            decimals: 6,
+          },
+          risk: 'AAA',
+          verified: true,
+          onchain_metadata: null,
+        },
+      });
+    }
+
     return {
       id: accountInfoId,
       ...acc,

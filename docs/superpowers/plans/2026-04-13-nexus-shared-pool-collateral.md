@@ -6,7 +6,11 @@
 
 **Architecture:** Nexus maintains a fixed pool of ~20 UTxOs at a single enterprise address controlled by its hot wallet payment key. Because collateral inputs are only referenced (not consumed) in the success path, multiple users can reference the same UTxO simultaneously. On wallet login, the client lends one from the pool and persists the reference in `wallet-db`. On subsequent dApp interactions, `getCollateral()` returns from cache — zero network calls. On `signTx`, if the transaction's `collateralInputs` include the cached Nexus UTxO, the background calls `/v1/collateral/cosign` and merges both witnesses before returning to the dApp. Periodic sync ticks validate the cached UTxO is still on-chain; if consumed (rare, Phase 2 failure elsewhere), the cache is refreshed.
 
-**Tech Stack:** Vue 2.7, TypeScript, Vuetify 2.7, `@cardano-sdk/core` v0.46.9, Axios, Dexie 4.0.7, existing Nexus JWT auth (`nexusDevice.service.ts`).
+**Repos touched:** `gerowallet` (Chrome extension client) + `nexus` (backend, `../nexus`).
+
+**Tech Stack:**
+- Client: Vue 2.7, TypeScript, Vuetify 2.7, `@cardano-sdk/core` v0.46.9, Axios, Dexie 4.0.7, existing Nexus JWT auth (`nexusDevice.service.ts`).
+- Backend: Java 21, Spring Boot 3.5.4, `cardano-client-lib` 0.7.1 (for signing + CBOR parsing), PostgreSQL + Flyway, existing device-JWT auth via `@PreAuthorize("@securityExpressions.canWriteCardano()")`.
 
 **Design evolution (why this plan exists):** An earlier draft proposed a standalone Node.js `gero-collateral` service — abandoned in favor of folding the feature into Nexus (existing infra, existing auth, no new deployment). A second draft used franken addresses (Nexus payment key + user stake key) for auto-discovery via sync — abandoned because it requires 5 ADA per user (non-scalable) versus a shared pool where UTxO sharing is safe (collateral inputs are referenced but not consumed in the success path).
 
@@ -114,13 +118,25 @@ Current code at `serialization.ts:424-475` filters `storedUtxos` for pure-ADA UT
 
 ## File Structure
 
-### Nexus Backend (API Contract — backend team implements)
+### Nexus Backend (`../nexus`)
 
-| Endpoint | Method | Request | Response | Notes |
-|----------|--------|---------|----------|-------|
-| `/v1/collateral/lend` | POST | `{}` (auth identifies device) | `{ utxoRef, utxoCbor, address }` | Idempotent per device within a time window |
-| `/v1/collateral/status` | GET | `?utxoRef=txHash%23N` | `{ valid: boolean, reason?: 'consumed'\|'unknown' }` | Cheap — check chain or cache |
-| `/v1/collateral/cosign` | POST | `{ txCbor, utxoRef }` | `{ witness }` | Verifies `utxoRef` in `collateralInputs` only |
+| File | Action | Responsibility |
+|------|--------|---------------|
+| `src/main/java/io/gerowallet/config/properties/CollateralProperties.java` | **Create** | Hot wallet + pool config binding |
+| `src/main/java/io/gerowallet/entity/CollateralPoolUtxo.java` | **Create** | JPA entity for pool UTxOs |
+| `src/main/java/io/gerowallet/repository/CollateralPoolUtxoRepository.java` | **Create** | Spring Data JPA repo |
+| `src/main/java/io/gerowallet/service/collateral/CollateralSigningService.java` | **Create** | Ed25519 + blake2b signing with hot wallet key |
+| `src/main/java/io/gerowallet/service/collateral/CollateralPoolInitService.java` | **Create** | Startup reconcile of DB ↔ chain |
+| `src/main/java/io/gerowallet/service/collateral/CollateralPoolMonitor.java` | **Create** | @Scheduled 5-min reconcile tick |
+| `src/main/java/io/gerowallet/service/collateral/CollateralService.java` | **Create** | lend / status / cosign business logic + security checks |
+| `src/main/java/io/gerowallet/facade/CollateralFacade.java` | **Create** | Thin facade (codebase convention) |
+| `src/main/java/io/gerowallet/model/collateral/*.java` | **Create** | Request/response DTOs |
+| `src/main/java/io/gerowallet/controller/collateral/CollateralController.java` | **Create** | REST endpoints |
+| `src/main/resources/db/migration/V19__create_collateral_pool.sql` | **Create** | Flyway migration |
+| `src/main/resources/application.yml` | **Modify** | Bind `app.collateral.*` properties |
+| `.env` | **Modify** | Hot wallet secrets |
+| `src/main/java/io/gerowallet/NexusApplication.java` | **Modify** | `@EnableAsync` + `@EnableScheduling` |
+| `src/test/java/io/gerowallet/service/collateral/CollateralServiceTest.java` | **Create** | Unit tests |
 
 ### Client (Chrome Extension — this plan)
 
@@ -146,6 +162,1159 @@ Current code at `serialization.ts:424-475` filters `storedUtxos` for pure-ADA UT
 ---
 
 ## Tasks
+
+All Phase A tasks run in the `nexus` repo at `/Users/dudiedri/IdeaProjects/A.D. Labs/nexus`. All Phase B tasks run in the `gerowallet` repo. Phase B can be written without Phase A deployed (client degrades gracefully) but must not be merged to production ahead of Phase A.
+
+### Prerequisite (manual, one-time): Generate and fund the hot wallet
+
+Before any Phase A task:
+
+1. Generate an Ed25519 key pair for the collateral hot wallet (keep offline; store the signing key in a password manager)
+2. Derive the enterprise address (payment credential only, no staking)
+3. Fund the address with ~100 ADA, split into 20 UTxOs of 5 ADA each
+4. Record: `HOT_WALLET_SKEY_HEX` (32 bytes), `HOT_WALLET_ADDRESS` (bech32)
+
+Commands for a Linux workstation:
+```bash
+# Using cardano-cli (requires Cardano node binaries)
+cardano-cli address key-gen \
+  --verification-key-file collateral.vkey \
+  --signing-key-file collateral.skey
+cardano-cli address build \
+  --payment-verification-key-file collateral.vkey \
+  --mainnet \
+  --out-file collateral.addr
+cat collateral.addr   # copy the addr1v... value
+```
+
+Then fund the address and split into 20 UTxOs via any Cardano wallet or a one-off tx.
+
+---
+
+## Phase A: Nexus backend (`../nexus`)
+
+### Task A1: Configuration for hot wallet + pool parameters
+
+**Files:**
+- Modify: `nexus/.env`
+- Modify: `nexus/src/main/resources/application.yml`
+- Create: `nexus/src/main/java/io/gerowallet/config/properties/CollateralProperties.java`
+
+- [ ] **Step 1: Add env vars to `.env`**
+
+Append to `nexus/.env`:
+
+```env
+# Collateral pool hot wallet (keep secret!)
+COLLATERAL_HOT_WALLET_SKEY_HEX=<32 bytes hex — the Ed25519 signing key>
+COLLATERAL_HOT_WALLET_ADDRESS=addr1v...
+COLLATERAL_AMOUNT_LOVELACE=5000000
+COLLATERAL_POOL_SIZE=20
+COLLATERAL_KILL_SWITCH=false
+COLLATERAL_NETWORK=MAINNET
+```
+
+- [ ] **Step 2: Bind to `application.yml`**
+
+Add at the end of `nexus/src/main/resources/application.yml`:
+
+```yaml
+app:
+  collateral:
+    hot-wallet-skey-hex: ${COLLATERAL_HOT_WALLET_SKEY_HEX:}
+    hot-wallet-address: ${COLLATERAL_HOT_WALLET_ADDRESS:}
+    amount-lovelace: ${COLLATERAL_AMOUNT_LOVELACE:5000000}
+    pool-size: ${COLLATERAL_POOL_SIZE:20}
+    kill-switch: ${COLLATERAL_KILL_SWITCH:false}
+    network: ${COLLATERAL_NETWORK:MAINNET}
+```
+
+- [ ] **Step 3: Create `CollateralProperties.java`**
+
+Create `nexus/src/main/java/io/gerowallet/config/properties/CollateralProperties.java`:
+
+```java
+package io.gerowallet.config.properties;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+@Component
+@ConfigurationProperties(prefix = "app.collateral")
+public class CollateralProperties {
+    private String hotWalletSkeyHex;
+    private String hotWalletAddress;
+    private long amountLovelace = 5_000_000L;
+    private int poolSize = 20;
+    private boolean killSwitch = false;
+    private String network = "MAINNET";
+
+    // Getters and setters
+    public String getHotWalletSkeyHex() { return hotWalletSkeyHex; }
+    public void setHotWalletSkeyHex(String hotWalletSkeyHex) { this.hotWalletSkeyHex = hotWalletSkeyHex; }
+    public String getHotWalletAddress() { return hotWalletAddress; }
+    public void setHotWalletAddress(String hotWalletAddress) { this.hotWalletAddress = hotWalletAddress; }
+    public long getAmountLovelace() { return amountLovelace; }
+    public void setAmountLovelace(long amountLovelace) { this.amountLovelace = amountLovelace; }
+    public int getPoolSize() { return poolSize; }
+    public void setPoolSize(int poolSize) { this.poolSize = poolSize; }
+    public boolean isKillSwitch() { return killSwitch; }
+    public void setKillSwitch(boolean killSwitch) { this.killSwitch = killSwitch; }
+    public String getNetwork() { return network; }
+    public void setNetwork(String network) { this.network = network; }
+}
+```
+
+- [ ] **Step 4: Verify it compiles**
+
+```bash
+cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+mvn compile -q
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/main/java/io/gerowallet/config/properties/CollateralProperties.java \
+        src/main/resources/application.yml .env
+git commit -m "feat(collateral): add hot wallet pool configuration"
+```
+
+---
+
+### Task A2: Hot wallet signing service (Ed25519 + blake2b)
+
+**Files:**
+- Create: `nexus/src/main/java/io/gerowallet/service/collateral/CollateralSigningService.java`
+
+- [ ] **Step 1: Create the signing service**
+
+Create `nexus/src/main/java/io/gerowallet/service/collateral/CollateralSigningService.java`:
+
+```java
+package io.gerowallet.service.collateral;
+
+import com.bloxbean.cardano.client.crypto.Blake2bUtil;
+import com.bloxbean.cardano.client.crypto.SecretKey;
+import com.bloxbean.cardano.client.crypto.VerificationKey;
+import com.bloxbean.cardano.client.transaction.spec.Transaction;
+import com.bloxbean.cardano.client.transaction.spec.TransactionWitnessSet;
+import com.bloxbean.cardano.client.transaction.spec.VkeyWitness;
+import com.bloxbean.cardano.client.util.HexUtil;
+import io.gerowallet.config.properties.CollateralProperties;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.security.SecureRandom;
+
+/**
+ * Signs transaction bodies with the collateral hot wallet's Ed25519 key.
+ * The signing key is loaded from configuration at startup and held in memory.
+ *
+ * Exposes:
+ *   - buildWitnessFor(Transaction): builds a TransactionWitnessSet with one
+ *     VKeyWitness signing the tx body hash. Returns CBOR hex.
+ *   - getAddress(): the hot wallet's enterprise address (bech32).
+ */
+@Service
+public class CollateralSigningService {
+
+    private static final Logger log = LoggerFactory.getLogger(CollateralSigningService.class);
+
+    private final CollateralProperties properties;
+    private SecretKey signingKey;
+    private VerificationKey verificationKey;
+
+    public CollateralSigningService(CollateralProperties properties) {
+        this.properties = properties;
+    }
+
+    @PostConstruct
+    void init() {
+        if (properties.getHotWalletSkeyHex() == null || properties.getHotWalletSkeyHex().isBlank()) {
+            log.warn("Collateral hot wallet skey not configured — /v1/collateral/* endpoints will return 503");
+            return;
+        }
+        byte[] skeyBytes = HexUtil.decodeHexString(properties.getHotWalletSkeyHex());
+        this.signingKey = new SecretKey(skeyBytes);
+        this.verificationKey = VerificationKey.create(signingKey);
+        log.info("Collateral hot wallet loaded. vkey={}...", HexUtil.encodeHexString(verificationKey.getBytes()).substring(0, 16));
+    }
+
+    public boolean isReady() {
+        return signingKey != null && !properties.isKillSwitch();
+    }
+
+    /**
+     * Build a TransactionWitnessSet containing a single VKeyWitness over the
+     * blake2b-256 hash of the transaction body. Returns CBOR hex.
+     */
+    public String buildWitnessForTx(Transaction tx) throws Exception {
+        if (!isReady()) {
+            throw new IllegalStateException("Collateral signing service not ready");
+        }
+
+        byte[] txBodyBytes = tx.getBody().serialize();
+        byte[] txBodyHash = Blake2bUtil.blake2bHash256(txBodyBytes);
+
+        // cardano-client-lib Ed25519 signing
+        byte[] signature = signingKey.sign(txBodyHash);
+
+        VkeyWitness vkeyWitness = new VkeyWitness(
+            verificationKey.getBytes(),
+            signature
+        );
+
+        TransactionWitnessSet witnessSet = new TransactionWitnessSet();
+        witnessSet.getVkeyWitnesses().add(vkeyWitness);
+
+        return HexUtil.encodeHexString(witnessSet.serialize());
+    }
+
+    public String getHotWalletAddress() {
+        return properties.getHotWalletAddress();
+    }
+
+    public long getCollateralAmountLovelace() {
+        return properties.getAmountLovelace();
+    }
+}
+```
+
+**Note:** `SecretKey.sign()` and `VerificationKey.create()` are cardano-client-lib 0.7.1 APIs. If exact method names differ (e.g., if the library uses `com.bloxbean.cardano.client.crypto.api.SigningProvider` or `Ed25519SigningProvider`), adapt accordingly. Search:
+
+```bash
+grep -rn "class SigningProvider\|interface SigningProvider\|class Ed25519" \
+  ~/.m2/repository/com/bloxbean/cardano/cardano-client-lib/0.7.1/ | head -20
+```
+
+- [ ] **Step 2: Verify compile**
+
+```bash
+cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+mvn compile -q
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/main/java/io/gerowallet/service/collateral/CollateralSigningService.java
+git commit -m "feat(collateral): hot wallet Ed25519 signing service"
+```
+
+---
+
+### Task A3: Flyway migration for pool state
+
+**Files:**
+- Create: `nexus/src/main/resources/db/migration/V19__create_collateral_pool.sql`
+
+- [ ] **Step 1: Verify V18 is the latest migration**
+
+```bash
+ls -la "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus/src/main/resources/db/migration/" | tail -5
+```
+
+If the latest version number is different from V18, use the next available number (e.g., if V20 exists use V21).
+
+- [ ] **Step 2: Create the migration**
+
+Create `nexus/src/main/resources/db/migration/V19__create_collateral_pool.sql`:
+
+```sql
+CREATE TABLE collateral_pool_utxos (
+    id              BIGSERIAL PRIMARY KEY,
+    tx_hash         VARCHAR(64) NOT NULL,
+    output_index    INTEGER NOT NULL,
+    address         TEXT NOT NULL,
+    lovelace        BIGINT NOT NULL,
+    utxo_cbor_hex   TEXT NOT NULL,
+    status          VARCHAR(16) NOT NULL DEFAULT 'AVAILABLE',
+    lent_count      BIGINT NOT NULL DEFAULT 0,
+    last_lent_at    TIMESTAMP WITH TIME ZONE,
+    consumed_at     TIMESTAMP WITH TIME ZONE,
+    created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    CONSTRAINT uk_collateral_utxo UNIQUE (tx_hash, output_index),
+    CONSTRAINT ck_collateral_status CHECK (status IN ('AVAILABLE', 'CONSUMED', 'RECLAIMED'))
+);
+
+CREATE INDEX idx_collateral_status ON collateral_pool_utxos(status);
+CREATE INDEX idx_collateral_last_lent_at ON collateral_pool_utxos(last_lent_at);
+
+COMMENT ON TABLE collateral_pool_utxos IS 'Shared pool of 5 ADA UTxOs at the hot wallet enterprise address. Each UTxO can be referenced as collateral by many wallets concurrently. Consumed only on Phase 2 validation failure.';
+COMMENT ON COLUMN collateral_pool_utxos.utxo_cbor_hex IS 'Pre-serialized TransactionUnspentOutput CBOR for immediate return to CIP-30 clients.';
+COMMENT ON COLUMN collateral_pool_utxos.lent_count IS 'Telemetry: how many times this UTxO has been returned by /lend.';
+```
+
+- [ ] **Step 3: Run the migration locally to verify**
+
+```bash
+cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev" -q &
+sleep 15
+# Verify with psql or the Nexus admin UI
+```
+
+Expected: migration V19 runs without errors.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/main/resources/db/migration/V19__create_collateral_pool.sql
+git commit -m "feat(collateral): add collateral_pool_utxos table"
+```
+
+---
+
+### Task A4: Entity + Repository
+
+**Files:**
+- Create: `nexus/src/main/java/io/gerowallet/entity/CollateralPoolUtxo.java`
+- Create: `nexus/src/main/java/io/gerowallet/repository/CollateralPoolUtxoRepository.java`
+
+- [ ] **Step 1: Create the entity**
+
+Create `nexus/src/main/java/io/gerowallet/entity/CollateralPoolUtxo.java`:
+
+```java
+package io.gerowallet.entity;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.OffsetDateTime;
+
+@Entity
+@Table(name = "collateral_pool_utxos",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"tx_hash", "output_index"}))
+public class CollateralPoolUtxo {
+
+    public enum Status { AVAILABLE, CONSUMED, RECLAIMED }
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "tx_hash", nullable = false, length = 64)
+    private String txHash;
+
+    @Column(name = "output_index", nullable = false)
+    private Integer outputIndex;
+
+    @Column(nullable = false, columnDefinition = "text")
+    private String address;
+
+    @Column(nullable = false)
+    private Long lovelace;
+
+    @Column(name = "utxo_cbor_hex", nullable = false, columnDefinition = "text")
+    private String utxoCborHex;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private Status status = Status.AVAILABLE;
+
+    @Column(name = "lent_count", nullable = false)
+    private Long lentCount = 0L;
+
+    @Column(name = "last_lent_at")
+    private OffsetDateTime lastLentAt;
+
+    @Column(name = "consumed_at")
+    private OffsetDateTime consumedAt;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private OffsetDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private OffsetDateTime updatedAt;
+
+    // Getters and setters (standard JavaBean pattern)
+    public Long getId() { return id; }
+    public String getTxHash() { return txHash; }
+    public void setTxHash(String txHash) { this.txHash = txHash; }
+    public Integer getOutputIndex() { return outputIndex; }
+    public void setOutputIndex(Integer outputIndex) { this.outputIndex = outputIndex; }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+    public Long getLovelace() { return lovelace; }
+    public void setLovelace(Long lovelace) { this.lovelace = lovelace; }
+    public String getUtxoCborHex() { return utxoCborHex; }
+    public void setUtxoCborHex(String utxoCborHex) { this.utxoCborHex = utxoCborHex; }
+    public Status getStatus() { return status; }
+    public void setStatus(Status status) { this.status = status; }
+    public Long getLentCount() { return lentCount; }
+    public void setLentCount(Long lentCount) { this.lentCount = lentCount; }
+    public OffsetDateTime getLastLentAt() { return lastLentAt; }
+    public void setLastLentAt(OffsetDateTime lastLentAt) { this.lastLentAt = lastLentAt; }
+    public OffsetDateTime getConsumedAt() { return consumedAt; }
+    public void setConsumedAt(OffsetDateTime consumedAt) { this.consumedAt = consumedAt; }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+
+    /** Convenience: return the "{txHash}#{index}" reference. */
+    public String getUtxoRef() {
+        return txHash + "#" + outputIndex;
+    }
+}
+```
+
+- [ ] **Step 2: Create the repository**
+
+Create `nexus/src/main/java/io/gerowallet/repository/CollateralPoolUtxoRepository.java`:
+
+```java
+package io.gerowallet.repository;
+
+import io.gerowallet.entity.CollateralPoolUtxo;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface CollateralPoolUtxoRepository extends JpaRepository<CollateralPoolUtxo, Long> {
+
+    Optional<CollateralPoolUtxo> findByTxHashAndOutputIndex(String txHash, Integer outputIndex);
+
+    List<CollateralPoolUtxo> findAllByStatus(CollateralPoolUtxo.Status status);
+
+    long countByStatus(CollateralPoolUtxo.Status status);
+
+    /** Round-robin: pick an AVAILABLE UTxO with the lowest recent lent activity. */
+    @Query("""
+        SELECT u FROM CollateralPoolUtxo u
+        WHERE u.status = 'AVAILABLE'
+        ORDER BY COALESCE(u.lastLentAt, u.createdAt) ASC
+    """)
+    List<CollateralPoolUtxo> findAvailableOrderedByOldestLend();
+
+    @Modifying
+    @Query("""
+        UPDATE CollateralPoolUtxo u
+        SET u.lentCount = u.lentCount + 1, u.lastLentAt = :now
+        WHERE u.id = :id
+    """)
+    void recordLend(@Param("id") Long id, @Param("now") OffsetDateTime now);
+
+    @Modifying
+    @Query("""
+        UPDATE CollateralPoolUtxo u
+        SET u.status = 'CONSUMED', u.consumedAt = :now
+        WHERE u.id = :id
+    """)
+    void markConsumed(@Param("id") Long id, @Param("now") OffsetDateTime now);
+}
+```
+
+- [ ] **Step 3: Compile check**
+
+```bash
+cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+mvn compile -q
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/main/java/io/gerowallet/entity/CollateralPoolUtxo.java \
+        src/main/java/io/gerowallet/repository/CollateralPoolUtxoRepository.java
+git commit -m "feat(collateral): JPA entity and repository for pool UTxOs"
+```
+
+---
+
+### Task A5: Pool initialization service (startup reconcile)
+
+**Files:**
+- Create: `nexus/src/main/java/io/gerowallet/service/collateral/CollateralPoolInitService.java`
+
+- [ ] **Step 1: Create the init service**
+
+On application startup, query the hot wallet address on-chain and reconcile with the DB. New UTxOs → insert AVAILABLE. Missing UTxOs → mark CONSUMED.
+
+Create `nexus/src/main/java/io/gerowallet/service/collateral/CollateralPoolInitService.java`:
+
+```java
+package io.gerowallet.service.collateral;
+
+import com.bloxbean.cardano.client.transaction.spec.TransactionInput;
+import com.bloxbean.cardano.client.transaction.spec.TransactionOutput;
+import com.bloxbean.cardano.client.transaction.spec.TransactionUnspentOutput;
+import com.bloxbean.cardano.client.transaction.spec.Value;
+import com.bloxbean.cardano.client.util.HexUtil;
+import io.gerowallet.config.properties.CollateralProperties;
+import io.gerowallet.entity.CollateralPoolUtxo;
+import io.gerowallet.facade.CardanoAddressFacade;
+import io.gerowallet.model.common.Utxo;
+import io.gerowallet.repository.CollateralPoolUtxoRepository;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigInteger;
+import java.time.OffsetDateTime;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+@Service
+public class CollateralPoolInitService {
+
+    private static final Logger log = LoggerFactory.getLogger(CollateralPoolInitService.class);
+
+    private final CollateralProperties properties;
+    private final CollateralPoolUtxoRepository repository;
+    private final CardanoAddressFacade addressFacade;
+
+    public CollateralPoolInitService(
+            CollateralProperties properties,
+            CollateralPoolUtxoRepository repository,
+            CardanoAddressFacade addressFacade) {
+        this.properties = properties;
+        this.repository = repository;
+        this.addressFacade = addressFacade;
+    }
+
+    @PostConstruct
+    @Async
+    public void reconcileOnStartup() {
+        try {
+            reconcile();
+        } catch (Exception e) {
+            log.error("Collateral pool reconciliation failed at startup", e);
+        }
+    }
+
+    @Transactional
+    public void reconcile() {
+        String address = properties.getHotWalletAddress();
+        if (address == null || address.isBlank()) {
+            log.warn("Collateral hot wallet address not configured — skipping pool reconcile");
+            return;
+        }
+
+        String network = properties.getNetwork();
+        // Exact facade method name may vary; adapt to actual signature.
+        List<Utxo> chainUtxos = addressFacade.getUtxosByAddress(address, 0, 200, network);
+
+        Set<String> onChainRefs = new HashSet<>();
+        for (Utxo u : chainUtxos) {
+            // Only track pure-ADA UTxOs matching the expected collateral amount
+            if (u.getAmount() == null || u.getAmount().isEmpty()) continue;
+            boolean pureAda = u.getAmount().size() == 1 && "lovelace".equals(u.getAmount().get(0).getUnit());
+            if (!pureAda) continue;
+            long lovelace = new BigInteger(u.getAmount().get(0).getQuantity()).longValueExact();
+            if (lovelace != properties.getAmountLovelace()) continue;
+
+            onChainRefs.add(u.getTxHash() + "#" + u.getOutputIndex());
+
+            var existing = repository.findByTxHashAndOutputIndex(u.getTxHash(), u.getOutputIndex());
+            if (existing.isEmpty()) {
+                CollateralPoolUtxo row = new CollateralPoolUtxo();
+                row.setTxHash(u.getTxHash());
+                row.setOutputIndex(u.getOutputIndex());
+                row.setAddress(address);
+                row.setLovelace(lovelace);
+                row.setUtxoCborHex(buildUtxoCborHex(u, address, lovelace));
+                row.setStatus(CollateralPoolUtxo.Status.AVAILABLE);
+                repository.save(row);
+                log.info("Collateral pool: discovered new UTxO {}", row.getUtxoRef());
+            }
+        }
+
+        // Mark CONSUMED any UTxOs that are AVAILABLE in DB but no longer on-chain
+        for (CollateralPoolUtxo row : repository.findAllByStatus(CollateralPoolUtxo.Status.AVAILABLE)) {
+            String ref = row.getUtxoRef();
+            if (!onChainRefs.contains(ref)) {
+                repository.markConsumed(row.getId(), OffsetDateTime.now());
+                log.warn("Collateral pool: UTxO {} no longer on-chain, marked CONSUMED", ref);
+            }
+        }
+
+        long available = repository.countByStatus(CollateralPoolUtxo.Status.AVAILABLE);
+        log.info("Collateral pool reconciled. Available UTxOs: {}", available);
+    }
+
+    /** Build the TransactionUnspentOutput CBOR hex for CIP-30 return. */
+    private String buildUtxoCborHex(Utxo u, String address, long lovelace) throws Exception {
+        TransactionInput input = new TransactionInput(u.getTxHash(), u.getOutputIndex());
+        TransactionOutput output = new TransactionOutput(address, Value.builder().coin(BigInteger.valueOf(lovelace)).build());
+        TransactionUnspentOutput tuo = new TransactionUnspentOutput(input, output);
+        return HexUtil.encodeHexString(tuo.serialize());
+    }
+}
+```
+
+**Note:** `CardanoAddressFacade.getUtxosByAddress` signature and `Utxo` shape must match the existing codebase. Verify by:
+
+```bash
+grep -rn "getUtxosByAddress" "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus/src/main/java" | head -5
+```
+
+If signature differs (e.g., takes `network` as enum, pagination differs), adapt the call site above.
+
+- [ ] **Step 2: Enable async on the Nexus application**
+
+Check if `@EnableAsync` is present on `NexusApplication.java`. If not, add it:
+
+```java
+@SpringBootApplication
+@EnableAsync
+@EnableScheduling
+public class NexusApplication {
+    public static void main(String[] args) { ... }
+}
+```
+
+- [ ] **Step 3: Compile + integration run**
+
+```bash
+mvn compile -q
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev" -q &
+sleep 30
+# Check logs for "Collateral pool reconciled. Available UTxOs: N"
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/main/java/io/gerowallet/service/collateral/CollateralPoolInitService.java \
+        src/main/java/io/gerowallet/NexusApplication.java
+git commit -m "feat(collateral): startup pool reconciliation against chain state"
+```
+
+---
+
+### Task A6: Scheduled pool monitor
+
+**Files:**
+- Create: `nexus/src/main/java/io/gerowallet/service/collateral/CollateralPoolMonitor.java`
+
+Periodically re-runs reconciliation to detect consumed UTxOs.
+
+- [ ] **Step 1: Create the monitor**
+
+Create `nexus/src/main/java/io/gerowallet/service/collateral/CollateralPoolMonitor.java`:
+
+```java
+package io.gerowallet.service.collateral;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+@Component
+public class CollateralPoolMonitor {
+
+    private static final Logger log = LoggerFactory.getLogger(CollateralPoolMonitor.class);
+
+    private final CollateralPoolInitService initService;
+
+    public CollateralPoolMonitor(CollateralPoolInitService initService) {
+        this.initService = initService;
+    }
+
+    /** Every 5 minutes, reconcile the pool against chain state. */
+    @Scheduled(fixedDelay = 5 * 60 * 1000L, initialDelay = 60 * 1000L)
+    public void tick() {
+        try {
+            initService.reconcile();
+        } catch (Exception e) {
+            log.error("Collateral pool monitor tick failed", e);
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Verify `@EnableScheduling` is on the application** (added in A5 Step 2)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/main/java/io/gerowallet/service/collateral/CollateralPoolMonitor.java
+git commit -m "feat(collateral): scheduled pool monitor every 5 minutes"
+```
+
+---
+
+### Task A7: Collateral facade + service (lend / status / cosign logic)
+
+**Files:**
+- Create: `nexus/src/main/java/io/gerowallet/service/collateral/CollateralService.java`
+- Create: `nexus/src/main/java/io/gerowallet/facade/CollateralFacade.java`
+- Create: `nexus/src/main/java/io/gerowallet/model/collateral/LendResponse.java`
+- Create: `nexus/src/main/java/io/gerowallet/model/collateral/StatusResponse.java`
+- Create: `nexus/src/main/java/io/gerowallet/model/collateral/CosignRequest.java`
+- Create: `nexus/src/main/java/io/gerowallet/model/collateral/CosignResponse.java`
+
+- [ ] **Step 1: Create DTOs**
+
+Create `nexus/src/main/java/io/gerowallet/model/collateral/LendResponse.java`:
+
+```java
+package io.gerowallet.model.collateral;
+
+public record LendResponse(String utxoRef, String utxoCbor, String address) {}
+```
+
+Create `StatusResponse.java`:
+
+```java
+package io.gerowallet.model.collateral;
+
+public record StatusResponse(boolean valid, String reason) {
+    public static StatusResponse valid() { return new StatusResponse(true, null); }
+    public static StatusResponse invalid(String reason) { return new StatusResponse(false, reason); }
+}
+```
+
+Create `CosignRequest.java`:
+
+```java
+package io.gerowallet.model.collateral;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record CosignRequest(
+        @NotBlank String txCbor,
+        @NotBlank String utxoRef
+) {}
+```
+
+Create `CosignResponse.java`:
+
+```java
+package io.gerowallet.model.collateral;
+
+public record CosignResponse(String witness) {}
+```
+
+- [ ] **Step 2: Create the service**
+
+Create `nexus/src/main/java/io/gerowallet/service/collateral/CollateralService.java`:
+
+```java
+package io.gerowallet.service.collateral;
+
+import com.bloxbean.cardano.client.transaction.spec.Transaction;
+import com.bloxbean.cardano.client.transaction.spec.TransactionInput;
+import com.bloxbean.cardano.client.util.HexUtil;
+import io.gerowallet.entity.CollateralPoolUtxo;
+import io.gerowallet.exception.BadRequestException;
+import io.gerowallet.exception.NotFoundException;
+import io.gerowallet.model.collateral.CosignResponse;
+import io.gerowallet.model.collateral.LendResponse;
+import io.gerowallet.model.collateral.StatusResponse;
+import io.gerowallet.repository.CollateralPoolUtxoRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class CollateralService {
+
+    private static final Logger log = LoggerFactory.getLogger(CollateralService.class);
+
+    private final CollateralPoolUtxoRepository repository;
+    private final CollateralSigningService signingService;
+
+    public CollateralService(
+            CollateralPoolUtxoRepository repository,
+            CollateralSigningService signingService) {
+        this.repository = repository;
+        this.signingService = signingService;
+    }
+
+    @Transactional
+    public LendResponse lend() {
+        if (!signingService.isReady()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Collateral service not ready");
+        }
+        List<CollateralPoolUtxo> candidates = repository.findAvailableOrderedByOldestLend();
+        if (candidates.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Collateral pool exhausted");
+        }
+        CollateralPoolUtxo chosen = candidates.get(0);
+        repository.recordLend(chosen.getId(), OffsetDateTime.now());
+        return new LendResponse(chosen.getUtxoRef(), chosen.getUtxoCborHex(), chosen.getAddress());
+    }
+
+    @Transactional(readOnly = true)
+    public StatusResponse status(String utxoRef) {
+        var parsed = parseRef(utxoRef);
+        Optional<CollateralPoolUtxo> row = repository.findByTxHashAndOutputIndex(parsed.txHash(), parsed.index());
+        if (row.isEmpty()) return StatusResponse.invalid("unknown");
+        if (row.get().getStatus() == CollateralPoolUtxo.Status.CONSUMED) return StatusResponse.invalid("consumed");
+        return StatusResponse.valid();
+    }
+
+    @Transactional
+    public CosignResponse cosign(String txCborHex, String utxoRef) {
+        if (!signingService.isReady()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Collateral service not ready");
+        }
+
+        var parsed = parseRef(utxoRef);
+
+        // Verify the UTxO is in our pool
+        CollateralPoolUtxo row = repository.findByTxHashAndOutputIndex(parsed.txHash(), parsed.index())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "UTxO not recognized"));
+        if (row.getStatus() != CollateralPoolUtxo.Status.AVAILABLE) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "UTxO not available");
+        }
+
+        // Parse the tx
+        Transaction tx;
+        try {
+            tx = Transaction.deserialize(HexUtil.decodeHexString(txCborHex));
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tx CBOR");
+        }
+
+        // Security: verify utxoRef is ONLY in collateralInputs, NOT in regular inputs
+        boolean inCollateral = containsRef(tx.getBody().getCollateral(), parsed.txHash(), parsed.index());
+        boolean inInputs = containsRef(tx.getBody().getInputs(), parsed.txHash(), parsed.index());
+        if (!inCollateral) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "UTxO not in collateralInputs");
+        }
+        if (inInputs) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "UTxO is in regular inputs (adversarial)");
+        }
+
+        // Sign
+        String witnessCbor;
+        try {
+            witnessCbor = signingService.buildWitnessForTx(tx);
+        } catch (Exception e) {
+            log.error("Cosign signing failed", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Signing failed");
+        }
+
+        return new CosignResponse(witnessCbor);
+    }
+
+    private static boolean containsRef(List<TransactionInput> list, String txHash, int index) {
+        if (list == null) return false;
+        for (TransactionInput in : list) {
+            if (txHash.equalsIgnoreCase(in.getTransactionId()) && in.getIndex() == index) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static ParsedRef parseRef(String utxoRef) {
+        int hashIdx = utxoRef.indexOf('#');
+        if (hashIdx <= 0 || hashIdx == utxoRef.length() - 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid utxoRef");
+        }
+        try {
+            return new ParsedRef(
+                    utxoRef.substring(0, hashIdx),
+                    Integer.parseInt(utxoRef.substring(hashIdx + 1))
+            );
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid utxoRef index");
+        }
+    }
+
+    private record ParsedRef(String txHash, int index) {}
+}
+```
+
+- [ ] **Step 3: Create a simple facade (thin wrapper for consistency with codebase)**
+
+Create `nexus/src/main/java/io/gerowallet/facade/CollateralFacade.java`:
+
+```java
+package io.gerowallet.facade;
+
+import io.gerowallet.model.collateral.CosignResponse;
+import io.gerowallet.model.collateral.LendResponse;
+import io.gerowallet.model.collateral.StatusResponse;
+import io.gerowallet.service.collateral.CollateralService;
+import org.springframework.stereotype.Component;
+
+@Component
+public class CollateralFacade {
+
+    private final CollateralService service;
+
+    public CollateralFacade(CollateralService service) {
+        this.service = service;
+    }
+
+    public LendResponse lend() {
+        return service.lend();
+    }
+
+    public StatusResponse status(String utxoRef) {
+        return service.status(utxoRef);
+    }
+
+    public CosignResponse cosign(String txCbor, String utxoRef) {
+        return service.cosign(txCbor, utxoRef);
+    }
+}
+```
+
+- [ ] **Step 4: Compile**
+
+```bash
+cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+mvn compile -q
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/main/java/io/gerowallet/service/collateral/CollateralService.java \
+        src/main/java/io/gerowallet/facade/CollateralFacade.java \
+        src/main/java/io/gerowallet/model/collateral/
+git commit -m "feat(collateral): lend/status/cosign business logic with security checks"
+```
+
+---
+
+### Task A8: REST controller
+
+**Files:**
+- Create: `nexus/src/main/java/io/gerowallet/controller/collateral/CollateralController.java`
+
+- [ ] **Step 1: Create the controller**
+
+Create `nexus/src/main/java/io/gerowallet/controller/collateral/CollateralController.java`:
+
+```java
+package io.gerowallet.controller.collateral;
+
+import io.gerowallet.facade.CollateralFacade;
+import io.gerowallet.model.collateral.CosignRequest;
+import io.gerowallet.model.collateral.CosignResponse;
+import io.gerowallet.model.collateral.LendResponse;
+import io.gerowallet.model.collateral.StatusResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/v1/collateral")
+@PreAuthorize("@securityExpressions.canWriteCardano()")
+@Validated
+@Tag(name = "Collateral", description = "Shared-pool collateral for dApp interactions")
+public class CollateralController {
+
+    private final CollateralFacade facade;
+
+    public CollateralController(CollateralFacade facade) {
+        this.facade = facade;
+    }
+
+    @PostMapping("/lend")
+    @Operation(summary = "Lend a shared-pool UTxO", description = "Returns a 5 ADA UTxO reference for use as collateral. May be returned to many devices concurrently.")
+    public ResponseEntity<LendResponse> lend() {
+        return ResponseEntity.ok(facade.lend());
+    }
+
+    @GetMapping("/status")
+    @Operation(summary = "Check if a pool UTxO is still valid")
+    public ResponseEntity<StatusResponse> status(@RequestParam("utxoRef") @NotBlank String utxoRef) {
+        return ResponseEntity.ok(facade.status(utxoRef));
+    }
+
+    @PostMapping("/cosign")
+    @Operation(summary = "Cosign a dApp tx that uses a pool UTxO as collateral")
+    public ResponseEntity<CosignResponse> cosign(@Valid @RequestBody CosignRequest request) {
+        return ResponseEntity.ok(facade.cosign(request.txCbor(), request.utxoRef()));
+    }
+}
+```
+
+- [ ] **Step 2: Run and smoke-test**
+
+```bash
+cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev" -q &
+sleep 30
+
+# Get a device JWT (use existing /api/auth/device flow or copy one from logs)
+TOKEN="<device-jwt>"
+
+# /lend
+curl -s -X POST http://localhost:8080/v1/collateral/lend \
+  -H "Authorization: Bearer $TOKEN" | jq
+# Expected: { "utxoRef": "...#0", "utxoCbor": "...", "address": "addr1v..." }
+
+# /status
+curl -s "http://localhost:8080/v1/collateral/status?utxoRef=$UTXO_REF" \
+  -H "Authorization: Bearer $TOKEN" | jq
+# Expected: { "valid": true }
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/main/java/io/gerowallet/controller/collateral/CollateralController.java
+git commit -m "feat(collateral): REST endpoints /v1/collateral/{lend,status,cosign}"
+```
+
+---
+
+### Task A9: Unit tests for CollateralService
+
+**Files:**
+- Create: `nexus/src/test/java/io/gerowallet/service/collateral/CollateralServiceTest.java`
+
+- [ ] **Step 1: Create service tests**
+
+Create `nexus/src/test/java/io/gerowallet/service/collateral/CollateralServiceTest.java`:
+
+```java
+package io.gerowallet.service.collateral;
+
+import io.gerowallet.entity.CollateralPoolUtxo;
+import io.gerowallet.model.collateral.LendResponse;
+import io.gerowallet.model.collateral.StatusResponse;
+import io.gerowallet.repository.CollateralPoolUtxoRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class CollateralServiceTest {
+
+    @Mock CollateralPoolUtxoRepository repository;
+    @Mock CollateralSigningService signingService;
+    @InjectMocks CollateralService service;
+
+    @BeforeEach
+    void setUp() {
+        when(signingService.isReady()).thenReturn(true);
+    }
+
+    @Test
+    void lend_returnsOldestAvailableUtxo() {
+        CollateralPoolUtxo row = new CollateralPoolUtxo();
+        row.setTxHash("abc".repeat(21) + "d"); // 64 chars
+        row.setOutputIndex(0);
+        row.setAddress("addr1v...");
+        row.setLovelace(5_000_000L);
+        row.setUtxoCborHex("82825820abc...");
+        row.setStatus(CollateralPoolUtxo.Status.AVAILABLE);
+        when(repository.findAvailableOrderedByOldestLend()).thenReturn(List.of(row));
+
+        LendResponse result = service.lend();
+
+        assertThat(result.utxoRef()).endsWith("#0");
+        assertThat(result.utxoCbor()).isEqualTo("82825820abc...");
+    }
+
+    @Test
+    void lend_whenPoolEmpty_throws503() {
+        when(repository.findAvailableOrderedByOldestLend()).thenReturn(Collections.emptyList());
+        assertThatThrownBy(() -> service.lend())
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void status_whenUnknown_returnsInvalid() {
+        when(repository.findByTxHashAndOutputIndex("abc".repeat(21) + "d", 0)).thenReturn(Optional.empty());
+        StatusResponse result = service.status(("abc".repeat(21) + "d") + "#0");
+        assertThat(result.valid()).isFalse();
+        assertThat(result.reason()).isEqualTo("unknown");
+    }
+
+    @Test
+    void status_whenConsumed_returnsInvalid() {
+        CollateralPoolUtxo row = new CollateralPoolUtxo();
+        row.setStatus(CollateralPoolUtxo.Status.CONSUMED);
+        row.setTxHash("abc".repeat(21) + "d");
+        row.setOutputIndex(0);
+        when(repository.findByTxHashAndOutputIndex(row.getTxHash(), 0)).thenReturn(Optional.of(row));
+        StatusResponse result = service.status(row.getTxHash() + "#0");
+        assertThat(result.valid()).isFalse();
+        assertThat(result.reason()).isEqualTo("consumed");
+    }
+
+    @Test
+    void status_whenAvailable_returnsValid() {
+        CollateralPoolUtxo row = new CollateralPoolUtxo();
+        row.setStatus(CollateralPoolUtxo.Status.AVAILABLE);
+        row.setTxHash("abc".repeat(21) + "d");
+        row.setOutputIndex(0);
+        when(repository.findByTxHashAndOutputIndex(row.getTxHash(), 0)).thenReturn(Optional.of(row));
+        StatusResponse result = service.status(row.getTxHash() + "#0");
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    void cosign_whenUtxoInInputsNotCollateral_throws400() {
+        // Build a minimal tx CBOR placing the pool UTxO in `inputs`, not `collateral`.
+        // Use cardano-client-lib Transaction builder for this test, or use a known-good fixture.
+        // TODO: populate with a real fixture during implementation; this test skeleton shows intent.
+    }
+}
+```
+
+**Note:** The `cosign_whenUtxoInInputsNotCollateral` test requires a real Cardano tx CBOR fixture. Leave it marked with a TODO to be filled in during implementation — include known-good CBOR samples from Preprod txs.
+
+- [ ] **Step 2: Run tests**
+
+```bash
+cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+mvn test -Dtest=CollateralServiceTest -q
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/test/java/io/gerowallet/service/collateral/CollateralServiceTest.java
+git commit -m "test(collateral): unit tests for CollateralService lend/status flows"
+```
+
+---
+
+## Phase B: Client (`gerowallet`)
 
 ### Task 1: Create `nexus-collateral-api.ts` HTTP client
 
@@ -1134,8 +2303,19 @@ Verification only.
 
 ## Self-Review Checklist
 
-1. **Spec coverage:**
-   - [x] Shared pool at enterprise address (no franken) (Nexus API contract)
+1. **Phase A (Nexus backend) coverage:**
+   - [x] Hot wallet config + properties (A1)
+   - [x] Ed25519 signing + blake2b service (A2)
+   - [x] Flyway migration for pool table (A3)
+   - [x] Entity + repository (A4)
+   - [x] Startup pool reconcile (A5)
+   - [x] Scheduled monitor for consumed UTxOs (A6)
+   - [x] Business logic with security checks (A7)
+   - [x] REST controller + device JWT auth (A8)
+   - [x] Unit tests (A9)
+
+2. **Phase B (client) coverage:**
+   - [x] Shared pool at enterprise address (no franken)
    - [x] DB persistence via `wallet-db` config table (Task 3)
    - [x] Fetch on login, validate via `/status` (Task 4)
    - [x] Periodic re-validation on sync tick (Task 5)
@@ -1146,84 +2326,28 @@ Verification only.
    - [x] Graceful degradation when Nexus is down (Tasks 3, 4, 7)
    - [x] Non-blocking login (Task 4 uses `setTimeout(0)`)
 
-2. **Files explicitly NOT touched:**
-   - `src/chrome/walletBg.ts` — franken filter unchanged
-   - `src/shared/utils/builder.ts` — `excludeCollateral` path unchanged
-   - `src/popup/modules/views/SignTx.vue`, `src/sidepanel/components/DAppOverlay.vue` — co-signing is transparent
-   - `src/db/wallet-db.ts` schema — reuse existing `config` table
-   - `.env.*`, `scripts/manifest.ts` — unchanged
+3. **Files explicitly NOT touched:**
+   - `gerowallet/src/chrome/walletBg.ts` — franken filter unchanged
+   - `gerowallet/src/shared/utils/builder.ts` — `excludeCollateral` path unchanged
+   - `gerowallet/src/popup/modules/views/SignTx.vue`, `src/sidepanel/components/DAppOverlay.vue` — co-signing is transparent
+   - `gerowallet/src/db/wallet-db.ts` schema — reuse existing `config` table
+   - `gerowallet/.env.*`, `scripts/manifest.ts` — unchanged
+   - `nexus` other endpoints — only new `/v1/collateral/*` added
 
-3. **Commits are atomic:**
-   - 9 commits (API client → store state → service → login init → sync validation → getCollateral fallback → SIGN_TX co-sign → i18n → UI)
+4. **Commits are atomic:**
+   - Phase A: 9 commits (config → signing → migration → entity+repo → init → monitor → service → controller → tests)
+   - Phase B: 9 commits (API client → store state → service → login init → sync validation → getCollateral fallback → SIGN_TX co-sign → i18n → UI)
    - Each independently revertable
+   - Phase A must be deployed before Phase B is shipped to production; Phase B can be developed and tested locally against a dev Nexus running Phase A
 
 ---
 
-## Nexus Backend API Spec (contract for backend team)
+## Nexus Backend API Spec
 
-### `POST /v1/collateral/lend`
+The full API is implemented in Phase A Tasks A7–A8. Endpoint summary for cross-reference:
 
-**Auth:** Device JWT
-
-**Request:** `{}` (empty body — device identity comes from JWT)
-
-**Response 200:**
-```json
-{
-  "utxoRef": "abc123...#0",
-  "utxoCbor": "82825820abc...",
-  "address": "addr1v87c4cxx..."
-}
-```
-
-**Response 503:** Pool exhausted / kill switch.
-
-**Behavior:**
-- Pick any valid (unconsumed) UTxO from the pool
-- Many devices may be assigned the same UTxO — this is intentional (concurrent sharing is safe)
-- Rate limit: one call per device per minute
-
-### `GET /v1/collateral/status?utxoRef=<ref>`
-
-**Auth:** Device JWT
-
-**Request:** query param `utxoRef=abc123...%230`
-
-**Response 200:**
-```json
-{ "valid": true }
-```
-or
-```json
-{ "valid": false, "reason": "consumed" }
-```
-
-**Behavior:** Fast check against chain index. Answers: "does this UTxO still exist on-chain?"
-
-### `POST /v1/collateral/cosign`
-
-**Auth:** Device JWT
-
-**Request:**
-```json
-{
-  "txCbor": "84a400...",
-  "utxoRef": "abc123...#0"
-}
-```
-
-**Response 200:**
-```json
-{ "witness": "a100818258..." }
-```
-
-**Response 400:** UTxO ref appears in `inputs` (not just `collateralInputs`) — adversarial tx, refuse to sign.
-
-**Response 404:** UTxO has been consumed. Client invalidates its cache.
-
-**Behavior:**
-1. Parse `txCbor`
-2. Verify `utxoRef` ∈ `tx.body.collateralInputs` AND `utxoRef` ∉ `tx.body.inputs`
-3. Compute `blake2b-256(tx.body.toCbor())` → tx body hash
-4. Ed25519 sign with the hot wallet payment signing key
-5. Build a `TransactionWitnessSet` with the single VKeyWitness and return its CBOR
+| Endpoint | Auth | Response success | Response errors |
+|----------|------|------------------|-----------------|
+| `POST /v1/collateral/lend` | Device JWT | `{ utxoRef, utxoCbor, address }` | 503 pool exhausted / not ready |
+| `GET /v1/collateral/status?utxoRef=...` | Device JWT | `{ valid, reason? }` | — |
+| `POST /v1/collateral/cosign` | Device JWT | `{ witness }` | 400 adversarial (UTxO in inputs) / 404 unknown or consumed / 503 not ready |
