@@ -11,7 +11,7 @@
             flat
             outlined
             class="pa-2 fill-height transparent"
-            style="height: 487px; overflow: auto; max-width: 350px"
+            :style="{ height: compact ? 'auto' : '487px', overflow: 'auto', maxWidth: '350px' }"
           >
             <TokenSelector
               v-for="(token, index) in tokenModel"
@@ -64,7 +64,7 @@
                 class="mb-4"
               ></v-text-field>
             </v-card-subtitle>
-            <v-card-text style="overflow-y: auto; height: 382px; text-align: left">
+            <v-card-text :style="{ overflowY: 'auto', height: compact ? '200px' : '382px', textAlign: 'left' }">
               <v-item-group v-model="selectedCollectibles" multiple>
                 <template v-for="(collection, index) in collections">
                   <div v-if="collection.items" :key="`collection_${index}`">
@@ -169,6 +169,8 @@ interface Props {
   tokens: any[];
   /** Fingerprints of NFTs fully allocated to other recipient cards — hidden from picker */
   excludedCollectibleFingerprints?: Set<string>;
+  /** When true, uses compact height for inline use inside a recipient card */
+  compact?: boolean;
 }
 
 const props = defineProps<Props>();

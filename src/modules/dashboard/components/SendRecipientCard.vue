@@ -178,6 +178,7 @@
             :value="assetsModel"
             :tokens="availableTokens"
             :excluded-collectible-fingerprints="excludedCollectibleFingerprints"
+            :compact="true"
             @input="onAssetsInput"
             @setMax="onSetMax"
           />
