@@ -5,15 +5,15 @@
         <v-card flat class="transparent">
           <v-card-title class="text-left">
             <Select
-              :value="sendData.selectedWallet"
-              :items="[sendData.selectedWallet]"
+              :value="sendData?.selectedWallet"
+              :items="sendData?.selectedWallet ? [sendData.selectedWallet] : []"
               :label="t('wallet.from')"
               :readonly="true"
             ></Select>
           </v-card-title>
           <v-card-text>
             <v-icon>mdi-arrow-down-thin</v-icon>
-            <DappAddress class="mb-4" :address="sendData.recipientAddress" :risk="risks?.addressRisk" :with-bg="false" />
+            <DappAddress class="mb-4" :address="primaryRecipientAddress" :risk="risks?.addressRisk" :with-bg="false" />
             <v-icon>mdi-arrow-down-thin</v-icon>
             <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true" :with-bg="false">
               {{ $t('wallet.youreGiving') }}
@@ -58,8 +58,11 @@ import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 
 const { t } = useTranslation();
 
+import type { SendRecipient } from '@/models/send-flow.types';
+
 interface Props {
-  sendData: any;
+  recipients?: SendRecipient[];
+  sendData?: Record<string, unknown>;
   txData?: Cardano.Tx;
 }
 
@@ -69,7 +72,7 @@ defineExpose({
 });
 const loading = ref<boolean>(false);
 const tx = ref<Cardano.Tx | undefined>(undefined);
-const risks = ref<any>({
+const risks = ref<{ score?: unknown; addressRisk?: string }>({
   score: undefined
 });
 
@@ -77,6 +80,13 @@ const { loggedWallet, utxos } = toRefs(walletStore);
 
 const changeAddress = computed(() => {
   return loggedWallet.value?.baseAddress;
+});
+
+const primaryRecipientAddress = computed(() => {
+  if (props.recipients && props.recipients.length > 0) {
+    return props.recipients[0].resolvedAddress ?? props.recipients[0].address ?? '';
+  }
+  return props.sendData?.recipientAddress ?? '';
 });
 
 const recipient = computed(() => {
@@ -190,14 +200,15 @@ async function scanTx(txData: Cardano.Tx) {
 
   // Make Cardano Shield scan non-blocking with 5-second timeout
   // Don't block the UI if the scan is slow or fails
+  const toAddress = props.recipients?.[0]?.resolvedAddress ?? props.recipients?.[0]?.address ?? props.sendData?.recipientAddress ?? '';
   const scanWithTimeout = Promise.race([
     cardanoShieldApi.scanTx({
       cborHex,
-      toAddress: props.sendData.recipientAddress,
+      toAddress,
       fromAddress: changeAddress.value,
       url: 'https://gerowallet.io',
     }),
-    new Promise<any>((_, reject) =>
+    new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000)
     )
   ]);
