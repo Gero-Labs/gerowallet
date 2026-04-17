@@ -96,10 +96,16 @@
 
                 <!-- Global total -->
                 <div v-if="globalTotal.ada > 0 || globalTotal.usd > 0" class="global-total">
-                  <span class="global-total__label">{{ $t('common.total') }}</span>
-                  <div class="global-total__values">
-                    <span class="global-total__ada">{{ globalTotal.formattedAda }}</span>
-                    <span class="global-total__fiat">{{ '\u2248' }} {{ globalTotal.formattedUsd }}</span>
+                  <div class="global-total__row">
+                    <span class="global-total__label">{{ $t('common.total') }}</span>
+                    <div>
+                      <span class="global-total__ada">{{ globalTotal.formattedAda }}</span>
+                      <span class="global-total__fiat">{{ '\u2248' }} {{ globalTotal.formattedUsd }}</span>
+                    </div>
+                  </div>
+                  <div v-if="globalTotal.formattedFee" class="global-total__row global-total__fee-row">
+                    <span class="global-total__fee-label">{{ $t('signTx.networkFee') }}</span>
+                    <span class="global-total__fee">{{ globalTotal.formattedFee }}</span>
                   </div>
                 </div>
               </div>
@@ -455,16 +461,28 @@ const globalTotal = computed(() => {
     });
   });
 
-  // Simple USD estimate from ADA price
+  // Extract fee from built tx
+  let feeAda = 0;
+  let formattedFee = '';
+  if (tx.value?.body?.fee) {
+    const feeLovelace = Number(tx.value.body.fee);
+    feeAda = feeLovelace / 1_000_000;
+    formattedFee = filters.toCurrency(feeLovelace, false, 6, '\u20B3', '', false, 6);
+  }
+
+  const totalWithFee = totalAda + feeAda;
   const adaPrice = Number(walletStore.price?.lastPrice || 0);
-  totalUsd = totalAda * adaPrice;
+  totalUsd = totalWithFee * adaPrice;
 
   return {
     ada: totalAda,
+    fee: feeAda,
+    totalWithFee,
     usd: totalUsd,
     formattedAda: totalAda > 0
       ? filters.toCurrency(totalAda * 1e6, false, 6, '\u20B3', '', false, 6)
       : '\u20B30',
+    formattedFee,
     formattedUsd: totalUsd > 0
       ? `$${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : '$0.00',
@@ -537,7 +555,7 @@ async function buildTx() {
     txValid.value = true;
     debugLog('Built multi-output tx:', tx.value);
   } catch (e) {
-    debugLog('buildTx error:', e);
+    if (!isCalculatingMax.value) debugLog('buildTx error:', e);
     txValid.value = false;
     throw e;
   }
@@ -755,9 +773,6 @@ onMounted(() => {
 
 /* ─── Global total ─── */
 .global-total {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 10px 12px;
   margin-top: 4px;
   background: rgba(255, 255, 255, 0.02);
@@ -765,14 +780,16 @@ onMounted(() => {
   border-radius: 10px;
 }
 
+.global-total__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .global-total__label {
   font-size: 12px;
   font-weight: 600;
   color: #CECFD2;
-}
-
-.global-total__values {
-  text-align: right;
 }
 
 .global-total__ada {
@@ -785,6 +802,22 @@ onMounted(() => {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
   margin-left: 6px;
+}
+
+.global-total__fee-row {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.global-total__fee-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.global-total__fee {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* ─── Empty wallet ─── */

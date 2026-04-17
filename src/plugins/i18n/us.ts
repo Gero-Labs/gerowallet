@@ -2230,6 +2230,7 @@ export default {
   'wallet.addAnotherRecipient': '+ Add another recipient',
   'wallet.duplicateRecipient': 'Duplicate recipient',
   'wallet.removeRecipient': 'Remove recipient',
+  'wallet.noContacts': 'No contacts saved yet',
   'wallet.tooManyRecipients': 'Too many recipients or assets for one transaction. Remove a recipient or reduce assets.',
   'wallet.recipientAddress': 'Recipient Address',
   'wallet.recipientDetails': 'Recipient Details',

@@ -29,7 +29,7 @@
             </template>
             <!-- Non-native token (clickable to swap) -->
             <template v-else>
-              <v-menu offset-y attach max-height="240">
+              <v-menu offset-y max-height="240" min-width="240">
                 <template v-slot:activator="{ on, attrs }">
                   <div class="token-selector-trigger" v-bind="attrs" v-on="on">
                     <v-avatar size="24" class="mr-2">
@@ -67,16 +67,17 @@
           </div>
           <div class="token-row__right">
             <v-text-field
-              :value="token.quantity"
+              :value="formatQuantityDisplay(token.quantity)"
               @input="onQuantityInput(index, $event)"
-              type="number"
+              @focus="onAmountFocus(index)"
+              @blur="onAmountBlur(index)"
+              type="text"
               outlined
               dense
               hide-details
               class="amount-input"
               placeholder="0"
-              min="0"
-              step="any"
+              inputmode="decimal"
             />
             <v-btn
               text
@@ -128,7 +129,7 @@
     <!-- Add token / NFT row -->
     <div class="add-asset-row">
       <!-- Add token picker -->
-      <v-menu offset-y attach max-height="320" min-width="280" v-if="missingTokens.length > 0">
+      <v-menu offset-y max-height="320" min-width="280" v-if="missingTokens.length > 0">
         <template v-slot:activator="{ on, attrs }">
           <v-btn text x-small color="#00DFF3" v-bind="attrs" v-on="on" class="add-asset-btn">
             <v-icon x-small class="mr-1">mdi-plus</v-icon>
@@ -449,9 +450,34 @@ function formatTokenValue(token: any): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+const focusedIndex = ref<number>(-1);
+
+function formatQuantityDisplay(quantity: string | number): string {
+  if (!quantity && quantity !== 0) return '';
+  const raw = String(quantity).replace(/,/g, '');
+  const num = parseFloat(raw);
+  if (isNaN(num)) return String(quantity);
+  // When focused, show raw number without commas for easy editing
+  if (focusedIndex.value >= 0) return raw;
+  // When blurred, format with commas
+  const parts = raw.split('.');
+  parts[0] = Number(parts[0]).toLocaleString('en-US');
+  return parts.join('.');
+}
+
+function onAmountFocus(index: number) {
+  focusedIndex.value = index;
+}
+
+function onAmountBlur(index: number) {
+  if (focusedIndex.value === index) focusedIndex.value = -1;
+}
+
 function onQuantityInput(index: number, val: string) {
+  // Strip commas from pasted/formatted input
+  const cleaned = val.replace(/,/g, '');
   const updatedTokens = [...tokenModel.value];
-  updatedTokens[index] = { ...updatedTokens[index], quantity: val };
+  updatedTokens[index] = { ...updatedTokens[index], quantity: cleaned };
   tokenModel.value = updatedTokens;
 }
 

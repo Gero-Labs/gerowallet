@@ -103,7 +103,6 @@
                 small
                 v-bind="attrs"
                 v-on="on"
-                :disabled="!contacts || Object.values(contacts).length === 0"
                 class="address-row__icon-btn"
               >
                 <v-icon small color="#00DFF3">mdi-book-open-variant-outline</v-icon>
@@ -118,19 +117,24 @@
                 </v-btn>
               </v-card-title>
               <v-card-text class="pa-0">
-                <v-data-table
-                  dense
-                  class="transparent"
-                  :headers="contactsHeaders"
-                  :items="contacts ? Object.values(contacts) : []"
-                  hide-default-footer
-                  disable-pagination
-                  @click:row="selectContact"
-                >
-                  <template v-slot:[`item.address`]="{ item }">
-                    {{ filters.truncate(item.address) }}
-                  </template>
-                </v-data-table>
+                <template v-if="contacts && Object.values(contacts).length > 0">
+                  <v-data-table
+                    dense
+                    class="transparent"
+                    :headers="contactsHeaders"
+                    :items="Object.values(contacts)"
+                    hide-default-footer
+                    disable-pagination
+                    @click:row="selectContact"
+                  >
+                    <template v-slot:[`item.address`]="{ item }">
+                      {{ filters.truncate(item.address) }}
+                    </template>
+                  </v-data-table>
+                </template>
+                <div v-else class="text-center py-6" style="color: rgba(255,255,255,0.4); font-size: 12px;">
+                  {{ $t('wallet.noContacts') }}
+                </div>
               </v-card-text>
             </v-card>
           </v-menu>
@@ -452,14 +456,16 @@ defineExpose({ cardTotalAmounts });
 /* ─── Address row ─── */
 .address-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
 }
 
 .address-row__icon-btn {
   width: 28px !important;
   height: 28px !important;
+  min-height: 28px !important;
   flex-shrink: 0;
+  margin-top: 4px;
 }
 
 .address-input {
