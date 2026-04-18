@@ -73,6 +73,7 @@
                 <SendRecipientCard
                   v-for="(recipient, idx) in recipients"
                   :key="recipient.id"
+                  :class="{ shake: shakeError && !isRecipientValid(recipient) }"
                   :recipient="recipient"
                   :index="idx"
                   :is-expanded="expandedRecipientId === recipient.id"
@@ -80,6 +81,7 @@
                   :show-header="true"
                   :available-tokens="availableTokensFor(recipient.id)"
                   :excluded-collectible-fingerprints="excludedFingerprintsFor(recipient.id)"
+                  :duplicate-of-index="getDuplicateOfIndex(recipient.id, recipient.address)"
                   @expand="expandRecipient(recipient.id)"
                   @update:recipient="updateRecipient(recipient.id, $event)"
                   @duplicate="duplicateRecipient(recipient.id)"
@@ -179,9 +181,8 @@
           <!-- Step 1: Continue button -->
           <v-btn
             v-if="currentStep !== 2"
-            class="continue-button"
-            @click="nextStep"
-            :disabled="!isValid || txSignLoading"
+            :class="['continue-button', { shake: shakeError }]"
+            @click="nextStep()"
             :loading="txSignLoading"
           >{{ $t('common.continue') + ' ' }}
             <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
@@ -256,6 +257,8 @@ const currentStep = ref<number>(1);
 const expandedRecipientId = ref<string | null>(null);
 const txValid = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
+const shakeError = ref<boolean>(false);
+const maxRecipientIds = ref<Set<string>>(new Set());
 
 function createEmptyRecipient(): SendRecipient {
   const nativeAsset = tokens.value.find((t: Token & { balance?: string | number; name?: string; img?: string; ticker: string }) => t.ticker === nativeTicker.value);
@@ -375,6 +378,8 @@ const resetData = () => {
   currentStep.value = 1;
   tx.value = undefined;
   txValid.value = false;
+  shakeError.value = false;
+  maxRecipientIds.value = new Set();
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
 };
@@ -407,6 +412,13 @@ function excludedFingerprintsFor(recipientId: string): Set<string> {
 function updateRecipient(id: string, updated: SendRecipient) {
   const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
   if (idx !== -1) {
+    // If ADA amount was manually changed, remove from MAX tracking
+    const old = recipients.value[idx];
+    const oldAda = old.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+    const newAda = updated.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+    if (oldAda && newAda && oldAda.quantity !== newAda.quantity && maxRecipientIds.value.has(id)) {
+      maxRecipientIds.value.delete(id);
+    }
     recipients.value.splice(idx, 1, updated);
   }
 }
@@ -443,6 +455,28 @@ async function removeRecipient(id: string) {
 
 function expandRecipient(id: string) {
   expandedRecipientId.value = id;
+}
+
+function getDuplicateOfIndex(recipientId: string, address: string): number | undefined {
+  if (!address) return undefined;
+  const current = recipients.value.find((r: SendRecipient) => r.id === recipientId);
+  const checkAddr = current?.resolvedAddress || address;
+  if (!checkAddr) return undefined;
+  const idx = recipients.value.findIndex((r: SendRecipient) =>
+    r.id !== recipientId && ((r.resolvedAddress || r.address) === checkAddr)
+  );
+  return idx >= 0 ? idx : undefined;
+}
+
+function isRecipientValid(r: SendRecipient): boolean {
+  const addr = r.resolvedAddress ?? r.address;
+  const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
+  if (rule(addr) !== true) return false;
+  const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
+    Object.keys(r.selectedCollectibles).length > 0;
+  if (!hasAsset) return false;
+  if (r.adaShortage > 0) return false;
+  return true;
 }
 
 const showAddLink = computed(() => {
@@ -571,6 +605,11 @@ const summaryRef = ref<InstanceType<typeof SummaryStep>>();
 
 async function nextStep() {
   if (currentStep.value === 1) {
+    if (!isValid.value) {
+      shakeError.value = true;
+      setTimeout(() => { shakeError.value = false; }, 600);
+      return;
+    }
     summaryRef.value?.scanTx(tx.value);
     currentStep.value++;
   } else if (currentStep.value === 2) {
@@ -592,6 +631,11 @@ function prevStep() {
  */
 async function setMax(recipientId: string, tokenIndex: number) {
   isCalculatingMax.value = true;
+  // Track ADA MAX recipients for auto-adjust on build failure
+  const recipientForMax = recipients.value.find((r: SendRecipient) => r.id === recipientId);
+  if (recipientForMax && recipientForMax.selectedTokens[tokenIndex]?.ticker === nativeTicker.value) {
+    maxRecipientIds.value.add(recipientId);
+  }
   const recipientIdx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
   if (recipientIdx === -1) { isCalculatingMax.value = false; return; }
 
@@ -705,6 +749,47 @@ const debouncedBuild = debounce(async () => {
       }
     }
     txValid.value = false;
+
+    // Auto-adjust MAX recipients on build failure
+    if (maxRecipientIds.value.size > 0) {
+      for (const maxId of maxRecipientIds.value) {
+        const maxIdx = recipients.value.findIndex((r: SendRecipient) => r.id === maxId);
+        if (maxIdx === -1) { maxRecipientIds.value.delete(maxId); continue; }
+        const maxRecipient = recipients.value[maxIdx];
+        const recipientAddress = maxRecipient.resolvedAddress ?? maxRecipient.address;
+        if (!isPaymentAddress(recipientAddress)) continue;
+        try {
+          const otherAda = recipients.value
+            .filter((r: SendRecipient) => r.id !== maxId)
+            .reduce((sum: bigint, r: SendRecipient) => {
+              const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+              return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
+            }, BigInt(0));
+          const maxResult = await nexusTxApi.calculateMaxAda({
+            destinationAddress: recipientAddress,
+            changeAddress: keys.value.payment[0].address,
+            utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+            network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+          }, loggedWallet.value.network);
+          const maxLovelace = BigInt(maxResult.max_lovelace) - otherAda;
+          if (maxLovelace > BigInt(0)) {
+            const maxQty = Number(maxLovelace) / 1_000_000;
+            const adaIdx = maxRecipient.selectedTokens.findIndex((tk: Token) => tk.ticker === nativeTicker.value);
+            if (adaIdx >= 0) {
+              const finalTokens = [...maxRecipient.selectedTokens];
+              finalTokens[adaIdx] = { ...finalTokens[adaIdx], quantity: String(maxQty) };
+              recipients.value.splice(maxIdx, 1, { ...maxRecipient, selectedTokens: finalTokens });
+            }
+          }
+        } catch { /* ignore auto-adjust failure */ }
+      }
+      // Retry build after adjusting
+      try {
+        await buildTx({ selectAll: true });
+        txValid.value = true;
+        recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+      } catch { /* still invalid */ }
+    }
   }
 }, 500);
 
@@ -941,5 +1026,16 @@ onMounted(() => {
 
 .v-stepper__content {
   padding: 0;
+}
+
+/* ─── Shake animation ─── */
+.shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
 }
 </style>
