@@ -200,6 +200,7 @@
             @input="onAssetsInput"
             @setMax="onSetMax"
             @openCollectiblesDialog="collectiblesDialogOpen = true"
+            @sendEntireWallet="$emit('sendEntireWallet')"
           />
           <SelectCollectiblesDialog
             :isOpen="collectiblesDialogOpen"
@@ -253,6 +254,7 @@ const emit = defineEmits<{
   (e: 'duplicate'): void;
   (e: 'remove'): void;
   (e: 'setMax', payload: { tokenIndex: number }): void;
+  (e: 'sendEntireWallet'): void;
 }>();
 
 const { loggedWallet, contacts } = toRefs(walletStore);
