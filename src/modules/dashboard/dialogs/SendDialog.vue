@@ -750,45 +750,50 @@ const debouncedBuild = debounce(async () => {
     }
     txValid.value = false;
 
-    // Auto-adjust MAX recipients on build failure
+    // Auto-adjust MAX recipients on build failure (one attempt only)
     if (maxRecipientIds.value.size > 0) {
-      for (const maxId of maxRecipientIds.value) {
-        const maxIdx = recipients.value.findIndex((r: SendRecipient) => r.id === maxId);
-        if (maxIdx === -1) { maxRecipientIds.value.delete(maxId); continue; }
-        const maxRecipient = recipients.value[maxIdx];
-        const recipientAddress = maxRecipient.resolvedAddress ?? maxRecipient.address;
-        if (!isPaymentAddress(recipientAddress)) continue;
-        try {
-          const otherAda = recipients.value
-            .filter((r: SendRecipient) => r.id !== maxId)
-            .reduce((sum: bigint, r: SendRecipient) => {
-              const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
-              return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
-            }, BigInt(0));
-          const maxResult = await nexusTxApi.calculateMaxAda({
-            destinationAddress: recipientAddress,
-            changeAddress: keys.value.payment[0].address,
-            utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
-            network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
-          }, loggedWallet.value.network);
-          const maxLovelace = BigInt(maxResult.max_lovelace) - otherAda;
-          if (maxLovelace > BigInt(0)) {
-            const maxQty = Number(maxLovelace) / 1_000_000;
-            const adaIdx = maxRecipient.selectedTokens.findIndex((tk: Token) => tk.ticker === nativeTicker.value);
-            if (adaIdx >= 0) {
-              const finalTokens = [...maxRecipient.selectedTokens];
-              finalTokens[adaIdx] = { ...finalTokens[adaIdx], quantity: String(maxQty) };
-              recipients.value.splice(maxIdx, 1, { ...maxRecipient, selectedTokens: finalTokens });
-            }
-          }
-        } catch { /* ignore auto-adjust failure */ }
-      }
-      // Retry build after adjusting
+      isCalculatingMax.value = true; // Prevent watch from re-triggering during adjustment
       try {
-        await buildTx({ selectAll: true });
-        txValid.value = true;
-        recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
-      } catch { /* still invalid */ }
+        for (const maxId of maxRecipientIds.value) {
+          const maxIdx = recipients.value.findIndex((r: SendRecipient) => r.id === maxId);
+          if (maxIdx === -1) { maxRecipientIds.value.delete(maxId); continue; }
+          const maxRecipient = recipients.value[maxIdx];
+          const recipientAddress = maxRecipient.resolvedAddress ?? maxRecipient.address;
+          if (!isPaymentAddress(recipientAddress)) continue;
+          try {
+            const otherAda = recipients.value
+              .filter((r: SendRecipient) => r.id !== maxId)
+              .reduce((sum: bigint, r: SendRecipient) => {
+                const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+                return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
+              }, BigInt(0));
+            const maxResult = await nexusTxApi.calculateMaxAda({
+              destinationAddress: recipientAddress,
+              changeAddress: keys.value.payment[0].address,
+              utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+              network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+            }, loggedWallet.value.network);
+            const maxLovelace = BigInt(maxResult.max_lovelace) - otherAda;
+            if (maxLovelace > BigInt(0)) {
+              const maxQty = Number(maxLovelace) / 1_000_000;
+              const adaIdx = maxRecipient.selectedTokens.findIndex((tk: Token) => tk.ticker === nativeTicker.value);
+              if (adaIdx >= 0) {
+                const finalTokens = [...maxRecipient.selectedTokens];
+                finalTokens[adaIdx] = { ...finalTokens[adaIdx], quantity: String(maxQty) };
+                recipients.value.splice(maxIdx, 1, { ...maxRecipient, selectedTokens: finalTokens });
+              }
+            }
+          } catch { /* ignore auto-adjust failure */ }
+        }
+        // Retry build after adjusting
+        try {
+          await buildTx({ selectAll: true });
+          txValid.value = true;
+          recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+        } catch { /* still invalid */ }
+      } finally {
+        isCalculatingMax.value = false;
+      }
     }
   }
 }, 500);
