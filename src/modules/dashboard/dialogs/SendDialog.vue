@@ -698,6 +698,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
   };
 
   try {
+    // Step 1: get the max amount preview from /v1/tx/max-ada (for UI display)
     const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network);
     const maxLovelace = BigInt(maxResult.max_lovelace);
     const changeMinUtxo = BigInt(maxResult.change_min_utxo);
@@ -706,6 +707,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
     if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
 
+    // Step 2: set the amount in the UI
     const maxQty = Number(maxLovelace) / 1_000_000;
     const finalTokens = [...recipients.value[recipientIdx].selectedTokens];
     finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: String(maxQty) };
@@ -716,8 +718,39 @@ async function setMax(recipientId: string, tokenIndex: number) {
     }
     recipients.value.splice(recipientIdx, 1, finalRecipient);
 
-    // Build with selectAll to match the max-ada calculation (all UTxOs selected)
-    try { await buildTx({ selectAll: true }); } catch { /* amount is correct per Nexus */ }
+    // Step 3: build the tx — send lovelace="0" so Nexus auto-maximizes using
+    // the same calculation as max-ada (no mismatch between two separate computations)
+    try {
+      // Build with the MAX output having lovelace="0" — Nexus detects it and maximizes
+      const buildOutputs = recipients.value
+        .filter((r: SendRecipient) => {
+          if (r.id === recipientId) return true;
+          const addr = r.resolvedAddress ?? r.address;
+          return !!addr && isPaymentAddress(addr);
+        })
+        .map((r: SendRecipient) => {
+          if (r.id === recipientId) {
+            const out = recipientToNexusOutput(r, '0');
+            if (!out.address || !isPaymentAddress(out.address)) out.address = changeAddr;
+            return out;
+          }
+          return recipientToNexusOutput(r);
+        });
+
+      const buildRequest: BuildTxRequest = {
+        outputs: buildOutputs,
+        changeAddress: changeAddr,
+        utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+        network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+        selectAll: true,
+      };
+      const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(buildRequest, loggedWallet.value.network);
+      const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+      tx.value = transaction.toCore();
+      txValid.value = true;
+    } catch {
+      // Build may fail if other recipients changed — the amount is still correct for UI
+    }
   } catch (err) {
     debugLog('setMax: /v1/tx/max-ada failed:', err);
   }
