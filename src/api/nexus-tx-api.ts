@@ -177,7 +177,8 @@ export function cardanoUtxoToNexusInput(utxo: Cardano.Utxo): NexusTxInput {
 // ── Public API ──
 
 export interface MaxAdaRequest {
-  destinationAddress: string;
+  /** All outputs — the one with lovelace="0" is the one Nexus will maximize */
+  outputs: NexusTxOutput[];
   changeAddress: string;
   utxos?: NexusTxInput[];
   senderAddress?: string;

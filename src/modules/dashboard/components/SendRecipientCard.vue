@@ -532,11 +532,10 @@ defineExpose({ cardTotalAmounts });
 }
 
 .address-row__icon-btn {
-  width: 28px !important;
-  height: 28px !important;
+  width: 32px !important;
+  height: 32px !important;
   min-height: 28px !important;
   flex-shrink: 0;
-  margin-top: 4px;
 }
 
 .address-input {
