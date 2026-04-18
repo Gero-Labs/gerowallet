@@ -2692,6 +2692,7 @@ export default {
   'wallet.removeRecipient': 'Empfänger entfernen',
   'wallet.noContacts': 'Noch keine Kontakte gespeichert',
   'wallet.lockedForTokens': 'gesperrt für Native Tokens in der Wallet',
+  'wallet.sendEntireWallet': 'Gesamte Wallet senden',
   'wallet.adaRequiredForTokens': 'ADA wird benötigt, um Token auf Cardano zu übertragen',
   'wallet.duplicateAddress': 'Gleiche Adresse wie Empfänger #{n}',
   'wallet.tooManyRecipients': 'Zu viele Empfänger oder Assets für eine Transaktion. Bitte Empfänger oder Assets reduzieren.',

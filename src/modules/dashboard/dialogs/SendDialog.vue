@@ -87,6 +87,7 @@
                   @duplicate="duplicateRecipient(recipient.id)"
                   @remove="removeRecipient(recipient.id)"
                   @setMax="setMax(recipient.id, $event.tokenIndex)"
+                  @sendEntireWallet="sendEntireWallet(recipient.id)"
                 />
 
                 <!-- Add another recipient link -->
@@ -666,12 +667,28 @@ async function setMax(recipientId: string, tokenIndex: number) {
   // All outputs are sent — the MAX recipient has lovelace="0", Nexus maximizes it.
   // Other recipients' ADA + tokens are subtracted automatically by Nexus.
 
-  // Build all outputs — the MAX recipient gets lovelace="0", others keep their amounts
-  const maxOutputs = recipients.value.map((r: SendRecipient) =>
-    r.id === recipientId
-      ? recipientToNexusOutput(r, '0') // this one will be maximized by Nexus
-      : recipientToNexusOutput(r)
-  );
+  // Build all outputs — the MAX recipient gets lovelace="0", others keep their amounts.
+  // If the MAX recipient has no address yet, use the change address as placeholder
+  // (the address only affects fee by a few bytes — close enough for MAX calculation).
+  const changeAddr = keys.value.payment[0].address;
+  const maxOutputs = recipients.value
+    .filter((r: SendRecipient) => {
+      // Skip other recipients that have no address and no amounts (empty cards)
+      if (r.id === recipientId) return true;
+      const addr = r.resolvedAddress ?? r.address;
+      return !!addr && isPaymentAddress(addr);
+    })
+    .map((r: SendRecipient) => {
+      if (r.id === recipientId) {
+        const out = recipientToNexusOutput(r, '0');
+        // Use change address as placeholder if recipient has no address
+        if (!out.address || !isPaymentAddress(out.address)) {
+          out.address = changeAddr;
+        }
+        return out;
+      }
+      return recipientToNexusOutput(r);
+    });
 
   const maxAdaRequest: MaxAdaRequest = {
     outputs: maxOutputs,
@@ -706,6 +723,15 @@ async function setMax(recipientId: string, tokenIndex: number) {
   }
 
   isCalculatingMax.value = false;
+}
+
+/** Send entire wallet: all tokens + NFTs are already added by the child, just trigger MAX ADA */
+async function sendEntireWallet(recipientId: string) {
+  // Wait for the child's emit to propagate (tokens + NFTs added to recipient)
+  await nextTick();
+  // Trigger MAX on ADA (index 0) — since all tokens/NFTs are being sent,
+  // no change output for native tokens → max = balance - fee
+  await setMax(recipientId, 0);
 }
 
 watch(() => props.isOpen, (val) => {

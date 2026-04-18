@@ -135,6 +135,19 @@
       </div>
     </div>
 
+    <!-- Send entire wallet -->
+    <div v-if="missingTokens.length > 0 || collectiblesCount > 0" class="send-all-row">
+      <v-btn
+        text x-small
+        color="rgba(255,255,255,0.4)"
+        class="send-all-btn"
+        @click="sendEntireWallet()"
+      >
+        <v-icon x-small class="mr-1">mdi-send-variant-outline</v-icon>
+        {{ $t('wallet.sendEntireWallet') }}
+      </v-btn>
+    </div>
+
     <!-- Add token / NFT row -->
     <div class="add-asset-row">
       <!-- Add token picker -->
@@ -222,7 +235,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(['input', 'setMax', 'openCollectiblesDialog']);
+const emit = defineEmits(['input', 'setMax', 'openCollectiblesDialog', 'sendEntireWallet']);
 
 const { loggedWallet, collections: resolvedCollections } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
@@ -549,6 +562,41 @@ function autoSetMinAda() {
   }
 }
 
+/** Add all tokens at full balance + all NFTs, then trigger MAX ADA */
+function sendEntireWallet() {
+  // Add all missing tokens at their full balance
+  const allTokens = [...tokenModel.value];
+  for (const token of missingTokens.value) {
+    const qty = token.decimals
+      ? Number(filters.toCurrency(token.balance, false, token.decimals, '', '', false, token.decimals).replaceAll(',', ''))
+      : Number(token.balance);
+    allTokens.push({ ...token, quantity: String(qty) });
+  }
+  tokenModel.value = allTokens;
+
+  // Add all collectibles
+  const allCollectibles: any[] = [];
+  for (const collection of Object.values(resolvedCollections.value)) {
+    const items = (collection as any)?.items;
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      if (item.toSendQuantity === undefined) item.toSendQuantity = item.quantity || 1;
+      allCollectibles.push(item);
+    }
+  }
+  if (allCollectibles.length > 0) {
+    selectedCollectibles.value = allCollectibles;
+    emit('input', {
+      ...props.value,
+      selectedTokens: allTokens,
+      selectedCollectibles: allCollectibles,
+    });
+  }
+
+  // Trigger MAX ADA — since all tokens/NFTs are now included, no change output needed
+  emit('sendEntireWallet');
+}
+
 async function addSpecificToken(token: any) {
   tokenModel.value = [...tokenModel.value, { ...token, quantity: '0' }];
   autoSetMinAda();
@@ -772,6 +820,21 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 }
 
 /* ─── Add asset row ─── */
+/* ─── Send entire wallet ─── */
+.send-all-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 0;
+}
+
+.send-all-btn {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 11px !important;
+  padding: 0 6px !important;
+  height: 22px !important;
+}
+
 .add-asset-row {
   display: flex;
   justify-content: flex-start;

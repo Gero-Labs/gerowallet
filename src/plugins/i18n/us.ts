@@ -2232,6 +2232,7 @@ export default {
   'wallet.removeRecipient': 'Remove recipient',
   'wallet.noContacts': 'No contacts saved yet',
   'wallet.lockedForTokens': 'locked for native tokens in wallet',
+  'wallet.sendEntireWallet': 'Send entire wallet',
   'wallet.adaRequiredForTokens': 'ADA is required to carry tokens on Cardano',
   'wallet.duplicateAddress': 'Same address as Recipient #{n}',
   'wallet.tooManyRecipients': 'Too many recipients or assets for one transaction. Remove a recipient or reduce assets.',
