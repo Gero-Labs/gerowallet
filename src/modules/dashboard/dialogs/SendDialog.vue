@@ -37,7 +37,7 @@
     <!-- Normal send flow -->
     <template v-else>
       <!-- Stepper indicator -->
-      <v-card-title style="display: block;" class="py-0">
+      <v-card-title style="display: block;" class="pa-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
           <v-stepper-header>
             <template v-for="(item, index) in steps">
@@ -530,10 +530,42 @@ const globalTotal = computed(() => {
   };
 });
 
+/** Build Nexus output format from a recipient. Optionally override lovelace (for max-ada). */
+function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
+  const address = r.resolvedAddress ?? r.address;
+  let lovelace = overrideLovelace ?? '0';
+  const assets: NexusTxAsset[] = [];
+
+  r.selectedTokens
+    .filter((tk: Token) => tk && (tk.unit || tk.unit === '') && tk.decimals != null)
+    .forEach((token: Token) => {
+      const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
+      if (token.ticker === nativeTicker.value) {
+        if (!overrideLovelace) lovelace = qty.toString();
+      } else if (token.unit) {
+        assets.push({
+          policyId: token.unit.slice(0, 56),
+          assetName: token.unit.slice(56),
+          quantity: qty.toString(),
+        });
+      }
+    });
+
+  Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
+    if (col.unit) {
+      assets.push({
+        policyId: col.unit.slice(0, 56),
+        assetName: col.unit.slice(56),
+        quantity: String(col.toSendQuantity || 1),
+      });
+    }
+  });
+
+  return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
+}
+
 /**
  * Build the transaction via Nexus backend (/v1/tx/build).
- * Server-side building gives us fresh protocol params, canonical fee calculation,
- * and coin selection without needing local tip/epochParams.
  */
 async function buildTx(options?: { selectAll?: boolean }) {
   const allValid = recipients.value.every((r: SendRecipient) =>
@@ -541,39 +573,7 @@ async function buildTx(options?: { selectAll?: boolean }) {
   );
   if (!allValid) return;
 
-  // Map recipients → Nexus output format
-  const nexusOutputs = recipients.value.map((r: SendRecipient) => {
-    const address = r.resolvedAddress ?? r.address;
-    let lovelace = '0';
-    const assets: NexusTxAsset[] = [];
-
-    r.selectedTokens
-      .filter((tk: Token) => tk && (tk.unit || tk.unit === '') && tk.decimals != null)
-      .forEach((token: Token) => {
-        const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
-        if (token.ticker === nativeTicker.value) {
-          lovelace = qty.toString();
-        } else if (token.unit) {
-          assets.push({
-            policyId: token.unit.slice(0, 56),
-            assetName: token.unit.slice(56),
-            quantity: qty.toString(),
-          });
-        }
-      });
-
-    Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
-      if (col.unit) {
-        assets.push({
-          policyId: col.unit.slice(0, 56),
-          assetName: col.unit.slice(56),
-          quantity: String(col.toSendQuantity || 1),
-        });
-      }
-    });
-
-    return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
-  });
+  const nexusOutputs = recipients.value.map((r: SendRecipient) => recipientToNexusOutput(r));
 
   const request: BuildTxRequest = {
     outputs: nexusOutputs,
@@ -663,20 +663,18 @@ async function setMax(recipientId: string, tokenIndex: number) {
   }
 
   // ADA max: ask Nexus to compute precisely via /v1/tx/max-ada.
-  // Nexus selects ALL UTxOs, computes fee + change min UTxO for native tokens,
-  // and returns the exact maximum sendable amount.
-  const otherAdaLovelace = recipients.value
-    .filter((r: SendRecipient) => r.id !== recipientId)
-    .reduce((sum: bigint, r: SendRecipient) => {
-      const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
-      return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
-    }, BigInt(0));
+  // All outputs are sent — the MAX recipient has lovelace="0", Nexus maximizes it.
+  // Other recipients' ADA + tokens are subtracted automatically by Nexus.
 
-  // Get the recipient address (needed for Nexus to compute output size → fee)
-  const recipientAddress = recipient.resolvedAddress ?? recipient.address;
+  // Build all outputs — the MAX recipient gets lovelace="0", others keep their amounts
+  const maxOutputs = recipients.value.map((r: SendRecipient) =>
+    r.id === recipientId
+      ? recipientToNexusOutput(r, '0') // this one will be maximized by Nexus
+      : recipientToNexusOutput(r)
+  );
 
   const maxAdaRequest: MaxAdaRequest = {
-    destinationAddress: recipientAddress,
+    outputs: maxOutputs,
     changeAddress: keys.value.payment[0].address,
     utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
     network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
@@ -684,7 +682,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
   try {
     const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network);
-    const maxLovelace = BigInt(maxResult.max_lovelace) - otherAdaLovelace;
+    const maxLovelace = BigInt(maxResult.max_lovelace);
     const changeMinUtxo = BigInt(maxResult.change_min_utxo);
 
     debugLog('setMax: Nexus max =', Number(maxLovelace) / 1_000_000, 'ADA (fee:', Number(maxResult.estimated_fee) / 1_000_000, ', changeMin:', Number(changeMinUtxo) / 1_000_000, ')');
@@ -761,19 +759,18 @@ const debouncedBuild = debounce(async () => {
           const recipientAddress = maxRecipient.resolvedAddress ?? maxRecipient.address;
           if (!isPaymentAddress(recipientAddress)) continue;
           try {
-            const otherAda = recipients.value
-              .filter((r: SendRecipient) => r.id !== maxId)
-              .reduce((sum: bigint, r: SendRecipient) => {
-                const ada = r.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
-                return sum + BigInt(Math.floor(Number(ada?.quantity || 0) * 1_000_000));
-              }, BigInt(0));
+            const adjustOutputs = recipients.value.map((r: SendRecipient) =>
+              r.id === maxId
+                ? recipientToNexusOutput(r, '0')
+                : recipientToNexusOutput(r)
+            );
             const maxResult = await nexusTxApi.calculateMaxAda({
-              destinationAddress: recipientAddress,
+              outputs: adjustOutputs,
               changeAddress: keys.value.payment[0].address,
               utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
               network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
             }, loggedWallet.value.network);
-            const maxLovelace = BigInt(maxResult.max_lovelace) - otherAda;
+            const maxLovelace = BigInt(maxResult.max_lovelace);
             if (maxLovelace > BigInt(0)) {
               const maxQty = Number(maxLovelace) / 1_000_000;
               const adaIdx = maxRecipient.selectedTokens.findIndex((tk: Token) => tk.ticker === nativeTicker.value);
