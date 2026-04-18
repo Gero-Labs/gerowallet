@@ -183,6 +183,12 @@
           />
         </div>
 
+        <!-- Duplicate address warning -->
+        <div v-if="duplicateOfIndex !== undefined" class="duplicate-warning">
+          <v-icon x-small color="#FEC84B" class="mr-1">mdi-alert-outline</v-icon>
+          {{ $t('wallet.duplicateAddress', { n: duplicateOfIndex + 1 }) }}
+        </div>
+
         <!-- Assets section (shown only when address is valid) -->
         <div class="assets-section">
           <AssetsToSendStep
@@ -235,6 +241,7 @@ interface Props {
   showHeader: boolean;
   availableTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
   excludedCollectibleFingerprints?: Set<string>;
+  duplicateOfIndex?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -579,6 +586,15 @@ defineExpose({ cardTotalAmounts });
   font-size: 11px;
   word-break: break-all;
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* ─── Duplicate address warning ─── */
+.duplicate-warning {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #FEC84B;
+  padding: 4px 4px 0;
 }
 
 /* ─── Assets section ─── */

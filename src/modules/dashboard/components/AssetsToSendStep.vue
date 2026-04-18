@@ -126,6 +126,12 @@
           <v-icon x-small color="#FEC84B" style="margin-top: -1px;" class="mr-1">mdi-lock-outline</v-icon>
           {{ lockedAdaForTokens.toFixed(2) }} {{ token.ticker }} {{ $t('wallet.lockedForTokens') }}
         </div>
+
+        <!-- Info: ADA auto-set to min UTxO for tokens -->
+        <div v-if="index === 0 && isAutoMinAda" class="token-info">
+          <v-icon x-small color="#FEC84B" class="mr-1" style="margin-top: -1px;">mdi-information-outline</v-icon>
+          {{ $t('wallet.adaRequiredForTokens') }}
+        </div>
       </div>
     </div>
 
@@ -197,7 +203,7 @@
 
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { toRefs, computed, watch, onMounted, ref } from 'vue';
+import { toRefs, computed, watch, onMounted, ref, nextTick } from 'vue';
 import networks from '@/utils/networks';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -224,6 +230,7 @@ const { price } = toRefs(networkStore);
 const selectedCollectibles = ref<any[]>([]);
 const search = ref<string>('');
 const selectedTokens = ref<any[]>([]);
+const isAutoMinAda = ref<boolean>(false);
 
 const { convertFiat } = useCurrencyConverter();
 
@@ -441,10 +448,15 @@ function getAvailableTokens(currentIndex: number) {
 
 function formatBalance(token: any): string {
   if (!token) return '0';
+  // Find the matching token in props.tokens which has the adjusted balance
+  // (total minus what other recipients have committed)
+  const available = props.tokens.find((t: any) => t.unit === token.unit || t.ticker === token.ticker);
+  const balance = available?.balance ?? token.balance;
+  if (!balance) return '0';
   if (token.decimals) {
-    return filters.toCurrency(token.balance, false, 2, '', '', true, token.decimals);
+    return filters.toCurrency(balance, false, 2, '', '', true, token.decimals);
   }
-  return String(token.balance || 0);
+  return String(balance);
 }
 
 function formatQuantityDisplay(quantity: string | number): string {
@@ -494,6 +506,8 @@ function onQuantityInput(index: number, val: string) {
   const updatedTokens = [...tokenModel.value];
   updatedTokens[index] = { ...updatedTokens[index], quantity: cleaned };
   tokenModel.value = updatedTokens;
+  // Clear auto-min flag when user manually edits ADA amount
+  if (index === 0) isAutoMinAda.value = false;
 }
 
 function setMinimum(token: any) {
@@ -524,14 +538,33 @@ function removeTokenSelector(index: number) {
   tokenModel.value = updatedTokens;
 }
 
-function addSpecificToken(token: any) {
+/** Auto-set ADA to min UTxO if ADA quantity is 0 and a non-ADA token/NFT is present */
+function autoSetMinAda() {
+  const adaToken = tokenModel.value[0];
+  if (adaToken && Number(adaToken.quantity) === 0 && props.value?.minAda > 0) {
+    const updatedTokens = [...tokenModel.value];
+    updatedTokens[0] = { ...updatedTokens[0], quantity: String(props.value.minAda) };
+    tokenModel.value = updatedTokens;
+    isAutoMinAda.value = true;
+  }
+}
+
+async function addSpecificToken(token: any) {
   tokenModel.value = [...tokenModel.value, { ...token, quantity: '0' }];
+  autoSetMinAda();
+  await nextTick();
+  // Focus the last amount input
+  const inputs = document.querySelectorAll('.amount-input input');
+  const lastInput = inputs[inputs.length - 1] as HTMLInputElement;
+  lastInput?.focus();
+  lastInput?.select();
 }
 
 function swapToken(index: number, newToken: any) {
   const updatedTokens = [...tokenModel.value];
   updatedTokens[index] = { ...newToken, quantity: updatedTokens[index]?.quantity || '0' };
   tokenModel.value = updatedTokens;
+  autoSetMinAda();
 }
 
 function formatTokenBalance(token: any): string {
@@ -585,6 +618,7 @@ watch(
       ...props.value,
       selectedCollectibles: newVal,
     });
+    if (newVal.length > 0) autoSetMinAda();
   },
   {
     deep: true,
@@ -601,7 +635,7 @@ onMounted(() => {
 });
 
 // Expose for parent access
-defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens, totalAmounts, lockedAdaForTokens });
+defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens, totalAmounts, lockedAdaForTokens, isAutoMinAda });
 </script>
 
 <style scoped>
