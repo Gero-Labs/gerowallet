@@ -509,7 +509,7 @@ const globalTotal = computed(() => {
   }
 
   const totalWithFee = totalAda + feeAda;
-  const adaPrice = Number(walletStore.price?.lastPrice || 0);
+  const adaPrice = Number(networkStore.price?.lastPrice || 0);
   totalUsd = totalWithFee * adaPrice;
 
   return {
