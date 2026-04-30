@@ -511,14 +511,21 @@ const preloadBackgroundImage = () => {
   img.src = imageUrl;
 };
 
-// Open settings dialog if launched from Mini Gero "All Settings" button
-onMounted(() => {
-  chrome.storage.local.get('openSettingsOnLoad', (result) => {
-    if (result.openSettingsOnLoad) {
-      currentDialog.value = dialogs.SETTINGS;
-      chrome.storage.local.remove('openSettingsOnLoad');
-    }
-  });
+// Open settings dialog if launched from Mini Gero settings button.
+// We listen for flag changes (handles the case where the dashboard tab is
+// already open and just gets focused) instead of reading on mount, which
+// would leave a stale flag in storage when no fresh ContentLayout mount occurs.
+const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+  if (area === 'local' && changes.openSettingsOnLoad?.newValue) {
+    currentDialog.value = dialogs.SETTINGS;
+    chrome.storage.local.remove('openSettingsOnLoad');
+  }
+};
+chrome.storage.onChanged.addListener(handleStorageChange);
+onBeforeUnmount(() => {
+  chrome.storage.onChanged.removeListener(handleStorageChange);
+  // Clear any leftover flag so the dialog doesn't auto-open next time
+  chrome.storage.local.remove('openSettingsOnLoad');
 });
 
 // Lifecycle
