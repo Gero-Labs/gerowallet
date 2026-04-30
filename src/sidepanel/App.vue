@@ -18,7 +18,7 @@
     <template v-else>
       <MiniLayout
         @wallet-switch="showWalletSwitcher = true"
-        @settings="showSettings = true"
+        @settings="openDashboardSettings"
       />
       <DAppOverlay />
     </template>
@@ -26,11 +26,6 @@
     <!-- Wallet switcher bottom sheet (available from header) -->
     <BottomSheet v-model="showWalletSwitcher" :title="t('miniGero.selectWallet')" height="60%">
       <WalletSelector compact @select="onWalletSwitch" />
-    </BottomSheet>
-
-    <!-- Settings bottom sheet -->
-    <BottomSheet v-model="showSettings" :title="t('settings.settings')" height="85%">
-      <SettingsPanel @close="showSettings = false" />
     </BottomSheet>
 
   </v-app>
@@ -47,13 +42,11 @@ import WalletSelector from './components/WalletSelector.vue';
 import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
 import BottomSheet from './components/BottomSheet.vue';
-import SettingsPanel from './components/SettingsPanel.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Wallet } from '@/models/types';
 
 const { t } = useTranslation();
 const showWalletSwitcher = ref(false);
-const showSettings = ref(false);
 
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
@@ -92,6 +85,21 @@ async function onWalletSelect(wallet: Wallet) {
 function onWalletSwitch(wallet: Wallet) {
   showWalletSwitcher.value = false;
   onWalletSelect(wallet);
+}
+
+function openDashboardSettings() {
+  chrome.storage.local.set({ openSettingsOnLoad: true });
+  const dashboardUrl = chrome.runtime.getURL('index.html');
+  chrome.tabs.query({ url: `${dashboardUrl}*` }, (tabs) => {
+    if (tabs.length > 0 && tabs[0].id !== undefined) {
+      chrome.tabs.update(tabs[0].id, { active: true });
+      if (tabs[0].windowId !== undefined) {
+        chrome.windows.update(tabs[0].windowId, { focused: true });
+      }
+    } else {
+      chrome.tabs.create({ url: dashboardUrl });
+    }
+  });
 }
 
 </script>
