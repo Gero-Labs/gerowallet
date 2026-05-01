@@ -90,16 +90,21 @@ function onWalletSwitch(wallet: Wallet) {
 function openDashboardSettings() {
   chrome.storage.local.set({ openSettingsOnLoad: true });
   const dashboardUrl = chrome.runtime.getURL('index.html');
-  chrome.tabs.query({ url: `${dashboardUrl}*` }, (tabs) => {
-    if (tabs.length > 0 && tabs[0].id !== undefined) {
-      chrome.tabs.update(tabs[0].id, { active: true });
-      if (tabs[0].windowId !== undefined) {
-        chrome.windows.update(tabs[0].windowId, { focused: true });
+  try {
+    chrome.tabs.query({ url: `${dashboardUrl}*` }, (tabs) => {
+      if (tabs.length > 0 && tabs[0].id !== undefined) {
+        chrome.tabs.update(tabs[0].id, { active: true });
+        if (tabs[0].windowId !== undefined) {
+          chrome.windows.update(tabs[0].windowId, { focused: true });
+        }
+      } else {
+        chrome.tabs.create({ url: dashboardUrl });
       }
-    } else {
-      chrome.tabs.create({ url: dashboardUrl });
-    }
-  });
+    });
+  } catch (e) {
+    console.warn('Failed to query dashboard tabs, opening new tab:', e);
+    chrome.tabs.create({ url: dashboardUrl });
+  }
 }
 
 </script>
