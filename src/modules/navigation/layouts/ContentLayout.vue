@@ -530,6 +530,16 @@ onBeforeUnmount(() => {
 
 // Lifecycle
 onMounted(async () => {
+  // Catch the new-tab path: storage.onChanged fired before this listener was
+  // registered, so check the flag once on mount. The already-open-tab path
+  // is handled by handleStorageChange, which removes the flag before mount.
+  chrome.storage.local.get('openSettingsOnLoad', (result) => {
+    if (result.openSettingsOnLoad) {
+      currentDialog.value = dialogs.SETTINGS;
+      chrome.storage.local.remove('openSettingsOnLoad');
+    }
+  });
+
   // Ensure colors are set on mount
   updateThemeColors();
 
