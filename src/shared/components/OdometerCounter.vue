@@ -74,7 +74,9 @@ watch(
 
       // Then animate to actual value
       setTimeout(() => {
-        odometerInstance.update(newValue);
+        if (odometerInstance) {
+          odometerInstance.update(newValue);
+        }
       }, 10);
     }
   }

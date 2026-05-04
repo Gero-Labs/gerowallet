@@ -1,49 +1,84 @@
 <template>
   <v-tab-item>
     <v-card flat class="transparent">
-      <v-card-title class="px-0 text-left">
-        {{ $t('settings.whatIsCollateral') }}
+      <v-card-title class="px-0 text-left d-flex align-center">
+        <span>{{ $t('settings.whatIsCollateral') }}</span>
+        <v-tooltip right max-width="320" content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <v-icon small class="ml-2" color="grey lighten-1" v-bind="attrs" v-on="on">
+              mdi-information-outline
+            </v-icon>
+          </template>
+          <span>{{ $t('settings.collateralTooltip') }}</span>
+        </v-tooltip>
       </v-card-title>
       <v-card-subtitle class="px-0 text-left">
         {{ $t('settings.collateralDescription') }}
       </v-card-subtitle>
+
       <v-card-text class="text-left px-0">
-        <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer disable-pagination :header-props="{ 'sort-icon': 'mdi-menu-up' }">
-          <template v-slot:[`item.utxo`]="{ item }">
-            <span class="mr-1">{{ filters.truncate(`${item.utxo}`) }}</span>
-            <CopyButton x-small :value="`${item.utxo}`"></CopyButton>
-          </template>
-          <template v-slot:[`item.address`]="{ item }">
-            <span class="mr-1">{{ filters.truncate(`${item.address}`) }}</span>
-            <CopyButton x-small :value="`${item.address}`"></CopyButton>
-          </template>
-          <template v-slot:[`item.balance`]="{ item }">
-            <span>{{ filters.toCurrency(`${item.balance}`, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}</span>
-          </template>
-        </v-data-table>
-        <v-row no-gutters class="mt-4">
-          <v-col cols="9" class="text-left">
-          </v-col>
-          <v-col cols="3" class="text-right">
+        <!-- Status: auto-detected (success) -->
+        <v-alert
+          v-if="collateral"
+          dense
+          outlined
+          color="success"
+          icon="mdi-check-circle-outline"
+          class="mb-4"
+        >
+          <div class="font-weight-bold">{{ $t('settings.collateralAutoDetected') }}</div>
+          <div class="caption mt-1">{{ $t('settings.collateralAutoDetectedDesc') }}</div>
+          <v-row no-gutters class="mt-3" align="center">
+            <v-col cols="auto" class="caption mr-2">{{ $t('settings.collateralAmount') }}:</v-col>
+            <v-col cols="auto" class="font-weight-medium">
+              {{ filters.toCurrency(collateral[1].value.coins.toString(), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}
+            </v-col>
+          </v-row>
+          <v-row no-gutters class="mt-1" align="center">
+            <v-col cols="auto" class="caption mr-2">{{ $t('settings.collateralUtxoRef') }}:</v-col>
+            <v-col cols="auto" class="caption">
+              {{ filters.truncate(`${collateral[0].txId}#${collateral[0].index}`) }}
+            </v-col>
+            <v-col cols="auto" class="ml-1">
+              <CopyButton x-small :value="`${collateral[0].txId}#${collateral[0].index}`" />
+            </v-col>
+          </v-row>
+        </v-alert>
+
+        <!-- Status: no own collateral, Gero shared pool covers (info banner).
+             We don't pre-fetch a Nexus UTxO — getCollateral() lends one on
+             demand when a dApp asks. The setup button stays available for
+             users who'd rather hold their own pure-ADA UTxO. -->
+        <v-alert
+          v-else
+          dense
+          outlined
+          color="info"
+          icon="mdi-shield-check-outline"
+          class="mb-4"
+        >
+          <div class="font-weight-bold">{{ $t('settings.collateralGeroProvided') }}</div>
+          <div class="caption mt-1">{{ $t('settings.collateralGeroProvidedDesc') }}</div>
+          <div class="mt-3">
             <v-btn
-              large
-              class="geroButton"
-              style="color: black!important;"
-              :disabled="collateralCandidate.length !== 0"
+              small
+              text
+              class="px-2"
+              :loading="isCreating"
               @click="setCollateral"
             >
               {{ $t('settings.setCollateral') }}
             </v-btn>
-          </v-col>
-        </v-row>
+          </div>
+        </v-alert>
       </v-card-text>
     </v-card>
   </v-tab-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, toRefs } from 'vue';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { ref, toRefs, computed, onMounted } from 'vue';
+import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -51,93 +86,96 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import { HexBlob } from '@cardano-sdk/util';
+import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 
 // Define emits
 const emit = defineEmits(['close']);
 
 // Get reactive store properties
 const { loggedWallet, utxos, collateral, keys } = toRefs(walletStore);
-const { tip, epochParams } = toRefs(networkStore);
 
 
 // Reactive data
 const { t } = useTranslation();
 
-const headers = ref([
-  {text: t('settings.utxo'), sortable: false, value: 'utxo'},
-  {text: t('common.address'), sortable: false, value: 'address'},
-  {text: t('common.balance'), sortable: false, value: 'balance'},
-]);
+const isCreating = ref(false);
 
-const collateralCandidate = computed<any>(() => {
-  if (collateral.value) {
-    return [collateral.value].map((utxo: Cardano.Utxo) => ({
-      utxo: `${utxo[0].txId}#${utxo[0].index}`,
-      address: utxo[1].address,
-      balance: utxo[1].value.coins.toString()
-    }));
+const hasNewCollateralFeature = computed(() => isFeatureNew('settings.collateral.autoDetect'));
+
+onMounted(() => {
+  if (hasNewCollateralFeature.value) {
+    markFeatureAsSeen('settings.collateral.autoDetect');
   }
-  return [];
 });
 
 // Methods
 const setCollateral = async () => {
+  isCreating.value = true;
   try {
-    // Check if we have epoch parameters
-    if (!epochParams.value) {
-      throw new Error(t('common.epochParametersNotAvailable'));
-    }
-
-    // Create a collateral output of 5 ADA
-    const collateralOutput: Cardano.TxOut = {
-      address: loggedWallet.value.baseAddress as Cardano.PaymentAddress,
-      value: {
-        coins: BigInt(5000000) // 5 ADA
-      }
+    // Build the request for nexus's /v1/tx/build endpoint.
+    // Server-side building means: nexus owns coin selection, fresh protocol params,
+    // and canonical fee calculation. The wallet only signs and submits.
+    const request: BuildTxRequest = {
+      outputs: [
+        {
+          address: loggedWallet.value.baseAddress as string,
+          lovelace: '5000000', // 5 ADA collateral
+        },
+      ],
+      changeAddress: keys.value.payment[0].address,
+      utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+      withdrawals: currentRewardWithdrawals(),
     };
 
-    // Build the transaction using the modern SDK with wallet context for accurate fee calculation
-    const txData = await buildCardanoTransaction({
-      outputs: [collateralOutput],
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-      walletContext: {
-        keys: keys.value,
-        stakeAddress: loggedWallet.value.stakeAddress,
-        accountIndex: 0
-      }
-    });
+    const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(
+      request,
+      loggedWallet.value.network
+    );
 
-    // Convert to CBOR for signing
-    const transaction: Serialization.Transaction = Serialization.Transaction.fromCore(txData)
-    const txCbor = transaction.toCbor();
+    // Reconstruct the unsigned transaction from the CBOR returned by nexus,
+    // then follow the same sign + merge-witness + submit flow as before.
+    const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
 
-    const signaturesRes: any = await Messaging.sendToBackground({
+    const signaturesRes = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
-    });
-    console.log('signaturesRes', signaturesRes)
+      data: { tx: txCborHex, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
+    }) as { data?: string; error?: { info?: string; code?: number | string } };
     if (signaturesRes.error) {
-      snackbar.setError(signaturesRes.error.info)
-    } else {
-      console.log(signaturesRes)
+      // Detect user rejection (no info / "user_rejected" reason) and stay silent — clicking
+      // Reject in the sign popup is an intentional action, not an error to surface.
+      const info = signaturesRes.error.info;
+      const isUserReject =
+        !info ||
+        /reject|cancel|denied|user_rejected/i.test(String(info)) ||
+        signaturesRes.error.code === 2; // CIP-30 UserDeclined
+      if (!isUserReject) {
+        snackbar.setError(info || t('settings.failedToBuildCollateral'));
+      }
+    } else if (signaturesRes.data) {
       const witnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
       const newTx: Serialization.Transaction = new Serialization.Transaction(transaction.body(), witnessSet)
       await submit(newTx.toCbor())
     }
-  } catch (error: any) {
-    console.error('Error building collateral transaction:', error);
-    if (error.message?.includes('UTxO Balance Insufficient')) {
+  } catch (error) {
+    console.error('Error building collateral transaction via nexus:', error);
+    const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
+    const status = err.response?.status;
+    const serverMsg = err.response?.data?.error || err.response?.data?.message;
+    if (status === 401 || status === 429) {
+      snackbar.setError(t('settings.failedToBuildCollateral'));
+    } else if (serverMsg && /insufficient/i.test(serverMsg)) {
+      snackbar.setError(t('settings.insufficientAdaForCollateral'));
+    } else if (err.message?.includes('UTxO Balance Insufficient')) {
       snackbar.setError(t('settings.insufficientAdaForCollateral'));
     } else {
       snackbar.setError(t('settings.failedToBuildCollateral'));
     }
+  } finally {
+    isCreating.value = false;
   }
 };
 

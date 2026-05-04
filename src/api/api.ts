@@ -22,12 +22,6 @@ export class Api {
     });
   }
 
-  async ablyToken(baseAddress: string) {
-    return this.axiosInstance.get(
-      `/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`
-    );
-  }
-
   async getAccountInfo(rewardAddress: string) {
     try {
       const { data, status } = await this.axiosInstance.get(

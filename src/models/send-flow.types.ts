@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Types for the shared send flow components
  * Used by dashboard and multisig modules
@@ -42,6 +43,23 @@ export interface SendFlowData {
   adaShortage?: number;
   isMultisigFunding?: boolean;
   availableWallets?: any[];
+}
+
+export interface SendRecipient {
+  /** Stable key for v-for — generated with crypto.randomUUID() */
+  id: string;
+  /** Raw input: payment address or $handle string */
+  address: string;
+  /** Resolved payment address (null when address is not yet valid or handle not yet resolved) */
+  resolvedAddress: string | null;
+  /** Selected tokens; first entry is always ADA (locked, cannot remove) */
+  selectedTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
+  /** Selected collectibles keyed by NFT name */
+  selectedCollectibles: Record<string, Collectible & { unit: string }>;
+  /** Min ADA required for this output (calculated from non-native assets) */
+  minAda: number;
+  /** > 0 when ADA in this card is less than required */
+  adaShortage: number;
 }
 
 export interface WalletSelectorConfig {

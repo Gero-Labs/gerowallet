@@ -9,7 +9,7 @@ export const geroDBSchema = {
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 };
 
-export const walletDBVersion: number = 9;
+export const walletDBVersion: number = 10;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -20,7 +20,8 @@ export const walletDBSchema = {
   rewards: 'epoch, amount, pool_id, type',
   transactions: 'id',
   connected_dapps: '++id, domain, time',
-  portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt', // Portfolio charts data moved from separate DB
+  portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt',
+  utxos: '++id', // Persisted UTxOs from server (survives logout)
 };
 
 export const blockChainDBVersion: number = 5;

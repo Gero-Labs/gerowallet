@@ -90,7 +90,6 @@ export const POPUP = {
   dappSignData: 'dapp-sign',
   bitcoinSignPsbt: 'sign-bitcoin-psbt',
   bitcoinSignMessage: 'sign-bitcoin-message',
-  login: 'plogin',
   warning:'warning',
   passKeyAuth: 'passkey-auth',
   wcSessionProposal: 'wc-session-proposal',

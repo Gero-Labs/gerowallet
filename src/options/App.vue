@@ -8,13 +8,17 @@
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
         <v-progress-linear
-            buffer-value="0"
-            color="primary"
-            reverse
-            stream
-            value="0"
-            style="color: cyan; width: 100px; text-align: center"
-        ></v-progress-linear>
+            :value="progress"
+            :indeterminate="progress === 0"
+            color="#16d9f3"
+            background-color="rgba(255,255,255,0.15)"
+            height="20"
+            rounded
+            class="glow-bar"
+            style="width: 220px"
+        >
+          <span v-if="progress > 0" style="color: black; font-size: 11px; font-weight: 700;">{{ progress }}%</span>
+        </v-progress-linear>
         <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
@@ -42,7 +46,7 @@ import { geroStore } from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 
-const { loading, isRestoring, text } = toRefs(loadingState);
+const { loading, isRestoring, text, progress } = toRefs(loadingState);
 const geroConfig = toRefs(geroStore).config;
 
 const snackbarPlugin = ref(snackbar);
@@ -200,5 +204,50 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
 
 .v-select.v-text-field input {
   cursor: pointer!important;
+}
+
+.glow-bar {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(22, 217, 243, 0.3)) drop-shadow(0 0 8px rgba(22, 217, 243, 0.15)); }
+  50% { filter: drop-shadow(0 0 8px rgba(22, 217, 243, 0.6)) drop-shadow(0 0 16px rgba(22, 217, 243, 0.35)); }
+}
+
+.glow-bar,
+.glow-bar * {
+  text-align: left !important;
+}
+
+.glow-bar {
+  border: 1px solid rgba(22, 217, 243, 0.3) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.glow-bar .v-progress-linear__background {
+  background: transparent !important;
+}
+
+.glow-bar .v-progress-linear__determinate {
+  position: relative !important;
+  background: #0a8fa8 !important;
+  overflow: hidden !important;
+}
+
+.glow-bar .v-progress-linear__determinate::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 80%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(126, 240, 255, 0.3), transparent);
+  animation: shimmer-sweep 3s ease-in-out infinite;
+}
+
+@keyframes shimmer-sweep {
+  0% { left: -80%; }
+  100% { left: 100%; }
 }
 </style>

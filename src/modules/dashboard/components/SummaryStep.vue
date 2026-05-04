@@ -1,176 +1,147 @@
 <template>
-  <v-card flat class="transparent">
-    <v-row no-gutters>
-      <v-col cols="6">
-        <v-card flat class="transparent">
-          <v-card-title class="text-left">
-            <Select
-              :value="sendData.selectedWallet"
-              :items="[sendData.selectedWallet]"
-              :label="t('wallet.from')"
-              :readonly="true"
-            ></Select>
-          </v-card-title>
-          <v-card-text>
-            <v-icon>mdi-arrow-down-thin</v-icon>
-            <DappAddress class="mb-4" :address="sendData.recipientAddress" :risk="risks?.addressRisk" :with-bg="false" />
-            <v-icon>mdi-arrow-down-thin</v-icon>
-            <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true" :with-bg="false">
-              {{ $t('wallet.youreGiving') }}
-              <v-tooltip bottom>
-                <template v-slot:activator="{ on, attrs }">
-                  <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
-                    mdi-information-outline
-                  </v-icon>
-                </template>
-                <div>
-                  <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} {{ $t('common.andOrTokensShownHere') }}<br></span>
-                  <span style="color: #FF7777">{{ $t('common.sentFromYourWallet') }}<br></span>
-                  <span> {{ $t('common.toTheAddressListedAbove') }}<br /><br />{{ $t('common.onceSignedIrreversible') }}</span>
-                </div>
-              </v-tooltip>
-            </TransactionCard>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="6" style="align-content: center">
-        <TransactionRisk class="pb-8" :risk="risks?.score" :loading="loading" />
-        <div style="flex-flow: row; display: flex; justify-content: center;">
-          <CopyButton v-if="tx" x-small :value="getCborHex()" :title="t('wallet.copyCBOR')"></CopyButton>
-        </div>
-      </v-col>
-    </v-row>
+  <v-card flat class="summary-step transparent">
+    <TransactionDetailsCard
+      v-if="tx"
+      :outputs="outputRows"
+      :withdrawal="withdrawalRow"
+      :totals="totals"
+      :risk-badge="txRiskBadge"
+      :risk-loading="loading"
+      :cbor-hex="getCborHex()"
+      class="mb-3"
+    />
   </v-card>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref } from 'vue';
-import Select from '@/shared/components/Select.vue';
-import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
-import DappAddress from '@/popup/modules/components/DappAddress.vue';
-import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
-import networks from '@/utils/networks';
-import cardanoShieldApi from '@/api/cardano-shield-api';
-import CopyButton from '@/shared/components/CopyButton.vue';
+import { DappScore } from '@/models/cardano-shield-types';
 import { walletStore } from '@/stores/walletStore';
+import cardanoShieldApi from '@/api/cardano-shield-api';
 import { Cardano } from '@cardano-sdk/core';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import filters from '@/shared/utils/filters';
+import TransactionDetailsCard, {
+  type TxDetailsOutput,
+  type TxDetailsWithdrawal,
+  type TxDetailsTotals,
+  type TxDetailsRiskBadge,
+} from '@/shared/components/TransactionDetailsCard.vue';
 
-const { t } = useTranslation();
+import type { SendRecipient } from '@/models/send-flow.types';
 
 interface Props {
-  sendData: any;
+  recipients: SendRecipient[];
   txData?: Cardano.Tx;
 }
 
 const props = defineProps<Props>();
-defineExpose({
-  scanTx,
-});
+defineExpose({ scanTx });
+
 const loading = ref<boolean>(false);
 const tx = ref<Cardano.Tx | undefined>(undefined);
-const risks = ref<any>({
-  score: undefined
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const risks = ref<any>({ score: undefined });
+
+const { loggedWallet } = toRefs(walletStore);
+
+const recipientAddresses = computed(() => {
+  const set = new Set<string>();
+  for (const r of props.recipients) {
+    const a = r.resolvedAddress || r.address;
+    if (a) set.add(a);
+  }
+  return set;
 });
 
-const { loggedWallet, utxos } = toRefs(walletStore);
+function truncateAddr(addr: string): string {
+  if (!addr) return '';
+  if (addr.length <= 20) return addr;
+  return addr.slice(0, 8) + '...' + addr.slice(-6);
+}
 
-const changeAddress = computed(() => {
-  return loggedWallet.value?.baseAddress;
-});
+function formatAda(lovelace: bigint | number): string {
+  return filters.toCurrency(Number(lovelace), false, 6, '', '', false, 6);
+}
 
-const recipient = computed(() => {
-  if (tx.value && tx.value.body.outputs) {
-    for (const output of tx.value.body.outputs) {
-      const outputAddress = output.address;
-      if (changeAddress.value !== outputAddress) {
-        return outputAddress;
-      }
-    }
-  }
-  return changeAddress.value;
-});
-
-const swapDetails = computed(() => {
-  if (!tx.value || !utxos.value || utxos.value.length === 0) {
-    return null;
-  }
-
-  const txBody = tx.value.body;
-
-  // Calculate input value from UTXOs
-  let inputCoins = BigInt(0);
-  const inputAssets = new Map<Cardano.AssetId, bigint>();
-
-  for (const input of txBody.inputs) {
-    const utxo = utxos.value.find((utxo: Cardano.Utxo) =>
-      input.txId === utxo[0].txId && input.index === utxo[0].index
-    );
-    if (utxo) {
-      inputCoins += BigInt(utxo[1].value.coins);
-      if (utxo[1].value.assets) {
-        Object.entries(utxo[1].value.assets).forEach(([assetId, amount]) => {
-          const currentAmount = inputAssets.get(assetId) || BigInt(0);
-          inputAssets.set(assetId, currentAmount + BigInt(amount));
-        });
-      }
-    }
-  }
-
-  // Calculate change output value (what stays in our wallet)
-  let changeCoins = BigInt(0);
-  const changeAssets = new Map<Cardano.AssetId, bigint>();
-
-  for (const output of txBody.outputs) {
-    if (output.address === changeAddress.value) {
-      changeCoins += BigInt(output.value.coins);
-      if (output.value.assets) {
-        output.value.assets.forEach((amount, assetId) => {
-          const currentAmount = changeAssets.get(assetId) || BigInt(0);
-          changeAssets.set(assetId, currentAmount + BigInt(amount));
-        });
-      }
-    }
-  }
-
-  // Calculate what we're giving away (input - change - fee)
-  const fee = BigInt(txBody.fee);
-  const giveCoins = inputCoins - changeCoins - fee;
-
-  const giveAssets: Array<{amount: string, currency: string, id: string}> = [];
-  inputAssets.forEach((inputAmount, assetId) => {
-    const changeAmount = changeAssets.get(assetId) || BigInt(0);
-    const giveAmount = inputAmount - changeAmount;
-    if (giveAmount > BigInt(0)) {
-      giveAssets.push({
-        amount: giveAmount.toString(),
-        currency: assetId,
-        id: assetId
-      });
-    }
+const outputRows = computed<TxDetailsOutput[]>(() => {
+  if (!tx.value?.body?.outputs) return [];
+  return tx.value.body.outputs.map((o) => {
+    const addr = String(o.address);
+    const isExternal = recipientAddresses.value.has(addr);
+    const coins = BigInt(o.value.coins);
+    const assets = o.value.assets;
+    const assetCount = assets
+      ? (assets instanceof Map ? assets.size : Object.keys(assets).length)
+      : 0;
+    return {
+      kind: isExternal ? 'external' : 'change',
+      truncatedAddress: truncateAddr(addr),
+      ada: formatAda(coins),
+      assetCount,
+    };
   });
+});
 
-  const swapDetails = {
-    give: {
-      total: Number(giveCoins),
-      txFee: fee.toString(),
-      provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
-      assets: giveAssets,
-    },
-    receive: {
-      total: 0, // For send transactions, we don't receive anything
-      provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
-      assets: [],
-    },
-    recipient: recipient.value,
-    txMetadata: tx.value.auxiliaryData,
+const feeAda = computed(() => {
+  if (!tx.value?.body?.fee) return '0';
+  return formatAda(Number(tx.value.body.fee));
+});
+
+const totalSendingLovelace = computed<bigint>(() => {
+  if (!tx.value?.body?.outputs) return 0n;
+  let sum = 0n;
+  for (const o of tx.value.body.outputs) {
+    if (recipientAddresses.value.has(String(o.address))) {
+      sum += BigInt(o.value.coins);
+    }
+  }
+  return sum;
+});
+
+const withdrawnRewardsLovelace = computed<bigint>(() => {
+  const ws = tx.value?.body?.withdrawals;
+  if (!ws || ws.length === 0) return 0n;
+  return ws.reduce<bigint>((acc, w) => acc + BigInt(w.quantity), 0n);
+});
+
+const withdrawalRow = computed<TxDetailsWithdrawal | null>(() => {
+  const v = withdrawnRewardsLovelace.value;
+  if (v <= 0n) return null;
+  const ws = tx.value?.body?.withdrawals;
+  const stake = ws?.[0]?.stakeAddress ? String(ws[0].stakeAddress) : '';
+  return { truncatedStakeAddress: truncateAddr(stake), ada: formatAda(v) };
+});
+
+const totals = computed<TxDetailsTotals>(() => {
+  const fee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : 0n;
+  const net = totalSendingLovelace.value + fee - withdrawnRewardsLovelace.value;
+  return {
+    totalSendingAda: formatAda(totalSendingLovelace.value),
+    feeAda: feeAda.value,
+    withdrawalAda: withdrawnRewardsLovelace.value > 0n ? formatAda(withdrawnRewardsLovelace.value) : undefined,
+    youPayAda: formatAda(net < 0n ? 0n : net),
+    isInternal: false,
   };
+});
 
-  console.log('SwapDetails (Cardano JS SDK):', swapDetails);
-  return swapDetails;
-})
+const txRiskBadge = computed<TxDetailsRiskBadge | null>(() => {
+  if (!risks.value || risks.value.score === undefined) return null;
+  const score = risks.value.score as unknown;
+  const scoreStr = String(score ?? '').toLowerCase();
+  const isHigh = score === DappScore.high || scoreStr === 'high' || score === 2;
+  const isMedium = score === DappScore.medium || scoreStr === 'medium' || score === 1;
+  const isLow = score === DappScore.low || scoreStr === 'low' || score === 0;
+  if (isHigh) return { color: '#FDA29B', icon: 'mdi-shield-alert', label: 'high' };
+  if (isMedium) return { color: '#FFD54F', icon: 'mdi-shield-half-full', label: 'medium' };
+  if (isLow) return { color: '#94CFA8', icon: 'mdi-shield-check', label: 'low' };
+  return { color: '#94969c', icon: 'mdi-shield-outline', label: 'unverified' };
+});
 
-// Helper function to get CBOR hex from Cardano.Tx
+const primaryRecipientAddress = computed(() =>
+  props.recipients[0]?.resolvedAddress ?? props.recipients[0]?.address ?? ''
+);
+const changeAddress = computed(() => loggedWallet.value?.baseAddress);
+
 const getCborHex = (): string => {
   if (!tx.value) return '';
   try {
@@ -187,64 +158,32 @@ async function scanTx(txData: Cardano.Tx) {
   tx.value = txData;
 
   const cborHex = getCborHex();
-
-  // Make Cardano Shield scan non-blocking with 5-second timeout
-  // Don't block the UI if the scan is slow or fails
+  const toAddress = primaryRecipientAddress.value;
   const scanWithTimeout = Promise.race([
     cardanoShieldApi.scanTx({
       cborHex,
-      toAddress: props.sendData.recipientAddress,
+      toAddress,
       fromAddress: changeAddress.value,
       url: 'https://gerowallet.io',
     }),
-    new Promise<any>((_, reject) =>
+    new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000)
-    )
+    ),
   ]);
 
   try {
     risks.value = await scanWithTimeout;
   } catch (e) {
     console.warn('Cardano Shield scan failed or timed out:', e);
-    risks.value = {
-      addressRisk: 'unknown',
-    };
+    risks.value = { addressRisk: 'unknown' };
   } finally {
-    // Set loading to false after scan completes (success or failure)
     loading.value = false;
   }
 }
 </script>
 
 <style scoped>
-.recipient-box {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  word-break: break-all;
-  font-size: 12px;
-  background: linear-gradient(to right, #005d65, #0000003d);
-}
-
-.continue-button {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  color: black!important;
-
-  &:disabled {
-    opacity: 0.5;
-    color: black!important;
-  }
-
-}
-
-.v-tooltip__content {
-  background: rgba(15, 19, 21, 1);
-  border:1px solid #C4C4C4;
-  line-height: 18px;
-  padding: 10px;
-  font-size: 14px;
-}
-.v-tooltip__content.menuable__content__active {
-  opacity: 1;
+.summary-step {
+  padding: 8px 0;
 }
 </style>

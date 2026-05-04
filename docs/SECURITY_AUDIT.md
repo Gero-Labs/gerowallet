@@ -67,7 +67,7 @@ The following `.env` files contain real API keys and must NEVER be committed to 
 - `VITE_ABLY_API_KEY=...` - Ably realtime messaging key
 - `GOOGLE_CLIENT_ID=...` - Google OAuth client ID
 - `MANIFEST_KEY=...` - Chrome extension signing key
-- `VITE_LD_CLIENT_SIDE_ID=...` - LaunchDarkly client ID
+- `VITE_FLAGS_BASE_URL=...` - Self-hosted feature flag service URL
 - `VITE_CASHBACK_IDENTIFIER=...` - Cashback service identifier
 
 **Action required:**
@@ -120,7 +120,7 @@ baseURL: import.meta.env.VITE_BACKEND_URL || 'https://dev.gerowallet.io'
 
 ### API Key Externalization
 - MoonPay, Guardarian, Ably keys use environment variables
-- LaunchDarkly client ID uses environment variable
+- Feature flag service URL uses environment variable
 - Backend URL uses environment variable
 
 ---
@@ -215,7 +215,7 @@ These services require API keys for full functionality:
 | Guardarian   | Fiat on-ramp                 | API key           |
 | Ably         | Real-time blockchain updates | API key with auth |
 | Google       | OAuth for Google Wallet      | Client ID         |
-| LaunchDarkly | Feature flags                | Client-side ID    |
+| gero-sync    | Feature flags                | Self-hosted URL   |
 | zkFold       | Google Wallet ZK proofs      | API key           |
 | KaiserEx     | Gero Card services           | OAuth flow        |
 | Blockfrost   | Cardano blockchain data      | Project ID        |

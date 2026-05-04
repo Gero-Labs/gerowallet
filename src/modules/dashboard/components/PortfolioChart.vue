@@ -213,7 +213,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref, watch, toRefs, nextTick, onBeforeUnmount } from 'vue';
 import { createChart, AreaSeries } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, AreaData, Time, SolidColor } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, AreaData, Time, SolidColor, MouseEventParams } from 'lightweight-charts';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
@@ -265,10 +265,10 @@ const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 const priceFormatter = (price: number) => {
   if (hideBalances.value) return '••••••';
-  if (price >= 1e6) return (price / 1e6).toFixed(1) + 'M';
-  if (price >= 1e3) return (price / 1e3).toFixed(1) + 'K';
-  if (price >= 1) return price.toFixed(0);
-  return price.toFixed(2);
+  if (price >= 1e6) return (price / 1e6).toFixed(2) + 'M';
+  if (price >= 1e3) return (price / 1e3).toFixed(2) + 'K';
+  if (price >= 1) return price.toFixed(2);
+  return price.toFixed(4);
 };
 
 const isApex = computed(() => {
@@ -619,7 +619,7 @@ const formatPnl = (value: number): string => {
  * Transform raw [timestamp_ms, value][] to lightweight-charts format,
  * filtered by the selected timeframe.
  */
-const transformData = (rawData: any[]): AreaData<Time>[] => {
+const transformData = (rawData: [number, number][]): AreaData<Time>[] => {
   if (!rawData || rawData.length === 0) return [];
 
   const cutoff = timeframeCutoffs[selectedTimeframe.value];
@@ -681,13 +681,7 @@ const transformData = (rawData: any[]): AreaData<Time>[] => {
   return result;
 };
 
-/**
- * Determine trend direction: compare first and last values.
- */
-const getTrendDirection = (data: AreaData<Time>[]): 'up' | 'down' => {
-  if (data.length < 2) return 'up';
-  return data[data.length - 1].value >= data[0].value ? 'up' : 'down';
-};
+// Trend direction is compared by caller via first/last value directly
 
 // --- Chart initialization and update ---
 
@@ -795,7 +789,7 @@ const initChart = () => {
     }
 
     // Subscribe to crosshair move for tooltip — direct DOM for instant tracking
-    chart.subscribeCrosshairMove((param: any) => {
+    chart.subscribeCrosshairMove((param: MouseEventParams<Time>) => {
       const el = tooltipRef.value;
       if (!el) return;
 
@@ -857,7 +851,7 @@ const initChart = () => {
   }
 };
 
-const updateChartData = (animate = true) => {
+const updateChartData = () => {
   if (!areaSeries || !chart) return;
 
   // Cancel any running animation

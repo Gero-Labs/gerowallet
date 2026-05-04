@@ -19,7 +19,10 @@ export function useDAppOverlay() {
 
   function connect() {
     try {
-      port = chrome.runtime.connect({ name: 'mini-gero-dapp-channel' });
+      // Read tabId from URL query param (set by openSidebar in background)
+      const params = new URLSearchParams(window.location.search);
+      const tabId = params.get('tabId') || '';
+      port = chrome.runtime.connect({ name: `mini-gero-dapp-channel:${tabId}` });
     } catch (e) {
       console.warn('[DApp] Failed to connect:', e);
       scheduleReconnect();

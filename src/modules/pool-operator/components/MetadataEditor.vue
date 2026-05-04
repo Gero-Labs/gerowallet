@@ -44,9 +44,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-
 
 const { t } = useTranslation();
 
@@ -55,11 +54,11 @@ interface MetadataValue {
   hash: string;
 }
 
-const props = defineProps<{ modelValue: MetadataValue }>();
-const emit = defineEmits(['update:modelValue']);
+const props = defineProps<{ value: MetadataValue }>();
+const emit = defineEmits(['input']);
 
-const url = ref(props.modelValue?.url || '');
-const hash = ref(props.modelValue?.hash || '');
+const url = ref(props.value?.url || '');
+const hash = ref(props.value?.hash || '');
 const jsonContent = ref('');
 const jsonError = ref('');
 const fetching = ref(false);
@@ -74,8 +73,7 @@ async function fetchAndHash() {
   fetching.value = true;
   try {
     const response = await fetch(url.value);
-    const text = await response.text();
-    jsonContent.value = text;
+    jsonContent.value = await response.text();
     await computeHash();
   } catch (e) {
     jsonError.value = t('poolOperator.fetchMetadataFailed');
@@ -120,6 +118,6 @@ async function computeHash() {
 }
 
 function emitUpdate() {
-  emit('update:modelValue', { url: url.value, hash: hash.value });
+  emit('input', { url: url.value, hash: hash.value });
 }
 </script>

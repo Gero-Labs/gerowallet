@@ -15,6 +15,9 @@ import {
 } from '@cardano-sdk/tx-construction';
 import type { BuildTx } from '@cardano-sdk/tx-construction';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
+import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
+import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
 
 /** CIP-0149 metadata label for voluntary DRep compensation */
 export const CIP149_METADATA_LABEL = BigInt(3692);
@@ -83,7 +86,8 @@ export async function buildCardanoTransaction({
   tip,
   implicitCoin = BigInt(0),
   walletContext,
-  auxiliaryData
+  auxiliaryData,
+  excludeCollateral = true
 }: {
   certificates?: Cardano.Certificate[];
   withdrawals?: Cardano.Withdrawal[];
@@ -99,6 +103,7 @@ export async function buildCardanoTransaction({
     accountIndex: number;
   };
   auxiliaryData?: Cardano.AuxiliaryData;
+  excludeCollateral?: boolean;
 }): Promise<Cardano.Tx> {
   // Check if we have epoch parameters
   if (!epochParams) {
@@ -278,8 +283,25 @@ export async function buildCardanoTransaction({
     computeSelectionLimit: computeSelectionLimit(protocolParams.maxTxSize, buildTx)
   };
 
+  // Eternl-style: exclude the auto-picked collateral UTxO from coin selection
+  // so a regular send doesn't accidentally spend the UTxO that dApps will use
+  // for collateral. Callers that explicitly need to use the collateral UTxO
+  // (e.g. CollateralTab.vue's "Set Collateral" flow) pass excludeCollateral: false.
+  let inputUtxos = utxos;
+  if (excludeCollateral && walletStore.collateral) {
+    const filtered = filterOutCollateralFromUTxOs(utxos, walletStore.collateral);
+    // Edge case: if filtering leaves no UTxOs (e.g. wallet has only the collateral
+    // UTxO), fall back to the unfiltered list so the tx can still be built.
+    if (filtered.length === 0) {
+      debugLog('[builder] Only UTxO is collateral; falling back to unfiltered set');
+      inputUtxos = utxos;
+    } else {
+      inputUtxos = filtered;
+    }
+  }
+
   // Convert UTXOs to proper format with BigInt values and ensure assets is always a Map
-  const formattedUtxos: Cardano.Utxo[] = utxos.map((utxo: any) => {
+  const formattedUtxos: Cardano.Utxo[] = inputUtxos.map((utxo: any) => {
 
     // Ensure assets is always a Map (not undefined or null)
     let assets: Map<Cardano.AssetId, bigint>;

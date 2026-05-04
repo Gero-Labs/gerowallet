@@ -1,0 +1,424 @@
+<template>
+  <BottomSheet :value="value" :title="$t('perpetuals.withdraw')" height="90%" @input="$emit('input', $event)">
+    <div class="withdraw-content">
+
+      <!-- Amount Input -->
+      <div class="input-row">
+        <v-text-field
+          v-model="amount"
+          :label="$t('perpetuals.amount')"
+          outlined
+          dense
+          dark
+          hide-details
+          class="perp-input"
+          suffix="USD"
+          type="number"
+          min="0"
+        />
+        <v-btn small depressed class="max-btn" @click="setMax()">
+          MAX
+        </v-btn>
+      </div>
+
+      <!-- Destination Address -->
+      <v-text-field
+        v-model="destinationAddress"
+        :label="$t('perpetuals.destinationAddress')"
+        outlined
+        dense
+        dark
+        hide-details
+        class="perp-input mb-3"
+        :placeholder="$t('perpetuals.defaultWalletAddress')"
+        clearable
+      />
+
+      <!-- Preview Section -->
+      <transition name="fade-slide">
+        <div v-if="amountNum > 0" class="preview-card">
+          <div class="preview-title">{{ $t('perpetuals.withdrawPreview') }}</div>
+
+          <div class="preview-row">
+            <span class="preview-label">{{ $t('perpetuals.amount') }}</span>
+            <span class="preview-value">${{ amountNum.toFixed(2) }}</span>
+          </div>
+
+          <div class="preview-row">
+            <span class="preview-label">{{ $t('perpetuals.estimatedReceived') }}</span>
+            <span class="preview-value highlight">{{ estimatedAda }} <span class="preview-unit">ADA</span></span>
+          </div>
+
+          <div class="preview-row">
+            <span class="preview-label">{{ $t('perpetuals.estimatedDelivery') }}</span>
+            <span class="preview-value muted">~{{ deliveryMinutes }} {{ $t('perpetuals.minutes') }}</span>
+          </div>
+        </div>
+      </transition>
+
+      <!-- Margin Safety Warning -->
+      <transition name="fade-slide">
+        <div v-if="showMarginWarning" class="margin-warning-banner">
+          <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle</v-icon>
+          <span>{{ $t('perpetuals.marginSafetyWarning') }}</span>
+        </div>
+      </transition>
+
+      <!-- Spending Password -->
+      <v-text-field
+        v-model="password"
+        :label="$t('perpetuals.spendingPassword')"
+        outlined
+        dense
+        dark
+        hide-details
+        class="perp-input mt-3"
+        :type="showPassword ? 'text' : 'password'"
+        :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append="showPassword = !showPassword"
+      />
+
+      <!-- Status Messages -->
+      <transition name="fade-slide">
+        <div v-if="withdrawStatus === 'pending'" class="status-banner pending mt-3">
+          <v-icon size="14" color="#FFA726" class="mr-2">mdi-clock-sand</v-icon>
+          {{ $t('perpetuals.withdrawPending') }}
+        </div>
+      </transition>
+
+      <transition name="fade-slide">
+        <div v-if="withdrawStatus === 'settled'" class="status-banner success mt-3">
+          <v-icon size="16" color="#26FAB0" class="mr-2">mdi-check-circle</v-icon>
+          {{ $t('perpetuals.withdrawSettled') }}
+        </div>
+      </transition>
+
+      <transition name="fade-slide">
+        <div v-if="withdrawError" class="error-banner mt-3">
+          <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+          <span>{{ withdrawError }}</span>
+        </div>
+      </transition>
+
+      <!-- Withdraw Button -->
+      <v-btn
+        block
+        depressed
+        :loading="isWithdrawing"
+        :disabled="!canWithdraw"
+        class="action-btn mt-4"
+        @click="handleWithdraw()"
+      >
+        <template v-if="isWithdrawing">
+          <v-icon size="14" class="mr-2">mdi-loading mdi-spin</v-icon>
+          {{ $t('perpetuals.withdrawInProgress') }}
+        </template>
+        <template v-else>
+          <v-icon size="14" class="mr-2">mdi-bank-transfer-out</v-icon>
+          {{ $t('perpetuals.withdraw') }}
+        </template>
+      </v-btn>
+
+    </div>
+  </BottomSheet>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue';
+import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
+import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
+import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
+import { walletStore } from '@/stores/walletStore';
+
+// ── Props & Emits ─────────────────────────────────────────────────────────────
+const props = defineProps<{
+  value: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: 'input', value: boolean): void;
+  (e: 'withdrawn'): void;
+}>();
+
+// ── Composables ───────────────────────────────────────────────────────────────
+const {
+  isWithdrawing,
+  withdrawStatus,
+  withdrawError,
+  usdToAdaRate,
+  deliveryMinutes,
+  requestQuote,
+  signAndSubmit,
+  resetWithdraw,
+} = useStrikeWithdraw();
+
+const { availableBalance, marginRatio } = useStrikeAccount();
+
+// ── Local State ───────────────────────────────────────────────────────────────
+const amount = ref<string>('');
+const destinationAddress = ref<string>('');
+const password = ref<string>('');
+const showPassword = ref(false);
+
+// ── Computed ──────────────────────────────────────────────────────────────────
+const amountNum = computed(() => {
+  const n = parseFloat(amount.value);
+  return isNaN(n) || n < 0 ? 0 : n;
+});
+
+const estimatedAda = computed(() => {
+  if (amountNum.value <= 0) return '0.00';
+  const rate = usdToAdaRate.value ?? 0;
+  return (amountNum.value * rate).toFixed(2);
+});
+
+const showMarginWarning = computed(() => {
+  if (!marginRatio.value || amountNum.value <= 0) return false;
+  const ratio = parseFloat(String(marginRatio.value));
+  return !isNaN(ratio) && ratio < 1.5;
+});
+
+const canWithdraw = computed(() =>
+  amountNum.value > 0 &&
+  destinationAddress.value.length > 0 &&
+  password.value.length > 0 &&
+  !isWithdrawing.value,
+);
+
+// ── Methods ───────────────────────────────────────────────────────────────────
+function setMax() {
+  if (availableBalance.value) {
+    amount.value = parseFloat(availableBalance.value).toFixed(2);
+  }
+}
+
+async function handleWithdraw() {
+  if (!canWithdraw.value) return;
+  await requestQuote(amount.value, 'ADA', destinationAddress.value);
+  const result = await signAndSubmit(password.value);
+  if (result) {
+    emit('withdrawn');
+  }
+}
+
+// Pre-fill destination with wallet base address
+onMounted(() => {
+  const addr = walletStore.state.walletInfo?.baseAddress;
+  if (addr) destinationAddress.value = addr;
+});
+
+// Reset on close
+watch(() => props.value, (val) => {
+  if (!val) {
+    amount.value = '';
+    password.value = '';
+    showPassword.value = false;
+    resetWithdraw();
+  }
+});
+</script>
+
+<style scoped>
+.withdraw-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 8px;
+}
+
+/* ── Amount Row ── */
+.input-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.input-row .perp-input {
+  flex: 1;
+}
+
+.max-btn {
+  height: 40px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  background: rgba(0, 199, 243, 0.1) !important;
+  color: #00c7f3 !important;
+  border: 1px solid rgba(0, 199, 243, 0.25) !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: none !important;
+  flex-shrink: 0;
+  margin-top: 0 !important;
+}
+
+/* ── Inputs ── */
+.perp-input :deep(.v-input__slot) {
+  background: rgba(255, 255, 255, 0.04) !important;
+  min-height: 40px !important;
+}
+
+.perp-input :deep(.v-label) {
+  font-size: 12px !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.perp-input :deep(input) {
+  font-size: 13px !important;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  color: #ffffff !important;
+  caret-color: #00c7f3 !important;
+}
+
+.perp-input :deep(.v-text-field__suffix) {
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+  font-weight: 600 !important;
+}
+
+.perp-input :deep(fieldset) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.perp-input :deep(.v-input--is-focused fieldset) {
+  border-color: #00c7f3 !important;
+}
+
+/* ── Preview Card ── */
+.preview-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.preview-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 10px;
+}
+
+.preview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.preview-row:last-child {
+  border-bottom: none;
+}
+
+.preview-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.preview-value {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.preview-value.highlight {
+  color: #00c7f3;
+}
+
+.preview-value.muted {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 400;
+}
+
+.preview-unit {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 400;
+}
+
+/* ── Margin Warning ── */
+.margin-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(249, 112, 102, 0.08);
+  border: 1px solid rgba(249, 112, 102, 0.25);
+  font-size: 11px;
+  color: #F97066;
+  line-height: 1.5;
+}
+
+/* ── Status Banners ── */
+.status-banner {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-banner.pending {
+  background: rgba(255, 167, 38, 0.08);
+  border: 1px solid rgba(255, 167, 38, 0.22);
+  color: #FFA726;
+}
+
+.status-banner.success {
+  background: rgba(38, 250, 176, 0.08);
+  border: 1px solid rgba(38, 250, 176, 0.22);
+  color: #26FAB0;
+}
+
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(249, 112, 102, 0.08);
+  border: 1px solid rgba(249, 112, 102, 0.22);
+  font-size: 11px;
+  color: #F97066;
+  line-height: 1.5;
+}
+
+/* ── Action Button ── */
+.action-btn {
+  height: 44px !important;
+  border-radius: 10px !important;
+  background: rgba(0, 199, 243, 0.12) !important;
+  color: #00c7f3 !important;
+  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+}
+
+.action-btn:hover:not(.v-btn--disabled) {
+  background: rgba(0, 199, 243, 0.2) !important;
+}
+
+.action-btn.v-btn--disabled {
+  opacity: 0.35 !important;
+}
+
+/* ── Transitions ── */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.25s ease;
+}
+
+.fade-slide-enter,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+</style>
