@@ -144,8 +144,8 @@ export function useStrikeDeposit() {
       // await pollForCredit(quote.value.quoteId, txHash.value);
 
       // status.value = 'credited';
-    } catch (e: any) {
-      error.value = e.message;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
       status.value = 'error';
     }
   }
