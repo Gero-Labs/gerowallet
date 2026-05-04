@@ -7,6 +7,7 @@ import { debugLog } from '@/utils/debug';
 export interface LoadingState {
   loading: boolean;
   text: string;
+  progress: number;  // 0-100, sync progress percentage
   isSyncing: boolean;
   isRestoring: boolean;
   connected: boolean;
@@ -18,6 +19,7 @@ export interface LoadingState {
 export const loadingState = Vue.observable<LoadingState>({
   loading: false,
   text: '',
+  progress: 0,
   isSyncing: false,
   isRestoring: false,
   connected: false,
@@ -151,6 +153,8 @@ export default {
 
   setConnecting: createSetter('connecting'),
 
+  setProgress: createSetter('progress'),
+
   setLoadingTxs: createSetter('loadingTxs'),
 
   // Expose the observable state
@@ -166,6 +170,7 @@ export default {
     const resetState: LoadingState = {
       loading: false,
       text: '',
+      progress: 0,
       isSyncing: false,
       isRestoring: false,
       connected: false,

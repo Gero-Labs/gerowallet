@@ -2,12 +2,11 @@ import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
-import { Blockchain, Network, WalletType, Tip, Wallet } from '@/models/types';
+import { Blockchain, Network, WalletType, Wallet } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
 import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
-import ablyService from '@/services/ably.service';
-import * as Ably from 'ably';
+import webSocketService from '@/services/websocket.service';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
@@ -24,15 +23,11 @@ export class WalletManager {
   private static instance: WalletManager;
   private walletBg: WalletBg | null = null;
   private currentWalletId: number | null = null;
+  private pendingSyncPromise: Promise<void> | null = null;
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
   // public syncMutex = withTimeout(new Mutex(), 2 * 60_000);
-
-  // Throttle sync when wallet is locked (sync at most once every 5 minutes)
-  private lastLockedSyncTime: number = 0;
-  private static LOCKED_SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
-
 
   private constructor() {}
 
@@ -137,6 +132,9 @@ export class WalletManager {
    */
   async login(wallet): Promise<WalletBg | null> {
     debugLog('WalletManager: Starting login process');
+    // Set syncing flag BEFORE setLoggedWallet — prevents router from navigating to dashboard
+    WalletStore.setSyncing(true);
+    LoadingState.setRestoring(true);
     LoadingState.setText('Creating wallet instance...');
     LoadingState.setLoading(true);
 
@@ -194,23 +192,41 @@ export class WalletManager {
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
         });
         LoadingState.setText('Initializing wallet...');
+
+        // Check if this is a first-time restore (no cached data)
+        const lastSyncInfo = walletBg.chain !== Blockchain.BITCOIN
+            ? await walletBg.getLastSyncInfo() : {};
+        const isFirstRestore = !lastSyncInfo;
+
+        // If first restore, prepare sync promise BEFORE connecting WebSocket (avoids race)
+        if (isFirstRestore) {
+          webSocketService.pauseSyncCheck();
+          this.pendingSyncPromise = webSocketService.waitForSync();
+        }
+
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
         this.currentWalletId = wallet.id;
 
-        // OPTIMIZATION: Use REST sync on login to get tip immediately
-        // This prevents "Cannot read properties of null (reading 'slot')" errors
-        // when trying to send transactions before Ably sync completes
-        // Skip for Bitcoin wallets — the Gero backend has no BITCOIN chain enum
-        if (walletBg.chain !== Blockchain.BITCOIN) {
-          LoadingState.setText('Syncing wallet data...');
-          await this.walletBg.syncService.syncViaRest().catch(err => {
-            console.warn('REST sync failed during login (non-critical):', err);
-            // Fall back to regular Ably sync if REST fails
-          });
+        // Wait for gero-sync catch-up to complete on first restore
+        if (isFirstRestore && this.pendingSyncPromise) {
+          const startTime = Date.now();
+          LoadingState.setProgress(5);
+          LoadingState.setText('Restoring wallet data...');
+          await this.pendingSyncPromise;
+          this.pendingSyncPromise = null;
+          webSocketService.resumeSyncCheck();
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 1500) {
+            await new Promise(r => setTimeout(r, 1500 - elapsed));
+          }
+          LoadingState.setProgress(0);
         }
 
+        // Clear syncing/restoring — allows router + WalletsListLogin to navigate
+        WalletStore.setSyncing(false);
+        LoadingState.setRestoring(false);
         LoadingState.setText('Wallet ready');
 
         // Initialize lastActivityTimestamp for auto-lock functionality
@@ -289,6 +305,9 @@ export class WalletManager {
 
       LoadingState.setText('Loading wallet data...');
 
+      // Load holdings from cached UTxOs and keys immediately — no need to wait for transactions or gero-sync
+      await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys()]);
+
       promises.push(
         walletBg.startSync(),
         walletBg.loadConfig(),
@@ -308,113 +327,55 @@ export class WalletManager {
       address = walletBg.stakeAddress;
     }
 
-    // Skip Ably for Bitcoin wallets (Ably is Cardano-specific)
+    // --- WebSocket sync (replaces Ably) ---
     if (walletBg.chain !== Blockchain.BITCOIN) {
-      // Force close existing connection if any to ensure fresh authentication
-      ablyService.close();
+      const lastSyncInfo = await walletBg.getLastSyncInfo();
+      const lastSyncedBlock = lastSyncInfo?.height || 0;
+      const credentials = walletBg.derivePaymentCredentials();
 
-      ablyService.setAuthParams(chain, network, address);
-      ablyService.setApi(walletBg.api);
-
-      // OPTIMIZATION: Connect to Ably completely in background - don't block login at all
-      // Ably will handle reconnection and message buffering automatically
-      (async () => {
-      ablyService.connect();
-
-      // Wait for connection to be established (non-blocking, happens in background)
-      const maxWaitTime = 10000; // 10-second max
-      const startTime = Date.now();
-      while (ablyService['client']?.connection?.state !== 'connected' && Date.now() - startTime < maxWaitTime) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      if (ablyService['client']?.connection?.state !== 'connected') {
-        console.warn('⚠️ Ably connection not established after timeout, will retry automatically');
-        return; // Don't subscribe if not connected
-      } else {
-        debugLog('✅ Ably connection established');
-      }
-
-      // TODO: Private channel subscription - Reserved for future push notifications
-      // Use cases: Multisig signatures, price alerts, governance updates
-      // Commented out for now since sync is handled via REST API
-      /*
-      try {
-        await ablyService.subscribeToPrivateChannel(address, {
-          onMessage: async (msg: Ably.InboundMessage) => {
-            // TODO: Implement notification handlers
-            switch (msg.name) {
-              case 'MULTISIG_UPDATE':
-                // Handle multisig signature notifications
-                break;
-              case 'PRICE_ALERT':
-                // Handle price alert notifications
-                break;
-              default:
-                debugLog('📬 Unhandled message on private channel:', msg);
-            }
+      webSocketService.connect(chain, network, address, lastSyncedBlock, {
+        onSync: async (data: any) => {
+          await this.tipMutex.runExclusive(async () => {
+            await walletBg.syncService.setSync(data);
+          });
+        },
+        onRollback: async (data: any) => {
+          debugLog('Rollback received:', data);
+          if (data.rollbackToSlot !== undefined) {
+            await walletBg.syncService.handleRollback(data.rollbackToSlot);
           }
-        });
-        console.log('✅ Subscribed to Ably private channel');
-      } catch (error: any) {
-        console.warn('⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
-      }
-      */
-
-      // Subscribe to group channel (in background)
-      try {
-        await ablyService.subscribeToGroupChannel(chain, network, {
-          onTip: async (msg: Ably.InboundMessage) => {
-            try {
-              const tip = JSON.parse(msg.data)?.data as Tip;
-
-              // Quick validation checks before logging
-              if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
-                return;
-              }
-
-              // Validate tip is newer than current tip before processing
-              const currentTip = NetworkStore.state.tip;
-              if (currentTip && tip.height <= currentTip.blockNo) {
-                return; // Silent skip - tip is older or same as current
-              }
-
-              // Also check if we already requested sync for this tip height
-              const lastSyncInfo = await walletBg.getLastSyncInfo();
-              if (lastSyncInfo && tip.height <= lastSyncInfo['height']) {
-                return; // Silent skip - already synced to this height or beyond
-              }
-
-              // Mark as processed BEFORE starting sync to prevent duplicates
-              ablyService.markTipAsProcessed(tip.hash);
-
-              // Throttle sync when wallet is locked — sync at most every 5 minutes
-              if (WalletStore.state.isLocked) {
-                const now = Date.now();
-                if (now - this.lastLockedSyncTime < WalletManager.LOCKED_SYNC_INTERVAL) {
-                  return;
-                }
-                this.lastLockedSyncTime = now;
-              }
-
-              debugLog('TIP', tip);
-
-              // Acquire mutex and process tip
-              await this.tipMutex.runExclusive(async () => {
-                await walletBg.syncService.sync(tip);
-              });
-            } catch (e) {
-              console.error(e);
+        },
+        onForceResync: async () => {
+          debugLog('Force resync: clearing sync state and resubscribing via gero-sync');
+          const startTime = Date.now();
+          LoadingState.setRestoring(true);
+          LoadingState.setProgress(5);
+          LoadingState.setText('Syncing wallet data...');
+          webSocketService.pauseSyncCheck();
+          try {
+            const db = await walletBg.getDb();
+            await db.table('sync').clear();
+            await db.table('transactions').clear();
+            await db.table('account').clear();
+            const syncPromise = webSocketService.waitForSync();
+            webSocketService.resubscribe(0);
+            await syncPromise;
+            // Ensure overlay is visible for at least 1.5s so user sees progress
+            const elapsed = Date.now() - startTime;
+            if (elapsed < 1500) {
+              await new Promise(r => setTimeout(r, 1500 - elapsed));
             }
-          },
-        });
-        console.log('✅ Subscribed to Ably group channel');
-      } catch (error: unknown) {
-        console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error['message'] || error);
-      }
-      })(); // Execute immediately but don't await - fully non-blocking
+          } finally {
+            LoadingState.setProgress(0);
+            LoadingState.setRestoring(false);
+            LoadingState.setText('');
+            webSocketService.resumeSyncCheck();
+          }
+          debugLog('Force resync complete');
+        },
+      }, credentials);
     } else {
-      debugLog('⏭️ Skipping Ably connection for Bitcoin wallet');
+      debugLog('Skipping WebSocket connection for Bitcoin wallet');
     }
 
     // Wait for all initialization promises to complete
@@ -470,17 +431,12 @@ export class WalletManager {
         chrome.alarms.onAlarm.removeListener(alarmListener);
       }
 
-      // Clean up Ably service
+      // Clean up WebSocket service
       try {
-        if (ablyService && typeof ablyService.unsubscribeAll === 'function') {
-          ablyService.unsubscribeAll();
-        }
-        if (ablyService && typeof ablyService.close === 'function') {
-          ablyService.close();
-          console.log('Ably service closed successfully');
-        }
-      } catch (ablyError) {
-        console.warn('Failed to cleanup Ably service during logout:', ablyError);
+        webSocketService.close();
+        console.log('WebSocket service closed successfully');
+      } catch (wsError) {
+        console.warn('Failed to cleanup WebSocket service during logout:', wsError);
       }
 
       // Clean up store messaging service

@@ -61,6 +61,30 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.7.0',
     path: ['settings', 'advanced', 'defaultExtensionMode']
   },
+  // Transactions > UTxOs tab
+  {
+    id: 'transactions.utxos',
+    version: '2.7.0',
+    path: ['transactions', 'utxos']
+  },
+  // Settings > Profile > Profile Picture (upload / NFT picker)
+  {
+    id: 'settings.profile.profilePicture',
+    version: '2.7.0',
+    path: ['settings', 'profile', 'profilePicture']
+  },
+  // Settings > Collateral > Auto-detect status banner
+  {
+    id: 'settings.collateral.autoDetect',
+    version: '2.7.0',
+    path: ['settings', 'collateral', 'autoDetect']
+  },
+  // Settings > Advanced > Auto-withdraw staking rewards on every send
+  {
+    id: 'settings.advanced.autoWithdrawRewards',
+    version: '2.7.0',
+    path: ['settings', 'advanced', 'autoWithdrawRewards']
+  },
   // Add more features here as needed
 ];
 

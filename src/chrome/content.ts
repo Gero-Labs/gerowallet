@@ -1,6 +1,6 @@
 import { Messaging } from './messaging';
 import { bringInitContentScript } from '@bringweb3/chrome-extension-kit';
-import { getAddressBech32, promptLogin } from '@/chrome/webpage';
+import { METHOD } from '@/chrome/config';
 
 /**
  * Escape HTML entities to prevent XSS attacks
@@ -13,16 +13,52 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+interface BackgroundReply {
+  data?: unknown;
+  error?: unknown;
+}
+
+// Bring runs inside our own content script, so its RPCs must NOT go through the
+// webpage proxy controller (which would gate every call behind the dApp
+// whitelist and return code -3 Refused for any non-connected site). Talk to the
+// background directly instead.
 const getWalletAddress = async (): Promise<string> => {
   try {
-    const addresses = await getAddressBech32();
-    if (addresses && addresses.length > 0) {
-      return addresses[0];
+    const response = (await Messaging.sendToBackground({
+      method: METHOD.getAddressBech32,
+      data: {},
+    })) as BackgroundReply | undefined;
+    if (response?.error) return '';
+    const address = response?.data;
+    if (typeof address === 'string' && address.length > 0) {
+      return address;
     }
   } catch (e) {
     console.warn('Failed to get wallet address:', e);
   }
   return '';
+};
+
+const promptLogin = async (): Promise<void> => {
+  try {
+    const response = (await Messaging.sendToBackground({
+      method: METHOD.popupLogin,
+      data: { userGesture: navigator.userActivation?.isActive },
+    })) as BackgroundReply | undefined;
+    if (response?.error) {
+      console.warn('[content.ts] promptLogin refused by background:', response.error);
+      return;
+    }
+    if (response?.data) {
+      window.dispatchEvent(new CustomEvent('gero:login', {
+        bubbles: true,
+        cancelable: true,
+        composed: false,
+      }));
+    }
+  } catch (e) {
+    console.warn('[content.ts] promptLogin failed:', e);
+  }
 };
 
 const injectScript = () => {
@@ -49,167 +85,22 @@ function shouldInject() {
 
 async function injectBring() {
   await bringInitContentScript({
-    switchWallet: false,
-    text: 'lower',
+    'switchWallet': false,
+    'text': 'lower',
     getWalletAddress,
     promptLogin,
-    walletAddressListeners: ['gero:login', 'gero:logout'],
-    theme: 'dark',
-    darkTheme: {
-      // font
-      fontUrl: 'https://fonts.googleapis.com/css2?family=Inter&display=swap',
-      fontFamily: '\'Inter\', system-ui',
-      // Popup
-      popupBg: '#141414',
-      popupShadow: '',
-      // Primary button
-      primaryBtnBg: 'linear-gradient(to right, #00c7f3, #00fad5)',
-      primaryBtnFC: '#041417',
-      primaryBtnFW: '600',
-      primaryBtnFS: '14px',
-      primaryBtnBorderC: 'transparent',
-      primaryBtnBorderW: '0',
-      primaryBtnRadius: '8px',
-      // Secondary button
-      secondaryBtnBg: 'transparent',
-      secondaryBtnFS: '12px',
-      secondaryBtnFW: '500',
-      secondaryBtnFC: 'white',
-      secondaryBtnBorderC: 'rgba(149, 176, 178, 0.50)',
-      secondaryBtnBorderW: '2px',
-      secondaryBtnRadius: '8px',
-      // Markdown
-      markdownBg: '#07131766',
-      markdownFS: '12px',
-      markdownFC: '#DADCE5',
-      markdownBorderW: '0',
-      markdownRadius: '4px',
-      markdownBorderC: 'black',
-      markdownScrollbarC: '#DADCE5',
-      // Wallet address
-      walletBg: '#1a1a1a',
-      walletFS: '10px',
-      walletFW: '400',
-      walletFC: 'white',
-      walletBorderC: 'white',
-      walletBorderW: '0',
-      walletRadius: '4px',
-      // Details of offering
-      detailsBg: '#1a1a1a',
-      detailsTitleFS: '15px',
-      detailsTitleFW: '600',
-      detailsTitleFC: 'white',
-      detailsSubtitleFS: '14px',
-      detailsSubtitleFW: '500',
-      detailsSubtitleFC: '#A8ADBF',
-      detailsRadius: '8px',
-      detailsBorderW: '0',
-      detailsBorderC: 'transparent',
-      detailsAmountFC: '#00DFF3',
-      detailsAmountFW: '700',
-      // Overlay
-      overlayBg: '#192E34E6',
-      overlayFS: '13px',
-      overlayFW: '400',
-      overlayFC: '#DADCE5',
-      loaderBg: '#0A2EC0',
-      // Optout \ Turn off
-      optoutBg: '#192E34',
-      optoutFS: '14px',
-      optoutFW: '400',
-      optoutFC: 'white',
-      optoutRadius: '56px',
-      // X Button and close buttons
-      closeFS: '9px',
-      closeFW: '300',
-      closeFC: '#B9BBBF',
-      // Token name
-      tokenBg: 'transparent',
-      tokenFS: '13px',
-      tokenFW: '600',
-      tokenFC: '#DADCE5',
-      tokenBorderW: '2px',
-      tokenBorderC: '#DADCE5',
-      // Notification popup
-      notificationFS: '14px',
-      notificationFW: '500',
-      notificationFC: 'white',
-      notificationBtnBg: 'linear-gradient(135deg, #00DFF3 0%, #FDFC47 100%)',
-      notificationBtnFS: '12px',
-      notificationBtnFW: '500',
-      notificationBtnFC: '#041417',
-      notificationBtnBorderW: '0',
-      notificationBtnBorderC: 'transparent',
-      notificationBtnRadius: '8px',
-      activateTitleFS: '--activate-title-f-s',
-      activateTitleFW: '--activate-title-f-w',
-      activateTitleFC: '--activate-title-f-c',
-      activateTitleBoldFS: '--activate-title-bold-f-s',
-      activateTitleBoldFW: '--activate-title-bold-f-w',
-      activateTitleBoldFC: '--activate-title-bold-f-c',
-      obBg: "linear-gradient(179deg, #00D6E9 0.68%, #00B0CF 99.85%)",
-      obCloseBtnTopHoverBg: "#00ADCC",
-      obOfferTextFS: "13px",
-      obOfferTextFW: "500",
-      obOfferTextFC: "#1A1A1A",
-      obOfferTextLH: "13px",
-      obOfferAmountFS: "21px",
-      obOfferAmountFW: "700",
-      obOfferAmountFC: "#1A1A1A",
-      obOfferAmountLH: "17px",
-      obActivateBtnBg: "#1A1A1A",
-      obActivateBtnFS: "13px",
-      obActivateBtnFW: "700",
-      obActivateBtnFC: "#FFF",
-      obActivateBtnLH: "13px",
-      obActivateBtnBorderC: "transparent",
-      obActivateBtnBorderW: "0",
-      obActivateBtnRadius: "4px",
-      obOptOutBtnBg: "#1A1A1A",
-      obOptOutBtnFS: "13px",
-      obOptOutBtnFW: "700",
-      obOptOutBtnFC: "#FFFFFF",
-      obOptOutBtnLH: "13px",
-      obOptOutBtnBorderC: "transparent",
-      obOptOutBtnBorderW: "0",
-      obOptOutBtnRadius: "4px",
-      obCloseBtnFS: "13px",
-      obCloseBtnFW: "500",
-      obCloseBtnFC: "#1A1A1A",
-      obCloseBtnLH: "13px",
-      obPlatformLogosBg: "#00ADCC",
-      obRetailerLogoBg: "#FFFFFF",
-      obPlatformWalletLogoBg: "#1A1A1A",
-      obOptOutTitleFS: "14px",
-      obOptOutTitleFW: "600",
-      obOptOutTitleFC: "#1A1A1A",
-      obOptOutTitleLH: "18px",
-      obOptOutMainBtnBg: "#1A1A1A",
-      obOptOutMainBtnFS: "13px",
-      obOptOutMainBtnFW: "700",
-      obOptOutMainBtnFC: "#FFF",
-      obOptOutMainBtnLH: "13px",
-      obOptOutMainBtnBorderW: "0",
-      obOptOutMainBtnBorderC: "transparent",
-      obOptOutMainBtnRadius: "4px",
-      obOptOutSecondaryBtnBg: "transparent",
-      obOptOutSecondaryBtnFS: "13px",
-      obOptOutSecondaryBtnFW: "700",
-      obOptOutSecondaryBtnFC: "#1A1A1A",
-      obOptOutSecondaryBtnLH: "13px",
-      obOptOutSecondaryBtnBorderW: "1px",
-      obOptOutSecondaryBtnBorderC: "#1A1A1A",
-      obOptOutSecondaryBtnRadius: "4px",
-      obOptOutBackBtnFS: "11px",
-      obOptOutBackBtnFW: "500",
-      obOptOutBackBtnFC: "#1A1A1A",
-      obOptOutBackBtnLH: "25px",
-    }
+    'walletAddressListeners': ['gero:login', 'gero:logout'],
+    'theme': 'dark',
   });
 }
 
 // Store listener reference for cleanup
-let messageListener: ((message: any, sender: any, sendResponse: any) => void) | null = null;
+type RuntimeMessageListener = (
+  message: unknown,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: unknown) => void,
+) => void;
+let messageListener: RuntimeMessageListener | null = null;
 let windowLoadListener: (() => void) | null = null;
 
 if (shouldInject()) {
@@ -217,6 +108,24 @@ if (shouldInject()) {
   (async () => {
     await injectBring();
     Messaging.createProxyController();
+
+    // If the user is already logged in when this page loads, Bring's backend
+    // may have cached a stale token (e.g., walletAddress=null from a prior
+    // session). Fire `gero:login` once so the Bring SDK pushes the current
+    // address to its background and re-fetches a fresh cashback token for
+    // this tab. Safe no-op if logged out: getWalletAddress returns ''.
+    try {
+      const currentAddress = await getWalletAddress();
+      if (currentAddress) {
+        window.dispatchEvent(new CustomEvent('gero:login', {
+          bubbles: true,
+          cancelable: true,
+          composed: false,
+        }));
+      }
+    } catch (e) {
+      console.warn('[content.ts] initial wallet-address check failed:', e);
+    }
 
     // Listen for WalletConnect deep link pairing from inject script
     window.addEventListener('message', (e) => {
@@ -234,13 +143,26 @@ if (shouldInject()) {
 
     // Store listener reference for cleanup
     messageListener = (message, _sender, _sendResponse) => {
-      if (message.action === 'showOverlay') {
-        showOverlay(message.url); // Show overlay on the specific tab with this URL
-      } else if (message.action === 'removeOverlay') {
-        const overlay: HTMLElement = document.getElementById('custom-overlay');
+      if (typeof message !== 'object' || message === null) return;
+      const msg = message as { action?: string; url?: string; loggedIn?: boolean };
+      if (msg.action === 'showOverlay' && typeof msg.url === 'string') {
+        showOverlay(msg.url); // Show overlay on the specific tab with this URL
+      } else if (msg.action === 'removeOverlay') {
+        const overlay = document.getElementById('custom-overlay');
         if (overlay) {
           document.body.removeChild(overlay);
         }
+      } else if (msg.action === 'geroLoggedWalletChanged') {
+        // Broadcast from the background: the active Gero wallet changed.
+        // Dispatch the Bring-configured event so its SDK refreshes the
+        // cached wallet address (stored by the SDK in chrome.storage) and
+        // re-fetches any pending cashback token for this tab.
+        const event = msg.loggedIn ? 'gero:login' : 'gero:logout';
+        window.dispatchEvent(new CustomEvent(event, {
+          bubbles: true,
+          cancelable: true,
+          composed: false,
+        }));
       }
     };
 

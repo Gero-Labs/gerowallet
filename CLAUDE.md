@@ -72,10 +72,14 @@ npm run pack             # Package .zip/.crx/.xpi
 
 ## Key Rules
 
+### ESLint
+- **Fix ESLint issues in every file you touch** — resolve any existing or newly introduced ESLint errors/warnings before moving on
+
 ### i18n
 - **Always use `$t()` for user-facing text** — never hardcode strings
 - Translation files: `src/plugins/i18n/us.ts` (English), `de.ts` (German)
 - **When adding keys to `us.ts`, always add corresponding German in `de.ts`**
+- **Before creating a new i18n key, search for an existing key with the same text** (e.g., `errors.insufficientBalance` already exists — reuse it instead of creating `perpetuals.insufficientBalance`)
 
 ### Vuetify
 - `v-select`, `v-autocomplete`, `v-combobox`: **Always use `attach` prop** (prevents dropdown positioning issues on scroll)
@@ -130,8 +134,9 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - `isFeatureNew(id)`, `markFeatureAsSeen(id)`, `hasNewFeaturesInPath(path)`
 
 ## Feature Flags
-- LaunchDarkly integration: `src/stores/featureFlagsStore.ts`
-- Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isGoMiningEnabled`, `isPoolOperatorEnabled`
+- Self-hosted flag service (gero-sync): `src/services/featureFlag.service.ts` + `src/stores/featureFlagsStore.ts`
+- Backend URL: `VITE_FLAGS_BASE_URL` (see `.env.*`)
+- Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isGoMiningEnabled`, `isPoolOperatorEnabled`, `isPhysicalCardOrderingEnabled`
 - Route gating: `isRouteUnderMaintenance()` in router.ts
 - Nav hiding: check flag in NavigationDrawer.vue menu items
 

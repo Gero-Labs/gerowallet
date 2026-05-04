@@ -48,16 +48,18 @@
           :key="index"
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
-            <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="white">{{ item.icon }}</v-icon>
-            <v-img
-              v-else
-              width="18"
-              height="18"
-              :src="item.icon"
-              :alt="item.title"
-              contain
-              style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
-            />
+            <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
+              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="white">{{ item.icon }}</v-icon>
+              <v-img
+                v-else
+                width="18"
+                height="18"
+                :src="item.icon"
+                :alt="item.title"
+                contain
+                style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
+              />
+            </v-badge>
           </v-list-item-avatar>
 
           <v-list-item-content>
@@ -149,8 +151,26 @@
         </v-list-item-avatar>
 
         <v-list-item-content class="py-0" style="align-self: initial">
-          <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account">
-            {{ account.name }}
+          <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account && !editingName">
+            <span
+              class="editable-name"
+              @click="startEditingName"
+              :title="t('settings.editWalletName')"
+            >{{ account.name }}<v-icon x-small class="ml-1 edit-icon">mdi-pencil</v-icon></span>
+          </v-list-item-title>
+          <v-list-item-title class="mb-0" style="font-size: 14px; display: flex; align-items: center;" v-if="account && editingName">
+            <input
+              ref="nameInput"
+              v-model="editNameValue"
+              class="name-edit-input"
+              maxlength="40"
+              @keydown.enter="saveWalletName"
+              @keydown.esc="cancelEditingName"
+              @blur="onNameInputBlur"
+            />
+            <v-btn icon x-small @mousedown.prevent="saveWalletName" :disabled="!isNameValid" color="success" class="ml-1" style="width: 16px; height: 16px;">
+              <v-icon style="font-size: 12px;">mdi-check</v-icon>
+            </v-btn>
           </v-list-item-title>
           <v-list-item-subtitle class="mb-0" style="font-size: 10px" v-if="account">
             {{ account.chain }}
@@ -188,7 +208,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
 import MusicStoreModule from '@/stores/musicStore'
@@ -196,6 +216,9 @@ import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
+import geroStoreDefault from '@/stores/geroStore';
+import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardStore from '@/stores/modules/card';
@@ -204,6 +227,7 @@ import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { debugLog } from '@/utils/debug';
+import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 
 interface NavigationItem {
   title?: string;
@@ -214,6 +238,7 @@ interface NavigationItem {
   enabled?: boolean;
   soon?: boolean;
   new?: boolean;
+  notificationDot?: boolean;
   underMaintenance?: boolean;
   loading?: boolean;
 }
@@ -223,6 +248,7 @@ type NavigationHrefItem = NavigationItem & { href: string };
 type NavigationHeaderItem = NavigationItem & { header: string };
 type NavigationItemUnion = NavigationLinkItem | NavigationHrefItem | NavigationHeaderItem;
 
+const { t } = useTranslation();
 const changeLogRef = ref(changeLog)
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
 // Define props and emit
@@ -301,7 +327,7 @@ const items = computed((): NavigationItemUnion[] => {
       underMaintenance: !isBlogEnabledByFeatureFlag.value,
     },
     { header: t('navigation.financialHub'), enabled: true },
-    { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
+    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
@@ -382,7 +408,7 @@ const loadingFFs = computed(() => {
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
 
-// Check if swap is enabled by LaunchDarkly feature flag
+// Check if Gero Card is enabled by feature flag
 const isGeroCardEnabledByFeatureFlag = computed(() => {
   return featureFlagsStore.isGeroCardEnabled();
 });
@@ -413,6 +439,48 @@ watch(() => breakpoint.mobile,
     }
   }
 )
+
+// Wallet name editing
+const { wallets } = toRefs(geroStore);
+const editingName = ref(false)
+const editNameValue = ref('')
+const nameInput = ref<HTMLInputElement | null>(null)
+
+const isNameValid = computed(() => {
+  const v = editNameValue.value.trim()
+  if (!v || v.length < 3 || v.length > 40) return false
+  if (v === account.value?.name) return false
+  const otherNames = Object.values(wallets.value)
+    .filter((w) => w.name !== account.value?.name)
+    .map((w) => w.name)
+  return !otherNames.includes(v)
+})
+
+function startEditingName() {
+  editNameValue.value = account.value?.name || ''
+  editingName.value = true
+  nextTick(() => {
+    nameInput.value?.focus()
+  })
+}
+
+function cancelEditingName() {
+  editingName.value = false
+}
+
+function onNameInputBlur() {
+  // Small delay so mousedown on check button fires first
+  setTimeout(() => { editingName.value = false }, 150)
+}
+
+function saveWalletName() {
+  if (!isNameValid.value) return
+  const newName = editNameValue.value.trim()
+  geroStoreDefault.setWalletName(loggedWallet.value.id, newName)
+  loggedWallet.value.name = newName
+  snackbar.fireSuccess(t('settings.walletNameUpdated'))
+  editingName.value = false
+}
 
 // Methods
 function toggleMiniPlayer() {
@@ -540,6 +608,19 @@ onUnmounted(() => {
   border: 1px solid transparent;
 }
 
+.menuItem ::v-deep .v-list-item__avatar {
+  overflow: visible !important;
+}
+
+.menuItem ::v-deep .v-avatar {
+  overflow: visible !important;
+}
+
+.menuItem ::v-deep .v-badge {
+  overflow: visible !important;
+}
+
+
 .activePage {
   background: linear-gradient(45deg, #00c7f3, #00ffd1);
 
@@ -661,5 +742,49 @@ onUnmounted(() => {
   width: 100%;
   position: relative;
   z-index: 1;
+}
+
+.editable-name {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 0;
+  margin-left: -2px;
+  padding-left: 2px;
+  padding-right: 2px;
+  transition: background 0.15s;
+
+  .edit-icon {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+
+    .edit-icon {
+      opacity: 0.6;
+    }
+  }
+}
+
+.name-edit-input {
+  font-size: 14px;
+  line-height: 20px;
+  height: 20px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  padding: 0 4px;
+  width: 100%;
+  font-family: inherit;
+
+  &:focus {
+    border-bottom-color: #00c7f3;
+  }
 }
 </style>

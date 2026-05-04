@@ -218,37 +218,47 @@ const submitLogin = async (walletId: number): Promise<void> => {
 
     // Trust the background response
     if (!response || response['error']) {
-      console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+      console.error('❌ Login failed:', (response as { error?: unknown })?.error || 'Unknown error');
       return;
     }
 
-    // Wait for login state to propagate using watcher (event-driven, not polling)
+    // Wait for login state to propagate AND sync to complete (event-driven, not polling)
     const loginSuccess = await new Promise<boolean>((resolve) => {
+      const checkReady = () => {
+        // Don't navigate while wallet is restoring/syncing
+        if (walletStore.isSyncing) return false;
+        return loggedWallet.value?.id === walletId;
+      };
+
       // Check immediately first
-      if (loggedWallet.value?.id === walletId) {
+      if (checkReady()) {
         debugLog('✅ Login already confirmed - loggedWallet.id matches target wallet');
         resolve(true);
         return;
       }
 
-      // Set up watcher for state change
-      const unwatch = watch(
-        () => loggedWallet.value?.id,
-        (newId) => {
-          if (newId === walletId) {
-            debugLog('✅ Login confirmed - loggedWallet.id matches target wallet');
-            unwatch();
+      // Set up watchers for both loggedWallet and restoring state
+      const unwatchWallet = watch(
+        () => [loggedWallet.value?.id, walletStore.isSyncing],
+        () => {
+          if (checkReady()) {
+            debugLog('✅ Login confirmed and restore complete');
+            unwatchWallet();
             resolve(true);
           }
         }
       );
 
-      // Safety timeout (2 seconds)
+      // Safety timeout (5 minutes — full restore can take time)
       setTimeout(() => {
-        unwatch();
-        console.warn('⚠️ Timeout waiting for login state to propagate');
-        resolve(false);
-      }, 2000);
+        unwatchWallet();
+        if (loggedWallet.value?.id === walletId) {
+          resolve(true); // wallet is set, just navigate
+        } else {
+          console.warn('⚠️ Timeout waiting for login state to propagate');
+          resolve(false);
+        }
+      }, 300000);
     });
 
     if (!loginSuccess) {
@@ -328,7 +338,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
       });
 
       if (!response || response['error']) {
-        console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+        console.error('❌ Login failed:', (response as { error?: unknown })?.error || 'Unknown error');
     
         return;
       }
@@ -378,7 +388,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
       await navigateAfterLogin();
     } catch (error) {
       console.error('❌ Login error after pre-login unlock:', error);
-  
+
     }
     return;
   }

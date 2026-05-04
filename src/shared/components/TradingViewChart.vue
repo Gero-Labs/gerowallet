@@ -1,5 +1,16 @@
 <template>
   <div class="trading-view-chart-container" :style="{height: height}">
+    <!-- OHLC legend overlay -->
+    <div v-if="!showFallback && legendData" class="ohlc-legend">
+      <span class="ohlc-legend__symbol">{{ symbol }} · {{ candleIntervalLabel }}</span>
+      <span class="ohlc-legend__values">
+        <span class="ohlc-legend__label">O</span><span :class="legendData.changeClass">{{ legendData.open }}</span>
+        <span class="ohlc-legend__label">H</span><span :class="legendData.changeClass">{{ legendData.high }}</span>
+        <span class="ohlc-legend__label">L</span><span :class="legendData.changeClass">{{ legendData.low }}</span>
+        <span class="ohlc-legend__label">C</span><span :class="legendData.changeClass">{{ legendData.close }}</span>
+        <span :class="legendData.changeClass">{{ legendData.change }} ({{ legendData.changePct }})</span>
+      </span>
+    </div>
     <div ref="chartContainer" class="chart-container" :style="{width: '100%', height: '100%', minHeight: height}"></div>
     <!-- Fallback for debugging -->
     <div v-if="showFallback" class="chart-fallback">
@@ -12,8 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { IChartApi, SolidColor, Time } from 'lightweight-charts';
 import { CandlestickSeries, createChart } from 'lightweight-charts';
 
@@ -33,6 +43,8 @@ interface Props {
   theme?: 'light' | 'dark';
   enableRealtime?: boolean;
   realtimeData?: any;
+  /** Candle interval in seconds for realtime updates (default 300 = 5m) */
+  candleInterval?: number;
   pricePrecision?: number;
   priceMinMove?: number;
 }
@@ -44,6 +56,7 @@ const props = withDefaults(defineProps<Props>(), {
   theme: 'dark',
   enableRealtime: false,
   realtimeData: undefined,
+  candleInterval: 300,
   pricePrecision: 4,
   priceMinMove: 0.0001,
 });
@@ -62,6 +75,40 @@ let candlestickSeries: any = null;
 
 // Internal chart data state
 let chartData: CandlestickDataPoint[] = [];
+
+// OHLC legend overlay
+interface LegendData {
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  change: string;
+  changePct: string;
+  changeClass: string;
+}
+
+const legendData = ref<LegendData | null>(null);
+
+const candleIntervalLabel = computed(() => {
+  const map: Record<number, string> = { 60: '1m', 300: '5m', 900: '15m', 3600: '1h', 86400: '1d' };
+  return map[props.candleInterval] ?? String(props.candleInterval) + 's';
+});
+
+function updateLegend(candle: CandlestickDataPoint) {
+  const p = props.pricePrecision;
+  const change = candle.close - candle.open;
+  const changePct = candle.open !== 0 ? (change / candle.open) * 100 : 0;
+  const sign = change >= 0 ? '+' : '';
+  legendData.value = {
+    open: candle.open.toFixed(p),
+    high: candle.high.toFixed(p),
+    low: candle.low.toFixed(p),
+    close: candle.close.toFixed(p),
+    change: sign + change.toFixed(p),
+    changePct: sign + changePct.toFixed(2) + '%',
+    changeClass: change >= 0 ? 'ohlc-legend--up' : 'ohlc-legend--down',
+  };
+}
 
 
 const initChart = async () => {
@@ -233,6 +280,22 @@ const initChart = async () => {
 
     emit('chartReady', chart);
 
+    // OHLC legend — update on crosshair move, show last candle by default
+    if (chartData.length > 0) {
+      updateLegend(chartData[chartData.length - 1]);
+    }
+    chart.subscribeCrosshairMove((param: any) => {
+      if (!param || !param.seriesData || param.seriesData.size === 0) {
+        // No crosshair — show last candle
+        if (chartData.length > 0) updateLegend(chartData[chartData.length - 1]);
+        return;
+      }
+      const candle = param.seriesData.get(candlestickSeries);
+      if (candle && candle.open != null) {
+        updateLegend(candle as CandlestickDataPoint);
+      }
+    });
+
   } catch (error) {
     console.error('TradingViewChart: Failed to initialize chart:', error);
     showFallback.value = true; // Keep fallback visible on error
@@ -248,7 +311,7 @@ const updateLastCandle = (realtimeData: any) => {
 
   const now = Math.floor(Date.now() / 1000);
   const lastCandle = chartData[chartData.length - 1];
-  const candleInterval = 300; // 5 minutes in seconds
+  const candleInterval = props.candleInterval;
 
   const timeSinceLastCandle = now - (lastCandle.time as number);
 
@@ -280,6 +343,7 @@ const updateLastCandle = (realtimeData: any) => {
 
     if (candlestickSeries) {
       candlestickSeries.update(updatedCandle);
+      updateLegend(updatedCandle);
     }
   }
 };
@@ -293,7 +357,7 @@ watch(() => props.data, (newData) => {
         const priceValid = !isNaN(candle.open) && !isNaN(candle.high) && !isNaN(candle.low) && !isNaN(candle.close);
         return timeValid && priceValid;
       });
-      
+
       if (validData.length > 0) {
         candlestickSeries.setData(validData);
         chartData = validData;
@@ -348,7 +412,7 @@ onBeforeUnmount(() => {
 .trading-view-chart-container {
   width: 100%;
   position: relative;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
   background: transparent;
   min-height: 160px;
@@ -365,7 +429,7 @@ onBeforeUnmount(() => {
 
 /* Dark theme adjustments */
 .trading-view-chart-container {
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: none;
 }
 
 /* Chart loading overlay */
@@ -402,5 +466,44 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   font-weight: 600;
+}
+
+/* ── OHLC legend overlay ─────────────────────────────────────────────── */
+
+.ohlc-legend {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.ohlc-legend__symbol {
+  font-size: 13px;
+  font-weight: 700;
+  color: #eaecef;
+}
+
+.ohlc-legend__values {
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  gap: 4px;
+}
+
+.ohlc-legend__label {
+  color: #848e9c;
+}
+
+.ohlc-legend--up {
+  color: #26FAB0;
+}
+
+.ohlc-legend--down {
+  color: #FF5252;
 }
 </style>

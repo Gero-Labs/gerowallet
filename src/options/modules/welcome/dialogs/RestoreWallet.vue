@@ -733,29 +733,28 @@ const performLogin = async (wallet) => {
   try {
     emit('dialogChange', false);
     showConfirmDialog.value = false;
+    resetDialog();
 
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.LOGIN,
-      data: { wallet },
-    });
-
-    const hasError = response && typeof response === 'object' && 'error' in response;
-    if (response && !hasError) {
-      vmProxy.$nextTick(() => {
-        resetDialog();
-        router.push('/').catch(err => {
-          if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
-            console.warn('Navigation error:', err);
-          }
-        });
+    // Retry LOGIN if background service worker restarted (connection lost during wallet creation)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
       });
-    } else if (hasError) {
-      console.warn('Login response contained error, proceeding anyway');
-      vmProxy.$nextTick(() => {
-        resetDialog();
-        router.push('/').catch(() => {});
-      });
+      const hasError = response && typeof response === 'object' && 'error' in response;
+      if (!hasError) break;
+      console.warn(`Login attempt ${attempt} failed, retrying in 1s...`);
+      await new Promise(r => setTimeout(r, 1000));
     }
+
+    // LOGIN awaits full sync — by now isSyncing=false and it's safe to navigate
+    vmProxy.$nextTick(() => {
+      router.push('/').catch(err => {
+        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+          console.warn('Navigation error:', err);
+        }
+      });
+    });
   } catch (error) {
     console.error('Error during login:', error);
   } finally {
