@@ -104,6 +104,10 @@
                     <span class="global-total__fee-label">{{ $t('signTx.networkFee') }}</span>
                     <span class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
                   </div>
+                  <div v-if="globalTotal.formattedWithdrawal" class="global-total__row global-total__fee-row">
+                    <span class="global-total__fee-label">{{ $t('wallet.rewardsWithdrawn') }}</span>
+                    <span class="global-total__withdrawal">+ {{ globalTotal.formattedWithdrawal }}</span>
+                  </div>
                   <div class="global-total__row global-total__total-row">
                     <span class="global-total__label">{{ $t('common.total') }}</span>
                     <div>
@@ -220,6 +224,8 @@ import filters from '@/shared/utils/filters';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
+import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 import debounce from 'lodash/debounce';
 import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest, type NexusTxAsset, type MaxAdaRequest } from '@/api/nexus-tx-api';
 import { Serialization } from '@cardano-sdk/core';
@@ -509,13 +515,28 @@ const globalTotal = computed(() => {
     formattedFee = filters.toCurrency(feeLovelace, false, 6, '\u20B3', '', false, 6);
   }
 
-  const totalWithFee = totalAda + feeAda;
-  const adaPrice = Number(networkStore.price?.lastPrice || 0);
+  // Rewards being auto-withdrawn as part of this tx (if any). They subtract
+  // from what the wallet actually pays, since they enter the tx as fresh input
+  // coin from the stake account.
+  let withdrawalAda = 0;
+  let formattedWithdrawal = '';
+  if (tx.value?.body?.withdrawals && tx.value.body.withdrawals.length > 0) {
+    const wLovelace = tx.value.body.withdrawals.reduce<bigint>(
+      (acc: bigint, w: { quantity: bigint }) => acc + BigInt(w.quantity),
+      BigInt(0)
+    );
+    withdrawalAda = Number(wLovelace) / 1_000_000;
+    formattedWithdrawal = filters.toCurrency(Number(wLovelace), false, 6, '\u20B3', '', false, 6);
+  }
+
+  const totalWithFee = totalAda + feeAda - withdrawalAda;
+  const adaPrice = Number(priceStore.adaUsd?.lastPrice || networkStore.price?.lastPrice || 0);
   totalUsd = totalWithFee * adaPrice;
 
   return {
     ada: totalAda,
     fee: feeAda,
+    withdrawal: withdrawalAda,
     totalWithFee,
     usd: totalUsd,
     formattedAda: totalAda > 0
@@ -525,6 +546,7 @@ const globalTotal = computed(() => {
       ? filters.toCurrency(totalWithFee * 1e6, false, 6, '\u20B3', '', false, 6)
       : '\u20B30',
     formattedFee,
+    formattedWithdrawal,
     formattedUsd: totalUsd > 0
       ? `$${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : '$0.00',
@@ -537,10 +559,17 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
   let lovelace = overrideLovelace ?? '0';
   const assets: NexusTxAsset[] = [];
 
+  // Track units added via the token list so a collectible under the same
+  // policy+assetName can't duplicate it in the output.
+  const addedUnits = new Set<string>();
+
   r.selectedTokens
-    .filter((tk: Token) => tk && (tk.unit || tk.unit === '') && tk.decimals != null)
+    .filter((tk: Token) => tk && (tk.unit !== undefined && tk.unit !== null))
     .forEach((token: Token) => {
-      const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
+      // Treat missing decimals as 0 — otherwise a no-metadata fungible would
+      // be silently dropped from the output and end up in change.
+      const decimals = token.decimals != null ? token.decimals : 0;
+      const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, decimals)));
       if (token.ticker === nativeTicker.value) {
         if (!overrideLovelace) lovelace = qty.toString();
       } else if (token.unit) {
@@ -549,17 +578,19 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
           assetName: token.unit.slice(56),
           quantity: qty.toString(),
         });
+        addedUnits.add(token.unit);
       }
     });
 
-  Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
-    if (col.unit) {
-      assets.push({
-        policyId: col.unit.slice(0, 56),
-        assetName: col.unit.slice(56),
-        quantity: String(col.toSendQuantity || 1),
-      });
-    }
+  Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit?: string }) => {
+    const unit = col.unit || ((col.policy_id || '') + (col.asset_name || ''));
+    if (!unit || addedUnits.has(unit)) return;
+    assets.push({
+      policyId: unit.slice(0, 56),
+      assetName: unit.slice(56),
+      quantity: String(col.toSendQuantity || col.quantity || 1),
+    });
+    addedUnits.add(unit);
   });
 
   return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
@@ -582,6 +613,7 @@ async function buildTx(options?: { selectAll?: boolean }) {
     utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
     network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
     selectAll: options?.selectAll,
+    withdrawals: currentRewardWithdrawals(),
   };
 
   try {
@@ -632,6 +664,11 @@ function prevStep() {
  */
 async function setMax(recipientId: string, tokenIndex: number) {
   isCalculatingMax.value = true;
+  // Invalidate any previously built tx so a stale one can't be submitted if
+  // the new build fails (e.g. user came back from the summary step and
+  // re-clicked MAX). tx.value is repopulated only when build succeeds.
+  txValid.value = false;
+  tx.value = undefined;
   // Track ADA MAX recipients for auto-adjust on build failure
   const recipientForMax = recipients.value.find((r: SendRecipient) => r.id === recipientId);
   if (recipientForMax && recipientForMax.selectedTokens[tokenIndex]?.ticker === nativeTicker.value) {
@@ -645,15 +682,15 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const selectedToken = sendTokensCopy[tokenIndex];
   if (!selectedToken) { isCalculatingMax.value = false; return; }
 
-  // For non-ADA tokens: just set to full balance, single build
+  // For non-ADA tokens: just set to full balance, single build.
+  // Use plain math for smallest-unit → decimal conversion — filters.toCurrency
+  // rounds to max 2 decimals when decimalPlaces isn't 4 or 6, which would
+  // over-commit tokens like AGIX (8 decimals, small balances).
   if (selectedToken.ticker !== nativeTicker.value) {
-    if (selectedToken.decimals) {
-      selectedToken.quantity = Number(
-        filters.toCurrency(sendTokensCopy[tokenIndex].balance, false, sendTokensCopy[tokenIndex].decimals, '', '', false, sendTokensCopy[tokenIndex].decimals).replaceAll(',', '')
-      );
-    } else {
-      selectedToken.quantity = Number(selectedToken.balance);
-    }
+    const decimals = Number(selectedToken.decimals) || 0;
+    selectedToken.quantity = decimals > 0
+      ? Number(selectedToken.balance) / Math.pow(10, decimals)
+      : Number(selectedToken.balance);
     try {
       const updated = { ...recipient, selectedTokens: sendTokensCopy };
       recipients.value.splice(recipientIdx, 1, updated);
@@ -695,6 +732,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
     changeAddress: keys.value.payment[0].address,
     utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
     network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+    withdrawals: currentRewardWithdrawals(),
   };
 
   try {
@@ -705,7 +743,13 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
     debugLog('setMax: Nexus max =', Number(maxLovelace) / 1_000_000, 'ADA (fee:', Number(maxResult.estimated_fee) / 1_000_000, ', changeMin:', Number(changeMinUtxo) / 1_000_000, ')');
 
-    if (maxLovelace <= BigInt(0)) { isCalculatingMax.value = false; return; }
+    if (maxLovelace <= BigInt(0)) {
+      // Max-ada couldn't fit an output (heavy NFTs etc.). Let the fallback
+      // debouncedBuild at the bottom of setMax surface the failure to the UI.
+      isCalculatingMax.value = false;
+      if (!txValid.value) debouncedBuild();
+      return;
+    }
 
     // Step 2: set the amount in the UI
     const maxQty = Number(maxLovelace) / 1_000_000;
@@ -720,8 +764,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
     // Step 3: build the tx — send lovelace="0" so Nexus auto-maximizes using
     // the same calculation as max-ada (no mismatch between two separate computations)
-    try {
-      // Build with the MAX output having lovelace="0" — Nexus detects it and maximizes
+    let adjustedLovelace: bigint = maxLovelace;
+    const tryBuild = async (loveOverride?: string): Promise<void> => {
       const buildOutputs = recipients.value
         .filter((r: SendRecipient) => {
           if (r.id === recipientId) return true;
@@ -730,7 +774,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
         })
         .map((r: SendRecipient) => {
           if (r.id === recipientId) {
-            const out = recipientToNexusOutput(r, '0');
+            const out = recipientToNexusOutput(r, loveOverride ?? '0');
             if (!out.address || !isPaymentAddress(out.address)) out.address = changeAddr;
             return out;
           }
@@ -743,27 +787,135 @@ async function setMax(recipientId: string, tokenIndex: number) {
         utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
         network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
         selectAll: true,
+        withdrawals: currentRewardWithdrawals(),
       };
       const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(buildRequest, loggedWallet.value.network);
       const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
       tx.value = transaction.toCore();
       txValid.value = true;
-    } catch {
-      // Build may fail if other recipients changed — the amount is still correct for UI
+      const outs = tx.value.body.outputs;
+      debugLog('setMax: built tx', {
+        outputCount: outs.length,
+        outputs: outs.map((o) => ({
+          addr: String(o.address).slice(0, 10) + '…' + String(o.address).slice(-6),
+          coins: o.value.coins.toString(),
+          assetCount: o.value.assets
+            ? (o.value.assets instanceof Map ? o.value.assets.size : Object.keys(o.value.assets).length)
+            : 0,
+        })),
+        fee: tx.value.body.fee.toString(),
+      });
+    };
+
+    try {
+      await tryBuild();
+    } catch (buildErr) {
+      // Nexus sometimes disagrees with /v1/tx/max-ada about change min-UTxO
+      // when native tokens remain in change — parse the shortage and retry with
+      // an explicit reduced lovelace so build accepts it.
+      const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
+      const match = msg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+      if (match) {
+        const shortage = BigInt(match[2]) - BigInt(match[1]);
+        adjustedLovelace = maxLovelace - shortage;
+        if (adjustedLovelace > BigInt(0)) {
+          const adjQty = Number(adjustedLovelace) / 1_000_000;
+          const adjTokens = [...recipients.value[recipientIdx].selectedTokens];
+          adjTokens[tokenIndex] = { ...adjTokens[tokenIndex], quantity: String(adjQty) };
+          recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: adjTokens });
+          try {
+            await tryBuild(adjustedLovelace.toString());
+          } catch (retryErr) {
+            debugLog('setMax: retry after shortage adjustment also failed:', retryErr);
+          }
+        }
+      } else {
+        debugLog('setMax: build after max-ada failed:', msg);
+      }
     }
   } catch (err) {
     debugLog('setMax: /v1/tx/max-ada failed:', err);
   }
 
   isCalculatingMax.value = false;
+
+  // If neither the initial build nor the backoff retry produced a tx (e.g.
+  // max-ada returned 0, threw, or the output is too heavy with NFTs),
+  // schedule a plain debouncedBuild so the continue button eventually
+  // becomes actionable. Otherwise the user is stuck — no reactive change
+  // will fire the watcher, nothing else triggers a rebuild.
+  if (!txValid.value) {
+    debouncedBuild();
+  }
 }
 
 /** Send entire wallet: all tokens + NFTs are already added by the child, just trigger MAX ADA */
 async function sendEntireWallet(recipientId: string) {
-  // Wait for the child's emit to propagate (tokens + NFTs added to recipient)
+  // Wait for the child's emit to propagate
   await nextTick();
-  // Trigger MAX on ADA (index 0) — since all tokens/NFTs are being sent,
-  // no change output for native tokens → max = balance - fee
+
+  // Authoritative fix: rebuild the recipient's outbound assets straight from
+  // the on-chain UTxO set. Keep only ADA in selectedTokens (so max-ada fills
+  // it), and put EVERY other asset in selectedCollectibles at its full UTxO
+  // quantity. This sidesteps any drift between walletStore.tokens /
+  // resolvedCollections / child state that would otherwise leave stragglers
+  // in the change output.
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
+  if (idx !== -1) {
+    const recipient = recipients.value[idx];
+
+    const totals = new Map<string, bigint>();
+    for (const utxo of (utxos.value as Cardano.Utxo[])) {
+      const raw = utxo[1].value.assets as unknown;
+      if (!raw) continue;
+      const add = (unit: string, qty: unknown) => {
+        totals.set(unit, (totals.get(unit) ?? BigInt(0)) + BigInt(String(qty)));
+      };
+      if (raw instanceof Map) {
+        raw.forEach((qty, unit) => add(String(unit), qty));
+      } else if (Array.isArray(raw)) {
+        for (const a of raw as { unit: string; quantity: unknown }[]) add(String(a.unit), a.quantity);
+      } else if (typeof raw === 'object') {
+        for (const [unit, qty] of Object.entries(raw as Record<string, unknown>)) add(unit, qty);
+      }
+    }
+
+    // Keep the ADA token entry (max-ada will set its amount) and drop every
+    // other token — those are re-emitted through the collectibles map with
+    // known-good quantities derived from the UTxOs.
+    const adaOnlyTokens = recipient.selectedTokens.filter((tk: Token) => tk?.ticker === nativeTicker.value);
+
+    const fullCollectibles: Record<string, Collectible & { unit: string }> = {};
+    for (const [unit, qty] of totals) {
+      if (!unit || unit === 'lovelace') continue;
+      const qtyNum = Number(qty);
+      fullCollectibles[unit] = {
+        unit,
+        policy_id: unit.slice(0, 56),
+        asset_name: unit.slice(56),
+        fingerprint: '',
+        quantity: qtyNum,
+        toSendQuantity: qtyNum,
+      } as Collectible & { unit: string };
+    }
+
+    recipients.value.splice(idx, 1, {
+      ...recipient,
+      selectedTokens: adaOnlyTokens,
+      selectedCollectibles: fullCollectibles,
+    });
+    await nextTick();
+
+    debugLog('sendEntireWallet: scanned', {
+      utxoCount: (utxos.value as Cardano.Utxo[]).length,
+      uniqueAssets: totals.size,
+      tokensKeptInRecipient: adaOnlyTokens.length,
+      collectiblesEmitted: Object.keys(fullCollectibles).length,
+    });
+  }
+
+  // Trigger MAX on ADA (index 0) — since every non-ADA asset is now on the
+  // recipient output, no change output should be needed.
   await setMax(recipientId, 0);
 }
 
@@ -787,7 +939,11 @@ const debouncedBuild = debounce(async () => {
   }
 
   try {
-    await buildTx();
+    // When a MAX recipient is tracked, always force selectAll so Nexus uses
+    // the same UTxO set as the auto-adjust path — prevents oscillation where
+    // plain build picks a different subset and fails differently.
+    const buildOpts = maxRecipientIds.value.size > 0 ? { selectAll: true } : undefined;
+    await buildTx(buildOpts);
     txValid.value = true;
     recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
   } catch (e) {
@@ -804,8 +960,66 @@ const debouncedBuild = debounce(async () => {
         const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
         if (recipients.value[0]) recipients.value[0].adaShortage = shortage;
       }
+    } else if (msg.includes('Insufficient ADA to cover minimum UTXO for change')) {
+      // Nexus 400 — change output can't cover min-UTxO with native tokens.
+      // Show shortage in the first recipient (same UX as other shortage errors).
+      const match = msg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+      if (match && recipients.value[0]) {
+        const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+        recipients.value[0].adaShortage = shortage;
+      }
+    } else if (msg.includes('Insufficient token balance')) {
+      // Nexus 400 — the output asked for more of a token than the wallet holds.
+      // Parse the asset identifier (policyId prefix + assetName hex, joined by
+      // "...") and the available amount, then cap the corresponding token in
+      // each recipient and rebuild once. If the cap fails, fall through and
+      // surface adaShortage so the recipient card shows the error.
+      const match = msg.match(/asset\s+([0-9a-f]+)\.\.\.([0-9a-f]+).*?Required:\s*(\d+),\s*available:\s*(\d+)/i);
+      if (match) {
+        const [, policyPrefix, assetNameSuffix, , availableStr] = match;
+        const available = BigInt(availableStr);
+        let capped = false;
+        for (const r of recipients.value) {
+          for (let i = 0; i < r.selectedTokens.length; i++) {
+            const tk = r.selectedTokens[i] as Token & { unit?: string };
+            if (!tk.unit) continue;
+            if (!tk.unit.startsWith(policyPrefix) || !tk.unit.endsWith(assetNameSuffix)) continue;
+            const decimals = tk.decimals ?? 0;
+            const newQty = Number(available) / Math.pow(10, decimals);
+            if (Number(tk.quantity) !== newQty) {
+              const updatedTokens = [...r.selectedTokens];
+              updatedTokens[i] = { ...tk, quantity: String(newQty) };
+              const idx = recipients.value.indexOf(r);
+              recipients.value.splice(idx, 1, { ...r, selectedTokens: updatedTokens });
+              capped = true;
+            }
+          }
+        }
+        if (capped) {
+          // Retry build immediately with the capped amount — avoid waiting for
+          // the watcher → debounce cycle, which would also re-run auto-adjust
+          // and loop.
+          isCalculatingMax.value = true;
+          try {
+            await buildTx({ selectAll: maxRecipientIds.value.size > 0 });
+            txValid.value = true;
+            recipients.value.forEach((rr: SendRecipient) => { rr.adaShortage = 0; });
+          } catch {
+            if (recipients.value[0]) recipients.value[0].adaShortage = 1;
+          } finally {
+            isCalculatingMax.value = false;
+            debouncedBuild.cancel();
+          }
+          return;
+        }
+      }
+      if (recipients.value[0]) recipients.value[0].adaShortage = 1;
     }
     txValid.value = false;
+    // Clear any stale tx so the summary step can't display / the user can't
+    // submit a previous build when the current inputs don't produce a valid
+    // one (e.g. returned from summary, tweaked amounts, new build failed).
+    tx.value = undefined;
 
     // Auto-adjust MAX recipients on build failure (one attempt only)
     if (maxRecipientIds.value.size > 0) {
@@ -828,6 +1042,7 @@ const debouncedBuild = debounce(async () => {
               changeAddress: keys.value.payment[0].address,
               utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
               network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+              withdrawals: currentRewardWithdrawals(),
             }, loggedWallet.value.network);
             const maxLovelace = BigInt(maxResult.max_lovelace);
             if (maxLovelace > BigInt(0)) {
@@ -841,13 +1056,43 @@ const debouncedBuild = debounce(async () => {
             }
           } catch { /* ignore auto-adjust failure */ }
         }
-        // Retry build after adjusting
+        // Retry build after adjusting; if Nexus's max-ada disagrees with build
+        // about change min-UTxO, parse the shortage and back off the MAX
+        // recipient's ADA by that amount, then try once more.
         try {
           await buildTx({ selectAll: true });
           txValid.value = true;
           recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
-        } catch { /* still invalid */ }
+        } catch (retryErr) {
+          const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+          const mm = retryMsg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+          if (mm) {
+            const shortageLovelace = BigInt(mm[2]) - BigInt(mm[1]);
+            // Apply backoff to every MAX recipient in case multiple are tracked
+            for (const maxId of maxRecipientIds.value) {
+              const idx = recipients.value.findIndex((r: SendRecipient) => r.id === maxId);
+              if (idx === -1) continue;
+              const mr = recipients.value[idx];
+              const adaIdx = mr.selectedTokens.findIndex((tk: Token) => tk.ticker === nativeTicker.value);
+              if (adaIdx < 0) continue;
+              const currentLovelace = BigInt(Math.floor(Number(mr.selectedTokens[adaIdx].quantity) * 1_000_000));
+              const adjusted = currentLovelace - shortageLovelace;
+              if (adjusted <= BigInt(0)) continue;
+              const finalTokens = [...mr.selectedTokens];
+              finalTokens[adaIdx] = { ...finalTokens[adaIdx], quantity: String(Number(adjusted) / 1_000_000) };
+              recipients.value.splice(idx, 1, { ...mr, selectedTokens: finalTokens });
+            }
+            try {
+              await buildTx({ selectAll: true });
+              txValid.value = true;
+              recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+            } catch { /* still invalid — leave adaShortage set */ }
+          }
+        }
       } finally {
+        // Drop any debouncedBuild calls queued by our own splices — without
+        // this the watcher re-fires with identical state and loops forever.
+        debouncedBuild.cancel();
         isCalculatingMax.value = false;
       }
     }
@@ -876,11 +1121,24 @@ watch(
       });
       if (assetsMap.size > 0) {
         try {
-          const mockOut: Cardano.TxOut = {
-            address: addr as Cardano.PaymentAddress,
-            value: { coins: BigInt(0) as Cardano.Lovelace, assets: assetsMap }
-          };
-          const minAdaLovelace = BrowserTxConstruction.minAdaRequired(mockOut, BigInt(epochParams.value.coinsPerUtxoByte));
+          // Iterate: the serialized size of the coin field grows with its
+          // varint length (1 byte for 0, up to 9 bytes for large amounts),
+          // so a one-shot calc with coins=0 under-reports min-UTxO for outputs
+          // that actually carry meaningful ADA. Feed the result back until
+          // stable so Nexus's calc (which sees the final coin value) agrees.
+          const coinsPerByte = BigInt(epochParams.value.coinsPerUtxoByte);
+          let coins = BigInt(0) as Cardano.Lovelace;
+          let minAdaLovelace = BigInt(0);
+          for (let i = 0; i < 5; i++) {
+            const mockOut: Cardano.TxOut = {
+              address: addr as Cardano.PaymentAddress,
+              value: { coins, assets: assetsMap }
+            };
+            const next = BrowserTxConstruction.minAdaRequired(mockOut, coinsPerByte);
+            if (next === minAdaLovelace) break;
+            minAdaLovelace = next;
+            coins = next as Cardano.Lovelace;
+          }
           r.minAda = Number(minAdaLovelace) / 1_000_000;
         } catch { r.minAda = 0; }
       } else {
@@ -919,13 +1177,12 @@ onMounted(() => {
 .step-recipients-wrapper {
   display: flex;
   justify-content: center;
-  padding: 8px 16px 4px;
+  padding: 8px 0 4px;
 }
 
 .step-recipients-inner {
-  width: 60%;
+  width: 100%;
   min-width: 340px;
-  max-width: 480px;
   max-height: 480px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -985,7 +1242,12 @@ onMounted(() => {
 
 .global-total__fee {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: #FDA29B !important;
+}
+
+.global-total__withdrawal {
+  font-size: 11px;
+  color: #94CFA8;
 }
 
 /* ─── Empty wallet ─── */
@@ -1039,7 +1301,7 @@ onMounted(() => {
     align-items: center;
     position: relative;
     padding: 2px;
-    width: 120px;
+    width: 68px;
 
     &.active .icon-container {
       box-shadow: 0 0 0 4px #00dff327;
@@ -1074,8 +1336,8 @@ onMounted(() => {
     flex: 1;
     height: 2px;
     width: 100%;
-    margin-left: -60px;
-    margin-right: -60px;
+    margin-left: -38px;
+    margin-right: -38px;
     margin-top: 11px;
     background-color: #292929;
 

@@ -1517,7 +1517,7 @@ export default {
   'perpetuals.fundingCountdown': 'Funding / Countdown',
   'perpetuals.fundingCountdownTooltip': 'The payment rate exchanged between the long and short positions for the next funding. If the funding rate is positive, longs pay shorts. If negative, shorts pay longs.',
 
-  // Strike v2 — additional keys
+  // Strike v2 - additional keys
   'perpetuals.noOpenOrders': 'No Open Orders',
   'perpetuals.noClosedPositions': 'No Closed Positions',
   'perpetuals.noOrderHistory': 'No Order History',
@@ -1549,7 +1549,7 @@ export default {
   'perpetuals.minutes': 'minutes',
   'perpetuals.liquidation': 'Liquidation',
 
-  // Strike v2 — trading terminal
+  // Strike v2 - trading terminal
   'perpetuals.chart': 'Chart',
   'perpetuals.data': 'Data',
   'perpetuals.depth': 'Depth',
@@ -1733,9 +1733,11 @@ export default {
   'settings.collateralAutoDetectedDesc': 'A suitable ADA-only UTxO is available. Gero will use it automatically when a dApp requires collateral. No setup needed.',
   'settings.collateralNotFound': 'No suitable collateral UTxO',
   'settings.collateralNotFoundDesc': 'You don\'t have an ADA-only UTxO that can be used as collateral. Set one up below to interact with smart contracts.',
-  'settings.collateralTooltip': 'Smart contracts may require collateral if validation fails. Gero handles this automatically when a suitable ADA-only UTxO is available in your wallet — no manual setup needed.',
+  'settings.collateralTooltip': 'Smart contracts may require collateral if validation fails. Gero handles this automatically when a suitable ADA-only UTxO is available in your wallet - no manual setup needed.',
   'settings.collateralAmount': 'Amount',
   'settings.collateralUtxoRef': 'UTxO',
+  'settings.collateralGeroProvided': 'Gero covers your collateral',
+  'settings.collateralGeroProvidedDesc': 'Your wallet has no ADA-only UTxO of its own, but Gero will provide one from a shared pool when a dApp requires collateral. Gero co-signs the transaction automatically — no setup needed.',
   'settings.collateralTxSetSuccess': 'Collateral Tx Set Successfully. Tx ID: {txId}',
   'settings.confirmPassword': 'Confirm Password',
   'settings.connectedDApps': 'Connected DApps',
@@ -1799,6 +1801,8 @@ export default {
   'settings.spendingSecuritySettings': 'Spending Security Settings',
   'settings.txAutoSubmit': 'Auto-submit Transactions',
   'settings.txAutoSubmitHelper': 'Automatically submit signed transactions without additional confirmation',
+  'settings.autoWithdrawRewards': 'Auto-withdraw Staking Rewards',
+  'settings.autoWithdrawRewardsHelper': 'Pull available staking rewards into every send',
   'settings.extensionClickAction': 'Extension Click Action',
   'settings.extensionClickActionHelper': 'Choose what opens when you click the GeroWallet extension icon',
   'settings.uploadPicture': 'Upload Picture',
@@ -2016,7 +2020,6 @@ export default {
   'transactions.moreTransactions': 'More Transactions',
   'transactions.muesliswap': 'MuesliSwap',
   'transactions.native': 'Native',
-  'transactions.networkFee': 'Network Fee',
   'transactions.noMoreTransactions': 'No more transactions',
   'transactions.noTransactionsFound': 'No transactions found',
   'transactions.pending': 'Pending',
@@ -2126,7 +2129,6 @@ export default {
   'wallet.contactCurrentAddress': 'Current',
   'wallet.contactUpdateAddress': 'Update Contact',
   'wallet.continue': 'Continue',
-  'wallet.copyCBOR': 'Copy CBOR',
   'wallet.createNewWallet': 'Create New Wallet',
   'wallet.createWallet': 'CREATE WALLET',
   'wallet.currentPassword': 'Current Password',
@@ -2149,7 +2151,7 @@ export default {
   'wallet.googleAccountProfilePicture': 'Google Account Profile Picture',
   'wallet.grantPermission': 'Grant Permission',
   'wallet.guardarianOffer': 'Limited Offer - 0% Wallet Fees',
-  'wallet.moonpaySigningWarning': 'Payment URL signing unavailable. MoonPay may show a signature error — please check your backend configuration.',
+  'wallet.moonpaySigningWarning': 'Payment URL signing unavailable. MoonPay may show a signature error - please check your backend configuration.',
   'wallet.hardwareWallet': 'Hardware Wallet',
   'wallet.hardwareWalletType': 'Hardware Wallet Type',
   'wallet.importExistingWallet': 'Import Existing Wallet',
@@ -2232,7 +2234,7 @@ export default {
   'wallet.removeRecipient': 'Remove recipient',
   'wallet.noContacts': 'No contacts saved yet',
   'wallet.lockedForTokens': 'locked for native tokens in wallet',
-  'wallet.sendEntireWallet': 'Send entire wallet',
+  'wallet.sendEntireWallet': 'Send Entire Wallet',
   'wallet.adaRequiredForTokens': 'ADA is required to carry tokens on Cardano',
   'wallet.duplicateAddress': 'Same address as Recipient #{n}',
   'wallet.tooManyRecipients': 'Too many recipients or assets for one transaction. Remove a recipient or reduce assets.',
@@ -2271,6 +2273,8 @@ export default {
   'wallet.signTransaction': 'Sign Transaction',
   'wallet.signTxWithTrezor': 'Please confirm the transaction on your Trezor device.',
   'wallet.signatureVerificationFailed': 'Signature verification failed',
+  'wallet.rewardsWithdrawn': 'Rewards Withdrawn',
+  'wallet.rewardsWithdrawnTooltip': 'Staking rewards pulled from this stake account into the transaction',
   'wallet.somethingWentWrong': 'Something Went Wrong',
   'wallet.spendCryptoAnywhere': 'Spend Crypto Anywhere',
   'wallet.spendingLockType': 'Spending Lock Type',
@@ -2794,11 +2798,11 @@ export default {
   'miniGero.connectRequest': 'Connection Request',
   'miniGero.signDataRequest': 'Sign Data Request',
   'miniGero.signTxRequest': 'Sign Transaction',
-  'signTx.transactionDetails': 'Transaction Details',
+  'signTx.transactionDetails': 'Tx Details',
   'signTx.toRecipient': 'To',
   'signTx.toYou': 'To you',
   'signTx.toYouTooltip': 'Self-transfer to one of your wallet\'s payment addresses.',
-  'signTx.changeTooltip': 'Change — the unspent portion of the transaction inputs returning to your wallet.',
+  'signTx.changeTooltip': 'Change - the unspent portion of the transaction inputs returning to your wallet.',
   'signTx.toRecipientTooltip': 'This output leaves your wallet. The funds go to an external address.',
   'signTx.totalSending': 'Total Sending',
   'signTx.networkFee': 'Network Fee',
@@ -2807,7 +2811,7 @@ export default {
   'signTx.expiresIn': 'Expires in',
   'signTx.expiresTooltip': 'This transaction is only valid up to slot {slot}. If you don\'t sign and submit it before then, the network will reject it and the dApp will need to build a new one.',
   'signTx.expiredTitle': 'Transaction expired',
-  'signTx.expiredBody': 'The validity window has passed. The network will reject this transaction now — reject it and ask the dApp to build a new one.',
+  'signTx.expiredBody': 'The validity window has passed. The network will reject this transaction now - reject it and ask the dApp to build a new one.',
   'signTx.copyCbor': 'Copy raw CBOR',
   'signTx.internalTransfer': 'Stays in your wallet',
   'signTx.assetCountTooltip': '{count} native token | {count} native tokens',
@@ -3103,7 +3107,7 @@ export default {
   'bitcoin.signedPsbt': 'Signed PSBT',
   'bitcoin.hardwareMessageSigningNotSupported': 'Message signing is not yet supported for hardware wallets.',
 
-  // Navigation — Bitcoin integrations
+  // Navigation - Bitcoin integrations
   'navigation.babylon': 'Babylon Staking',
   'navigation.ordinals': 'Ordinals & Runes',
   'navigation.thorchain': 'Thorchain Swap',
@@ -3173,8 +3177,8 @@ export default {
   'gomining.withdrawalType': 'Withdrawal Type',
   'gomining.fastWithdrawal': 'Fast',
   'gomining.standardWithdrawal': '24h',
-  'gomining.fastWithdrawalNote': 'Order-based — processed in minutes. Higher fee may apply.',
-  'gomining.standardWithdrawalNote': 'Standard — processed within 24 hours. Lower fee.',
+  'gomining.fastWithdrawalNote': 'Order-based - processed in minutes. Higher fee may apply.',
+  'gomining.standardWithdrawalNote': 'Standard - processed within 24 hours. Lower fee.',
   'gomining.networkFee': 'Network Fee',
   'gomining.youWillReceive': 'You will receive',
   'gomining.confirmWithdraw': 'Confirm Withdrawal',
@@ -3244,7 +3248,7 @@ export default {
 
   // Intro banner
   'babylon.intro.title': 'New to Babylon Staking?',
-  'babylon.intro.body': 'Babylon lets you earn rewards by staking native BTC directly on Bitcoin — no bridges, wrapping, or custodians. You choose a Finality Provider to delegate to, set a lock-up period, and keep full self-custody throughout.',
+  'babylon.intro.body': 'Babylon lets you earn rewards by staking native BTC directly on Bitcoin - no bridges, wrapping, or custodians. You choose a Finality Provider to delegate to, set a lock-up period, and keep full self-custody throughout.',
   'babylon.intro.step1': 'Choose a Finality Provider below',
   'babylon.intro.step2': 'Set your BTC amount and lock duration',
   'babylon.intro.step3': 'Sign the staking transaction directly in your Gero wallet',
@@ -3258,13 +3262,13 @@ export default {
   'babylon.col.tvl': 'TVL',
   'babylon.col.stakers': 'stakers',
 
-  // Tooltips — hero stats
+  // Tooltips - hero stats
   'babylon.tooltip.activeTvl': 'Total BTC currently locked and actively staked across all Babylon participants',
   'babylon.tooltip.totalStakers': 'Number of unique Bitcoin addresses currently participating in Babylon staking',
   'babylon.tooltip.activeProviders': 'Finality Providers are validator nodes that secure the Babylon chain using your delegated BTC',
   'babylon.tooltip.unbondingWait': 'Minimum wait time after requesting to unstake before your BTC becomes withdrawable',
 
-  // Tooltips — staking parameters
+  // Tooltips - staking parameters
   'babylon.tooltip.minStake': 'Minimum amount of BTC you must lock in a single staking position',
   'babylon.tooltip.maxStake': 'Maximum amount of BTC you can lock in a single staking position',
   'babylon.tooltip.duration': 'The lock period in Bitcoin blocks. 1 block ≈ 10 min. After expiry you can withdraw without waiting for unbonding',
@@ -3279,10 +3283,10 @@ export default {
   'babylon.totalStakers': 'All-time',
   'babylon.btcPk': 'BTC PK',
 
-  // Tooltips — finality provider section
+  // Tooltips - finality provider section
   'babylon.tooltip.finalityProvider': 'Finality Providers are validator nodes that use your delegated BTC to sign and finalize Bitcoin blocks on the Babylon network. Rewards are distributed to all delegators.',
 
-  // Tooltips — delegation states
+  // Tooltips - delegation states
   'babylon.tooltip.state.pending': 'Transaction submitted but not yet confirmed on the Bitcoin network',
   'babylon.tooltip.state.active': 'Your BTC is actively staked and earning rewards',
   'babylon.tooltip.state.unbonding_requested': 'Unbonding has been requested. Waiting for confirmation',
@@ -3421,7 +3425,7 @@ export default {
   'poolOperator.margin': 'Margin',
   'poolOperator.relays': 'Relays',
   'poolOperator.welcomeTitle': 'Stake Pool Operations Center',
-  'poolOperator.welcomeSubtitle': 'Manage your Cardano stake pool directly from your wallet. Monitor nodes, track block production, rotate KES keys, and update pool parameters — all in one place.',
+  'poolOperator.welcomeSubtitle': 'Manage your Cardano stake pool directly from your wallet. Monitor nodes, track block production, rotate KES keys, and update pool parameters - all in one place.',
   'poolOperator.featureDashboard': 'Pool Dashboard',
   'poolOperator.featureDashboardDesc': 'Live pool stats, pledge status, saturation, delegators, and epoch history at a glance.',
   'poolOperator.featureMonitor': 'Node Monitoring',
@@ -3429,7 +3433,7 @@ export default {
   'poolOperator.featureSchedule': 'Leader Schedule',
   'poolOperator.featureScheduleDesc': 'See your assigned block slots for current and next epoch. Know exactly when your pool will mint.',
   'poolOperator.featureKes': 'Remote KES Rotation',
-  'poolOperator.featureKesDesc': 'Rotate KES keys with one tap — securely from your wallet. No SSH needed.',
+  'poolOperator.featureKesDesc': 'Rotate KES keys with one tap - securely from your wallet. No SSH needed.',
   'poolOperator.readyToStart': 'Get Started',
   'poolOperator.readyToStartDesc': 'Import your pool cold key to unlock all features.',
   'poolOperator.setupColdKey': 'Set Up Cold Key',
@@ -3509,7 +3513,7 @@ export default {
   'poolOperator.leaderSchedule': 'Leader Schedule',
   'poolOperator.nextEpoch': 'Next Epoch',
   'poolOperator.nodeRequiredForSchedule': 'Node connection required',
-  'poolOperator.nodeRequiredForScheduleDescription': 'Connect your block producer node via the Node Monitor to fetch the leader schedule. The VRF calculation runs on your node — your VRF key never leaves the server.',
+  'poolOperator.nodeRequiredForScheduleDescription': 'Connect your block producer node via the Node Monitor to fetch the leader schedule. The VRF calculation runs on your node - your VRF key never leaves the server.',
   'poolOperator.fetch': 'Fetch',
   'poolOperator.calculatingSchedule': 'Calculating leader schedule on your node...',
   'poolOperator.assignedSlots': 'Assigned Slots',
@@ -3553,7 +3557,7 @@ export default {
   'poolOperator.blockProducer': 'Block Producer',
   'poolOperator.relay': 'Relay',
   'poolOperator.getStarted': 'Connect Your Nodes',
-  'poolOperator.getStartedDescription': 'Monitor your block producer and relay nodes in real-time. Install the lightweight agent on each node — it auto-creates a secure tunnel.',
+  'poolOperator.getStartedDescription': 'Monitor your block producer and relay nodes in real-time. Install the lightweight agent on each node - it auto-creates a secure tunnel.',
   'poolOperator.step1Title': 'Download the agent',
   'poolOperator.step1Description': 'Run this on each node (block producer + relays):',
   'poolOperator.step2Title': 'Configure',
@@ -3582,13 +3586,13 @@ export default {
   'poolOperator.restartNode': 'Restart the node when prompted',
   'poolOperator.orQuickCommand': 'or use quick command',
   'poolOperator.directRotation': 'Direct KES rotation',
-  'poolOperator.iRotatedRefresh': 'I Rotated — Refresh',
+  'poolOperator.iRotatedRefresh': 'I Rotated - Refresh',
   'poolOperator.kesRefreshed': 'KES status refreshed',
   'poolOperator.kesRefreshFailed': 'Failed to refresh KES status',
   'poolOperator.remoteRotatePassKeyDescription': 'Authenticate with your PassKey to decrypt the cold key. It will be sent securely to your node over the encrypted tunnel, used to sign the new operational certificate, and discarded immediately.',
   'poolOperator.kesRotated': 'KES Keys Rotated Successfully',
   'poolOperator.kesRotatedDescription': 'New KES keys generated and node restarted. The changes will take effect in the next epoch.',
-  'poolOperator.kesWarningTitle': 'KES Expiring — {remaining} periods left',
+  'poolOperator.kesWarningTitle': 'KES Expiring - {remaining} periods left',
   'poolOperator.kesWarningSubtitle': 'Rotate your KES keys to keep producing blocks.',
   'poolOperator.deposit': 'Deposit',
   'poolOperator.retiring': 'Retiring',
@@ -3619,10 +3623,10 @@ export default {
   'poolOperator.publicRoots': 'Public Roots',
   'poolOperator.loadingPeerDetails': 'Loading peer details...',
   'poolOperator.peersEndpointUnavailable': 'Restart gero-node-monitor for detailed peer info',
-  'poolOperator.kesLedgerLimitation': 'KES rotation with Ledger cold key is not supported — the Ledger app cannot sign operational certificates. Please use cardano-cli on your air-gapped machine for KES rotation.',
+  'poolOperator.kesLedgerLimitation': 'KES rotation with Ledger cold key is not supported - the Ledger app cannot sign operational certificates. Please use cardano-cli on your air-gapped machine for KES rotation.',
   'poolOperator.kesKeysGenerated': 'KES Keys Generated',
   'poolOperator.kesKeysGeneratedDescription': 'New KES keys and operational certificate have been generated. Download the files below and transfer them to your node server.',
-  'poolOperator.kesTransferInstructions': 'Transfer kes.skey, kes.vkey, and node.cert to your block producer node. Restart the node to apply the new KES key. Keep kes.skey secure — it is used for block signing.',
+  'poolOperator.kesTransferInstructions': 'Transfer kes.skey, kes.vkey, and node.cert to your block producer node. Restart the node to apply the new KES key. Keep kes.skey secure - it is used for block signing.',
   'poolOperator.myRelays': 'My Relays',
   'poolOperator.direction': 'Direction',
   'poolOperator.noPeersInFilter': 'No peers match the current filter',

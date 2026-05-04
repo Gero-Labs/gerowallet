@@ -13,6 +13,8 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
+import { nexusCollateralApi } from '@/api/nexus-collateral-api';
+import { debugLog } from '@/utils/debug';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -80,8 +82,12 @@ export function toStakeCredential(address: Cardano.Address): Cardano.Credential 
 }
 
 export function toStakeAddress(addressBech32: string, networkId: Cardano.NetworkId): string {
-  if (Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentKeyStakeKey &&
-      Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentScriptStakeKey) {
+  if (!addressBech32) return undefined;
+  const address = Cardano.Address.fromString(addressBech32);
+  if (!address) return undefined;
+  const type = address.getType();
+  if (type !== Cardano.AddressType.BasePaymentKeyStakeKey &&
+      type !== Cardano.AddressType.BasePaymentScriptStakeKey) {
     return undefined;
   }
   const stakeCredential: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(addressBech32));
@@ -421,28 +427,18 @@ const getFilterAmount = (amount: string): bigint => {
     return filterAmount;
 };
 
-export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {}, storedUtxos: Cardano.Utxo[]): string[] {
+export async function getCollateral(
+  { amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {},
+  storedUtxos: Cardano.Utxo[]
+): Promise<string[]> {
   if (!storedUtxos || !Array.isArray(storedUtxos)) {
     const error = APIError.InvalidRequest;
     error.info = 'No UTXOs available in wallet.';
     throw error;
   }
 
-  // Filter for pure ADA UTXOs (no assets) suitable for collateral
-  // Cardano.Utxo is [TxIn, TxOut] where TxOut has value: { coins: bigint, assets?: Map }
-  let filteredUtxos = storedUtxos.filter(utxo => {
-    const txOut = utxo[1];
-    return !txOut.value.assets || txOut.value.assets.size === 0;
-  });
-
-  if (filteredUtxos.length === 0) {
-    const error = APIError.InvalidRequest;
-    error.info = 'No pure ADA UTXOs available for collateral.';
-    throw error;
-  }
-
+  let filterAmount = MAX_COLLATERAL_AMOUNT;
   if (amount) {
-    let filterAmount = MAX_COLLATERAL_AMOUNT;
     try {
       filterAmount = getFilterAmount(amount);
     } catch (e) {
@@ -450,28 +446,66 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
       error.info = (e as Error)?.message || 'Unknown error';
       throw error;
     }
-
-    const utxos: Cardano.Utxo[] = [];
-    let totalCoins = 0n;
-    for (const utxo of filteredUtxos) {
-      const coins = utxo[1].value.coins;
-      totalCoins += BigInt(coins);
-      utxos.push(utxo);
-      if (totalCoins >= filterAmount) break;
-    }
-
-    if (totalCoins < filterAmount) {
-      const error = APIError.Refused;
-      error.info = 'not enough coins in configured collateral UTxOs';
-      throw error
-    }
-    filteredUtxos = utxos;
   }
 
-  // Convert Cardano.Utxo to CBOR strings
-  return filteredUtxos.map((utxo) => {
-    return Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor();
+  // Pass 1: try to satisfy from the user's own pure-ADA UTxOs.
+  // Cardano.Utxo is [TxIn, TxOut] where TxOut.value = { coins: bigint, assets?: Map }
+  const pureAdaUtxos = storedUtxos.filter((utxo) => {
+    const txOut = utxo[1];
+    return !txOut.value.assets || txOut.value.assets.size === 0;
   });
+
+  const selected: Cardano.Utxo[] = [];
+  let totalCoins = 0n;
+  for (const utxo of pureAdaUtxos) {
+    selected.push(utxo);
+    totalCoins += BigInt(utxo[1].value.coins);
+    if (totalCoins >= filterAmount) break;
+  }
+
+  if (totalCoins >= filterAmount) {
+    return selected.map((utxo) => Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor());
+  }
+
+  // Pass 2 — Nexus shared-pool fallback. The wallet has no own pure-ADA UTxO
+  // big enough for collateral, so ask Nexus to lend one of the pool UTxOs at
+  // its enterprise address. The returned ref points to a real on-chain UTxO
+  // we don't control; on signTx the background detects the pool address and
+  // calls /v1/collateral/cosign for the witness.
+  try {
+    const lent = await nexusCollateralApi.lend();
+    const utxoCbor = buildNexusUtxoCbor(lent);
+    return [utxoCbor];
+  } catch (lendErr) {
+    debugLog('[getCollateral] Nexus lend fallback failed:', lendErr);
+    const error = APIError.Refused;
+    error.info = pureAdaUtxos.length === 0
+      ? 'No pure ADA UTXOs available for collateral.'
+      : 'not enough coins in configured collateral UTxOs';
+    throw error;
+  }
+}
+
+/**
+ * Build the CIP-30 {@code TransactionUnspentOutput} CBOR for a Nexus-lent UTxO.
+ * Nexus returns raw fields ({@code txHash}, {@code outputIndex}, {@code address},
+ * {@code lovelace}); we synthesize the cardano-sdk core shape here so the call
+ * site can return the same kind of value used elsewhere in this file.
+ */
+function buildNexusUtxoCbor(lent: { txHash: string; outputIndex: number; address: string; lovelace: string }): string {
+  const address = Cardano.PaymentAddress(lent.address);
+  const utxo: Cardano.Utxo = [
+    {
+      txId: Cardano.TransactionId(lent.txHash),
+      index: lent.outputIndex,
+      address,
+    },
+    {
+      address,
+      value: { coins: BigInt(lent.lovelace) },
+    },
+  ];
+  return Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor();
 }
 
 export function getUsedAddresses(keys: any, paginate?: Paginate): HexBlob[] {
@@ -856,10 +890,14 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
     if (tx.body?.outputs) {
       outputs = tx.body.outputs;
     } else if (tx.cbor && !tx.body) {
-      try {
-        const deserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(tx.cbor));
-        outputs = deserialized.body?.outputs;
-      } catch { /* skip */ }
+      // Skip non-array CBOR (e.g. bare TxBody from Apex chain)
+      const firstByte = typeof tx.cbor === 'string' ? parseInt(tx.cbor.slice(0, 2), 16) : 0;
+      if ((firstByte >> 5) === 4) {
+        try {
+          const deserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(tx.cbor));
+          outputs = deserialized.body?.outputs;
+        } catch { /* skip */ }
+      }
     }
 
     if (outputs) {
@@ -952,6 +990,15 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
 
     // Check if this is a raw transaction with CBOR that needs full conversion
     if (tx.cbor && !tx.body) {
+      // Cardano Tx CBOR is a top-level array (major type 4). Apex/non-Cardano
+      // chains may send a bare TxBody (map, major type 5). Skip those silently —
+      // they will be stored as-is and the UI guards via isCardanoTx.
+      const firstByte = typeof tx.cbor === 'string' ? parseInt(tx.cbor.slice(0, 2), 16) : 0;
+      const majorType = firstByte >> 5;
+      if (majorType !== 4) {
+        const txId = tx.tx_hash || tx.hash || 'unknown_' + Date.now();
+        return { ...tx, id: txId };
+      }
       try {
         // Use the already imported Serialization from the top of the file
         // Deserialize the transaction
@@ -1017,8 +1064,10 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
           utxo
         };
       } catch (e) {
-        console.error('Error deserializing transaction CBOR:', e);
-        // Fallback: ensure it at least has an id
+        const txHash = tx.tx_hash || tx.hash || 'unknown';
+        const cborPreview = typeof tx.cbor === 'string' ? tx.cbor.slice(0, 64) : '<non-string>';
+        console.warn(`Skipping tx ${txHash}: CBOR deserialize failed (${(e as Error).message}). CBOR head: ${cborPreview}`);
+        // Fallback: keep tx as-is so caller can still index it; UI helpers guard via isCardanoTx
         const fallbackId = tx.tx_hash || tx.hash || 'fallback_' + Date.now();
         return { ...tx, id: fallbackId };
       }

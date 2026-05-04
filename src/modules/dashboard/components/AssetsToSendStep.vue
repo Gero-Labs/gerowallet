@@ -22,7 +22,7 @@
               <v-icon
                 v-if="token.verified"
                 x-small
-                color="primary"
+                color="#00DFF3"
                 class="ml-1"
                 style="margin-top: -1px; font-size: 10px;"
               >mdi-check-decagram</v-icon>
@@ -135,62 +135,63 @@
       </div>
     </div>
 
-    <!-- Send entire wallet -->
-    <div v-if="missingTokens.length > 0 || collectiblesCount > 0" class="send-all-row">
-      <v-btn
-        text x-small
-        color="rgba(255,255,255,0.4)"
-        class="send-all-btn"
-        @click="sendEntireWallet()"
-      >
-        <v-icon x-small class="mr-1">mdi-send-variant-outline</v-icon>
-        {{ $t('wallet.sendEntireWallet') }}
-      </v-btn>
-    </div>
-
     <!-- Add token / NFT row -->
     <div class="add-asset-row">
-      <!-- Add token picker -->
-      <v-menu offset-y max-height="320" min-width="280" v-if="missingTokens.length > 0">
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn text x-small color="#00DFF3" v-bind="attrs" v-on="on" class="add-asset-btn">
-            <v-icon x-small class="mr-1">mdi-plus</v-icon>
-            {{ $t('assets.addToken') }}
-          </v-btn>
-        </template>
-        <v-list dense dark class="token-picker-list">
-          <v-list-item
-            v-for="(token, idx) in missingTokens"
-            :key="token.unit || `missing-${idx}`"
-            @click="addSpecificToken(token)"
-          >
-            <v-avatar size="24" class="mr-2">
-              <img :src="token.img" :alt="token.ticker" />
-            </v-avatar>
-            <v-list-item-content>
-              <v-list-item-title style="font-size: 13px;">{{ token.ticker }}</v-list-item-title>
-              <v-list-item-subtitle style="font-size: 11px;">
-                {{ token.name || '' }}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-            <v-list-item-action style="margin: 0; min-width: auto;">
-              <span style="font-size: 11px; color: rgba(255,255,255,0.4);">
-                {{ formatTokenBalance(token) }}
-              </span>
-            </v-list-item-action>
-          </v-list-item>
-        </v-list>
-      </v-menu>
-      <!-- Add NFT button -->
-      <v-btn
-        v-if="collectiblesCount > 0"
-        text x-small color="#00DFF3"
-        class="add-asset-btn"
-        @click="$emit('openCollectiblesDialog')"
-      >
-        <v-icon x-small class="mr-1">mdi-plus</v-icon>
-        {{ $t('assets.addCollectibleLabel') }}
-      </v-btn>
+      <div style="gap: 8px; display: flex;">
+        <!-- Add token picker -->
+        <v-menu offset-y max-height="320" min-width="280" v-if="missingTokens.length > 0">
+          <template v-slot:activator="{ on, attrs }">
+            <v-btn text x-small color="#00DFF3" v-bind="attrs" v-on="on" class="add-asset-btn">
+              <v-icon x-small class="mr-1">mdi-plus</v-icon>
+              {{ $t('assets.addToken') }}
+            </v-btn>
+          </template>
+          <v-list dense dark class="token-picker-list">
+            <v-list-item
+              v-for="(token, idx) in missingTokens"
+              :key="token.unit || `missing-${idx}`"
+              @click="addSpecificToken(token)"
+            >
+              <v-avatar size="24" class="mr-2">
+                <img :src="token.img" :alt="token.ticker" />
+              </v-avatar>
+              <v-list-item-content>
+                <v-list-item-title style="font-size: 13px;">{{ token.ticker }}</v-list-item-title>
+                <v-list-item-subtitle style="font-size: 11px;">
+                  {{ token.name || '' }}
+                </v-list-item-subtitle>
+              </v-list-item-content>
+              <v-list-item-action style="margin: 0; min-width: auto;">
+                <span style="font-size: 11px; color: rgba(255,255,255,0.4);">
+                  {{ formatTokenBalance(token) }}
+                </span>
+              </v-list-item-action>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+        <!-- Add NFT button -->
+        <v-btn
+          v-if="collectiblesCount > 0"
+          text x-small color="#00DFF3"
+          class="add-asset-btn"
+          @click="$emit('openCollectiblesDialog')"
+        >
+          <v-icon x-small class="mr-1">mdi-plus</v-icon>
+          {{ $t('assets.addCollectibleLabel') }}
+        </v-btn>
+      </div>
+      <!-- Send entire wallet -->
+      <div v-if="missingTokens.length > 0 || collectiblesCount > 0" class="send-all-row">
+        <v-btn
+          text x-small
+          color="#00DFF3"
+          class="send-all-btn"
+          @click="sendEntireWallet()"
+        >
+          <v-icon x-small class="mr-1">mdi-send-variant-outline</v-icon>
+          {{ $t('wallet.sendEntireWallet') }}
+        </v-btn>
+      </div>
     </div>
 
     <!-- Selected NFT chips -->
@@ -276,8 +277,19 @@ function getTokenPriceInUsd(token: any): number {
 }
 
 const missingTokens = computed(() => {
-  const existingTokens = selectedTokens.value.map(token => token?.ticker);
-  return props.tokens.filter(token => !existingTokens.includes(token.ticker));
+  // Must read from tokenModel (which mirrors props.value.selectedTokens), not
+  // the local selectedTokens ref — the latter is only seeded on mount and
+  // never updated, so it wrongly reports tokens already added as "missing"
+  // and sendEntireWallet ends up pushing duplicates that over-commit balance.
+  const existingUnits = new Set<string>();
+  const existingTickers = new Set<string>();
+  for (const tk of tokenModel.value) {
+    if (tk?.unit) existingUnits.add(tk.unit);
+    if (tk?.ticker) existingTickers.add(tk.ticker);
+  }
+  return props.tokens.filter(
+    (token: any) => !(token.unit && existingUnits.has(token.unit)) && !existingTickers.has(token.ticker)
+  );
 });
 
 const tokenModel = computed({
@@ -285,10 +297,15 @@ const tokenModel = computed({
     return props.value?.selectedTokens || [];
   },
   set(newTokens) {
+    // Preserve whatever the parent already tracks for collectibles — our
+    // local `selectedCollectibles` ref mirrors the select-dialog state and
+    // is stale after send-entire-wallet (which populates the parent's
+    // recipient directly via a UTxO scan). Emitting it here would wipe the
+    // parent's authoritative list and strand assets in change.
     emit('input', {
       ...props.value,
       selectedTokens: newTokens,
-      selectedCollectibles: selectedCollectibles.value,
+      selectedCollectibles: props.value?.selectedCollectibles ?? selectedCollectibles.value,
     });
   },
 });
@@ -564,34 +581,64 @@ function autoSetMinAda() {
 
 /** Add all tokens at full balance + all NFTs, then trigger MAX ADA */
 function sendEntireWallet() {
-  // Add all missing tokens at their full balance
-  const allTokens = [...tokenModel.value];
+  // Max out EVERY token in the recipient (including ones already present at
+  // qty 0 from manual "add") and append every token missing so far. Using
+  // plain math for the smallest-unit → decimal conversion — filters.toCurrency
+  // rounds to max 2 decimals when decimalPlaces isn't 4 or 6, which would
+  // overstate tokens like AGIX (8 decimals) and make Nexus reject the tx.
+  const nativeTickerLocal = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+  const toDecimal = (balance: unknown, decimals: unknown) => {
+    const dec = Number(decimals) || 0;
+    return dec > 0 ? Number(balance) / Math.pow(10, dec) : Number(balance);
+  };
+  const allTokens = tokenModel.value.map((tk: any) => {
+    if (tk?.ticker === nativeTickerLocal) return tk; // ADA handled separately by max-ada
+    const full = props.tokens.find((t: any) => t.unit === tk.unit) || tk;
+    return { ...tk, quantity: String(toDecimal(full.balance ?? tk.balance, tk.decimals)) };
+  });
   for (const token of missingTokens.value) {
-    const qty = token.decimals
-      ? Number(filters.toCurrency(token.balance, false, token.decimals, '', '', false, token.decimals).replaceAll(',', ''))
-      : Number(token.balance);
-    allTokens.push({ ...token, quantity: String(qty) });
+    allTokens.push({ ...token, quantity: String(toDecimal(token.balance, token.decimals)) });
   }
   tokenModel.value = allTokens;
 
-  // Add all collectibles
+  // Build the set of units already represented in tokens so we never emit the
+  // same asset through both the token list AND the collectible list — Nexus
+  // would otherwise see the combined quantity and reject it as exceeding the
+  // wallet balance ("Insufficient token balance for asset ...").
+  const tokenUnits = new Set<string>();
+  for (const tk of allTokens) {
+    if (tk?.unit) tokenUnits.add(tk.unit);
+  }
+
+  // Add all collectibles, excluding anything already represented as a token.
+  // Always derive `unit` from policy_id + asset_name when missing so the
+  // output emitter doesn't silently drop the asset (which would leave it in
+  // the change output and defeat "send entire wallet").
   const allCollectibles: any[] = [];
   for (const collection of Object.values(resolvedCollections.value)) {
     const items = (collection as any)?.items;
     if (!Array.isArray(items)) continue;
     for (const item of items) {
-      if (item.toSendQuantity === undefined) item.toSendQuantity = item.quantity || 1;
-      allCollectibles.push(item);
+      const unit = item.unit || ((item.policy_id || '') + (item.asset_name || ''));
+      if (!unit) continue;
+      if (tokenUnits.has(unit)) continue;
+      // Send the FULL on-chain quantity for each NFT/collectible — otherwise
+      // a previously-set partial toSendQuantity would leave the remainder in
+      // change and defeat "send entire wallet".
+      const maxQty = Number(item.quantity) || 1;
+      item.toSendQuantity = maxQty;
+      allCollectibles.push({ ...item, unit, toSendQuantity: maxQty });
     }
   }
-  if (allCollectibles.length > 0) {
-    selectedCollectibles.value = allCollectibles;
-    emit('input', {
-      ...props.value,
-      selectedTokens: allTokens,
-      selectedCollectibles: allCollectibles,
-    });
-  }
+  selectedCollectibles.value = allCollectibles;
+  // Always emit the final snapshot (tokens + collectibles together) so the
+  // parent's recipient state matches what sendEntireWallet intended — any
+  // earlier emit from tokenModel's setter used a stale collectibles value.
+  emit('input', {
+    ...props.value,
+    selectedTokens: allTokens,
+    selectedCollectibles: allCollectibles,
+  });
 
   // Trigger MAX ADA — since all tokens/NFTs are now included, no change output needed
   emit('sendEntireWallet');
@@ -837,7 +884,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 
 .add-asset-row {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 8px;
   padding: 4px 0 2px;
 }

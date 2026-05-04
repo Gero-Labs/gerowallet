@@ -131,6 +131,7 @@ watch(
     }
     if (!open && visitedAdvancedTab.value) {
       markFeatureAsSeen('settings.advanced.defaultExtensionMode');
+      markFeatureAsSeen('settings.advanced.autoWithdrawRewards');
       visitedAdvancedTab.value = false;
     }
   }

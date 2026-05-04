@@ -498,7 +498,7 @@ import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import debounce from 'lodash/debounce';
-import { CardanoTx, isCardanoTx, StoredTransaction } from '@/models/transaction.types';
+import { isCardanoTx, StoredTransaction } from '@/models/transaction.types';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -1257,7 +1257,8 @@ const isInternalTransfer = (item: StoredTransaction): boolean => {
   return allInputsInternal && allOutputsInternal;
 };
 
-const isStrike = (item: CardanoTx): boolean => {
+const isStrike = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Strike Finance perpetual trading transactions
   const STRIKE_SCRIPT_HASH = 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5';
   const STRIKE_CONTRACT_ADDRESS = 'addr1wytzw530pgjxm4wxsxj5ufp23cxacrvzmytpjnlcgq6t7vsgz25ef';
@@ -1276,7 +1277,8 @@ const isStrike = (item: CardanoTx): boolean => {
   return hasStrikeAddress || hasStrikeScript || false;
 };
 
-const isDexHunter = (item: CardanoTx): boolean => {
+const isDexHunter = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Check for DexHunter order contract address (primary indicator)
   const DEXHUNTER_ORDER_ADDRESS =
     'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
@@ -1298,7 +1300,8 @@ const isDexHunter = (item: CardanoTx): boolean => {
   return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata || false;
 };
 
-const isMinswap = (item: CardanoTx): boolean => {
+const isMinswap = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Minswap V1 addresses
   const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
   const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
@@ -1341,7 +1344,8 @@ const isMinswap = (item: CardanoTx): boolean => {
   return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || false;
 };
 
-const isJpgStore = (item: CardanoTx): boolean => {
+const isJpgStore = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Check for jpg.store marketplace script address
   const JPGSTORE_SCRIPT_ADDRESS =
     'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
@@ -1377,7 +1381,8 @@ const isJpgStore = (item: CardanoTx): boolean => {
   return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash) || false;
 };
 
-const isWingRiders = (item: CardanoTx): boolean => {
+const isWingRiders = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // WingRiders V1 order address
   const WINGRIDERS_V1_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
 
@@ -1417,13 +1422,15 @@ const isWingRiders = (item: CardanoTx): boolean => {
   return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum || false;
 };
 
-const isVyFi = (item: CardanoTx): boolean => {
+const isVyFi = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Check for VyFi metadata message (indicates platform interaction)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
   return typeof msg === 'string' && msg.includes('VyFi');
 };
 
-const isSundaeSwap = (item: CardanoTx): boolean => {
+const isSundaeSwap = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // SundaeSwap V1 addresses
   const SUNDAESWAP_V1_ORDER_ADDRESS = 'addr1wxaptpmxcxawvr3pzlhgnpmzz3ql43n2tc8mn3av5kx0yzs09tqh8';
   const SUNDAESWAP_V1_POOL_ADDRESS = 'addr1w9qzpelu9hn45pefc0xr4ac4kdxeswq7pndul2vuj59u8tqaxdznu';
@@ -1449,7 +1456,8 @@ const isSundaeSwap = (item: CardanoTx): boolean => {
   ) ?? false;
 };
 
-const isSplash = (item: CardanoTx): boolean => {
+const isSplash = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Splash DEX batcher key (primary indicator)
   const SPLASH_BATCHER_KEY = '5cb2c968e5d1c7197a6ce7615967310a375545d9bc65063a964335b2';
 
@@ -1467,7 +1475,8 @@ const isSplash = (item: CardanoTx): boolean => {
   return hasSplashBatcherKey || hasSplashScript || false;
 };
 
-const isMuesliSwap = (item: CardanoTx): boolean => {
+const isMuesliSwap = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // MuesliSwap order address
   const MUESLISWAP_ORDER_ADDRESS =
     'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
@@ -1515,10 +1524,12 @@ const isCashback = (item: StoredTransaction): boolean => {
   );
 };
 
-const isStakeRegistration = (item: CardanoTx): boolean => {
+const isStakeRegistration = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
+  const certs = item.body?.certificates;
   return (
-    (item.body.certificates?.length ?? 0) > 0 &&
-    item.body.certificates!.some(
+    (certs?.length ?? 0) > 0 &&
+    certs!.some(
       (certificate) =>
         certificate.__typename === Cardano.CertificateType.StakeRegistration ||
         certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
@@ -1527,10 +1538,12 @@ const isStakeRegistration = (item: CardanoTx): boolean => {
   );
 };
 
-const isStakeDeRegistration = (item: CardanoTx): boolean => {
+const isStakeDeRegistration = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
+  const certs = item.body?.certificates;
   return (
-    (item.body.certificates?.length ?? 0) > 0 &&
-    item.body.certificates!.some(
+    (certs?.length ?? 0) > 0 &&
+    certs!.some(
       (certificate) =>
         certificate.__typename === Cardano.CertificateType.Unregistration ||
         certificate.__typename === Cardano.CertificateType.StakeDeregistration

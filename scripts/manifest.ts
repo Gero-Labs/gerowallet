@@ -73,6 +73,7 @@ function buildCSP(dev: boolean): string {
     'https://api-v2.strikefinance.org',
     'wss://*.strikefinance.org',
     'https://*.gerowallet.io',
+    'wss://*.gerowallet.io',
     // Dev-only
     ...(dev
       ? [
@@ -81,6 +82,7 @@ function buildCSP(dev: boolean): string {
           'http://localhost:*',
           'ws://localhost:*',
           'ws://127.0.0.1:*',
+          'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
       : ['ws://127.0.0.1:*']),
