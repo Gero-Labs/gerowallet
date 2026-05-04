@@ -186,6 +186,8 @@ function disconnect(): void {
   connected.value = false;
   authenticated.value = false;
   _accountId = null;
+  _privateKeyHex = null;
+  _publicKeyHex = null;
 }
 
 // ── Public API ──

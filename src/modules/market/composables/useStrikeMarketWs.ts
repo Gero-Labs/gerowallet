@@ -2,7 +2,7 @@
  * Strike v2 Market Data WebSocket
  *
  * Public, no authentication required.
- * URL: wss://api-v2.strikefinance.org/ws/price
+ * URL: wss://api.strikefinance.org/ws/price
  *
  * Protocol:
  *   Subscribe:   { method: "subscribe", channel: "<name>", symbol: "BTC-USD", id: N }
