@@ -25,6 +25,8 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+import { nexusCollateralApi } from '@/api/nexus-collateral-api';
+import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -184,7 +186,10 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 // Mini-gero DApp channel — per-tab port routing
 // Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
 const miniGeroPorts = new Map<number, chrome.runtime.Port>();
-const pendingDAppRequests = new Map<string, DAppRequestResolver>();
+// requestId → { resolver, tabId } so port-disconnect handlers can reject the
+// requests sent through that specific tab's port (closing the side panel via
+// the X button must register as a user reject, not silently hang).
+const pendingDAppRequests = new Map<string, { resolve: DAppRequestResolver; tabId: number }>();
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name.startsWith('mini-gero-dapp-channel')) {
@@ -205,9 +210,9 @@ chrome.runtime.onConnect.addListener((port) => {
 
     port.onMessage.addListener((message) => {
       if (message.type === 'dapp-response' && message.requestId) {
-        const resolver = pendingDAppRequests.get(message.requestId);
-        if (resolver) {
-          resolver(message);
+        const entry = pendingDAppRequests.get(message.requestId);
+        if (entry) {
+          entry.resolve(message);
           pendingDAppRequests.delete(message.requestId);
         }
       }
@@ -217,6 +222,15 @@ chrome.runtime.onConnect.addListener((port) => {
       if (miniGeroPorts.get(tabId) === port) {
         miniGeroPorts.delete(tabId);
       }
+      // Closing the side panel (X button) disconnects the port. Treat that as
+      // a user reject for any in-flight request so the dApp gets a real
+      // response instead of hanging forever waiting on a sign that won't come.
+      for (const [requestId, entry] of pendingDAppRequests.entries()) {
+        if (entry.tabId === tabId) {
+          entry.resolve({ error: APIError.Refused.info || 'User rejected' });
+          pendingDAppRequests.delete(requestId);
+        }
+      }
     });
   }
 });
@@ -225,13 +239,19 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
   // Find the correct port: prefer exact tab, fall back to any connected port
   const port = (typeof tabId === 'number' && miniGeroPorts.get(tabId)) || miniGeroPorts.values().next().value;
   if (!port) return Promise.reject(new Error('mini-gero not connected'));
+  // Resolve the tabId we're actually sending through so the disconnect handler
+  // can reject this request if the side panel closes before responding.
+  const sendingTabId = (typeof tabId === 'number' ? tabId : NaN);
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
     // No timeout — user interaction can take as long as needed.
     // Cleanup happens via port disconnect or explicit user response.
-    pendingDAppRequests.set(requestId, (response) => {
-      if (response.error) reject(new Error(String(response.error)));
-      else resolve(response);
+    pendingDAppRequests.set(requestId, {
+      tabId: sendingTabId,
+      resolve: (response) => {
+        if (response.error) reject(new Error(String(response.error)));
+        else resolve(response);
+      },
     });
     port.postMessage({
       type: 'dapp-request',
@@ -702,7 +722,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
   const storedUtxos = WalletStore.state.utxos;
   try {
-    const utxos: string[] = getCollateral(request.data.params, storedUtxos as Cardano.Utxo[])
+    const utxos: string[] = await getCollateral(request.data.params, storedUtxos as Cardano.Utxo[])
     sendResponse({
       id: request.id,
       data: utxos,
@@ -896,43 +916,67 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       .then((response) => signTxReply({ data: response.data }));
   };
 
-  const openSidePanelForSignTx = () => {
+  // Pop a popup window with the SignTx route, send the request, and wire the
+  // response back to the dApp. Used both as the primary path when the user has
+  // disabled the side panel and as a fallback when opening the side panel fails.
+  const openPopupForSignTx = async () => {
+    const requestCopy = JSON.parse(JSON.stringify(request));
+    // Force close any existing SignTx popups before opening a new one
+    const windows = await chrome.windows.getAll({ populate: true });
+    for (const window of windows) {
+      if (window.type === 'popup') {
+        for (const tab of window.tabs) {
+          if (tab.url?.includes(`index.html#/${POPUP.signTx}`)) {
+            await chrome.windows.remove(window.id);
+            break;
+          }
+        }
+      }
+    }
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.data.origin)}`
+    );
+    return focusOrCreatePopup(popupURL, 470, 852)
+      .then((tab) => Messaging.sendToPopupInternal(tab.id, requestCopy))
+      .then((response: BackgroundResponse) => {
+        if (response.data) signTxReply({ data: response.data });
+        else if (response.error) signTxReply({ error: response.error });
+        else signTxReply({ error: APIError.InternalError });
+      })
+      .catch((e) => signTxReply({ error: e }));
+  };
+
+  const openSidePanelForSignTx = async () => {
     if (typeof tabId !== 'number') {
       return signTxReply({ error: APIError.InternalError });
     }
-    // Create a deep copy of the request to prevent mutations from affecting subsequent sign attempts
-    const requestCopy = JSON.parse(JSON.stringify(request));
 
-    openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
-      .then(() => handleMiniGeroSignTx())
-      .catch(async () => {
-        // Fallback: popup window
-        // Force close any existing SignTx popups before opening a new one
-        const windows = await chrome.windows.getAll({ populate: true });
-        for (const window of windows) {
-          if (window.type === 'popup') {
-            for (const tab of window.tabs) {
-              if (tab.url?.includes(`index.html#/${POPUP.signTx}`)) {
-                await chrome.windows.remove(window.id);
-                break;
-              }
-            }
-          }
-        }
-        const popupURL = chrome.runtime.getURL(
-          `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.data.origin)}`
-        );
-        focusOrCreatePopup(popupURL, 470, 852)
-          .then((tab) => Messaging.sendToPopupInternal(tab.id, requestCopy))
-          .then((response: BackgroundResponse) => {
-            if (response.data) signTxReply({ data: response.data });
-            else if (response.error) signTxReply({ error: response.error });
-            else signTxReply({ error: APIError.InternalError });
-          })
-          .catch((e) => signTxReply({ error: e }));
-      });
+    // Phase 1: open the side panel and wait for the mini-gero port. Failures
+    // here mean the user can't see the prompt at all, so we fall back to the
+    // popup window. Phase 2 sends the request via the connected port —
+    // errors there (incl. the user clicking Reject) are real responses and
+    // must be relayed back to the dApp without spawning a second prompt.
+    try {
+      await openSidebar(tabId, 'sidepanel/index.html');
+      await waitForMiniGeroPort(5000, tabId);
+    } catch {
+      return openPopupForSignTx();
+    }
+
+    handleMiniGeroSignTx().catch((err: unknown) => {
+      signTxReply({ error: errorMessage(err) || APIError.InternalError });
+    });
   };
+
+  // Honor the user's "Prompt Display Mode" preference (Settings → Advanced).
+  // useSidePanel === false means the user picked Popup, so skip the side panel
+  // entirely instead of opening it and forcing a Reject before falling through.
+  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
+
+  if (!useSidePanel) {
+    openPopupForSignTx();
+    return;
+  }
 
   // Primary: route through mini-gero side panel drawer
   if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
@@ -1586,6 +1630,33 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
   }
 });
 
+/**
+ * Merge two TransactionWitnessSet CBOR blobs into one. Used to fold the Nexus
+ * collateral co-sign witness into the user's witness before returning to the
+ * dApp. Cardano's witness set deduplicates VKeyWitnesses by pubkey, so the
+ * Map-based merge preserves both signers without producing duplicates.
+ */
+async function mergeWitnessSets(userWitnessCbor: string, extraWitnessCbor: string): Promise<string> {
+  const { Serialization } = await import('@cardano-sdk/core');
+  const { HexBlob } = await import('@cardano-sdk/util');
+
+  const userCore = Serialization.TransactionWitnessSet.fromCbor(HexBlob(userWitnessCbor)).toCore();
+  const extraCore = Serialization.TransactionWitnessSet.fromCbor(HexBlob(extraWitnessCbor)).toCore();
+
+  const merged = {
+    signatures: new Map([
+      ...(userCore.signatures?.entries() || []),
+      ...(extraCore.signatures?.entries() || []),
+    ]),
+    ...(userCore.bootstrap && { bootstrap: userCore.bootstrap }),
+    ...(userCore.scripts && { scripts: userCore.scripts }),
+    ...(userCore.redeemers && { redeemers: userCore.redeemers }),
+    ...(userCore.datums && { datums: userCore.datums }),
+  };
+
+  return Serialization.TransactionWitnessSet.fromCore(merged).toCbor();
+}
+
 app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   try {
     // Note: Never log request - contains password
@@ -1610,7 +1681,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         ? new Uint8Array(request.data.privateKeyBytes)
         : undefined;
 
-      const witnessResult = await walletBg.signTx(
+      let witnessResult = await walletBg.signTx(
         transaction,
         request.data.password,
         request.data.accountIndex || 0,
@@ -1618,6 +1689,33 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.addresses,
         privateKeyBytes, // Pass pre-decrypted private key for PRF wallets
       );
+
+      // Nexus shared-pool collateral co-sign. If the tx's collateralInputs include
+      // any UTxO from the Nexus enterprise pool, request the hot wallet's witness
+      // for it and merge it with the user's witness. We don't track which inputs
+      // are "ours" (no client-side cache) — we just ask Nexus, which returns 404
+      // for any ref that isn't in its pool, and merge witnesses from the ones
+      // that succeed.
+      const txCborForCosign: string | undefined = request.data.txCbor;
+      if (txCborForCosign && transaction?.body?.collaterals?.length) {
+        for (const c of transaction.body.collaterals) {
+          const ref = `${c.txId}#${c.index}`;
+          try {
+            const { witness } = await nexusCollateralApi.cosign(txCborForCosign, ref);
+            const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
+            witnessResult = { witnesses: merged };
+            debugLog('🔗 Merged Nexus collateral cosign for', ref);
+          } catch (cosignErr: any) {
+            const status = cosignErr?.response?.status;
+            // 404 = ref isn't in the Nexus pool (it's a user-owned UTxO),
+            // 400 = adversarial-tx guard tripped — both expected for non-pool refs.
+            if (status !== 404 && status !== 400) {
+              debugLog('⚠️ Nexus cosign failed for', ref, status, cosignErr?.message);
+            }
+          }
+        }
+      }
+
       sendResponse({
         id: request.id,
         data: witnessResult,

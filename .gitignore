@@ -46,6 +46,9 @@ coverage/
 .cache/
 .eslintcache
 
+# Graphify output
+graphify-out/
+
 # Translation utility scripts (temporary)
 scripts/translate-*.js
 scripts/merge-translations.js

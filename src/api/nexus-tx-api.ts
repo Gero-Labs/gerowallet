@@ -63,6 +63,15 @@ export interface NexusTxInput {
   referenceScriptHash?: string;
 }
 
+/**
+ * Reward withdrawal attached to a transfer tx. Matches Nexus's TxWithdrawalRequest.
+ * Maps to the tx body's `withdrawals` field (separate from `certificates`).
+ */
+export interface NexusTxWithdrawal {
+  stakeAddress: string;
+  amount: string;
+}
+
 export interface BuildTxRequest {
   outputs: NexusTxOutput[];
   changeAddress: string;
@@ -73,6 +82,8 @@ export interface BuildTxRequest {
   metadata?: Record<string, unknown>;
   /** When true, forces selection of ALL UTxOs (used for send-max). */
   selectAll?: boolean;
+  /** Optional reward withdrawals to pull into the tx. */
+  withdrawals?: NexusTxWithdrawal[];
 }
 
 export interface BuildTxResponse {
@@ -113,6 +124,14 @@ nexusTxClient.interceptors.response.use(
         debugLog('[nexus-tx-api] Reauth failed after 401:', refreshErr);
         throw error;
       }
+    }
+    // Surface the Nexus error body's message so callers can parse it
+    // (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
+    const body = error.response?.data as { message?: string } | undefined;
+    if (body?.message) {
+      const enriched = new Error(body.message);
+      (enriched as Error & { response?: unknown }).response = error.response;
+      throw enriched;
     }
     throw error;
   }
@@ -183,6 +202,8 @@ export interface MaxAdaRequest {
   utxos?: NexusTxInput[];
   senderAddress?: string;
   network?: 'MAINNET' | 'PREPROD';
+  /** Same reward-withdrawals semantics as buildTransferTx — bumps the max. */
+  withdrawals?: NexusTxWithdrawal[];
 }
 
 export interface MaxAdaResponse {

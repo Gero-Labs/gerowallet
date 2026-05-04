@@ -79,6 +79,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.7.0',
     path: ['settings', 'collateral', 'autoDetect']
   },
+  // Settings > Advanced > Auto-withdraw staking rewards on every send
+  {
+    id: 'settings.advanced.autoWithdrawRewards',
+    version: '2.7.0',
+    path: ['settings', 'advanced', 'autoWithdrawRewards']
+  },
   // Add more features here as needed
 ];
 

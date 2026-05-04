@@ -55,7 +55,9 @@
             class="address-input"
             :error="!!localAddress && !resolving && rules.recipientRules(loggedWallet.chain, loggedWallet.network)(localAddress) !== true"
             :loading="resolving"
+            :suffix="resolvedSuffix"
             @input="resolveAddress"
+            color="#00DFF3"
           >
             <!-- Handle image prepended inside input when resolved -->
             <template v-slot:prepend-inner>
@@ -150,7 +152,7 @@
                   >
                     <div class="contact-item__info" @click="selectContact(contact)" style="flex: 1; cursor: pointer;">
                       <span class="contact-item__name">{{ contact.name || $t('wallet.unnamed') }}</span>
-                      <span class="contact-item__address">{{ filters.truncate(contact.address, 20) }}</span>
+                      <span class="contact-item__address">{{ filters.truncate(contact.address) }}</span>
                     </div>
                     <v-btn icon x-small @click.stop="deleteContact(contact.address)" class="ml-1">
                       <v-icon x-small color="#F97066">mdi-trash-can-outline</v-icon>
@@ -290,6 +292,14 @@ const displayAddress = computed(() => {
   return filters.truncate(addr);
 });
 
+const resolvedSuffix = computed(() => {
+  const raw = localAddress.value || '';
+  const resolved = props.recipient.resolvedAddress;
+  // Only show suffix when the input is an ADA handle that resolved to a different address
+  if (!resolved || !raw.startsWith('$') || raw === resolved) return '';
+  return `(${filters.truncate(resolved)})`;
+});
+
 const totalAdaDisplay = computed(() => {
   const adaToken = props.recipient.selectedTokens.find(t => t.ticker === nativeTicker.value);
   if (!adaToken || !Number(adaToken.quantity)) return '';
@@ -343,7 +353,6 @@ const resolveAdaHandle = debounce(async (val: string) => {
       handleAsset.value = { name: res.data.name, img: assets.resolveIcon(res.data.image) };
       resolvedFailed.value = false;
       const resolved = res.data.resolved_addresses.ada;
-      localAddress.value = `${val} (${filters.truncate(resolved)})`;
       emitAddress(resolved, val, true);
     } else {
       resolvedFailed.value = true;
@@ -559,6 +568,10 @@ defineExpose({ cardTotalAmounts });
 
 .address-input :deep(fieldset) {
   border-color: transparent !important;
+}
+
+.address-input :deep(.v-text-field__suffix) {
+  font-size: 10px;
 }
 
 .address-input :deep(.v-input__slot:hover fieldset) {

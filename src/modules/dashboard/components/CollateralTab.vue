@@ -45,22 +45,25 @@
           </v-row>
         </v-alert>
 
-        <!-- Status: not found (warning + setup action) -->
+        <!-- Status: no own collateral, Gero shared pool covers (info banner).
+             We don't pre-fetch a Nexus UTxO — getCollateral() lends one on
+             demand when a dApp asks. The setup button stays available for
+             users who'd rather hold their own pure-ADA UTxO. -->
         <v-alert
           v-else
           dense
           outlined
-          color="warning"
-          icon="mdi-alert-circle-outline"
+          color="info"
+          icon="mdi-shield-check-outline"
           class="mb-4"
         >
-          <div class="font-weight-bold">{{ $t('settings.collateralNotFound') }}</div>
-          <div class="caption mt-1">{{ $t('settings.collateralNotFoundDesc') }}</div>
+          <div class="font-weight-bold">{{ $t('settings.collateralGeroProvided') }}</div>
+          <div class="caption mt-1">{{ $t('settings.collateralGeroProvidedDesc') }}</div>
           <div class="mt-3">
             <v-btn
               small
-              class="geroButton"
-              style="color: black!important;"
+              text
+              class="px-2"
               :loading="isCreating"
               @click="setCollateral"
             >
@@ -87,6 +90,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import { HexBlob } from '@cardano-sdk/util';
 import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 
 // Define emits
 const emit = defineEmits(['close']);
@@ -124,6 +128,7 @@ const setCollateral = async () => {
       ],
       changeAddress: keys.value.payment[0].address,
       utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+      withdrawals: currentRewardWithdrawals(),
     };
 
     const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(

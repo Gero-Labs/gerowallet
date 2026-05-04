@@ -140,7 +140,7 @@ export class SyncService {
           blockNo: tip.height,
           slot: tip.slot,
           hash: tip.hash,
-          time: tip.time,
+          time: tip.time ? tip.time * 1000 : undefined,
           epoch: tip.epoch,
           epoch_slot: tip.epoch_slot || 0,
         });

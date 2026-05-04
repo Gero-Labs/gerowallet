@@ -838,7 +838,8 @@ const drepIds = computed(() => {
   });
 });
 
-function findLovelace(io: TxAmount[]) {
+function findLovelace(io: TxAmount[] | undefined | null) {
+  if (!io?.length) return 0;
   const token = io.find(item => item.unit === 'lovelace');
   return token ? token.quantity : 0;
 }
@@ -954,6 +955,7 @@ const getDRepCip129 = (drep: Cardano.DelegateRepresentative): string => {
 };
 
 const txIOAssets = (io: TxIO) => {
+  if (!io?.amount?.length) return [];
   return io.amount
     .filter((token: TxAmount) => token.unit !== 'lovelace')
     .map((asset: TxAmount) => {
@@ -1006,23 +1008,32 @@ const getMetadata = (txInfo: { cbor?: string }): string | null => {
   if (!txInfo?.cbor) {
     return null;
   }
-  return JSON.stringify(
-    Serialization.Transaction.fromCbor(Serialization.TxCBOR(txInfo.cbor)).auxiliaryData()?.metadata()?.toCore(),
-    (_key, value) => {
-      if (value instanceof Map) {
-        const obj: Record<string, unknown> = {};
-        for (const [k, v] of value.entries()) {
-          obj[k] = v;
+  // Cardano Tx CBOR is array (major type 4). Skip non-array (e.g. Apex bare TxBody).
+  const firstByte = parseInt(txInfo.cbor.slice(0, 2), 16);
+  if ((firstByte >> 5) !== 4) {
+    return null;
+  }
+  try {
+    return JSON.stringify(
+      Serialization.Transaction.fromCbor(Serialization.TxCBOR(txInfo.cbor)).auxiliaryData()?.metadata()?.toCore(),
+      (_key, value) => {
+        if (value instanceof Map) {
+          const obj: Record<string, unknown> = {};
+          for (const [k, v] of value.entries()) {
+            obj[k] = v;
+          }
+          return obj;
+        } else if (typeof value === 'bigint') {
+          return value.toString();
+        } else {
+          return value;
         }
-        return obj;
-      } else if (typeof value === 'bigint') {
-        return value.toString();
-      } else {
-        return value;
-      }
-    },
-    2
-  );
+      },
+      2
+    );
+  } catch {
+    return null;
+  }
 };
 
 const txAssets = computed(() => {

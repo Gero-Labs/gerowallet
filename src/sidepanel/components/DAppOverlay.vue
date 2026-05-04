@@ -89,116 +89,16 @@
         </div>
 
         <!-- Decoded transaction summary -->
-        <div v-if="signTxSummary" class="tx-details mb-3">
-          <div class="tx-details-header">
-            <span class="white--text text-caption font-weight-bold text-uppercase">{{ $t('signTx.transactionDetails') }}</span>
-            <!-- Cardano Shield risk badge -->
-            <v-tooltip v-if="txRiskBadge" top content-class="custom-tooltip" max-width="240">
-              <template v-slot:activator="{ on, attrs }">
-                <span class="risk-badge" :style="{ color: txRiskBadge.color, borderColor: txRiskBadge.color }" v-bind="attrs" v-on="on">
-                  <v-icon :color="txRiskBadge.color" size="11" class="mr-1">{{ txRiskBadge.icon }}</v-icon>
-                  {{ $t(`signTx.risk.${txRiskBadge.label}`) }}
-                </span>
-              </template>
-              <span>{{ $t(`signTx.risk.${txRiskBadge.label}Tooltip`) }}</span>
-            </v-tooltip>
-            <v-progress-circular
-              v-else-if="txRiskLoading"
-              indeterminate
-              size="12"
-              width="2"
-              color="grey"
-            />
-            <!-- Copy raw CBOR — escape hatch for debugging / pasting into a tx inspector -->
-            <v-tooltip v-if="txCborForSummary" top content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <span v-bind="attrs" v-on="on" class="ml-1 d-inline-flex">
-                  <CopyButton x-small :value="txCborForSummary" />
-                </span>
-              </template>
-              <span>{{ $t('signTx.copyCbor') }}</span>
-            </v-tooltip>
-          </div>
-
-          <!-- Internal transfer banner (e.g. setting collateral, consolidation) -->
-          <div v-if="signTxSummary.isInternal" class="tx-internal-banner">
-            <span class="white--text text-caption">{{ $t('signTx.internalTransfer') }}</span>
-          </div>
-
-          <!-- Outputs -->
-          <div class="tx-details-section">
-            <div
-              v-for="(out, i) in signTxSummary.outputs"
-              :key="`out-${i}`"
-              class="tx-output-row"
-            >
-              <div class="tx-output-left">
-                <v-tooltip top content-class="custom-tooltip" max-width="260">
-                  <template v-slot:activator="{ on, attrs }">
-                    <v-icon
-                      size="14"
-                      :color="out.kind === 'external' ? '#FDA29B' : (out.kind === 'change' ? '#94969c' : '#94CFA8')"
-                      class="mr-1"
-                      v-bind="attrs"
-                      v-on="on"
-                    >
-                      {{ out.kind === 'external'
-                        ? 'mdi-arrow-top-right'
-                        : (out.kind === 'change' ? 'mdi-keyboard-return' : 'mdi-arrow-u-left-bottom') }}
-                    </v-icon>
-                  </template>
-                  <span>
-                    {{ out.kind === 'external' ? $t('signTx.toRecipientTooltip')
-                       : out.kind === 'change' ? $t('signTx.changeTooltip')
-                       : $t('signTx.toYouTooltip') }}
-                  </span>
-                </v-tooltip>
-                <span class="tx-output-addr grey--text text-caption">{{ out.truncatedAddress }}</span>
-              </div>
-              <div class="tx-output-right">
-                <span class="white--text text-caption font-weight-medium">{{ out.ada }} ₳</span>
-                <v-tooltip v-if="out.assets.length > 0" top content-class="custom-tooltip tx-asset-tooltip" max-width="260">
-                  <template v-slot:activator="{ on, attrs }">
-                    <span class="tx-asset-pill ml-1" v-bind="attrs" v-on="on">{{ out.assetPillLabel }}</span>
-                  </template>
-                  <div>
-                    <div class="font-weight-bold mb-1">
-                      {{ $tc('signTx.assetCountTooltip', out.assets.length, { count: out.assets.length }) }}
-                    </div>
-                    <div class="tx-asset-list">
-                      <div v-for="asset in out.assets.slice(0, ASSET_TOOLTIP_LIMIT)" :key="asset.unit" class="tx-asset-line">
-                        <span class="tx-asset-qty">{{ asset.formattedQuantity }}</span>
-                        <span class="tx-asset-name grey--text">{{ asset.label }}</span>
-                      </div>
-                    </div>
-                    <div v-if="out.assets.length > ASSET_TOOLTIP_LIMIT" class="text-caption grey--text mt-1">
-                      {{ $t('signTx.andMoreTokens', { count: out.assets.length - ASSET_TOOLTIP_LIMIT }) }}
-                    </div>
-                  </div>
-                </v-tooltip>
-              </div>
-            </div>
-          </div>
-
-          <v-divider class="tx-details-divider" />
-
-          <!-- Total + fee -->
-          <div class="tx-details-section">
-            <div v-if="!signTxSummary.isInternal" class="tx-summary-row">
-              <span class="grey--text text-caption">{{ $t('signTx.totalSending') }}</span>
-              <span class="white--text text-caption font-weight-bold">{{ signTxSummary.totalSendingAda }} ₳</span>
-            </div>
-            <div class="tx-summary-row">
-              <span class="grey--text text-caption">{{ $t('signTx.networkFee') }}</span>
-              <span class="white--text text-caption font-weight-medium">{{ signTxSummary.feeAda }} ₳</span>
-            </div>
-            <v-divider v-if="!signTxSummary.isInternal" class="tx-details-divider my-1" />
-            <div class="tx-summary-row tx-summary-total">
-              <span class="white--text text-caption font-weight-bold">{{ $t('signTx.youPay') }}</span>
-              <span class="text-caption font-weight-bold" style="color: #00c7f3;">{{ signTxSummary.youPayAda }} ₳</span>
-            </div>
-          </div>
-        </div>
+<TransactionDetailsCard
+          v-if="signTxSummary"
+          :outputs="signTxSummary.outputs"
+          :withdrawal="signTxSummary.withdrawal"
+          :totals="signTxSummary.totals"
+          :risk-badge="txRiskBadge"
+          :risk-loading="txRiskLoading"
+          :cbor-hex="txCborForSummary"
+          class="mb-3"
+        />
 
         <!-- Expired banner — shown once the live TTL countdown reaches 0. Sign buttons
              below all gate on `ttlDisplay.expired`, so the user is forced to reject. -->
@@ -432,6 +332,10 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
 import BottomSheet from './BottomSheet.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import TransactionDetailsCard, {
+  type TxDetailsWithdrawal,
+  type TxDetailsTotals,
+} from '@/shared/components/TransactionDetailsCard.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
@@ -507,7 +411,7 @@ interface SignTxAssetInfo {
   formattedQuantity: string; // decimal-adjusted quantity for display (e.g. "94.07059" for 94070590 USDM @ 6 decimals)
 }
 
-type OutputKind = 'payment' | 'change' | 'external';
+type OutputKind = 'change' | 'external';
 
 interface SignTxOutputSummary {
   address: string;
@@ -522,9 +426,9 @@ interface SignTxOutputSummary {
 
 interface SignTxSummary {
   outputs: SignTxOutputSummary[];
-  feeAda: string;
-  totalSendingAda: string;
-  youPayAda: string;
+  /** Null when no withdrawals; the shared card uses this to render the row. */
+  withdrawal: TxDetailsWithdrawal | null;
+  totals: TxDetailsTotals;
   isInternal: boolean;
   // TTL — only the absolute slot is computed here. The live "in Xh Ym Zs" string
   // is derived in `ttlDisplay` so the expensive CBOR parse below doesn't re-run
@@ -833,6 +737,19 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
     const feeLovelace = BigInt(body.fee ?? 0n);
     const feeAda = formatLovelace(feeLovelace);
 
+    // Stake reward withdrawals attached to the tx — come in as fresh input
+    // coin from the stake account, so they offset the "You pay" total.
+    const withdrawalsRaw = (body as { withdrawals?: Array<{ quantity?: unknown; stakeAddress?: unknown }> }).withdrawals;
+    const withdrawalsLovelace = Array.isArray(withdrawalsRaw)
+      ? withdrawalsRaw.reduce<bigint>((acc, w) => acc + BigInt(String(w?.quantity ?? '0')), 0n)
+      : 0n;
+    const withdrawal: TxDetailsWithdrawal | null = withdrawalsLovelace > 0n
+      ? {
+          truncatedStakeAddress: filters.truncate(String(withdrawalsRaw?.[0]?.stakeAddress ?? '')),
+          ada: formatLovelace(withdrawalsLovelace),
+        }
+      : null;
+
     // Sum lovelace going to external addresses (excludes change AND self-payments)
     const totalSendingLovelace = outputs.reduce<bigint>((sum, o) => {
       if (o.isOwn) return sum;
@@ -840,9 +757,10 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
     }, 0n);
     const totalSendingAda = formatLovelace(totalSendingLovelace);
 
-    // What the user is actually paying out of pocket: ADA leaving the wallet + network fee.
-    // For internal transfers this is just the fee.
-    const youPayAda = formatLovelace(feeLovelace + totalSendingLovelace);
+    // What the user is actually paying out of pocket: ADA leaving the wallet +
+    // network fee, minus any rewards pulled in via withdrawals.
+    const youPayLovelace = feeLovelace + totalSendingLovelace - withdrawalsLovelace;
+    const youPayAda = formatLovelace(youPayLovelace < 0n ? 0n : youPayLovelace);
 
     // "Internal transfer" = every output address belongs to this wallet
     const isInternal = outputs.length > 0 && outputs.every(o => o.isOwn);
@@ -858,9 +776,14 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
 
     return {
       outputs,
-      feeAda,
-      totalSendingAda,
-      youPayAda,
+      withdrawal,
+      totals: {
+        totalSendingAda,
+        feeAda,
+        withdrawalAda: withdrawalsLovelace > 0n ? formatLovelace(withdrawalsLovelace) : undefined,
+        youPayAda,
+        isInternal,
+      },
       isInternal,
       ttlSlot,
     };

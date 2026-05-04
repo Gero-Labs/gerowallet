@@ -176,11 +176,47 @@ export class TransactionsLoader extends BaseLoader {
             };
 
             newTransactions.sort((a, b) => a.tx_timestamp - b.tx_timestamp);
+
+            // gero-sync's live-block path can't resolve consumed inputs (Yaci block
+            // events ship only the input ref). Build an index of every produced output
+            // we have synced, then backfill missing input.address/amount before sentAmount
+            // accounting. Without this, sends look like "received" because sentAmount=0.
+            const outputIndex = new Map<string, { address?: string; amount?: any[] }>();
+            for (const tx of newTransactions) {
+              const outs = tx.utxo?.outputs;
+              if (!outs?.length) continue;
+              for (const out of outs) {
+                if (out.address && out.output_index != null) {
+                  outputIndex.set(`${tx.tx_hash}#${out.output_index}`, {
+                    address: out.address,
+                    amount: out.amount,
+                  });
+                }
+              }
+            }
+
             transactions = newTransactions.map((tx) => {
               let sentAmount = 0;
               let receivedAmount = 0;
               const sentAssets = new Map<string, any>();
               const receivedAssets = new Map<string, any>();
+
+              // Resolve inputs in place so the tx detail dialog renders the same
+              // address/amount the loader uses for sentAmount accounting.
+              if (tx.utxo?.inputs?.length) {
+                tx.utxo.inputs = tx.utxo.inputs.map((inp: any) => {
+                  if (inp.address && inp.amount?.length) return inp;
+                  const ref = `${inp.tx_hash}#${inp.output_index}`;
+                  const hit = outputIndex.get(ref);
+                  return hit ? { ...inp, address: hit.address, amount: hit.amount } : inp;
+                });
+              }
+
+              // gero-sync's live-block path doesn't emit tx_size — derive it from
+              // the cbor byte count (hex string length / 2). humanFileSize handles 0.
+              if ((!tx.tx_size || tx.tx_size <= 0) && typeof tx.cbor === 'string' && tx.cbor.length > 0) {
+                tx.tx_size = Math.floor(tx.cbor.length / 2);
+              }
 
               this.processUtxos(tx.utxo?.inputs, currentAddress, currentStake, networkId, true, sentAssets, (amount) => {
                 sentAmount += amount;
