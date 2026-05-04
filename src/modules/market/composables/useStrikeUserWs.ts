@@ -1,7 +1,7 @@
 /**
  * Strike v2 User Data WebSocket
  *
- * URL: wss://api-v2.strikefinance.org/ws/user-api
+ * URL: wss://api.strikefinance.org/ws/user-api
  *
  * Authentication flow:
  *   1. Connect to WebSocket
@@ -21,10 +21,11 @@
 import { ref } from 'vue';
 import * as ed25519 from '@noble/ed25519';
 import { hexToBytes, bytesToHex } from '@/api/strike-v2.auth';
+import { debugLog } from '@/utils/debug';
 
 const WS_URL =
   (import.meta.env.VITE_STRIKE_WS_USER_URL as string | undefined) ??
-  'wss://api-v2.strikefinance.org/ws/user-api';
+  'wss://api.strikefinance.org/ws/user-api';
 
 type EventCallback = (data: unknown) => void;
 
@@ -33,9 +34,13 @@ let _publicKeyHex: string | null = null;
 let _privateKeyHex: string | null = null;
 let _accountId: string | null = null;
 
+const RECONNECT_BASE_MS = 5_000;
+const RECONNECT_MAX_MS = 60_000;
+
 // Module-level singletons
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectDelay = RECONNECT_BASE_MS;
 let pingInterval: ReturnType<typeof setInterval> | null = null;
 let msgId = 0;
 const listeners = new Map<string, Set<EventCallback>>();
@@ -130,7 +135,7 @@ function handleMessage(event: MessageEvent): void {
 
     // Handle errors
     if (parsed.e === 'error' || parsed.error) {
-      console.error('[Strike User WS] Error:', parsed.error || parsed);
+      debugLog('[Strike User WS] Error:', parsed.error || parsed);
       continue;
     }
 
@@ -153,6 +158,7 @@ function connect(): void {
   ws.onopen = () => {
     connected.value = true;
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    reconnectDelay = RECONNECT_BASE_MS;
     startPingInterval();
     // Authenticate immediately after connection
     authenticate();
@@ -165,7 +171,8 @@ function connect(): void {
     authenticated.value = false;
     ws = null;
     stopPingInterval();
-    reconnectTimer = setTimeout(connect, 5000);
+    reconnectTimer = setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
   };
 
   ws.onerror = () => ws?.close();
@@ -173,6 +180,7 @@ function connect(): void {
 
 function disconnect(): void {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  reconnectDelay = RECONNECT_BASE_MS;
   stopPingInterval();
   if (ws) { ws.onclose = null; ws.close(); ws = null; }
   connected.value = false;

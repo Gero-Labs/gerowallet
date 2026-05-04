@@ -1588,7 +1588,9 @@ export default {
   'perpetuals.generateKeys': 'Generate API Keys',
   'perpetuals.confirmConnect': 'Confirm & Connect',
   'perpetuals.disconnectStrike': 'Disconnect Strike Account',
-  'perpetuals.onboardingDescription': 'Generate an API key pair to trade perpetuals on Strike Finance.',
+  'perpetuals.onboardingDescription': 'Generate an API key pair to trade perpetuals on Strike Finance. Your spending password encrypts the key at rest.',
+  'perpetuals.unlockStrike': 'Unlock Strike',
+  'perpetuals.unlockStrikeDescription': 'Enter your spending password to unlock the Strike API key for this wallet.',
   'perpetuals.keyGenerated': 'Key pair generated successfully',
   'perpetuals.publicKeyLabel': 'Your Public Key',
 

@@ -12,7 +12,9 @@
       <div class="onboarding-title">{{ $t('perpetuals.connectToStrike') }}</div>
 
       <!-- Description -->
-      <div class="onboarding-desc">{{ $t('perpetuals.onboardingDescription') }}</div>
+      <div class="onboarding-desc">
+        {{ needsUnlock ? $t('perpetuals.unlockStrikeDescription') : $t('perpetuals.onboardingDescription') }}
+      </div>
 
       <!-- Error -->
       <div v-if="error" class="onboarding-error">
@@ -20,7 +22,7 @@
         <span>{{ error }}</span>
       </div>
 
-      <!-- Key display (after generation) -->
+      <!-- Key display (after generation/unlock) -->
       <div v-if="publicKey" class="key-card">
         <div class="key-card-label">
           <v-icon size="12" color="#26FAB0" class="mr-1">mdi-check-circle</v-icon>
@@ -36,37 +38,79 @@
         </div>
       </div>
 
-      <!-- Generate button / Connected state -->
+      <!-- Spending password (required to encrypt/decrypt the Strike key) -->
+      <v-text-field
+        v-if="!isConnected"
+        v-model="password"
+        :type="showPassword ? 'text' : 'password'"
+        :label="$t('perpetuals.spendingPassword')"
+        :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        outlined
+        dense
+        hide-details
+        autocomplete="current-password"
+        class="password-field"
+        :disabled="isLoading"
+        @click:append="showPassword = !showPassword"
+        @keyup.enter="onSubmit()"
+      />
+
+      <!-- Action button: Unlock if encrypted blob exists, otherwise Generate -->
       <v-btn
         v-if="!isConnected"
         block
         depressed
         :loading="isLoading"
+        :disabled="!password"
         class="connect-btn"
-        @click="generateAndConnect()"
+        @click="onSubmit()"
       >
-        <v-icon size="16" class="mr-2">mdi-key-variant</v-icon>
-        {{ $t('perpetuals.generateApiKeys') }}
+        <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-key-variant' }}</v-icon>
+        {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perpetuals.generateApiKeys') }}
       </v-btn>
 
-      <div v-else class="connected-state">
-        <v-icon size="16" color="#26FAB0" class="mr-2">mdi-check-circle</v-icon>
-        <span class="connected-label">{{ $t('perpetuals.connected') }}</span>
-      </div>
+      <template v-else>
+        <div class="connected-state">
+          <v-icon size="16" color="#26FAB0" class="mr-2">mdi-check-circle</v-icon>
+          <span class="connected-label">{{ $t('perpetuals.connected') }}</span>
+        </div>
+        <v-btn
+          block
+          text
+          :loading="isLoading"
+          class="disconnect-btn"
+          @click="onDisconnect()"
+        >
+          <v-icon size="14" class="mr-1">mdi-link-off</v-icon>
+          {{ $t('perpetuals.disconnectStrike') }}
+        </v-btn>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 
 const emit = defineEmits<{
   (e: 'connected'): void;
 }>();
 
-const { isConnected, isLoading, publicKey, error, generateAndConnect } = useStrikeOnboarding();
+const {
+  isConnected,
+  needsUnlock,
+  isLoading,
+  publicKey,
+  error,
+  checkConnection,
+  unlock,
+  generateAndConnect,
+  disconnect,
+} = useStrikeOnboarding();
 
+const password = ref('');
+const showPassword = ref(false);
 const copied = ref(false);
 
 const truncatedKey = computed(() => {
@@ -75,6 +119,20 @@ const truncatedKey = computed(() => {
   if (key.length <= 20) return key;
   return `${key.slice(0, 10)}...${key.slice(-8)}`;
 });
+
+async function onSubmit() {
+  if (!password.value) return;
+  const ok = needsUnlock.value
+    ? await unlock(password.value)
+    : await generateAndConnect(password.value);
+  if (ok) password.value = '';
+}
+
+async function onDisconnect() {
+  await disconnect();
+  password.value = '';
+  showPassword.value = false;
+}
 
 async function copyKey() {
   if (!publicKey.value) return;
@@ -86,6 +144,8 @@ async function copyKey() {
     // ignore
   }
 }
+
+onMounted(() => { checkConnection(); });
 
 watch(isConnected, (val) => {
   if (val) emit('connected');
@@ -240,5 +300,43 @@ watch(isConnected, (val) => {
   font-size: 13px;
   font-weight: 700;
   color: #26FAB0;
+}
+
+.password-field {
+  width: 100%;
+}
+
+.password-field >>> .v-input__slot {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-radius: 10px !important;
+  min-height: 42px;
+}
+
+.password-field >>> fieldset {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.password-field >>> input {
+  color: #ffffff !important;
+  font-size: 13px !important;
+}
+
+.password-field >>> .v-label {
+  font-size: 12px !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.disconnect-btn {
+  width: 100% !important;
+  height: 32px !important;
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+  margin-top: 4px !important;
+}
+
+.disconnect-btn:hover {
+  color: #F97066 !important;
 }
 </style>

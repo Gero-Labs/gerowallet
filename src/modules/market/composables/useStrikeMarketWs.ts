@@ -26,10 +26,14 @@
  */
 
 import { ref } from 'vue';
+import { debugLog } from '@/utils/debug';
 
 const WS_URL =
   (import.meta.env.VITE_STRIKE_WS_URL as string | undefined) ??
   'wss://api.strikefinance.org/ws/price';
+
+const RECONNECT_BASE_MS = 5_000;
+const RECONNECT_MAX_MS = 60_000;
 
 type WsCallback = (data: unknown) => void;
 
@@ -42,6 +46,7 @@ interface Subscription {
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectDelay = RECONNECT_BASE_MS;
 let pingInterval: ReturnType<typeof setInterval> | null = null;
 let msgId = 0;
 const connected = ref(false);
@@ -163,17 +168,18 @@ function fireCallbacks(channel: string, symbol: string | undefined, data: unknow
 
 function connect(): void {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    console.log('[StrikeWS] Already connected/connecting, skipping');
+    debugLog('[StrikeWS] Already connected/connecting, skipping');
     return;
   }
 
-  console.log('[StrikeWS] Connecting to', WS_URL);
+  debugLog('[StrikeWS] Connecting to', WS_URL);
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
-    console.log('[StrikeWS] Connected');
+    debugLog('[StrikeWS] Connected');
     connected.value = true;
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    reconnectDelay = RECONNECT_BASE_MS;
     resubscribeAll();
     startPingInterval();
   };
@@ -181,21 +187,23 @@ function connect(): void {
   ws.onmessage = handleMessage;
 
   ws.onclose = (event) => {
-    console.log('[StrikeWS] Closed:', event.code, event.reason);
+    debugLog('[StrikeWS] Closed:', event.code, event.reason, 'reconnect in', reconnectDelay, 'ms');
     connected.value = false;
     ws = null;
     stopPingInterval();
-    reconnectTimer = setTimeout(connect, 5000);
+    reconnectTimer = setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
   };
 
   ws.onerror = (event) => {
-    console.error('[StrikeWS] Error:', event);
+    debugLog('[StrikeWS] Error:', event);
     ws?.close();
   };
 }
 
 function disconnect(): void {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  reconnectDelay = RECONNECT_BASE_MS;
   stopPingInterval();
   if (ws) { ws.onclose = null; ws.close(); ws = null; }
   connected.value = false;

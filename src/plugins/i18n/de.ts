@@ -1825,7 +1825,9 @@ export default {
   'perpetuals.generateKeys': 'API-Schlüssel Generieren',
   'perpetuals.confirmConnect': 'Bestätigen & Verbinden',
   'perpetuals.disconnectStrike': 'Strike-Konto Trennen',
-  'perpetuals.onboardingDescription': 'Generieren Sie ein API-Schlüsselpaar, um Perpetuals auf Strike Finance zu handeln.',
+  'perpetuals.onboardingDescription': 'Generieren Sie ein API-Schlüsselpaar, um Perpetuals auf Strike Finance zu handeln. Ihr Ausgabepasswort verschlüsselt den Schlüssel im Speicher.',
+  'perpetuals.unlockStrike': 'Strike Entsperren',
+  'perpetuals.unlockStrikeDescription': 'Geben Sie Ihr Ausgabepasswort ein, um den Strike-API-Schlüssel für diese Wallet zu entsperren.',
   'perpetuals.keyGenerated': 'Schlüsselpaar erfolgreich generiert',
   'perpetuals.publicKeyLabel': 'Ihr Öffentlicher Schlüssel',
 

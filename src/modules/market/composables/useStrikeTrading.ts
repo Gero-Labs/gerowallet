@@ -88,11 +88,14 @@ async function cancelOrder(orderId: string, symbol: string): Promise<void> {
   }
 }
 
-async function cancelAllOrders(symbol?: string): Promise<void> {
+async function cancelAllOrders(symbol: string): Promise<void> {
+  if (!symbol) {
+    throw new Error('cancelAllOrders requires a symbol');
+  }
   try {
     loading.value = true;
     error.value = null;
-    await strikeTradeApi.cancelAllOrders({ symbol: symbol ?? '' });
+    await strikeTradeApi.cancelAllOrders({ symbol });
     await loadOpenOrders(symbol);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -135,6 +138,14 @@ const walletBalance = computed<string | null>(() => {
   return account.value?.wallet_balance ?? null;
 });
 
+function reset(): void {
+  account.value = null;
+  openOrders.value = [];
+  positions.value = [];
+  loading.value = false;
+  error.value = null;
+}
+
 export function useStrikeTrading() {
   return {
     account,
@@ -152,5 +163,6 @@ export function useStrikeTrading() {
     cancelAllOrders,
     setLeverage,
     setMarginMode,
+    reset,
   };
 }
