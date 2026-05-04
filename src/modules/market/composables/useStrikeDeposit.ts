@@ -86,23 +86,18 @@ export function useStrikeDeposit() {
    *   Body: { amount: string, asset: 'ADA', chain: 'cardano' }
    *   Response: DepositQuote
    */
-  async function requestQuote(amountAda: number): Promise<void> {
-    status.value = 'quoting';
-    error.value = null;
-
-    try {
-      // TODO: Replace with actual Strike validator API endpoint.
-      // Expected: POST /v2/deposit/quote { amount, asset: 'ADA', chain: 'cardano' }
-      // Map the response to DepositQuote and assign to quote.value.
-      throw new Error('Deposit quote API not yet available — endpoint TBD');
-
-      // Unreachable until implemented; placeholder to show intended assignment:
-      // quote.value = response as DepositQuote;
-    } catch (e: any) {
-      error.value = e.message;
-      status.value = 'error';
-    }
+  async function requestQuote(_amountAda: number): Promise<void> {
+    // The Strike v2 deposit-quote endpoint is not yet published. Until it is,
+    // surface a friendly "coming soon" message instead of throwing — that way
+    // the calling UI can read `error` / `isAvailable` and hide or disable the
+    // deposit affordance gracefully.
+    status.value = 'idle';
+    quote.value = null;
+    error.value = 'Deposits coming soon — Strike validator endpoint not yet available.';
   }
+
+  /** True once the Strike deposit endpoint is wired in. UIs can gate buttons on this. */
+  const isAvailable = ref(false);
 
   /**
    * Steps 2–4: Build the transaction, sign it, submit it, and wait for
@@ -163,5 +158,5 @@ export function useStrikeDeposit() {
     error.value = null;
   }
 
-  return { quote, status, txHash, error, requestQuote, buildAndSign, reset };
+  return { quote, status, txHash, error, isAvailable, requestQuote, buildAndSign, reset };
 }

@@ -111,6 +111,31 @@ strikeClient.interceptors.request.use(
   },
 );
 
+// Auth-failure subscribers — useStrikeOnboarding registers itself here so a
+// 401 from the server can flip the composable's isConnected flag without
+// creating a circular import.
+type AuthFailureHandler = () => void;
+const authFailureHandlers = new Set<AuthFailureHandler>();
+
+export function onStrikeAuthFailure(handler: AuthFailureHandler): () => void {
+  authFailureHandlers.add(handler);
+  return () => authFailureHandlers.delete(handler);
+}
+
+strikeClient.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const status = err?.response?.status;
+    if (status === 401 || status === 403) {
+      clearStrikeApiKeys();
+      authFailureHandlers.forEach((h) => {
+        try { h(); } catch { /* never let a handler swallow the original error */ }
+      });
+    }
+    return Promise.reject(err);
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Unauthenticated market-data client
 // ---------------------------------------------------------------------------
