@@ -406,8 +406,12 @@ const computedValues = computed(() => {
   let totalValue;
   if (portfolio.value?.adaValue) {
     totalValue = portfolio.value.adaValue;
-  } else {
+  } else if (utxos.value && utxos.value.length > 0) {
     totalValue = Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
+  } else if (account.value?.controlled_amount && Number(account.value.controlled_amount) > 0) {
+    totalValue = Number(account.value.controlled_amount) / 1000000;
+  } else {
+    totalValue = 0;
   }
   return { totalValue, assetsValue, collectibles, lpsValue };
 });

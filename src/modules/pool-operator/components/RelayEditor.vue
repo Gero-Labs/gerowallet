@@ -93,8 +93,8 @@ interface RelayEntry {
   dnsName?: string;
 }
 
-const props = defineProps<{ modelValue: any[] }>();
-const emit = defineEmits(['update:modelValue']);
+const props = defineProps<{ value: RelayEntry[] }>();
+const emit = defineEmits(['input']);
 
 const localRelays = ref<RelayEntry[]>([]);
 
@@ -105,7 +105,7 @@ const relayTypes = [
   { text: 'SRV', value: 'srv' },
 ];
 
-watch(() => props.modelValue, (val) => {
+watch(() => props.value, (val) => {
   if (val && val.length > 0 && localRelays.value.length === 0) {
     localRelays.value = [...val];
   }
@@ -134,6 +134,6 @@ function emitUpdate() {
       return { __typename: 'RelayByNameMultihost' as const, dnsName: r.dnsName || '' };
     }
   });
-  emit('update:modelValue', relays);
+  emit('input', relays);
 }
 </script>

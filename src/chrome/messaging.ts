@@ -3,6 +3,10 @@ import { Cardano } from '@cardano-sdk/core';
 
 interface Message {
   method?: string;
+  // Per-method payload; varies widely across handlers. A proper discriminated
+  // union would require refactoring every handler in background.ts, so we keep
+  // this loose for now.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: any;
   error?: string;
   sender?: string;
@@ -14,10 +18,41 @@ interface Message {
 }
 
 /**
+ * Shape of messages flowing over the internal popup/side-panel ports.
+ * Only the fields we read/write are typed; extra fields are preserved at runtime.
+ */
+interface PortMessage {
+  method?: string;
+  tabId?: number;
+  data?: unknown;
+  error?: unknown;
+}
+
+/**
+ * Per-tab registry of side-panel onConnect listeners, so we can clean up
+ * stale listeners when the same tab re-requests a side-panel interaction.
+ */
+type PortConnectListener = (port: chrome.runtime.Port) => void;
+const sidePanelListeners: Map<number, PortConnectListener> = new Map();
+
+/**
+ * Narrow an unknown background response to detect an `error` field without
+ * resorting to `as any`.
+ */
+function responseHasError(response: unknown): boolean {
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    'error' in response &&
+    Boolean((response as { error?: unknown }).error)
+  );
+}
+
+/**
  * Generic wrapper for responses from background script
  * @template T - The response data type
  */
-export interface BackgroundResponse<T = any> {
+export interface BackgroundResponse<T = unknown> {
   data: T;
   target: string;
   sender: string;
@@ -99,7 +134,7 @@ class InternalController {
 
   requestData = () => {
     if (chrome?.tabs) {
-      return new Promise((resolve, reject) => {
+      return new Promise<PortMessage>((resolve, reject) => {
         chrome.tabs.getCurrent((tab) => {
           if (!tab) {
             reject('Tab not found');
@@ -109,7 +144,7 @@ class InternalController {
           const tabId = tab.id;
           const self = this;
 
-          function messageHandler(response: any) {
+          function messageHandler(response: PortMessage) {
             self.port.onMessage.removeListener(messageHandler);
             resolve(response);
           }
@@ -126,7 +161,7 @@ class InternalController {
     return null
   };
 
-  returnData = async ({ data, error }: { data: any; error: any }) => {
+  returnData = async ({ data, error }: { data: unknown; error: unknown }) => {
     if (this.port) {
       this.port.postMessage({
         data,
@@ -166,11 +201,11 @@ class InternalSidePanelController {
     }
   }
 
-  public async requestData(): Promise<{ data: any; error?: any }> {
-    return new Promise((resolve, _reject) => {
+  public async requestData(): Promise<PortMessage> {
+    return new Promise((resolve) => {
       const self = this;
 
-      function messageHandler(response: any) {
+      function messageHandler(response: PortMessage) {
         self.port.onMessage.removeListener(messageHandler);
         resolve(response);
       }
@@ -184,7 +219,7 @@ class InternalSidePanelController {
     });
   }
 
-  public async returnData({ data, error }: { data: any; error: any }) {
+  public async returnData({ data, error }: { data: unknown; error: unknown }) {
     this.port.postMessage({
       method: METHOD.returnData,
       tabId: this.tabId,
@@ -194,28 +229,33 @@ class InternalSidePanelController {
   }
 }
 
-class BackgroundController {
-  private methodList: { [key: string]: (request: any, sendResponse: any) => void } = {};
-  private optionsMethodList: { [key: string]: (request: any, sendResponse: any) => void } = {};
+type MessageSendResponse = (response?: unknown) => void;
+type BackgroundRequest = Message & { send?: chrome.runtime.MessageSender };
+type BackgroundHandler = (request: BackgroundRequest, sendResponse: MessageSendResponse) => void;
 
-  add = (method: string, func: (request: any, sendResponse: any) => void) => {
+class BackgroundController {
+  private methodList: Record<string, BackgroundHandler> = {};
+  private optionsMethodList: Record<string, BackgroundHandler> = {};
+
+  add = (method: string, func: BackgroundHandler) => {
     this.methodList[method] = func;
   };
 
-  addToOptions = (method: string, func: (request: any, sendResponse: any) => void) => {
+  addToOptions = (method: string, func: BackgroundHandler) => {
     this.optionsMethodList[method] = func;
   };
 
   // listens to events from webpage / options / side panel to background
   listen = () => {
     if (chrome?.runtime) {
-      chrome.runtime.onMessage.addListener((request, sender: chrome.runtime.MessageSender, sendResponse) => {
+      chrome.runtime.onMessage.addListener((msg: unknown, sender: chrome.runtime.MessageSender, sendResponse: MessageSendResponse) => {
+        const request = msg as BackgroundRequest;
         request.send = sender;
         try {
-          if (request.sender === SENDER.webpage && this.methodList[request.method]) {
+          if (request.sender === SENDER.webpage && request.method && this.methodList[request.method]) {
             this.methodList[request.method](request, sendResponse);
             return true;
-          } else if (request.sender === SENDER.options && this.optionsMethodList[request.method]) {
+          } else if (request.sender === SENDER.options && request.method && this.optionsMethodList[request.method]) {
             this.optionsMethodList[request.method](request, sendResponse);
             return true;
           }
@@ -232,7 +272,7 @@ class BackgroundController {
 
 export const Messaging = {
   sendToBackgroundFromOptions: async function (request: Message) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage(
           { ...request, target: TARGET, sender: SENDER.options },
@@ -253,7 +293,7 @@ export const Messaging = {
     });
   },
   sendToBackground: async function (request: Message) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage(
           { ...request, target: TARGET, sender: SENDER.webpage },
@@ -273,9 +313,9 @@ export const Messaging = {
       }
     });
   },
-  sendToContent: function ({ method, data }: { method: string; data: any }) {
+  sendToContent: function ({ method, data }: { method: string; data: unknown }) {
     return new Promise((resolve, reject) => {
-      const requestId = Math.random().toString(36).substr(2, 9);
+      const requestId = Math.random().toString(36).slice(2, 11);
       function responseHandler(e: MessageEvent) {
         const response = e.data;
         if (
@@ -321,7 +361,7 @@ export const Messaging = {
           }
         }
 
-        function messageHandler(response: any) {
+        function messageHandler(response: PortMessage) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
             // Create a deep copy of the request to prevent mutations from affecting the original
@@ -360,16 +400,16 @@ export const Messaging = {
     });
   },
   sendToSidePanelInternal: function (tabIdd: number, request: Message) {
-    return new Promise((resolve, _reject) => {
-      // Remove any existing listeners for this tab before adding new one
+    return new Promise((resolve) => {
+      // Remove any existing listener for this tab before adding a new one
       // This prevents old listeners from responding with stale request data
-      if ((this as any)._sidePanelListeners?.[tabIdd]) {
-        const oldListener = (this as any)._sidePanelListeners[tabIdd];
-        chrome.runtime.onConnect.removeListener(oldListener);
+      const staleListener = sidePanelListeners.get(tabIdd);
+      if (staleListener) {
+        chrome.runtime.onConnect.removeListener(staleListener);
       }
 
       function connectionHandler(port: chrome.runtime.Port) {
-        function messageHandler(response: any) {
+        function messageHandler(response: PortMessage) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
             // Create a deep copy of the request to prevent mutations
@@ -398,8 +438,8 @@ export const Messaging = {
           port.onDisconnect.removeListener(disconnectHandler);
           chrome.runtime.onConnect.removeListener(connectionHandler);
           // Clean up listener tracking
-          if ((Messaging as any)._sidePanelListeners?.[tabIdd] === connectionHandler) {
-            delete (Messaging as any)._sidePanelListeners[tabIdd];
+          if (sidePanelListeners.get(tabIdd) === connectionHandler) {
+            sidePanelListeners.delete(tabIdd);
           }
         }
 
@@ -408,21 +448,21 @@ export const Messaging = {
       }
 
       // Track the listener so we can remove it later
-      if (!(this as any)._sidePanelListeners) {
-        (this as any)._sidePanelListeners = {};
-      }
-      (this as any)._sidePanelListeners[tabIdd] = connectionHandler;
+      sidePanelListeners.set(tabIdd, connectionHandler);
 
       chrome.runtime.onConnect.addListener(connectionHandler);
     });
   },
   createInternalController: () => new InternalController(),
-  createInternalSidePanelController: (tabid) => new InternalSidePanelController(tabid),
+  createInternalSidePanelController: (tabid: number) => new InternalSidePanelController(tabid),
   createProxyController: () => {
     // listen to events from background
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener(async (response) => {
-        console.log('response', response);
+        // Bring SDK messages (`from: 'bringweb3'`) are handled by the Bring
+        // SDK's own listeners, not by our dApp proxy — skip them cleanly so
+        // they don't trigger a whitelist round-trip or log noise.
+        if ((response as { from?: unknown })?.from === 'bringweb3') return;
         if (
           typeof response !== 'object' ||
           response === null ||
@@ -440,7 +480,7 @@ export const Messaging = {
         });
 
         // protect background by not allowing not whitelisted
-        if (!whitelisted || (whitelisted as any).error) return;
+        if (!whitelisted || responseHasError(whitelisted)) return;
         const event = new CustomEvent(`${TARGET}${response.event}`, {
           detail: response.data,
         });
@@ -480,8 +520,8 @@ export const Messaging = {
       });
 
       // protect background by not allowing not whitelisted
-      if (!whitelisted || (whitelisted as any).error) {
-        window.postMessage({ ...whitelisted as object, id: request.id });
+      if (!whitelisted || responseHasError(whitelisted)) {
+        window.postMessage({ ...(whitelisted as object), id: request.id });
         return;
       }
       await Messaging.sendToBackground(request).then((response) => {

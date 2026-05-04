@@ -10,6 +10,8 @@ import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
 import blockchainApi from '@/api/blockchain-api';
+import webSocketService from '@/services/websocket.service';
+import WalletStore from '@/stores/walletStore';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -19,7 +21,7 @@ export class SyncService {
   private walletBg: WalletBg | null = null;
   private api: Api;
 
-  constructor(walletBg: any) {
+  constructor(walletBg: WalletBg) {
     this.walletBg = walletBg;
     this.api = walletBg.api;
   }
@@ -138,7 +140,7 @@ export class SyncService {
           blockNo: tip.height,
           slot: tip.slot,
           hash: tip.hash,
-          time: tip.time,
+          time: tip.time ? tip.time * 1000 : undefined,
           epoch: tip.epoch,
           epoch_slot: tip.epoch_slot || 0,
         });
@@ -193,28 +195,87 @@ export class SyncService {
   }
 
   /**
-   * Resync wallet by clearing sync data and starting fresh
+   * Resync wallet by clearing sync data and triggering full catch-up via gero-sync.
+   * Clears transactions, sync checkpoint, and account tables, then resubscribes
+   * with lastSyncedBlock=0 so gero-sync fetches everything from Nexus.
    */
   async resync() {
-    const promises = []
-    promises.push(this.walletBg.getDb()
-      .then(db => {
-        const syncTable = db.table('sync');
-        syncTable.clear();
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      }));
-    promises.push(this.walletBg.getDb()
-      .then(db => {
-        const syncTable = db.table('account');
-        syncTable.clear();
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      }));
-    await Promise.all(promises);
-    await this.sync();
+    debugLog('Resync: refreshing UTxOs and account from server');
+    const startTime = Date.now();
+    LoadingState.setRestoring(true);
+    LoadingState.setProgress(5);
+    LoadingState.setText('Syncing wallet data...');
+    try {
+      if (this.walletBg) {
+        const db = await this.walletBg.getDb();
+        const txTable = db.table('transactions');
+        if (txTable) {
+          await txTable.clear();
+          debugLog('Resync: cleared transactions table');
+        }
+      }
+
+      if (webSocketService.isConnected()) {
+        webSocketService.pauseSyncCheck();
+        const syncPromise = webSocketService.waitForSync();
+        webSocketService.resubscribe(0);
+        await syncPromise;
+        webSocketService.resumeSyncCheck();
+        // Ensure overlay is visible for at least 1.5s
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 1500) {
+          await new Promise(r => setTimeout(r, 1500 - elapsed));
+        }
+        debugLog('Resync: complete');
+      } else {
+        debugLog('Resync: WebSocket not connected, falling back to REST sync');
+        await this.sync();
+      }
+    } catch (err) {
+      console.error('Resync error:', err);
+    } finally {
+      LoadingState.setProgress(0);
+      LoadingState.setRestoring(false);
+      LoadingState.setText('');
+    }
+  }
+
+  /**
+   * Handle a chain rollback by deleting transactions above the rollback point
+   * and resetting the sync checkpoint.
+   */
+  async handleRollback(rollbackToSlot: number): Promise<void> {
+    debugLog(`Handling rollback to slot ${rollbackToSlot}`);
+
+    const db = await this.walletBg.getDb();
+
+    // Delete transactions that are above the rollback point
+    const txTable = db.table('transactions');
+    const allTxs = await txTable.toArray();
+    const invalidTxIds = allTxs
+      .filter((tx: any) => tx.absolute_slot && tx.absolute_slot > rollbackToSlot)
+      .map((tx: any) => tx.id);
+
+    if (invalidTxIds.length > 0) {
+      await txTable.bulkDelete(invalidTxIds);
+      debugLog(`Deleted ${invalidTxIds.length} invalidated transactions`);
+    }
+
+    // Reset sync checkpoint to before the rollback point
+    // gero-sync will push new fork blocks via normal SYNC flow
+    const syncInfo = await this.walletBg.getLastSyncInfo();
+    if (syncInfo && syncInfo.slot > rollbackToSlot) {
+      await db.table('sync').put({
+        id: 1,
+        height: 0,
+        hash: '',
+        slot: rollbackToSlot,
+        time: syncInfo.time,
+        epoch: syncInfo.epoch,
+        epoch_slot: 0,
+      });
+      debugLog(`Reset sync checkpoint to slot ${rollbackToSlot}`);
+    }
   }
 
   /**
@@ -222,7 +283,7 @@ export class SyncService {
    * @param syncObject - Sync data object containing various blockchain data
    */
   async setSync(syncObject) {
-    if (syncObject && syncObject.success) {
+    if (syncObject && (syncObject.success || syncObject.type === 'SYNC')) {
       const promises: any[] = [];
       if (syncObject.account) {
         promises.push(this.walletBg.setAccountInfo(syncObject.account));
@@ -242,18 +303,39 @@ export class SyncService {
       if (syncObject.block) {
         promises.push(this.walletBg.setLastSyncInfo(syncObject.block));
       }
+      // Wire server-provided addresses from CATCH_UP_COMPLETE for key derivation
+      if (syncObject.addresses && Array.isArray(syncObject.addresses) && syncObject.addresses.length > 0) {
+        promises.push(this.syncKeys(syncObject.addresses));
+      }
+      // Check if server addresses exceed our credential range — resubscribe if needed
+      if (syncObject.addresses && Array.isArray(syncObject.addresses)) {
+        const expanded = this.walletBg.expandCredentialsIfNeeded(syncObject.addresses);
+        if (expanded) {
+          debugLog(`🔄 Resubscribing with expanded credentials (${expanded.length})`);
+          webSocketService.resubscribe(0, expanded);
+          return; // resubscribe will trigger a new catch-up with the full credential set
+        }
+      }
+      // Apply server-provided UTxOs — set on store, resolve assets, persist to DB
+      if (syncObject.utxos && Array.isArray(syncObject.utxos)) {
+        const converted = this.convertNexusUtxos(syncObject.utxos);
+        debugLog(`Applying ${converted.length} server UTxOs`);
+        promises.push(this.walletBg.applyUtxos(converted, true));
+      }
       if (promises.length > 0) {
         await Promise.all(promises);
       }
       debugLog('setSync', syncObject);
-      NetworkStore.setTip({
-        blockNo: syncObject.block.height,
-        slot: syncObject.block.slot,
-        hash: syncObject.block.hash,
-        time: syncObject.block.time * 1000,
-        epoch: syncObject.block.epoch,
-        epoch_slot: syncObject.block.epoch_slot,
-      });
+      if (syncObject.block) {
+        NetworkStore.setTip({
+          blockNo: syncObject.block.height,
+          slot: syncObject.block.slot,
+          hash: syncObject.block.hash,
+          time: syncObject.block.time ? syncObject.block.time * 1000 : undefined,
+          epoch: syncObject.block.epoch,
+          epoch_slot: syncObject.block.epoch_slot || 0,
+        });
+      }
     }
   }
 
@@ -424,6 +506,7 @@ export class SyncService {
           resolvedKeys
         });
       });
+      WalletStore.setKeys(resolvedKeys);
       return resolvedKeys;
     } catch (err) {
       console.error(`Failed to open database: ${err}`);
@@ -483,6 +566,55 @@ export class SyncService {
       debugLog('Error getting latest transaction block height:', e);
       return 0;
     }
+  }
+
+  /**
+   * Convert Nexus UTxO format to Cardano.Utxo[] (TxIn/TxOut tuples).
+   * Nexus: {txHash, txIndex, address, value, assetList, datumHash, inlineDatum, referenceScript}
+   * Wallet: [[{txId, index, address}, {address, value: {coins, assets}, datumHash, datum, scriptReference}]]
+   */
+  private convertNexusUtxos(nexusUtxos: any[]): Cardano.Utxo[] {
+    const result: Cardano.Utxo[] = [];
+    for (const u of nexusUtxos) {
+      try {
+        const txHash = u.txHash || u.tx_hash;
+        const txIndex = u.txIndex ?? u.tx_index ?? u.output_index ?? 0;
+        const address = u.address || u.owner_addr;
+        const lovelace = BigInt(u.value || u.lovelace_amount || '0');
+
+        // Build assets map from assetList
+        const assets = new Map<Cardano.AssetId, bigint>();
+        const assetList = u.assetList || u.assets || u.amounts || [];
+        for (const a of assetList) {
+          const unit = a.unit || (a.policyId && a.assetName ? a.policyId + a.assetName : null);
+          if (unit && unit !== 'lovelace') {
+            assets.set(Cardano.AssetId(unit), BigInt(a.quantity || '0'));
+          }
+        }
+
+        const txIn: Cardano.HydratedTxIn = {
+          txId: Cardano.TransactionId(txHash),
+          index: txIndex,
+          address: address as Cardano.PaymentAddress,
+        };
+
+        const txOut: Cardano.TxOut = {
+          address: address as Cardano.PaymentAddress,
+          value: {
+            coins: lovelace,
+            assets: assets.size > 0 ? assets : undefined,
+          },
+          datumHash: u.datumHash || undefined,
+          datum: u.inlineDatum || undefined,
+          scriptReference: u.referenceScript || undefined,
+        };
+
+        result.push([txIn, txOut]);
+      } catch (e) {
+        debugLog('Failed to convert Nexus UTxO:', e, u);
+      }
+    }
+    return result;
   }
 }
 

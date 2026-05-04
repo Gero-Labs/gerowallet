@@ -19,6 +19,24 @@
           <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="txAutoSubmit" style="margin: auto" />
         </v-col>
       </v-row>
+      <v-row
+        no-gutters
+        class="py-2"
+        v-if="networks.resolveStakingSupport(loggedWallet?.chain, loggedWallet?.network)"
+      >
+        <v-col cols="9" class="text-left">
+          <h3 style="color: white">
+            {{ $t('settings.autoWithdrawRewards') }}
+            <v-icon color="error" x-small class="ml-1" v-if="isAutoWithdrawRewardsNew">
+              mdi-circle
+            </v-icon>
+          </h3>
+          <span class="helper my-0">{{ $t('settings.autoWithdrawRewardsHelper') }}</span>
+        </v-col>
+        <v-col cols="3" style="display: flex;">
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="autoWithdrawRewards" style="margin: auto" />
+        </v-col>
+      </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
           <h3 style="color: white">
@@ -126,7 +144,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
-import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
+import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import GeroStore from '@/stores/geroStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import cardStore from '@/stores/modules/card';
@@ -171,6 +189,21 @@ const useSidePanel = computed({
     }
   }
 });
+
+const autoWithdrawRewards = computed({
+  get() {
+    return config.value?.autoWithdrawRewards || false;
+  },
+  set(val: boolean) {
+    if (config.value) {
+      config.value.autoWithdrawRewards = val;
+      setWalletConfiguration(loggedWallet.value.id, 'autoWithdrawRewards', val);
+      markFeatureAsSeen('settings.advanced.autoWithdrawRewards');
+    }
+  }
+});
+
+const isAutoWithdrawRewardsNew = computed(() => isFeatureNew('settings.advanced.autoWithdrawRewards'));
 
 const isDefaultExtensionModeNew = computed(() => isFeatureNew('settings.advanced.defaultExtensionMode'));
 

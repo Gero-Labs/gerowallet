@@ -37,9 +37,7 @@ function buildCSP(dev: boolean): string {
     // Gero backend
     ...(dev
       ? ['https://dev.gerowallet.io']
-      : ['https://api.gerowallet.io', 'wss://api.gerowallet.io']),
-    // Market data (REST + WebSocket)
-    'https://market.gerowallet.io',
+      : ['https://*.gerowallet.io', 'wss://api.gerowallet.io']),
     'wss://market.gerowallet.io',
     // Bitcoin APIs
     'https://blockstream.info',
@@ -70,9 +68,12 @@ function buildCSP(dev: boolean): string {
     'https://api.bringweb3.io/',
     'https://api.cardanoshield.com/api/',
     'https://connect.trezor.io',
-    // LaunchDarkly (feature flags)
-    'https://*.launchdarkly.com',
-    'wss://*.launchdarkly.com',
+    // Strike Finance (perpetuals)
+    'https://api.strikefinance.org',
+    'https://api-v2.strikefinance.org',
+    'wss://*.strikefinance.org',
+    'https://*.gerowallet.io',
+    'wss://*.gerowallet.io',
     // Dev-only
     ...(dev
       ? [
@@ -81,6 +82,7 @@ function buildCSP(dev: boolean): string {
           'http://localhost:*',
           'ws://localhost:*',
           'ws://127.0.0.1:*',
+          'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
       : ['ws://127.0.0.1:*']),
@@ -113,7 +115,7 @@ function buildCSP(dev: boolean): string {
   ];
 
   const mediaSrc = [
-    ...(dev ? ['https://dev.gerowallet.io', 'http://localhost:*'] : ['https://api.gerowallet.io', 'https://dev.gerowallet.io']),
+    ...(dev ? ['https://*.gerowallet.io', 'http://localhost:*'] : ['https://*.gerowallet.io']),
     'data:',
   ];
 
