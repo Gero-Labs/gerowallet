@@ -48,6 +48,7 @@ export interface Account {
 export interface WalletStore {
   loggedWallet: any;
   isLocked: boolean;
+  isSyncing: boolean;
   account: Account;
   transactions: any[];
   utxos: Cardano.Utxo[] | IUnifiedUtxo[];  // Support both Cardano and Bitcoin UTXOs
@@ -69,10 +70,12 @@ export interface WalletStore {
 export const walletStore = Vue.observable<WalletStore>({
   loggedWallet: null,
   isLocked: false,
+  isSyncing: false,  // true during first restore sync — prevents navigation to dashboard
   account: null,
   transactions: [],
   utxos: [],
   collateral: null,
+  nexusCollateral: null,
   keys: null,
   tokens: {},
   collections: {},
@@ -91,6 +94,7 @@ export const walletStore = Vue.observable<WalletStore>({
     txAutoSubmit: true,
     useSidePanel: true,
     websiteProtection: true,
+    autoWithdrawRewards: false,
   },
   fiatRates: null,
   fiatRatesIntervalId: null,
@@ -195,9 +199,37 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
 }
 
 export default {
+  setSyncing(isSyncing: boolean) {
+    walletStore.isSyncing = isSyncing;
+    broadcastFromBackground({ isSyncing });
+  },
+
   setLoggedWallet(loggedWallet: any) {
+    const prevAddress = walletStore.loggedWallet?.baseAddress;
+    const newAddress = loggedWallet?.baseAddress;
     walletStore.loggedWallet = loggedWallet;
     broadcastFromBackground({ loggedWallet });
+
+    // Notify every tab's content script that the active wallet address
+    // changed, so the Bring SDK (listening for `gero:login` / `gero:logout`)
+    // can refresh its cached walletAddress and trigger a fresh cashback token
+    // fetch. Without this, tabs loaded before login keep Bring's cache at
+    // null and cashback tokens are generated with walletAddress=null.
+    // Fires on login (null → addr), logout (addr → null), and wallet switch
+    // (addrA → addrB), but not on repeated sets with the same address.
+    if (typeof chrome !== 'undefined' && chrome.tabs?.query && prevAddress !== newAddress) {
+      chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id !== 'number') continue;
+          chrome.tabs.sendMessage(
+            tab.id,
+            { action: 'geroLoggedWalletChanged', loggedIn: !!newAddress },
+            // Swallow "Receiving end does not exist" — many tabs have no content script
+            () => void chrome.runtime.lastError,
+          );
+        }
+      });
+    }
 
     // Initialize price service when wallet is set (chain-aware)
     if (loggedWallet && (loggedWallet.chain === 'Cardano' || loggedWallet.chain === 'Bitcoin')) {

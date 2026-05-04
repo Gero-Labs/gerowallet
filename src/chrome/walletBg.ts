@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import { type StoredTransaction, isCardanoTx } from '@/models/transaction.types';
+import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
@@ -37,7 +37,6 @@ import {
   hdPathToArray,
   keyHashFromAddress,
   toStakeAddress,
-  toValueCore,
 } from '@/chrome/serialization';
 import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
 import { deriveBitcoinAddress } from '@/chains/bitcoin/bitcoinKeyManager';
@@ -59,7 +58,6 @@ import { Buffer } from 'buffer';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import {
   Hash28ByteBase16,
-  Hash32ByteBase16,
   Bip32PrivateKey,
   Ed25519PrivateKey,
   Ed25519PublicKey,
@@ -74,6 +72,7 @@ export class WalletBg {
   api: Api;
   syncService: SyncService;
   loaderFactory: LoaderFactory;
+
 
   id: number;
   name: string;
@@ -218,207 +217,136 @@ export class WalletBg {
     return epoch;
   }
 
-  async setUtxosAndAddresses(transactions: StoredTransaction[]) {
-    debugLog('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
+  /**
+   * Apply UTxOs: set on store, resolve assets, persist to DB.
+   * Called on login (from DB) and when server UTxOs arrive.
+   */
+  async applyUtxos(utxos: Cardano.Utxo[], persist = false) {
+    if (!utxos || utxos.length === 0) return;
 
-    // Bitcoin wallets don't process Cardano transactions (Phase 1)
-    if (this.chain === Blockchain.BITCOIN) {
-      debugLog('⏭️ Skipping Cardano transaction processing for Bitcoin wallet');
-      return;
+    // Defense-in-depth: filter to only UTxOs matching wallet's payment credentials
+    const myCredentials = new Set(this.derivePaymentCredentials());
+    const filtered = utxos.filter(([, txOut]) => {
+      try {
+        const addr = Cardano.Address.fromString(txOut.address as string);
+        const baseAddr = addr?.asBase();
+        if (!baseAddr) return true; // keep non-base addresses (enterprise, etc.)
+        const paymentCred = baseAddr.getPaymentCredential().hash;
+        return myCredentials.has(paymentCred);
+      } catch {
+        return true; // keep if we can't parse
+      }
+    });
+    if (filtered.length !== utxos.length) {
+      debugLog(`🔒 Credential filter: ${utxos.length} → ${filtered.length} UTxOs (${utxos.length - filtered.length} Franken removed)`);
     }
+    utxos = filtered;
 
-    let stakeAddress: string = '';
-    let address: string = '';
-    if (this.isEnterpriseAddress()) {
-      address = this.baseAddress;
-      debugLog('🏢 Using enterprise address:', address);
-    } else {
-      stakeAddress = this.stakeAddress;
-      debugLog('🏛️ Using stake address:', stakeAddress);
-    }
-
-    const utxos: Map<string, Cardano.Utxo> = new Map<string, Cardano.Utxo>();
-    const addresses: Set<string> = new Set<string>();
-    addresses.add(this.baseAddress);
     const uniqueAssets: Set<string> = new Set<string>();
-
-    for (const transaction of transactions) {
-      if (isCardanoTx(transaction)) {
-        transaction.body.outputs.forEach((out, idx) => {
-          let outAddress = out.address;
-          const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
-          try {
-            // TODO Support Byron Addresses
-            if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
-              const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
-              const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
-                this.networkId(),
-                baseAddress.getStakeCredential()
-              );
-              outAddress = rewardAddr.toAddress().toBech32();
-            }
-            if (address === outAddress || stakeAddress === outAddress) {
-              addresses.add(out.address);
-              const utxoId = `${transaction.id || transaction.tx_hash}#${idx}`;
-              utxos.set(utxoId, [
-                {
-                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
-                  index: idx,
-                  address: out.address,
-                },
-                {
-                  address: out.address,
-                  value: out.value,
-                  datumHash: out.datumHash,
-                  datum: out.datum,
-                  scriptReference: out.scriptReference,
-                },
-              ]);
-            }
-            if (out.value.assets) {
-              out.value.assets.keys().forEach((key: string) => {
-                if (!uniqueAssets.has(key)) {
-                  uniqueAssets.add(key);
-                }
-              });
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        });
-      } else {
-        transaction.utxo.outputs.forEach((out, _idx) => {
-          let outAddress = out.address;
-          const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
-          try {
-            // TODO Support Byron Addresses
-            if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
-              const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
-              const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
-                this.networkId(),
-                baseAddress.getStakeCredential()
-              );
-              outAddress = rewardAddr.toAddress().toBech32();
-            }
-            if (address === outAddress || stakeAddress === outAddress) {
-              addresses.add(out.address);
-              const utxoId: string = `${transaction.id || transaction.tx_hash}#${out.output_index}`;
-              utxos.set(utxoId, [
-                {
-                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
-                  index: out.output_index,
-                  address: out.address,
-                },
-                {
-                  address: out.address,
-                  value: toValueCore(out.amount),
-                  datumHash: out.data_hash ? Hash32ByteBase16.fromHexBlob(HexBlob(out.data_hash)) : null,
-                  datum: out.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(out.inline_datum)).toCore() : null,
-                  scriptReference: null // only reference_script_hash is available from sync, not full script bytes
-                },
-              ]);
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        });
-        Array.from(utxos.values()).forEach((utxo: Cardano.Utxo) => {
-          utxo[1].value.assets?.keys().forEach((key: string) => {
-            if (!uniqueAssets.has(key)) {
-              uniqueAssets.add(key);
-            }
-          });
-        })
+    for (const [, txOut] of utxos) {
+      if (txOut.value.assets) {
+        txOut.value.assets.keys().forEach((key: string) => uniqueAssets.add(key));
       }
     }
 
-    const currentSlot = NetworkStore.getCurrentSlot() ?? 0;
+    debugLog(`📦 applyUtxos: ${utxos.length} UTxOs, ${uniqueAssets.size} assets, persist=${persist}`);
 
-    for (const transaction of transactions) {
-      if (isCardanoTx(transaction)) {
-        const invalidHereafter = transaction.body.validityInterval?.invalidHereafter;
-        const isPendingExpired =
-          transaction.pending &&
-          invalidHereafter != null &&
-          currentSlot > Number(invalidHereafter);
-
-        if (isPendingExpired) {
-          debugLog(`⏰ Skipping expired pending tx ${transaction.id}: slot ${currentSlot} > invalidHereafter ${invalidHereafter}`);
-          continue;
-        }
-
-        for (const inp of transaction.body.inputs) {
-          const utxoKey = `${inp.txId}#${inp.index}`;
-          utxos.delete(utxoKey);
-        }
-      } else {
-        for (const inp of transaction.utxo.inputs) {
-          const utxoKey = `${inp.tx_hash}#${inp.output_index}`;
-          utxos.delete(utxoKey);
-        }
-      }
-    }
-
-    debugLog(`✅ UTXO processing complete: ${utxos.size} UTXOs remaining`);
-
-    // Set Assets Info in Network DB
     await this.syncService.syncAssets(Array.from(uniqueAssets));
+    this.setAssets(utxos);
+    WalletStore.setUtxos(utxos);
 
-    // Wait for assets to be loaded into NetworkStore before resolving them
-    // Only needed on first-time wallet import/restore (when lastSyncInfo doesn't exist)
-    // For regular logins, assets are already cached in NetworkStore
-    const lastSyncInfo = await this.getLastSyncInfo();
-    if (!lastSyncInfo) {
-      await this.waitForAssetsToLoad(Array.from(uniqueAssets));
+    // Persist to per-wallet DB so UTxOs survive logout
+    if (persist) {
+      try {
+        const db = await this.getDb();
+        const table = db.table('utxos');
+        await table.clear();
+        // Store as serializable objects (BigInt → string, Map → array of entries)
+        const serialized = utxos.map(([txIn, txOut]) => ({
+          txId: txIn.txId,
+          index: txIn.index,
+          address: txOut.address,
+          coins: txOut.value.coins.toString(),
+          assets: txOut.value.assets ? Array.from(txOut.value.assets.entries()).map(([k, v]) => ({ unit: k, quantity: v.toString() })) : [],
+          datumHash: txOut.datumHash || null,
+          datum: txOut.datum || null,
+          scriptReference: txOut.scriptReference || null,
+        }));
+        await table.bulkPut(serialized);
+      } catch (e) {
+        debugLog('Failed to persist UTxOs:', e);
+      }
     }
-
-    // Resolve Assets from UTxOs
-    this.setAssets(Array.from(utxos.values()));
-
-    // Keys
-    debugLog('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
-    if (this.type !== WalletType.Google) {
-      const keys = await this.syncService.syncKeys(Array.from(addresses));
-      WalletStore.setKeys(keys);
-    } else {
-      debugLog('🔑 Skipping key sync for Google wallet type');
-    }
-
-    // UTxOs
-    WalletStore.setUtxos(Array.from(utxos.values()));
   }
 
   /**
-   * Wait for assets to be loaded into NetworkStore from the blockchain database
-   * This prevents race conditions where assets are resolved before metadata is available
-   * @param assetUnits - Array of asset units to wait for
-   * @param timeoutMs - Maximum time to wait in milliseconds (default: 5000ms)
+   * Load persisted UTxOs from per-wallet DB. Fast — no server needed.
    */
-  private async waitForAssetsToLoad(assetUnits: string[], timeoutMs: number = 5000): Promise<void> {
-    if (!assetUnits || assetUnits.length === 0) {
+  public async loadCachedUtxos() {
+    try {
+      const db = await this.getDb();
+      const table = db.table('utxos');
+      const rows = await table.toArray();
+      if (!rows || rows.length === 0) return;
+
+      debugLog(`📦 Loading ${rows.length} persisted UTxOs from DB`);
+
+      // Reconstruct Cardano.Utxo[] from serialized rows
+      const utxos: Cardano.Utxo[] = rows.map((row: any) => {
+        const assets = new Map<Cardano.AssetId, bigint>();
+        if (row.assets) {
+          for (const a of row.assets) {
+            assets.set(Cardano.AssetId(a.unit), BigInt(a.quantity));
+          }
+        }
+        return [
+          {
+            txId: Cardano.TransactionId(row.txId),
+            index: row.index,
+            address: row.address as Cardano.PaymentAddress,
+          },
+          {
+            address: row.address as Cardano.PaymentAddress,
+            value: { coins: BigInt(row.coins), assets: assets.size > 0 ? assets : undefined },
+            datumHash: row.datumHash || undefined,
+            datum: row.datum || undefined,
+            scriptReference: row.scriptReference || undefined,
+          },
+        ] as Cardano.Utxo;
+      });
+
+      await this.applyUtxos(utxos);
+    } catch (e) {
+      debugLog('Failed to load cached UTxOs:', e);
+    }
+  }
+
+  /**
+   * Load persisted keys from per-wallet DB so the receive dialog works before first sync.
+   */
+  public async loadCachedKeys() {
+    try {
+      const db = await this.getDb();
+      const table = db.table('addresses');
+      const row = await table.where({ address: this.publicKey }).first();
+      if (row?.resolvedKeys) {
+        debugLog('🔑 Loading cached keys from DB');
+        WalletStore.setKeys(row.resolvedKeys);
+      }
+    } catch (e) {
+      debugLog('Failed to load cached keys:', e);
+    }
+  }
+
+  /**
+   * Dexie subscription callback — kept for Bitcoin wallets only.
+   * Cardano UTxOs come from server via applyUtxos().
+   */
+  async setUtxosAndAddresses(transactions: StoredTransaction[]) {
+    if (this.chain === Blockchain.BITCOIN) {
+      debugLog('🔄 setUtxosAndAddresses (Bitcoin) with', transactions?.length || 0, 'transactions');
       return;
     }
-
-    debugLog(`⏳ Waiting for ${assetUnits.length} assets to load into NetworkStore...`);
-    const startTime = Date.now();
-    const checkInterval = 50; // Check every 50ms
-
-    while (Date.now() - startTime < timeoutMs) {
-      // Check if all assets are loaded in NetworkStore
-      const allAssetsLoaded = assetUnits.every(unit => NetworkStore.state.assets[unit]);
-
-      if (allAssetsLoaded) {
-        debugLog(`✅ All assets loaded into NetworkStore in ${Date.now() - startTime}ms`);
-        return;
-      }
-
-      // Wait before checking again
-      await new Promise(resolve => setTimeout(resolve, checkInterval));
-    }
-
-    // Timeout reached - log warning but continue (don't block wallet initialization)
-    const loadedCount = assetUnits.filter(unit => NetworkStore.state.assets[unit]).length;
-    console.warn(`⚠️ Timeout waiting for assets: ${loadedCount}/${assetUnits.length} loaded after ${timeoutMs}ms`);
   }
 
   setAssets(utxos?: Cardano.Utxo[]) {
@@ -645,6 +573,32 @@ export class WalletBg {
       .catch(err => {
         console.error(`${err.stack || err}`);
       });
+
+    // Synthesize lovelace token from account when UTxOs aren't available (e.g. preprod/testnet)
+    const controlled = Number(accountInfo.controlled_amount);
+    if (controlled > 0 && WalletStore.state.utxos.length === 0) {
+      const network = networks.resolveNetwork(this.chain, this.network);
+      WalletStore.setTokens({
+        lovelace: {
+          unit: 'lovelace',
+          name: network?.currencyName,
+          policy_id: '',
+          img: network?.currencyImage,
+          quantity: accountInfo.controlled_amount,
+          metadata: {
+            name: network?.currencyName,
+            ticker: network?.currencyTicker,
+            description: network?.currencyDescription,
+            logo: network?.currencyImage,
+            decimals: 6,
+          },
+          risk: 'AAA',
+          verified: true,
+          onchain_metadata: null,
+        },
+      });
+    }
+
     return {
       id: accountInfoId,
       ...acc,
@@ -702,11 +656,10 @@ export class WalletBg {
             if (!existingTx) {
               // Transaction doesn't exist - it's new, add it
               txsToUpdate.push(newTx);
-            } else if (existingTx.pending !== newTx.pending) {
-              // Transaction exists but pending status changed - update it
+            } else if (existingTx.pending !== newTx.pending || existingTx.tx_timestamp !== newTx.tx_timestamp) {
+              // Transaction exists but pending status or timestamp changed - update it
               txsToUpdate.push(newTx);
             }
-            // Otherwise, transaction exists and hasn't changed - skip it
           });
 
           // Only update if there are changes
@@ -858,6 +811,56 @@ export class WalletBg {
 
   paymentKeyInternal(index: number): Ed25519PublicKey {
     return getPaymentKeyInternal(this.publicKey, index);
+  }
+
+  /** Current credential derivation range (indices 0..N-1 per chain) */
+  private credentialRange = 20;
+
+  /**
+   * Derive payment credential hashes (blake2b-224) for external and internal chains.
+   */
+  derivePaymentCredentials(): string[] {
+    const credentials: string[] = [];
+    for (let i = 0; i < this.credentialRange; i++) {
+      credentials.push(getPaymentKeyExternal(this.publicKey, i).hash().hex());
+    }
+    for (let i = 0; i < this.credentialRange; i++) {
+      credentials.push(getPaymentKeyInternal(this.publicKey, i).hash().hex());
+    }
+    return credentials;
+  }
+
+  /**
+   * Check if server-provided addresses are all covered by current credentials.
+   * If not, expand the range and return the new full set. Returns null if no expansion needed.
+   */
+  expandCredentialsIfNeeded(serverAddresses: string[]): string[] | null {
+    if (!serverAddresses || serverAddresses.length === 0) return null;
+
+    const currentCreds = new Set(this.derivePaymentCredentials());
+    let needsExpansion = false;
+
+    for (const addr of serverAddresses) {
+      try {
+        const parsed = Cardano.Address.fromString(addr);
+        const baseAddr = parsed?.asBase();
+        if (!baseAddr) continue;
+        const paymentCred = baseAddr.getPaymentCredential().hash;
+        if (!currentCreds.has(paymentCred)) {
+          needsExpansion = true;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (!needsExpansion) return null;
+
+    // Double the range and re-derive
+    this.credentialRange = Math.min(this.credentialRange * 2, 500);
+    debugLog(`🔑 Expanding credential range to ${this.credentialRange} per chain`);
+    return this.derivePaymentCredentials();
   }
 
   stakeKey(): Ed25519PublicKey {
@@ -1510,7 +1513,6 @@ export class WalletBg {
   /**
    * Cardano JS SDK transaction signing method
    * @param txInput - Either a CBOR hex string or Cardano.Tx object (Cardano JS SDK)
-   * @param partialSign - Whether this is a partial signing operation
    * @param password - Wallet password for software wallets
    * @param accountIndex - Account index for derivation
    * @param utxos - UTXOs for reference

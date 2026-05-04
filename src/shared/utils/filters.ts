@@ -168,6 +168,8 @@ const filters = {
     return str.charAt(0).toUpperCase() + str.slice(1);
   },
   humanFileSize(bytes, si= true, dp=1) {
+    if (bytes == null || !Number.isFinite(Number(bytes))) return '—';
+    bytes = Number(bytes);
     const thresh = si ? 1000 : 1024;
 
     if (Math.abs(bytes) < thresh) {

@@ -8,7 +8,6 @@ import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 // Critical parts loaded immediately
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import PortfolioPage from '@/modules/portfolio/PortfolioPage.vue';
-import Login from '@/popup/modules/views/Login.vue';
 
 // Lazy loading for other components (saves ~5MB initial load)
 const Staking = () => import("@/modules/staking/Staking.vue");
@@ -209,15 +208,6 @@ const routes = [
       requiresAuth: true,
     },
   },
-  {
-    path: '/plogin',
-    name: 'plogin',
-    component: Login,
-    meta: {
-      layout: PopupLayout,
-      requiresAuth: false,
-    },
-  },
   // MultiSig route disabled - under maintenance
   // {
   //   path: '/multisig',
@@ -350,8 +340,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
   const isLocked: boolean = WalletStore.state.isLocked;
+  const isSyncing: boolean = WalletStore.state.isSyncing;
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
+  console.log(`[ROUTER] ${from.path} → ${to.path} | loggedIn=${isLoggedIn} locked=${isLocked} syncing=${isSyncing} welcome=${isWelcome}`);
 
   // Prevent redirect loops: if we're already being redirected to welcome, just allow it
   if (isWelcome && from.path === '/') {
@@ -366,9 +358,13 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn && !isLocked) {
-    // already logged in and NOT locked → don't show welcome again
+  if (isWelcome && isLoggedIn && !isLocked && !isSyncing) {
+    // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
+  }
+  if (needsAuth && isSyncing) {
+    // Syncing wallet — stay on welcome until done
+    return next({ path: '/welcome' });
   }
   if (needsAuth && isLocked) {
     // wallet is locked → send to /welcome to unlock
