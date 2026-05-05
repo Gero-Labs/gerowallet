@@ -1,5 +1,13 @@
 <template>
-  <BottomSheet :value="value" :title="$t('perpetuals.deposit')" height="90%" @input="$emit('input', $event)">
+  <BottomSheet
+    :value="value"
+    :title="$t('perpetuals.deposit')"
+    height="auto"
+    max-height="90vh"
+    max-width="480px"
+    compact
+    @input="$emit('input', $event)"
+  >
     <div class="deposit-content">
 
       <!-- ── Phase 1: Amount input ─────────────────────────────────────── -->

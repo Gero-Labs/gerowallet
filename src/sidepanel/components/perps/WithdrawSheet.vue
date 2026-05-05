@@ -1,5 +1,13 @@
 <template>
-  <BottomSheet :value="value" :title="$t('perpetuals.withdraw')" height="92%" @input="$emit('input', $event)">
+  <BottomSheet
+    :value="value"
+    :title="$t('perpetuals.withdraw')"
+    height="auto"
+    max-height="90vh"
+    max-width="480px"
+    compact
+    @input="$emit('input', $event)"
+  >
     <div class="withdraw-content">
 
       <!-- ── Step indicator ─────────────────────────────────────── -->
