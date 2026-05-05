@@ -2,109 +2,228 @@
   <BottomSheet :value="value" :title="$t('perpetuals.deposit')" height="90%" @input="$emit('input', $event)">
     <div class="deposit-content">
 
-      <!-- Amount Input -->
-      <div class="input-row">
+      <!-- ── Phase 1: Amount input ─────────────────────────────────────── -->
+      <template v-if="phase === 'amount'">
+        <div class="balance-row">
+          <span class="balance-label">{{ $t('perpetuals.deposit.available') }}</span>
+          <span class="balance-value" @click="setMax()">
+            {{ availableAdaDisplay }} <span class="preview-unit">ADA</span>
+            <v-icon size="11" class="ml-1" color="#00c7f3">mdi-flash</v-icon>
+          </span>
+        </div>
+
+        <div class="input-row">
+          <v-text-field
+            v-model="amount"
+            :label="$t('perpetuals.deposit.amountLabel')"
+            outlined
+            dense
+            dark
+            hide-details
+            class="perp-input"
+            suffix="ADA"
+            type="number"
+            min="0"
+          />
+          <v-btn small depressed class="max-btn" @click="setMax()">
+            MAX
+          </v-btn>
+        </div>
+
+        <div class="warning-banner mt-2">
+          <v-icon size="14" color="#FFA726" class="mr-2" style="flex-shrink:0">mdi-alert-outline</v-icon>
+          <span>{{ $t('perpetuals.stablecoinWarning') }}</span>
+        </div>
+
+        <transition name="fade-slide">
+          <div v-if="depositError" class="error-banner mt-3">
+            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <span>{{ depositError }}</span>
+          </div>
+        </transition>
+
+        <v-btn
+          block
+          depressed
+          :loading="depositStatus === 'quoting'"
+          :disabled="!canQuote"
+          class="action-btn mt-4"
+          @click="goToReview()"
+        >
+          {{ $t('perpetuals.deposit.continue') }}
+          <v-icon size="14" class="ml-2">mdi-arrow-right</v-icon>
+        </v-btn>
+      </template>
+
+      <!-- ── Phase 2: Review & sign ────────────────────────────────────── -->
+      <template v-else-if="phase === 'review'">
+        <div class="preview-card">
+          <div class="preview-title">{{ $t('perpetuals.deposit.review') }}</div>
+
+          <div class="preview-row">
+            <span class="preview-label">{{ $t('perpetuals.deposit.youSend') }}</span>
+            <span class="preview-value highlight">
+              {{ requiredAdaDisplay }} <span class="preview-unit">ADA</span>
+            </span>
+          </div>
+          <div class="preview-row">
+            <span class="preview-label">{{ $t('perpetuals.estimatedCredit') }}</span>
+            <span class="preview-value highlight">${{ usdValueDisplay }}</span>
+          </div>
+          <div class="preview-row">
+            <span class="preview-label">{{ $t('perpetuals.deposit.exchangeRate') }}</span>
+            <span class="preview-value muted">{{ exchangeRateDisplay }}</span>
+          </div>
+          <div class="preview-row">
+            <span class="preview-label">{{ $t('perpetuals.deposit.depositAddress') }}</span>
+            <span class="preview-value mono-addr" :title="quote?.deposit_address || ''">
+              {{ truncatedAddress }}
+              <v-icon size="12" class="ml-1 copy-icon" @click="copyAddress()">
+                {{ addressCopied ? 'mdi-check' : 'mdi-content-copy' }}
+              </v-icon>
+            </span>
+          </div>
+
+          <div class="countdown-row">
+            <v-icon size="12" :color="quoteCountdown < 30 ? '#F97066' : '#FFA726'" class="mr-1">
+              mdi-clock-outline
+            </v-icon>
+            <span class="countdown-text" :class="{ urgent: quoteCountdown < 30 }">
+              <template v-if="quoteCountdown > 0">
+                {{ $t('perpetuals.quoteExpires') }} {{ formatCountdown(quoteCountdown) }}
+              </template>
+              <template v-else>
+                {{ $t('perpetuals.deposit.quoteExpired') }}
+              </template>
+            </span>
+            <v-btn
+              x-small
+              text
+              class="ml-auto refresh-btn"
+              :loading="depositStatus === 'quoting'"
+              @click="refreshQuote()"
+            >
+              <v-icon size="12" class="mr-1">mdi-refresh</v-icon>
+              {{ $t('perpetuals.deposit.refresh') }}
+            </v-btn>
+          </div>
+        </div>
+
         <v-text-field
-          v-model="amount"
-          :label="$t('perpetuals.amount')"
+          v-model="password"
+          :label="$t('perpetuals.spendingPassword')"
           outlined
           dense
           dark
           hide-details
-          class="perp-input"
-          suffix="ADA"
-          type="number"
-          min="0"
+          class="perp-input mt-3"
+          :type="showPassword ? 'text' : 'password'"
+          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+          :disabled="quoteCountdown <= 0"
+          @click:append="showPassword = !showPassword"
         />
-        <v-btn small depressed class="max-btn" @click="setMax()">
-          MAX
-        </v-btn>
-      </div>
 
-      <!-- Preview Section -->
-      <transition name="fade-slide">
-        <div v-if="amountNum > 0" class="preview-card">
-          <div class="preview-title">{{ $t('perpetuals.depositPreview') }}</div>
-
-          <div class="preview-row">
-            <span class="preview-label">{{ $t('perpetuals.amount') }}</span>
-            <span class="preview-value">{{ amountNum.toFixed(2) }} <span class="preview-unit">ADA</span></span>
+        <transition name="fade-slide">
+          <div v-if="depositError" class="error-banner mt-3">
+            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <span>{{ depositError }}</span>
           </div>
+        </transition>
 
-          <div class="preview-row">
-            <span class="preview-label">{{ $t('perpetuals.estimatedCredit') }}</span>
-            <span class="preview-value highlight">
-              ${{ estimatedUsd }}
-            </span>
-          </div>
-
-          <div class="preview-row">
-            <span class="preview-label">{{ $t('perpetuals.networkFee') }}</span>
-            <span class="preview-value muted">~{{ networkFee }} ADA</span>
-          </div>
-
-          <div v-if="quoteCountdown > 0" class="countdown-row">
-            <v-icon size="12" color="#FFA726" class="mr-1">mdi-clock-outline</v-icon>
-            <span class="countdown-text">
-              {{ $t('perpetuals.quoteExpires', { seconds: quoteCountdown }) }}
-            </span>
-          </div>
+        <div class="action-row mt-4">
+          <v-btn text small class="back-btn" @click="goBackToAmount()">
+            <v-icon size="14" class="mr-1">mdi-arrow-left</v-icon>
+            {{ $t('common.back') }}
+          </v-btn>
+          <v-btn
+            depressed
+            :loading="isSigning"
+            :disabled="!canConfirm"
+            class="action-btn flex-grow-1"
+            @click="handleConfirm()"
+          >
+            <v-icon size="14" class="mr-2">mdi-shield-check</v-icon>
+            {{ $t('perpetuals.deposit.confirmSign') }}
+          </v-btn>
         </div>
-      </transition>
+      </template>
 
-      <!-- Stablecoin Warning -->
-      <div class="warning-banner">
-        <v-icon size="14" color="#FFA726" class="mr-2" style="flex-shrink:0">mdi-alert-outline</v-icon>
-        <span>{{ $t('perpetuals.stablecoinWarning') }}</span>
-      </div>
+      <!-- ── Phase 3: Status / progress ────────────────────────────────── -->
+      <template v-else-if="phase === 'status'">
+        <div class="status-card">
+          <div class="status-icon-wrap">
+            <v-progress-circular
+              v-if="depositStatus !== 'credited' && depositStatus !== 'confirmed' && depositStatus !== 'error'"
+              indeterminate
+              size="56"
+              width="3"
+              color="#00c7f3"
+            />
+            <v-icon v-else-if="depositStatus === 'error'" size="56" color="#F97066">
+              mdi-alert-circle
+            </v-icon>
+            <v-icon v-else size="56" color="#26FAB0">
+              mdi-check-circle
+            </v-icon>
+          </div>
 
-      <!-- Spending Password -->
-      <v-text-field
-        v-model="password"
-        :label="$t('perpetuals.spendingPassword')"
-        outlined
-        dense
-        dark
-        hide-details
-        class="perp-input mt-3"
-        :type="showPassword ? 'text' : 'password'"
-        :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append="showPassword = !showPassword"
-      />
+          <div class="status-title">{{ statusLabel }}</div>
+          <div class="status-sub" v-if="statusSub">{{ statusSub }}</div>
 
-      <!-- Status / Success -->
-      <transition name="fade-slide">
-        <div v-if="depositStatus === 'confirmed'" class="success-banner mt-3">
-          <v-icon size="16" color="#26FAB0" class="mr-2">mdi-check-circle</v-icon>
-          {{ $t('perpetuals.depositConfirmed') }}
+          <!-- Step pills -->
+          <div class="step-pills">
+            <div
+              v-for="(s, idx) in statusSteps"
+              :key="s.key"
+              class="step-pill"
+              :class="{
+                active: stepIndexFor(depositStatus) === idx,
+                done: stepIndexFor(depositStatus) > idx,
+              }"
+            >
+              <v-icon size="10" v-if="stepIndexFor(depositStatus) > idx" color="#26FAB0">mdi-check</v-icon>
+              <span>{{ s.label }}</span>
+            </div>
+          </div>
+
+          <transition name="fade-slide">
+            <div v-if="(depositStatus === 'credited' || depositStatus === 'confirmed') && txHash" class="tx-link-row mt-4">
+              <a class="tx-link" :href="explorerUrl" target="_blank" rel="noopener noreferrer">
+                <v-icon size="13" class="mr-1">mdi-open-in-new</v-icon>
+                {{ $t('perpetuals.deposit.viewExplorer') }}
+              </a>
+            </div>
+          </transition>
+
+          <transition name="fade-slide">
+            <div v-if="depositError" class="error-banner mt-3">
+              <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+              <span>{{ depositError }}</span>
+            </div>
+          </transition>
         </div>
-      </transition>
 
-      <transition name="fade-slide">
-        <div v-if="depositError" class="error-banner mt-3">
-          <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
-          <span>{{ depositError }}</span>
+        <div class="action-row mt-4" v-if="depositStatus === 'credited' || depositStatus === 'confirmed' || depositStatus === 'error'">
+          <v-btn
+            v-if="depositStatus === 'error'"
+            depressed
+            class="action-btn flex-grow-1"
+            @click="retryFromError()"
+          >
+            <v-icon size="14" class="mr-2">mdi-refresh</v-icon>
+            {{ $t('perpetuals.deposit.retry') }}
+          </v-btn>
+          <v-btn
+            v-else
+            depressed
+            class="action-btn flex-grow-1"
+            @click="closeAndReset()"
+          >
+            <v-icon size="14" class="mr-2">mdi-check</v-icon>
+            {{ $t('common.done') }}
+          </v-btn>
         </div>
-      </transition>
-
-      <!-- Deposit Button -->
-      <v-btn
-        block
-        depressed
-        :loading="isDepositing"
-        :disabled="!canDeposit"
-        class="action-btn mt-4"
-        @click="handleDeposit()"
-      >
-        <template v-if="isDepositing">
-          <v-icon size="14" class="mr-2">mdi-loading mdi-spin</v-icon>
-          {{ $t('perpetuals.depositInProgress') }}
-        </template>
-        <template v-else>
-          <v-icon size="14" class="mr-2">mdi-bank-transfer-in</v-icon>
-          {{ $t('perpetuals.deposit') }}
-        </template>
-      </v-btn>
+      </template>
 
     </div>
   </BottomSheet>
@@ -115,6 +234,8 @@ import { ref, computed, watch } from 'vue';
 import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
 import { walletStore } from '@/stores/walletStore';
+import type { Cardano } from '@cardano-sdk/core';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -126,23 +247,28 @@ const emit = defineEmits<{
   (e: 'deposited'): void;
 }>();
 
+const { t } = useTranslation();
+
 // ── Composable ────────────────────────────────────────────────────────────────
 const {
-  isDepositing,
+  quote,
+  txHash,
   depositStatus,
   depositError,
   quoteCountdown,
   adaToUsdRate,
-  networkFee,
   requestQuote,
   buildAndSign,
   resetDeposit,
 } = useStrikeDeposit();
 
-// ── Local State ───────────────────────────────────────────────────────────────
+// ── Local state ───────────────────────────────────────────────────────────────
+type Phase = 'amount' | 'review' | 'status';
+const phase = ref<Phase>('amount');
 const amount = ref<string>('');
 const password = ref<string>('');
 const showPassword = ref(false);
+const addressCopied = ref(false);
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 const amountNum = computed(() => {
@@ -150,46 +276,184 @@ const amountNum = computed(() => {
   return isNaN(n) || n < 0 ? 0 : n;
 });
 
-const maxAda = computed(() => {
-  const balances = walletStore.state.balances;
-  if (!balances) return 0;
-  const lovelace = balances.lovelace ?? balances.ada ?? 0;
-  const ada = typeof lovelace === 'bigint'
-    ? Number(lovelace) / 1_000_000
-    : Number(lovelace) / 1_000_000;
-  return Math.max(0, ada - 2); // keep 2 ADA for fees/min UTxO
+/**
+ * Compute available ADA from on-chain UTxOs (matches the SendDialog approach
+ * — walletStore doesn't expose a precomputed `balances` map). We subtract a
+ * 2 ADA buffer to leave room for the network fee + min-UTxO change output.
+ */
+const availableAda = computed<number>(() => {
+  const utxos = walletStore.utxos as Cardano.Utxo[] | undefined;
+  if (!utxos || utxos.length === 0) return 0;
+  let total = BigInt(0);
+  for (const utxo of utxos) {
+    try {
+      total += BigInt(utxo[1]?.value?.coins ?? 0);
+    } catch {
+      // Skip malformed UTxOs rather than crash the UI.
+    }
+  }
+  const ada = Number(total) / 1_000_000;
+  return Math.max(0, ada - 2);
 });
 
-const estimatedUsd = computed(() => {
-  if (amountNum.value <= 0) return '0.00';
-  const rate = adaToUsdRate.value ?? 0;
-  return (amountNum.value * rate).toFixed(2);
+const availableAdaDisplay = computed(() => availableAda.value.toFixed(2));
+
+const requiredAdaDisplay = computed(() => {
+  const lovelace = quote.value?.quote.asset_amount;
+  if (!lovelace) return '0.00';
+  return (Number(lovelace) / 1_000_000).toFixed(6);
 });
 
-const canDeposit = computed(() =>
-  amountNum.value > 0 && password.value.length > 0 && !isDepositing.value,
+const usdValueDisplay = computed(() => {
+  const usd = quote.value?.quote.usd_value;
+  if (usd) return Number(usd).toFixed(2);
+  // Fallback: estimate from local ADA price if Strike didn't return a usd value
+  return (amountNum.value * (adaToUsdRate.value ?? 0)).toFixed(2);
+});
+
+const exchangeRateDisplay = computed(() => {
+  const rate = quote.value?.quote.exchange_rate;
+  if (rate) return `1 ADA ≈ $${Number(rate).toFixed(4)}`;
+  return adaToUsdRate.value > 0 ? `1 ADA ≈ $${adaToUsdRate.value.toFixed(4)}` : '—';
+});
+
+const truncatedAddress = computed(() => {
+  const addr = quote.value?.deposit_address ?? '';
+  if (!addr) return '—';
+  if (addr.length <= 16) return addr;
+  return `${addr.slice(0, 10)}…${addr.slice(-6)}`;
+});
+
+const explorerUrl = computed(() => {
+  if (!txHash.value) return '#';
+  const network = walletStore.loggedWallet?.network;
+  const prefix = network === 'Preprod' ? 'preprod.' : '';
+  return `https://${prefix}cexplorer.io/tx/${txHash.value}`;
+});
+
+const canQuote = computed(() => amountNum.value > 0 && amountNum.value <= availableAda.value);
+const canConfirm = computed(
+  () =>
+    !!password.value &&
+    quoteCountdown.value > 0 &&
+    !isSigning.value,
 );
+
+const isSigning = computed(() =>
+  ['building', 'signing', 'submitting', 'confirming'].includes(depositStatus.value),
+);
+
+// ── Status pill model ─────────────────────────────────────────────────────────
+const statusSteps = computed(() => [
+  { key: 'building', label: t('perpetuals.deposit.statusBuilding') },
+  { key: 'signing', label: t('perpetuals.deposit.statusSigning') },
+  { key: 'submitting', label: t('perpetuals.deposit.statusSubmitting') },
+  { key: 'confirming', label: t('perpetuals.deposit.statusConfirming') },
+  { key: 'credited', label: t('perpetuals.deposit.statusCredited') },
+]);
+
+function stepIndexFor(s: string): number {
+  switch (s) {
+    case 'building': return 0;
+    case 'signing': return 1;
+    case 'submitting': return 2;
+    case 'confirming': return 3;
+    case 'credited':
+    case 'confirmed': return 4;
+    default: return -1;
+  }
+}
+
+const statusLabel = computed(() => {
+  switch (depositStatus.value) {
+    case 'building': return t('perpetuals.deposit.statusBuilding');
+    case 'signing': return t('perpetuals.deposit.statusSigning');
+    case 'submitting': return t('perpetuals.deposit.statusSubmitting');
+    case 'confirming': return t('perpetuals.deposit.statusConfirming');
+    case 'credited':
+    case 'confirmed': return t('perpetuals.depositConfirmed');
+    case 'error': return t('perpetuals.deposit.statusError');
+    default: return t('perpetuals.deposit.statusBuilding');
+  }
+});
+
+const statusSub = computed(() => {
+  switch (depositStatus.value) {
+    case 'confirming': return t('perpetuals.deposit.statusConfirmingSub');
+    case 'credited':
+    case 'confirmed': return t('perpetuals.deposit.statusCreditedSub');
+    default: return '';
+  }
+});
 
 // ── Methods ───────────────────────────────────────────────────────────────────
 function setMax() {
-  amount.value = maxAda.value.toFixed(2);
+  amount.value = availableAda.value.toFixed(2);
 }
 
-async function handleDeposit() {
-  if (!canDeposit.value) return;
-  await requestQuote(amount.value);
-  const result = await buildAndSign(password.value);
-  if (result) {
+function formatCountdown(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+async function copyAddress() {
+  const addr = quote.value?.deposit_address;
+  if (!addr) return;
+  try {
+    await navigator.clipboard.writeText(addr);
+    addressCopied.value = true;
+    setTimeout(() => { addressCopied.value = false; }, 1800);
+  } catch {
+    // Fail silently — clipboard isn't critical.
+  }
+}
+
+async function goToReview() {
+  if (!canQuote.value) return;
+  await requestQuote(amountNum.value);
+  if (depositStatus.value === 'quoted') {
+    phase.value = 'review';
+  }
+}
+
+async function refreshQuote() {
+  await requestQuote(amountNum.value);
+}
+
+function goBackToAmount() {
+  phase.value = 'amount';
+}
+
+async function handleConfirm() {
+  if (!canConfirm.value) return;
+  phase.value = 'status';
+  const ok = await buildAndSign(password.value);
+  if (ok) {
     emit('deposited');
   }
 }
 
-// Reset on close
+function retryFromError() {
+  // Send the user back to the amount step with a clean slate; the quote may
+  // be stale, the password may have been wrong, or the build may have failed.
+  resetDeposit();
+  password.value = '';
+  phase.value = 'amount';
+}
+
+function closeAndReset() {
+  emit('input', false);
+}
+
+// ── Reset on close ────────────────────────────────────────────────────────────
 watch(() => props.value, (val) => {
   if (!val) {
     amount.value = '';
     password.value = '';
     showPassword.value = false;
+    addressCopied.value = false;
+    phase.value = 'amount';
     resetDeposit();
   }
 });
@@ -203,17 +467,44 @@ watch(() => props.value, (val) => {
   padding-bottom: 8px;
 }
 
+/* ── Balance row ── */
+.balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0 8px;
+}
+
+.balance-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.balance-value {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: #00c7f3;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.balance-value:hover { opacity: 0.85; }
+
 /* ── Amount Row ── */
 .input-row {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
-.input-row .perp-input {
-  flex: 1;
-}
+.input-row .perp-input { flex: 1; }
 
 .max-btn {
   height: 40px !important;
@@ -235,29 +526,24 @@ watch(() => props.value, (val) => {
   background: rgba(255, 255, 255, 0.04) !important;
   min-height: 40px !important;
 }
-
 .perp-input :deep(.v-label) {
   font-size: 12px !important;
   color: rgba(255, 255, 255, 0.4) !important;
 }
-
 .perp-input :deep(input) {
   font-size: 13px !important;
   font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
   color: #ffffff !important;
   caret-color: #00c7f3 !important;
 }
-
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 11px !important;
   color: rgba(255, 255, 255, 0.35) !important;
   font-weight: 600 !important;
 }
-
 .perp-input :deep(fieldset) {
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
-
 .perp-input :deep(.v-input--is-focused fieldset) {
   border-color: #00c7f3 !important;
 }
@@ -268,7 +554,7 @@ watch(() => props.value, (val) => {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 12px 14px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 
 .preview-title {
@@ -287,10 +573,7 @@ watch(() => props.value, (val) => {
   padding: 4px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
-
-.preview-row:last-child {
-  border-bottom: none;
-}
+.preview-row:last-child { border-bottom: none; }
 
 .preview-label {
   font-size: 11px;
@@ -302,16 +585,12 @@ watch(() => props.value, (val) => {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
 }
-
-.preview-value.highlight {
-  color: #26FAB0;
-}
-
-.preview-value.muted {
-  color: rgba(255, 255, 255, 0.45);
-  font-weight: 400;
-}
+.preview-value.highlight { color: #26FAB0; }
+.preview-value.muted { color: rgba(255, 255, 255, 0.45); font-weight: 400; }
+.preview-value.mono-addr { font-size: 11px; }
 
 .preview-unit {
   font-size: 9px;
@@ -319,16 +598,37 @@ watch(() => props.value, (val) => {
   font-weight: 400;
 }
 
+.copy-icon {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.copy-icon:hover { opacity: 1; color: #00c7f3 !important; }
+
 .countdown-row {
   display: flex;
   align-items: center;
-  padding-top: 8px;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .countdown-text {
   font-size: 10px;
   color: #FFA726;
   font-weight: 600;
+}
+.countdown-text.urgent { color: #F97066; }
+
+.refresh-btn {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  color: #00c7f3 !important;
+  text-transform: none !important;
+  padding: 0 6px !important;
+  min-width: 0 !important;
+  height: 22px !important;
 }
 
 /* ── Warning Banner ── */
@@ -344,19 +644,95 @@ watch(() => props.value, (val) => {
   line-height: 1.5;
 }
 
-/* ── Success / Error Banners ── */
-.success-banner {
+/* ── Status card ── */
+.status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 18px 14px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.status-icon-wrap {
   display: flex;
   align-items: center;
-  padding: 10px 12px;
-  border-radius: 8px;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  margin-bottom: 14px;
+}
+
+.status-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+  margin-bottom: 4px;
+}
+
+.status-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.step-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.4);
+}
+.step-pill.active {
+  background: rgba(0, 199, 243, 0.12);
+  border-color: rgba(0, 199, 243, 0.4);
+  color: #00c7f3;
+}
+.step-pill.done {
   background: rgba(38, 250, 176, 0.08);
-  border: 1px solid rgba(38, 250, 176, 0.22);
-  font-size: 12px;
-  font-weight: 600;
+  border-color: rgba(38, 250, 176, 0.25);
   color: #26FAB0;
 }
 
+.tx-link-row {
+  display: flex;
+  justify-content: center;
+}
+
+.tx-link {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #00c7f3;
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 199, 243, 0.08);
+  border: 1px solid rgba(0, 199, 243, 0.22);
+  transition: background 0.15s ease;
+}
+.tx-link:hover { background: rgba(0, 199, 243, 0.16); }
+
+/* ── Error banner ── */
 .error-banner {
   display: flex;
   align-items: flex-start;
@@ -369,7 +745,23 @@ watch(() => props.value, (val) => {
   line-height: 1.5;
 }
 
-/* ── Action Button ── */
+/* ── Action row & buttons ── */
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flex-grow-1 { flex-grow: 1; }
+
+.back-btn {
+  height: 44px !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+}
+
 .action-btn {
   height: 44px !important;
   border-radius: 10px !important;
