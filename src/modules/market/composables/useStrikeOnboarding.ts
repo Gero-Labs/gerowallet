@@ -396,15 +396,26 @@ function lock(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Auth-failure subscription — flip isConnected when the API rejects our keys.
-// strike-v2.client.ts already calls clearStrikeApiKeys() on 401/403; we just
-// need to mirror that into the composable's reactive state.
+// Auth-failure subscription — when Strike rejects our keys (401/403), they're
+// permanently dead from Strike's perspective: re-unlocking with the same
+// password just reloads the same dead keys and the loop repeats. Nuke the
+// encrypted blob too so the user is routed to the "Connect" flow (which goes
+// through builder-connect end-to-end) instead of a broken "Unlock" loop.
+//
+// strike-v2.client.ts already calls clearStrikeApiKeys() on 401/403; we
+// extend that here to also remove the persisted blob.
 // ---------------------------------------------------------------------------
 
 onStrikeAuthFailure(() => {
+  const walletId = walletStore.loggedWallet?.id;
   isConnected.value = false;
-  // hasStoredKeys may still be true — user can re-unlock or regenerate.
+  hasStoredKeys.value = false;
+  publicKey.value = null;
+  error.value = 'Strike rejected the stored API keys — please reconnect.';
   useStrikeTrading().reset();
+  if (walletId) {
+    void removeKeysForWallet(walletId);
+  }
 });
 
 // ---------------------------------------------------------------------------
