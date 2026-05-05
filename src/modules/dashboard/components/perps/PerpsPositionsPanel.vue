@@ -475,17 +475,22 @@ onBeforeUnmount(() => {
 // ---------------------------------------------------------------------------
 
 const marketsConfig = ref<Record<string, StrikeMarketConfig>>({});
-const tiersBySymbol = ref<Record<string, ReturnType<typeof normalizeMarginTiers>>>({});
+// Plain Map (non-reactive) so the cache write inside `tiersFor()` doesn't
+// trigger a re-run of the computed that calls it.
+const tierCache = new Map<string, ReturnType<typeof normalizeMarginTiers>>();
 
 function tiersFor(symbol: string): ReturnType<typeof normalizeMarginTiers> {
-  if (tiersBySymbol.value[symbol]) return tiersBySymbol.value[symbol];
+  const cached = tierCache.get(symbol);
+  if (cached) return cached;
   const cfg = marketsConfig.value[symbol];
   const raw: MarginTier[] | undefined = cfg?.margin_tiers;
   if (!raw || raw.length === 0) return [];
   const numeric = normalizeMarginTiers(raw);
-  tiersBySymbol.value = { ...tiersBySymbol.value, [symbol]: numeric };
+  tierCache.set(symbol, numeric);
   return numeric;
 }
+
+watch(marketsConfig, () => tierCache.clear(), { deep: true });
 
 let fetchedMarkets = false;
 watch(() => props.positions, async (positions) => {
@@ -495,7 +500,6 @@ watch(() => props.positions, async (positions) => {
   try {
     const res = await strikeMarketApi.getMarkets();
     marketsConfig.value = res.markets ?? {};
-    tiersBySymbol.value = {};
   } catch {
     fetchedMarkets = false;
   }
@@ -583,8 +587,10 @@ const positionRows = computed<PositionRow[]>(() => {
       isoBalance,
       tiers,
       walletBalance,
+      // Exclude the current position by symbol+side, not symbol alone —
+      // hedge-mode traders have both LONG and SHORT open on one symbol.
       otherCrossPositions: p.MarginMode === 'cross'
-        ? crossInputs.filter((c) => c.symbol !== p.symbol)
+        ? crossInputs.filter((c) => !(c.symbol === p.symbol && c.side === side))
         : crossInputs,
       isolatedPositions: isoInputs,
     });

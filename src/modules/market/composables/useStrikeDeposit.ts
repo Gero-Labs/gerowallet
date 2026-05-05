@@ -63,6 +63,13 @@ let countdownTimer: ReturnType<typeof setInterval> | null = null;
 const POLL_INTERVAL_MS = 7_000;
 const POLL_MAX_ATTEMPTS = 26; // 26 × 7s ≈ 3min2s
 
+/**
+ * Generation counter — bumped by `reset()` so any in-flight polling loop
+ * exits the next time it wakes up. Without this, closing the DepositSheet
+ * mid-deposit would leave `pollForCredit` firing API calls for ~3 minutes.
+ */
+let flowGeneration = 0;
+
 function clearCountdown(): void {
   if (countdownTimer) {
     clearInterval(countdownTimer);
@@ -309,7 +316,7 @@ export function useStrikeDeposit() {
       // (the dashboard PerpsAccountSection / VaultDepositSheet) listen for
       // 'confirmed'; the new side-panel sheet treats 'credited' and
       // 'confirmed' as equivalent.
-      const credited = await pollForCredit(requestId.value);
+      const credited = await pollForCredit(requestId.value, flowGeneration);
       if (credited) {
         status.value = 'confirmed';
         return true;
@@ -335,23 +342,25 @@ export function useStrikeDeposit() {
    * confirmed `completed`. A `failed` response throws so the caller's catch
    * block can surface the error to the UI.
    */
-  async function pollForCredit(reqId: string): Promise<boolean> {
+  async function pollForCredit(reqId: string, generation: number): Promise<boolean> {
     for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+      // Composable was reset (e.g. user closed the sheet) — abandon the loop.
+      if (generation !== flowGeneration) return false;
+
+      let resp: TransactionStatusResponse | null = null;
       try {
-        const resp: TransactionStatusResponse = await strikeUserApi.getTransactionStatus(
-          reqId,
-          'deposit',
-        );
-        if (resp.status === 'completed') return true;
-        if (resp.status === 'failed') {
-          throw new Error('Strike rejected the deposit transaction.');
-        }
+        resp = await strikeUserApi.getTransactionStatus(reqId, 'deposit');
       } catch (e) {
         // Transient HTTP errors shouldn't kill the loop — Strike's API
-        // occasionally returns 5xx during heavy block-tip activity. Only a
-        // hard 'failed' status above propagates.
+        // occasionally returns 5xx during heavy block-tip activity.
         debugLog('[strike-deposit] poll attempt', attempt, 'transient error:', e);
       }
+
+      if (resp?.status === 'completed') return true;
+      if (resp?.status === 'failed') {
+        throw new Error('Strike rejected the deposit transaction.');
+      }
+
       await sleep(POLL_INTERVAL_MS);
     }
     return false;
@@ -359,6 +368,9 @@ export function useStrikeDeposit() {
 
   /** Reset all state back to idle. Safe to call at any point. */
   function reset(): void {
+    // Bump the generation so any in-flight pollForCredit exits on its
+    // next wake-up instead of writing to the now-stale state.
+    flowGeneration++;
     quote.value = null;
     status.value = 'idle';
     txHash.value = null;

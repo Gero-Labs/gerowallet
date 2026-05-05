@@ -208,7 +208,7 @@ function onDialogInput(val: boolean): void {
 function validate(): string | null {
   if (!totalSize.value) return t('perps.algo.errorSizeRequired');
   const sizeNum = Number(totalSize.value);
-  if (!Number.isFinite(sizeNum) || sizeNum <= 0) return t('perps.algo.errorSidePositive');
+  if (!Number.isFinite(sizeNum) || sizeNum <= 0) return t('perps.algo.errorSizePositive');
   if (durationMinutes.value < 5) return t('perps.algo.errorDurationMin');
   if (durationMinutes.value > 1440) return t('perps.algo.errorDurationMax');
   return null;

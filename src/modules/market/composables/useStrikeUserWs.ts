@@ -428,11 +428,23 @@ function on(eventType: string, cb: EventCallback): () => void {
 
 /**
  * Connect with Strike API keys. Call after user authenticates.
+ *
+ * @param publicKeyHex   Ed25519 public key (64 hex chars).
+ * @param privateKeyHex  Ed25519 private key (64 hex chars).
+ * @param accountId      Optional persisted Strike account_id (from
+ *                       `StrikeStoredKeys.accountId`). The logon response
+ *                       normally returns this, but passing it preserves a
+ *                       working state if the response ever omits the field
+ *                       — without it, `subscribeUserStream()` exits early.
  */
-function connectWithKeys(publicKeyHex: string, privateKeyHex: string): void {
+function connectWithKeys(
+  publicKeyHex: string,
+  privateKeyHex: string,
+  accountId?: string,
+): void {
   _publicKeyHex = publicKeyHex;
   _privateKeyHex = privateKeyHex;
-  _accountId = null;
+  _accountId = accountId ?? null;
   setupVisibilityHandler();
   connect();
 }
