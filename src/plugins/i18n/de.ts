@@ -1886,6 +1886,8 @@ export default {
   'perpetuals.deposit.statusError': 'Einzahlung fehlgeschlagen',
   'perpetuals.deposit.viewExplorer': 'Im Explorer ansehen',
   'perpetuals.deposit.retry': 'Erneut versuchen',
+  'perpetuals.deposit.hwNotSupported': 'Einzahlungen mit Hardware-Wallet & PassKey werden in diesem Flow noch nicht unterstützt. Sende ADA stattdessen aus dem Standard-Senden-Dialog an {addr} — Strike schreibt es gut, sobald die Transaktion on-chain bestätigt ist.',
+  'perpetuals.deposit.copyAddress': 'Einzahlungsadresse kopieren',
 
   // Strike v2 Auszahlungs-Flow — Sheet-spezifische Labels und Status-Texte
   'perps.withdraw.step1Title': 'Betrag eingeben',
@@ -1978,7 +1980,7 @@ export default {
   'perps.algo.errorDurationMin': 'Die Dauer muss mindestens 5 Minuten betragen.',
   'perps.algo.errorDurationMax': 'Die Dauer darf 24 Stunden nicht überschreiten.',
   'perps.algo.errorSizeRequired': 'Gesamtgröße ist erforderlich.',
-  'perps.algo.errorSidePositive': 'Gesamtgröße muss positiv sein.',
+  'perps.algo.errorSizePositive': 'Gesamtgröße muss positiv sein.',
   'perps.algo.created': 'TWAP-Strategie erstellt.',
   'perps.algo.cancelRequested': 'Abbruch angefordert.',
 

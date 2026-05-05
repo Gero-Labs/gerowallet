@@ -199,19 +199,29 @@ onBeforeUnmount(() => {
 // ── Margin tiers per symbol (lazy-fetch + memoise) ─────────────────────────
 
 const localMarketsConfig = ref<Record<string, StrikeMarketConfig>>({});
-const tiersBySymbol = ref<Record<string, ReturnType<typeof normalizeMarginTiers>>>({});
+// Plain Map (non-reactive) so the cache write inside `tiersFor()` doesn't
+// trigger a re-run of the `rows` computed that calls it.
+const tierCache = new Map<string, ReturnType<typeof normalizeMarginTiers>>();
 
 function tiersFor(symbol: string): ReturnType<typeof normalizeMarginTiers> {
-  if (tiersBySymbol.value[symbol]) return tiersBySymbol.value[symbol];
+  const cached = tierCache.get(symbol);
+  if (cached) return cached;
 
   const cfg = props.marketsConfig?.[symbol] ?? localMarketsConfig.value[symbol];
   const raw: MarginTier[] | undefined = cfg?.margin_tiers;
   if (!raw || raw.length === 0) return [];
 
   const numeric = normalizeMarginTiers(raw);
-  tiersBySymbol.value = { ...tiersBySymbol.value, [symbol]: numeric };
+  tierCache.set(symbol, numeric);
   return numeric;
 }
+
+// Invalidate the cache when the upstream market config changes.
+watch(
+  () => props.marketsConfig,
+  () => tierCache.clear(),
+);
+watch(localMarketsConfig, () => tierCache.clear(), { deep: true });
 
 // If no marketsConfig is provided, fetch once when there are positions.
 let fetchedMarkets = false;
@@ -223,8 +233,6 @@ watch(() => props.positions, async (positions) => {
   try {
     const res = await strikeMarketApi.getMarkets();
     localMarketsConfig.value = res.markets ?? {};
-    // invalidate tier cache so tiersFor() re-derives from fresh config
-    tiersBySymbol.value = {};
   } catch {
     fetchedMarkets = false; // allow retry on next position change
   }
@@ -309,8 +317,12 @@ const rows = computed<Row[]>(() => {
       isoBalance,
       tiers,
       walletBalance,
+      // Exclude only the current position by symbol+side identity, not by
+      // symbol alone — hedge-mode traders have both LONG and SHORT open on
+      // the same symbol and we want each row's liq calc to include the
+      // opposite-side position as part of the cross context.
       otherCrossPositions: p.MarginMode === 'cross'
-        ? crossInputs.filter((c) => c.symbol !== p.symbol)
+        ? crossInputs.filter((c) => !(c.symbol === p.symbol && c.side === side))
         : crossInputs,
       isolatedPositions: isoInputs,
     });

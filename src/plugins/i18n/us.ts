@@ -1649,6 +1649,8 @@ export default {
   'perpetuals.deposit.statusError': 'Deposit failed',
   'perpetuals.deposit.viewExplorer': 'View on Explorer',
   'perpetuals.deposit.retry': 'Try Again',
+  'perpetuals.deposit.hwNotSupported': 'Hardware-wallet & PassKey deposits aren\'t wired into this flow yet. Send ADA to {addr} from the standard Send dialog instead — Strike will credit it once the tx confirms on-chain.',
+  'perpetuals.deposit.copyAddress': 'Copy Deposit Address',
 
   // Strike v2 withdraw flow — sheet-specific labels and status copy
   'perps.withdraw.step1Title': 'Enter amount',
@@ -1741,7 +1743,7 @@ export default {
   'perps.algo.errorDurationMin': 'Duration must be at least 5 minutes.',
   'perps.algo.errorDurationMax': 'Duration cannot exceed 24 hours.',
   'perps.algo.errorSizeRequired': 'Total size is required.',
-  'perps.algo.errorSidePositive': 'Total size must be positive.',
+  'perps.algo.errorSizePositive': 'Total size must be positive.',
   'perps.algo.created': 'TWAP strategy created.',
   'perps.algo.cancelRequested': 'Cancel requested.',
 

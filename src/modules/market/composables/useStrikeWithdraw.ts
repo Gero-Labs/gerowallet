@@ -40,6 +40,14 @@ const status = ref<WithdrawStatus>('idle');
 const error = ref<string | null>(null);
 const requestId = ref<string | null>(null);
 
+/**
+ * Generation counter — bumped by `reset()` so any in-flight polling loop
+ * exits the next time it wakes up. Without this, closing the WithdrawSheet
+ * mid-withdrawal would leave `pollSettlement` firing API calls for up to
+ * 5 minutes.
+ */
+let flowGeneration = 0;
+
 // ── Polling config ──────────────────────────────────────────────────────────
 // Strike treats withdrawals as off-chain quote → on-chain settlement.
 // We poll status every 3 s for the first 30 s (rapid pickup), then back off
@@ -120,27 +128,31 @@ async function signCip8(message: string, password: string): Promise<string> {
   return res.data.signature;
 }
 
-async function pollSettlement(reqId: string): Promise<void> {
+async function pollSettlement(reqId: string, generation: number): Promise<void> {
   const start = Date.now();
-  let lastStatus: TransactionStatusResponse['status'] | null = null;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    // Composable was reset (e.g. user closed the sheet) — abandon the loop.
+    if (generation !== flowGeneration) return;
+
     const elapsed = Date.now() - start;
     if (elapsed > POLL_TIMEOUT_MS) {
       throw new Error('Withdrawal timed out — please check the transaction history.');
     }
 
+    let res: TransactionStatusResponse | null = null;
     try {
-      const res = await strikeUserApi.getTransactionStatus(reqId, 'withdraw');
-      lastStatus = res.status;
-      if (res.status === 'completed') return;
-      if (res.status === 'failed') {
-        throw new Error('Withdrawal failed on the validator side.');
-      }
-    } catch (e) {
-      // Transient errors are tolerated; a final failure will throw above.
-      if (lastStatus === 'failed') throw e;
+      res = await strikeUserApi.getTransactionStatus(reqId, 'withdraw');
+    } catch {
+      // Transient HTTP / network error — fall through to retry. We never
+      // catch a real validator-side failure here because that surfaces as
+      // res.status === 'failed' below, which throws unconditionally.
+    }
+
+    if (res?.status === 'completed') return;
+    if (res?.status === 'failed') {
+      throw new Error('Withdrawal failed on the validator side.');
     }
 
     const wait = elapsed < POLL_FAST_PHASE_MS ? POLL_FAST_MS : POLL_SLOW_MS;
@@ -237,7 +249,7 @@ export function useStrikeWithdraw() {
       requestId.value = submitRes.request_id ?? quote.value.withdraw_id;
 
       status.value = 'pending';
-      await pollSettlement(requestId.value);
+      await pollSettlement(requestId.value, flowGeneration);
 
       status.value = 'settled';
       return true;
@@ -249,6 +261,9 @@ export function useStrikeWithdraw() {
   }
 
   function reset(): void {
+    // Bump the generation so any in-flight pollSettlement exits on its
+    // next wake-up instead of writing to the now-stale state.
+    flowGeneration++;
     quote.value = null;
     status.value = 'idle';
     error.value = null;

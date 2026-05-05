@@ -125,6 +125,7 @@
         </div>
 
         <v-text-field
+          v-if="needsPassword"
           v-model="password"
           :label="$t('perpetuals.spendingPassword')"
           outlined
@@ -137,6 +138,11 @@
           :disabled="quoteCountdown <= 0"
           @click:append="showPassword = !showPassword"
         />
+
+        <div v-else class="info-banner mt-3">
+          <v-icon size="14" color="#FFB454" class="mr-2" style="flex-shrink:0">mdi-information-outline</v-icon>
+          <span>{{ $t('perpetuals.deposit.hwNotSupported', { addr: truncatedAddress }) }}</span>
+        </div>
 
         <transition name="fade-slide">
           <div v-if="depositError" class="error-banner mt-3">
@@ -151,6 +157,7 @@
             {{ $t('common.back') }}
           </v-btn>
           <v-btn
+            v-if="needsPassword"
             depressed
             :loading="isSigning"
             :disabled="!canConfirm"
@@ -159,6 +166,15 @@
           >
             <v-icon size="14" class="mr-2">mdi-shield-check</v-icon>
             {{ $t('perpetuals.deposit.confirmSign') }}
+          </v-btn>
+          <v-btn
+            v-else
+            depressed
+            class="action-btn flex-grow-1"
+            @click="copyAddress()"
+          >
+            <v-icon size="14" class="mr-2">mdi-content-copy</v-icon>
+            {{ $t('perpetuals.deposit.copyAddress') }}
           </v-btn>
         </div>
       </template>
@@ -348,12 +364,21 @@ const explorerUrl = computed(() => {
 });
 
 const canQuote = computed(() => amountNum.value > 0 && amountNum.value <= availableAda.value);
-const canConfirm = computed(
-  () =>
-    !!password.value &&
-    quoteCountdown.value > 0 &&
-    !isSigning.value,
-);
+
+// Hardware-wallet (Ledger/Trezor/Keystone) and PRF/PassKey wallets sign via
+// an interactive flow that the deposit composable doesn't yet drive (the
+// Send dialog handles those paths). Until that's wired, surface a clear
+// "not supported" message instead of a permanently-disabled confirm button.
+const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
+const isHwWallet = computed(() => {
+  const t = walletStore.loggedWallet?.type;
+  return t === 'Ledger' || t === 'Trezor' || t === 'Keystone';
+});
+const needsPassword = computed(() => !isPrfWallet.value && !isHwWallet.value);
+const canConfirm = computed(() => {
+  if (!needsPassword.value) return false; // HW / PRF — show the explainer instead
+  return !!password.value && quoteCountdown.value > 0 && !isSigning.value;
+});
 
 const isSigning = computed(() =>
   ['building', 'signing', 'submitting', 'confirming'].includes(depositStatus.value),
@@ -775,6 +800,19 @@ watch(() => props.value, (val) => {
   border: 1px solid rgba(249, 112, 102, 0.22);
   font-size: 11px;
   color: #F97066;
+  line-height: 1.5;
+}
+
+/* ── Info banner (HW/PRF "not supported") ── */
+.info-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 180, 84, 0.08);
+  border: 1px solid rgba(255, 180, 84, 0.22);
+  font-size: 11px;
+  color: #FFB454;
   line-height: 1.5;
 }
 
