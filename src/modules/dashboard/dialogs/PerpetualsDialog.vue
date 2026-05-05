@@ -205,6 +205,8 @@
           :market-config="currentMarketConfig"
           :live-price="strikeRealtimeData?.lastPrice ?? 0"
           :wallet-ada-balance="walletAdaBalance"
+          :ob-asks="obAsks"
+          :ob-bids="obBids"
           @order-placed="refreshPositionsAndOrders"
           @leverage-changed="loadAccount()"
           @margin-mode-changed="loadAccount()"

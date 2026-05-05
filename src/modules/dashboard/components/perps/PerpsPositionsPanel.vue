@@ -41,42 +41,115 @@
           v-else
           dense
           :headers="positionHeaders"
-          :items="positions"
+          :items="positionRows"
+          item-key="pos.PositionID"
+          :expanded.sync="expandedRows"
+          show-expand
+          single-expand
           class="transparent perps-table"
           hide-default-footer
           :items-per-page="-1"
         >
+          <template v-slot:[`item.symbol`]="{ item }">
+            <span class="font-mono">{{ item.pos.symbol }}</span>
+          </template>
           <template v-slot:[`item.Side`]="{ item }">
-            <span :class="item.Side === 'long' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
-              {{ item.Side }}
+            <span :class="item.pos.Side === 'long' ? 'clr-green' : 'clr-red'" class="fw-600 text-uppercase font-mono">
+              {{ item.pos.Side }}
             </span>
           </template>
-          <template v-slot:[`item.EntryPrice`]="{ item }">
-            <span class="font-mono">{{ formatPrice(item.EntryPrice) }}</span>
+          <template v-slot:[`item.entryMark`]="{ item }">
+            <div class="cell-stack">
+              <span class="font-mono">{{ formatPrice(item.pos.EntryPrice) }}</span>
+              <span class="font-mono cell-sub">{{ formatPrice(item.markPrice) }}</span>
+            </div>
           </template>
-          <template v-slot:[`item.mark_price`]="{ item }">
-            <span class="font-mono">{{ formatPrice(item.mark_price) }}</span>
+          <template v-slot:[`item.Size`]="{ item }">
+            <span class="font-mono">{{ formatSize(item.pos.Size) }}</span>
           </template>
           <template v-slot:[`item.liquidation_price`]="{ item }">
-            <span class="font-mono clr-yellow">{{ formatPrice(item.liquidation_price) }}</span>
+            <v-tooltip top max-width="240" :open-delay="120">
+              <template #activator="{ on, attrs }">
+                <span
+                  class="font-mono cell-hint"
+                  :class="liqClass(item)"
+                  v-bind="attrs"
+                  v-on="on"
+                >
+                  {{ formatPrice(item.liqPrice) }}
+                  <span class="liq-distance" v-if="item.distanceToLiq != null">
+                    ({{ formatSignedPct(item.distanceToLiq) }})
+                  </span>
+                </span>
+              </template>
+              <span>{{ item.pos.MarginMode === 'cross' ? $t('perps.position.crossTooltip') : $t('perps.position.isolatedTooltip') }}</span>
+            </v-tooltip>
+          </template>
+          <template v-slot:[`item.margin`]="{ item }">
+            <span class="font-mono">{{ formatPrice(item.summary.currentMargin) }}</span>
           </template>
           <template v-slot:[`item.upnl`]="{ item }">
-            <span :class="parseFloat(item.upnl) >= 0 ? 'clr-green' : 'clr-red'" class="font-mono fw-600">
-              {{ parseFloat(item.upnl) >= 0 ? '+' : '' }}{{ parseFloat(item.upnl).toFixed(2) }}
-              <span class="roe-pct">
-                ({{ calcROE(item) }})
+            <span :class="pnlClass(item.summary.unrealizedPnl)" class="font-mono fw-600">
+              {{ formatSignedUsd(item.summary.unrealizedPnl) }}
+              <span class="roe-pct" v-if="item.summary.currentMargin > 0">
+                ({{ formatSignedPct(item.summary.pnlPercentage) }})
               </span>
             </span>
           </template>
           <template v-slot:[`item.actions`]="{ item }">
             <v-btn
               x-small text color="#F6465D"
-              :loading="closingPosition === item.PositionID"
-              @click="closePosition(item)"
+              :loading="closingPosition === item.pos.PositionID"
+              @click="closePosition(item.pos)"
               class="action-btn"
             >
               {{ $t('perpetuals.close') }}
             </v-btn>
+          </template>
+          <template v-slot:expanded-item="{ headers, item }">
+            <td :colspan="headers.length" class="expanded-cell">
+              <div class="expanded-summary">
+                <div class="expanded-title">{{ $t('perps.position.summary') }}</div>
+                <div class="expanded-grid">
+                  <div class="expanded-stat">
+                    <span class="expanded-label">{{ $t('perps.position.notional') }}</span>
+                    <span class="expanded-value">${{ formatPrice(item.summary.notional) }}</span>
+                  </div>
+                  <div class="expanded-stat">
+                    <span class="expanded-label">{{ $t('perps.position.margin') }}</span>
+                    <span class="expanded-value">${{ formatPrice(item.summary.currentMargin) }}</span>
+                  </div>
+                  <div class="expanded-stat">
+                    <span class="expanded-label">{{ $t('perps.position.maintenanceMargin') }}</span>
+                    <span class="expanded-value">${{ formatPrice(item.summary.maintenanceMargin) }}</span>
+                  </div>
+                  <div class="expanded-stat">
+                    <span class="expanded-label">{{ $t('perps.position.upnl') }}</span>
+                    <span class="expanded-value" :class="pnlClass(item.summary.unrealizedPnl)">
+                      {{ formatSignedUsd(item.summary.unrealizedPnl) }}
+                    </span>
+                  </div>
+                  <div class="expanded-stat">
+                    <span class="expanded-label">{{ $t('perps.position.upnlPct') }}</span>
+                    <span class="expanded-value" :class="pnlClass(item.summary.unrealizedPnl)">
+                      {{ formatSignedPct(item.summary.pnlPercentage) }}
+                    </span>
+                  </div>
+                  <div class="expanded-stat">
+                    <span class="expanded-label">{{ $t('perps.position.liqPrice') }}</span>
+                    <span class="expanded-value" :class="liqClass(item)">
+                      ${{ formatPrice(item.liqPrice) }}
+                    </span>
+                  </div>
+                  <div class="expanded-stat" v-if="item.distanceToLiq != null">
+                    <span class="expanded-label">{{ $t('perps.position.distanceToLiq') }}</span>
+                    <span class="expanded-value" :class="liqClass(item)">
+                      {{ formatSignedPct(item.distanceToLiq) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </td>
           </template>
         </v-data-table>
       </v-tab-item>
@@ -200,23 +273,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { usePerpsFormatters } from '@/modules/market/composables/perps';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { strikeTradeApi } from '@/api/strike-v2.trade';
+import { strikeMarketApi } from '@/api/strike-v2.market';
 import type {
   AccountResponse,
   FillHistoryResult,
   FundingHistoryResult,
+  MarginTier,
   Order,
   OrderHistoryResult,
   Position,
+  StrikeMarketConfig,
 } from '@/api/strike-v2.types';
+import {
+  calcPositionSummary,
+  normalizeMarginTiers,
+  type CrossPositionInput,
+  type IsolatedPositionInput,
+  type PositionSide as MathPositionSide,
+  type PositionSummary,
+} from '@/modules/market/math';
+import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketWs';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t: $t } = useTranslation();
-const { formatPrice, formatTime } = usePerpsFormatters();
+const { formatTime } = usePerpsFormatters();
 
 // ---------------------------------------------------------------------------
 // Props / Emits
@@ -344,18 +429,218 @@ async function cancelAllOrdersAction() {
 }
 
 // ---------------------------------------------------------------------------
-// ROE% = (uPnL / currentMargin) * 100 — per Integrator Guide Section 8.2
+// Live mark prices (per-symbol, via market WS)
 // ---------------------------------------------------------------------------
 
-function calcROE(pos: Position): string {
-  const upnl = parseFloat(pos.upnl);
-  // Isolated: currentMargin = IsolatedMargin; Cross: notional / leverage
-  const margin = pos.MarginMode === 'isolated'
-    ? parseFloat(pos.IsolatedMargin)
-    : (parseFloat(pos.Size) * (props.livePrice ?? 0)) / pos.Leverage;
-  if (!margin || margin === 0) return '0.00%';
-  const roe = (upnl / margin) * 100;
-  return `${roe >= 0 ? '+' : ''}${roe.toFixed(2)}%`;
+const marketWs = useStrikeMarketWs();
+const markPrices = ref<Record<string, string>>({});
+const subs = new Map<string, () => void>();
+
+function ensureMarkPriceSub(symbol: string) {
+  if (subs.has(symbol)) return;
+  const unsub = marketWs.subscribeMarkPrice(symbol, (data: unknown) => {
+    const d = data as { p?: string };
+    if (d?.p) markPrices.value = { ...markPrices.value, [symbol]: d.p };
+  });
+  subs.set(symbol, unsub);
+}
+
+function pruneSubs(activeSymbols: Set<string>) {
+  for (const [symbol, unsub] of subs.entries()) {
+    if (!activeSymbols.has(symbol)) {
+      unsub();
+      subs.delete(symbol);
+    }
+  }
+}
+
+watch(() => props.positions, (positions) => {
+  const active = new Set<string>();
+  for (const p of positions ?? []) {
+    if (p?.symbol) {
+      active.add(p.symbol);
+      ensureMarkPriceSub(p.symbol);
+    }
+  }
+  pruneSubs(active);
+}, { immediate: true, deep: true });
+
+onBeforeUnmount(() => {
+  for (const unsub of subs.values()) unsub();
+  subs.clear();
+});
+
+// ---------------------------------------------------------------------------
+// Margin tiers per symbol — fetch markets once, memoise normalised tiers
+// ---------------------------------------------------------------------------
+
+const marketsConfig = ref<Record<string, StrikeMarketConfig>>({});
+const tiersBySymbol = ref<Record<string, ReturnType<typeof normalizeMarginTiers>>>({});
+
+function tiersFor(symbol: string): ReturnType<typeof normalizeMarginTiers> {
+  if (tiersBySymbol.value[symbol]) return tiersBySymbol.value[symbol];
+  const cfg = marketsConfig.value[symbol];
+  const raw: MarginTier[] | undefined = cfg?.margin_tiers;
+  if (!raw || raw.length === 0) return [];
+  const numeric = normalizeMarginTiers(raw);
+  tiersBySymbol.value = { ...tiersBySymbol.value, [symbol]: numeric };
+  return numeric;
+}
+
+let fetchedMarkets = false;
+watch(() => props.positions, async (positions) => {
+  if (fetchedMarkets) return;
+  if (!positions || positions.length === 0) return;
+  fetchedMarkets = true;
+  try {
+    const res = await strikeMarketApi.getMarkets();
+    marketsConfig.value = res.markets ?? {};
+    tiersBySymbol.value = {};
+  } catch {
+    fetchedMarkets = false;
+  }
+}, { immediate: true });
+
+// ---------------------------------------------------------------------------
+// Computed rows with derived math (uPnL, margin, liq, etc.)
+// ---------------------------------------------------------------------------
+
+interface PositionRow {
+  pos: Position;
+  markPrice: number;
+  summary: PositionSummary;
+  liqPrice: number;
+  distanceToLiq: number | null;
+}
+
+function toMathSide(s: Position['Side']): MathPositionSide {
+  return s === 'long' ? 'LONG' : 'SHORT';
+}
+
+function liveMarkFor(pos: Position): number {
+  const ws = markPrices.value[pos.symbol];
+  const wsNum = ws ? parseFloat(ws) : NaN;
+  if (isFinite(wsNum) && wsNum > 0) return wsNum;
+  // Fallback for the active symbol: parent-supplied livePrice
+  if (pos.symbol === props.symbol && props.livePrice > 0) return props.livePrice;
+  const entry = parseFloat(pos.EntryPrice ?? '0');
+  return isFinite(entry) ? entry : 0;
+}
+
+const positions = computed<Position[]>(() => props.positions ?? []);
+
+const positionRows = computed<PositionRow[]>(() => {
+  const list = positions.value;
+  if (list.length === 0) return [];
+
+  const walletBalance = parseFloat(props.account?.wallet_balance ?? '0') || 0;
+
+  // Build cross/isolated context once.
+  const crossInputs: CrossPositionInput[] = [];
+  const isoInputs: IsolatedPositionInput[] = [];
+
+  for (const p of list) {
+    const tiers = tiersFor(p.symbol);
+    if (tiers.length === 0) continue;
+    const size = Math.abs(parseFloat(p.Size ?? '0'));
+    const entry = parseFloat(p.EntryPrice ?? '0');
+    const mark = liveMarkFor(p);
+    const notional = mark * size;
+    let tier = tiers[tiers.length - 1];
+    for (const t of tiers) {
+      if (notional <= t.max_notional) { tier = t; break; }
+    }
+    if (p.MarginMode === 'cross') {
+      crossInputs.push({
+        symbol: p.symbol,
+        side: toMathSide(p.Side),
+        size,
+        entryPrice: entry,
+        markPrice: mark,
+        notional,
+        tier,
+      });
+    } else {
+      isoInputs.push({ isoBalance: parseFloat(p.IsolatedMargin ?? '0') || 0 });
+    }
+  }
+
+  return list.map((p) => {
+    const tiers = tiersFor(p.symbol);
+    const mark = liveMarkFor(p);
+    const entry = parseFloat(p.EntryPrice ?? '0') || 0;
+    const size = Math.abs(parseFloat(p.Size ?? '0')) || 0;
+    const isoBalance = parseFloat(p.IsolatedMargin ?? '0') || 0;
+    const side = toMathSide(p.Side);
+
+    const summary = calcPositionSummary({
+      side,
+      marginType: p.MarginMode === 'cross' ? 'cross' : 'isolated',
+      entryPrice: entry,
+      markPrice: mark,
+      size,
+      leverage: p.Leverage,
+      isoBalance,
+      tiers,
+      walletBalance,
+      otherCrossPositions: p.MarginMode === 'cross'
+        ? crossInputs.filter((c) => c.symbol !== p.symbol)
+        : crossInputs,
+      isolatedPositions: isoInputs,
+    });
+
+    const apiLiq = parseFloat(p.liquidation_price ?? '');
+    const liqPrice = isFinite(apiLiq) && apiLiq > 0 ? apiLiq : summary.liquidationPrice;
+
+    let distanceToLiq: number | null = null;
+    if (mark > 0 && liqPrice > 0) {
+      distanceToLiq = ((liqPrice - mark) / mark) * 100;
+    }
+
+    return { pos: p, markPrice: mark, summary, liqPrice, distanceToLiq };
+  });
+});
+
+const expandedRows = ref<PositionRow[]>([]);
+
+// ---------------------------------------------------------------------------
+// Formatters (tight, scoped — independent of usePerpsFormatters)
+// ---------------------------------------------------------------------------
+
+function formatPrice(val: string | number | null | undefined): string {
+  if (val === null || val === undefined || val === '') return '—';
+  const n = typeof val === 'number' ? val : parseFloat(val);
+  if (!isFinite(n)) return '—';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatSize(val: string | number | null | undefined): string {
+  if (val === null || val === undefined || val === '') return '—';
+  const n = typeof val === 'number' ? val : parseFloat(val);
+  if (!isFinite(n)) return '—';
+  return Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 6 });
+}
+
+function formatSignedUsd(n: number): string {
+  if (!isFinite(n)) return '—';
+  const prefix = n >= 0 ? '+$' : '-$';
+  return prefix + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatSignedPct(n: number): string {
+  if (!isFinite(n)) return '—';
+  const prefix = n >= 0 ? '+' : '';
+  return `${prefix}${n.toFixed(2)}%`;
+}
+
+function pnlClass(n: number): string {
+  if (!isFinite(n) || n === 0) return '';
+  return n > 0 ? 'clr-green' : 'clr-red';
+}
+
+function liqClass(row: PositionRow): string {
+  if (row.distanceToLiq == null) return 'clr-yellow';
+  return Math.abs(row.distanceToLiq) < 10 ? 'clr-orange' : 'clr-yellow';
 }
 
 // ---------------------------------------------------------------------------
@@ -363,17 +648,15 @@ function calcROE(pos: Position): string {
 // ---------------------------------------------------------------------------
 
 const positionHeaders = [
-  { text: 'Symbol', value: 'symbol', sortable: true },
-  { text: 'Side', value: 'Side', sortable: true },
-  { text: 'Size', value: 'Size', sortable: true },
-  { text: 'Entry Price', value: 'EntryPrice', sortable: true },
-  { text: 'Mark Price', value: 'mark_price', sortable: false },
-  { text: 'Liq. Price', value: 'liquidation_price', sortable: false },
-  { text: 'Margin', value: 'IsolatedMargin', sortable: true },
-  { text: 'PNL (ROE%)', value: 'upnl', sortable: true },
-  { text: 'Funding', value: 'maintenance_margin', sortable: false },
-  { text: 'TP/SL', value: 'tpsl', sortable: false },
+  { text: $t('perpetuals.positions'), value: 'symbol', sortable: true },
+  { text: $t('perpetuals.side'), value: 'Side', sortable: true },
+  { text: $t('perps.position.size'), value: 'Size', sortable: false },
+  { text: `${$t('perps.position.entry')} / ${$t('perps.position.mark')}`, value: 'entryMark', sortable: false },
+  { text: $t('perps.position.liqPrice'), value: 'liquidation_price', sortable: false },
+  { text: $t('perps.position.margin'), value: 'margin', sortable: false },
+  { text: `${$t('perps.position.upnl')} (%)`, value: 'upnl', sortable: false },
   { text: '', value: 'actions', sortable: false, width: 70 },
+  { text: '', value: 'data-table-expand', width: 28 },
 ];
 
 const openOrderHeaders = [
@@ -479,6 +762,30 @@ const fundingHistoryHeaders = [
   color: #eaecef;
 }
 
+/* Stacked entry/mark cell */
+.cell-stack {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.cell-sub {
+  color: #848e9c;
+  font-size: 10px !important;
+}
+
+.cell-hint {
+  text-decoration: underline dotted rgba(255, 255, 255, 0.18);
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+.liq-distance {
+  color: #848e9c;
+  font-size: 10px;
+  margin-left: 2px;
+}
+
 /* Loading / empty states */
 .tab-loading {
   display: flex;
@@ -512,6 +819,7 @@ const fundingHistoryHeaders = [
 .clr-green { color: #26FAB0 !important; }
 .clr-red { color: #F6465D !important; }
 .clr-yellow { color: #F0B90B !important; }
+.clr-orange { color: #FFA726 !important; }
 
 .fw-600 { font-weight: 600; }
 
@@ -527,5 +835,64 @@ const fundingHistoryHeaders = [
   font-weight: 600;
   color: #eaecef;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Expanded row ── */
+.expanded-cell {
+  padding: 8px 12px !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  height: auto !important;
+}
+
+.expanded-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.expanded-title {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5e6673;
+}
+
+.expanded-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 4px 12px;
+}
+
+.expanded-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.expanded-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #5e6673;
+}
+
+.expanded-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: #eaecef;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Responsive — narrow widths ── */
+@media (max-width: 720px) {
+  /* Hide nice-to-have columns on narrow widths: keep symbol, side, size, uPnL, liq */
+  .perps-table >>> th:nth-child(4),
+  .perps-table >>> td:nth-child(4),
+  .perps-table >>> th:nth-child(6),
+  .perps-table >>> td:nth-child(6) {
+    display: none;
+  }
 }
 </style>
