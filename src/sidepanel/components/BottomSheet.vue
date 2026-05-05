@@ -1,9 +1,9 @@
 <template>
-  <div v-if="visible" class="bottom-sheet-overlay" :class="{ 'is-compact': compact }" :style="overlayStyle" @click.self="onBackdropClick">
+  <div v-if="visible" class="bottom-sheet-overlay" :style="overlayStyle" @click.self="onBackdropClick">
     <div
       ref="sheetRef"
       class="bottom-sheet-container"
-      :class="{ 'no-transition': dragging, 'is-compact': compact }"
+      :class="{ 'no-transition': dragging }"
       :style="sheetStyle"
       @touchstart.passive="onDragStart"
       @mousedown="onDragStart"
@@ -31,23 +31,11 @@ const props = withDefaults(defineProps<{
   value: boolean;
   title?: string;
   height?: string;
-  maxHeight?: string;
-  maxWidth?: string;
-  /**
-   * Compact mode — sheet is content-sized (height: auto), capped by maxHeight,
-   * constrained by maxWidth on wide viewports, and rendered as a centered
-   * modal instead of bottom-anchored. Use for short multi-step actions
-   * (deposit, withdraw) so the sheet doesn't dwarf its content.
-   */
-  compact?: boolean;
   persistent?: boolean;
   showHandle?: boolean;
   draggable?: boolean;
 }>(), {
   height: '85%',
-  maxHeight: '100vh',
-  maxWidth: '100%',
-  compact: false,
   persistent: false,
   showHandle: true,
   draggable: true,
@@ -95,8 +83,6 @@ const overlayStyle = computed(() => {
 
 const sheetStyle = computed(() => ({
   height: props.height,
-  maxHeight: props.maxHeight,
-  maxWidth: props.maxWidth,
   transform: `translateY(${translateY.value}px)`,
 }));
 
@@ -256,7 +242,6 @@ onBeforeUnmount(() => {
 
 .bottom-sheet-container {
   width: 100%;
-  margin: 0 auto;
   background:
     linear-gradient(180deg, rgba(19, 22, 27, 0.65) 0%, rgba(10, 12, 16, 0.75) 100%),
     radial-gradient(ellipse at 30% 0%, rgba(45, 240, 247, 0.06) 0%, transparent 60%),
@@ -276,26 +261,6 @@ onBeforeUnmount(() => {
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     inset -1px 0 0 rgba(45, 240, 247, 0.06);
   touch-action: none;
-}
-
-/* Compact mode — sheet is sized to its content and rendered as a centered
-   modal on wide viewports instead of a viewport-spanning bottom-anchored
-   takeover. Opt in via the `compact` prop (used by short multi-step actions
-   like deposit / withdraw). The same slide-up animation still works because
-   translation is relative to the sheet's own resting position. */
-@media (min-width: 600px) {
-  .bottom-sheet-overlay.is-compact {
-    align-items: center;
-    padding: 24px;
-  }
-
-  .bottom-sheet-container.is-compact {
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow:
-      0 24px 60px rgba(0, 0, 0, 0.6),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  }
 }
 
 .bottom-sheet-container.no-transition {

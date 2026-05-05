@@ -1,14 +1,21 @@
 <template>
-  <BottomSheet
+  <v-dialog
     :value="value"
-    :title="$t('perpetuals.withdraw')"
-    height="auto"
-    max-height="90vh"
-    max-width="480px"
-    compact
+    max-width="480"
+    scrollable
     @input="$emit('input', $event)"
   >
-    <div class="withdraw-content">
+    <v-card class="perps-action-dialog">
+      <v-card-title class="dialog-title">
+        <span class="text-subtitle-1 font-weight-bold">{{ $t('perpetuals.withdraw') }}</span>
+        <v-spacer />
+        <v-btn icon small @click="closeSheet()">
+          <v-icon small>mdi-close</v-icon>
+        </v-btn>
+      </v-card-title>
+      <v-divider />
+      <v-card-text class="dialog-body">
+        <div class="withdraw-content">
 
       <!-- ── Step indicator ─────────────────────────────────────── -->
       <div class="step-rail">
@@ -246,13 +253,14 @@
         </div>
       </div>
 
-    </div>
-  </BottomSheet>
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
-import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
 import { walletStore } from '@/stores/walletStore';
@@ -488,6 +496,23 @@ watch(() => props.value, (val) => {
 </script>
 
 <style scoped>
+.perps-action-dialog {
+  background: linear-gradient(180deg, #13161B 0%, #0A0C10 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dialog-title {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  color: #fff;
+}
+
+.dialog-body {
+  padding: 16px !important;
+  color: #fff;
+}
+
 .withdraw-content {
   display: flex;
   flex-direction: column;

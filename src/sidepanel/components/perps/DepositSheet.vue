@@ -1,14 +1,21 @@
 <template>
-  <BottomSheet
+  <v-dialog
     :value="value"
-    :title="$t('perpetuals.deposit')"
-    height="auto"
-    max-height="90vh"
-    max-width="480px"
-    compact
+    max-width="480"
+    scrollable
     @input="$emit('input', $event)"
   >
-    <div class="deposit-content">
+    <v-card class="perps-action-dialog">
+      <v-card-title class="dialog-title">
+        <span class="text-subtitle-1 font-weight-bold">{{ $t('perpetuals.deposit') }}</span>
+        <v-spacer />
+        <v-btn icon small @click="closeAndReset()">
+          <v-icon small>mdi-close</v-icon>
+        </v-btn>
+      </v-card-title>
+      <v-divider />
+      <v-card-text class="dialog-body">
+        <div class="deposit-content">
 
       <!-- ── Phase 1: Amount input ─────────────────────────────────────── -->
       <template v-if="phase === 'amount'">
@@ -233,13 +240,14 @@
         </div>
       </template>
 
-    </div>
-  </BottomSheet>
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
 import { walletStore } from '@/stores/walletStore';
 import type { Cardano } from '@cardano-sdk/core';
@@ -468,6 +476,23 @@ watch(() => props.value, (val) => {
 </script>
 
 <style scoped>
+.perps-action-dialog {
+  background: linear-gradient(180deg, #13161B 0%, #0A0C10 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dialog-title {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  color: #fff;
+}
+
+.dialog-body {
+  padding: 16px !important;
+  color: #fff;
+}
+
 .deposit-content {
   display: flex;
   flex-direction: column;
