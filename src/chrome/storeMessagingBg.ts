@@ -31,11 +31,13 @@ type StoreSubscribeMessage = {
 
 type Message = StoreUpdateMessage | StoreUpdateChunkMessage | StoreSubscribeMessage;
 
-// Chrome runtime port has a 64 MiB per-message cap. Split anything larger
-// (e.g. wallets with thousands of transactions) into chunks the receiver
-// reassembles. 16 MiB leaves headroom for the JSON envelope + UTF-8 expansion.
-const CHUNK_SIZE_BYTES = 16 * 1024 * 1024;
-const SIZE_THRESHOLD_BYTES = 32 * 1024 * 1024;
+// Chrome runtime port has a 64 MiB per-message *byte* cap. We size against
+// `string.length` (UTF-16 code units), so chunks may expand up to ~3 bytes per
+// code unit when serialized to UTF-8 (CJK / non-ASCII metadata). Chunk at
+// 8 MiB code units (≤ 24 MiB bytes worst case) and split anything above
+// 16 MiB code units (≤ 48 MiB bytes worst case) — both safely under 64 MiB.
+const CHUNK_SIZE_CODE_UNITS = 8 * 1024 * 1024;
+const SIZE_THRESHOLD_CODE_UNITS = 16 * 1024 * 1024;
 
 class BackgroundStoreMessaging {
   private connectedPorts = new Set<chrome.runtime.Port>();
@@ -156,12 +158,12 @@ class BackgroundStoreMessaging {
       return [];
     }
 
-    if (serialized.length <= SIZE_THRESHOLD_BYTES) {
+    if (serialized.length <= SIZE_THRESHOLD_CODE_UNITS) {
       return [{ type: 'STORE_UPDATE', storeName, updates, timestamp }];
     }
 
     const updateId = `${timestamp}-${++this.updateSeq}`;
-    const totalChunks = Math.ceil(serialized.length / CHUNK_SIZE_BYTES);
+    const totalChunks = Math.ceil(serialized.length / CHUNK_SIZE_CODE_UNITS);
     const chunks: StoreUpdateChunkMessage[] = [];
     for (let i = 0; i < totalChunks; i++) {
       chunks.push({
@@ -170,11 +172,11 @@ class BackgroundStoreMessaging {
         updateId,
         chunkIndex: i,
         totalChunks,
-        data: serialized.slice(i * CHUNK_SIZE_BYTES, (i + 1) * CHUNK_SIZE_BYTES),
+        data: serialized.slice(i * CHUNK_SIZE_CODE_UNITS, (i + 1) * CHUNK_SIZE_CODE_UNITS),
         timestamp,
       });
     }
-    debugLog(`📦 Chunking store update ${storeName} (${serialized.length}B → ${totalChunks} chunks)`);
+    debugLog(`📦 Chunking store update ${storeName} (${serialized.length} code units → ${totalChunks} chunks)`);
     return chunks;
   }
 

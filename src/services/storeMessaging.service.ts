@@ -105,6 +105,8 @@ class StoreMessagingService {
         this.port.onDisconnect.addListener(() => {
           debugLog('📡 Store messaging disconnected');
           this.port = null;
+          // Drop any partial chunks — sender will resend fresh on reconnect.
+          this.chunkBuffers.clear();
 
           // Attempt to reconnect with exponential backoff
           this.scheduleReconnect();
@@ -310,6 +312,7 @@ class StoreMessagingService {
     // Clear all subscribers
     this.subscribers.clear();
     this.subscribedStores.clear();
+    this.chunkBuffers.clear();
 
     // Reset connection state
     this.reconnectAttempts = 0;
