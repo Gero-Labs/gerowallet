@@ -13,10 +13,22 @@ import wasm from 'vite-plugin-wasm';
 // turning functions into plain {} objects at runtime.
 // Must be at top-level Vite plugins with enforce:'pre' so it intercepts
 // BEFORE Vite's built-in resolver maps them to node_modules files.
+// Stub for @effect/platform's swagger-ui module — pulled in transitively by
+// @midnight-ntwrk/wallet-sdk-unshielded-wallet → effect → @effect/platform.
+// The module ships a 100KB+ minified swagger-ui-bundle string that breaks
+// Vite's commonjs resolver during the extension background build. We never
+// render an OpenAPI swagger UI from inside the wallet, so an empty module
+// is functionally equivalent.
+const HTTP_API_SWAGGER_STUB = `
+export const javascript = '';
+export const css = '';
+export const html = () => '';
+`;
+
 const cjsInteropPlugin = {
   name: 'cjs-interop-virtual-modules',
   enforce: 'pre' as const,
-  resolveId(source: string) {
+  resolveId(source: string, importer?: string) {
     const virtuals: Record<string, string> = {
       'gopd': '\0virtual:gopd',
       'gopd/gOPD': '\0virtual:gopd-gOPD',
@@ -26,7 +38,29 @@ const cjsInteropPlugin = {
       'function-bind': '\0virtual:function-bind',
       'has-proto': '\0virtual:has-proto',
     };
-    return virtuals[source] || null;
+    if (virtuals[source]) return virtuals[source];
+
+    // Intercept @effect/platform's bundled UI modules (swagger-ui, scalar
+    // api-reference) — they ship multi-hundred-KB minified strings that break
+    // Vite's commonjs resolver during the extension background build. We never
+    // render these UIs from inside the wallet, so empty stubs are functionally
+    // equivalent. Both relative and absolute import forms are handled.
+    const effectStubMap: Record<string, string> = {
+      './internal/httpApiSwagger.js': '\0virtual:effect-httpApiSwagger',
+      './internal/httpApiSwagger': '\0virtual:effect-httpApiSwagger',
+      './internal/httpApiScalar.js': '\0virtual:effect-httpApiScalar',
+      './internal/httpApiScalar': '\0virtual:effect-httpApiScalar',
+    };
+    if (effectStubMap[source] && importer && importer.includes('@effect/platform')) {
+      return effectStubMap[source];
+    }
+    if (source.endsWith('@effect/platform/dist/esm/internal/httpApiSwagger.js')) {
+      return '\0virtual:effect-httpApiSwagger';
+    }
+    if (source.endsWith('@effect/platform/dist/esm/internal/httpApiScalar.js')) {
+      return '\0virtual:effect-httpApiScalar';
+    }
+    return null;
   },
   load(id: string) {
     switch (id) {
@@ -59,6 +93,10 @@ export default $dp;`;
         return `var test = { __proto__: null, foo: {} };
 var result = { __proto__: test }.foo === test.foo && !(test instanceof Object);
 export default function hasProto() { return result; };`;
+
+      case '\0virtual:effect-httpApiSwagger':
+      case '\0virtual:effect-httpApiScalar':
+        return HTTP_API_SWAGGER_STUB;
     }
     return null;
   }

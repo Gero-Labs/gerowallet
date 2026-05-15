@@ -110,6 +110,7 @@ import googleSvg from '@/assets/svg/googleWhite.svg'
 import zkFold from '@/assets/svg/zkfold.svg';
 import cashbackBags from '@/assets/img/cashback.png';
 import cardanoBg from '@/assets/cardanoBg.png';
+import midnightBg from '@/assets/Midnight.webp';
 import cashbackBg from '@/assets/cashbackBg.png';
 import rectangle from '@/assets/img/rectangle.png';
 import rectangle2 from '@/assets/img/rectangle2.png';
@@ -367,6 +368,7 @@ export default {
   zkFold,
   cashbackBags,
   cardanoBg,
+  midnightBg,
   cashbackBg,
   rectangle,
   rectangle2,

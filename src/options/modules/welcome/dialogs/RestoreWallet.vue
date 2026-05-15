@@ -407,7 +407,7 @@
 import { ref, computed, watch, onUnmounted, onMounted, getCurrentInstance, reactive, nextTick } from 'vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
-import { Theme } from '@/models/types';
+import { Theme, Blockchain } from '@/models/types';
 import networks, { NetworkInfo } from '@/utils/networks';
 import MnemonicAutocomplete from '@/modules/welcome/components/MnemonicAutocomplete.vue';
 import SecurityMethodCard from '@/shared/components/SecurityMethodCard.vue';
@@ -634,16 +634,31 @@ const handleContinue = () => {
 const walletCreationStep3 = async () => {
   creatingWalletLoader.value = true;
   try {
-    // Check if wallet with same mnemonic already exists
-    const { derivePublicKeyFromMnemonic, getWalletByPublicKey } = await import('@/db/gero-db');
-    const publicKey = await derivePublicKeyFromMnemonic(seedToStr.value);
-    const existingWallet = await getWalletByPublicKey(publicKey);
+    // Check if wallet with same mnemonic already exists (Cardano/Bitcoin only).
+    // Midnight derives publicKey via the wallet-sdk-facade, which isn't wired
+    // in yet — skip dedup on Midnight until SDK lands. Re-restoring the same
+    // Midnight mnemonic will create a separate wallet record for now.
+    if (localNetwork.value.blockchain !== Blockchain.MIDNIGHT) {
+      const { derivePublicKeyFromMnemonic, getWalletByPublicKey } = await import('@/db/gero-db');
+      const publicKey = await derivePublicKeyFromMnemonic(seedToStr.value);
+      const existingWallet = await getWalletByPublicKey(publicKey);
 
-    if (existingWallet) {
-      existingWalletInfo.value = existingWallet;
-      showConfirmDialog.value = true;
-      creatingWalletLoader.value = false;
-      return;
+      if (existingWallet) {
+        existingWalletInfo.value = existingWallet;
+        showConfirmDialog.value = true;
+        creatingWalletLoader.value = false;
+        return;
+      }
+    }
+
+    // Pre-derive Midnight bech32m addresses in this options context — see
+    // CreateWallet.vue / midnightKeyManager.ts for why this can't live in
+    // gero-db.ts (background-bundle bloat).
+    let midnightAddresses: { unshielded: string; shielded: string; dust: string; publicKeyHex?: string; addressHex?: string } | undefined;
+    if (localNetwork.value.blockchain === Blockchain.MIDNIGHT) {
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = deriveMidnightKeys(seedToStr.value, localNetwork.value.network);
+      midnightAddresses = derived.addresses;
     }
 
     let wallet;
@@ -677,6 +692,7 @@ const walletCreationStep3 = async () => {
             backupMnemonic: true,
             prfOutput,
             walletId: newWalletId, // CRITICAL: Must match ID used for PRF salt
+            ...(midnightAddresses ? { midnightAddresses } : {}),
           };
 
           wallet = await GeroStore.createNewWallet(
@@ -716,7 +732,8 @@ const walletCreationStep3 = async () => {
         newWallet.password,
         localNetwork.value.blockchain,
         localNetwork.value.network,
-        undefined  // addressType - use default based on chain
+        undefined,  // addressType - use default based on chain
+        midnightAddresses ? { midnightAddresses } : undefined
       );
     }
 

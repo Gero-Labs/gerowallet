@@ -484,6 +484,21 @@ const walletCreationStep = async () => {
   try {
     let wallet;
 
+    // For Midnight, pre-derive the 3 role-specific bech32m addresses in this
+    // (options) context. The SDK can't run in the background service worker
+    // (ledger-v8 WASM + effect runtime are too heavy), so we derive here and
+    // hand the addresses to gero-db as a JSON-stringified field. Generate the
+    // mnemonic up-front so derivation and storage see the same one.
+    let preGeneratedMnemonic: string | null = null;
+    let midnightAddresses: { unshielded: string; shielded: string; dust: string; publicKeyHex?: string; addressHex?: string } | undefined;
+    if (localNetwork.value.blockchain === 'Midnight') {
+      const bip39 = await import('bip39');
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      preGeneratedMnemonic = bip39.generateMnemonic(256);
+      const derived = deriveMidnightKeys(preGeneratedMnemonic, localNetwork.value.network);
+      midnightAddresses = derived.addresses;
+    }
+
     if (selectedSecurityMethod.value === 'prf') {
       // ========================================================================
       // PRF WALLET CREATION (PURE PRF MODE - NO PASSWORD)
@@ -513,13 +528,14 @@ const walletCreationStep = async () => {
             backupMnemonic: true,
             prfOutput,
             walletId: newWalletId, // CRITICAL: Must match ID used for PRF salt
+            ...(midnightAddresses ? { midnightAddresses } : {}),
           };
 
           wallet = await GeroStore.createNewWallet(
             newWallet.name,
             newWallet.icon,
             Theme.GERO,
-            null,
+            preGeneratedMnemonic, // null for non-Midnight (gero-db generates inline)
             newWallet.password || 'temp-password',
             localNetwork.value.blockchain,
             localNetwork.value.network,
@@ -547,11 +563,12 @@ const walletCreationStep = async () => {
         newWallet.name,
         newWallet.icon,
         Theme.GERO,
-        null,
+        preGeneratedMnemonic, // null for non-Midnight (gero-db generates inline)
         newWallet.password,
         localNetwork.value.blockchain,
         localNetwork.value.network,
-        undefined  // addressType - use default based on chain
+        undefined,  // addressType - use default based on chain
+        midnightAddresses ? { midnightAddresses } : undefined
       );
     }
 

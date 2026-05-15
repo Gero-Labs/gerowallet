@@ -3632,4 +3632,54 @@ export default {
   'poolOperator.myRelays': 'My Relays',
   'poolOperator.direction': 'Direction',
   'poolOperator.noPeersInFilter': 'No peers match the current filter',
+
+  // Midnight DUST registration. The flow combines a Cardano CIP-30 mapping
+  // tx (signed via Gero's Cardano wallet or the official portal) with the
+  // wallet's Midnight DUST address as the DUST recipient.
+  'midnight.registerForDust': 'Register for DUST generation',
+  'midnight.registerForDustSubtitle': 'Map your Cardano NIGHT to your Midnight DUST address',
+  'midnight.dustRecipientAddress': 'Your DUST recipient address (Midnight)',
+  'midnight.nightRegistered': 'NIGHT registered',
+  'midnight.generationRate': 'Generation rate',
+  'midnight.howRegistrationWorks': 'How registration works',
+  'midnight.registrationStep1': 'cNIGHT held on Cardano is mapped to a Midnight DUST address via a Cardano transaction',
+  'midnight.registrationStep2': 'You sign the registration with your Cardano wallet (CIP-30)',
+  'midnight.registrationStep3': 'After ~432 Midnight blocks (~2.5 hours), your registered NIGHT begins generating DUST',
+  'midnight.openRedemptionPortal': 'Open Redemption Portal',
+  'midnight.statusUnregistered': 'Not registered for DUST',
+  'midnight.statusUnregisteredHelp': 'Register your Cardano-side NIGHT to start generating DUST.',
+  'midnight.statusPending': 'Registration pending',
+  'midnight.statusPendingHelp': 'Awaiting relay (~2.5h). DUST will start generating once accepted.',
+  'midnight.statusRegistered': 'Registration active',
+  'midnight.statusRegisteredHelp': 'Your registered NIGHT is generating DUST.',
+  'midnight.statusInvalid': 'Registration invalid',
+  'midnight.statusInvalidHelp': 'Update your DUST address — the current mapping is no longer valid.',
+  // Legacy-wallet upgrade prompt
+  'midnight.upgradeAddressesNotice': 'This wallet was created before DUST address derivation was supported. Enter your spending password to derive your DUST address.',
+  'midnight.upgradeAddressesNoticePrf': 'This wallet was created before DUST address derivation was supported. Authorize with your PassKey to derive your DUST address.',
+  'midnight.deriveDustAddress': 'Derive DUST address',
+  'midnight.authorizeWithPasskey': 'Authorize with PassKey',
+  // Portfolio panel labels
+  'midnight.unshielded': 'Unshielded',
+  'midnight.shielded': 'Shielded',
+  'midnight.registered': 'Registered',
+  'midnight.chartComingSoon': 'Historical chart coming soon',
+  'midnight.chartNoData': 'No transaction history yet',
+  // SendDialog Midnight branch
+  'midnight.sendComingSoonTitle': 'Midnight send is coming soon',
+  'midnight.sendComingSoonDescription': 'Sending NIGHT in-app needs the Midnight wallet SDK\'s transfer surface. Until that lands, you can still receive into this wallet.',
+  'midnight.signWithPasskeyAndSend': 'Sign with PassKey and send',
+  'midnight.signAndSend': 'Sign and send',
+  'midnight.shieldedSendComingNote': 'Shielded send (with proof generation) coming in a future release.',
+  // Flow diagram labels (DustRegistrationDialog)
+  'midnight.flowSign': 'Sign',
+  'midnight.flowValidator': 'Validator',
+  'midnight.flowDust': 'DUST address',
+  'midnight.capacity': 'Capacity',
+  // Transaction type labels (history list)
+  'midnight.txRegisterDust': 'Registered for DUST',
+  'midnight.txDeregisterDust': 'Deregistered DUST',
+  'midnight.txShield': 'Shielded NIGHT',
+  'midnight.txUnshield': 'Unshielded NIGHT',
+  'midnight.txContractCall': 'Contract call',
 }

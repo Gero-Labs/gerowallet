@@ -3229,6 +3229,158 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
   }
 });
 
+/**
+ * Persist a re-derived Midnight publicKey JSON for an existing Midnight wallet.
+ * The browser context runs the SDK derivation (ledger-v8 WASM doesn't run in
+ * service workers), then ships the resulting `{ unshielded, shielded, dust }`
+ * JSON here so the BG can update the wallet record + propagate to walletStore.
+ *
+ * The expected request shape: `{ walletId: number; publicKey: string }`.
+ * Caller is responsible for having already verified the user's password (the
+ * derivation requires decrypting the mnemonic — if that succeeds the password
+ * was valid, no separate VERIFY_SPENDING_PASSWORD call is needed).
+ */
+app.addToOptions(MessageTypes.UPDATE_MIDNIGHT_PUBLIC_KEY, async (request, sendResponse) => {
+  try {
+    const { walletId, publicKey } = request.data || {};
+    if (typeof walletId !== 'number' || typeof publicKey !== 'string' || !publicKey) {
+      throw new Error('walletId and publicKey are required');
+    }
+    const { getDb } = await import('@/db/gero-db');
+    const db = await getDb();
+    await db['wallets'].update(walletId, { publicKey });
+
+    // Refresh the live walletBg if this is the currently logged-in wallet so
+    // subsequent code paths (sync, signing) see the new addresses without
+    // requiring a re-login.
+    const walletBg = walletManager.getWallet();
+    if (walletBg && walletBg.id === walletId) {
+      walletBg.publicKey = publicKey;
+      try {
+        const parsed = JSON.parse(publicKey);
+        if (parsed && typeof parsed === 'object' && parsed.unshielded) {
+          walletBg.baseAddress = parsed.unshielded;
+        }
+      } catch { /* publicKey shape mismatch — DB still updated; next login will pick up. */ }
+      WalletStore.setLoggedWallet({ ...walletBg });
+    }
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: sign a list of intent-hash segments with the user's role-derived
+ * key. Used by the Midnight send pipeline (see `services/midnight-tx.service`).
+ * Mnemonic decryption + signing happen entirely inside `walletBg.signMidnightSegments`;
+ * this handler is a thin transport.
+ *
+ * Request shape: `{ segments: MidnightSegmentToSign[]; password?: string;
+ *                   prfSecret?: number[] /* serialized Uint8Array * / }`.
+ */
+app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    const { segments, password, prfSecret } = request.data || {};
+    if (!Array.isArray(segments)) throw new Error('segments[] is required');
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, signatures },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: submit a fully-signed (and proven, for shielded) transaction via
+ * Nexus's relay endpoint. Nexus calls `PolkadotNodeClient.sendMidnightTransaction`
+ * against the Midnight RPC node and bubbles the submission event back here.
+ *
+ * Request shape: `{ signedTxHex: string; waitFor?: 'Submitted'|'InBlock'|'Finalized' }`.
+ */
+app.addToOptions(MessageTypes.SUBMIT_MIDNIGHT_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('SUBMIT_MIDNIGHT_TX called on non-Midnight wallet');
+    }
+    const { signedTxHex, waitFor } = request.data || {};
+    if (typeof signedTxHex !== 'string' || !signedTxHex) {
+      throw new Error('signedTxHex is required');
+    }
+    const { getMidnightApi } = await import('@/api/midnight-api');
+    const api = getMidnightApi(walletBg.network);
+    const result = await api.submitMidnightTx({ signedTxHex, waitFor });
+    sendResponse({
+      id: request.id,
+      data: { success: true, result },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: get the publicKeyHex + addressHex the Nexus sidecar needs for
+ * seedless wallet construction. Fast path if already persisted; slow path
+ * decrypts the mnemonic once and persists for next time.
+ *
+ * Request shape: `{ password?: string; prfSecret?: number[] }`.
+ */
+app.addToOptions(MessageTypes.GET_MIDNIGHT_WALLET_KEYS, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    const { password, prfSecret } = request.data || {};
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const keys = await walletBg.getMidnightWalletKeys(password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, ...keys },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, async (request, sendResponse) => {
   try {
     // Only update panel behavior — storage is written directly by the component
