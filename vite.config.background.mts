@@ -5,6 +5,10 @@ import packageJson from './package.json';
 import rollupTla from 'rollup-plugin-tla';
 import commonjs from '@rollup/plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
+
+const _require = createRequire(import.meta.url);
 
 // Virtual module plugin for CJS packages that break under Rollup's
 // getAugmentedNamespace double-wrapping (CJS→ESM→namespace→wrapper).
@@ -37,6 +41,10 @@ const cjsInteropPlugin = {
       'hasown': '\0virtual:hasown',
       'function-bind': '\0virtual:function-bind',
       'has-proto': '\0virtual:has-proto',
+      // bn.js is CJS-only (@polkadot/util from Midnight SDK does `import BN from 'bn.js'`).
+      // Must intercept before Vite's node-resolve maps it to the CJS file, which Rollup
+      // then fails to find a `default` export from.
+      'bn.js': '\0virtual:bn-js-esm',
     };
     if (virtuals[source]) return virtuals[source];
 
@@ -97,6 +105,23 @@ export default function hasProto() { return result; };`;
       case '\0virtual:effect-httpApiSwagger':
       case '\0virtual:effect-httpApiScalar':
         return HTTP_API_SWAGGER_STUB;
+
+      case '\0virtual:bn-js-esm': {
+        // bn.js is CJS with a UMD wrapper: `if(typeof module==='object'){module.exports=BN}`.
+        // @polkadot/util (Midnight SDK dep) does `import BN from 'bn.js'` which Rollup
+        // can't satisfy from the raw CJS file. We strip the entire UMD conditional block
+        // and append a top-level ESM `export default BN;` instead.
+        const bnPath = _require.resolve('bn.js');
+        const src = readFileSync(bnPath, 'utf-8');
+        const exportName = src.match(/module\.exports\s*=\s*(\w+)/)?.[1] ?? 'BN';
+        const bnCode = src
+          .replace(
+            /if\s*\([^)]*\btypeof\s+module\b[^)]*\)\s*\{[^}]*\bmodule\.exports\s*=\s*\w+[^}]*\}(?:\s*else\s*\{[^}]*\})?/s,
+            '',
+          )
+          .trimEnd() + `\nexport default ${exportName};\n`;
+        return { code: bnCode, map: null };
+      }
     }
     return null;
   }
