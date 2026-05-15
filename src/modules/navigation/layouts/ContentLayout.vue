@@ -10,7 +10,9 @@
                 ? 'apex-background-dashboard'
                 : loggedWallet?.chain === Blockchain.BITCOIN
                   ? 'bitcoin-background-dashboard'
-                  : 'cardano-background-dashboard'
+                  : loggedWallet?.chain === Blockchain.MIDNIGHT
+                    ? 'midnight-background-dashboard'
+                    : 'cardano-background-dashboard'
             "
             :style="{
               backgroundImage: `url(${
@@ -18,7 +20,9 @@
                   ? assets.apexBg
                   : loggedWallet?.chain === Blockchain.BITCOIN
                     ? assets.bitcoinBg
-                    : assets.cardanoBg
+                    : loggedWallet?.chain === Blockchain.MIDNIGHT
+                      ? assets.midnightBg
+                      : assets.cardanoBg
               })`,
             }"
           ></div>
@@ -73,9 +77,9 @@
                   <v-tooltip
                     bottom
                     :content-class="
-                      connected
+                      (isMidnight ? isMidnightConnected : connected)
                         ? 'network-tooltip'
-                        : connecting
+                        : (isMidnight ? isMidnightConnecting : connecting)
                         ? 'network-tooltip connecting'
                         : 'network-tooltip offline'
                     "
@@ -89,25 +93,30 @@
                       >
                         <v-icon
                           small
-                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
-                          :class="{ 'sync-animation': isSyncing, 'connecting-animation': connecting }"
+                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? '#FFA500' : '#ff6464'"
+                          :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
                         >
-                          {{ connected ? 'mdi-lan-connect' : connecting ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
+                          {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                         </v-icon>
 
-                        <!-- Small epoch progress bar (hidden in compact mode) -->
+                        <!-- Small progress bar (hidden in compact mode).
+                             Cardano: epoch-slot percentage as a definite value.
+                             Midnight: no epoch concept — render a generic
+                             striped/streaming activity indicator instead, so
+                             the bar's "live" feeling carries over even though
+                             there's no fixed-window progress to show. -->
                         <v-progress-linear
                           v-if="!compactNav"
                           class="epoch-progress-liquid-glass"
                           height="8"
-                          :buffer-value="epochSlotPercentage"
-                          :value="epochSlotPercentage"
-                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
+                          :buffer-value="isMidnight ? 100 : epochSlotPercentage"
+                          :value="isMidnight ? 100 : epochSlotPercentage"
+                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? '#FFA500' : '#ff6464'"
                           background-color="transparent"
                           style="width: 50px"
                           striped
-                          :stream="connected"
-                          :indeterminate="connecting"
+                          :stream="isMidnight ? isMidnightConnected : connected"
+                          :indeterminate="isMidnight ? isMidnightConnecting : connecting"
                         ></v-progress-linear>
                       </div>
                     </template>
@@ -115,15 +124,20 @@
                     <div class="network-tooltip-content">
                       <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
                       <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
-                      <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
-                      <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      <template v-if="isMidnight">
+                        <div><strong>Block:</strong> {{ midnightTip?.height || 'N/A' }}</div>
+                      </template>
+                      <template v-else>
+                        <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
+                        <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      </template>
                       <div>
                         <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                         <span
                           :style="
-                            connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }
+                            (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: '#FFA500' } : { color: '#ff6464' }
                           "
-                          >{{ connected ? t('navigation.online') : connecting ? t('navigation.connecting') : t('navigation.offline') }}</span
+                          >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
                         >
                       </div>
                     </div>
@@ -284,6 +298,7 @@ import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { networkStore } from '@/stores/networkStore';
+import { midnightStore } from '@/stores/midnightStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -299,7 +314,12 @@ const { isSyncing, connected, connecting } = toRefs(loadingState);
 const { loggedWallet, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { tip } = toRefs(networkStore);
+// Midnight uses its own store — `networkStore.tip` is Cardano-shaped (epoch/slot)
+// and stays empty for Midnight wallets.
+const { tip: midnightTip, networkStatus: midnightNetworkStatus } = toRefs(midnightStore);
 const { musicPlaylist, context } = toRefs(musicStore);
+
+const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
 
 // Global search
 const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
@@ -371,16 +391,20 @@ const kesWarningVisible = computed(() => {
 });
 
 const epochSlotPercentage = computed(() => {
+  // Midnight has no epoch concept — show 0 (the progress bar will render flat).
+  if (isMidnight.value) return 0;
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;
 });
 
 // Format last sync as timestamp (e.g., "2:45:32 PM")
 const lastSyncTimestamp = computed(() => {
-  if (!tip.value?.time) {
+  // Midnight tip carries `timestamp` (unix seconds * 1000 from indexer); Cardano tip carries `time`.
+  const t = isMidnight.value ? midnightTip.value?.timestamp : tip.value?.time;
+  if (!t) {
     return 'N/A';
   }
 
-  const date = new Date(tip.value.time);
+  const date = new Date(t);
   return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -388,6 +412,11 @@ const lastSyncTimestamp = computed(() => {
     hour12: true
   });
 });
+
+// Midnight WS connection state mirrors midnightStore.networkStatus rather than
+// the global Cardano `loadingState.connected/connecting`.
+const isMidnightConnected = computed(() => midnightNetworkStatus.value === 'connected');
+const isMidnightConnecting = computed(() => midnightNetworkStatus.value === 'connecting');
 
 const isWelcomeDone = computed({
   get() {
@@ -493,6 +522,9 @@ const preloadBackgroundImage = () => {
       break;
     case Blockchain.BITCOIN:
       imageUrl = assets.bitcoinBg;
+      break;
+    case Blockchain.MIDNIGHT:
+      imageUrl = assets.midnightBg;
       break;
     default:
       imageUrl = assets.cardanoBg;
@@ -608,6 +640,48 @@ onBeforeUnmount(() => {
 
   &[style*='url('] {
     opacity: 1;
+  }
+}
+
+/* Midnight background — wide cinematic shot with a fade-to-black mask so the
+   portfolio surface below sits cleanly on transparent black. Mirrors the
+   prototype's treatment from `new-midnight-backup`. */
+.midnight-background-dashboard {
+  position: absolute;
+  top: -70%;
+  left: 50%;
+  width: 100vw;
+  height: 120vh;
+  z-index: -1;
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: brightness(0.7);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+
+  /* Fade to black at the bottom so the holdings table doesn't fight the bg. */
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.4) 85%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.4) 85%,
+    rgba(0, 0, 0, 0) 100%
+  );
+
+  &[style*='url('] {
+    opacity: 0.6;
   }
 }
 

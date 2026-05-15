@@ -1,7 +1,64 @@
 <template>
   <v-layout column>
+    <!-- Midnight: same layout grammar as Cardano's portfolio page.
+         Top hero row: portfolio chart (9-col, with metrics panel + chart) +
+         recent transactions (3-col). Below: filter chip bar + token table
+         showing NIGHT/DUST as line items. Dust registration dialog is opened
+         from a header-action button so the Register CTA stays accessible. -->
+    <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
+      <v-row no-gutters class="hero-row">
+        <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
+          <MidnightPortfolioChart />
+        </v-col>
+        <v-col xl="3" lg="3" md="4" class="pa-2 hidden-sm-and-down hero-tx-col">
+          <MidnightTransactionsCard />
+        </v-col>
+      </v-row>
+
+      <!-- Holdings table: same liquid-glass shell + chip bar pattern as Cardano. -->
+      <v-row no-gutters>
+        <v-col cols="12" class="pa-2">
+          <v-card flat class="liquid-glass holdings-table-card">
+            <!-- Filter chip bar mirrors Cardano. Holdings is the only meaningful
+                 view for Midnight today; Collectibles/Market/Watchlist are
+                 surfaced as disabled-state chips so the layout stays uniform. -->
+            <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
+              <div class="filter-chip-bar d-flex align-center" style="gap: 4px;">
+                <v-chip small class="geroButton flex-shrink-0">
+                  <v-icon x-small class="mr-1" color="black">mdi-wallet-outline</v-icon>
+                  {{ $t('assets.holdings') }}
+                </v-chip>
+                <v-chip small outlined disabled class="flex-shrink-0">
+                  <v-icon x-small class="mr-1">mdi-image-outline</v-icon>
+                  {{ $t('assets.collectibles') }}
+                </v-chip>
+              </div>
+              <v-spacer />
+              <v-btn
+                small
+                color="primary"
+                outlined
+                class="flex-shrink-0"
+                @click="dustRegistrationOpen = true"
+              >
+                <v-icon x-small left>mdi-shield-star</v-icon>
+                {{ $t('midnight.registerForDust') }}
+              </v-btn>
+            </div>
+
+            <MidnightHoldingsTable />
+          </v-card>
+        </v-col>
+      </v-row>
+
+      <DustRegistrationDialog
+        :is-open="dustRegistrationOpen"
+        @close="dustRegistrationOpen = false"
+      />
+    </template>
+
     <!-- Empty state for wallets with no tokens -->
-    <template v-if="isWalletEmpty">
+    <template v-else-if="isWalletEmpty">
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
           <EmptyStateHero
@@ -270,6 +327,10 @@ import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateC
 import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
 import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransactionsCard.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
+import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
+import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
+import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
+import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
@@ -339,6 +400,9 @@ const isMainnetCardano = computed(() =>
 
 type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist';
 const activeView = ref<ViewMode>('holdings');
+
+// DUST registration dialog state — only relevant when chain === Midnight.
+const dustRegistrationOpen = ref(false);
 
 // Compact chip mode — collapse labels to icons when space is tight
 const compactChips = ref(false);
@@ -906,6 +970,7 @@ watch(
   height: 210px;
   overflow: hidden;
 }
+
 
 
 /* ── Holdings table card ──────────────────────────────────────────────────────── */

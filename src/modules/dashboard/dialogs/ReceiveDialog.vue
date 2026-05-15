@@ -10,8 +10,49 @@
     :img="assets.qrCodeSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
+    <!-- Midnight Wallet UI — three role-specific addresses -->
+    <v-card-title v-if="isMidnightWallet" class="py-0 transparent">
+      <v-tabs
+        v-model="midnightTab"
+        centered
+        background-color="transparent"
+      >
+        <v-tab>Unshielded</v-tab>
+        <v-tab>Shielded</v-tab>
+        <v-tab>Dust</v-tab>
+      </v-tabs>
+      <v-tabs-items v-model="midnightTab" class="transparent">
+        <v-tab-item eager v-for="(item, i) in midnightTabs" :key="i">
+          <v-list-item three-line class="px-0">
+            <v-list-item-avatar size="160" rounded>
+              <div
+                class="qr-container"
+                :ref="el => setMidnightQrContainerRef(el, i)"
+              ></div>
+            </v-list-item-avatar>
+            <v-list-item-content class="pl-4">
+              <h4 class="address-label">{{ item.label }}</h4>
+              <div class="address-row">
+                <span
+                  class="address-text"
+                  @click="triggerCopy(item.value)"
+                >
+                  {{ item.value ? filters.truncate(item.value) : '—' }}
+                </span>
+                <CopyButton v-if="item.value" class="ml-1" :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
+              </div>
+              <p class="info-text">{{ item.info }}</p>
+              <p v-if="!item.value" class="path-text" style="color: #ff9b3b;">
+                Pending SDK integration
+              </p>
+            </v-list-item-content>
+          </v-list-item>
+        </v-tab-item>
+      </v-tabs-items>
+    </v-card-title>
+
     <!-- Bitcoin Wallet UI -->
-    <v-card-title v-if="isBitcoinWallet" class="py-0 transparent">
+    <v-card-title v-else-if="isBitcoinWallet" class="py-0 transparent">
       <v-list-item three-line class="px-0">
         <v-list-item-avatar size="160" rounded>
           <div class="qr-container" ref="btcQrContainer"></div>
@@ -31,7 +72,7 @@
     </v-card-title>
 
     <!-- Cardano Wallet UI (Original) -->
-    <v-card-title v-else class="py-0 transparent">
+    <v-card-title v-else-if="!isMidnightWallet" class="py-0 transparent">
       <v-tabs
         v-model="tab"
         centered
@@ -255,6 +296,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
 import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
 
@@ -269,6 +311,49 @@ const { loggedWallet, keys } = toRefs(walletStore);
 // Check if Bitcoin wallet
 const isBitcoinWallet = computed(() => {
   return loggedWallet.value?.chain === Blockchain.BITCOIN;
+});
+
+// Check if Midnight wallet
+const isMidnightWallet = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
+});
+
+// Midnight state — addresses come from midnightStore (populated by the SDK
+// at login time). Until the SDK is integrated they're empty strings; the UI
+// shows a "Pending SDK integration" hint instead of a QR.
+const midnightTab = ref(0);
+const midnightQrContainers = [
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+];
+const midnightQrcodes: (QRCodeStyling | null)[] = [null, null, null];
+
+const setMidnightQrContainerRef = (el: Element | null, index: number) => {
+  if (el && midnightQrContainers[index]) {
+    midnightQrContainers[index].value = el as HTMLElement;
+  }
+};
+
+const midnightTabs = computed(() => {
+  const addrs = midnightStore.addresses;
+  return [
+    {
+      label: 'Unshielded address',
+      value: addrs.unshielded ?? '',
+      info: 'Receive public NIGHT transfers. Indexer-visible — same shape as Bitcoin/Cardano payment addresses.',
+    },
+    {
+      label: 'Shielded address',
+      value: addrs.shielded ?? '',
+      info: 'Receive private (Zswap) NIGHT. Senders generate a ZK proof; the indexer cannot see amounts or recipients.',
+    },
+    {
+      label: 'Dust address',
+      value: addrs.dust ?? '',
+      info: 'Receive DUST registration mappings. Used by the cnight_generates_dust validator on the Cardano side.',
+    },
+  ];
 });
 
 // Cardano state
@@ -538,6 +623,35 @@ watch(
       await deriveBitcoinAddress();
       await nextTick();
       updateBitcoinQrCode();
+    } else if (isMidnightWallet.value) {
+      // Midnight wallet — render a QR per address tab. Addresses may be empty
+      // strings if the SDK hasn't derived them yet; in that case skip QR setup
+      // and the template renders a "Pending SDK integration" hint.
+      midnightTabs.value.forEach((tabItem, i) => {
+        if (!tabItem.value) return;
+        if (!midnightQrcodes[i]) {
+          midnightQrcodes[i] = new QRCodeStyling({
+            width: 160,
+            height: 160,
+            type: 'svg',
+            data: tabItem.value,
+            image: assets.geroLogo,
+            margin: 2,
+            qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
+            imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
+            backgroundOptions: { color: '#ffffff' },
+            cornersSquareOptions: { type: 'extra-rounded' },
+            cornersDotOptions: { type: 'dot' },
+          });
+        } else {
+          midnightQrcodes[i]!.update({ data: tabItem.value });
+        }
+        const el = midnightQrContainers[i].value;
+        if (el) {
+          el.innerHTML = '';
+          midnightQrcodes[i]!.append(el);
+        }
+      });
     } else {
       // Cardano wallet - original logic
       tabs.value.forEach((tabItem, i) => {

@@ -11,8 +11,88 @@
     :width="428"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
+    <!-- Midnight unshielded send (Phase 1). Build → sign → submit through Nexus.
+         Shielded send and the shielded/unshielded toggle land in Phase 3 once
+         `wallet-sdk-shielded` is wired and a proof server is configured. -->
+    <template v-if="isMidnight">
+      <v-card-text class="px-3 pb-3 send-dialog-content midnight-send-content">
+        <!-- Available balance reminder -->
+        <div class="midnight-balance-snapshot mb-4">
+          <div class="midnight-snapshot-label">{{ $t('midnight.unshielded') }}</div>
+          <div class="midnight-snapshot-amount">
+            {{ formatMidnightUnshielded }} {{ midnightNightCurrency }}
+          </div>
+        </div>
+
+        <!-- Recipient + amount form. Mirrors Cardano SendRecipientCard's
+             field shapes but is single-recipient since Midnight unshielded
+             transfers don't aggregate multi-output the same way. -->
+        <v-form ref="midnightFormRef" v-model="midnightFormValid">
+          <v-text-field
+            v-model="midnightRecipient"
+            :label="$t('common.recipientAddress')"
+            outlined
+            dense
+            :rules="midnightAddressRules"
+            :disabled="midnightSending"
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="midnightAmount"
+            :label="$t('common.amount') + ' (' + midnightNightCurrency + ')'"
+            outlined
+            dense
+            type="number"
+            min="0"
+            step="0.000001"
+            :rules="midnightAmountRules"
+            :disabled="midnightSending"
+            :hint="`Available: ${formatMidnightUnshielded} ${midnightNightCurrency}`"
+            persistent-hint
+            class="mb-3"
+          >
+            <template v-slot:append>
+              <v-btn x-small text @click="setMidnightMax" :disabled="midnightSending">MAX</v-btn>
+            </template>
+          </v-text-field>
+
+          <!-- PRF wallets: no password field. Password wallets: prompt inline. -->
+          <v-text-field
+            v-if="!isPrfWallet"
+            v-model="midnightPassword"
+            :label="$t('common.spendingPassword')"
+            type="password"
+            outlined
+            dense
+            :disabled="midnightSending"
+            class="mb-2"
+          />
+
+          <div v-if="midnightError" class="red--text text--lighten-2 text-caption mb-2">
+            {{ midnightError }}
+          </div>
+
+          <v-btn
+            block
+            large
+            class="geroButton mt-2"
+            :loading="midnightSending"
+            :disabled="!canSubmitMidnightSend"
+            @click="submitMidnightSend"
+          >
+            <v-icon left>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-send' }}</v-icon>
+            {{ isPrfWallet ? $t('midnight.signWithPasskeyAndSend') : $t('midnight.signAndSend') }}
+          </v-btn>
+
+          <div class="text-caption text--secondary text-center mt-3">
+            {{ $t('midnight.shieldedSendComingNote') }}
+          </div>
+        </v-form>
+      </v-card-text>
+    </template>
+
     <!-- Empty wallet state -->
-    <template v-if="isWalletEmpty">
+    <template v-else-if="isWalletEmpty">
       <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
         <div class="empty-wallet-state">
           <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
@@ -217,7 +297,9 @@ import TransactionAuthSection from '@/shared/components/TransactionAuthSection.v
 import SummaryStep from '../components/SummaryStep.vue';
 import SendRecipientCard from '../components/SendRecipientCard.vue';
 import rules from '@/utils/rules';
-import { WalletType } from '@/models/types';
+import { WalletType, Blockchain, Network } from '@/models/types';
+import { midnightStore } from '@/stores/midnightStore';
+import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { Token, Collectible, SendRecipient } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
@@ -250,6 +332,147 @@ const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolved
 const { epochParams } = toRefs(networkStore)
 
 const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+// ── Midnight unshielded send (Phase 1) ──────────────────────────────────────
+//
+// Build → sign → submit via Nexus. Mirrors the Cardano pipeline but:
+//   - the wallet only signs intent-hash segments locally (no full tx
+//     construction in browser — Nexus runs the SDK)
+//   - hardware wallets are not supported (Midnight requires cleartext key
+//     for proof generation; SDK has no hardware-signer integration)
+//   - the form is single-recipient (multi-recipient unshielded transfers
+//     can be revisited if the SDK exposes it cleanly)
+const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
+const midnightNightCurrency = computed(() =>
+  loggedWallet.value?.network === Network.MAINNET ? 'NIGHT' : 'tNIGHT'
+);
+
+const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
+
+const formatMidnightUnshielded = computed(() => {
+  const value = midnightStore.balances?.nightUnshielded ?? 0n;
+  const whole = value / NIGHT_DIVISOR;
+  const remainder = value % NIGHT_DIVISOR;
+  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
+  const fraction = remainderStr.slice(0, 2).padEnd(2, '0');
+  return `${whole.toLocaleString('en-US')}.${fraction}`;
+});
+
+const midnightFormRef = ref<{ validate: () => boolean } | null>(null);
+const midnightFormValid = ref(false);
+const midnightRecipient = ref('');
+const midnightAmount = ref('');
+const midnightPassword = ref('');
+const midnightSending = ref(false);
+const midnightError = ref<string | null>(null);
+
+// `isPrfWallet` is destructured from `useTransactionSigning()` below — we
+// reference it inside async/computed bodies so the temporal-dead-zone is
+// never observed at runtime (those bodies run after module init completes).
+
+// Validation rules. Address shape is intentionally permissive — the indexer
+// is the final arbiter; we only catch obvious typos here.
+const midnightAddressRules = computed(() => [
+  (v: string) => !!v || 'Recipient address required',
+  (v: string) => {
+    const isMain = loggedWallet.value?.network === Network.MAINNET;
+    const prefix = isMain ? 'mn_addr_' : `mn_addr_${(loggedWallet.value?.network || '').toLowerCase()}`;
+    return v.startsWith('mn_addr_') || `Address should start with ${prefix}`;
+  },
+]);
+
+const midnightAmountRules = computed(() => [
+  (v: string) => !!v || 'Amount required',
+  (v: string) => {
+    const n = Number(v);
+    return (Number.isFinite(n) && n > 0) || 'Must be positive';
+  },
+  (v: string) => {
+    const baseUnits = parseMidnightAmount(v);
+    const balance = midnightStore.balances?.nightUnshielded ?? 0n;
+    return baseUnits <= balance || 'Exceeds available balance';
+  },
+]);
+
+function parseMidnightAmount(input: string): bigint {
+  // Accepts decimal strings; converts to NIGHT base units (10^6).
+  if (!input) return 0n;
+  const [whole = '0', fractionRaw = ''] = input.trim().split('.');
+  const fraction = (fractionRaw + '0'.repeat(MIDNIGHT_DECIMALS.NIGHT))
+    .slice(0, MIDNIGHT_DECIMALS.NIGHT);
+  try {
+    return BigInt(whole) * NIGHT_DIVISOR + BigInt(fraction || '0');
+  } catch {
+    return 0n;
+  }
+}
+
+function setMidnightMax() {
+  const value = midnightStore.balances?.nightUnshielded ?? 0n;
+  const whole = value / NIGHT_DIVISOR;
+  const remainder = value % NIGHT_DIVISOR;
+  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
+  midnightAmount.value = remainder === 0n ? whole.toString() : `${whole}.${remainderStr.replace(/0+$/, '')}`;
+}
+
+const canSubmitMidnightSend = computed(() => {
+  if (midnightSending.value) return false;
+  if (!midnightRecipient.value || !midnightAmount.value) return false;
+  if (!isPrfWallet.value && !midnightPassword.value) return false;
+  return midnightFormValid.value;
+});
+
+async function submitMidnightSend() {
+  if (!canSubmitMidnightSend.value) return;
+  midnightError.value = null;
+  midnightSending.value = true;
+  try {
+    const wallet = loggedWallet.value;
+    if (!wallet) throw new Error('No wallet logged in');
+
+    // PRF: trigger WebAuthn ceremony to obtain the raw PRF output that BG
+    // will use to decrypt the mnemonic. Password: pass the typed password.
+    const credentials: { password?: string; prfSecret?: Uint8Array } = {};
+    if (isPrfWallet.value) {
+      if (!wallet.webAuthnCredentialId) {
+        throw new Error('PRF wallet missing credential ID');
+      }
+      const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+      const prfBuffer = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+      credentials.prfSecret = new Uint8Array(prfBuffer);
+    } else {
+      credentials.password = midnightPassword.value;
+    }
+
+    const { sendUnshieldedNight } = await import('@/services/midnight-tx.service');
+    const amountBaseUnits = parseMidnightAmount(midnightAmount.value);
+    const result = await sendUnshieldedNight(
+      wallet.network,
+      {
+        fromAddress: wallet.baseAddress,
+        outputs: [{
+          address: midnightRecipient.value.trim(),
+          amount: amountBaseUnits.toString(),
+          token: 'NIGHT',
+        }],
+        ttlMs: Date.now() + 5 * 60_000, // 5 minutes
+      },
+      credentials,
+    );
+
+    // Reset state + close — the gero-sync subscription will pick up the
+    // confirmed tx and update the transactions card automatically.
+    midnightRecipient.value = '';
+    midnightAmount.value = '';
+    midnightPassword.value = '';
+    debugLog('🌙 Midnight tx submitted:', result.txHash, 'status:', result.status);
+    emit('close');
+  } catch (e) {
+    midnightError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    midnightSending.value = false;
+  }
+}
 
 const { openReceiveDialog: switchToReceive } = useQuickActionDialogs();
 
@@ -1268,6 +1491,32 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.4);
   max-width: 300px;
   margin: 0 auto;
+}
+
+/* ─── Midnight balance snapshot (in send-dialog Midnight branch) ─── */
+.midnight-balance-snapshot {
+  background: linear-gradient(135deg, rgba(0, 199, 243, 0.08) 0%, rgba(255, 216, 110, 0.06) 100%);
+  border: 1px solid rgba(0, 199, 243, 0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 8px auto 0;
+  min-width: 200px;
+}
+
+.midnight-snapshot-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+.midnight-snapshot-amount {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
 }
 
 /* ─── Actions ─── */

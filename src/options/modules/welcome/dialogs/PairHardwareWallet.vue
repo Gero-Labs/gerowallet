@@ -347,8 +347,8 @@ const emit = defineEmits(['dialogChange']);
 const vmProxy = getCurrentInstance()!.proxy
 const router = vmProxy.$router;
 
-// Network selection
-const allNetworks = networks.networks;
+// Network selection — exclude chains that don't support hardware wallets (e.g. Midnight)
+const allNetworks = networks.networks.filter(n => n.supportedHardware !== false);
 const mainnetNetworks = computed(() => allNetworks.filter(n => n.network === 'Mainnet'));
 const testnetNetworks = computed(() => allNetworks.filter(n => n.network !== 'Mainnet'));
 const isTestnetSelected = computed(() => localNetwork.value?.network !== 'Mainnet');

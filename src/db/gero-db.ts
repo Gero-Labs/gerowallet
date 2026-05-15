@@ -218,6 +218,11 @@ function getDefaultAddressType(chain: string): string {
     case Blockchain.APEX_PRIME:
     case Blockchain.APEX_VECTOR:
       return 'shelley';
+    case Blockchain.MIDNIGHT:
+      // Midnight derives 3 role-specific addresses (Zswap shielded, NightExternal
+      // unshielded, Dust). The wallet manages all three; the addressType field
+      // stores 'unshielded' as the default receive address category.
+      return 'unshielded';
     default:
       return 'unknown';
   }
@@ -257,6 +262,12 @@ export async function createNewWallet(
     backupMnemonic?: boolean;
     prfOutput?: ArrayBuffer; // PRF output from registration (avoids second prompt)
     walletId?: number; // Pre-allocated wallet ID for PRF wallets (must match PRF salt)
+    /**
+     * For Midnight wallets only. Pre-derived bech32m addresses (3 role-specific
+     * ones) computed by the caller in an SDK-aware context. gero-db does not
+     * derive these itself — see the Midnight branch above for why.
+     */
+    midnightAddresses?: { unshielded: string; shielded: string; dust: string };
   }
 ) {
   let isRestore = true;
@@ -274,6 +285,20 @@ export async function createNewWallet(
     const { deriveBitcoinAccountXpub, deriveBitcoinRootKey } = await import('@/chains/bitcoin/bitcoinKeyManager');
     rootKey = deriveBitcoinRootKey(mnemonic);
     publicKey = deriveBitcoinAccountXpub(mnemonic, network, addressType);
+  } else if (chain === Blockchain.MIDNIGHT) {
+    // Midnight key derivation: BIP39 → 64-byte seed. The Midnight SDK
+    // (HDWallet + UnshieldedAddress) is intentionally NOT imported here —
+    // pulling `@midnight-ntwrk/wallet-sdk-*` into gero-db.ts would drag the
+    // ~10MB ledger-v8 WASM + `effect` runtime into the background service
+    // worker bundle. Instead, callers (CreateWallet.vue, RestoreWallet.vue)
+    // pre-derive the bech32m addresses in the options context and pass them
+    // via `options.midnightAddresses`; gero-db just serializes them onto the
+    // wallet record under `publicKey`.
+    const seed: Uint8Array = bip39.mnemonicToSeedSync(mnemonic);
+    rootKey = { privateKey: seed };
+    publicKey = options?.midnightAddresses
+      ? JSON.stringify(options.midnightAddresses)
+      : JSON.stringify({ unshielded: '', shielded: '', dust: '' });
   } else {
     // Cardano key derivation (existing logic)
     rootKey = resolvePrivateKey(mnemonic);
@@ -332,8 +357,8 @@ export async function createNewWallet(
     try {
       // Step 3: Encrypt private key using PRF output (no additional prompt)
       // Extract key bytes based on chain
-      const keyBytes = chain === Blockchain.BITCOIN
-        ? rootKey.privateKey  // Bitcoin: BIP32 interface has privateKey as Uint8Array
+      const keyBytes = (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT)
+        ? rootKey.privateKey  // Bitcoin/Midnight: { privateKey: Uint8Array }
         : rootKey.bytes();    // Cardano: Bip32PrivateKey has bytes() method
 
       const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
@@ -405,8 +430,9 @@ export async function createNewWallet(
 
     // Encrypt private key based on chain
     let encryptedPrivateKey: string;
-    if (chain === Blockchain.BITCOIN) {
-      // Bitcoin: Use raw key bytes
+    if (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT) {
+      // Bitcoin/Midnight: encrypt raw key bytes (Uint8Array). Same double-encrypt
+      // pattern as Cardano's encryptPrivateKey, just without the Bip32PrivateKey wrapper.
       const { encryptWithPassword } = await import('@/shared/utils/crypto');
       const CryptoTS = await import('crypto-ts');
       const keyBytes = rootKey.privateKey;  // Uint8Array

@@ -140,6 +140,19 @@ export class WalletBg {
       );
       this.stakeAddress = '';  // Bitcoin has no staking address
       console.log('✅ Bitcoin address initialized:', this.baseAddress);
+    } else if (this.chain === Blockchain.MIDNIGHT) {
+      // Midnight: 3 role-specific addresses (shielded / unshielded / dust)
+      // were derived at wallet creation/restore and stored as a JSON blob in
+      // `publicKey`. The unshielded one is what gero-sync subscribes to, so
+      // we hydrate `baseAddress` from it for code paths that read baseAddress
+      // generically. The dashboard UI reads the full set from midnightStore.
+      try {
+        const addrs = this.publicKey ? JSON.parse(this.publicKey) : null;
+        this.baseAddress = addrs?.unshielded ?? '';
+      } catch {
+        this.baseAddress = '';
+      }
+      this.stakeAddress = '';
     } else if (wallet.type === WalletType.Google) {
       // Google wallet (Cardano)
       this.baseAddress = googleBaseAddress
@@ -149,7 +162,16 @@ export class WalletBg {
       this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
       this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
     }
-    this.syncService = new SyncService(this);
+    // Cardano sync service is Cardano-only — Bitcoin uses its own dedicated
+    // sync, Midnight runs through midnightSyncService.
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      this.syncService = new SyncService(this);
+    }
+    // LoaderFactory creates a per-wallet DB-backed cache for config, contacts,
+    // connected dapps, and Cardano-specific tables (account, rewards, etc.).
+    // The Cardano-specific loaders are only invoked from the Cardano init
+    // path; Midnight uses just config/contacts/dapps, all of which read the
+    // per-wallet Dexie DB and are chain-agnostic.
     this.loaderFactory = new LoaderFactory({
       id: this.id,
       chain: this.chain,
@@ -1651,6 +1673,182 @@ export class WalletBg {
     }
   }
 
+  /**
+   * Midnight: sign a list of intent-hash segments with the user's role-derived
+   * key. Used by the Midnight send pipeline — Nexus builds an
+   * `UnprovenTransaction` server-side, the wallet signs each emitted segment
+   * locally so the SDK never sees raw key material.
+   *
+   * The signing primitive is the SDK's `UnshieldedKeystore.signData(bytes)`
+   * which produces the BIP-340-compatible `Signature` (hex string) that
+   * `signUnprovenTransaction` expects in its callback.
+   *
+   * **Role mapping**:
+   *  - `NightExternal` (HD role 0) — unshielded NIGHT spends + DUST registration
+   *  - `Zswap`         (HD role 3) — shielded NIGHT spends (Phase 3)
+   *
+   * The mnemonic is decrypted on every call and the derived key is wiped on
+   * exit; nothing is cached on the WalletBg instance.
+   *
+   * @param segments  Array of `{ index, role, dataHex }` from Nexus's build response
+   * @param password  Spending password (password wallets)
+   * @param prfSecret Raw PRF output bytes (PRF/PassKey wallets)
+   * @returns         Array of `{ index, signatureHex }` matching input order
+   */
+  async signMidnightSegments(
+    segments: Array<{ index: number; role: 'NightExternal' | 'Zswap'; dataHex: string }>,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<Array<{ index: number; signatureHex: string }>> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('signMidnightSegments called on non-Midnight wallet');
+    }
+    if (segments.length === 0) return [];
+
+    // Decrypt the mnemonic once for the batch — we wipe it before returning.
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      // Phase 1 supports NightExternal only; Zswap lands in Phase 3 alongside
+      // the shielded send flow (requires `wallet-sdk-shielded` integration).
+      const usesZswap = segments.some(s => s.role === 'Zswap');
+      if (usesZswap) {
+        throw new Error('Zswap (shielded) signing is not yet supported. Phase 3 work pending.');
+      }
+
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = deriveMidnightKeys(mnemonic, this.network);
+
+      const { createKeystore } = await import('@midnight-ntwrk/wallet-sdk-unshielded-wallet');
+      // Map our project's `Network` constant to the SDK's NetworkId string.
+      // We avoid duplicating the mapping here — `midnightNetworkId` lives in
+      // `midnightKeyManager` and is already used during address derivation.
+      const { Network } = await import('@/models/types');
+      let networkId: string;
+      switch (this.network) {
+        case Network.MAINNET: networkId = 'mainnet'; break;
+        case Network.PREVIEW: networkId = 'preview'; break;
+        case Network.PREPROD: networkId = 'preprod'; break;
+        case Network.TESTNET: networkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+
+      const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
+
+      const results: Array<{ index: number; signatureHex: string }> = [];
+      for (const segment of segments) {
+        const dataBytes = Buffer.from(segment.dataHex, 'hex');
+        const signature = keystore.signData(dataBytes);
+        // The SDK's `Signature` type is `string` (hex). Pass it through as-is
+        // so Nexus can hand it back to `signUnprovenTransaction`.
+        results.push({ index: segment.index, signatureHex: signature as unknown as string });
+      }
+
+      // Best-effort wipe — Uint8Array can be zeroed; the BIP39 string lives
+      // in the GC heap and is hard to clear directly, so we drop the reference.
+      derived.unshieldedSecretKey.fill(0);
+      derived.dustSecretKey.fill(0);
+      derived.seed.fill(0);
+
+      return results;
+    } finally {
+      // Even on throw, drop the mnemonic reference so the GC can reclaim it.
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
+   * Return the `publicKeyHex` and `addressHex` the Nexus sidecar needs to
+   * reconstruct this wallet seedlessly via `UnshieldedWallet.startWithPublicKey`.
+   *
+   * Fast path (no decryption): if the wallet record already stores these (set at
+   * creation/restore time, or persisted by a previous slow-path call), reads them
+   * directly from `this.publicKey` JSON.
+   *
+   * Slow path (one-time migration): decrypts the mnemonic, derives the keystore,
+   * writes the keys back to the DB for next time, wipes the mnemonic.
+   */
+  async getMidnightWalletKeys(
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ publicKeyHex: string; addressHex: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('getMidnightWalletKeys called on non-Midnight wallet');
+    }
+
+    // Fast path: already stored.
+    try {
+      const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+      if (parsed?.publicKeyHex && parsed?.addressHex) {
+        return { publicKeyHex: parsed.publicKeyHex, addressHex: parsed.addressHex };
+      }
+    } catch {
+      // Malformed JSON — fall through to slow path.
+    }
+
+    // Slow path: derive from mnemonic and persist.
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret required to derive Midnight wallet keys');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password required to derive Midnight wallet keys');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = deriveMidnightKeys(mnemonic, this.network);
+
+      // Persist back to the wallet record so future calls take the fast path.
+      try {
+        const existing = this.publicKey ? JSON.parse(this.publicKey) : {};
+        const updated = JSON.stringify({
+          ...existing,
+          publicKeyHex: derived.publicKeyHex,
+          addressHex: derived.addressHex,
+        });
+        this.publicKey = updated;
+        const { getDb } = await import('@/db/gero-db');
+        const database = await getDb();
+        await (database as any).wallets.update(this.id, { publicKey: updated });
+      } catch {
+        // Non-fatal — keys are still returned for this request.
+      }
+
+      derived.unshieldedSecretKey.fill(0);
+      derived.dustSecretKey.fill(0);
+      derived.seed.fill(0);
+
+      return { publicKeyHex: derived.publicKeyHex, addressHex: derived.addressHex };
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
   async signData(
     address: Cardano.PaymentAddress | Cardano.RewardAccount | string,
     payload: string,
@@ -1749,8 +1947,10 @@ export class WalletBg {
   }
 
   isEnterpriseAddress(): boolean {
-    // Bitcoin has no enterprise addresses
-    if (this.chain === Blockchain.BITCOIN) {
+    // Non-Cardano chains have no enterprise/script-address concept and use
+    // address formats the Cardano SDK can't parse (Bitcoin: bech32 with
+    // different HRP; Midnight: bech32m with `mn_addr_*` HRP).
+    if (this.chain === Blockchain.BITCOIN || this.chain === Blockchain.MIDNIGHT) {
       return false;
     }
 
