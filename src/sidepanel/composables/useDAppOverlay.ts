@@ -1,4 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useChainContext } from './useChainContext';
 
 export interface DAppRequest {
   type: 'dapp-request';
@@ -98,7 +99,11 @@ export function useDAppOverlay() {
     }
   }
 
-  onMounted(() => connect());
+  onMounted(() => {
+    const { isApex } = useChainContext();
+    if (isApex.value) return; // Apex falls back to popup signing — no overlay port
+    connect();
+  });
   onUnmounted(() => port?.disconnect());
 
   return { isVisible, currentRequest, requestQueue, approve, reject };

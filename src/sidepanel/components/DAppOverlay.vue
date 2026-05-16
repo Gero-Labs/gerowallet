@@ -1,5 +1,6 @@
 <template>
   <BottomSheet
+    v-if="!isApex"
     :value="isVisible"
     :persistent="true"
     :show-handle="false"
@@ -330,6 +331,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
+import { useChainContext } from '../composables/useChainContext';
 import BottomSheet from './BottomSheet.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import TransactionDetailsCard, {
@@ -355,6 +357,7 @@ interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
 
 const { isVisible, currentRequest, requestQueue, approve, reject } = useDAppOverlay();
+const { isApex } = useChainContext();
 
 const spendingPassword = ref('');
 const showPassword = ref(false);
