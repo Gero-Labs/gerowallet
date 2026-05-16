@@ -333,7 +333,6 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
 import { useChainContext } from '../composables/useChainContext';
 import BottomSheet from './BottomSheet.vue';
-import CopyButton from '@/shared/components/CopyButton.vue';
 import TransactionDetailsCard, {
   type TxDetailsWithdrawal,
   type TxDetailsTotals,
@@ -402,10 +401,6 @@ const signDataMessage = computed(() => {
 });
 
 // ── Sign Tx — decoded summary so users see what they're signing ──
-
-// Cap on how many tokens we list in the asset tooltip — keeps the popover from
-// becoming a wall of text for token-heavy outputs (NFT bundles, DEX pool tokens, etc.)
-const ASSET_TOOLTIP_LIMIT = 6;
 
 interface SignTxAssetInfo {
   unit: string;
