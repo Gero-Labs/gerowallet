@@ -10,7 +10,17 @@ import { debugLog } from '@/utils/debug';
 type StoreUpdateMessage = {
   type: 'STORE_UPDATE';
   storeName: string;
-  updates: Record<string, any>;
+  updates: Record<string, unknown>;
+  timestamp: number;
+};
+
+type StoreUpdateChunkMessage = {
+  type: 'STORE_UPDATE_CHUNK';
+  storeName: string;
+  updateId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  data: string;
   timestamp: number;
 };
 
@@ -19,11 +29,20 @@ type StoreSubscribeMessage = {
   storeName: string;
 };
 
-type Message = StoreUpdateMessage | StoreSubscribeMessage;
+type Message = StoreUpdateMessage | StoreUpdateChunkMessage | StoreSubscribeMessage;
+
+// Chrome runtime port has a 64 MiB per-message *byte* cap. We size against
+// `string.length` (UTF-16 code units), so chunks may expand up to ~3 bytes per
+// code unit when serialized to UTF-8 (CJK / non-ASCII metadata). Chunk at
+// 8 MiB code units (≤ 24 MiB bytes worst case) and split anything above
+// 16 MiB code units (≤ 48 MiB bytes worst case) — both safely under 64 MiB.
+const CHUNK_SIZE_CODE_UNITS = 8 * 1024 * 1024;
+const SIZE_THRESHOLD_CODE_UNITS = 16 * 1024 * 1024;
 
 class BackgroundStoreMessaging {
   private connectedPorts = new Set<chrome.runtime.Port>();
   private storeSubscriptions = new Map<string, Set<chrome.runtime.Port>>();
+  private updateSeq = 0;
 
   constructor() {
     this.initialize();
@@ -99,39 +118,66 @@ class BackgroundStoreMessaging {
   /**
    * Broadcast store update to all subscribed ports
    */
-  public broadcastUpdate(storeName: string, updates: Record<string, any>) {
-    const message: StoreUpdateMessage = {
-      type: 'STORE_UPDATE',
-      storeName,
-      updates,
-      timestamp: Date.now()
-    };
+  public broadcastUpdate(storeName: string, updates: Record<string, unknown>) {
+    const timestamp = Date.now();
+    const messages = this.buildMessages(storeName, updates, timestamp);
 
-    // Send to all ports subscribed to this store
     const subscribedPorts = this.storeSubscriptions.get(storeName);
-    if (subscribedPorts) {
-      subscribedPorts.forEach(port => {
-        try {
-          port.postMessage(message);
-        } catch (error) {
-          console.error(`Failed to send update to port:`, error);
-          // Remove disconnected port
-          subscribedPorts.delete(port);
-          this.connectedPorts.delete(port);
-        }
-      });
-    }
+    const targets = new Set<chrome.runtime.Port>();
+    if (subscribedPorts) subscribedPorts.forEach(p => targets.add(p));
+    this.connectedPorts.forEach(p => targets.add(p));
 
-    // Also send to all connected ports (for stores that don't require explicit subscription)
-    this.connectedPorts.forEach(port => {
-      try {
-        port.postMessage(message);
-      } catch (error) {
-        console.error(`Failed to send update to port:`, error);
-        // Remove disconnected port
-        this.connectedPorts.delete(port);
+    targets.forEach(port => {
+      for (const msg of messages) {
+        try {
+          port.postMessage(msg);
+        } catch (error) {
+          console.error('Failed to send update to port:', error);
+          subscribedPorts?.delete(port);
+          this.connectedPorts.delete(port);
+          break;
+        }
       }
     });
+  }
+
+  /**
+   * Build either a single STORE_UPDATE or a sequence of STORE_UPDATE_CHUNK
+   * messages depending on serialized size.
+   */
+  private buildMessages(
+    storeName: string,
+    updates: Record<string, unknown>,
+    timestamp: number,
+  ): Message[] {
+    let serialized: string;
+    try {
+      serialized = JSON.stringify(updates);
+    } catch (error) {
+      console.error('Failed to serialize store update:', error);
+      return [];
+    }
+
+    if (serialized.length <= SIZE_THRESHOLD_CODE_UNITS) {
+      return [{ type: 'STORE_UPDATE', storeName, updates, timestamp }];
+    }
+
+    const updateId = `${timestamp}-${++this.updateSeq}`;
+    const totalChunks = Math.ceil(serialized.length / CHUNK_SIZE_CODE_UNITS);
+    const chunks: StoreUpdateChunkMessage[] = [];
+    for (let i = 0; i < totalChunks; i++) {
+      chunks.push({
+        type: 'STORE_UPDATE_CHUNK',
+        storeName,
+        updateId,
+        chunkIndex: i,
+        totalChunks,
+        data: serialized.slice(i * CHUNK_SIZE_CODE_UNITS, (i + 1) * CHUNK_SIZE_CODE_UNITS),
+        timestamp,
+      });
+    }
+    debugLog(`📦 Chunking store update ${storeName} (${serialized.length} code units → ${totalChunks} chunks)`);
+    return chunks;
   }
 
   /**
