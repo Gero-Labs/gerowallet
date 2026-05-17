@@ -15,6 +15,7 @@ export function useDAppOverlay() {
   const isVisible = ref(false);
   const currentRequest = ref<DAppRequest | null>(null);
   const requestQueue = ref<DAppRequest[]>([]);
+  const { isApex } = useChainContext();
   let port: chrome.runtime.Port | null = null;
   let retryCount = 0;
 
@@ -100,7 +101,6 @@ export function useDAppOverlay() {
   }
 
   onMounted(() => {
-    const { isApex } = useChainContext();
     if (isApex.value) return; // Apex falls back to popup signing — no overlay port
     connect();
   });

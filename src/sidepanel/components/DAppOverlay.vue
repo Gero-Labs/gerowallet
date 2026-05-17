@@ -673,8 +673,7 @@ function resolveAssetInfo(unit: string): KnownAssetInfo {
   return { name: 'Unknown token', decimals: 0 };
 }
 
-// Raw CBOR hex of the current sign request — used by both the parser below and
-// the CopyButton in the tx details header.
+// Raw CBOR hex of the current sign request — used by the parser below.
 const txCborForSummary = computed<string | null>(() => {
   if (currentRequest.value?.method !== 'signTx') return null;
   return (currentRequest.value.payload?.tx as string | undefined) || null;
