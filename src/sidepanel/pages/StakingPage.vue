@@ -15,15 +15,15 @@
           class="segment-btn text-none"
         >
           <v-icon small class="mr-1">mdi-server-network</v-icon>
-          {{ $t('miniGero.stakepool') }}
+          {{ isApex ? $t('miniGero.delegation') : $t('miniGero.stakepool') }}
         </v-btn>
         <v-btn
           small
           :class="{ 'segment-active': activeTab === 1 }"
           class="segment-btn text-none"
         >
-          <v-icon small class="mr-1">mdi-vote</v-icon>
-          {{ $t('miniGero.governance') }}
+          <v-icon small class="mr-1">{{ isApex ? 'mdi-trophy-outline' : 'mdi-vote' }}</v-icon>
+          {{ isApex ? $t('miniGero.rewards') : $t('miniGero.governance') }}
         </v-btn>
       </v-btn-toggle>
     </div>
@@ -37,6 +37,7 @@
 
     <!-- Active View -->
     <PoolListView v-if="activeTab === 0" />
+    <RewardsView v-else-if="isApex" />
     <GovernanceView v-else />
 
     <!-- Claim Rewards Bottom Sheet -->
@@ -93,12 +94,15 @@ import networks from '@/utils/networks';
 import StakingStatusCard from '../components/staking/StakingStatusCard.vue';
 import PoolListView from '../components/staking/PoolListView.vue';
 import GovernanceView from '../components/staking/GovernanceView.vue';
+import RewardsView from '../components/staking/RewardsView.vue';
 import BottomSheet from '../components/BottomSheet.vue';
+import { useChainContext } from '../composables/useChainContext';
 
 const activeTab = ref(0);
 const showClaimSheet = ref(false);
 const claimLoading = ref(false);
 
+const { isApex } = useChainContext();
 const { loggedWallet, account } = toRefs(walletStore);
 
 const currencySymbol = computed(() => {
