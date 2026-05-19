@@ -18,7 +18,7 @@
     <template v-else>
       <MiniLayout
         @wallet-switch="showWalletSwitcher = true"
-        @settings="openFullDashboard"
+        @settings="openDashboardSettings"
       />
       <DAppOverlay />
     </template>
@@ -44,7 +44,6 @@ import DAppOverlay from './components/DAppOverlay.vue';
 import BottomSheet from './components/BottomSheet.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Wallet } from '@/models/types';
-import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
 
 const { t } = useTranslation();
 const showWalletSwitcher = ref(false);
@@ -88,9 +87,26 @@ function onWalletSwitch(wallet: Wallet) {
   onWalletSelect(wallet);
 }
 
-function openFullDashboard() {
-  openFullDashboardTab();
+function openDashboardSettings() {
+  chrome.storage.local.set({ openSettingsOnLoad: true });
+  const dashboardUrl = chrome.runtime.getURL('index.html');
+  try {
+    chrome.tabs.query({ url: `${dashboardUrl}*` }, (tabs) => {
+      if (tabs.length > 0 && tabs[0].id !== undefined) {
+        chrome.tabs.update(tabs[0].id, { active: true });
+        if (tabs[0].windowId !== undefined) {
+          chrome.windows.update(tabs[0].windowId, { focused: true });
+        }
+      } else {
+        chrome.tabs.create({ url: dashboardUrl });
+      }
+    });
+  } catch (e) {
+    console.warn('Failed to query dashboard tabs, opening new tab:', e);
+    chrome.tabs.create({ url: dashboardUrl });
+  }
 }
+
 </script>
 <style>
 .custom-tooltip {
