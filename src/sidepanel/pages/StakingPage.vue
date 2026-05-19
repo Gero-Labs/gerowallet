@@ -52,7 +52,7 @@
             <span class="text-caption grey--text">{{ $t('miniGero.claimableRewards') }}</span>
             <span class="text-body-2 font-weight-bold" style="color: #00c7f3;">{{ formattedRewards }}</span>
           </div>
-          <div v-if="!hasDRepDelegation" class="drep-warning">
+          <div v-if="claimGatedByDRep" class="drep-warning">
             <v-icon small color="warning" class="mr-1">mdi-alert-outline</v-icon>
             <span class="text-caption warning--text">{{ $t('miniGero.drepRequired') }}</span>
           </div>
@@ -62,14 +62,14 @@
           block
           class="mt-4 claim-btn"
           :loading="claimLoading"
-          :disabled="!hasDRepDelegation"
+          :disabled="claimGatedByDRep"
           @click="confirmClaim"
         >
-          {{ hasDRepDelegation ? $t('miniGero.confirmWithdrawal') : $t('miniGero.delegateDRepFirst') }}
+          {{ claimGatedByDRep ? $t('miniGero.delegateDRepFirst') : $t('miniGero.confirmWithdrawal') }}
         </v-btn>
 
         <v-btn
-          v-if="!hasDRepDelegation"
+          v-if="claimGatedByDRep"
           block
           text
           small
@@ -122,6 +122,10 @@ const formattedRewards = computed(() => {
 const hasDRepDelegation = computed(() => {
   return !!account.value?.drep_id;
 });
+
+// DRep delegation is a Cardano Conway-era requirement for reward withdrawal.
+// Apex has no governance/DRep layer, so its claim flow is never DRep-gated.
+const claimGatedByDRep = computed(() => !isApex.value && !hasDRepDelegation.value);
 
 const handleClaim = () => {
   showClaimSheet.value = true;
