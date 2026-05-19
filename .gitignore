@@ -52,3 +52,7 @@ graphify-out/
 # Translation utility scripts (temporary)
 scripts/translate-*.js
 scripts/merge-translations.js
+
+# Local planning/spec notes from superpowers skills
+docs/superpowers/
+.superpowers/
