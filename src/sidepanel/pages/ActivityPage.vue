@@ -210,7 +210,7 @@ function openTxDetail(tx: any) {
 }
 
 .icon-receive {
-  background: rgba(0, 199, 243, 0.15);
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
 }
 
 .icon-send {
@@ -238,7 +238,7 @@ function openTxDetail(tx: any) {
 }
 
 .accent-text {
-  color: #00c7f3;
+  color: var(--chain-primary);
 }
 
 .error-text {

@@ -26,7 +26,7 @@
               @error="faviconFailed = true"
               v-if="!faviconFailed"
             />
-            <v-icon v-else size="32" color="#00c7f3">mdi-web</v-icon>
+            <v-icon v-else size="32" :color="primaryColor">mdi-web</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
@@ -45,7 +45,7 @@
           <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
           <v-checkbox
             v-model="enableConsent"
-            color="#00DFF3"
+            :color="primaryColor"
             hide-details
             dark
             dense
@@ -149,7 +149,7 @@
         <!-- Ledger wallet -->
         <template v-else-if="walletType === WalletType.Ledger">
           <div class="hw-notice pa-3 mb-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectLedger') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -164,7 +164,7 @@
         <!-- Trezor wallet -->
         <template v-else-if="walletType === WalletType.Trezor">
           <div class="hw-notice pa-3 mb-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectTrezor') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -179,7 +179,7 @@
         <!-- Keystone wallet -->
         <template v-else-if="walletType === WalletType.Keystone">
           <div class="hw-notice pa-3 mb-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-qrcode-scan</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-qrcode-scan</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.keystoneSign') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -274,7 +274,7 @@
         <!-- Ledger wallet -->
         <template v-else-if="walletType === WalletType.Ledger">
           <div class="hw-notice pa-3 mb-3 mt-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectLedger') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -289,7 +289,7 @@
         <!-- Trezor wallet -->
         <template v-else-if="walletType === WalletType.Trezor">
           <div class="hw-notice pa-3 mb-3 mt-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectTrezor') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -356,7 +356,8 @@ interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
 
 const { isVisible, currentRequest, requestQueue, approve, reject } = useDAppOverlay();
-const { isApex } = useChainContext();
+const { isApex, themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const spendingPassword = ref('');
 const showPassword = ref(false);
@@ -1412,8 +1413,8 @@ async function signDataHw() {
   font-size: 9px;
   padding: 1px 6px;
   border-radius: 6px;
-  background: rgba(0, 199, 243, 0.15);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  color: var(--chain-primary);
   font-weight: 600;
 }
 
@@ -1535,7 +1536,7 @@ async function signDataHw() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: rgba(0, 199, 243, 0.08);
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent);
   border-radius: 8px;
   width: 100%;
 }

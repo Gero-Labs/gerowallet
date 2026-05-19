@@ -12,7 +12,7 @@
       <v-btn
         block
         outlined
-        color="#00c7f3"
+        :color="primaryColor"
         class="mt-6"
         @click="openDashboard"
       >
@@ -24,7 +24,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import BottomSheet from '../BottomSheet.vue';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 defineProps<{
   value: boolean;

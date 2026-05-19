@@ -50,7 +50,7 @@
         <div class="claim-info-card">
           <div class="d-flex justify-space-between mb-2">
             <span class="text-caption grey--text">{{ $t('miniGero.claimableRewards') }}</span>
-            <span class="text-body-2 font-weight-bold" style="color: #00c7f3;">{{ formattedRewards }}</span>
+            <span class="text-body-2 font-weight-bold" style="color: var(--chain-primary);">{{ formattedRewards }}</span>
           </div>
           <div v-if="claimGatedByDRep" class="drep-warning">
             <v-icon small color="warning" class="mr-1">mdi-alert-outline</v-icon>
@@ -73,7 +73,7 @@
           block
           text
           small
-          color="#00c7f3"
+          :color="primaryColor"
           class="mt-2 text-none"
           @click="goToGovernance"
         >
@@ -102,7 +102,8 @@ const activeTab = ref(0);
 const showClaimSheet = ref(false);
 const claimLoading = ref(false);
 
-const { isApex } = useChainContext();
+const { isApex, themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 const { loggedWallet, account } = toRefs(walletStore);
 
 const currencySymbol = computed(() => {
@@ -216,8 +217,8 @@ watch(
 }
 
 .segment-active {
-  background: linear-gradient(135deg, rgba(0, 199, 243, 0.15), rgba(0, 255, 209, 0.1)) !important;
-  color: #00c7f3 !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--chain-gradient1) 15%, transparent), color-mix(in srgb, var(--chain-gradient2) 10%, transparent)) !important;
+  color: var(--chain-primary) !important;
 }
 
 /* Claim confirmation */
@@ -238,7 +239,7 @@ watch(
 }
 
 .claim-btn {
-  background: linear-gradient(135deg, #00c7f3, #00ffd1) !important;
+  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2)) !important;
   color: #000 !important;
   font-weight: 600;
   text-transform: none;

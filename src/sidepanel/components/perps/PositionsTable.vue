@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import type { Position } from '@/api/strike-v2.types';
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   positions: Position[];
   loading?: boolean;
 }>(), {
@@ -240,8 +240,8 @@ function isLiqClose(pos: Position): boolean {
 }
 
 .badge--leverage {
-  background: rgba(0, 199, 243, 0.15);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  color: var(--chain-primary);
 }
 
 .badge--margin-mode {

@@ -211,8 +211,8 @@ function formatDuration(openedAt: string, closedAt: string): string {
 }
 
 .badge--leverage {
-  background: rgba(0, 199, 243, 0.12);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  color: var(--chain-primary);
 }
 
 /* ── Prices ── */

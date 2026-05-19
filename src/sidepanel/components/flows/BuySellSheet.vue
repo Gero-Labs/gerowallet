@@ -44,7 +44,7 @@
         <v-btn
           text
           small
-          color="#00c7f3"
+          :color="primaryColor"
           class="mt-4"
           @click="step = 1"
         >
@@ -58,7 +58,7 @@
         <v-progress-circular
           v-if="iframeLoading"
           size="48"
-          color="#00c7f3"
+          :color="primaryColor"
           indeterminate
           class="iframe-loader"
         />
@@ -73,7 +73,7 @@
         <v-btn
           text
           small
-          color="#00c7f3"
+          :color="primaryColor"
           class="back-btn"
           @click="goBackToProviders"
         >
@@ -93,6 +93,10 @@ import { walletStore } from '@/stores/walletStore';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';
 import BottomSheet from '../BottomSheet.vue';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
 const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;
@@ -219,7 +223,7 @@ watch(() => props.value, (open) => {
 
 .choice-card:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(0, 199, 243, 0.3);
+  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
 }
 
 .choice-card:active {
@@ -259,7 +263,7 @@ watch(() => props.value, (open) => {
 
 .provider-item:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(0, 199, 243, 0.3);
+  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
 }
 
 .provider-logo {

@@ -103,7 +103,7 @@
 
       <!-- Loading -->
       <div v-if="loading && filteredVaults.length === 0" class="text-center py-8">
-        <v-progress-circular indeterminate color="#00c7f3" size="32" width="3" />
+        <v-progress-circular indeterminate :color="primaryColor" size="32" width="3" />
         <div class="grey--text text-caption mt-2">{{ $t('vaults.loadingVaults') }}</div>
       </div>
 
@@ -114,7 +114,7 @@
       >
         <v-icon size="40" color="rgba(255,255,255,0.08)">mdi-safe-square-outline</v-icon>
         <div class="text-body-2 grey--text mt-3 text-center">{{ $t('vaults.noVaultsFound') }}</div>
-        <v-btn x-small text color="#00c7f3" class="mt-2" @click="clearFilters()">
+        <v-btn x-small text :color="primaryColor" class="mt-2" @click="clearFilters()">
           {{ $t('vaults.clearFilters') }}
         </v-btn>
       </div>
@@ -142,7 +142,7 @@
           <v-btn
             small
             text
-            color="#00c7f3"
+            :color="primaryColor"
             :loading="loading"
             @click="loadMore()"
           >
@@ -193,8 +193,12 @@ import VaultDetailSheet from '../components/perps/VaultDetailSheet.vue';
 import VaultDepositSheet from '../components/perps/VaultDepositSheet.vue';
 import VaultWithdrawSheet from '../components/perps/VaultWithdrawSheet.vue';
 import StrikeOnboarding from '../components/perps/StrikeOnboarding.vue';
+import { useChainContext } from '../composables/useChainContext';
 
 // ── Composables ────────────────────────────────────────────────────────────────
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const {
   vaults,
@@ -385,8 +389,8 @@ onMounted(() => {
 .deposits-summary {
   display: flex;
   align-items: center;
-  background: rgba(0, 199, 243, 0.04);
-  border: 1px solid rgba(0, 199, 243, 0.12);
+  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 12%, transparent);
   border-radius: 12px;
   padding: 12px 16px;
   backdrop-filter: blur(8px);
@@ -404,7 +408,7 @@ onMounted(() => {
 .deposits-summary__divider {
   width: 1px;
   height: 28px;
-  background: rgba(0, 199, 243, 0.15);
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
   margin: 0 16px;
 }
 
@@ -423,7 +427,7 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.deposits-summary__value--cyan { color: #00c7f3; }
+.deposits-summary__value--cyan { color: var(--chain-primary); }
 
 /* ── Position Mini-Cards (horizontal scroll) ── */
 .positions-scroll-wrap {
@@ -456,8 +460,8 @@ onMounted(() => {
 }
 
 .position-mini-card:hover {
-  background: rgba(0, 199, 243, 0.05);
-  border-color: rgba(0, 199, 243, 0.22);
+  background: color-mix(in srgb, var(--chain-primary) 5%, transparent);
+  border-color: color-mix(in srgb, var(--chain-primary) 22%, transparent);
 }
 
 .pmini-name {
@@ -517,9 +521,9 @@ onMounted(() => {
 }
 
 .filter-chip--active {
-  background: rgba(0, 199, 243, 0.12);
-  border-color: rgba(0, 199, 243, 0.3);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
+  color: var(--chain-primary);
   font-weight: 600;
 }
 

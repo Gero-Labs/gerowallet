@@ -3,7 +3,7 @@
     <div v-if="tx" class="tx-detail">
       <!-- Amount -->
       <div class="tx-amount-section">
-        <v-icon :color="isReceive ? '#00c7f3' : '#ff8e8e'" size="36">
+        <v-icon :color="isReceive ? primaryColor : '#ff8e8e'" size="36">
           {{ isReceive ? 'mdi-arrow-bottom-left' : 'mdi-arrow-top-right' }}
         </v-icon>
         <div class="tx-amount" :class="isReceive ? 'accent--text' : 'error--text'">
@@ -64,7 +64,7 @@
         block
         outlined
         small
-        color="#00c7f3"
+        :color="primaryColor"
         class="mt-4"
         @click="openExplorer"
       >
@@ -83,6 +83,10 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { getExplorerUrl } from '@/shared/utils/explorer';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 type TxAsset = {
   unit: string;
@@ -190,7 +194,7 @@ function openExplorer() {
 }
 
 .accent--text {
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
 }
 
 .error--text {
@@ -238,7 +242,7 @@ function openExplorer() {
 }
 
 .detail-value.clickable:hover {
-  color: #00c7f3;
+  color: var(--chain-primary);
 }
 
 .fee-text {
