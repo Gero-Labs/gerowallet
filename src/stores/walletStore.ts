@@ -57,8 +57,6 @@ export interface WalletStore {
   tokens: {};
   collections: {};
   config: any;
-  fiatRates: {};
-  fiatRatesIntervalId: any;
   rewards?: any[];
   contacts?: Record<string, Contact>;
   connectedDapps?: any[];
@@ -75,7 +73,6 @@ export const walletStore = Vue.observable<WalletStore>({
   transactions: [],
   utxos: [],
   collateral: null,
-  nexusCollateral: null,
   keys: null,
   tokens: {},
   collections: {},
@@ -96,8 +93,6 @@ export const walletStore = Vue.observable<WalletStore>({
     websiteProtection: true,
     autoWithdrawRewards: false,
   },
-  fiatRates: null,
-  fiatRatesIntervalId: null,
   rewards: [],
   contacts: {},
   connectedDapps: [],
@@ -309,16 +304,6 @@ export default {
     broadcastFromBackground({ config });
   },
 
-  setFiatRates(fiatRates: any) {
-    walletStore.fiatRates = fiatRates;
-    broadcastFromBackground({ fiatRates });
-  },
-
-  setFiatRatesIntervalId(fiatRatesIntervalId: any) {
-    walletStore.fiatRatesIntervalId = fiatRatesIntervalId;
-    broadcastFromBackground({ fiatRatesIntervalId });
-  },
-
   setRewards(rewards: any[]) {
     walletStore.rewards = rewards;
     broadcastFromBackground({ rewards });
@@ -464,8 +449,6 @@ export default {
       tokens: {},
       collections: {},
       config: {},
-      fiatRates: null,
-      fiatRatesIntervalId: null,
       rewards: [],
       connectedDapps: [],
       bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
@@ -488,12 +471,6 @@ export default {
     // CRITICAL: Clear wallet-specific alarms only (keep system alarms like auto-lock-check)
     clearWalletSpecificAlarms();
 
-    // Clear intervals to prevent memory leaks
-    if (walletStore.fiatRatesIntervalId) {
-      clearInterval(walletStore.fiatRatesIntervalId);
-      walletStore.fiatRatesIntervalId = null;
-    }
-
     // Clear all wallet-specific data immediately during wallet switching
     // This prevents cross-wallet data contamination
     const clearedState: Partial<WalletStore> = {
@@ -507,7 +484,6 @@ export default {
       rewards: [],
       contacts: {},
       connectedDapps: [],
-      fiatRatesIntervalId: null,
       bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
     };
 

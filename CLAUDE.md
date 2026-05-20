@@ -142,8 +142,8 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 
 ## Background Polling
 - **Sync (Ably `onTip`)**: Full speed when unlocked; throttled to every 2 min when locked (`walletManager.service.ts`)
-- **Fiat rates**: Every 4 hours (`walletBg.ts startSync`)
 - **Xerberus risk scores**: Every 12 hours
+- **Fiat rates (USD→EUR)**: Fetched on demand by `useCurrencyConverter.ts` via `/api/price/fiatRates`. No background polling.
 - **Price data**: Provided by market data API (`market-api.ts`), NOT by background alarms. No CoinGecko, ticker, DexHunter mcap, RealFi, or TapTools polling in background.
 
 ## Performance
