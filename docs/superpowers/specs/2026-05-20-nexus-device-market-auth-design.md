@@ -177,9 +177,11 @@ All paths under `nexus/src/main/java/io/gerowallet/`.
 - New `DeviceRateLimitBuckets` — Caffeine `Cache<String, TokenBucket>`, parallel to
   `RateLimitBuckets` but String-keyed; separate buckets for per-deviceId and per-IP.
 - Enforced on:
-  - `POST /api/auth/device` and `/api/auth/device/refresh` — caps token minting.
-  - Device market REST routes.
-  - WS handshake (connection attempts; not per-message — relay is upstream push).
+  - `POST /api/auth/device` and `/api/auth/device/refresh` — **per-IP only** —
+    caps token minting.
+  - Device market REST routes — per-deviceId + per-IP.
+  - WS handshake (connection attempts; not per-message — relay is upstream push)
+    — per-deviceId + per-IP.
 - Exceed → **429**.
 - Config keys + approved defaults:
 
@@ -187,10 +189,16 @@ All paths under `nexus/src/main/java/io/gerowallet/`.
   |---|---|
   | Market REST, per-device | 10 / 20 |
   | Market REST, per-IP | 50 / 100 |
-  | `/api/auth/device`, per-device | 1 / 5 |
   | `/api/auth/device`, per-IP | 2 / 10 |
   | WS handshake, per-device | 1 / 5 |
   | WS handshake, per-IP | 10 / 20 |
+
+  > No per-device limit on `/api/auth/device`: a per-deviceId bucket only
+  > constrains an endpoint hit repeatedly with the *same* id. The minting
+  > endpoint is precisely where an attacker uses a fresh deviceId per call, so
+  > each id is seen once and the bucket never fills. Per-IP is the meaningful
+  > control there. Per-device applies where the id repeats — market routes and
+  > WS reconnect.
 
 - Single-instance only, consistent with existing `TokenBucket`/`RateLimitBuckets`.
   Redis/Bucket4j upgrade noted as future work, not in scope.
