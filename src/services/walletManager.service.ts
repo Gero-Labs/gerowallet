@@ -309,7 +309,6 @@ export class WalletManager {
       await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys()]);
 
       promises.push(
-        walletBg.startSync(),
         walletBg.loadConfig(),
         walletBg.loadAccount(),
         walletBg.loadContacts(),
@@ -464,21 +463,14 @@ export class WalletManager {
         }
       }
 
-      // Stop sync intervals before clearing wallet data
+      // Stop Bitcoin periodic sync before clearing wallet data
       try {
-        if (this.walletBg) {
-          this.walletBg.endSync();
-
-          // Stop Bitcoin periodic sync if it's a Bitcoin wallet
-          if (this.walletBg.chain === Blockchain.BITCOIN) {
-            this.walletBg.stopBitcoinPeriodicSync();
-            debugLog('Bitcoin periodic sync stopped during logout');
-          }
-
-          debugLog('WalletBg sync intervals cleared during logout');
+        if (this.walletBg && this.walletBg.chain === Blockchain.BITCOIN) {
+          this.walletBg.stopBitcoinPeriodicSync();
+          debugLog('Bitcoin periodic sync stopped during logout');
         }
       } catch (syncError) {
-        console.warn('Failed to end sync during logout:', syncError);
+        console.warn('Failed to stop Bitcoin sync during logout:', syncError);
       }
 
       // Clear wallet store data
