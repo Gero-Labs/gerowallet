@@ -185,7 +185,9 @@
                   <v-tooltip bottom content-class="custom-tooltip">
                     <template v-slot:activator="{ on }">
                       <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
-                        <v-icon size="23">mdi-fullscreen-exit</v-icon>
+                        <v-avatar size="23">
+                          <img :src="assets.miniModeSvg" :alt="t('miniGero.miniMode')" />
+                        </v-avatar>
                       </v-btn>
                     </template>
                     <span>{{ t('miniGero.miniMode') }}</span>
