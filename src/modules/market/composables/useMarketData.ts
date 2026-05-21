@@ -9,6 +9,7 @@ import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { debugLog } from '@/utils/debug';
+import { getNexusAccessToken } from '@/services/nexusDevice.service';
 
 export interface MarketToken {
   unit: string;
@@ -371,7 +372,7 @@ function getTokenByUnit(unit: string): MarketToken | undefined {
 
 // --- Live price streaming via SockJS + STOMP ---
 
-const MARKET_API_BASE = import.meta.env['VITE_MARKET_API_URL'] || 'https://market.gerowallet.io';
+const MARKET_API_BASE = import.meta.env['VITE_NEXUS_URL'];
 const STOMP_TOPIC = '/topic/market/prices';
 
 let sock: WebSocket | null = null;
@@ -444,11 +445,12 @@ function parseStompFrame(data: string): { command: string; headers: Record<strin
   return { command, headers, body };
 }
 
-function connectStream(): void {
+async function connectStream(): Promise<void> {
   if (sock) return;
 
-  const url = `${MARKET_API_BASE}/ws/market`;
-  debugLog(`📡 Market WS: connecting via SockJS to ${url}`);
+  const token = await getNexusAccessToken();
+  const url = `${MARKET_API_BASE}/ws/market?access_token=${encodeURIComponent(token)}`;
+  debugLog('📡 Market WS: connecting via SockJS to nexus /ws/market');
   const socket = new SockJS(url) as unknown as WebSocket;
   sock = socket;
 
@@ -479,7 +481,7 @@ function connectStream(): void {
     console.log('📡 Market WS: closed, reconnecting in 5s');
     sock = null;
     wsConnected.value = false;
-    streamReconnectTimer = setTimeout(() => connectStream(), 5000);
+    streamReconnectTimer = setTimeout(() => { void connectStream(); }, 5000);
   };
 }
 
@@ -525,7 +527,7 @@ export function useMarketData() {
   // Initialize once on first composable call
   if (!initialized) {
     initialized = true;
-    fetchAllTokens().then(() => connectStream()); // WS after initial data is ready
+    void fetchAllTokens().then(() => connectStream()); // WS after initial data is ready
     // REST fallback every 5 minutes (in case WS is down)
     refreshInterval = setInterval(() => {
       if (!document.hidden) fetchAllTokens(true);
@@ -536,7 +538,7 @@ export function useMarketData() {
   if (!chainWatcherStop) {
     chainWatcherStop = watch(() => walletStore.loggedWallet?.chain, () => {
       disconnectStream();
-      fetchAllTokens().then(() => connectStream()); // Reconnect WS with fresh data
+      void fetchAllTokens().then(() => connectStream()); // Reconnect WS with fresh data
     });
   }
 
