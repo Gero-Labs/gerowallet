@@ -9,7 +9,7 @@ import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { debugLog } from '@/utils/debug';
-import { getNexusAccessToken } from '@/services/nexusDevice.service';
+import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 
 export interface MarketToken {
   unit: string;
@@ -454,7 +454,10 @@ async function connectStream(): Promise<void> {
   const socket = new SockJS(url) as unknown as WebSocket;
   sock = socket;
 
+  let opened = false;
+
   socket.onopen = () => {
+    opened = true;
     console.log('📡 Market WS: SockJS opened, sending STOMP CONNECT');
     socket.send(stompFrame('CONNECT', { 'accept-version': '1.2', 'heart-beat': '0,0' }));
   };
@@ -481,7 +484,21 @@ async function connectStream(): Promise<void> {
     console.log('📡 Market WS: closed, reconnecting in 5s');
     sock = null;
     wsConnected.value = false;
-    streamReconnectTimer = setTimeout(() => { void connectStream(); }, 5000);
+    streamReconnectTimer = setTimeout(() => {
+      void (async () => {
+        if (!opened) {
+          // Handshake never completed — likely a server-side token rejection.
+          // Force a fresh token so the reconnect doesn't replay the rejected one.
+          debugLog('📡 Market WS: handshake failed, refreshing device token before reconnect');
+          try {
+            await reauthenticateNexus();
+          } catch (e) {
+            debugLog('Market WS: token refresh before reconnect failed', e);
+          }
+        }
+        void connectStream();
+      })();
+    }, 5000);
   };
 }
 
