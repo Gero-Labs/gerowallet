@@ -15,9 +15,11 @@
  * All calls go through `nexusBaseUrl` from `midnightConfig.ts`.
  */
 
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
+import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
+import { debugLog } from '@/utils/debug';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
 
 /**
@@ -106,7 +108,7 @@ export interface BuildDustRegistrationTxRequest {
 }
 
 export interface BuildDustRegistrationTxResponse {
-  /** `primitives_only` (current Nexus state) or `complete` (when full tx assembly ships). */
+  /** `complete` (full unsigned tx CBOR included) or `primitives_only` (legacy Nexus). */
   status: 'primitives_only' | 'complete';
   txCbor: string | null;
   txHash: string | null;
@@ -117,7 +119,24 @@ export interface BuildDustRegistrationTxResponse {
   mintAsset: {
     policyId: string;
     assetNameHex: string;
-    quantity: string;
+    quantity: number;
+  };
+  note?: string;
+}
+
+/** Wire-shape (snake_case) of the Nexus response, before conversion to camelCase. */
+interface BuildDustRegistrationTxResponseWire {
+  status: 'primitives_only' | 'complete';
+  tx_cbor: string | null;
+  tx_hash: string | null;
+  validator_address: string;
+  validator_script_hash: string;
+  datum_cbor: string;
+  redeemer_cbor: string;
+  mint_asset: {
+    policy_id: string;
+    asset_name_hex: string;
+    quantity: number;
   };
   note?: string;
 }
@@ -211,6 +230,37 @@ export class MidnightApi {
         'Content-Type': 'application/json',
       },
     });
+
+    // Nexus's Midnight DUST controller (and the broader Midnight API surface)
+    // is gated by `@PreAuthorize("@securityExpressions.canReadMidnight()")`,
+    // so every request needs the device JWT. Mirror the auth + retry pattern
+    // from `nexus-tx-api.ts`: bearer token on each request, drop + reauth +
+    // retry once on 401.
+    this.axiosInstance.interceptors.request.use(async (config) => {
+      const token = await getNexusAccessToken();
+      config.headers.Authorization = `Bearer ${token}`;
+      return config;
+    });
+    this.axiosInstance.interceptors.response.use(
+      (res) => res,
+      async (error: AxiosError) => {
+        const cfg = error.config as AxiosRequestConfig & { _retried?: boolean };
+        if (error.response?.status === 401 && cfg && !cfg._retried) {
+          cfg._retried = true;
+          try {
+            const token = await reauthenticateNexus();
+            if (cfg.headers) {
+              cfg.headers.Authorization = `Bearer ${token}`;
+            }
+            return this.axiosInstance.request(cfg);
+          } catch (refreshErr) {
+            debugLog('[midnight-api] Reauth failed after 401:', refreshErr);
+            throw error;
+          }
+        }
+        throw error;
+      },
+    );
   }
 
   /** The Nexus `?network=` slug for chain-agnostic endpoints (`midnight-preview` etc.). */
@@ -348,19 +398,42 @@ export class MidnightApi {
   }
 
   /**
-   * Build the unsigned Cardano transaction that registers a NIGHT UTxO under
-   * the DUST mapping validator. Wallet signs the returned CBOR via the
-   * existing CIP-30 flow (the user's Cardano payment key) and submits via
-   * Cardano's `submit-tx` endpoint.
+   * Build the unsigned Cardano transaction that registers the wallet's DUST
+   * address under the Midnight DUST mapping validator. The wallet signs the
+   * returned `txCbor` with the user's Cardano payment key (the same key used
+   * for every other Cardano tx) and submits via the existing Cardano
+   * `submit-tx` endpoint.
+   *
+   * Nexus's request/response use snake_case JSON; we convert at the wire
+   * boundary so callers see the camelCase TS shape.
    */
   async buildDustRegistrationTx(
     request: BuildDustRegistrationTxRequest,
   ): Promise<BuildDustRegistrationTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'dust/build-registration-tx');
-      const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponse>(url, request);
-      if (status === 200) return data;
-      throw parseHttpError(data);
+      const wireBody = {
+        cardano_address: request.cardanoAddress,
+        payment_key_hash_hex: request.paymentKeyHashHex,
+        dust_address_hex: request.dustAddressHex,
+      };
+      const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(url, wireBody);
+      if (status !== 200) throw parseHttpError(data);
+      return {
+        status: data.status,
+        txCbor: data.tx_cbor,
+        txHash: data.tx_hash,
+        validatorAddress: data.validator_address,
+        validatorScriptHash: data.validator_script_hash,
+        datumCbor: data.datum_cbor,
+        redeemerCbor: data.redeemer_cbor,
+        mintAsset: {
+          policyId: data.mint_asset.policy_id,
+          assetNameHex: data.mint_asset.asset_name_hex,
+          quantity: data.mint_asset.quantity,
+        },
+        note: data.note,
+      };
     } catch (error) {
       throw parseHttpError(error);
     }

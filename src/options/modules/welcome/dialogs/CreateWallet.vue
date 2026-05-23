@@ -490,12 +490,22 @@ const walletCreationStep = async () => {
     // hand the addresses to gero-db as a JSON-stringified field. Generate the
     // mnemonic up-front so derivation and storage see the same one.
     let preGeneratedMnemonic: string | null = null;
-    let midnightAddresses: { unshielded: string; shielded: string; dust: string; publicKeyHex?: string; addressHex?: string } | undefined;
+    let midnightAddresses: {
+      unshielded: string;
+      shielded: string;
+      dust: string;
+      publicKeyHex?: string;
+      addressHex?: string;
+      cardanoXpub?: string;
+      cardanoBaseAddress?: string;
+      cardanoStakeAddress?: string;
+      cardanoPaymentKeyHashHex?: string;
+    } | undefined;
     if (localNetwork.value.blockchain === 'Midnight') {
       const bip39 = await import('bip39');
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       preGeneratedMnemonic = bip39.generateMnemonic(256);
-      const derived = deriveMidnightKeys(preGeneratedMnemonic, localNetwork.value.network);
+      const derived = await deriveMidnightKeys(preGeneratedMnemonic, localNetwork.value.network);
       midnightAddresses = derived.addresses;
     }
 

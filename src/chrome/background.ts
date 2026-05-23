@@ -3381,6 +3381,36 @@ app.addToOptions(MessageTypes.GET_MIDNIGHT_WALLET_KEYS, async (request, sendResp
   }
 });
 
+/**
+ * Midnight: sign + submit the Cardano-side DUST registration tx. Same wallet
+ * mnemonic that derives Midnight HD keys also derives the CIP-1852 Cardano
+ * payment key. Request shape: `{ txCborHex: string; password?: string;
+ * prfSecret?: number[] }`. Returns `{ txHash }` on success.
+ */
+app.addToOptions(MessageTypes.SIGN_AND_SUBMIT_DUST_REGISTRATION_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    const { txCborHex, password, prfSecret } = request.data || {};
+    if (!txCborHex) throw new Error('txCborHex is required');
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const { txHash } = await walletBg.signAndSubmitDustRegistrationTx(txCborHex, password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, txHash },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, async (request, sendResponse) => {
   try {
     // Only update panel behavior — storage is written directly by the component

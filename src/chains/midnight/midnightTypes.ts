@@ -70,6 +70,21 @@ export interface MidnightAddresses {
    * Same lifecycle as `publicKeyHex` above.
    */
   addressHex?: string;
+  /**
+   * Cardano CIP-1852 account 0 xpub (bech32 `xpub1...`) derived from the same
+   * mnemonic. Lets a Midnight wallet natively sign the Cardano-side DUST
+   * registration tx without requiring a separate Cardano wallet. Mirrors
+   * Lace's pattern of one mnemonic feeding all per-chain integrations.
+   * Optional for backward compat — wallets created before this field was added
+   * get it derived + persisted on first DUST registration attempt.
+   */
+  cardanoXpub?: string;
+  /** Cardano base address at external chain index 0 (`addr1...`/`addr_test1...`). */
+  cardanoBaseAddress?: string;
+  /** Cardano stake/reward address (`stake1...`/`stake_test1...`). */
+  cardanoStakeAddress?: string;
+  /** 28-byte hex payment-key hash for the Cardano base address. */
+  cardanoPaymentKeyHashHex?: string;
 }
 
 /**

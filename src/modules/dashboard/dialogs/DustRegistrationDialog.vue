@@ -137,18 +137,74 @@
     <!-- Primary action: gradient button matches the wallet's geroButton style.
          The CTA changes per status so the user always sees the right next step. -->
     <v-card-actions class="px-0 pt-0" style="display: block">
-      <v-btn
-        v-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid'"
-        block
-        large
-        class="geroButton"
-        :loading="loading"
-        :disabled="!dustAddress"
-        @click="openRedemptionPortal"
-      >
-        <v-icon left>mdi-open-in-new</v-icon>
-        {{ t('midnight.openRedemptionPortal') }}
-      </v-btn>
+      <!-- Unregistered / Invalid: native build → sign → submit flow -->
+      <template v-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid'">
+        <!-- Stage 1: pre-build CTA -->
+        <template v-if="!inSigningPhase">
+          <v-btn
+            block
+            large
+            class="geroButton"
+            :loading="buildBusy"
+            :disabled="!dustAddress || buildBusy"
+            @click="startRegistration"
+          >
+            <v-icon left>mdi-shield-plus</v-icon>
+            {{ t('midnight.registerForDust') }}
+          </v-btn>
+
+          <div v-if="buildError" class="red--text text--lighten-2 text-caption mt-2">
+            {{ buildError }}
+          </div>
+
+          <!-- Fallback: external portal (kept for users on older Nexus deployments
+               or who prefer the foundation flow). -->
+          <div class="text-center mt-3">
+            <v-btn small text color="rgba(255,255,255,0.6)" @click="openRedemptionPortal">
+              <v-icon small left>mdi-open-in-new</v-icon>
+              {{ t('midnight.openRedemptionPortal') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- Stage 2: password input (or PassKey gesture) + Sign & Register. -->
+        <template v-else>
+          <v-text-field
+            v-if="!isPrfWalletForSign"
+            v-model="localPassword"
+            :label="t('common.spendingPassword')"
+            type="password"
+            outlined
+            dense
+            :disabled="signBusy"
+            @keydown.enter="confirmRegistration"
+            class="mb-2"
+          />
+
+          <div v-if="signError" class="red--text text--lighten-2 text-caption mb-2">
+            {{ signError }}
+          </div>
+
+          <v-btn
+            block
+            large
+            class="geroButton"
+            :loading="signBusy"
+            :disabled="!canConfirmRegistration"
+            @click="confirmRegistration"
+          >
+            <v-icon left>{{ isPrfWalletForSign ? 'mdi-fingerprint' : 'mdi-shield-check' }}</v-icon>
+            {{ isPrfWalletForSign ? t('midnight.authorizeWithPasskey') : t('midnight.signAndRegister') }}
+          </v-btn>
+
+          <div class="text-center mt-2">
+            <v-btn small text :disabled="signBusy" @click="resetRegistrationState">
+              {{ t('common.cancel') }}
+            </v-btn>
+          </div>
+        </template>
+      </template>
+
       <v-btn
         v-else-if="registrationStatus === 'Pending'"
         block
@@ -181,9 +237,12 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { getMidnightApi } from '@/api/midnight-api';
+import { dustAddressToHex } from '@/chains/midnight/midnightKeyManager';
+import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
-defineEmits<{ (e: 'close'): void }>();
+const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
 const loading = ref(false);
@@ -317,7 +376,7 @@ async function runUpgrade() {
     }
 
     const { deriveMidnightAddresses } = await import('@/chains/midnight/midnightKeyManager');
-    const derived = deriveMidnightAddresses(mnemonic, wallet.network);
+    const derived = await deriveMidnightAddresses(mnemonic, wallet.network);
 
     const { Messaging } = await import('@/chrome/messaging');
     const { MessageTypes } = await import('@/models/MessageTypes');
@@ -355,6 +414,130 @@ async function openRedemptionPortal() {
     ? 'https://redeem.midnight.gd/'
     : 'https://dust.preview.midnight.network/';
   window.open(portalUrl, '_blank', 'noopener,noreferrer');
+}
+
+// ─── Native DUST registration (build → sign → submit) ─────────────────────────
+// Midnight wallets in Gero derive both their Midnight HD keys (NightExternal /
+// Dust / Zswap roles) AND a CIP-1852 Cardano payment key from the same BIP39
+// mnemonic. Nexus builds the unsigned Cardano tx (validator script output +
+// mint NFT + inline datum + auto-selected UTxO + collateral) using the
+// wallet's derived Cardano base address. The wallet decrypts its mnemonic,
+// re-derives the Cardano payment key, signs the tx, and submits to the
+// Cardano network that mirrors the Midnight wallet's network. All in one BG
+// round-trip via `SIGN_AND_SUBMIT_DUST_REGISTRATION_TX`.
+
+const txCborHex = ref<string | null>(null);
+const buildBusy = ref(false);
+const buildError = ref<string | null>(null);
+const signBusy = ref(false);
+const signError = ref<string | null>(null);
+/** Spending-password input bound to the password wallet sign UI. */
+const localPassword = ref('');
+/** Switches the action area from "Register" CTA to the password / PassKey gate. */
+const inSigningPhase = ref(false);
+
+const isPrfWalletForSign = computed(() => isPrfWallet.value);
+
+function resetRegistrationState() {
+  txCborHex.value = null;
+  buildBusy.value = false;
+  buildError.value = null;
+  signBusy.value = false;
+  signError.value = null;
+  inSigningPhase.value = false;
+  localPassword.value = '';
+}
+
+async function startRegistration() {
+  if (!dustAddress.value) return;
+  const wallet = loggedWallet.value;
+  if (!wallet) return;
+
+  buildBusy.value = true;
+  buildError.value = null;
+
+  try {
+    const cardanoAddress = addresses.value?.cardanoBaseAddress ?? '';
+    const paymentKeyHashHex = addresses.value?.cardanoPaymentKeyHashHex ?? '';
+
+    if (!cardanoAddress || !paymentKeyHashHex) {
+      throw new Error('Cardano keys are not derived for this wallet. Recreate it to use native DUST registration.');
+    }
+
+    const dustHex = dustAddressToHex(dustAddress.value);
+
+    const response = await getMidnightApi(wallet.network).buildDustRegistrationTx({
+      cardanoAddress,
+      paymentKeyHashHex,
+      dustAddressHex: dustHex,
+    });
+
+    if (response.status !== 'complete' || !response.txCbor) {
+      throw new Error(
+        response.note ||
+          'Nexus returned primitives_only — full tx assembly not yet enabled on this deployment.',
+      );
+    }
+
+    txCborHex.value = response.txCbor;
+    inSigningPhase.value = true;
+  } catch (e) {
+    buildError.value = e instanceof Error ? e.message : String(e);
+    snackbar.setError(buildError.value);
+  } finally {
+    buildBusy.value = false;
+  }
+}
+
+const canConfirmRegistration = computed(() => {
+  if (signBusy.value || buildBusy.value) return false;
+  if (!txCborHex.value) return false;
+  if (isPrfWalletForSign.value) return true;
+  return !!localPassword.value;
+});
+
+async function confirmRegistration() {
+  if (!txCborHex.value) return;
+  const wallet = loggedWallet.value;
+  if (!wallet) return;
+
+  signBusy.value = true;
+  signError.value = null;
+  try {
+    let prfSecret: Uint8Array | undefined;
+    if (isPrfWallet.value) {
+      if (!wallet.webAuthnCredentialId) {
+        throw new Error('PRF wallet missing credential ID');
+      }
+      const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+      const prfBuf = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+      prfSecret = new Uint8Array(prfBuf);
+    }
+
+    const { Messaging } = await import('@/chrome/messaging');
+    const { MessageTypes } = await import('@/models/MessageTypes');
+    const resp = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_AND_SUBMIT_DUST_REGISTRATION_TX,
+      data: {
+        txCborHex: txCborHex.value,
+        password: isPrfWallet.value ? undefined : localPassword.value,
+        prfSecret: prfSecret ? Array.from(prfSecret) : undefined,
+      },
+    }) as { data: { success: boolean; error?: string; txHash?: string } };
+
+    if (!resp?.data?.success || !resp.data.txHash) {
+      throw new Error(resp?.data?.error || 'DUST registration submission failed');
+    }
+
+    snackbar.fireSuccess(t('midnight.dustRegistrationSubmitted'));
+    resetRegistrationState();
+    emit('close');
+  } catch (e) {
+    signError.value = e instanceof Error ? e.message : String(e);
+    snackbar.setError(signError.value);
+  } finally {
+    signBusy.value = false;
+  }
 }
 
 void props;

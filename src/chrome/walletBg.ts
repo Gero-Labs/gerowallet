@@ -36,6 +36,7 @@ import {
   getStakeKey,
   hdPathToArray,
   keyHashFromAddress,
+  submitTx as submitTxFn,
   toStakeAddress,
 } from '@/chrome/serialization';
 import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
@@ -1731,7 +1732,7 @@ export class WalletBg {
       }
 
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = deriveMidnightKeys(mnemonic, this.network);
+      const derived = await deriveMidnightKeys(mnemonic, this.network);
 
       const { createKeystore } = await import('@midnight-ntwrk/wallet-sdk-unshielded-wallet');
       // Map our project's `Network` constant to the SDK's NetworkId string.
@@ -1783,66 +1784,149 @@ export class WalletBg {
    * Slow path (one-time migration): decrypts the mnemonic, derives the keystore,
    * writes the keys back to the DB for next time, wipes the mnemonic.
    */
+  /**
+   * Return the cached Midnight + Cardano material persisted at wallet creation.
+   * New Midnight wallets derive both chains' keys from the same mnemonic and
+   * write the full set to the `publicKey` JSON blob in one pass — see
+   * `midnightKeyManager.deriveMidnightKeys`. No mnemonic decryption is needed
+   * at read time.
+   *
+   * `password` / `prfSecret` are accepted for forward compat with the BG
+   * message signature but unused; they can be dropped once no caller passes
+   * them.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async getMidnightWalletKeys(
-    password?: string,
-    prfSecret?: Uint8Array,
-  ): Promise<{ publicKeyHex: string; addressHex: string }> {
+    _password?: string,
+    _prfSecret?: Uint8Array,
+  ): Promise<{
+    publicKeyHex: string;
+    addressHex: string;
+    cardanoXpub?: string;
+    cardanoBaseAddress?: string;
+    cardanoStakeAddress?: string;
+    cardanoPaymentKeyHashHex?: string;
+  }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('getMidnightWalletKeys called on non-Midnight wallet');
     }
-
-    // Fast path: already stored.
+    let parsed: Record<string, string> | null = null;
     try {
-      const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
-      if (parsed?.publicKeyHex && parsed?.addressHex) {
-        return { publicKeyHex: parsed.publicKeyHex, addressHex: parsed.addressHex };
-      }
+      parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
     } catch {
-      // Malformed JSON — fall through to slow path.
+      parsed = null;
+    }
+    if (!parsed?.publicKeyHex || !parsed?.addressHex) {
+      throw new Error('Midnight wallet record is missing derived keys — recreate the wallet.');
+    }
+    return {
+      publicKeyHex: parsed.publicKeyHex,
+      addressHex: parsed.addressHex,
+      cardanoXpub: parsed.cardanoXpub,
+      cardanoBaseAddress: parsed.cardanoBaseAddress,
+      cardanoStakeAddress: parsed.cardanoStakeAddress,
+      cardanoPaymentKeyHashHex: parsed.cardanoPaymentKeyHashHex,
+    };
+  }
+
+  /**
+   * Sign + submit the Cardano-side DUST registration tx for a Midnight wallet.
+   *
+   * Both the Midnight HD keys and the Cardano CIP-1852 keys are derived from
+   * the same mnemonic (Lace pattern), so a Midnight wallet can natively sign
+   * Cardano txs without requiring a separate Cardano wallet.
+   *
+   * Flow:
+   *   1. Decrypt the mnemonic (password for password wallets / PRF for PRF
+   *      wallets).
+   *   2. Derive the Cardano root key, then the account-0 external-chain
+   *      index-0 payment key (matches `cardanoBaseAddress`).
+   *   3. Sign `txCborHex.id` with that key, plus the stake key if the tx
+   *      needs it (for collateral_return on stake-bound addresses).
+   *   4. Apply the witness set to the tx and submit to the Cardano network
+   *      that mirrors this Midnight wallet's network (preview ↔ preview).
+   *
+   * Note: this is a focused signing path. It only handles the DUST
+   * registration tx shape — single payment-key signature plus optional stake
+   * key. Full address-resolution / multi-input signing is not needed here
+   * because Nexus's tx builder selects UTxOs only from `cardanoBaseAddress`.
+   */
+  async signAndSubmitDustRegistrationTx(
+    txCborHex: string,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ txHash: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('signAndSubmitDustRegistrationTx called on non-Midnight wallet');
     }
 
-    // Slow path: derive from mnemonic and persist.
+    // 1. Decrypt the mnemonic.
     const { decrypt } = await import('@/shared/utils/crypto');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
-      if (!prfSecret) throw new Error('PRF secret required to derive Midnight wallet keys');
+      if (!prfSecret) throw new Error('PRF secret required to sign DUST registration tx');
       if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
       const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
       mnemonic = await decryptMnemonicWithPrfOutput(
         this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
       );
     } else {
-      if (!password) throw new Error('Password required to derive Midnight wallet keys');
+      if (!password) throw new Error('Password required to sign DUST registration tx');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
       mnemonic = decrypt(this.encryptedMnemonic, password);
     }
 
     try {
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = deriveMidnightKeys(mnemonic, this.network);
+      // 2. Derive Cardano keys from the same mnemonic.
+      const { resolvePrivateKey } = await import('@/shared/utils/resolver');
+      const rootKey = resolvePrivateKey(mnemonic);
+      const accountKey = rootKey.derive([
+        WalletTypePurpose.CIP1852,
+        CoinTypes.CARDANO,
+        HARDENED + 0,
+      ]);
+      const paymentKey = accountKey.derive([0, 0]).toRawKey(); // external chain, index 0
+      const stakeKey = accountKey.derive([2, 0]).toRawKey();   // staking chain
 
-      // Persist back to the wallet record so future calls take the fast path.
-      try {
-        const existing = this.publicKey ? JSON.parse(this.publicKey) : {};
-        const updated = JSON.stringify({
-          ...existing,
-          publicKeyHex: derived.publicKeyHex,
-          addressHex: derived.addressHex,
-        });
-        this.publicKey = updated;
-        const { getDb } = await import('@/db/gero-db');
-        const database = await getDb();
-        await (database as any).wallets.update(this.id, { publicKey: updated });
-      } catch {
-        // Non-fatal — keys are still returned for this request.
+      // 3. Deserialize the tx, sign the body hash with the payment + stake keys.
+      const transaction = deserializeCardanoJsSdkTx(txCborHex);
+      const signatures = new Map<string, string>();
+      const payPub = paymentKey.toPublic();
+      const paySig = paymentKey.sign(HexBlob(transaction.id));
+      signatures.set(payPub.hex(), paySig.hex());
+      // Sign with the stake key too — the validator may also require this for
+      // collateral_return witnesses, and a redundant signature is harmless.
+      const stakePub = stakeKey.toPublic();
+      const stakeSig = stakeKey.sign(HexBlob(transaction.id));
+      signatures.set(stakePub.hex(), stakeSig.hex());
+
+      const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
+
+      // 4. Attach the witness set and submit via the chain-agnostic submit
+      // endpoint, explicitly targeting the Cardano network that mirrors the
+      // Midnight wallet's network (preview ↔ preview, preprod ↔ preprod,
+      // mainnet ↔ mainnet).
+      const cardanoNetwork = this.network; // Network.PREVIEW etc — same string for both chains
+      const txDeserialized = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+      // Splice the witness CBOR into the tx by re-serializing.
+      const txCore = txDeserialized.toCore();
+      const signedTx: Cardano.Tx = {
+        ...txCore,
+        witness: witnessSet.toCore(),
+      };
+      const signedCbor = Serialization.Transaction.fromCore(signedTx).toCbor();
+
+      const response = await submitTxFn(signedCbor, Blockchain.CARDANO, cardanoNetwork);
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Submit failed (${response.status}): ${body}`);
       }
-
-      derived.unshieldedSecretKey.fill(0);
-      derived.dustSecretKey.fill(0);
-      derived.seed.fill(0);
-
-      return { publicKeyHex: derived.publicKeyHex, addressHex: derived.addressHex };
+      const txHashResp = (await response.text()).trim().replace(/^"|"$/g, '');
+      if (!/^[a-f0-9]{64}$/i.test(txHashResp)) {
+        throw new Error(`Unexpected submit response: ${txHashResp}`);
+      }
+      return { txHash: txHashResp };
     } finally {
       mnemonic = '';
       void mnemonic;

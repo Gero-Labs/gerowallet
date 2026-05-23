@@ -95,8 +95,14 @@ export interface BuildTxResponse {
 
 // ── Axios client ──
 
+// Fallback to public Nexus URL when env isn't injected (matches the auth
+// client default in nexusDevice.service.ts).
+const NEXUS_TX_BASE = (typeof import.meta !== 'undefined'
+  && import.meta.env
+  && import.meta.env['VITE_NEXUS_URL']) || 'https://nexus.gerowallet.io';
+
 const nexusTxClient = axios.create({
-  baseURL: import.meta.env['VITE_NEXUS_URL'],
+  baseURL: NEXUS_TX_BASE,
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });

@@ -40,8 +40,16 @@ interface DeviceAuthResponse {
  * Keeping it separate from the API client prevents accidental recursion when
  * the API client's auth interceptor calls login() to refresh.
  */
+// Fall back to the public Nexus URL when the env var isn't injected (e.g.
+// production builds where `.env.production` doesn't define VITE_NEXUS_URL).
+// Without a baseURL, axios resolves `/api/auth/device` against the extension's
+// own origin, producing an `ERR_FILE_NOT_FOUND` instead of a real network call.
+const NEXUS_AUTH_BASE = (typeof import.meta !== 'undefined'
+  && import.meta.env
+  && import.meta.env['VITE_NEXUS_URL']) || 'https://nexus.gerowallet.io';
+
 const authClient = axios.create({
-  baseURL: import.meta.env['VITE_NEXUS_URL'],
+  baseURL: NEXUS_AUTH_BASE,
   timeout: 15_000,
   headers: { 'Content-Type': 'application/json' },
 });
