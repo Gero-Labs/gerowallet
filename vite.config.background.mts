@@ -45,6 +45,13 @@ const cjsInteropPlugin = {
       // Must intercept before Vite's node-resolve maps it to the CJS file, which Rollup
       // then fails to find a `default` export from.
       'bn.js': '\0virtual:bn-js-esm',
+      // The `assert` browser polyfill pulls in call-bound/get-intrinsic, which throws
+      // "Function.prototype.apply was called on ServiceWorkerGlobalScope" during init
+      // in service-worker contexts. The polyfill's intrinsic lookup falls back to
+      // globalThis when running in SW. Replace with a minimal local implementation
+      // that doesn't depend on those packages at all.
+      'assert': '\0virtual:assert-stub',
+      'assert/': '\0virtual:assert-stub',
     };
     if (virtuals[source]) return virtuals[source];
 
@@ -106,20 +113,86 @@ export default function hasProto() { return result; };`;
       case '\0virtual:effect-httpApiScalar':
         return HTTP_API_SWAGGER_STUB;
 
+      case '\0virtual:assert-stub':
+        // Minimal `assert` polyfill. The npm `assert` browser package depends
+        // on call-bound → get-intrinsic, which throws in service-worker context
+        // ("Function.prototype.apply was called on ServiceWorkerGlobalScope")
+        // because the intrinsic lookup falls back to globalThis. None of the
+        // Midnight / @polkadot deps use the rich Node assert API at runtime —
+        // they just need `assert(value)` to throw on falsy.
+        return `
+function assert(value, message) {
+  if (!value) throw new (assert.AssertionError)({ message: message || 'Assertion failed', actual: value, expected: true });
+}
+function fail(actual, expected, message) {
+  throw new (assert.AssertionError)({ message: message || ('AssertionError: ' + actual + ' ' + expected), actual: actual, expected: expected });
+}
+assert.AssertionError = class AssertionError extends Error {
+  constructor(opts) {
+    super((opts && opts.message) || 'AssertionError');
+    this.name = 'AssertionError';
+    if (opts) { this.actual = opts.actual; this.expected = opts.expected; this.operator = opts.operator; }
+  }
+};
+assert.ok = assert;
+assert.fail = fail;
+assert.equal = function (a, b, m) { if (a != b) fail(a, b, m); };
+assert.notEqual = function (a, b, m) { if (a == b) fail(a, b, m); };
+assert.strictEqual = function (a, b, m) { if (a !== b) fail(a, b, m); };
+assert.notStrictEqual = function (a, b, m) { if (a === b) fail(a, b, m); };
+assert.deepEqual = function (a, b, m) { try { if (JSON.stringify(a) !== JSON.stringify(b)) fail(a, b, m); } catch (e) { fail(a, b, m); } };
+assert.notDeepEqual = function (a, b, m) { try { if (JSON.stringify(a) === JSON.stringify(b)) fail(a, b, m); } catch (e) { /* ok */ } };
+assert.deepStrictEqual = assert.deepEqual;
+assert.notDeepStrictEqual = assert.notDeepEqual;
+assert.throws = function (fn) { try { fn(); } catch (e) { return; } throw new Error('Did not throw'); };
+assert.doesNotThrow = function (fn) { fn(); };
+assert.ifError = function (err) { if (err) throw err; };
+assert.match = function (s, r, m) { if (!r.test(s)) fail(s, r, m); };
+assert.doesNotMatch = function (s, r, m) { if (r.test(s)) fail(s, r, m); };
+assert.rejects = async function (fn) { try { await (typeof fn === 'function' ? fn() : fn); } catch (e) { return; } throw new Error('Did not reject'); };
+assert.doesNotReject = async function (fn) { await (typeof fn === 'function' ? fn() : fn); };
+export default assert;
+export { assert, fail };
+export const ok = assert.ok;
+export const equal = assert.equal;
+export const notEqual = assert.notEqual;
+export const strictEqual = assert.strictEqual;
+export const notStrictEqual = assert.notStrictEqual;
+export const deepEqual = assert.deepEqual;
+export const notDeepEqual = assert.notDeepEqual;
+export const deepStrictEqual = assert.deepStrictEqual;
+export const notDeepStrictEqual = assert.notDeepStrictEqual;
+export const throws = assert.throws;
+export const doesNotThrow = assert.doesNotThrow;
+export const ifError = assert.ifError;
+export const match = assert.match;
+export const doesNotMatch = assert.doesNotMatch;
+export const rejects = assert.rejects;
+export const doesNotReject = assert.doesNotReject;
+export const AssertionError = assert.AssertionError;
+`;
+
       case '\0virtual:bn-js-esm': {
-        // bn.js is CJS with a UMD wrapper: `if(typeof module==='object'){module.exports=BN}`.
-        // @polkadot/util (Midnight SDK dep) does `import BN from 'bn.js'` which Rollup
-        // can't satisfy from the raw CJS file. We strip the entire UMD conditional block
-        // and append a top-level ESM `export default BN;` instead.
+        // bn.js is wrapped in its own IIFE that takes `(module, exports)` as
+        // parameters and calls itself with `(typeof module === 'undefined' ||
+        // module, this)`. `BN` is only defined inside that IIFE scope. We
+        // can't strip the wrapper without breaking lexical scope, so instead
+        // we run the original code inside a wrapper IIFE that supplies
+        // `module`/`exports` locals, then re-export `module.exports` as the
+        // ESM default. Wrapping in an IIFE keeps `module`/`exports` out of
+        // the bundle's module-level scope, where they would otherwise collide
+        // with Rollup's commonjs interop hoisting.
+        // @polkadot/util (Midnight SDK dep) does `import BN from 'bn.js'`.
         const bnPath = _require.resolve('bn.js');
         const src = readFileSync(bnPath, 'utf-8');
-        const exportName = src.match(/module\.exports\s*=\s*(\w+)/)?.[1] ?? 'BN';
-        const bnCode = src
-          .replace(
-            /if\s*\([^)]*\btypeof\s+module\b[^)]*\)\s*\{[^}]*\bmodule\.exports\s*=\s*\w+[^}]*\}(?:\s*else\s*\{[^}]*\})?/s,
-            '',
-          )
-          .trimEnd() + `\nexport default ${exportName};\n`;
+        const bnCode =
+          'const _bnExports = (function () {\n' +
+          '  var module = { exports: {} };\n' +
+          '  var exports = module.exports;\n' +
+          src + '\n' +
+          '  return module.exports;\n' +
+          '})();\n' +
+          'export default _bnExports;\n';
         return { code: bnCode, map: null };
       }
     }
