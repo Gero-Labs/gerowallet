@@ -589,11 +589,16 @@ export class MidnightApi {
         dust_receiver_address_bech32: request.dustReceiverAddressBech32,
         ttl_ms: request.ttlMs,
       };
+      // Per-call timeout override: the sidecar runs the dust SDK
+      // synchronously (createDustGenerationTransaction + one indexer
+      // blockData() HTTP roundtrip), which can take 30s+ on first call
+      // because the wallet cache may also be (re)hydrating. Use 90s here
+      // rather than the instance-level 30s default.
       const { data, status } = await this.axiosInstance.post<{
         unproven_tx_hex: string;
         tx_hash: string;
         signature_payload_hex: string;
-      }>(url, wireBody);
+      }>(url, wireBody, { timeout: 90_000 });
       if (status !== 200) throw parseHttpError(data);
       return {
         unprovenTxHex: data.unproven_tx_hex,
@@ -619,10 +624,13 @@ export class MidnightApi {
         unproven_tx_hex: request.unprovenTxHex,
         signature_hex: request.signatureHex,
       };
+      // Same 90s ceiling as build — finalize is fast (just splices signature)
+      // but the subsequent substrate submission can stall briefly on first
+      // call. 90s is well above any expected real-world latency.
       const { data, status } = await this.axiosInstance.post<{
         tx_hash: string;
         status: 'Submitted' | 'InBlock' | 'Finalized';
-      }>(url, wireBody);
+      }>(url, wireBody, { timeout: 90_000 });
       if (status !== 200) throw parseHttpError(data);
       return { txHash: data.tx_hash, status: data.status };
     } catch (error) {

@@ -210,7 +210,11 @@ class MidnightSyncService {
   private async bootstrapTipFromNexus(network: string): Promise<void> {
     const api = getMidnightApi(network);
     const block = await api.getLatestBlock();
-    if (typeof block.height !== 'number') return;
+    debugLog('🌙 Midnight tip bootstrap response:', block);
+    if (typeof block.height !== 'number' || block.height === 0) {
+      debugLog('🌙 Midnight tip bootstrap: indexer returned no height — skipping');
+      return;
+    }
     midnightActions.applyTipUpdate({
       hash: block.hash ?? null,
       height: block.height,
@@ -219,6 +223,7 @@ class MidnightSyncService {
       // ms semantics for `timestamp` (see midnight-sync handleSync below).
       timestamp: typeof block.time === 'number' ? block.time : 0,
     });
+    debugLog(`🌙 Midnight tip applied: height=${block.height} timestamp=${block.time}`);
   }
 
   /**
