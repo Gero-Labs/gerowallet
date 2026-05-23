@@ -369,12 +369,16 @@ onMounted(async () => {
 }
 
 .delegate-action-btn {
-  background: linear-gradient(135deg, #00c7f3, #00ffd1) !important;
-  color: #000 !important;
+  background: transparent !important;
+  color: #fff !important;
   font-weight: 600;
   text-transform: none;
   height: 36px !important;
   border-radius: 8px;
+}
+
+.delegate-action-btn.v-btn--disabled {
+  color: #fff !important;
 }
 
 .drep-search >>> .v-input__slot {
