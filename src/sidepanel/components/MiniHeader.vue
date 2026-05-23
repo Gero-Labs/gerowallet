@@ -33,7 +33,7 @@
       <v-tooltip bottom content-class="custom-tooltip">
         <template v-slot:activator="{ on }">
           <v-btn icon x-small @click="openFullDashboard" class="toolbar-btn" v-on="on">
-            <v-icon size="18" color="#888">mdi-arrow-expand</v-icon>
+            <v-icon size="20" color="#888">mdi-fullscreen</v-icon>
           </v-btn>
         </template>
         <span>{{ $t('miniGero.openFullDashboard') }}</span>

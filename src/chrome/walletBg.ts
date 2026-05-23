@@ -191,8 +191,6 @@ export class WalletBg {
 
   unsubscribeAll() {
     this.loaderFactory.unsubscribeAll();
-    // CRITICAL: Clear all intervals and alarms during cleanup
-    this.endSync();
   }
 
   networkId(): number {
@@ -2074,30 +2072,6 @@ export class WalletBg {
     return blockchainDb;
   }
 
-  async startSync() {
-    this.endSync();
-
-    const updateFiatRates = async () => {
-      try {
-        const fiatRates = await this.api.fetchFiatRates();
-        WalletStore.setFiatRates(fiatRates);
-      } catch (err) {
-        // Ignore fiat rates errors
-      }
-    };
-
-    if (!WalletStore.state.fiatRatesIntervalId) {
-      await updateFiatRates();
-      WalletStore.setFiatRatesIntervalId(setInterval(updateFiatRates, 14400000));
-    }
-  }
-
-  endSync() {
-    if (WalletStore.state.fiatRatesIntervalId) {
-      clearInterval(WalletStore.state.fiatRatesIntervalId);
-      WalletStore.setFiatRatesIntervalId(null);
-    }
-  }
 }
 
 export function alarmListener(alarm) {

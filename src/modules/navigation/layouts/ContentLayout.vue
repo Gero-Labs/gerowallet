@@ -199,7 +199,9 @@
                   <v-tooltip bottom content-class="custom-tooltip">
                     <template v-slot:activator="{ on }">
                       <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
-                        <v-icon size="20">mdi-cellphone</v-icon>
+                        <v-avatar size="23">
+                          <img :src="assets.miniModeSvg" :alt="t('miniGero.miniMode')" />
+                        </v-avatar>
                       </v-btn>
                     </template>
                     <span>{{ t('miniGero.miniMode') }}</span>
@@ -344,6 +346,7 @@ watch(settingsNavRequest, (req) => {
     settingsNavRequest.value = null;
   }
 });
+
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
@@ -542,8 +545,35 @@ const preloadBackgroundImage = () => {
   img.src = imageUrl;
 };
 
+// Open settings dialog if launched from Mini Gero settings button.
+// We listen for flag changes (handles the case where the dashboard tab is
+// already open and just gets focused) instead of reading on mount, which
+// would leave a stale flag in storage when no fresh ContentLayout mount occurs.
+const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+  if (area === 'local' && changes.openSettingsOnLoad?.newValue) {
+    currentDialog.value = dialogs.SETTINGS;
+    chrome.storage.local.remove('openSettingsOnLoad');
+  }
+};
+chrome.storage.onChanged.addListener(handleStorageChange);
+onBeforeUnmount(() => {
+  chrome.storage.onChanged.removeListener(handleStorageChange);
+  // Clear any leftover flag so the dialog doesn't auto-open next time
+  chrome.storage.local.remove('openSettingsOnLoad');
+});
+
 // Lifecycle
 onMounted(async () => {
+  // Catch the new-tab path: storage.onChanged fired before this listener was
+  // registered, so check the flag once on mount. The already-open-tab path
+  // is handled by handleStorageChange, which removes the flag before mount.
+  chrome.storage.local.get('openSettingsOnLoad', (result) => {
+    if (result.openSettingsOnLoad) {
+      currentDialog.value = dialogs.SETTINGS;
+      chrome.storage.local.remove('openSettingsOnLoad');
+    }
+  });
+
   // Ensure colors are set on mount
   updateThemeColors();
 

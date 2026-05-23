@@ -1,12 +1,41 @@
 import axios from 'axios';
+import type { AxiosRequestConfig, AxiosError } from 'axios';
+import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 
 const axiosInstance = axios.create({
-  baseURL: import.meta.env['VITE_MARKET_API_URL'] || 'https://market.gerowallet.io',
+  baseURL: import.meta.env['VITE_NEXUS_URL'],
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// Market data is proxied by nexus, which authenticates device-id JWTs.
+// Attach the device access token to every request.
+axiosInstance.interceptors.request.use(async (config) => {
+  const token = await getNexusAccessToken();
+  config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// On 401, drop the cached token, re-authenticate the device, and retry once.
+axiosInstance.interceptors.response.use(
+  (res) => res,
+  async (error: AxiosError) => {
+    const config = error.config as AxiosRequestConfig & { _retried?: boolean };
+    if (error.response?.status === 401 && config && !config._retried) {
+      config._retried = true;
+      const token = await reauthenticateNexus();
+      if (config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return axiosInstance.request(config);
+    }
+    return Promise.reject(error);
+  }
+);
+
+export { axiosInstance as marketAxiosInstance };
 
 // ── Interfaces ──────────────────────────────────────────────────────────────────
 
