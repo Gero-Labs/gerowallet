@@ -137,28 +137,25 @@
     <!-- Primary action: gradient button matches the wallet's geroButton style.
          The CTA changes per status so the user always sees the right next step. -->
     <v-card-actions class="px-0 pt-0" style="display: block">
-      <!-- Unregistered / Invalid: native build → sign → submit flow -->
+      <!-- Unregistered / Invalid: Midnight-native register (Path A) flow -->
       <template v-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid'">
-        <!-- Stage 1: pre-build CTA -->
+        <!-- Stage 1: pre-build CTA. For PRF wallets `startRegistration` skips
+             straight to the PassKey gesture; password wallets get the input. -->
         <template v-if="!inSigningPhase">
           <v-btn
             block
             large
             class="geroButton"
-            :loading="buildBusy"
-            :disabled="!dustAddress || buildBusy"
+            :disabled="!dustAddress"
             @click="startRegistration"
           >
             <v-icon left>mdi-shield-plus</v-icon>
             {{ t('midnight.registerForDust') }}
           </v-btn>
 
-          <div v-if="buildError" class="red--text text--lighten-2 text-caption mt-2">
-            {{ buildError }}
-          </div>
-
-          <!-- Fallback: external portal (kept for users on older Nexus deployments
-               or who prefer the foundation flow). -->
+          <!-- Fallback: external portal (Path B / foundation flow). Kept as a
+               low-prominence option for users who want to use cNIGHT on Cardano
+               instead of native NIGHT registration. -->
           <div class="text-center mt-3">
             <v-btn small text color="rgba(255,255,255,0.6)" @click="openRedemptionPortal">
               <v-icon small left>mdi-open-in-new</v-icon>
@@ -167,7 +164,8 @@
           </div>
         </template>
 
-        <!-- Stage 2: password input (or PassKey gesture) + Sign & Register. -->
+        <!-- Stage 2: password input (or PassKey gesture) + Sign & Register.
+             Path A is a single round-trip: build + sign + submit in one BG call. -->
         <template v-else>
           <v-text-field
             v-if="!isPrfWalletForSign"
@@ -176,20 +174,20 @@
             type="password"
             outlined
             dense
-            :disabled="signBusy"
+            :disabled="submitBusy"
             @keydown.enter="confirmRegistration"
             class="mb-2"
           />
 
-          <div v-if="signError" class="red--text text--lighten-2 text-caption mb-2">
-            {{ signError }}
+          <div v-if="submitError" class="red--text text--lighten-2 text-caption mb-2">
+            {{ submitError }}
           </div>
 
           <v-btn
             block
             large
             class="geroButton"
-            :loading="signBusy"
+            :loading="submitBusy"
             :disabled="!canConfirmRegistration"
             @click="confirmRegistration"
           >
@@ -198,7 +196,7 @@
           </v-btn>
 
           <div class="text-center mt-2">
-            <v-btn small text :disabled="signBusy" @click="resetRegistrationState">
+            <v-btn small text :disabled="submitBusy" @click="resetRegistrationState">
               {{ t('common.cancel') }}
             </v-btn>
           </div>
@@ -237,8 +235,6 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { getMidnightApi } from '@/api/midnight-api';
-import { dustAddressToHex } from '@/chains/midnight/midnightKeyManager';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
@@ -416,21 +412,25 @@ async function openRedemptionPortal() {
   window.open(portalUrl, '_blank', 'noopener,noreferrer');
 }
 
-// ─── Native DUST registration (build → sign → submit) ─────────────────────────
-// Midnight wallets in Gero derive both their Midnight HD keys (NightExternal /
-// Dust / Zswap roles) AND a CIP-1852 Cardano payment key from the same BIP39
-// mnemonic. Nexus builds the unsigned Cardano tx (validator script output +
-// mint NFT + inline datum + auto-selected UTxO + collateral) using the
-// wallet's derived Cardano base address. The wallet decrypts its mnemonic,
-// re-derives the Cardano payment key, signs the tx, and submits to the
-// Cardano network that mirrors the Midnight wallet's network. All in one BG
-// round-trip via `SIGN_AND_SUBMIT_DUST_REGISTRATION_TX`.
+// ─── DUST registration — Path A (Midnight-native NIGHT-for-DUST) ─────────────
+//
+// The wallet's own NIGHT UTxOs get registered to generate DUST for the
+// wallet's own DUST address. Signed locally with the NightExternal key
+// (same key the unshielded send pipeline already uses). No Cardano
+// interaction, no ADA needed.
+//
+// Two phases:
+//   • Stage 1: user clicks "Register" → spending password or PassKey gesture
+//     gathered → call `registerNightForDust` which orchestrates
+//     getKeys → build → sign → submit in one round-trip.
+//   • UI lock during the round-trip (5–10s).
+//
+// Path B (Cardano-side mapping validator) remains in the codebase for users
+// holding cNIGHT on Cardano but is no longer the primary action — see the
+// Cardano wallet view for that flow (planned).
 
-const txCborHex = ref<string | null>(null);
-const buildBusy = ref(false);
-const buildError = ref<string | null>(null);
-const signBusy = ref(false);
-const signError = ref<string | null>(null);
+const submitBusy = ref(false);
+const submitError = ref<string | null>(null);
 /** Spending-password input bound to the password wallet sign UI. */
 const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
@@ -439,73 +439,44 @@ const inSigningPhase = ref(false);
 const isPrfWalletForSign = computed(() => isPrfWallet.value);
 
 function resetRegistrationState() {
-  txCborHex.value = null;
-  buildBusy.value = false;
-  buildError.value = null;
-  signBusy.value = false;
-  signError.value = null;
+  submitBusy.value = false;
+  submitError.value = null;
   inSigningPhase.value = false;
   localPassword.value = '';
 }
 
-async function startRegistration() {
+function startRegistration() {
   if (!dustAddress.value) return;
-  const wallet = loggedWallet.value;
-  if (!wallet) return;
-
-  buildBusy.value = true;
-  buildError.value = null;
-
-  try {
-    const cardanoAddress = addresses.value?.cardanoBaseAddress ?? '';
-    const paymentKeyHashHex = addresses.value?.cardanoPaymentKeyHashHex ?? '';
-
-    if (!cardanoAddress || !paymentKeyHashHex) {
-      throw new Error('Cardano keys are not derived for this wallet. Recreate it to use native DUST registration.');
-    }
-
-    const dustHex = dustAddressToHex(dustAddress.value);
-
-    const response = await getMidnightApi(wallet.network).buildDustRegistrationTx({
-      cardanoAddress,
-      paymentKeyHashHex,
-      dustAddressHex: dustHex,
-    });
-
-    if (response.status !== 'complete' || !response.txCbor) {
-      throw new Error(
-        response.note ||
-          'Nexus returned primitives_only — full tx assembly not yet enabled on this deployment.',
-      );
-    }
-
-    txCborHex.value = response.txCbor;
-    inSigningPhase.value = true;
-  } catch (e) {
-    buildError.value = e instanceof Error ? e.message : String(e);
-    snackbar.setError(buildError.value);
-  } finally {
-    buildBusy.value = false;
+  // For PRF wallets, kick straight into the PassKey gesture (no input field).
+  // For password wallets, show the inline password field first.
+  inSigningPhase.value = true;
+  if (isPrfWalletForSign.value) {
+    confirmRegistration();
   }
 }
 
 const canConfirmRegistration = computed(() => {
-  if (signBusy.value || buildBusy.value) return false;
-  if (!txCborHex.value) return false;
+  if (submitBusy.value) return false;
+  if (!dustAddress.value) return false;
   if (isPrfWalletForSign.value) return true;
   return !!localPassword.value;
 });
 
 async function confirmRegistration() {
-  if (!txCborHex.value) return;
   const wallet = loggedWallet.value;
   if (!wallet) return;
+  if (!dustAddress.value) return;
+  if (!wallet.baseAddress) {
+    submitError.value = 'Wallet missing Midnight address';
+    snackbar.setError(submitError.value);
+    return;
+  }
 
-  signBusy.value = true;
-  signError.value = null;
+  submitBusy.value = true;
+  submitError.value = null;
   try {
     let prfSecret: Uint8Array | undefined;
-    if (isPrfWallet.value) {
+    if (isPrfWalletForSign.value) {
       if (!wallet.webAuthnCredentialId) {
         throw new Error('PRF wallet missing credential ID');
       }
@@ -514,29 +485,28 @@ async function confirmRegistration() {
       prfSecret = new Uint8Array(prfBuf);
     }
 
-    const { Messaging } = await import('@/chrome/messaging');
-    const { MessageTypes } = await import('@/models/MessageTypes');
-    const resp = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_AND_SUBMIT_DUST_REGISTRATION_TX,
-      data: {
-        txCborHex: txCborHex.value,
-        password: isPrfWallet.value ? undefined : localPassword.value,
-        prfSecret: prfSecret ? Array.from(prfSecret) : undefined,
+    const { registerNightForDust } = await import('@/services/midnight-tx.service');
+    const result = await registerNightForDust(
+      wallet.network,
+      {
+        fromAddress: wallet.baseAddress,
+        dustReceiverAddressBech32: dustAddress.value,
       },
-    }) as { data: { success: boolean; error?: string; txHash?: string } };
-
-    if (!resp?.data?.success || !resp.data.txHash) {
-      throw new Error(resp?.data?.error || 'DUST registration submission failed');
-    }
+      {
+        password: isPrfWalletForSign.value ? undefined : localPassword.value,
+        prfSecret,
+      },
+    );
 
     snackbar.fireSuccess(t('midnight.dustRegistrationSubmitted'));
+    void result; // result.txHash available for future "view tx" link
     resetRegistrationState();
     emit('close');
   } catch (e) {
-    signError.value = e instanceof Error ? e.message : String(e);
-    snackbar.setError(signError.value);
+    submitError.value = e instanceof Error ? e.message : String(e);
+    snackbar.setError(submitError.value);
   } finally {
-    signBusy.value = false;
+    submitBusy.value = false;
   }
 }
 

@@ -28,6 +28,7 @@ import type {
   BuildMidnightTxResponse,
   MidnightSegmentToSign,
   SubmitMidnightTxResponse,
+  SubmitNightDustRegistrationResponse,
 } from '@/api/midnight-api';
 
 export interface SignedSegment {
@@ -157,5 +158,58 @@ export async function sendUnshieldedNight(
     addressHex,
     unprovenTxHex: built.unprovenTxHex,
     signatures,
+  });
+}
+
+// ─── Path A — NIGHT-for-DUST registration ─────────────────────────────────────
+//
+// Registers the wallet's own NIGHT UTxOs to generate DUST for the wallet's
+// own dust address. Signed locally with the NightExternal key (same key
+// used for unshielded sends). No Cardano interaction.
+//
+// Flow:
+//   1. getWalletKeys → publicKeyHex + addressHex (cached or slow-path)
+//   2. buildNightDustRegistrationTx → Nexus sidecar builds via DustWallet,
+//      returns unproven tx + a single signature payload (intent #1, segment 1)
+//   3. signSegments → BG signs the payload with NightExternal (same path as send)
+//   4. submitNightDustRegistrationTx → Nexus splices the signature + submits
+//      to substrate
+
+export async function registerNightForDust(
+  network: string,
+  args: {
+    fromAddress: string;
+    dustReceiverAddressBech32: string;
+    /** Tx TTL (epoch ms). Defaults to now + 24h. */
+    ttlMs?: number;
+  },
+  credentials: MidnightSendCredentials,
+): Promise<SubmitNightDustRegistrationResponse> {
+  const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
+
+  const api = getMidnightApi(network);
+  const built = await api.buildNightDustRegistrationTx({
+    fromAddress: args.fromAddress,
+    publicKeyHex,
+    addressHex,
+    dustReceiverAddressBech32: args.dustReceiverAddressBech32,
+    ttlMs: args.ttlMs ?? (Date.now() + 24 * 60 * 60 * 1000),
+  });
+
+  // Sign the single payload with the existing NightExternal segment-signing
+  // BG handler. Wrap the single payload as a one-element segments array;
+  // role is always NightExternal for DUST registration (per Lace's
+  // `signDustRegistration` callback in `dependencies.ts:425`).
+  const signed = await signSegments(
+    [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
+    credentials,
+  );
+  if (signed.length !== 1) {
+    throw new Error('Expected exactly one signature for DUST registration');
+  }
+
+  return api.submitNightDustRegistrationTx({
+    unprovenTxHex: built.unprovenTxHex,
+    signatureHex: signed[0].signatureHex,
   });
 }

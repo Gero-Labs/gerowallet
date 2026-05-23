@@ -207,6 +207,44 @@ export interface SubmitMidnightTxResponse {
   blockHeight?: number;
 }
 
+// ─── Path A: Midnight-native DUST registration (NIGHT-for-DUST) ──────────────
+//
+// Registers the wallet's OWN NIGHT UTxOs to generate DUST for the wallet's
+// own dust address. Signed locally with the NightExternal key. No Cardano
+// interaction. First-time registration is fee-free. Different shape from
+// Path B (Cardano-side mapping validator); they coexist for cNIGHT holders.
+
+export interface BuildNightDustRegistrationRequest {
+  /** Sender's unshielded `mn_addr_…` address. Used by sidecar to read NIGHT UTxOs. */
+  fromAddress: string;
+  /** Raw signing public key hex — `UnshieldedKeystore.getPublicKey()`. */
+  publicKeyHex: string;
+  /** Address bytes as hex — `UnshieldedKeystore.getAddress()`. */
+  addressHex: string;
+  /** User's DUST address (bech32m `mn_dust-addr_<network>1…`). REQUIRED. */
+  dustReceiverAddressBech32: string;
+  /** Tx TTL as epoch ms (must be in the future). */
+  ttlMs: number;
+}
+
+export interface BuildNightDustRegistrationResponse {
+  unprovenTxHex: string;
+  txHash: string;
+  /** Single signature payload (hex). Signed with NightExternal key. */
+  signaturePayloadHex: string;
+}
+
+export interface SubmitNightDustRegistrationRequest {
+  unprovenTxHex: string;
+  /** Hex of the NightExternal signature over the build's signaturePayloadHex. */
+  signatureHex: string;
+}
+
+export interface SubmitNightDustRegistrationResponse {
+  txHash: string;
+  status: 'Submitted' | 'InBlock' | 'Finalized';
+}
+
 /**
  * Single shared axios instance — uses the Midnight network's Nexus URL from config.
  * Caller passes the `network` per call so we can reuse one instance across sessions.
@@ -525,6 +563,68 @@ export class MidnightApi {
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
       if (status !== 200) throw parseHttpError(data);
       return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  // ─── Path A: NIGHT-for-DUST registration (Midnight-native) ────────────────
+
+  /**
+   * Build the Midnight-native DUST registration tx. Nexus's sidecar reads
+   * the user's NIGHT UTxOs from the cached UnshieldedWallet and builds the
+   * unproven extrinsic via `DustWallet.createDustGenerationTransaction`.
+   * Returns the unproven tx + a single signature payload the wallet must
+   * sign with its NightExternal key.
+   */
+  async buildNightDustRegistrationTx(
+    request: BuildNightDustRegistrationRequest,
+  ): Promise<BuildNightDustRegistrationResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/build-night-registration');
+      const wireBody = {
+        from_address: request.fromAddress,
+        public_key_hex: request.publicKeyHex,
+        address_hex: request.addressHex,
+        dust_receiver_address_bech32: request.dustReceiverAddressBech32,
+        ttl_ms: request.ttlMs,
+      };
+      const { data, status } = await this.axiosInstance.post<{
+        unproven_tx_hex: string;
+        tx_hash: string;
+        signature_payload_hex: string;
+      }>(url, wireBody);
+      if (status !== 200) throw parseHttpError(data);
+      return {
+        unprovenTxHex: data.unproven_tx_hex,
+        txHash: data.tx_hash,
+        signaturePayloadHex: data.signature_payload_hex,
+      };
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Submit the wallet-signed DUST registration tx. Sidecar splices the
+   * NightExternal signature into intent #1 and returns the serialized
+   * extrinsic; Nexus submits via `author_submitExtrinsic`.
+   */
+  async submitNightDustRegistrationTx(
+    request: SubmitNightDustRegistrationRequest,
+  ): Promise<SubmitNightDustRegistrationResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/submit-night-registration');
+      const wireBody = {
+        unproven_tx_hex: request.unprovenTxHex,
+        signature_hex: request.signatureHex,
+      };
+      const { data, status } = await this.axiosInstance.post<{
+        tx_hash: string;
+        status: 'Submitted' | 'InBlock' | 'Finalized';
+      }>(url, wireBody);
+      if (status !== 200) throw parseHttpError(data);
+      return { txHash: data.tx_hash, status: data.status };
     } catch (error) {
       throw parseHttpError(error);
     }

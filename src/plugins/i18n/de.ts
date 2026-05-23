@@ -3538,7 +3538,7 @@ export default {
 
   // Midnight DUST-Registrierung
   'midnight.registerForDust': 'Für DUST-Generierung registrieren',
-  'midnight.registerForDustSubtitle': 'Verknüpfen Sie Ihr Cardano-NIGHT mit Ihrer Midnight-DUST-Adresse',
+  'midnight.registerForDustSubtitle': 'Signieren Sie mit Ihrer Wallet, um aus Ihrem NIGHT DUST zu generieren',
   'midnight.dustRecipientAddress': 'Ihre DUST-Empfangsadresse (Midnight)',
   'midnight.nightRegistered': 'Registriertes NIGHT',
   'midnight.generationRate': 'Generierungsrate',
