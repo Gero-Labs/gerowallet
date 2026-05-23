@@ -33,6 +33,7 @@ import webSocketService from './websocket.service';
 import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import { debugLog } from '@/utils/debug';
 import { Network } from '@/models/types';
+import { getMidnightApi } from '@/api/midnight-api';
 import type {
   MidnightAddresses,
   MidnightBalances,
@@ -187,6 +188,37 @@ class MidnightSyncService {
 
     this.active = true;
     debugLog(`🌙 Midnight sync started for ${addresses.unshielded} on ${network} (gero-sync key: ${geroSyncNetwork})`);
+
+    // Bootstrap the chain tip from Nexus's indexer-backed `/api/blocks/latest`.
+    // gero-sync only sends `block` data inside SYNC messages when there's
+    // something to dispatch; if the wallet's already caught up at startup,
+    // SYNC_CHECK_OK arrives with no `block` field, leaving `midnightStore.tip`
+    // and `lastSync` at their empty defaults — so the navigation status
+    // tooltip would otherwise show "Last Sync: N/A" / "Block: N/A" forever.
+    // Fire-and-forget; a failure here is non-fatal (the tooltip just stays
+    // at N/A until the next SYNC arrives).
+    this.bootstrapTipFromNexus(network).catch((e) => {
+      debugLog('🌙 Midnight tip bootstrap from Nexus failed (non-fatal):', e);
+    });
+  }
+
+  /**
+   * Read the current chain tip from Nexus's `/api/blocks/latest` and seed
+   * {@link midnightStore.tip} + `lastSync`. Used at sync start so the
+   * navigation tooltip has a value before any new blocks have arrived.
+   */
+  private async bootstrapTipFromNexus(network: string): Promise<void> {
+    const api = getMidnightApi(network);
+    const block = await api.getLatestBlock();
+    if (typeof block.height !== 'number') return;
+    midnightActions.applyTipUpdate({
+      hash: block.hash ?? null,
+      height: block.height,
+      // Nexus's BlockDto returns `time` in epoch ms (chain-agnostic; same
+      // shape as Cardano's tip carries). The Midnight tip type already uses
+      // ms semantics for `timestamp` (see midnight-sync handleSync below).
+      timestamp: typeof block.time === 'number' ? block.time : 0,
+    });
   }
 
   /**
