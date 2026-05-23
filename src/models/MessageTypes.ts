@@ -55,4 +55,14 @@ export enum MessageTypes {
   // that were created before this field was stored): decrypts mnemonic once,
   // derives the keys, persists them back to DB, returns them.
   GET_MIDNIGHT_WALLET_KEYS = 'GET_MIDNIGHT_WALLET_KEYS',
+  // Midnight: sign + submit a Cardano-side DUST registration tx using the
+  // wallet's same mnemonic. The wallet has both Midnight and CIP-1852 Cardano
+  // keys derived from one BIP39 phrase (Lace pattern). This BG message:
+  //   1. Decrypts the mnemonic (password or PRF secret).
+  //   2. Derives the Cardano payment key at CIP-1852 / 1815' / account / 0 / 0.
+  //   3. Signs the supplied Cardano tx CBOR with that key.
+  //   4. Submits the signed tx to the Cardano network corresponding to the
+  //      Midnight wallet's network (midnight-preview → cardano-preview, etc.).
+  // Returns the tx hash. Used by `DustRegistrationDialog` for native registration.
+  SIGN_AND_SUBMIT_DUST_REGISTRATION_TX = 'SIGN_AND_SUBMIT_DUST_REGISTRATION_TX',
 }

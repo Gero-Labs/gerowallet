@@ -26,8 +26,22 @@ import * as bip39 from 'bip39';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { createKeystore } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import { DustSecretKey } from '@midnight-ntwrk/ledger-v8';
-import { DustAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
-import { Network } from '@/models/types';
+import { DustAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { bech32, bech32m } from 'bech32';
+import {
+  Bip32Ed25519,
+  Bip32PublicKeyHex,
+  SodiumBip32Ed25519,
+} from '@cardano-sdk/crypto';
+import { resolvePrivateKey } from '@/shared/utils/resolver';
+import { getAddress, getPaymentKeyExternal, getRewardAddress } from '@/chrome/serialization';
+import {
+  Blockchain,
+  CoinTypes,
+  HARDENED,
+  Network,
+  WalletTypePurpose,
+} from '@/models/types';
 import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
 
 /**
@@ -64,6 +78,58 @@ export interface MidnightDerivedKeys {
   publicKeyHex: string;
   /** Address bytes as hex (`UnshieldedKeystore.getAddress()`). Needed by Nexus sidecar for seedless wallet construction. */
   addressHex: string;
+  /** Cardano CIP-1852 account 0 xpub (bech32 `xpub1...`). Used to sign DUST registration txs on Cardano. */
+  cardanoXpub: string;
+  /** Cardano base address at external chain index 0 (bech32 `addr1...`/`addr_test1...`). */
+  cardanoBaseAddress: string;
+  /** Cardano stake/reward address (bech32 `stake1...`/`stake_test1...`). */
+  cardanoStakeAddress: string;
+  /** 28-byte hex payment-key hash for the Cardano base address. Sent to Nexus DUST builder. */
+  cardanoPaymentKeyHashHex: string;
+}
+
+/**
+ * Derive the Cardano CIP-1852 xpub + primary base/stake address from the
+ * wallet's BIP39 mnemonic. Mirrors `derivePublicKeyFromMnemonic` in
+ * `gero-db.ts` but co-located so a single mnemonic produces both the Midnight
+ * HD material and the Cardano material in one pass — matching Lace's pattern
+ * of one wallet seed feeding every per-chain integration module.
+ */
+async function deriveCardanoMaterial(
+  mnemonic: string,
+  network: string,
+  account = 0,
+): Promise<{
+  cardanoXpub: string;
+  cardanoBaseAddress: string;
+  cardanoStakeAddress: string;
+  cardanoPaymentKeyHashHex: string;
+}> {
+  const rootKey = resolvePrivateKey(mnemonic);
+  const bip32Ed25519: Bip32Ed25519 = await SodiumBip32Ed25519.create();
+  const xpubHex: Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(
+    rootKey
+      .derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + account])
+      .hex(),
+  );
+  let words: number[];
+  try {
+    words = bech32.toWords(Buffer.from(xpubHex, 'hex'));
+  } catch {
+    words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
+  }
+  const cardanoXpub = bech32.encode('xpub', words, 120);
+
+  const cardanoBaseAddress = getAddress(cardanoXpub, Blockchain.CARDANO, network, 0).toBech32();
+  const cardanoStakeAddress = getRewardAddress(cardanoXpub, Blockchain.CARDANO, network).toBech32();
+  const cardanoPaymentKeyHashHex = getPaymentKeyExternal(cardanoXpub, 0).hash().hex();
+
+  return {
+    cardanoXpub,
+    cardanoBaseAddress,
+    cardanoStakeAddress,
+    cardanoPaymentKeyHashHex,
+  };
 }
 
 /**
@@ -78,11 +144,11 @@ export interface MidnightDerivedKeys {
  * @param network  One of `Network.PREVIEW | PREPROD | MAINNET | TESTNET`
  * @param account  HD account index (defaults to 0)
  */
-export function deriveMidnightKeys(
+export async function deriveMidnightKeys(
   mnemonic: string,
   network: string,
   account = 0,
-): MidnightDerivedKeys {
+): Promise<MidnightDerivedKeys> {
   const seed = bip39.mnemonicToSeedSync(mnemonic);
 
   const result = HDWallet.fromSeed(seed);
@@ -122,6 +188,11 @@ export function deriveMidnightKeys(
   // Wipe HD private material once the addresses are derived.
   hdWallet.clear();
 
+  // Derive the Cardano CIP-1852 material from the same mnemonic so a single
+  // Midnight wallet can natively sign Cardano-side DUST registration txs
+  // without requiring a separate Cardano wallet (Lace pattern).
+  const cardano = await deriveCardanoMaterial(mnemonic, network, account);
+
   // Shielded address still requires the Zswap wallet's coin + encryption keys
   // from `wallet-sdk-shielded`. That landing is gated on the WASM bundle
   // decision; until then the dashboard renders a "Pending SDK integration" hint.
@@ -131,6 +202,10 @@ export function deriveMidnightKeys(
     dust: dustAddress,
     publicKeyHex,
     addressHex,
+    cardanoXpub: cardano.cardanoXpub,
+    cardanoBaseAddress: cardano.cardanoBaseAddress,
+    cardanoStakeAddress: cardano.cardanoStakeAddress,
+    cardanoPaymentKeyHashHex: cardano.cardanoPaymentKeyHashHex,
   };
 
   return {
@@ -140,6 +215,10 @@ export function deriveMidnightKeys(
     addresses,
     publicKeyHex,
     addressHex,
+    cardanoXpub: cardano.cardanoXpub,
+    cardanoBaseAddress: cardano.cardanoBaseAddress,
+    cardanoStakeAddress: cardano.cardanoStakeAddress,
+    cardanoPaymentKeyHashHex: cardano.cardanoPaymentKeyHashHex,
   };
 }
 
@@ -147,10 +226,21 @@ export function deriveMidnightKeys(
  * Public-facing helper: just the addresses (no private material). Used by the
  * UI / sync wiring at login time when the wallet has its decrypted seed.
  */
-export function deriveMidnightAddresses(
+export async function deriveMidnightAddresses(
   mnemonic: string,
   network: string,
   account = 0,
-): MidnightAddresses {
-  return deriveMidnightKeys(mnemonic, network, account).addresses;
+): Promise<MidnightAddresses> {
+  const derived = await deriveMidnightKeys(mnemonic, network, account);
+  return derived.addresses;
+}
+
+/**
+ * Decode a bech32m DUST address (`mn_dust-addr_<network>1…`) back to its raw
+ * payload hex. Needed by `dust/build-registration-tx` which inlines the bytes
+ * into the validator's datum (`dust_address: ByteArray`, ≤ 33 bytes).
+ */
+export function dustAddressToHex(bech32Address: string): string {
+  const parsed = MidnightBech32m.parse(bech32Address);
+  return parsed.data.toString('hex');
 }

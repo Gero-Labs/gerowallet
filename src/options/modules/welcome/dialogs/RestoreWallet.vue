@@ -654,10 +654,20 @@ const walletCreationStep3 = async () => {
     // Pre-derive Midnight bech32m addresses in this options context — see
     // CreateWallet.vue / midnightKeyManager.ts for why this can't live in
     // gero-db.ts (background-bundle bloat).
-    let midnightAddresses: { unshielded: string; shielded: string; dust: string; publicKeyHex?: string; addressHex?: string } | undefined;
+    let midnightAddresses: {
+      unshielded: string;
+      shielded: string;
+      dust: string;
+      publicKeyHex?: string;
+      addressHex?: string;
+      cardanoXpub?: string;
+      cardanoBaseAddress?: string;
+      cardanoStakeAddress?: string;
+      cardanoPaymentKeyHashHex?: string;
+    } | undefined;
     if (localNetwork.value.blockchain === Blockchain.MIDNIGHT) {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = deriveMidnightKeys(seedToStr.value, localNetwork.value.network);
+      const derived = await deriveMidnightKeys(seedToStr.value, localNetwork.value.network);
       midnightAddresses = derived.addresses;
     }
 

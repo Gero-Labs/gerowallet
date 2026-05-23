@@ -3547,6 +3547,8 @@ export default {
   'midnight.registrationStep2': 'Sie signieren die Registrierung mit Ihrer Cardano-Wallet (CIP-30)',
   'midnight.registrationStep3': 'Nach ~432 Midnight-Blöcken (~2,5 Stunden) beginnt Ihr registriertes NIGHT, DUST zu generieren',
   'midnight.openRedemptionPortal': 'Einlösungsportal öffnen',
+  'midnight.signAndRegister': 'Signieren & Registrieren',
+  'midnight.dustRegistrationSubmitted': 'DUST-Registrierung übermittelt',
   'midnight.statusUnregistered': 'Nicht für DUST registriert',
   'midnight.statusUnregisteredHelp': 'Registrieren Sie Ihr Cardano-seitiges NIGHT, um DUST zu generieren.',
   'midnight.statusPending': 'Registrierung ausstehend',

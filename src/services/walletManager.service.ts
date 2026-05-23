@@ -302,7 +302,17 @@ export class WalletManager {
       // Hydrate midnightStore with the persisted addresses so the dashboard
       // (MidnightBalanceCards, ReceiveDialog) can render immediately.
       const { midnightActions } = await import('@/stores/midnightStore');
-      let addresses: { unshielded: string; shielded: string; dust: string; publicKeyHex?: string; addressHex?: string } = { unshielded: '', shielded: '', dust: '' };
+      let addresses: {
+        unshielded: string;
+        shielded: string;
+        dust: string;
+        publicKeyHex?: string;
+        addressHex?: string;
+        cardanoXpub?: string;
+        cardanoBaseAddress?: string;
+        cardanoStakeAddress?: string;
+        cardanoPaymentKeyHashHex?: string;
+      } = { unshielded: '', shielded: '', dust: '' };
       try {
         const parsed = walletBg.publicKey ? JSON.parse(walletBg.publicKey) : null;
         if (parsed && typeof parsed === 'object') {
@@ -312,6 +322,10 @@ export class WalletManager {
             dust: parsed.dust ?? '',
             publicKeyHex: parsed.publicKeyHex,
             addressHex: parsed.addressHex,
+            cardanoXpub: parsed.cardanoXpub,
+            cardanoBaseAddress: parsed.cardanoBaseAddress,
+            cardanoStakeAddress: parsed.cardanoStakeAddress,
+            cardanoPaymentKeyHashHex: parsed.cardanoPaymentKeyHashHex,
           };
         }
       } catch (e) {
