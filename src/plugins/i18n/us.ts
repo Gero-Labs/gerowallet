@@ -3637,7 +3637,7 @@ export default {
   // tx (signed via Gero's Cardano wallet or the official portal) with the
   // wallet's Midnight DUST address as the DUST recipient.
   'midnight.registerForDust': 'Register for DUST generation',
-  'midnight.registerForDustSubtitle': 'Map your Cardano NIGHT to your Midnight DUST address',
+  'midnight.registerForDustSubtitle': 'Sign with your wallet to start generating DUST from your NIGHT',
   'midnight.dustRecipientAddress': 'Your DUST recipient address (Midnight)',
   'midnight.nightRegistered': 'NIGHT registered',
   'midnight.generationRate': 'Generation rate',
