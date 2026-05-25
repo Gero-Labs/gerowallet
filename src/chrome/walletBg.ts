@@ -1752,6 +1752,25 @@ export class WalletBg {
 
       const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
 
+      // DIAGNOSTIC: compare BG-derived public key against the one persisted
+      // at wallet creation (in options context). If they differ, the BG
+      // bundle's HD-derivation chain is silently producing wrong bytes —
+      // most likely the sha512/HMAC polyfill (the same chain that crashed
+      // loudly on the Cardano CIP-1852 derivation; see the skipCardano
+      // workaround above). A mismatch here explains a Substrate-side
+      // "Custom error: 1" (signature does not verify against the
+      // nightVerifyingKey embedded in the tx at build time).
+      try {
+        const bgPublicKey = keystore.getPublicKey() as unknown as string;
+        const storedPublicKey = this.publicKey
+          ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
+          : undefined;
+        console.log('[MidnightSign] pubkey BG=', bgPublicKey, 'STORED=', storedPublicKey,
+          'match=', storedPublicKey ? bgPublicKey === storedPublicKey : 'no-stored');
+      } catch (e) {
+        console.warn('[MidnightSign] pubkey comparison failed:', e);
+      }
+
       const results: Array<{ index: number; signatureHex: string }> = [];
       for (const segment of segments) {
         const dataBytes = Buffer.from(segment.dataHex, 'hex');
