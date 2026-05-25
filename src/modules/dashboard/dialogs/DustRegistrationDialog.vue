@@ -227,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, toRefs, watch } from 'vue';
+import { computed, ref, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { midnightStore } from '@/stores/midnightStore';
@@ -235,7 +235,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { getMidnightApi } from '@/api/midnight-api';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
@@ -266,11 +266,17 @@ const dustCurrency = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 const networkLabel = computed(() => (isMainnet.value ? 'Mainnet' : 'Preview'));
 
 const dustAddress = computed(() => addresses.value?.dust ?? '');
-const nightRegistered = computed(() => balances.value?.nightRegistered ?? 0n);
-// Prefer freshly-polled rate (see refreshDustState below) over the static
-// gero-sync AccountInfo snapshot — it picks up live decay as we approach cap.
+
+// Live DUST state — polled from Nexus every 5s, extrapolated locally
+// every 1s. Module-scoped singleton so the portfolio + this dialog share
+// one poll loop.
+const dustLive = useMidnightDustLive();
+const nightRegistered = computed(() => {
+  if (dustLive.hasData.value) return dustLive.nightRegistered.value;
+  return balances.value?.nightRegistered ?? 0n;
+});
 const dustGenerating = computed(() => {
-  if (polledAsOfMs.value !== 0) return polledDustGenerating.value;
+  if (dustLive.hasData.value) return dustLive.dustGenerating.value;
   return balances.value?.dustGenerating ?? 0n;
 });
 
@@ -278,71 +284,14 @@ const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 
   return (dustState.value?.registrationStatus as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid') ?? 'Unregistered';
 });
 
-// ── Live DUST balance ───────────────────────────────────────────────────────
-// The on-chain DUST balance changes every second as the runtime accumulates
-// generation against registered NIGHT UTxOs. gero-sync ships a snapshot via
-// AccountInfo on subscribe, but that's a one-shot — without local tick the
-// number is frozen. We poll Nexus's dust account-state endpoint every 5s for
-// an authoritative snapshot, then linearly extrapolate between polls using
-// the per-second `dust_generating` rate via a 1s nowTick.
-const polledDustBalance = ref<bigint>(0n);
-const polledDustGenerating = ref<bigint>(0n);
-const polledDustCap = ref<bigint>(0n);
-const polledAsOfMs = ref<number>(0);
-const nowTickMs = ref<number>(Date.now());
-
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-let tickTimer: ReturnType<typeof setInterval> | null = null;
-
-async function refreshDustState() {
-  const network = loggedWallet.value?.network;
-  const address = addresses.value?.unshielded;
-  if (!network || !address) return;
-  try {
-    const api = getMidnightApi(network);
-    const res = await api.getDustAccountState(address);
-    polledDustBalance.value = BigInt(res.dust_balance ?? '0');
-    polledDustGenerating.value = BigInt(res.dust_generating ?? '0');
-    polledDustCap.value = BigInt(res.dust_cap ?? '0');
-    polledAsOfMs.value = Date.now();
-  } catch {
-    // Best-effort; keep last successful values + extrapolation between calls.
-  }
-}
-
-watch(
-  () => props.isOpen,
-  (open) => {
-    if (open) {
-      void refreshDustState();
-      pollTimer ??= setInterval(refreshDustState, 5_000);
-      tickTimer ??= setInterval(() => { nowTickMs.value = Date.now(); }, 1_000);
-    } else {
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
-    }
-  },
-  { immediate: true },
-);
-onBeforeUnmount(() => {
-  if (pollTimer) clearInterval(pollTimer);
-  if (tickTimer) clearInterval(tickTimer);
-});
-
-// Live (extrapolated) DUST balance — `polled + elapsedSeconds * rate`, clamped
-// to the cap so we don't overshoot visually.
+// Live DUST balance + cap — composable handles polling + 1s tick. Fall back
+// to gero-sync's AccountInfo snapshot before the first poll completes.
 const dustCurrent = computed<bigint>(() => {
-  if (polledAsOfMs.value === 0) {
-    return dustState.value?.current ?? 0n;
-  }
-  const elapsedMs = Math.max(0, nowTickMs.value - polledAsOfMs.value);
-  const extra = (polledDustGenerating.value * BigInt(elapsedMs)) / 1000n;
-  let live = polledDustBalance.value + extra;
-  if (polledDustCap.value > 0n && live > polledDustCap.value) live = polledDustCap.value;
-  return live;
+  if (dustLive.hasData.value) return dustLive.dustBalance.value;
+  return dustState.value?.current ?? 0n;
 });
 const dustCap = computed(() => {
-  if (polledDustCap.value > 0n) return polledDustCap.value;
+  if (dustLive.hasData.value) return dustLive.dustCap.value;
   return dustState.value?.cap ?? 0n;
 });
 const capProgress = computed(() => {

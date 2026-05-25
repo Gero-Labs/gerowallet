@@ -53,7 +53,7 @@
           <div class="pnl-item">
             <span class="pnl-label">{{ dustCurrency }}</span>
             <span class="pnl-value" :style="{ color: '#FFD86E' }">
-              {{ hideBalances ? '••••' : formatDust(balances.dust ?? 0n) + ' ' + dustCurrency }}
+              {{ hideBalances ? '••••' : formatDust(liveDustBalance) + ' ' + dustCurrency }}
             </span>
           </div>
         </div>
@@ -101,12 +101,21 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 
 defineEmits<{ (e: 'refresh'): void }>();
 
 const { addresses, balances, dustState, transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+
+// Live (1s-ticking) DUST balance — composable polls Nexus every 5s and
+// extrapolates between polls using the per-second generation rate.
+const dustLive = useMidnightDustLive();
+const liveDustBalance = computed<bigint>(() => {
+  if (dustLive.hasData.value) return dustLive.dustBalance.value;
+  return balances.value.dust ?? 0n;
+});
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
@@ -129,10 +138,12 @@ const timeframeWindowMs: Record<Timeframe, number> = {
 };
 
 // ── Computed values ──────────────────────────────────────────────────────────
+// `nightRegistered` is a SUBSET of `nightUnshielded` (the portion already
+// registered for DUST generation), not a separate pile. Summing all three
+// double-counted the registered amount — total = unshielded + shielded.
 const totalNight = computed<bigint>(() =>
   (balances.value.nightUnshielded ?? 0n) +
-  (balances.value.nightShielded ?? 0n) +
-  (balances.value.nightRegistered ?? 0n),
+  (balances.value.nightShielded ?? 0n),
 );
 
 const unshieldedAddress = computed(() => addresses.value?.unshielded ?? loggedWallet.value?.baseAddress ?? '');
