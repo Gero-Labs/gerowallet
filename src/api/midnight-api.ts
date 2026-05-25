@@ -568,6 +568,33 @@ export class MidnightApi {
     }
   }
 
+  /**
+   * Current DUST account state for a Midnight unshielded address.
+   *
+   * <p>Returns balance, per-second generation rate, cap, total NIGHT
+   * registered, and registration/generation status. Math is deterministic
+   * on the server (UTxO ledger + chain dust params), so this is cheap and
+   * safe to poll on a short interval while a dust-related view is open.
+   */
+  async getDustAccountState(address: string): Promise<{
+    dust_balance: string;
+    dust_generating: string;
+    dust_cap: string;
+    night_registered: string;
+    dust_registration_status: 'Unregistered' | 'Registered' | string;
+    dust_generation_status: 'empty' | 'refilling' | 'filled' | string;
+    dust_time_remaining_seconds: number | null;
+  }> {
+    try {
+      const url = nexusMidnightPathFor(this.network, `dust/account-state/${encodeURIComponent(address)}`);
+      const { data, status } = await this.axiosInstance.get(url, { timeout: 5_000 });
+      if (status !== 200) throw parseHttpError(data);
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   // ─── Path A: NIGHT-for-DUST registration (Midnight-native) ────────────────
 
   /**
