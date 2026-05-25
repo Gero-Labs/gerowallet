@@ -127,10 +127,12 @@ interface MidnightHoldingRow {
   iconColor: string;
 }
 
+// `nightRegistered` is a SUBSET of `nightUnshielded` (the portion registered
+// for DUST generation), not a separate pile. Summing all three would
+// double-count the registered amount.
 const totalNight = computed<bigint>(() =>
   (balances.value.nightUnshielded ?? 0n) +
-  (balances.value.nightShielded ?? 0n) +
-  (balances.value.nightRegistered ?? 0n),
+  (balances.value.nightShielded ?? 0n),
 );
 
 const rows = computed<MidnightHoldingRow[]>(() => [
