@@ -148,6 +148,14 @@ export async function deriveMidnightKeys(
   mnemonic: string,
   network: string,
   account = 0,
+  /**
+   * Skip Cardano (CIP-1852) material derivation. Set true on signing-only
+   * paths inside the background service worker, where the bundled pbkdf2/
+   * sha512 polyfill chain crashes with "Cannot set properties of undefined
+   * (setting 'NaN')". The Midnight signing flow only needs the
+   * NightExternal key, so Cardano material is dead weight here.
+   */
+  options: { skipCardano?: boolean } = {},
 ): Promise<MidnightDerivedKeys> {
   const seed = bip39.mnemonicToSeedSync(mnemonic);
 
@@ -191,7 +199,10 @@ export async function deriveMidnightKeys(
   // Derive the Cardano CIP-1852 material from the same mnemonic so a single
   // Midnight wallet can natively sign Cardano-side DUST registration txs
   // without requiring a separate Cardano wallet (Lace pattern).
-  const cardano = await deriveCardanoMaterial(mnemonic, network, account);
+  // Skipped on signing-only paths (see options.skipCardano above).
+  const cardano = options.skipCardano
+    ? { cardanoXpub: '', cardanoBaseAddress: '', cardanoStakeAddress: '', cardanoPaymentKeyHashHex: '' }
+    : await deriveCardanoMaterial(mnemonic, network, account);
 
   // Shielded address still requires the Zswap wallet's coin + encryption keys
   // from `wallet-sdk-shielded`. That landing is gated on the WASM bundle

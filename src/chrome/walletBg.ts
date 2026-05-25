@@ -1729,8 +1729,12 @@ export class WalletBg {
         throw new Error('Zswap (shielded) signing is not yet supported. Phase 3 work pending.');
       }
 
+      // skipCardano: the signing path runs inside the BG service worker where
+      // the bundled pbkdf2/sha512 polyfill chain crashes (CLAUDE.md "pbkdf2
+      // build issues"). NightExternal signing doesn't need Cardano material,
+      // so skip that derivation entirely.
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(mnemonic, this.network);
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
       const { createKeystore } = await import('@midnight-ntwrk/wallet-sdk-unshielded-wallet');
       // Map our project's `Network` constant to the SDK's NetworkId string.
