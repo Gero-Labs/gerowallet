@@ -1795,29 +1795,27 @@ export class WalletBg {
   }
 
   /**
-   * BG-side build + balance + sign of an unshielded NIGHT transfer.
+   * BG-side DUST-balance + sign of an unshielded NIGHT transfer Nexus built.
    *
-   * Returns the SIGNED but UNPROVEN tx hex. The wallet then ships this
-   * to the sidecar's /tx/finalize which generates the ZK proof, binds
-   * the tx, and submits via polkadot.js midnight.sendMnTransaction.
+   * Returns the SIGNED but UNPROVEN tx hex, ready for the sidecar's
+   * /tx/finalize (prove + bind + submit).
    *
-   * Why this lives in BG (and not the sidecar): the DUST fee step
-   * (`dustWallet.balanceTransactions`) cryptographically requires the
-   * user's real dust secret to derive spend nullifiers. Same constraint
-   * Lace lives with; same architecture they use.
+   * Why this lives in BG: the DUST fee step (`dustWallet.balanceTransactions`)
+   * needs the user's real dust secret to derive spend nullifiers. Same
+   * constraint Lace lives with. The NIGHT input selection / change / offer
+   * construction is done by Nexus (UTxOs are public; indexer view is canonical).
    */
-  async buildAndSignMidnightUnshieldedTransfer(
-    outputs: Array<{ address: string; amount: bigint; token: 'NIGHT' }>,
+  async balanceAndSignMidnightUnshieldedTransfer(
+    unprovenTxHex: string,
     ttlMs: number,
     password?: string,
     prfSecret?: Uint8Array,
   ): Promise<string> {
     if (this.chain !== Blockchain.MIDNIGHT) {
-      throw new Error('buildAndSignMidnightUnshieldedTransfer called on non-Midnight wallet');
+      throw new Error('balanceAndSignMidnightUnshieldedTransfer called on non-Midnight wallet');
     }
-    if (outputs.length === 0) throw new Error('outputs[] must be non-empty');
-    if (outputs.some((o) => o.token !== 'NIGHT')) {
-      throw new Error('only NIGHT outputs are supported today');
+    if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
+      throw new Error('unprovenTxHex is required');
     }
 
     // Decrypt mnemonic (same pattern as signMidnightSegments above).
@@ -1841,7 +1839,7 @@ export class WalletBg {
       const { Network } = await import('@/models/types');
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
-      const { buildAndSignUnshieldedTransfer } = await import('@/chains/midnight/midnightTxBuilder');
+      const { balanceAndSignUnshieldedTransfer } = await import('@/chains/midnight/midnightTxBuilder');
 
       // skipCardano:true: the BG-bundle pbkdf2/sha512 shim breaks on the
       // Cardano BIP-32 derivation path. We don't need Cardano keys for a
@@ -1861,12 +1859,12 @@ export class WalletBg {
       }
 
       try {
-        const signedTxHex = await buildAndSignUnshieldedTransfer({
+        const signedTxHex = await balanceAndSignUnshieldedTransfer({
           sdkNetworkId,
           endpoints,
           unshieldedSecretKey: derived.unshieldedSecretKey,
           dustSecretSeed: derived.dustSecretKey,
-          outputs: outputs.map((o) => ({ address: o.address, amount: o.amount })),
+          unprovenTxHex,
           ttl: new Date(ttlMs),
         });
         return signedTxHex;
