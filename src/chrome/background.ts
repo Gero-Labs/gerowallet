@@ -3324,39 +3324,32 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
 });
 
 /**
- * Midnight: build + balance (DUST fee) + sign an unshielded NIGHT transfer
- * inside the BG service worker. Returns the signed-but-unproven tx hex.
- * Sidecar's /tx/finalize handles ZK proving + binding + submission.
+ * Midnight: DUST-balance + sign the unproven unshielded NIGHT-transfer tx
+ * Nexus built. Returns the signed-but-unproven tx hex. Sidecar's /tx/finalize
+ * handles ZK proving + binding + submission.
  *
- * Request shape: `{ outputs: Array<{address, amount: string, token:'NIGHT'}>,
- *                   ttlMs: number, password?: string, prfSecret?: number[] }`.
- * Amounts arrive as strings (BigInt-safe transport across runtime.sendMessage).
+ * Request shape: `{ unprovenTxHex: string, ttlMs: number,
+ *                   password?: string, prfSecret?: number[] }`.
  */
 app.addToOptions(
-  MessageTypes.BUILD_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
+  MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
   async (request, sendResponse) => {
     try {
       const walletBg = walletManager.getWallet();
       if (!walletBg) throw new Error('No wallet logged in');
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
-        throw new Error('BUILD_AND_SIGN_MIDNIGHT_UNSHIELDED_TX called on non-Midnight wallet');
+        throw new Error('BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX called on non-Midnight wallet');
       }
-      const { outputs, ttlMs, password, prfSecret } = request.data || {};
-      if (!Array.isArray(outputs) || outputs.length === 0) {
-        throw new Error('outputs[] is required and must be non-empty');
+      const { unprovenTxHex, ttlMs, password, prfSecret } = request.data || {};
+      if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
+        throw new Error('unprovenTxHex is required');
       }
       if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs)) {
         throw new Error('ttlMs is required (epoch millis)');
       }
-      const parsedOutputs = outputs.map((o: { address: string; amount: string; token: string }) => {
-        if (typeof o?.address !== 'string' || !o.address) throw new Error('output.address required');
-        if (typeof o?.amount !== 'string' || !o.amount) throw new Error('output.amount required (string)');
-        if (o?.token !== 'NIGHT') throw new Error('only token:"NIGHT" supported today');
-        return { address: o.address, amount: BigInt(o.amount), token: 'NIGHT' as const };
-      });
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-      const signedTxHex = await walletBg.buildAndSignMidnightUnshieldedTransfer(
-        parsedOutputs,
+      const signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
+        unprovenTxHex,
         ttlMs,
         password,
         prfBytes,

@@ -1,34 +1,30 @@
-// BG-side build + balance + sign for unshielded NIGHT transfers.
+// BG-side DUST-balance + sign for unshielded NIGHT transfers.
 //
-// Why this exists: every Midnight tx except first-time DUST registration
-// must pay its fee with a DUST coin spend. Spending a DUST coin requires
-// constructing a nullifier from the user's dust secret key + the coin's
-// nonce — the SDK's `balanceTransactions(dustSecretKey, ...)` is the only
-// canonical entry point and it touches the secret cryptographically.
+// The unproven NIGHT-transfer tx (inputs + outputs + change) is built by
+// Nexus's `/tx/build-unshielded` because NIGHT UTxOs are public — the
+// indexer-backed view there is canonical. The wallet's only required
+// pre-prove work is the steps that need the user's secrets:
 //
-// That rules out our seedless server-side architecture for non-trivial
-// txs (we hit chain error `1010: Custom error 138` when we tried with a
-// throwaway dust key). Tx ASSEMBLY moves into the wallet's BG service
-// worker — where the mnemonic is already decrypted at sign-time. The
-// sidecar still does ZK PROVING and SUBMISSION (heavy WASM + key material,
-// best kept server-side).
+//   1. DUST fee balance — needs the user's dust secret to derive spend
+//      nullifiers (`balanceTransactions(dustSk, …)` → `localState.spend(sk, …)`).
+//   2. Sign each unshielded input — needs the NightExternal key.
 //
-// This matches Lace's architecture: wallets live in the MV3 service worker,
-// the user's secrets are re-derived JIT per tx, and only proving is
-// remote. See the SDK research notes in this session for citations.
+// Sidecar (`/tx/finalize`) then does ZK proof + bind + submit.
+//
+// Note on UnshieldedWallet usage: `signUnprovenTransaction` walks the tx's
+// segments directly (no UTxO state read). So we don't `waitForSyncedState`
+// here — only `start()` is required to make the SDK's signing capability
+// available. Saves the 5-30s UnshieldedWallet cold sync per send.
+//
+// Shielded txs cannot be split this way (notes are encrypted to the user's
+// Zswap key — only the wallet can see them). When shielded ships, the wallet
+// will own the entire pre-prove pipeline including the build step.
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 
-export interface UnshieldedTransferOutput {
-  /** Recipient unshielded address (bech32m `mn_addr_<network>1…`). */
-  readonly address: string;
-  /** Atomic units. NIGHT = 6 decimals. */
-  readonly amount: bigint;
-}
-
-export interface BuildAndSignUnshieldedTransferArgs {
+export interface BalanceAndSignUnshieldedTransferArgs {
   /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
@@ -37,44 +33,37 @@ export interface BuildAndSignUnshieldedTransferArgs {
   readonly unshieldedSecretKey: Uint8Array;
   /** Sender's DUST secret seed (Uint8Array). Caller wipes after. */
   readonly dustSecretSeed: Uint8Array;
-  readonly outputs: ReadonlyArray<UnshieldedTransferOutput>;
+  /** Hex of the unproven tx Nexus built. Markers: no-signature/pre-proof/pre-binding. */
+  readonly unprovenTxHex: string;
   readonly ttl: Date;
 }
 
 /**
- * Build + balance + sign an unshielded NIGHT transfer. Returns the SIGNED
- * but UNPROVEN tx as a hex string ready for the sidecar's prove+submit
- * step.
- *
- * Sync timing: both UnshieldedWallet and DustWallet run a brief sync
- * against the indexer to populate state. Cold sync ~5-30s; once state
- * persistence lands (next step in the plan), warm syncs will be sub-second.
+ * DUST-balance + sign the unproven unshielded-NIGHT tx that Nexus built.
+ * Returns the SIGNED-but-UNPROVEN tx as a hex string ready for the sidecar's
+ * prove+submit step.
  */
-export async function buildAndSignUnshieldedTransfer(
-  args: BuildAndSignUnshieldedTransferArgs,
+export async function balanceAndSignUnshieldedTransfer(
+  args: BalanceAndSignUnshieldedTransferArgs,
 ): Promise<string> {
   debugLog('🌙 midnight tx-builder: starting', {
     network: args.sdkNetworkId,
-    outputCount: args.outputs.length,
+    unprovenBytes: args.unprovenTxHex.length / 2,
   });
 
-  // Dynamic imports keep cold-start cheap if no one's sending NIGHT yet
-  // (the SDK is non-trivial in size). Once we add persistence + warm
-  // wallets, this can move to a top-level import.
+  // Dynamic imports keep cold-start cheap if no one's sending NIGHT yet.
   const [
     { UnshieldedWallet, createKeystore },
     { DustWallet },
     ledgerMod,
-    { MidnightBech32m, UnshieldedAddress },
     abstractionsMod,
   ] = await Promise.all([
     import('@midnight-ntwrk/wallet-sdk-unshielded-wallet'),
     import('@midnight-ntwrk/wallet-sdk-dust-wallet'),
     import('@midnight-ntwrk/ledger-v8'),
-    import('@midnight-ntwrk/wallet-sdk-address-format'),
     import('@midnight-ntwrk/wallet-sdk-abstractions'),
   ]);
-  const { LedgerParameters, DustSecretKey, nativeToken } = ledgerMod;
+  const { LedgerParameters, DustSecretKey, Transaction } = ledgerMod;
   const { InMemoryTransactionHistoryStorage } = abstractionsMod;
 
   // Tx history schema namespace is re-exported from abstractions as
@@ -87,18 +76,30 @@ export async function buildAndSignUnshieldedTransfer(
   let unshieldedWallet: Awaited<ReturnType<typeof unshieldedBuilderStart>> | undefined;
   let dustWallet: Awaited<ReturnType<typeof dustBuilderStart>> | undefined;
   let dustSk: ledger.DustSecretKey | undefined;
-  let unshieldedSubscription: { unsubscribe: () => void } | undefined;
   let dustSubscription: { unsubscribe: () => void } | undefined;
 
   try {
-    // ── UnshieldedWallet ──────────────────────────────────────────
+    // ── Deserialize Nexus's unproven tx ───────────────────────────
+    // Nexus emits `UnshieldedOffer.new(inputs, outputs, [])` — empty
+    // signatures — so the marker triple is no-signature/pre-proof/pre-binding.
+    const TxAny = Transaction as unknown as {
+      deserialize: (s: string, p: string, b: string, raw: Uint8Array) => ledger.UnprovenTransaction;
+    };
+    const unprovenBytes = hexToBytes(args.unprovenTxHex);
+    const unprovenTransfer = TxAny.deserialize(
+      'no-signature', 'pre-proof', 'pre-binding', unprovenBytes,
+    );
+    debugLog('🌙 unproven tx deserialized', { bytes: unprovenBytes.length });
+
+    // ── UnshieldedWallet — signing only, no sync ──────────────────
+    // signUnprovenTransaction walks the tx's segments directly; it doesn't
+    // read UTxO state. start() is enough; we skip waitForSyncedState.
     const keystore = createKeystore(args.unshieldedSecretKey, args.sdkNetworkId);
     const publicKey = {
       publicKey: keystore.getPublicKey(),
       addressHex: keystore.getAddress(),
       address: keystore.getBech32Address().toString(),
     };
-
     const txHistoryStorage = new InMemoryTransactionHistoryStorage(
       txHistoryNs.TransactionHistoryCommonSchema as ConstructorParameters<
         typeof InMemoryTransactionHistoryStorage
@@ -114,17 +115,9 @@ export async function buildAndSignUnshieldedTransfer(
         typeof UnshieldedWallet
       >[0]['txHistoryStorage'],
     });
-
     unshieldedWallet = await unshieldedBuilderStart(unshieldedBuilder, publicKey);
-    // shareReplay({refCount:true}) on `state` requires an active
-    // subscriber to drive sync; without this `waitForSyncedState`
-    // can hang. The dust wallet has the same pattern.
-    unshieldedSubscription = unshieldedWallet.state.subscribe(() => { /* keep-alive */ });
-    debugLog('🌙 unshielded sync: waiting');
-    await unshieldedWallet.waitForSyncedState();
-    debugLog('🌙 unshielded sync: done');
 
-    // ── DustWallet ────────────────────────────────────────────────
+    // ── DustWallet — must sync; balanceTransactions reads UTxO state ──
     dustSk = DustSecretKey.fromSeed(args.dustSecretSeed);
     const dustBuilder = DustWallet({
       networkId: args.sdkNetworkId as Parameters<typeof DustWallet>[0]['networkId'],
@@ -140,29 +133,14 @@ export async function buildAndSignUnshieldedTransfer(
       dustSk,
       LedgerParameters.initialParameters().dust,
     );
+    // shareReplay({refCount:true}) on `state` requires an active subscriber
+    // to drive sync; without this `waitForSyncedState` can hang.
     dustSubscription = dustWallet.state.subscribe(() => { /* keep-alive */ });
     debugLog('🌙 dust sync: waiting');
     await dustWallet.waitForSyncedState();
     debugLog('🌙 dust sync: done');
 
-    // ── Build the transfer (unproven, no dust fee inputs yet) ─────
-    const ledgerOutputs = args.outputs.map((o) => ({
-      receiverAddress: UnshieldedAddress.codec.decode(
-        args.sdkNetworkId as unknown as Parameters<typeof UnshieldedAddress.codec.decode>[0],
-        MidnightBech32m.parse(o.address),
-      ),
-      amount: o.amount,
-      type: nativeToken().raw,
-    }));
-    const unprovenTransfer = await unshieldedWallet.transferTransaction(
-      ledgerOutputs as Parameters<typeof unshieldedWallet.transferTransaction>[0],
-      args.ttl,
-    );
-    debugLog('🌙 transfer built (unproven, no dust fee inputs)');
-
-    // ── Add DUST fee inputs (requires the dust secret to derive
-    //     nullifiers — this is the step the seedless sidecar couldn't
-    //     do). Returns the same tx augmented with the dust spends.
+    // ── Add DUST fee inputs (the step that needs the dust secret) ─
     const balancedTx = await dustWallet.balanceTransactions(
       dustSk,
       [unprovenTransfer],
@@ -170,7 +148,7 @@ export async function buildAndSignUnshieldedTransfer(
     );
     debugLog('🌙 transfer balanced with dust fee inputs');
 
-    // ── Sign each input with the NightExternal key ────────────────
+    // ── Sign each unshielded input with the NightExternal key ─────
     const signSegment = (data: Uint8Array): ledger.Signature =>
       keystore.signData(data);
     const signedTx = await unshieldedWallet.signUnprovenTransaction(
@@ -184,12 +162,23 @@ export async function buildAndSignUnshieldedTransfer(
     debugLog('🌙 transfer serialized', { bytes: signedBytes.length });
     return signedTxHex;
   } finally {
-    try { unshieldedSubscription?.unsubscribe(); } catch { /* swallow */ }
     try { dustSubscription?.unsubscribe(); } catch { /* swallow */ }
     try { await unshieldedWallet?.stop(); } catch { /* swallow */ }
     try { await dustWallet?.stop(); } catch { /* swallow */ }
     try { (dustSk as unknown as { clear?: () => void } | undefined)?.clear?.(); } catch { /* swallow */ }
   }
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (clean.length === 0 || clean.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(clean)) {
+    throw new Error('unprovenTxHex is not valid hex');
+  }
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i += 1) {
+    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
 }
 
 // Small thunks so the awaited type is inferred for the let-bindings above.
