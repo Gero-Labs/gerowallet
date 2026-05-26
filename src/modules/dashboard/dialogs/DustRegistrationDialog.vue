@@ -213,6 +213,54 @@
         <v-icon left>mdi-clock-outline</v-icon>
         {{ t('common.close') }}
       </v-btn>
+      <!-- Registered: show Done + a secondary Deregister action. -->
+      <template v-else-if="registrationStatus === 'Registered'">
+        <!-- Stage 1: pre-build CTA (mirrors the register flow). -->
+        <template v-if="!inDeregisterPhase">
+          <v-btn block large outlined @click="$emit('close')">
+            {{ t('common.done') }}
+          </v-btn>
+          <div class="text-center mt-3">
+            <v-btn small text color="rgba(255,255,255,0.6)" @click="startDeregister">
+              <v-icon small left>mdi-link-off</v-icon>
+              {{ t('midnight.deregisterFromDust') }}
+            </v-btn>
+          </div>
+        </template>
+        <!-- Stage 2: password / PassKey + Sign & Deregister. -->
+        <template v-else>
+          <v-text-field
+            v-if="!isPrfWalletForSign"
+            v-model="localPassword"
+            :label="t('common.spendingPassword')"
+            type="password"
+            outlined
+            dense
+            :disabled="submitBusy"
+            @keydown.enter="confirmDeregister"
+            class="mb-2"
+          />
+          <div v-if="submitError" class="red--text text--lighten-2 text-caption mb-2">
+            {{ submitError }}
+          </div>
+          <v-btn
+            block
+            large
+            class="geroButton"
+            :loading="submitBusy"
+            :disabled="!canConfirmRegistration"
+            @click="confirmDeregister"
+          >
+            <v-icon left>{{ isPrfWalletForSign ? 'mdi-fingerprint' : 'mdi-link-off' }}</v-icon>
+            {{ isPrfWalletForSign ? t('midnight.authorizeWithPasskey') : t('midnight.signAndDeregister') }}
+          </v-btn>
+          <div class="text-center mt-2">
+            <v-btn small text :disabled="submitBusy" @click="resetRegistrationState">
+              {{ t('common.cancel') }}
+            </v-btn>
+          </div>
+        </template>
+      </template>
       <v-btn
         v-else
         block
@@ -456,6 +504,8 @@ const submitError = ref<string | null>(null);
 const localPassword = ref('');
 /** Switches the action area from "Register" CTA to the password / PassKey gate. */
 const inSigningPhase = ref(false);
+/** Same idea as inSigningPhase but for the Deregister button (registered → confirm). */
+const inDeregisterPhase = ref(false);
 
 const isPrfWalletForSign = computed(() => isPrfWallet.value);
 
@@ -463,7 +513,56 @@ function resetRegistrationState() {
   submitBusy.value = false;
   submitError.value = null;
   inSigningPhase.value = false;
+  inDeregisterPhase.value = false;
   localPassword.value = '';
+}
+
+function startDeregister() {
+  inDeregisterPhase.value = true;
+  if (isPrfWalletForSign.value) {
+    confirmDeregister();
+  }
+}
+
+async function confirmDeregister() {
+  const wallet = loggedWallet.value;
+  if (!wallet) return;
+  if (!wallet.baseAddress) {
+    submitError.value = 'Wallet missing Midnight address';
+    snackbar.setError(submitError.value);
+    return;
+  }
+  submitBusy.value = true;
+  submitError.value = null;
+  try {
+    let prfSecret: Uint8Array | undefined;
+    if (isPrfWalletForSign.value) {
+      if (!wallet.webAuthnCredentialId) {
+        throw new Error('PRF wallet missing credential ID');
+      }
+      const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+      const prfBuf = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+      prfSecret = new Uint8Array(prfBuf);
+    }
+    const { deregisterNightForDust } = await import('@/services/midnight-tx.service');
+    const result = await deregisterNightForDust(
+      wallet.network,
+      { fromAddress: wallet.baseAddress },
+      {
+        password: isPrfWalletForSign.value ? undefined : localPassword.value,
+        prfSecret,
+      },
+    );
+    snackbar.fireSuccess(t('midnight.dustDeregistrationSubmitted'));
+    void result;
+    resetRegistrationState();
+    emit('close');
+  } catch (e) {
+    submitError.value = e instanceof Error ? e.message : String(e);
+    snackbar.setError(submitError.value);
+  } finally {
+    submitBusy.value = false;
+  }
 }
 
 function startRegistration() {
