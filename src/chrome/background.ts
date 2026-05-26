@@ -25,6 +25,11 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+// Smoke probe — forces wallet-sdk-dust-wallet into the BG bundle to verify
+// it loads cleanly in the Chrome MV3 service worker before we wire the real
+// BG-side NIGHT-transfer handler (which depends on it for fee balancing).
+// Safe to delete once the real handler is in place.
+import '@/chains/midnight/midnightDustSdkProbe';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
