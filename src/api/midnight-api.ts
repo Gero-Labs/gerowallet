@@ -234,6 +234,14 @@ export interface BuildNightDustRegistrationResponse {
   signaturePayloadHex: string;
 }
 
+/** Same shape as register minus the dust receiver — deregister has none. */
+export interface BuildNightDustDeregistrationRequest {
+  fromAddress: string;
+  publicKeyHex: string;
+  addressHex: string;
+  ttlMs: number;
+}
+
 export interface SubmitNightDustRegistrationRequest {
   unprovenTxHex: string;
   /** Hex of the NightExternal signature over the build's signaturePayloadHex. */
@@ -621,6 +629,39 @@ export class MidnightApi {
       // blockData() HTTP roundtrip), which can take 30s+ on first call
       // because the wallet cache may also be (re)hydrating. Use 90s here
       // rather than the instance-level 30s default.
+      const { data, status } = await this.axiosInstance.post<{
+        unproven_tx_hex: string;
+        tx_hash: string;
+        signature_payload_hex: string;
+      }>(url, wireBody, { timeout: 90_000 });
+      if (status !== 200) throw parseHttpError(data);
+      return {
+        unprovenTxHex: data.unproven_tx_hex,
+        txHash: data.tx_hash,
+        signaturePayloadHex: data.signature_payload_hex,
+      };
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Build the Midnight-native DUST DEREGISTRATION tx — symmetric to
+   * {@link buildNightDustRegistrationTx} but for the wallet's currently
+   * registered UTxOs (no dust receiver — deregistration removes them from
+   * generation). Submission flows through {@link submitNightDustRegistrationTx}.
+   */
+  async buildNightDustDeregistrationTx(
+    request: BuildNightDustDeregistrationRequest,
+  ): Promise<BuildNightDustRegistrationResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/build-night-deregistration');
+      const wireBody = {
+        from_address: request.fromAddress,
+        public_key_hex: request.publicKeyHex,
+        address_hex: request.addressHex,
+        ttl_ms: request.ttlMs,
+      };
       const { data, status } = await this.axiosInstance.post<{
         unproven_tx_hex: string;
         tx_hash: string;
