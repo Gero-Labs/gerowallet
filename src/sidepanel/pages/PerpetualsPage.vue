@@ -299,6 +299,7 @@ import networks from '@/utils/networks';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import type { Position, Order, ClosedPosition, FillHistoryResult } from '@/api/strike-v2.types';
 import SymbolSelector from '../components/perps/SymbolSelector.vue';
 import PriceTicker from '../components/perps/PriceTicker.vue';
@@ -309,6 +310,7 @@ import OrderBook from '../components/perps/OrderBook.vue';
 
 const trading = useStrikeTrading();
 const { getTicker } = useStrikeMarket();
+const { isConnected } = useStrikeOnboarding();
 
 const perpetualsSupported = computed(() => {
   const w = walletStore.loggedWallet;
@@ -327,12 +329,12 @@ const activeSegment = ref<Segment>('trade');
 
 // The composable may return PositionsResponse { positions, count } or Position[] depending on API shape
 const positions = computed<Position[]>(() => {
-  const raw = trading.positions.value as any;
+  const raw = trading.positions.value as Position[] | { positions?: Position[] } | null;
   if (!raw) return [];
   return Array.isArray(raw) ? raw : (raw.positions ?? []);
 });
 const openOrders = computed<Order[]>(() => {
-  const raw = trading.openOrders.value as any;
+  const raw = trading.openOrders.value as Order[] | { orders?: Order[] } | null;
   if (!raw) return [];
   return Array.isArray(raw) ? raw : (raw.orders ?? []);
 });
@@ -539,12 +541,23 @@ watch(activeSegment, (seg) => {
 
 // ── Lifecycle ──
 
+// Authenticated calls only fire once Strike API keys are unlocked. Without
+// this gate, an opened-but-not-connected page issues unauthenticated /v2/*
+// requests that 401 and trip the auth-failure handler.
+function loadAccountData() {
+  trading.loadAccount();
+  trading.loadPositions(selectedSymbol.value);
+  trading.loadOpenOrders(selectedSymbol.value);
+}
+
 onMounted(() => {
-  if (perpetualsSupported.value) {
-    trading.loadAccount();
-    trading.loadPositions(selectedSymbol.value);
-    trading.loadOpenOrders(selectedSymbol.value);
+  if (perpetualsSupported.value && isConnected.value) {
+    loadAccountData();
   }
+});
+
+watch(isConnected, (connected) => {
+  if (connected && perpetualsSupported.value) loadAccountData();
 });
 </script>
 

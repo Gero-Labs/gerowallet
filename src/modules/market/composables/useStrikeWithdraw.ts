@@ -1,184 +1,298 @@
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { strikeUserApi } from '@/api/strike-v2.user';
+import type {
+  WithdrawQuoteResponse,
+  TransactionStatusResponse,
+} from '@/api/strike-v2.types';
+import { walletStore } from '@/stores/walletStore';
+import { priceStore } from '@/stores/priceStore';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
 /**
- * Strike v2 withdrawal quote returned by the validator API.
- *
- * TODO: Confirm field names against the final Strike v2 spec once the
- *       withdraw-quote endpoint is published. All fields listed here are
- *       derived from the pre-release design document.
+ * Strike v2 withdraw quote – wraps the validator response and adds local
+ * timing fields the UI relies on (countdown, etc.).
  */
-export interface WithdrawQuote {
-  /**
-   * Raw message string the user must sign with their Cardano wallet's Ed25519
-   * key.  The signature is what authorises the validator to release funds.
-   */
-  message: string;
-  /** Estimated ADA (or token) amount the user will receive, as a string. */
-  estimatedAmount: string;
-  /** Estimated on-chain settlement time in milliseconds. */
-  estimatedDeliveryMs: number;
-  /** Quote expiry timestamp (Unix ms). Signature must be submitted before this. */
-  expiresAt: number;
-  /** Opaque identifier used when submitting the signed quote to validators. */
-  quoteId: string;
-  /**
-   * Whether the withdrawal is safe given the user's current open positions /
-   * margin levels.  The UI should warn (or block) if this is false.
-   */
-  marginSafe: boolean;
+export interface WithdrawQuote extends WithdrawQuoteResponse {
+  /** Optional fields surfaced if the runtime returns them. */
+  fee?: string;
+  expires_at?: string;
+  amount_received?: string;
+  /** Local Unix-ms timestamp parsed from `expires_at`. 0 if not provided. */
+  expiresAtMs: number;
+  /** Local Unix-ms timestamp captured when the quote was received. */
+  receivedAtMs: number;
 }
 
-/**
- * Lifecycle states for the withdrawal flow.
- *
- * idle       → no active withdrawal
- * quoting    → waiting for validators to return a withdrawal quote
- * signing    → awaiting Ed25519 message signature from the wallet
- * submitting → sending the signed quote to the Strike validators
- * pending    → validators are processing; waiting for on-chain settlement
- * settled    → funds delivered to the user's destination address
- * error      → unrecoverable error; see `error` ref for the message
- */
 export type WithdrawStatus =
   | 'idle'
   | 'quoting'
+  | 'quoted'
   | 'signing'
   | 'submitting'
   | 'pending'
   | 'settled'
   | 'error';
 
-// Module-level refs so the state is shared across component instances within
-// the same extension context.  Only one withdrawal can be in flight at a time.
+// ── Module-level singleton state ────────────────────────────────────────────
 const quote = ref<WithdrawQuote | null>(null);
 const status = ref<WithdrawStatus>('idle');
 const error = ref<string | null>(null);
+const requestId = ref<string | null>(null);
 
 /**
- * Composable for the Strike v2 message-signed withdrawal flow.
- *
- * ## Lifecycle
- * 1. `requestQuote(amountUsd, asset, destinationAddress)` — calls the Strike
- *    validator API to obtain a message to sign, estimated delivery time, and
- *    expiry.  Sets `status` to `'quoting'`.
- * 2. `signAndSubmit(password)` — signs `quote.value.message` with the active
- *    wallet's Ed25519 key (spending password / hardware wallet / PassKey),
- *    then posts the signed quote to the validators.  Status transitions:
- *    `'signing'` → `'submitting'` → `'pending'` → `'settled'`.
- * 3. `reset()` — clears all state back to `'idle'`.
- *
- * ## Validator-side verification (for reference)
- * When the signed message is submitted the validators will check:
- *   a. Ed25519 signature is valid for the user's public key.
- *   b. `quoteId` is still within its expiry window.
- *   c. The current margin position is safe to allow a withdrawal of this size.
- * On success they initiate the on-chain settlement (send funds to
- * `destinationAddress`).
- *
- * ## TODOs (API not yet confirmed)
- * - `requestQuote`: POST endpoint path, request shape, and response shape are
- *   all pending the Strike v2 spec.  See inline TODO comments.
- * - `signAndSubmit`: Wire into the existing wallet message-signing utility
- *   (CIP-8 / `signData`) and confirm the submission endpoint shape.
- * - Polling/webhook strategy for `'pending'` → `'settled'` transition is TBD.
+ * Generation counter — bumped by `reset()` so any in-flight polling loop
+ * exits the next time it wakes up. Without this, closing the WithdrawSheet
+ * mid-withdrawal would leave `pollSettlement` firing API calls for up to
+ * 5 minutes.
  */
+let flowGeneration = 0;
+
+// ── Polling config ──────────────────────────────────────────────────────────
+// Strike treats withdrawals as off-chain quote → on-chain settlement.
+// We poll status every 3 s for the first 30 s (rapid pickup), then back off
+// to 8 s up to a 5-minute hard cap. This matches the cadence used by the
+// deposit flow once it's wired and avoids hammering the validator endpoint.
+const POLL_FAST_MS = 3000;
+const POLL_SLOW_MS = 8000;
+const POLL_FAST_PHASE_MS = 30_000;
+const POLL_TIMEOUT_MS = 5 * 60_000;
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** UTF-8 string → lower-case hex (no `0x` prefix) — required by CIP-30 signData. */
+function utf8ToHex(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i].toString(16).padStart(2, '0');
+  }
+  return out;
+}
+
+/** Best-effort ISO 8601 parser → Unix ms; returns 0 when unparseable. */
+function parseExpiry(iso: string | undefined): number {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function getActiveStakeAddress(): string | null {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet) return null;
+  return wallet.stakeAddress ?? wallet.baseAddress ?? null;
+}
+
+/**
+ * Sign a CIP-8 / COSE_Sign1 over the given UTF-8 message using the active
+ * wallet's stake key. Returns the COSE_Sign1 hex (the `signature` field of
+ * the CIP-30 DataSignature) which Strike expects as `wallet_signature`.
+ *
+ * Routes through `MessageTypes.SIGN_DATA` → `walletBg.signData` → the
+ * `signDataCip8` utility in `src/chrome/serialization.ts`. This bypasses the
+ * dapp-connector protocol layer entirely while still producing the wire
+ * format Strike requires.
+ *
+ * @param message  Plain UTF-8 message returned by the validator.
+ * @param password Spending password (empty string for HW / PRF wallets — the
+ *                 background path will use the appropriate auth flow).
+ */
+async function signCip8(message: string, password: string): Promise<string> {
+  const stakeAddress = getActiveStakeAddress();
+  if (!stakeAddress) {
+    throw new Error('No active wallet — cannot sign withdrawal message.');
+  }
+
+  const payloadHex = utf8ToHex(message);
+
+  const res = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SIGN_DATA,
+    data: {
+      address: stakeAddress,
+      payload: payloadHex,
+      password,
+      accountIndex: 0,
+      isUsb: false,
+    },
+  }) as { data?: { signature?: string; key?: string; error?: string }; error?: string };
+
+  if (res?.error) {
+    throw new Error(typeof res.error === 'string' ? res.error : 'Signing failed');
+  }
+  if (res?.data?.error) {
+    throw new Error(res.data.error);
+  }
+  if (!res?.data?.signature) {
+    throw new Error('Wallet returned no signature');
+  }
+  return res.data.signature;
+}
+
+async function pollSettlement(reqId: string, generation: number): Promise<void> {
+  const start = Date.now();
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    // Composable was reset (e.g. user closed the sheet) — abandon the loop.
+    if (generation !== flowGeneration) return;
+
+    const elapsed = Date.now() - start;
+    if (elapsed > POLL_TIMEOUT_MS) {
+      throw new Error('Withdrawal timed out — please check the transaction history.');
+    }
+
+    let res: TransactionStatusResponse | null = null;
+    try {
+      res = await strikeUserApi.getTransactionStatus(reqId, 'withdraw');
+    } catch {
+      // Transient HTTP / network error — fall through to retry. We never
+      // catch a real validator-side failure here because that surfaces as
+      // res.status === 'failed' below, which throws unconditionally.
+    }
+
+    if (res?.status === 'completed') return;
+    if (res?.status === 'failed') {
+      throw new Error('Withdrawal failed on the validator side.');
+    }
+
+    const wait = elapsed < POLL_FAST_PHASE_MS ? POLL_FAST_MS : POLL_SLOW_MS;
+    await new Promise(r => setTimeout(r, wait));
+  }
+}
+
+// ── Public composable ───────────────────────────────────────────────────────
+
 export function useStrikeWithdraw() {
+  /** Live ADA/USD price (from priceStore). 0 if unavailable. */
+  const usdPerAda = computed(() => priceStore.adaUsd?.lastPrice ?? 0);
+  /** Local convenience: USD → ADA conversion rate. */
+  const usdToAdaRate = computed(() => (usdPerAda.value > 0 ? 1 / usdPerAda.value : 0));
+  /** Strike publishes withdrawal SLAs as “a few minutes”; default to 5 in UI. */
+  const deliveryMinutes = computed(() => 5);
+  const isWithdrawing = computed(() =>
+    ['quoting', 'signing', 'submitting', 'pending'].includes(status.value),
+  );
+
   /**
-   * Step 1: Obtain a withdrawal quote from the Strike validators.
+   * Step 1 — request a withdrawal quote.
    *
-   * @param amountUsd         - Amount the user wishes to withdraw, in USD.
-   * @param asset             - Asset ticker, e.g. `'ADA'` or a policy-id token.
-   * @param destinationAddress - Bech32 Cardano address to receive the funds.
-   *
-   * TODO: Replace the thrown error below with a real API call once the Strike
-   *       v2 withdraw-quote endpoint is confirmed.
-   * Expected shape (subject to change):
-   *   POST /v2/withdraw/quote
-   *   Body: { amount: string, asset: string, address: string, chain: 'cardano' }
-   *   Response: WithdrawQuote
+   * @param amountUsd USD amount the user wants to withdraw.
+   * @param asset     Asset to receive (defaults to 'ADA' for Cardano).
    */
-  async function requestQuote(
-    amountUsd: string,
-    asset: string,
-    destinationAddress: string,
-  ): Promise<void> {
-    status.value = 'quoting';
+  async function requestQuote(amountUsd: string, asset = 'ADA'): Promise<void> {
     error.value = null;
+    quote.value = null;
+    requestId.value = null;
+    status.value = 'quoting';
 
     try {
-      // TODO: Replace with actual Strike validator API endpoint.
-      // Expected: POST /v2/withdraw/quote
-      //   { amount: amountUsd, asset, address: destinationAddress, chain: 'cardano' }
-      // Map the response to WithdrawQuote and assign to quote.value.
-      throw new Error('Withdraw quote API not yet available — endpoint TBD');
+      const recipient = walletStore.loggedWallet?.baseAddress ?? '';
+      if (!recipient) {
+        throw new Error('No active Cardano wallet.');
+      }
+      const amt = parseFloat(amountUsd);
+      if (!Number.isFinite(amt) || amt <= 0) {
+        throw new Error('Invalid withdrawal amount.');
+      }
 
-      // Unreachable until implemented; placeholder to show intended assignment:
-      // quote.value = response as WithdrawQuote;
-    } catch (e: any) {
-      error.value = e.message;
+      const raw = await strikeUserApi.getWithdrawQuote({
+        usd_value: amountUsd,
+        blockchain: 'cardano',
+        recipient_address: recipient,
+        asset,
+      }) as WithdrawQuoteResponse & {
+        fee?: string;
+        expires_at?: string;
+        amount_received?: string;
+      };
+
+      quote.value = {
+        ...raw,
+        fee: raw.fee,
+        expires_at: raw.expires_at,
+        amount_received: raw.amount_received,
+        expiresAtMs: parseExpiry(raw.expires_at),
+        receivedAtMs: Date.now(),
+      };
+      status.value = 'quoted';
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
       status.value = 'error';
     }
   }
 
   /**
-   * Steps 2–3: Sign the quote message with the wallet and submit to validators.
-   *
-   * Must be called after a successful `requestQuote()` (i.e. `quote.value` is
-   * non-null and not expired).
-   *
-   * @param password - The wallet's spending password (pass an empty string for
-   *   hardware wallets or PassKey wallets — the signing step will use the
-   *   appropriate authentication path instead).
-   *
-   * TODO: Integrate with the existing wallet message-signing utility:
-   *   - Use CIP-8 `signData` (same path used by DApp connect).
-   *   - Sign `quote.value.message` with the payment key of the active wallet.
-   *   - Submit to the Strike validator submission endpoint (TBD).
-   *   - For the pending step, poll or listen for settlement confirmation.
-   *     Possible endpoint: GET /v2/withdraw/status?quoteId=
+   * Step 2 — sign the quote message and submit. Drives status through
+   * `signing → submitting → pending → settled`.
    */
-  async function signAndSubmit(password: string): Promise<void> {
+  async function signAndSubmit(password: string): Promise<boolean> {
     if (!quote.value) {
-      error.value = 'No active withdrawal quote. Call requestQuote() first.';
+      error.value = 'No active withdrawal quote.';
       status.value = 'error';
-      return;
+      return false;
     }
-
-    if (!quote.value.marginSafe) {
-      error.value = 'Withdrawal blocked: current margin position is not safe.';
+    if (quote.value.expiresAtMs && Date.now() > quote.value.expiresAtMs) {
+      error.value = 'Quote expired — please request a new one.';
       status.value = 'error';
-      return;
+      return false;
     }
 
     try {
-      // TODO: Sign quote.value.message with the wallet's Ed25519 key.
-      //       Use the CIP-8 signData flow (same as DApp message signing).
       status.value = 'signing';
-      // const signature = await signMessage(quote.value.message, password);
+      const walletSignature = await signCip8(quote.value.message_to_sign, password);
 
-      // TODO: Submit { quoteId, signature, publicKey } to the Strike validators.
-      //       Expected: POST /v2/withdraw/submit
       status.value = 'submitting';
-      // await submitWithdrawal(quote.value.quoteId, signature);
+      const submitRes = await strikeUserApi.executeWithdraw(
+        quote.value.withdraw_id,
+        walletSignature,
+      );
+      requestId.value = submitRes.request_id ?? quote.value.withdraw_id;
 
-      // TODO: Poll or subscribe for on-chain settlement.
-      //       Expected: GET /v2/withdraw/status?quoteId=
       status.value = 'pending';
-      // await pollForSettlement(quote.value.quoteId);
+      await pollSettlement(requestId.value, flowGeneration);
 
-      // status.value = 'settled';
-    } catch (e: any) {
-      error.value = e.message;
+      status.value = 'settled';
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
       status.value = 'error';
+      return false;
     }
   }
 
-  /** Reset all state back to idle. Safe to call at any point in the lifecycle. */
   function reset(): void {
+    // Bump the generation so any in-flight pollSettlement exits on its
+    // next wake-up instead of writing to the now-stale state.
+    flowGeneration++;
     quote.value = null;
     status.value = 'idle';
     error.value = null;
+    requestId.value = null;
   }
 
-  return { quote, status, error, requestQuote, signAndSubmit, reset };
+  // Backwards-compatible aliases used by existing call-sites (e.g. WithdrawSheet).
+  const withdrawStatus = status;
+  const withdrawError = error;
+  const resetWithdraw = reset;
+
+  return {
+    // State
+    quote,
+    status,
+    error,
+    requestId,
+    // Aliases
+    withdrawStatus,
+    withdrawError,
+    resetWithdraw,
+    // Computed
+    isWithdrawing,
+    usdPerAda,
+    usdToAdaRate,
+    deliveryMinutes,
+    // Methods
+    requestQuote,
+    signAndSubmit,
+    reset,
+  };
 }
