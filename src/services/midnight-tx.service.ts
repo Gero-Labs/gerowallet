@@ -213,39 +213,3 @@ export async function registerNightForDust(
     signatureHex: signed[0].signatureHex,
   });
 }
-
-/**
- * Path A — DEREGISTER the wallet's NIGHT UTxOs from DUST generation.
- *
- * Symmetric to {@link registerNightForDust}: build → sign (single payload,
- * NightExternal role) → submit (reuses /dust/submit-night-registration; the
- * on-chain extrinsic is the same midnight.sendMnTransaction runtime call).
- */
-export async function deregisterNightForDust(
-  network: string,
-  args: { fromAddress: string; ttlMs?: number },
-  credentials: MidnightSendCredentials,
-): Promise<SubmitNightDustRegistrationResponse> {
-  const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
-
-  const api = getMidnightApi(network);
-  const built = await api.buildNightDustDeregistrationTx({
-    fromAddress: args.fromAddress,
-    publicKeyHex,
-    addressHex,
-    ttlMs: args.ttlMs ?? (Date.now() + 24 * 60 * 60 * 1000),
-  });
-
-  const signed = await signSegments(
-    [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
-    credentials,
-  );
-  if (signed.length !== 1) {
-    throw new Error('Expected exactly one signature for DUST deregistration');
-  }
-
-  return api.submitNightDustRegistrationTx({
-    unprovenTxHex: built.unprovenTxHex,
-    signatureHex: signed[0].signatureHex,
-  });
-}
