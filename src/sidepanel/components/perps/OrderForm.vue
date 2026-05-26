@@ -163,6 +163,32 @@
       </div>
     </div>
 
+    <!-- Live Estimates -->
+    <transition name="estimates-fade">
+      <div v-if="hasValidSize" class="estimates-block">
+        <div v-if="orderType === 'market'" class="est-row">
+          <span class="est-label">{{ $t('perpetuals.estEntryPrice') }}</span>
+          <span class="est-value">{{ estEntryPriceDisplay }}</span>
+        </div>
+        <div class="est-row">
+          <span class="est-label">{{ $t('perpetuals.estLiqPrice') }}</span>
+          <span class="est-value">{{ estLiquidationPriceDisplay }}</span>
+        </div>
+        <div class="est-row">
+          <span class="est-label">{{ $t('perpetuals.requiredMargin') }}</span>
+          <span class="est-value">{{ requiredMarginDisplay }} <span class="mi-unit">USD</span></span>
+        </div>
+        <div class="est-row">
+          <span class="est-label">{{ $t('perpetuals.estFee') }}</span>
+          <span class="est-value">{{ estFeeDisplay }} <span class="mi-unit">USD</span></span>
+        </div>
+        <div v-if="slippageWarning" class="est-warning">
+          <v-icon size="11" class="est-warning-icon">mdi-alert-outline</v-icon>
+          <span>{{ slippageWarning }}</span>
+        </div>
+      </div>
+    </transition>
+
     <!-- Place Order Button -->
     <v-btn
       block
@@ -210,10 +236,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
-import type { CreateOrderRequest, OrderType, OrderSide } from '@/api/strike-v2.types';
+import { strikeMarketApi } from '@/api/strike-v2.market';
+import {
+  calcLiquidationPriceIsolated,
+  calcVwapMarketFill,
+  getMarginTier,
+  normalizeMarginTiers,
+} from '@/modules/market/math';
+import type {
+  CreateOrderRequest, OrderType, OrderSide, StrikeMarketConfig, MarginTierNumeric,
+} from '@/api/strike-v2.types';
 
 // ── Props & Emits ────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -226,7 +261,45 @@ const emit = defineEmits<{
 
 // ── Composables ──────────────────────────────────────────────────────────────
 const { placeOrder, setLeverage, availableBalance, account } = useStrikeTrading();
-const { getSymbolInfo } = useStrikeMarket();
+const { getSymbolInfo, getTicker } = useStrikeMarket();
+
+// ── Market config (margin tiers, tick size) — fetched once per session ──────
+const marketConfig = ref<StrikeMarketConfig | null>(null);
+const marketTiers = computed<MarginTierNumeric[]>(() =>
+  marketConfig.value?.margin_tiers ? normalizeMarginTiers(marketConfig.value.margin_tiers) : [],
+);
+
+// Slim order-book snapshot for VWAP (refreshed on size change)
+const obAsks = ref<[string, string][]>([]);
+const obBids = ref<[string, string][]>([]);
+
+async function loadMarketConfig() {
+  try {
+    const res = await strikeMarketApi.getMarkets();
+    marketConfig.value = res.markets[props.symbol] ?? null;
+  } catch {
+    marketConfig.value = null;
+  }
+}
+
+let obFetchTimer: ReturnType<typeof setTimeout> | null = null;
+async function refreshOrderBookSnapshot() {
+  if (orderType.value !== 'market') return;
+  try {
+    const snap = await strikeMarketApi.getOrderBook(props.symbol, 50);
+    obAsks.value = snap.asks ?? [];
+    obBids.value = snap.bids ?? [];
+  } catch { /* keep previous snapshot */ }
+}
+
+function scheduleObRefresh() {
+  if (obFetchTimer) clearTimeout(obFetchTimer);
+  obFetchTimer = setTimeout(() => { refreshOrderBookSnapshot(); }, 250);
+}
+
+onMounted(() => {
+  loadMarketConfig();
+});
 
 // ── Local State ──────────────────────────────────────────────────────────────
 const side = ref<'buy' | 'sell'>('buy');
@@ -278,6 +351,112 @@ const canSubmit = computed(() => {
   if (showPriceInput.value && (!price.value || parseFloat(price.value) <= 0)) return false;
   if (showTriggerInput.value && (!stopPrice.value || parseFloat(stopPrice.value) <= 0)) return false;
   return true;
+});
+
+// ── Live Estimates ───────────────────────────────────────────────────────────
+
+const sizeNum = computed(() => parseFloat(size.value) || 0);
+const hasValidSize = computed(() => sizeNum.value > 0);
+
+const tickerLastPrice = computed(() => parseFloat(getTicker(props.symbol)?.lastPrice ?? '0') || 0);
+
+/** Reference price used for non-VWAP estimates (limit price or last ticker). */
+const refPriceForEstimates = computed(() => {
+  if (orderType.value === 'market') {
+    return tickerLastPrice.value;
+  }
+  return parseFloat(price.value) || tickerLastPrice.value;
+});
+
+const DEFAULT_TAKER_RATE = 0.0006;
+
+/** Side normalised to LONG/SHORT for math layer. */
+const sideUpper = computed<'LONG' | 'SHORT'>(() => (side.value === 'buy' ? 'LONG' : 'SHORT'));
+
+/** VWAP fill estimate for market orders. */
+const marketFill = computed(() => {
+  if (orderType.value !== 'market' || sizeNum.value <= 0) return null;
+  const levels = side.value === 'buy' ? obAsks.value : obBids.value;
+  if (!levels.length) return null;
+  return calcVwapMarketFill(levels, sizeNum.value);
+});
+
+const estEntryPrice = computed(() => {
+  if (orderType.value === 'market') {
+    return marketFill.value?.avgPrice ?? tickerLastPrice.value;
+  }
+  return refPriceForEstimates.value;
+});
+
+const notional = computed(() => sizeNum.value * estEntryPrice.value);
+
+const requiredMargin = computed(() => {
+  const lev = localLeverage.value || 1;
+  if (notional.value <= 0 || lev <= 0) return 0;
+  return notional.value / lev;
+});
+
+const estFee = computed(() => notional.value * DEFAULT_TAKER_RATE);
+
+const estLiquidationPrice = computed(() => {
+  if (notional.value <= 0 || estEntryPrice.value <= 0) return 0;
+  const tier = getMarginTier(marketTiers.value, notional.value);
+  if (!tier) return 0;
+  // Use cross-as-isolated approximation: isoBalance = notional / leverage.
+  // This matches the dashboard form's preview and avoids depending on the
+  // full cross context (other positions, wallet balance) which the side
+  // panel form does not have.
+  const isoBalance = requiredMargin.value;
+  return calcLiquidationPriceIsolated(
+    sideUpper.value, estEntryPrice.value, isoBalance, sizeNum.value, tier,
+  );
+});
+
+const pricePrecision = computed(() => marketConfig.value?.quote_prec ?? 4);
+
+function fmtMoney(value: number, dp = 2): string {
+  if (!isFinite(value) || value === 0) return '—';
+  return value.toFixed(dp);
+}
+
+const estEntryPriceDisplay = computed(() => {
+  if (estEntryPrice.value <= 0) return '—';
+  return `$${estEntryPrice.value.toFixed(pricePrecision.value)}`;
+});
+
+const estLiquidationPriceDisplay = computed(() => {
+  if (estLiquidationPrice.value <= 0) return '—';
+  return `$${estLiquidationPrice.value.toFixed(pricePrecision.value)}`;
+});
+
+const requiredMarginDisplay = computed(() => fmtMoney(requiredMargin.value));
+const estFeeDisplay = computed(() => fmtMoney(estFee.value));
+
+/** Slippage warning shown when VWAP fill exceeds 50bps vs top-of-book. */
+const slippageWarning = computed(() => {
+  const fill = marketFill.value;
+  if (!fill) return '';
+  if (fill.insufficientDepth) {
+    return 'Order exceeds available book depth';
+  }
+  if (fill.slippageBps > 50) {
+    return `High slippage: ~${(fill.slippageBps / 100).toFixed(2)}%`;
+  }
+  return '';
+});
+
+// Refresh OB snapshot when size changes for market orders
+watch([sizeNum, side, orderType], () => {
+  if (orderType.value === 'market' && sizeNum.value > 0) {
+    scheduleObRefresh();
+  }
+});
+
+watch(() => props.symbol, () => {
+  marketConfig.value = null;
+  obAsks.value = [];
+  obBids.value = [];
+  loadMarketConfig();
 });
 
 // ── Methods ──────────────────────────────────────────────────────────────────
@@ -753,5 +932,66 @@ watch(() => account.value, (acc) => {
   font-size: 12px !important;
   font-weight: 700 !important;
   text-transform: none !important;
+}
+
+/* ── Live Estimates ── */
+.estimates-block {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.est-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.est-label {
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.02em;
+}
+
+.est-value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.est-warning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(246, 190, 66, 0.08);
+  border: 1px solid rgba(246, 190, 66, 0.2);
+  color: #f6be42;
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.est-warning-icon {
+  color: #f6be42 !important;
+}
+
+.estimates-fade-enter-active,
+.estimates-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.estimates-fade-enter,
+.estimates-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
 }
 </style>
