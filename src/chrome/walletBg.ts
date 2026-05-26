@@ -1795,6 +1795,95 @@ export class WalletBg {
   }
 
   /**
+   * BG-side build + balance + sign of an unshielded NIGHT transfer.
+   *
+   * Returns the SIGNED but UNPROVEN tx hex. The wallet then ships this
+   * to the sidecar's /tx/finalize which generates the ZK proof, binds
+   * the tx, and submits via polkadot.js midnight.sendMnTransaction.
+   *
+   * Why this lives in BG (and not the sidecar): the DUST fee step
+   * (`dustWallet.balanceTransactions`) cryptographically requires the
+   * user's real dust secret to derive spend nullifiers. Same constraint
+   * Lace lives with; same architecture they use.
+   */
+  async buildAndSignMidnightUnshieldedTransfer(
+    outputs: Array<{ address: string; amount: bigint; token: 'NIGHT' }>,
+    ttlMs: number,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<string> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('buildAndSignMidnightUnshieldedTransfer called on non-Midnight wallet');
+    }
+    if (outputs.length === 0) throw new Error('outputs[] must be non-empty');
+    if (outputs.some((o) => o.token !== 'NIGHT')) {
+      throw new Error('only NIGHT outputs are supported today');
+    }
+
+    // Decrypt mnemonic (same pattern as signMidnightSegments above).
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { Network } = await import('@/models/types');
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { buildAndSignUnshieldedTransfer } = await import('@/chains/midnight/midnightTxBuilder');
+
+      // skipCardano:true: the BG-bundle pbkdf2/sha512 shim breaks on the
+      // Cardano BIP-32 derivation path. We don't need Cardano keys for a
+      // Midnight transfer — same workaround we use in signMidnightSegments.
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      let sdkNetworkId: string;
+      switch (this.network) {
+        case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
+        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+        case Network.PREPROD: sdkNetworkId = 'preprod'; break;
+        case Network.TESTNET: sdkNetworkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) {
+        throw new Error(`No Midnight endpoints configured for network ${this.network}`);
+      }
+
+      try {
+        const signedTxHex = await buildAndSignUnshieldedTransfer({
+          sdkNetworkId,
+          endpoints,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: derived.dustSecretKey,
+          outputs: outputs.map((o) => ({ address: o.address, amount: o.amount })),
+          ttl: new Date(ttlMs),
+        });
+        return signedTxHex;
+      } finally {
+        // Wipe the derived secrets regardless of success/failure. The
+        // mnemonic itself is cleared in the outer finally.
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
    * Return the `publicKeyHex` and `addressHex` the Nexus sidecar needs to
    * reconstruct this wallet seedlessly via `UnshieldedWallet.startWithPublicKey`.
    *
