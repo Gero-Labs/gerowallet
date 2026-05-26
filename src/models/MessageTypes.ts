@@ -45,6 +45,12 @@ export enum MessageTypes {
   // segment (BIP-340), wipes the key, returns signatures. The SDK's signSegment
   // callback is implemented as a thin wrapper around this BG round-trip.
   SIGN_MIDNIGHT_SEGMENTS = 'SIGN_MIDNIGHT_SEGMENTS',
+  // Midnight: build + balance (with DUST fee inputs) + sign an unshielded
+  // NIGHT transfer entirely inside the BG service worker. Returns the signed
+  // but UNPROVEN tx hex. Sidecar then proves + binds + submits via /tx/finalize.
+  // This is the canonical path because the DUST fee step needs the user's
+  // real dust secret to derive spend nullifiers — same architecture as Lace.
+  BUILD_AND_SIGN_MIDNIGHT_UNSHIELDED_TX = 'BUILD_AND_SIGN_MIDNIGHT_UNSHIELDED_TX',
   // Midnight: submit a fully-signed (and proven, for shielded) transaction via
   // Nexus's /tx/submit relay. Nexus forwards to the Midnight RPC node and
   // returns the txHash + status (Submitted / InBlock / Finalized).

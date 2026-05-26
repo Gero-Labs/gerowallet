@@ -62,7 +62,7 @@ export async function buildAndSignUnshieldedTransfer(
   // (the SDK is non-trivial in size). Once we add persistence + warm
   // wallets, this can move to a top-level import.
   const [
-    { UnshieldedWallet, createKeystore, InMemoryTransactionHistoryStorage },
+    { UnshieldedWallet, createKeystore },
     { DustWallet },
     ledgerMod,
     { MidnightBech32m, UnshieldedAddress },
@@ -75,6 +75,7 @@ export async function buildAndSignUnshieldedTransfer(
     import('@midnight-ntwrk/wallet-sdk-abstractions'),
   ]);
   const { LedgerParameters, DustSecretKey, nativeToken } = ledgerMod;
+  const { InMemoryTransactionHistoryStorage } = abstractionsMod;
 
   // Tx history schema namespace is re-exported from abstractions as
   // `export * as TransactionHistoryStorage`. The schema we need is
