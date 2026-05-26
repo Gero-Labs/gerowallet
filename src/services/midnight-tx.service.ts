@@ -1,23 +1,22 @@
 /**
  * Midnight transaction orchestration (browser/options context).
  *
- * Mirrors the Cardano send pipeline (build at Nexus → sign locally → submit
- * via Nexus relay) but with Midnight-specific signing semantics: the SDK's
- * `signSegment` callback expects per-segment BIP-340 signatures from the
- * user's role-derived key (NightExternal for unshielded, Zswap for shielded).
+ * Two pipelines coexist here:
  *
- * Lifecycle:
- *   1. `getWalletKeys` → BG fast-path or single mnemonic decrypt to get publicKeyHex + addressHex
- *   2. `buildUnshielded` → POST to Nexus, receive `unprovenTxHex` + `segmentsToSign[]`
- *   3. `signSegments` → BG decrypts mnemonic, derives NightExternal key, signs each segment
- *   4. `submit` → POST envelope `{ fromAddress, publicKeyHex, addressHex, unprovenTxHex, signatures }`
- *      (hex-encoded JSON) to Nexus's `/tx/submit` relay; Nexus calls sidecar `/tx/finalize`
- *      which calls `signUnprovenTransaction` synchronously then submits to Substrate RPC.
+ *  - Unshielded NIGHT transfer (CURRENT): BG service worker builds + DUST-fee-
+ *    balances + signs the tx via `UnshieldedWallet`+`DustWallet`, then ships
+ *    the signed-but-unproven hex to Nexus's `/tx/submit`. Nexus → sidecar's
+ *    `/tx/finalize` produces the ZK proof, binds the tx, and submits to the
+ *    Midnight RPC node. The fee step must run inside BG because
+ *    `balanceTransactions(dustSecretKey, …)` cryptographically needs the
+ *    user's real DUST secret to derive spend nullifiers. Same architecture
+ *    as Lace.
  *
- * **Phase 1 scope**: unshielded build + sign + submit. Shielded + proof
- * generation deferred to Phase 3.
+ *  - DUST registration (Path A — NIGHT-for-DUST): server builds with a
+ *    throwaway dust secret (first-time registration is fee-free), BG signs
+ *    the single intent segment, Nexus splices + submits. See bottom of file.
  *
- * See `docs/superpowers/plans/2026-05-05-midnight-tx-build.md`.
+ * Phase 3 (shielded) will add a separate proof step.
  */
 
 import { Messaging } from '@/chrome/messaging';
@@ -25,7 +24,6 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import type {
   BuildMidnightTxRequest,
-  BuildMidnightTxResponse,
   MidnightSegmentToSign,
   SubmitMidnightTxResponse,
   SubmitNightDustRegistrationResponse,
@@ -67,20 +65,11 @@ export async function getWalletKeys(
   };
 }
 
-/** Step 2: Nexus builds an `UnprovenTransaction` for unshielded NIGHT. */
-export async function buildUnshielded(
-  network: string,
-  request: BuildMidnightTxRequest,
-): Promise<BuildMidnightTxResponse> {
-  const api = getMidnightApi(network);
-  return api.buildUnshieldedTx(request);
-}
-
 /**
- * Step 3: sign all intent-hash segments locally via BG. The PRF secret (if
- * present) is shipped as a regular array because chrome.runtime.sendMessage
- * can't serialise a `Uint8Array` directly — BG reconstructs it on the other
- * side.
+ * Sign intent-hash segments locally via BG (used by DUST registration which
+ * still pre-collects a single signature server-side, then submits as a
+ * splice). The PRF secret bytes are shipped as a regular array because
+ * `chrome.runtime.sendMessage` can't serialise a `Uint8Array` directly.
  */
 export async function signSegments(
   segments: MidnightSegmentToSign[],
@@ -102,63 +91,63 @@ export async function signSegments(
 }
 
 /**
- * Step 4: encode the `SignedTxEnvelope` JSON as hex and POST to Nexus's
- * `/tx/submit` relay through BG. Nexus calls the sidecar `/tx/finalize` which
- * calls `signUnprovenTransaction` synchronously (draining the pre-collected
- * signature map by visit order) then submits the resulting extrinsic to the
- * Midnight Substrate RPC node.
- *
- * Wire format: hex(JSON({ fromAddress, publicKeyHex, addressHex, unprovenTxHex, signatures }))
- * Matches `SignedTxEnvelope` on the Nexus Java side (`MidnightTxSubmitService`).
+ * BG builds + DUST-fee-balances + signs the unshielded NIGHT transfer using
+ * the user's real role-derived keys (NightExternal + DustSecret). Returns the
+ * signed-but-unproven tx hex; sidecar's `/tx/finalize` handles ZK proving and
+ * submission. Amounts go over the wire as decimal strings because BigInt
+ * can't ride `chrome.runtime.sendMessage`.
  */
-export async function submit(
-  envelope: {
-    fromAddress: string;
-    publicKeyHex: string;
-    addressHex: string;
-    unprovenTxHex: string;
-    signatures: SignedSegment[];
-  },
-  waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
-): Promise<SubmitMidnightTxResponse> {
-  const signedTxHex = Buffer.from(JSON.stringify(envelope), 'utf8').toString('hex');
+async function buildAndSignUnshieldedTxInBg(
+  outputs: Array<{ address: string; amount: bigint; token: 'NIGHT' }>,
+  ttlMs: number,
+  credentials: MidnightSendCredentials,
+): Promise<string> {
   const response = await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.SUBMIT_MIDNIGHT_TX,
-    data: { signedTxHex, waitFor },
-  }) as { data: { success: boolean; result?: SubmitMidnightTxResponse; error?: string } };
+    method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
+    data: {
+      outputs: outputs.map((o) => ({ address: o.address, amount: o.amount.toString(), token: o.token })),
+      ttlMs,
+      password: credentials.password,
+      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+    },
+  }) as { data: { success: boolean; signedTxHex?: string; error?: string } };
 
-  if (!response?.data?.success || !response.data.result) {
-    throw new Error(response?.data?.error || 'Midnight submission failed');
+  if (!response?.data?.success || !response.data.signedTxHex) {
+    throw new Error(response?.data?.error || 'Midnight tx build/sign failed');
   }
-  return response.data.result;
+  return response.data.signedTxHex;
 }
 
 /**
- * Convenience wrapper: get keys → build → sign → submit.
- *
- * For PRF wallets the single `prfSecret` bytes are reused across the
- * `getWalletKeys` (slow-path only) and `signSegments` BG calls — the user
- * completes one WebAuthn gesture in the UI, and the bytes flow through.
- * For password wallets the password is similarly reused.
+ * POST a signed-but-unproven tx hex to Nexus's `/tx/submit` relay. Nexus
+ * forwards to the sidecar's `/tx/finalize`, which proves + binds + submits to
+ * the Midnight RPC node and returns the txHash + finality status.
+ */
+async function submitSignedTx(
+  network: string,
+  signedTxHex: string,
+  waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
+): Promise<SubmitMidnightTxResponse> {
+  const api = getMidnightApi(network);
+  return api.submitMidnightTx({ signedTxHex, waitFor });
+}
+
+/**
+ * Convenience wrapper: BG build+sign → submit. One WebAuthn / password prompt
+ * (the credentials are consumed inside BG; nothing else needs them).
  */
 export async function sendUnshieldedNight(
   network: string,
   baseRequest: Omit<BuildMidnightTxRequest, 'publicKeyHex' | 'addressHex'>,
   credentials: MidnightSendCredentials,
 ): Promise<SubmitMidnightTxResponse> {
-  const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
-
-  const request: BuildMidnightTxRequest = { ...baseRequest, publicKeyHex, addressHex };
-  const built = await buildUnshielded(network, request);
-  const signatures = await signSegments(built.segmentsToSign, credentials);
-
-  return submit({
-    fromAddress: baseRequest.fromAddress,
-    publicKeyHex,
-    addressHex,
-    unprovenTxHex: built.unprovenTxHex,
-    signatures,
-  });
+  const outputs = baseRequest.outputs.map((o) => ({
+    address: o.address,
+    amount: BigInt(o.amount),
+    token: 'NIGHT' as const,
+  }));
+  const signedTxHex = await buildAndSignUnshieldedTxInBg(outputs, baseRequest.ttlMs, credentials);
+  return submitSignedTx(network, signedTxHex);
 }
 
 // ─── Path A — NIGHT-for-DUST registration ─────────────────────────────────────
