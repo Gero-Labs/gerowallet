@@ -455,11 +455,14 @@ export const midnightActions = {
 
   /**
    * Apply UTxO deltas from a sync event (created + spent for our address) and
-   * re-derive `balances.nightUnshielded` from the resulting set. Idempotent by
+   * incrementally update `balances.nightUnshielded`. Idempotent by
    * `(intentHash, outputIndex)` — re-deliveries of the same tx during history
-   * replay are no-ops on both the set and the derived balance. This is the
-   * canonical correctness model for UTxO chains; replaces the older running-
-   * delta math which double-counted on replay.
+   * replay are no-ops on both the set and the derived balance.
+   *
+   * Performance: O(|added| + |removed|), independent of the steady-state
+   * UTxO set size. A wallet with 50k lifetime txs replays in N×k ops, not
+   * N×|set| ops — the previous full re-sum would have been ~25M ops at
+   * |set|=500 vs ~50k here.
    */
   applyUtxoDeltas(deltas: {
     added: MidnightUnshieldedUtxo[];
@@ -469,21 +472,43 @@ export const midnightActions = {
     for (const u of midnightStore.utxos) {
       byKey.set(`${u.intentHash}:${u.outputIndex}`, u);
     }
+
+    let balanceDelta = 0n;
+    const isNight = (u: MidnightUnshieldedUtxo) => {
+      const tt = u.tokenType ?? '';
+      return tt === '' || /^0+$/.test(tt);
+    };
+
     for (const u of deltas.added) {
-      byKey.set(`${u.intentHash}:${u.outputIndex}`, u);
+      const key = `${u.intentHash}:${u.outputIndex}`;
+      if (byKey.has(key)) continue; // duplicate — replay or two paths converged
+      byKey.set(key, u);
+      if (isNight(u)) balanceDelta += u.value;
     }
     for (const r of deltas.removed) {
-      byKey.delete(`${r.intentHash}:${r.outputIndex}`);
+      const key = `${r.intentHash}:${r.outputIndex}`;
+      const existing = byKey.get(key);
+      if (!existing) continue; // never had it (or already removed) — no-op
+      byKey.delete(key);
+      if (isNight(existing)) balanceDelta -= existing.value;
     }
-    midnightStore.utxos = Array.from(byKey.values());
 
-    let night = 0n;
-    for (const u of midnightStore.utxos) {
-      // Empty tokenType / 32-byte-zero tokenType both mean native NIGHT.
-      const tt = u.tokenType ?? '';
-      if (tt === '' || /^0+$/.test(tt)) night += u.value;
+    if (balanceDelta === 0n && deltas.added.length === 0 && deltas.removed.length === 0) {
+      return;
     }
-    midnightStore.balances = { ...midnightStore.balances, nightUnshielded: night };
+
+    midnightStore.utxos = Array.from(byKey.values());
+    const currentNight = midnightStore.balances.nightUnshielded ?? 0n;
+    const nextNight = currentNight + balanceDelta;
+    // Clamp at zero defensively. A negative result indicates a missing prior
+    // delivery (e.g., resume cursor advanced past a receive the wallet never
+    // saw). The set-based dedup makes this unreachable in normal operation;
+    // the clamp guards against partial gero-sync replays during the gap
+    // period before persistence handshake completes.
+    midnightStore.balances = {
+      ...midnightStore.balances,
+      nightUnshielded: nextNight < 0n ? 0n : nextNight,
+    };
 
     broadcastFromBackground({
       utxos: midnightStore.utxos,
