@@ -95,6 +95,14 @@ interface WsSyncTx {
   tx_timestamp?: number;
   txTimestamp?: number;
   /**
+   * Indexer-side Midnight transactionId (gero-sync emits via SnakeCaseStrategy).
+   * Used by the wallet to advance the persisted resume cursor so reconnects
+   * skip already-applied history. Null on non-Midnight chains or older
+   * gero-sync versions that don't emit it.
+   */
+  midnight_tx_id?: number;
+  midnightTxId?: number;
+  /**
    * Carries Midnight's parsed unshielded outputs from PR7+ gero-sync.
    * Snake_case keys come from the indexer; gero-sync re-serializes via
    * Jackson's SnakeCaseStrategy so both forms can appear depending on the
@@ -170,6 +178,13 @@ class MidnightSyncService {
 
     const geroSyncNetwork = toGeroSyncMidnightNetwork(network);
 
+    // Persisted resume cursor: highest indexer txId the wallet already
+    // applied. gero-sync uses it to open the indexer subscription at
+    // (cursor + 1), skipping replay of already-known history. Null = fresh
+    // install / cleared state → server falls back to full replay.
+    const midnightLastTxId = midnightStore.lastMidnightTxId ?? null;
+    debugLog(`🌙 Midnight sync start: resume cursor=${midnightLastTxId}`);
+
     webSocketService.connect(
       'MIDNIGHT',
       geroSyncNetwork,
@@ -184,6 +199,7 @@ class MidnightSyncService {
       // returns empty by default. When per-address derivation arrives, this
       // is where role-specific public keys would flow.
       [],
+      midnightLastTxId,
     );
 
     this.active = true;
@@ -288,9 +304,16 @@ class MidnightSyncService {
       const myUnshielded = this.currentAddresses?.unshielded ?? '';
       const added: MidnightUnshieldedUtxo[] = [];
       const removed: Array<{ intentHash: string; outputIndex: number }> = [];
+      let maxTxId = -1;
       for (const rawTx of data.transactions) {
         const tx = this.parseTx(rawTx, myUnshielded);
         if (tx) midnightActions.applyTransaction(tx);
+        // gero-sync's per-tx WS payload carries `midnight_tx_id` (snake-cased
+        // from SyncPayload.TxData.midnightTxId). Track the highest seen so we
+        // can advance the persisted resume cursor regardless of whether the
+        // UTxO set actually changed for this tx.
+        const txId = rawTx.midnight_tx_id ?? rawTx.midnightTxId;
+        if (typeof txId === 'number' && txId > maxTxId) maxTxId = txId;
         if (!myUnshielded) continue;
         for (const o of this.readOutputs(rawTx, 'created')) {
           if (o.owner !== myUnshielded) continue;
@@ -307,8 +330,12 @@ class MidnightSyncService {
           if (intentHash) removed.push({ intentHash, outputIndex });
         }
       }
-      if (added.length > 0 || removed.length > 0) {
-        midnightActions.applyUtxoDeltas({ added, removed });
+      if (added.length > 0 || removed.length > 0 || maxTxId >= 0) {
+        midnightActions.applyUtxoDeltas({
+          added,
+          removed,
+          maxTxId: maxTxId >= 0 ? maxTxId : undefined,
+        });
       }
     }
 

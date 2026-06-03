@@ -104,6 +104,15 @@ export interface MidnightStore {
    * indicator per entry while the SDK runs `finalizeRecipe`.
    */
   provingOperations: Map<string, MidnightProvingOperation>;
+
+  /**
+   * Highest indexer transactionId we've successfully applied to the UTxO set.
+   * Persisted across reloads; on WS reconnect the wallet sends this value as
+   * the `midnightLastTxId` resume cursor so gero-sync's subscription resumes
+   * at {@code transactionId: lastMidnightTxId + 1} instead of replaying full
+   * history. Null = never applied a tx (fresh install / cleared state).
+   */
+  lastMidnightTxId: number | null;
 }
 
 const STORE_NAME = 'midnightStore';
@@ -140,6 +149,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   utxos: [],
   dustState: null,
   provingOperations: new Map(),
+  lastMidnightTxId: null,
 });
 
 // ---------------------------------------------------------------- serializer
@@ -268,6 +278,9 @@ if (context === 'browser') {
     midnightStore.transactions = hydrateTransactions(stored.transactions);
     midnightStore.dustState = hydrateDustState(stored.dustState);
     midnightStore.provingOperations = hydrateProvingOperations(stored.provingOperations);
+    midnightStore.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
+      ? stored.lastMidnightTxId
+      : null;
   });
 }
 
@@ -293,7 +306,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   }
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
-    'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses',
+    'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
   ] as const) {
     if (key in updates) {
       (midnightStore as any)[key] = updates[key];
@@ -380,6 +393,7 @@ export const midnightActions = {
       utxos: [],
       dustState: null,
       provingOperations: new Map(),
+      lastMidnightTxId: null,
     });
     broadcastFromBackground({
       isActive: false,
@@ -392,6 +406,7 @@ export const midnightActions = {
       utxos: [],
       dustState: null,
       provingOperations: new Map(),
+      lastMidnightTxId: null,
     }, true);
     debugLog('🧹 Midnight store cleared');
   },
@@ -467,6 +482,8 @@ export const midnightActions = {
   applyUtxoDeltas(deltas: {
     added: MidnightUnshieldedUtxo[];
     removed: Array<{ intentHash: string; outputIndex: number }>;
+    /** Highest indexer txId seen in this batch — advances the resume cursor. */
+    maxTxId?: number;
   }) {
     const byKey = new Map<string, MidnightUnshieldedUtxo>();
     for (const u of midnightStore.utxos) {
@@ -493,7 +510,24 @@ export const midnightActions = {
       if (isNight(existing)) balanceDelta -= existing.value;
     }
 
-    if (balanceDelta === 0n && deltas.added.length === 0 && deltas.removed.length === 0) {
+    // Advance the persisted resume cursor whether or not the UTxO set
+    // actually changed: a duplicate delivery still means we've "seen" the
+    // event, and we don't want gero-sync to replay it again on next reconnect.
+    let cursorAdvanced = false;
+    if (typeof deltas.maxTxId === 'number' && deltas.maxTxId >= 0) {
+      const prev = midnightStore.lastMidnightTxId ?? -1;
+      if (deltas.maxTxId > prev) {
+        midnightStore.lastMidnightTxId = deltas.maxTxId;
+        cursorAdvanced = true;
+      }
+    }
+
+    if (
+      balanceDelta === 0n
+      && deltas.added.length === 0
+      && deltas.removed.length === 0
+      && !cursorAdvanced
+    ) {
       return;
     }
 
@@ -513,6 +547,7 @@ export const midnightActions = {
     broadcastFromBackground({
       utxos: midnightStore.utxos,
       balances: midnightStore.balances,
+      lastMidnightTxId: midnightStore.lastMidnightTxId,
     });
   },
 

@@ -1,6 +1,7 @@
 import { debugLog } from '@/utils/debug';
 import LoadingState from '@/stores/loading';
 import FIFOCache from 'tiny-fifo-cache';
+import { midnightStore } from '@/stores/midnightStore';
 
 interface WsSyncBlock {
   hash: string;
@@ -35,6 +36,7 @@ class WebSocketService {
   private chain: string | null = null;
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
+  private midnightLastTxId: number | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private syncCheckTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempt: number = 0;
@@ -54,7 +56,15 @@ class WebSocketService {
     stakeAddress: string,
     lastSyncedBlock: number,
     handlers: WsHandlers,
-    credentials?: string[]
+    credentials?: string[],
+    /**
+     * Midnight-only resume cursor — wallet's highest applied indexer txId.
+     * gero-sync seeds its per-address `lastTxIds` from this so the
+     * subscription opens at (cursor+1). Null = no persisted state → full
+     * history replay. Reconnects re-use the latest value so we don't
+     * re-pay replay cost on every dropped WS.
+     */
+    midnightLastTxId?: number | null,
   ): void {
     this.close();
     this.chain = chain;
@@ -63,6 +73,7 @@ class WebSocketService {
     this.lastSyncedBlock = lastSyncedBlock;
     this.handlers = handlers;
     this.credentials = credentials || null;
+    this.midnightLastTxId = midnightLastTxId ?? null;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
     this.openConnection();
@@ -90,7 +101,16 @@ class WebSocketService {
       LoadingState.setText('');
       this.reconnectAttempt = 0;
 
-      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock}`);
+      // Re-read the Midnight resume cursor at every connect attempt. The
+      // wallet's `applyUtxoDeltas` may have advanced `lastMidnightTxId` since
+      // the last SUBSCRIBE (auto-reconnect after a transient WS drop, network
+      // hiccup, BG SW wake-up). Stale cursor = needless replay on every drop.
+      let liveMidnightCursor: number | null = this.midnightLastTxId;
+      if (this.chain === 'MIDNIGHT') {
+        const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
+        if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
+      }
+      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock} midnightLastTxId=${liveMidnightCursor}`);
       this.send({
         type: 'SUBSCRIBE',
         chain: this.chain,
@@ -99,6 +119,10 @@ class WebSocketService {
         lastSyncedBlock: this.lastSyncedBlock,
         credentials: this.credentials,
         platform: 'extension',
+        // Midnight-only: included regardless of chain so server can ignore on
+        // non-Midnight chains. Null = no persisted cursor (gero-sync full
+        // replay).
+        midnightLastTxId: liveMidnightCursor,
       });
 
       this.startSyncCheck();
