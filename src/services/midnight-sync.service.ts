@@ -279,41 +279,57 @@ class MidnightSyncService {
       });
     }
 
-    // 2) Transactions — also derive a delta-balance update per tx since
-    // gero-sync's PR6/PR7 dispatched payloads include the indexer's parsed
-    // unshielded outputs but no aggregated `account` field. We sum
-    // `unshieldedCreatedOutputs[].value where owner == myUnshielded` and
-    // subtract `unshieldedSpentOutputs[].value where owner == myUnshielded`,
-    // applying the delta to `balances.nightUnshielded`. Only outputs with the
-    // null tokenType (NIGHT) count toward this — other tokenTypes would be
-    // custom asset balances we don't model yet.
+    // 2) Transactions — UTxO-set model: add created outputs owned by us,
+    // remove spent outputs owned by us, idempotently keyed by
+    // (intentHash, outputIndex). Balance is then re-derived from the set
+    // inside `applyUtxoDeltas` so history replays + reconnects can't drift
+    // the balance up or down (was the old delta-running bug class).
     if (Array.isArray(data.transactions) && data.transactions.length > 0) {
       const myUnshielded = this.currentAddresses?.unshielded ?? '';
-      let nightDelta = 0n;
+      const added: MidnightUnshieldedUtxo[] = [];
+      const removed: Array<{ intentHash: string; outputIndex: number }> = [];
       for (const rawTx of data.transactions) {
         const tx = this.parseTx(rawTx, myUnshielded);
         if (tx) midnightActions.applyTransaction(tx);
-        if (myUnshielded) {
-          nightDelta += this.computeNightDelta(rawTx, myUnshielded);
+        if (!myUnshielded) continue;
+        for (const o of this.readOutputs(rawTx, 'created')) {
+          if (o.owner !== myUnshielded) continue;
+          if (!this.isNightOutput(o)) continue;
+          added.push(this.outputToUtxo(o));
+        }
+        for (const o of this.readOutputs(rawTx, 'spent')) {
+          if (o.owner !== myUnshielded) continue;
+          // tokenType filter not needed for removal — if the wallet had it,
+          // the matching add went through the NIGHT filter; if it didn't,
+          // the remove is a no-op against an absent key.
+          const intentHash = o.intentHash ?? o.intent_hash ?? '';
+          const outputIndex = o.outputIndex ?? o.output_index ?? 0;
+          if (intentHash) removed.push({ intentHash, outputIndex });
         }
       }
-      if (nightDelta !== 0n) {
-        const current = midnightStore.balances.nightUnshielded ?? 0n;
-        const next = current + nightDelta;
-        const clamped = next < 0n ? 0n : next;
-        debugLog(`🌙 midnight-sync[bg] applying balance delta: ${current} + ${nightDelta} = ${clamped}`);
-        midnightActions.updateBalances({
-          nightUnshielded: clamped,
-        });
+      if (added.length > 0 || removed.length > 0) {
+        midnightActions.applyUtxoDeltas({ added, removed });
       }
     }
 
-    // 3) UTXOs (CATCH_UP_COMPLETE attaches them; live SYNC may too)
+    // 3) UTXOs — bulk-replace path used by CATCH_UP_COMPLETE's absolute
+    // snapshot. Re-derive balance from the new set to keep nightUnshielded
+    // consistent with the UTxO source of truth.
     if (Array.isArray(data.utxos)) {
-      midnightActions.setUtxos(this.parseUtxos(data.utxos));
+      const parsed = this.parseUtxos(data.utxos);
+      midnightActions.setUtxos(parsed);
+      let night = 0n;
+      for (const u of parsed) {
+        const tt = u.tokenType ?? '';
+        if (tt === '' || /^0+$/.test(tt)) night += u.value;
+      }
+      midnightActions.updateBalances({ nightUnshielded: night });
     }
 
-    // 4) Account info — pull out balance + DUST state fields
+    // 4) Account info — pull out DUST/registered/shielded fields. We DON'T
+    // accept `nightUnshielded` from this path (gero-sync's MidnightSyncProvider
+    // already leaves `controlledAmount` unset for exactly this reason — the
+    // sync-events-derived UTxO set is authoritative for that field).
     if (data.account) {
       this.applyAccountInfo(data.account);
     }
@@ -374,14 +390,24 @@ class MidnightSyncService {
     };
   }
 
-  /**
-   * Compute the net unshielded NIGHT delta for our address from a single tx's
-   * created/spent outputs. Used by handleSync to update `balances.nightUnshielded`.
-   */
-  private computeNightDelta(raw: WsSyncTx, myUnshielded: string): bigint {
-    const received = this.sumOutputsForOwner(this.readOutputs(raw, 'created'), myUnshielded);
-    const spent = this.sumOutputsForOwner(this.readOutputs(raw, 'spent'), myUnshielded);
-    return received - spent;
+  /** Empty token type or 32-byte-zero token type both mean native NIGHT. */
+  private isNightOutput(o: WsMidnightOutput): boolean {
+    const tt = o.tokenType ?? o.token_type ?? '';
+    return tt === '' || tt === NIGHT_TOKEN_TYPE_NULL;
+  }
+
+  /** Map a gero-sync WS output payload to the wallet's UTxO record. */
+  private outputToUtxo(o: WsMidnightOutput): MidnightUnshieldedUtxo {
+    return {
+      owner: o.owner,
+      tokenType: o.tokenType ?? o.token_type ?? '',
+      value: this.toBig(o.value),
+      intentHash: o.intentHash ?? o.intent_hash ?? '',
+      outputIndex: o.outputIndex ?? o.output_index ?? 0,
+      ctime: undefined,
+      initialNonce: '',
+      registeredForDustGeneration: false,
+    };
   }
 
   private readOutputs(raw: WsSyncTx, kind: 'created' | 'spent'): WsMidnightOutput[] {
@@ -427,10 +453,13 @@ class MidnightSyncService {
 
   private applyAccountInfo(account: WsAccountInfo): void {
     // Map snake_case (from gero-sync's JsonNaming) to Midnight balance fields.
+    //
+    // NOTE: `controlledAmount` is intentionally NOT mapped to nightUnshielded.
+    // gero-sync's MidnightSyncProvider also doesn't set it for the same reason:
+    // nightUnshielded is the wallet's sync-events-derived UTxO sum (full set,
+    // not just registered ones), so an account-info override would clobber it
+    // with a different / partial value.
     const balances: Partial<MidnightBalances> = {};
-
-    const unshielded = account.controlledAmount ?? account.controlled_amount;
-    if (unshielded !== undefined) balances.nightUnshielded = this.toBig(unshielded);
 
     const dust = account.dust_balance;
     if (dust !== undefined) balances.dust = this.toBig(dust);

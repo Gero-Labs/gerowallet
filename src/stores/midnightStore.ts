@@ -453,6 +453,44 @@ export const midnightActions = {
     broadcastFromBackground({ utxos: midnightStore.utxos });
   },
 
+  /**
+   * Apply UTxO deltas from a sync event (created + spent for our address) and
+   * re-derive `balances.nightUnshielded` from the resulting set. Idempotent by
+   * `(intentHash, outputIndex)` — re-deliveries of the same tx during history
+   * replay are no-ops on both the set and the derived balance. This is the
+   * canonical correctness model for UTxO chains; replaces the older running-
+   * delta math which double-counted on replay.
+   */
+  applyUtxoDeltas(deltas: {
+    added: MidnightUnshieldedUtxo[];
+    removed: Array<{ intentHash: string; outputIndex: number }>;
+  }) {
+    const byKey = new Map<string, MidnightUnshieldedUtxo>();
+    for (const u of midnightStore.utxos) {
+      byKey.set(`${u.intentHash}:${u.outputIndex}`, u);
+    }
+    for (const u of deltas.added) {
+      byKey.set(`${u.intentHash}:${u.outputIndex}`, u);
+    }
+    for (const r of deltas.removed) {
+      byKey.delete(`${r.intentHash}:${r.outputIndex}`);
+    }
+    midnightStore.utxos = Array.from(byKey.values());
+
+    let night = 0n;
+    for (const u of midnightStore.utxos) {
+      // Empty tokenType / 32-byte-zero tokenType both mean native NIGHT.
+      const tt = u.tokenType ?? '';
+      if (tt === '' || /^0+$/.test(tt)) night += u.value;
+    }
+    midnightStore.balances = { ...midnightStore.balances, nightUnshielded: night };
+
+    broadcastFromBackground({
+      utxos: midnightStore.utxos,
+      balances: midnightStore.balances,
+    });
+  },
+
   /** DUST tank state from Nexus's `/dust/status` endpoint. */
   setDustState(state: MidnightDustState | null) {
     midnightStore.dustState = state;
