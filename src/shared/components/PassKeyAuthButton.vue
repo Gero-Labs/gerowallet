@@ -39,6 +39,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'success', privateKeyBytes: Uint8Array): void;
+  (e: 'prf-output', prfBytes: Uint8Array): void;
   (e: 'error', error: Error): void;
 }>();
 
@@ -55,7 +56,7 @@ async function authenticate() {
   try {
     // Dynamic imports to reduce bundle size
     const { walletStore } = await import('@/stores/walletStore');
-    const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
+    const { decryptPrivateKeyWithPrf, evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
 
     const loggedWallet = walletStore.loggedWallet;
     if (!loggedWallet) {
@@ -73,14 +74,27 @@ async function authenticate() {
     let privateKeyBytes: Uint8Array;
 
     if (isSidePanel) {
-      // Open PassKeyAuth popup for authentication
+      // Open PassKeyAuth popup for authentication. The popup-based flow
+      // doesn't expose the raw PRF output yet, so non-Cardano consumers
+      // (e.g. Midnight's mnemonic decrypt) don't work from the sidepanel.
+      // Follow-up: surface PRF from the popup flow too.
       privateKeyBytes = await authenticateInPopup(loggedWallet);
     } else {
-      // Direct WebAuthn authentication
+      // Direct WebAuthn authentication. Do the PRF ceremony FIRST and emit
+      // the raw bytes so chain-specific consumers (Midnight needs them to
+      // decrypt the mnemonic; Cardano consumers ignore the event) can
+      // reuse the same gesture instead of prompting twice. Then pass the
+      // pre-evaluated PRF into the Cardano private-key decryptor.
+      const prfBuffer = await evaluatePrfForWallet(
+        loggedWallet.webAuthnCredentialId,
+        loggedWallet.id.toString(),
+      );
+      emit('prf-output', new Uint8Array(prfBuffer));
       privateKeyBytes = await decryptPrivateKeyWithPrf(
         loggedWallet.prfEncryptedPrivateKey,
         loggedWallet.webAuthnCredentialId,
-        loggedWallet.id.toString()
+        loggedWallet.id.toString(),
+        prfBuffer,
       );
     }
 
