@@ -1,7 +1,10 @@
 <template>
-  <!-- Midnight wallets get a self-contained send dialog that reuses
-       TransactionAuthSection (the chain-agnostic password/PRF/submit UI)
-       so we don't duplicate auth state machines per chain. -->
+  <!-- Vue 2 requires a single root in template; the wrapping <div> is harmless
+       because both branches mount Vuetify v-dialogs that portal themselves to
+       document.body. Midnight wallets get a self-contained MidnightSendDialog
+       that reuses TransactionAuthSection (the chain-agnostic password / PRF /
+       submit UI), so no auth state machine is duplicated per chain. -->
+  <div class="send-dialog-root">
   <MidnightSendDialog v-if="isMidnight" :is-open="isOpen" @close="emit('close')" />
   <BaseDialog
     v-else
@@ -210,6 +213,7 @@
       </v-card-actions>
     </template>
   </BaseDialog>
+  </div>
 </template>
 <script setup lang="ts">
 import { toRefs, ref, computed, watch, onMounted, nextTick } from 'vue';
