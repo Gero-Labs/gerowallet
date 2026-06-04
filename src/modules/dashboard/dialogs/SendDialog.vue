@@ -20,7 +20,7 @@
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <!-- Empty wallet state -->
-    <template v-else-if="isWalletEmpty">
+    <template v-if="isWalletEmpty">
       <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
         <div class="empty-wallet-state">
           <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
