@@ -50,8 +50,11 @@
         </v-text-field>
 
         <!-- Auth: same component the Cardano stepper uses. Renders either a
-             password field (Normal wallets) or a PassKey button (PRF wallets)
-             and emits `submit` / `passkey-success(bytes)` accordingly. -->
+             password field (Normal wallets) or a PassKey button (PRF wallets).
+             We listen on `passkey-prf-output` (raw PRF bytes) rather than
+             `passkey-success` (decrypted Cardano private key) because Midnight
+             decrypts its own mnemonic from the raw PRF — the Cardano-specific
+             private key bytes are the wrong material for our BG handler. -->
         <TransactionAuthSection
           :wallet-type="loggedWallet?.type"
           :is-prf-wallet="isPrfWallet"
@@ -62,7 +65,7 @@
           :password-label="t('common.spendingPassword')"
           :password-rules="passwordRules"
           :submit-text="t('midnight.signAndSend')"
-          @passkey-success="onPasskeySuccess"
+          @passkey-prf-output="onPasskeyPrfOutput"
           @passkey-error="onPasskeyError"
           @submit="submitWithPassword"
           button-style="width: 295px; margin-bottom: 1px;"
@@ -186,9 +189,13 @@ async function submitWithPassword() {
   await send({ password: password.value });
 }
 
-async function onPasskeySuccess(bytes: Uint8Array) {
+async function onPasskeyPrfOutput(prfBytes: Uint8Array) {
   if (!preflight() || !isPrfWallet.value) return;
-  await send({ prfSecret: bytes });
+  // prfBytes are the RAW WebAuthn PRF output — these decrypt the wallet's
+  // mnemonic in BG. Do NOT use `passkey-success`'s decrypted-Cardano-key
+  // bytes for this; they're the wrong material and will fail with
+  // `OperationError` inside `decryptMnemonicWithPrfOutput`.
+  await send({ prfSecret: prfBytes });
 }
 
 function onPasskeyError(error: Error) {

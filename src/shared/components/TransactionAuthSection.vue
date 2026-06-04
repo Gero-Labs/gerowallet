@@ -6,6 +6,7 @@
         v-if="!isSigned"
         :disabled="loading"
         @success="$emit('passkey-success', $event)"
+        @prf-output="$emit('passkey-prf-output', $event)"
         @error="$emit('passkey-error', $event)"
         :style="buttonStyle"
         :class="buttonClass"
@@ -111,6 +112,14 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<{
   (e: 'passkey-success', bytes: Uint8Array): void;
+  /**
+   * Raw PRF output from the WebAuthn ceremony, emitted alongside `passkey-success`.
+   * Chains that need the raw PRF (e.g. Midnight, to decrypt the mnemonic with
+   * `decryptMnemonicWithPrfOutput`) listen here; Cardano consumers ignore it
+   * because the `passkey-success` event already carries the decrypted Cardano
+   * private key.
+   */
+  (e: 'passkey-prf-output', bytes: Uint8Array): void;
   (e: 'passkey-error', error: Error): void;
   (e: 'autofill-success'): void;
   (e: 'autofill-error', error: string): void;
