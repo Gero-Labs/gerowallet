@@ -97,9 +97,8 @@ import assets from '@/utils/assets';
 interface Props {
   isOpen: boolean;
 }
-const props = defineProps<Props>();
-const emit = defineEmits<(e: 'close') => void>();
-void props; // referenced via template only
+defineProps<Props>();
+const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
