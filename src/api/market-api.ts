@@ -18,12 +18,16 @@ axiosInstance.interceptors.request.use(async (config) => {
   return config;
 });
 
-// On 401, drop the cached token, re-authenticate the device, and retry once.
+// On 401 (token invalid) or 403 (token valid but scopes stale), drop the
+// cached token, re-authenticate the device, and retry once. The 403 case
+// fires when Nexus adds new scopes to DEFAULT_SCOPES and the wallet's
+// cached JWT predates them; only a fresh login picks up the new claim set.
 axiosInstance.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const config = error.config as AxiosRequestConfig & { _retried?: boolean };
-    if (error.response?.status === 401 && config && !config._retried) {
+    const status = error.response?.status;
+    if ((status === 401 || status === 403) && config && !config._retried) {
       config._retried = true;
       const token = await reauthenticateNexus();
       if (config.headers) {

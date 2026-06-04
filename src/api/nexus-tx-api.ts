@@ -113,12 +113,17 @@ nexusTxClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-// 401 → drop cached token, reauth, retry once
+// 401 (token invalid) or 403 (token valid but scopes stale) → drop cached
+// token, reauth, retry once. The 403 case fires when Nexus adds new scopes to
+// DEFAULT_SCOPES and the wallet's cached JWT predates them; only a fresh
+// /api/auth/device login picks up the updated claim set. The _retried flag
+// prevents loops if the server genuinely denies post-reauth.
 nexusTxClient.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const config = error.config as AxiosRequestConfig & { _retried?: boolean };
-    if (error.response?.status === 401 && config && !config._retried) {
+    const status = error.response?.status;
+    if ((status === 401 || status === 403) && config && !config._retried) {
       config._retried = true;
       try {
         const token = await reauthenticateNexus();
@@ -127,7 +132,7 @@ nexusTxClient.interceptors.response.use(
         }
         return nexusTxClient.request(config);
       } catch (refreshErr) {
-        debugLog('[nexus-tx-api] Reauth failed after 401:', refreshErr);
+        debugLog(`[nexus-tx-api] Reauth failed after ${status}:`, refreshErr);
         throw error;
       }
     }

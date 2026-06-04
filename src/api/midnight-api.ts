@@ -283,7 +283,13 @@ export class MidnightApi {
       (res) => res,
       async (error: AxiosError) => {
         const cfg = error.config as AxiosRequestConfig & { _retried?: boolean };
-        if (error.response?.status === 401 && cfg && !cfg._retried) {
+        // Retry on 401 (token invalid) AND 403 (token valid but missing
+        // scopes — happens when Nexus adds new scopes to DEFAULT_SCOPES and
+        // the wallet's cached JWT predates them; only a fresh login picks up
+        // the new claim set). The _retried flag prevents loops if the
+        // server genuinely denies after re-auth.
+        const status = error.response?.status;
+        if ((status === 401 || status === 403) && cfg && !cfg._retried) {
           cfg._retried = true;
           try {
             const token = await reauthenticateNexus();
@@ -292,7 +298,7 @@ export class MidnightApi {
             }
             return this.axiosInstance.request(cfg);
           } catch (refreshErr) {
-            debugLog('[midnight-api] Reauth failed after 401:', refreshErr);
+            debugLog(`[midnight-api] Reauth failed after ${status}:`, refreshErr);
             throw error;
           }
         }
