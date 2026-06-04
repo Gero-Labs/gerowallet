@@ -25,6 +25,10 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+// Smoke probe — forces wallet-sdk-shielded into the BG bundle to verify it
+// loads in the MV3 service worker before wiring real shielded code.
+// Safe to delete once the real shielded BG handler is in place.
+import '@/chains/midnight/midnightShieldedSdkProbe';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
