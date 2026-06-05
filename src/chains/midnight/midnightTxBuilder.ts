@@ -80,14 +80,19 @@ export async function balanceAndSignUnshieldedTransfer(
 
   try {
     // ── Deserialize Nexus's unproven tx ───────────────────────────
-    // Nexus emits `UnshieldedOffer.new(inputs, outputs, [])` — empty
-    // signatures — so the marker triple is no-signature/pre-proof/pre-binding.
+    // Marker triple is `signature / pre-proof / pre-binding`, NOT
+    // `no-signature/...`. `UnshieldedOffer.new(inputs, outputs, sigs)` always
+    // returns `UnshieldedOffer<SignatureEnabled>` per the SDK type signature
+    // (ledger-v8.d.ts:1970) — the empty `[]` signatures argument doesn't
+    // demote the marker. A `'no-signature'` deserialization here would
+    // misinterpret the bytes and the SDK then rejects on addSignature with
+    // the cryptic "Invalid signature value" string out of the ledger WASM.
     const TxAny = Transaction as unknown as {
       deserialize: (s: string, p: string, b: string, raw: Uint8Array) => ledger.UnprovenTransaction;
     };
     const unprovenBytes = hexToBytes(args.unprovenTxHex);
     const unprovenTransfer = TxAny.deserialize(
-      'no-signature', 'pre-proof', 'pre-binding', unprovenBytes,
+      'signature', 'pre-proof', 'pre-binding', unprovenBytes,
     );
     debugLog('🌙 unproven tx deserialized', { bytes: unprovenBytes.length });
 
