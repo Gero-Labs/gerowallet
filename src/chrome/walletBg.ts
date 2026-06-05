@@ -1858,6 +1858,31 @@ export class WalletBg {
         throw new Error(`No Midnight endpoints configured for network ${this.network}`);
       }
 
+      // Sanity check: the publicKey BG re-derives from the mnemonic MUST
+      // match the publicKey stored in the wallet record (which Nexus used
+      // to build the unproven tx's inputs). If they diverge, BG signatures
+      // won't verify against Nexus's input.owner field → the SDK rejects
+      // with "Invalid signature value" inside the ledger WASM. This is a
+      // hard signal that bip39/HD derivation differs between the bundle
+      // that created the wallet and the BG bundle that's now signing.
+      let storedPublicKeyHex: string | undefined;
+      try {
+        const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+        storedPublicKeyHex = parsed?.publicKeyHex;
+      } catch { /* ignore — fall through to throw below if needed */ }
+      if (storedPublicKeyHex) {
+        const livePublicKeyHex = derived.publicKeyHex;
+        if (livePublicKeyHex !== storedPublicKeyHex) {
+          throw new Error(
+            `Midnight key derivation mismatch — BG-derived publicKey ` +
+            `(${livePublicKeyHex.slice(0, 16)}…) doesn't match the wallet record's ` +
+            `stored publicKey (${storedPublicKeyHex.slice(0, 16)}…). The wallet ` +
+            `was created with a different bundle's bip39/HD derivation than the ` +
+            `BG bundle uses now; signatures would not verify.`,
+          );
+        }
+      }
+
       try {
         const signedTxHex = await balanceAndSignUnshieldedTransfer({
           sdkNetworkId,
