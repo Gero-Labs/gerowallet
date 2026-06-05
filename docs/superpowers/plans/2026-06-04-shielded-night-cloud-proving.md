@@ -157,22 +157,69 @@ The endpoint is structurally identical to `/tx/finalize` today; the separate rou
 - New DTO: `ProveAndSubmitTxRequest { signedTxHex }` (no envelope unpacking — pass-through, same as the simplified `/tx/finalize`).
 - Service: trivial pass-through to `MidnightSidecarClient.proveAndSubmit(req)`.
 
-### 5.3 gero-sync — shielded subscription
+### 5.3 gero-sync — shielded subscription **(revised post-schema-probe)**
 
 **File:** `gero-sync/src/main/java/io/gerowallet/sync/chain/midnight/MidnightShieldedTxSubscriber.java` (new).
 
-Mirrors `MidnightUnshieldedTxSubscriber` but subscribes to `shieldedTransactions(sessionId: $sid, index: $i)`. Address-keyed by `sessionId` (derived from the wallet's Zswap encryption pubkey, NOT a wallet address — the wallet provides it on SUBSCRIBE).
+The unshielded subscriber pattern doesn't transplant 1:1 to shielded because the indexer uses a server-side **session** model (see §6.1). gero-sync needs to manage sessions on behalf of the wallet:
 
-- New SUBSCRIBE field: `midnightShieldedSessionId: HexEncoded` + `midnightShieldedLastIndex: Integer` (same cursor-resume pattern we just shipped for unshielded).
-- New TxData field on the dispatch payload: `midnightShieldedIndex` (for cursor advancement on the wallet side).
+1. **On SUBSCRIBE from wallet** (carrying viewingKey + optional `midnightShieldedLastIndex` cursor):
+   - Call indexer `connect(viewingKey, options)` → receive `sessionId`
+   - Stash `(sessionId, viewingKey, walletSession)` in the subscriber's per-session state
+   - Open the GraphQL `shieldedTransactions(sessionId, index: lastShieldedLastIndex+1)` subscription
+2. **On RelevantTransaction events** from the indexer:
+   - Forward the tx payload to the wallet over WS as a SYNC dispatch with shielded-specific fields
+   - Advance per-session cursor (`endIndex` field on the tx)
+3. **On ShieldedTransactionsProgress markers**:
+   - Use `highestRelevantEndIndex` to advance the cursor when no relevant tx fired this tick (matches the unshielded progress-marker pattern)
+4. **On wallet WS close / unregister**:
+   - Call indexer `disconnect(sessionId)` to free the server-side resources
+
+Wire-protocol additions on the SUBSCRIBE message:
+
+- `midnightShieldedViewingKey: HexEncoded` (REQUIRED for shielded sync — gero-sync needs it to call `connect`)
+- `midnightShieldedLastIndex: Integer` (resume cursor, same shape as the existing unshielded cursor)
+
+SyncPayload.TxData gains:
+
+- `midnightShieldedStartIndex: Integer`, `midnightShieldedEndIndex: Integer` — wallet uses `endIndex` to advance its cursor
+- `midnightShieldedCollapsedMerkleTreeUpdate: bytes hex` — the SDK needs this to keep its Zswap state's commitment tree in sync; pass through verbatim from the indexer event
+
+The viewing key handoff is the **privacy hinge** for shielded sync. Document it in the SUBSCRIBE-handler logs (just sessionId, never the viewingKey itself).
 
 ## 6. Open questions to resolve while building
 
-1. **Shielded session ID derivation.** Confirm with Midnight docs whether `sessionId` is `hash(zswapEncryptionPublicKey)` or another shape. The `shieldedTransactions` subscription schema in our indexer probe (`/api/v3/graphql`) gave `sessionId: HexEncoded!`; SDK side is `ZswapLocalState` watching.
-2. **Note decryption cost on cold sync.** If the indexer's `shieldedTransactions(sessionId, …)` already filters server-side to a sessionId-matching set, the wallet's decrypt cost is bounded. If it streams *everything* and the wallet decrypts every blob, the cold sync is unbounded. Verify before deciding whether gero-sync needs to do server-side filtering as well.
-3. **Consent text wording.** Draft above is engineer-prose. Needs a UX pass before ship — flag for the design / content review.
+### 6.1 Resolved during 2026-06-05 schema probe
+
+**Indexer subscription model is more involved than the plan originally assumed.** The Foundation indexer at `https://indexer.preview.midnight.network/api/v3/graphql` exposes:
+
+```graphql
+mutation connect(viewingKey: ViewingKey!, options: ConnectOptions): String  # returns sessionId
+mutation disconnect(sessionId: HexEncoded!)
+subscription shieldedTransactions(sessionId: HexEncoded!, index: Int) {
+  ... on ShieldedTransactionsProgress { highestEndIndex; highestCheckedEndIndex; highestRelevantEndIndex }
+  ... on RelevantTransaction {
+    transaction { id raw hash protocolVersion identifiers startIndex endIndex ... }
+    collapsedMerkleTree { startIndex endIndex update protocolVersion }
+  }
+}
+```
+
+Implications for the plan:
+
+- **The wallet must hand a `viewingKey` to whoever it subscribes through.** The indexer uses it server-side to decide which transactions are "relevant" to this session and only pushes `RelevantTransaction` events. The wallet still needs its own full `ZswapSecretKeys` locally to decrypt note **contents** (the indexer only filters; it doesn't fully decrypt for the client).
+- **Privacy decision: viewingKey routes through gero-sync, NOT the public indexer.** Otherwise the public indexer learns the user's full incoming-note set. Routing through gero-sync keeps the trust boundary inside the wallet/Gero perimeter the user already consented to with cloud-side proving. gero-sync becomes a `connect/disconnect/subscribe` proxy for the shielded path.
+- **Session lifecycle becomes a real concern.** Connect on wallet login, disconnect on logout. If the session is dropped mid-flight, gero-sync should re-connect transparently. Track `sessionId` in the wallet's WS subscription state alongside `lastShieldedTxIndex`.
+- **Cursor field is `index`, not `transactionId`.** And the progress marker carries three counters: `highestEndIndex` (chain progress), `highestCheckedEndIndex` (indexer scan progress), `highestRelevantEndIndex` (this session's matched txs). The wallet advances its cursor against `highestRelevantEndIndex` so the resume math mirrors unshielded but on a different field.
+- **Cold-sync cost is bounded by `highestRelevantEndIndex`,** not total chain history. The indexer filters server-side; only the user's txs flow over the wire. Personal wallets with low tx counts stay fast. Open question: how `ConnectOptions` affects this — needs a follow-up read.
+
+### 6.2 Still open
+
+3. **Consent text wording.** Draft text in §4.3 above is engineer-prose. Needs a UX pass before ship; the consent must now also explain that **the same viewing-key handoff lets Gero see incoming shielded balances during sync**, not just witness data per send. Two privacy disclosures, one consent.
 4. **DUST balancing for shielded tx fees.** Confirmed unshielded txs need DUST fees; verify shielded txs do too (they should, same fee model). If yes, the BG handler also runs `dustWallet.balanceTransactions(dustSk, [shieldedUnproven], ttl)` before serializing. The `[unprovenTx]` array on `balanceTransactions` is chain-agnostic per the SDK signature.
 5. **PassKey/PRF gesture handling on shielded send.** Same as unshielded — one WebAuthn ceremony, derive Zswap keys from the mnemonic. Verify no extra prompts are needed.
+6. **`ConnectOptions` shape.** The mutation accepts an optional `ConnectOptions` input object. Read its definition before connecting; it may include start-index hints or scan-mode toggles that affect cold-sync behaviour.
+7. **viewingKey derivation in BG.** Confirm `viewingKey` is the Zswap encryption-public component (`incoming viewing key` equivalent), not the secret key. If it's the secret, we have a stronger privacy decision to surface (server can decrypt forever, not just for the session). Probe via SDK source before wallet handler is written.
 
 ## 7. Execution order
 
