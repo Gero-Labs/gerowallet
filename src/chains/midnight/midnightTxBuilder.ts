@@ -141,18 +141,32 @@ export async function balanceAndSignUnshieldedTransfer(
     debugLog('🌙 dust sync: done');
 
     // ── Add DUST fee inputs (the step that needs the dust secret) ─
-    const balancedTx = await dustWallet.balanceTransactions(
+    // `dust.balanceTransactions` does NOT mutate or wrap the input tx — it
+    // returns a SEPARATE dust-only fee tx with its own intent containing the
+    // DustActions. The caller is responsible for merging that fee tx into the
+    // unshielded transfer; see wallet-sdk-facade/dist/index.js:280-283 for
+    // the canonical pattern:
+    //   feeBalancingTx = dust.balanceTransactions(dustSk, [transferTx], ttl)
+    //   balancedTx     = transferTx.merge(feeBalancingTx)
+    // Without the merge, signUnprovenTransaction signs the fee-only tx (no
+    // unshielded inputs in scope), the chain receives an unbalanced tx and
+    // rejects with "Invalid signature value" inside the ledger WASM.
+    const feeBalancingTx = await dustWallet.balanceTransactions(
       dustSk,
       [unprovenTransfer],
       args.ttl,
     );
-    debugLog('🌙 transfer balanced with dust fee inputs');
+    debugLog('🌙 dust fee tx built');
+    const mergedTx = (unprovenTransfer as unknown as {
+      merge: (other: ledger.UnprovenTransaction) => ledger.UnprovenTransaction;
+    }).merge(feeBalancingTx as ledger.UnprovenTransaction);
+    debugLog('🌙 transfer + dust fee merged');
 
     // ── Sign each unshielded input with the NightExternal key ─────
     const signSegment = (data: Uint8Array): ledger.Signature =>
       keystore.signData(data);
     const signedTx = await unshieldedWallet.signUnprovenTransaction(
-      balancedTx,
+      mergedTx,
       signSegment,
     );
     debugLog('🌙 transfer signed');
