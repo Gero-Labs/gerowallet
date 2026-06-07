@@ -113,7 +113,29 @@ export interface MidnightStore {
    * history. Null = never applied a tx (fresh install / cleared state).
    */
   lastMidnightTxId: number | null;
+
+  /**
+   * Record of the user's consent to send shielded-tx witness data through
+   * Gero Cloud's proving service. Required before the first shielded send
+   * and persisted so subsequent sends don't re-prompt — until the
+   * {@code version} is bumped by a future plan change (e.g. proof-server
+   * routing options diverge, or wording materially changes), at which
+   * point the consent must be re-acquired.
+   *
+   * {@code null} → never accepted. The send dialog routes shielded sends
+   * through the consent dialog first; cancelling the consent aborts the
+   * send. Accepting writes {@code {version, acceptedAt}} here.
+   */
+  shieldedProvingConsent: { version: number; acceptedAt: number } | null;
 }
+
+/**
+ * Current consent version. Bump only when the agreement materially
+ * changes (e.g. proof-server-routing options land and require disclosure,
+ * or the wording around what Gero servers see / log changes). A bump
+ * invalidates every existing accepted record and re-prompts on next send.
+ */
+export const SHIELDED_PROVING_CONSENT_VERSION = 1;
 
 const STORE_NAME = 'midnightStore';
 const context = getContextType();
@@ -150,6 +172,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   dustState: null,
   provingOperations: new Map(),
   lastMidnightTxId: null,
+  shieldedProvingConsent: null,
 });
 
 // ---------------------------------------------------------------- serializer
@@ -281,7 +304,23 @@ if (context === 'browser') {
     midnightStore.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
       ? stored.lastMidnightTxId
       : null;
+    midnightStore.shieldedProvingConsent = hydrateShieldedProvingConsent(stored.shieldedProvingConsent);
   });
+}
+
+/**
+ * Hydrate the consent record from chrome.storage. Reject anything that
+ * doesn't match the expected shape so corrupt state can't accidentally
+ * be read as "consented".
+ */
+function hydrateShieldedProvingConsent(
+  stored: unknown,
+): { version: number; acceptedAt: number } | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const v = (stored as { version?: unknown }).version;
+  const at = (stored as { acceptedAt?: unknown }).acceptedAt;
+  if (typeof v !== 'number' || typeof at !== 'number') return null;
+  return { version: v, acceptedAt: at };
 }
 
 /**
@@ -307,6 +346,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
+    'shieldedProvingConsent',
   ] as const) {
     if (key in updates) {
       (midnightStore as any)[key] = updates[key];
@@ -409,6 +449,30 @@ export const midnightActions = {
       lastMidnightTxId: null,
     }, true);
     debugLog('🧹 Midnight store cleared');
+  },
+
+  /**
+   * Record the user's consent to send shielded-tx witness data through Gero
+   * Cloud's proving service. Called by the BG handler after the consent
+   * dialog's accept button is clicked. Persists immediate so the value
+   * survives a SW restart between the consent acceptance and the send.
+   */
+  acceptShieldedProvingConsent() {
+    const consent = {
+      version: SHIELDED_PROVING_CONSENT_VERSION,
+      acceptedAt: Date.now(),
+    };
+    midnightStore.shieldedProvingConsent = consent;
+    broadcastFromBackground({ shieldedProvingConsent: consent }, true);
+  },
+
+  /**
+   * Clear the user's shielded-proving consent. Used by settings / "revoke
+   * privacy consent" UI flows. The next shielded send will re-prompt.
+   */
+  clearShieldedProvingConsent() {
+    midnightStore.shieldedProvingConsent = null;
+    broadcastFromBackground({ shieldedProvingConsent: null }, true);
   },
 
   /** Network/WS status update (driven by the gero-sync client wrapper). */
