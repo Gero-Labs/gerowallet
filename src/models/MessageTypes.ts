@@ -63,6 +63,11 @@ export enum MessageTypes {
   // to this spend. Caller (UI) must surface the explicit consent for routing
   // it through Gero Cloud proving — see ShieldedProvingConsentDialog.
   BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX',
+  // Midnight: record the user's consent to ship shielded-tx witness data to
+  // Gero Cloud for proving. Browser routes the consent click here so BG can
+  // persist + broadcast to every connected browser context (the user
+  // accepting in options should also unlock the popup's send dialog).
+  ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT = 'ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT',
   // Midnight: submit a fully-signed (and proven, for shielded) transaction via
   // Nexus's /tx/submit relay. Nexus forwards to the Midnight RPC node and
   // returns the txHash + status (Submitted / InBlock / Finalized).
