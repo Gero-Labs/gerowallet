@@ -37,6 +37,14 @@ class WebSocketService {
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
   private midnightLastTxId: number | null = null;
+  /**
+   * Midnight shielded-only: hex-encoded Zswap viewing key. Sent on every
+   * SUBSCRIBE so gero-sync can open the indexer's shielded-tx subscription
+   * on this wallet's behalf. NEVER LOGGED — only "set"/"unset" via a derived
+   * boolean. See {@link openConnection} log line.
+   */
+  private midnightShieldedViewingKey: string | null = null;
+  private midnightShieldedLastIndex: number | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private syncCheckTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempt: number = 0;
@@ -65,6 +73,24 @@ class WebSocketService {
      * re-pay replay cost on every dropped WS.
      */
     midnightLastTxId?: number | null,
+    /**
+     * Midnight shielded-only: opt-in to gero-sync's shielded-tx subscription
+     * by supplying the wallet's Zswap viewing key (hex). When non-null,
+     * gero-sync opens an indexer session via `mutation connect(viewingKey)`
+     * and forwards shielded events to this WS. Null = unshielded-only sync
+     * (current default until the shielded SDK derivation lands).
+     *
+     * The viewing key is held in-memory only for the duration of the WS
+     * session — it's re-derived from the wallet at next login rather than
+     * persisted to disk to keep its blast radius bounded.
+     */
+    midnightShieldedViewingKey?: string | null,
+    /**
+     * Midnight shielded-only: resume cursor for the shielded-tx subscription
+     * (mirrors {@code midnightLastTxId} for the shielded side). Null =
+     * full replay from genesis.
+     */
+    midnightShieldedLastIndex?: number | null,
   ): void {
     this.close();
     this.chain = chain;
@@ -74,6 +100,8 @@ class WebSocketService {
     this.handlers = handlers;
     this.credentials = credentials || null;
     this.midnightLastTxId = midnightLastTxId ?? null;
+    this.midnightShieldedViewingKey = midnightShieldedViewingKey ?? null;
+    this.midnightShieldedLastIndex = midnightShieldedLastIndex ?? null;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
     this.openConnection();
@@ -110,7 +138,11 @@ class WebSocketService {
         const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
         if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
       }
-      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock} midnightLastTxId=${liveMidnightCursor}`);
+      // Privacy: log only that a shielded viewing key is in play, never the
+      // value itself. The hex bytes de-anonymize the user's incoming notes.
+      const shieldedRequested = this.midnightShieldedViewingKey != null
+        && this.midnightShieldedViewingKey.length > 0;
+      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock} midnightLastTxId=${liveMidnightCursor} shieldedRequested=${shieldedRequested} midnightShieldedLastIndex=${this.midnightShieldedLastIndex}`);
       this.send({
         type: 'SUBSCRIBE',
         chain: this.chain,
@@ -123,6 +155,11 @@ class WebSocketService {
         // non-Midnight chains. Null = no persisted cursor (gero-sync full
         // replay).
         midnightLastTxId: liveMidnightCursor,
+        // Midnight shielded-only: pair of fields that opt this WS session
+        // into gero-sync's shielded-tx subscription. Both null → unshielded-
+        // only sync (today's default).
+        midnightShieldedViewingKey: this.midnightShieldedViewingKey,
+        midnightShieldedLastIndex: this.midnightShieldedLastIndex,
       });
 
       this.startSyncCheck();
@@ -328,7 +365,16 @@ class WebSocketService {
     if (expandedCredentials) {
       this.credentials = expandedCredentials;
     }
-    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock} credentials=${this.credentials?.length || 0}`);
+    // Live-read the Midnight cursor for resubscribe too — same reason as the
+    // initial connect path: store may have advanced since the last SUBSCRIBE.
+    let liveMidnightCursor: number | null = this.midnightLastTxId;
+    if (this.chain === 'MIDNIGHT') {
+      const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
+      if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
+    }
+    const shieldedRequested = this.midnightShieldedViewingKey != null
+      && this.midnightShieldedViewingKey.length > 0;
+    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock} credentials=${this.credentials?.length || 0} shieldedRequested=${shieldedRequested}`);
     this.lastSyncedBlock = lastSyncedBlock;
     this.send({
       type: 'SUBSCRIBE',
@@ -338,6 +384,11 @@ class WebSocketService {
       lastSyncedBlock,
       credentials: this.credentials,
       platform: 'extension',
+      // Mirror the connect-path payload so a force-resync doesn't accidentally
+      // strip Midnight-only resume cursors and re-trigger full replay.
+      midnightLastTxId: liveMidnightCursor,
+      midnightShieldedViewingKey: this.midnightShieldedViewingKey,
+      midnightShieldedLastIndex: this.midnightShieldedLastIndex,
     });
   }
 

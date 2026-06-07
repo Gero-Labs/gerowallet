@@ -164,6 +164,22 @@ class MidnightSyncService {
     network: string,
     addresses: MidnightAddresses,
     lastSyncedBlock = 0,
+    /**
+     * Optional shielded-sync opt-in. When provided, gero-sync opens a
+     * shielded-tx indexer subscription alongside the unshielded one and
+     * forwards events to this WS session. Until the wallet's shielded-SDK
+     * derivation lands at login, callers leave this undefined and the
+     * sync stays unshielded-only.
+     *
+     * Held in the WS service for the session lifetime; not persisted. Re-
+     * derive from the wallet at next login rather than caching the value.
+     */
+    shielded?: {
+      /** Hex-encoded Zswap viewing key from the user's mnemonic. */
+      viewingKey: string;
+      /** Persisted resume cursor (highest applied shielded indexer endIndex). */
+      lastIndex?: number | null;
+    },
   ): void {
     if (!addresses.unshielded) {
       debugLog('Midnight sync: refusing to start without unshielded address');
@@ -183,7 +199,8 @@ class MidnightSyncService {
     // (cursor + 1), skipping replay of already-known history. Null = fresh
     // install / cleared state → server falls back to full replay.
     const midnightLastTxId = midnightStore.lastMidnightTxId ?? null;
-    debugLog(`🌙 Midnight sync start: resume cursor=${midnightLastTxId}`);
+    // Privacy: log only whether shielded is enabled, never the viewing key.
+    debugLog(`🌙 Midnight sync start: resume cursor=${midnightLastTxId} shielded=${shielded != null}`);
 
     webSocketService.connect(
       'MIDNIGHT',
@@ -200,6 +217,8 @@ class MidnightSyncService {
       // is where role-specific public keys would flow.
       [],
       midnightLastTxId,
+      shielded?.viewingKey ?? null,
+      shielded?.lastIndex ?? null,
     );
 
     this.active = true;
