@@ -1907,6 +1907,128 @@ export class WalletBg {
   }
 
   /**
+   * BG-side build + sign of a shielded NIGHT transfer.
+   *
+   * Unlike unshielded, the wallet owns the ENTIRE pre-prove pipeline because
+   * shielded notes are encrypted to the user's Zswap viewing key — Nexus
+   * can't see them so it can't build the inputs/change/outputs. The SDK's
+   * {@code transferTransaction} reads the wallet's note set, picks inputs,
+   * builds change, signs with the Zswap secrets, and returns an
+   * UnprovenTransaction.
+   *
+   * Returns the SIGNED but UNPROVEN tx hex (markers
+   * SignatureEnabled / PreProof / PreBinding), ready for the sidecar's
+   * /tx/prove-and-submit (prove + bind + submit).
+   *
+   * Privacy: the returned hex embeds the witness data the prover needs.
+   * Caller (UI) has surfaced consent that we're routing it through Gero
+   * Cloud — see ShieldedProvingConsentDialog. This method itself stays
+   * blind to the consent flag because by the time it's invoked, consent
+   * has already been recorded.
+   */
+  async buildAndSignMidnightShieldedTransfer(
+    outputs: ReadonlyArray<{ receiverAddress: string; amount: bigint; tokenType?: string }>,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<string> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('buildAndSignMidnightShieldedTransfer called on non-Midnight wallet');
+    }
+    if (!Array.isArray(outputs) || outputs.length === 0) {
+      throw new Error('At least one output is required');
+    }
+
+    // Decrypt mnemonic — same pattern as the unshielded path. PRF wallets
+    // need the raw PRF output; password wallets need the password.
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { Network } = await import('@/models/types');
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { buildAndSignShieldedTransfer } = await import('@/chains/midnight/midnightShieldedBuilder');
+
+      // skipCardano:true: same BG-bundle pbkdf2 polyfill workaround as
+      // balanceAndSignMidnightUnshieldedTransfer. Cardano material isn't
+      // needed for a shielded send.
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      let sdkNetworkId: string;
+      switch (this.network) {
+        case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
+        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+        case Network.PREPROD: sdkNetworkId = 'preprod'; break;
+        case Network.TESTNET: sdkNetworkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) {
+        throw new Error(`No Midnight endpoints configured for network ${this.network}`);
+      }
+
+      // Sanity check the stored viewing key matches what we just re-derived.
+      // If they diverge, sync was running against a different key than this
+      // tx — the indexer's session was scanning the wrong viewing key, the
+      // wallet sees stale notes, and the tx may try to spend phantom inputs.
+      // Fail loud rather than build a tx the chain will reject.
+      try {
+        const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+        const storedViewingKey = parsed?.zswapViewingKey;
+        if (storedViewingKey && storedViewingKey !== derived.zswapViewingKeyHex) {
+          throw new Error(
+            `Midnight viewing-key mismatch — BG-derived viewing key ` +
+            `(${derived.zswapViewingKeyHex.slice(0, 16)}…) doesn't match the ` +
+            `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
+            `Sync was running against the wrong key; the local note set is unsound.`,
+          );
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('Midnight viewing-key mismatch')) throw e;
+        // Parse failures fall through — the publicKey JSON may not have the
+        // field yet on legacy wallets. The build will still produce a valid
+        // tx; sync correctness is the user's responsibility on legacy wallets.
+      }
+
+      try {
+        const signedTxHex = await buildAndSignShieldedTransfer({
+          sdkNetworkId,
+          endpoints,
+          zswapSecretKeySeed: derived.zswapSecretKey,
+          outputs: outputs.map((o) => ({
+            receiverAddress: o.receiverAddress,
+            amount: o.amount,
+            tokenType: (o.tokenType ?? 'native') as 'native',
+          })),
+        });
+        return signedTxHex;
+      } finally {
+        // Wipe all derived secrets. The mnemonic itself is cleared in the
+        // outer finally.
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0);
+        derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
    * Return the `publicKeyHex` and `addressHex` the Nexus sidecar needs to
    * reconstruct this wallet seedlessly via `UnshieldedWallet.startWithPublicKey`.
    *

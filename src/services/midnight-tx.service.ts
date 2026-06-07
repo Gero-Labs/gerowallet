@@ -160,6 +160,75 @@ export async function sendUnshieldedNight(
   return submitSignedTx(network, signedTxHex);
 }
 
+// ─── Shielded NIGHT send ──────────────────────────────────────────────────────
+
+/**
+ * Shielded recipient + amount. `tokenType` defaults to native NIGHT.
+ * Outputs are serialised as decimal strings on the wire because Chrome
+ * messaging can't carry BigInt; BG re-parses to bigint.
+ */
+export interface ShieldedTransferOutput {
+  receiverAddress: string;
+  amount: bigint;
+  tokenType?: string;
+}
+
+/**
+ * BG builds + signs the shielded tx (mnemonic decrypt → ZswapSecretKeys →
+ * ShieldedWallet.transferTransaction → signed-but-unproven hex). Caller
+ * MUST already hold user consent for sending the witness data through
+ * Gero Cloud proving — gate on `midnightStore.shieldedProvingConsent` at
+ * the UI layer (Step 5).
+ */
+async function buildAndSignShieldedInBg(
+  outputs: ReadonlyArray<ShieldedTransferOutput>,
+  credentials: MidnightSendCredentials,
+): Promise<string> {
+  const response = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
+    data: {
+      outputs: outputs.map((o) => ({
+        receiverAddress: o.receiverAddress,
+        amount: o.amount.toString(),
+        tokenType: o.tokenType,
+      })),
+      password: credentials.password,
+      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+    },
+  }) as { data: { success: boolean; signedTxHex?: string; error?: string } };
+
+  if (!response?.data?.success || !response.data.signedTxHex) {
+    throw new Error(response?.data?.error || 'Midnight shielded build/sign failed');
+  }
+  return response.data.signedTxHex;
+}
+
+/**
+ * Two-step shielded NIGHT transfer:
+ *   1. buildAndSignShieldedInBg → BG produces signed-but-unproven tx hex.
+ *      (The "build" step lives in the wallet because shielded notes are
+ *      encrypted to the user's Zswap key — no server can see them.)
+ *   2. api.proveAndSubmitMidnightTx → Nexus relays to sidecar
+ *      /tx/prove-and-submit which proves + binds + submits.
+ *
+ * Privacy gate: the caller is responsible for surfacing the consent dialog
+ * (Step 5) before invoking. By the time this function runs, the user has
+ * already accepted that witness data ships to Gero Cloud for proving.
+ */
+export async function sendShieldedNight(
+  network: string,
+  outputs: ReadonlyArray<ShieldedTransferOutput>,
+  credentials: MidnightSendCredentials,
+  waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
+): Promise<SubmitMidnightTxResponse> {
+  if (outputs.length === 0) {
+    throw new Error('sendShieldedNight: at least one output is required');
+  }
+  const signedTxHex = await buildAndSignShieldedInBg(outputs, credentials);
+  const api = getMidnightApi(network);
+  return api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
+}
+
 // ─── Path A — NIGHT-for-DUST registration ─────────────────────────────────────
 //
 // Registers the wallet's own NIGHT UTxOs to generate DUST for the wallet's
