@@ -25,7 +25,7 @@
 import * as bip39 from 'bip39';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { createKeystore } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
-import { DustSecretKey } from '@midnight-ntwrk/ledger-v8';
+import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import { DustAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { bech32, bech32m } from 'bech32';
 import {
@@ -72,6 +72,23 @@ export interface MidnightDerivedKeys {
   unshieldedSecretKey: Uint8Array;
   /** 32-byte private key for role Dust at index 0; consumed by DustWallet for fee payment + DUST registration tx signing. */
   dustSecretKey: Uint8Array;
+  /**
+   * 32-byte private key for role Zswap at index 0 — the seed used to derive
+   * the full {@link ZswapSecretKeys} for shielded note decryption and shielded
+   * tx signing. Caller must wipe (\`.fill(0)\`) after use. Mirrors how
+   * {@code dustSecretKey} is passed to {@code DustSecretKey.fromSeed} in the
+   * unshielded tx-build path.
+   */
+  zswapSecretKey: Uint8Array;
+  /**
+   * Hex-encoded Zswap encryption public key — the viewing key. Gero-sync
+   * forwards this to the indexer's {@code connect(viewingKey)} mutation to
+   * open a shielded-tx subscription. Safe to persist on the wallet record
+   * (it lets the indexer filter to notes addressed to this user, but cannot
+   * spend; spend requires the matching private key). Treat as moderately
+   * sensitive — anyone with this can de-anonymize incoming shielded notes.
+   */
+  zswapViewingKeyHex: string;
   /** Computed bech32m unshielded address (`mn_addr_<network>1...`). */
   addresses: MidnightAddresses;
   /** Raw signing public key hex (`UnshieldedKeystore.getPublicKey()`). Needed by Nexus sidecar for seedless wallet construction. */
@@ -182,6 +199,18 @@ export async function deriveMidnightKeys(
   }
   const dustSecretKey = dustRoleKey.key;
 
+  // Zswap (shielded) keys: Roles.Zswap at index 0 gives a 32-byte seed for
+  // ZswapSecretKeys.fromSeed. The encryptionPublicKey is the wallet's viewing
+  // key — what gero-sync forwards to the indexer's connect mutation. Coin and
+  // encryption secret keys stay in BG memory only for signing paths; public
+  // viewing key is safe to persist on the wallet record so login can supply
+  // it to gero-sync without re-decrypting the mnemonic.
+  const zswapRoleKey = accountKey.selectRole(Roles.Zswap).deriveKeyAt(0);
+  if (zswapRoleKey.type !== 'keyDerived') {
+    throw new Error('Midnight key derivation out of bounds');
+  }
+  const zswapSecretKey = zswapRoleKey.key;
+
   const networkId = midnightNetworkId(network);
   const keystore = createKeystore(unshieldedSecretKey, networkId);
   const unshieldedAddress = keystore.getBech32Address().toString();
@@ -192,6 +221,15 @@ export async function deriveMidnightKeys(
   const dustSk = DustSecretKey.fromSeed(dustSecretKey);
   const dustAddress = DustAddress.encodePublicKey(networkId, dustSk.publicKey);
   dustSk.clear();
+
+  // Derive the viewing key from the Zswap secret. ZswapSecretKeys.fromSeed
+  // is the SDK's canonical constructor; we read encryptionPublicKey then
+  // wipe the secret material immediately. The returned keys object's
+  // encryptionPublicKey is already a hex string per ledger-v8's EncPublicKey
+  // type alias.
+  const zswapKeys = ZswapSecretKeys.fromSeed(zswapSecretKey);
+  const zswapViewingKeyHex = zswapKeys.encryptionPublicKey as unknown as string;
+  zswapKeys.clear();
 
   // Wipe HD private material once the addresses are derived.
   hdWallet.clear();
@@ -204,15 +242,18 @@ export async function deriveMidnightKeys(
     ? { cardanoXpub: '', cardanoBaseAddress: '', cardanoStakeAddress: '', cardanoPaymentKeyHashHex: '' }
     : await deriveCardanoMaterial(mnemonic, network, account);
 
-  // Shielded address still requires the Zswap wallet's coin + encryption keys
-  // from `wallet-sdk-shielded`. That landing is gated on the WASM bundle
-  // decision; until then the dashboard renders a "Pending SDK integration" hint.
+  // Shielded address (mn_shield-addr_…) requires the bech32m encoding of the
+  // combined coin+encryption public keys. Deferred to a follow-up: today the
+  // dashboard still doesn't render a shielded balance, so the bech32 form
+  // isn't load-bearing. The viewing key is what unlocks gero-sync shielded
+  // subscription, and that's what we ship here.
   const addresses: MidnightAddresses = {
     unshielded: unshieldedAddress,
     shielded: '',
     dust: dustAddress,
     publicKeyHex,
     addressHex,
+    zswapViewingKey: zswapViewingKeyHex,
     cardanoXpub: cardano.cardanoXpub,
     cardanoBaseAddress: cardano.cardanoBaseAddress,
     cardanoStakeAddress: cardano.cardanoStakeAddress,
@@ -223,6 +264,8 @@ export async function deriveMidnightKeys(
     seed,
     unshieldedSecretKey,
     dustSecretKey,
+    zswapSecretKey,
+    zswapViewingKeyHex,
     addresses,
     publicKeyHex,
     addressHex,

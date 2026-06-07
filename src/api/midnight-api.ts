@@ -575,6 +575,36 @@ export class MidnightApi {
   }
 
   /**
+   * Shielded: hand the SIGNED-but-UNPROVEN shielded tx hex to Nexus's relay,
+   * which forwards to the sidecar's /tx/prove-and-submit. The sidecar runs
+   * the ZK prover, binds the tx, and submits via the Midnight RPC node.
+   *
+   * Endpoint: POST /api/v1/midnight/{network}/tx/prove-and-submit
+   *
+   * Privacy: the {@code signedTxHex} body contains witness data that lets
+   * whoever reads it link the user's shielded notes to this spend. The
+   * wallet must surface explicit user consent before calling this (see
+   * ShieldedProvingConsentDialog). Sidecar pledges not to log or persist
+   * the body — see sidecar/src/routes/proveAndSubmit.ts.
+   *
+   * Phase 1 returns {@code SubmitMidnightTxResponse} — same shape as the
+   * unshielded path. A dedicated response type may follow when the sidecar
+   * surfaces proving duration or proof-server identity for UX progress.
+   */
+  async proveAndSubmitMidnightTx(
+    request: { signedTxHex: string; waitFor?: 'Submitted' | 'InBlock' | 'Finalized' },
+  ): Promise<SubmitMidnightTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'tx/prove-and-submit');
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
+      if (status !== 200) throw parseHttpError(data);
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
    * Current DUST account state for a Midnight unshielded address.
    *
    * <p>Returns balance, per-second generation rate, cap, total NIGHT
