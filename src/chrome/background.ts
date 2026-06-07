@@ -3376,6 +3376,76 @@ app.addToOptions(
 );
 
 /**
+ * Midnight: build + sign a shielded NIGHT transfer entirely in BG.
+ *
+ * Request shape: `{ outputs: [{receiverAddress, amount, tokenType?}], password?, prfSecret? }`.
+ * Amounts are passed as decimal strings to survive Chrome messaging's
+ * BigInt-unfriendly serialization; BG parses back to bigint.
+ *
+ * Response: `{ success: true, signedTxHex }` — the SIGNED but UNPROVEN tx
+ * hex. UI must hand this to Nexus's /tx/prove-and-submit, NOT to /tx/submit
+ * (which expects a fully-finalized tx).
+ */
+app.addToOptions(
+  MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
+  async (request, sendResponse) => {
+    try {
+      const walletBg = walletManager.getWallet();
+      if (!walletBg) throw new Error('No wallet logged in');
+      if (walletBg.chain !== Blockchain.MIDNIGHT) {
+        throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX called on non-Midnight wallet');
+      }
+      const { outputs, password, prfSecret } = request.data || {};
+      if (!Array.isArray(outputs) || outputs.length === 0) {
+        throw new Error('outputs is required (non-empty array)');
+      }
+      // Outputs come over the wire with amount as a string (BigInt isn't JSON-
+      // serializable). Parse back to bigint here before handing off to the BG
+      // builder. Fail loudly on a bad amount rather than passing 0 onward.
+      const parsedOutputs = outputs.map((o: unknown, idx: number) => {
+        if (!o || typeof o !== 'object') {
+          throw new Error(`outputs[${idx}] is not an object`);
+        }
+        const obj = o as { receiverAddress?: string; amount?: string | number; tokenType?: string };
+        if (typeof obj.receiverAddress !== 'string' || obj.receiverAddress.length === 0) {
+          throw new Error(`outputs[${idx}].receiverAddress is required`);
+        }
+        const amount = typeof obj.amount === 'bigint'
+          ? obj.amount
+          : BigInt(String(obj.amount ?? '0'));
+        if (amount <= 0n) {
+          throw new Error(`outputs[${idx}].amount must be > 0`);
+        }
+        return {
+          receiverAddress: obj.receiverAddress,
+          amount,
+          tokenType: obj.tokenType,
+        };
+      });
+      const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      const signedTxHex = await walletBg.buildAndSignMidnightShieldedTransfer(
+        parsedOutputs,
+        password,
+        prfBytes,
+      );
+      sendResponse({
+        id: request.id,
+        data: { success: true, signedTxHex },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
  * Midnight: submit a fully-signed (and proven, for shielded) transaction via
  * Nexus's relay endpoint. Nexus calls `PolkadotNodeClient.sendMidnightTransaction`
  * against the Midnight RPC node and bubbles the submission event back here.

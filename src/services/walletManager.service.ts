@@ -308,6 +308,7 @@ export class WalletManager {
         dust: string;
         publicKeyHex?: string;
         addressHex?: string;
+        zswapViewingKey?: string;
         cardanoXpub?: string;
         cardanoBaseAddress?: string;
         cardanoStakeAddress?: string;
@@ -322,6 +323,7 @@ export class WalletManager {
             dust: parsed.dust ?? '',
             publicKeyHex: parsed.publicKeyHex,
             addressHex: parsed.addressHex,
+            zswapViewingKey: parsed.zswapViewingKey,
             cardanoXpub: parsed.cardanoXpub,
             cardanoBaseAddress: parsed.cardanoBaseAddress,
             cardanoStakeAddress: parsed.cardanoStakeAddress,
@@ -338,7 +340,17 @@ export class WalletManager {
       // into midnightStore actions. Skip if the address derivation failed.
       if (addresses.unshielded) {
         const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
-        midnightSyncService.start(walletBg.network, addresses, 0);
+        // Opt into shielded sync if the wallet record carries a viewing key
+        // (post-Step-4 wallets). Legacy wallets without the field stay
+        // unshielded-only — they need a re-derivation to enable shielded.
+        // Privacy: log only the boolean, never the key itself.
+        const shielded = addresses.zswapViewingKey
+          ? { viewingKey: addresses.zswapViewingKey, lastIndex: null }
+          : undefined;
+        if (shielded) {
+          debugLog('🌙 Midnight sync: starting with shielded subscription enabled');
+        }
+        midnightSyncService.start(walletBg.network, addresses, 0, shielded);
       } else {
         debugLog('🌙 Skipping gero-sync subscribe: no unshielded address on wallet record');
       }
