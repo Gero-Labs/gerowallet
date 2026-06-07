@@ -71,6 +71,18 @@ export interface MidnightAddresses {
    */
   addressHex?: string;
   /**
+   * Hex-encoded Zswap encryption public key (the "viewing key"). Gero-sync
+   * forwards this to the Midnight indexer's {@code connect(viewingKey)} mutation
+   * so the indexer can server-side-filter shielded txs to the ones this wallet
+   * can decrypt. Cannot spend; can de-anonymize incoming notes — treat as
+   * moderately sensitive but safe to persist on the wallet record.
+   *
+   * Optional for backward compat: wallets created before this field was added
+   * keep doing unshielded-only sync. Re-derived + persisted on first wallet
+   * upgrade or on a forced re-derivation path.
+   */
+  zswapViewingKey?: string;
+  /**
    * Cardano CIP-1852 account 0 xpub (bech32 `xpub1...`) derived from the same
    * mnemonic. Lets a Midnight wallet natively sign the Cardano-side DUST
    * registration tx without requiring a separate Cardano wallet. Mirrors

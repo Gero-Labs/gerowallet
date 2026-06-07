@@ -52,6 +52,17 @@ export enum MessageTypes {
   // submits. The build step (NIGHT input/output/change) is on Nexus because
   // those UTxOs are public; the indexer-backed view there is canonical.
   BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX = 'BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX',
+  // Midnight: build + sign a shielded NIGHT transfer entirely in BG. Unlike
+  // unshielded, shielded notes are encrypted to the user's Zswap viewing key
+  // so only the wallet can build the tx. BG: decrypts mnemonic, derives
+  // ZswapSecretKeys, runs ShieldedWallet.transferTransaction, returns
+  // signed-but-unproven tx hex. Markers: SignatureEnabled / PreProof /
+  // PreBinding. Sidecar's /tx/prove-and-submit takes it from there.
+  //
+  // Privacy: the returned hex carries witness data linking the user's notes
+  // to this spend. Caller (UI) must surface the explicit consent for routing
+  // it through Gero Cloud proving — see ShieldedProvingConsentDialog.
+  BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX',
   // Midnight: submit a fully-signed (and proven, for shielded) transaction via
   // Nexus's /tx/submit relay. Nexus forwards to the Midnight RPC node and
   // returns the txHash + status (Submitted / InBlock / Finalized).
