@@ -3446,6 +3446,39 @@ app.addToOptions(
 );
 
 /**
+ * Midnight: persist the user's consent to ship shielded-tx witness data
+ * through Gero Cloud's proving service. BG-side action so the value
+ * propagates to every browser context (popup, options, sidepanel) via the
+ * standard midnightStore broadcast — the user shouldn't need to re-consent
+ * just because they accepted in options and then opened the popup.
+ *
+ * Body shape: `{}` (no params — current SHIELDED_PROVING_CONSENT_VERSION
+ * is fixed in code; future bumps invalidate the recorded acceptance).
+ */
+app.addToOptions(
+  MessageTypes.ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT,
+  async (request, sendResponse) => {
+    try {
+      const { midnightActions } = await import('@/stores/midnightStore');
+      midnightActions.acceptShieldedProvingConsent();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
  * Midnight: submit a fully-signed (and proven, for shielded) transaction via
  * Nexus's relay endpoint. Nexus calls `PolkadotNodeClient.sendMidnightTransaction`
  * against the Midnight RPC node and bubbles the submission event back here.
