@@ -146,11 +146,39 @@ export async function balanceAndSignUnshieldedTransfer(
     // the WS is delivering data or stalled. Logging is heuristic (the SDK
     // doesn't publish a stable progress schema across versions) — we probe
     // common shapes and fall through on misses.
+    // BUILD-ID marker so we can confirm at runtime which version of this
+    // module is loaded into the BG service worker. If the user reports
+    // "still hangs" but doesn't see this exact line, the dev-server
+    // background bundle didn't rebuild (Vite has separate watch configs
+    // for the page bundle vs. background bundle — they don't always
+    // hot-reload in sync).
+    debugLog('🌙 dust sync: instrumentation BUILD=v2-heartbeat');
+
     let lastLoggedHeight = -1;
     let stateUpdateCount = 0;
+    let totalStateUpdates = 0;
+    let lastStateSnapshot: unknown = null;
     const syncStartMs = Date.now();
     dustSubscription = dustWallet.state.subscribe((state: unknown) => {
       stateUpdateCount += 1;
+      totalStateUpdates += 1;
+      lastStateSnapshot = state;
+      // First update: dump the entire state shape so we can see what the
+      // SDK is actually publishing. The probing in the heuristic block
+      // below is only useful if we know the field names.
+      if (totalStateUpdates === 1) {
+        try {
+          debugLog('🌙 dust sync: FIRST state update', {
+            keys: state && typeof state === 'object' ? Object.keys(state) : [],
+            stringified: JSON.stringify(
+              state,
+              (_k, v) => (typeof v === 'bigint' ? `bigint:${v.toString()}` : v),
+            ).slice(0, 500),
+          });
+        } catch {
+          debugLog('🌙 dust sync: FIRST state update (unserializable)', { type: typeof state });
+        }
+      }
       // Probe shapes we've seen on the dust/unshielded SDK state types.
       const s = state as Record<string, unknown> | undefined;
       const progress = (s?.['progress'] as Record<string, unknown> | undefined) ?? undefined;
@@ -167,6 +195,28 @@ export async function balanceAndSignUnshieldedTransfer(
       }
     });
     debugLog('🌙 dust sync: waiting');
+
+    // 5s heartbeat so silent hangs are visible. Distinguishes three
+    // failure modes that all currently look identical:
+    //   - BG service worker still alive but SDK observable is silent
+    //     (heartbeat fires, totalStateUpdates stays 0)
+    //   - SDK observable emitting but our height extraction missed the
+    //     shape (heartbeat fires AND totalStateUpdates>0 but no
+    //     "progress height=" line)
+    //   - BG SW killed mid-await by Chrome's idle timeout (heartbeat
+    //     STOPS firing, send dialog hangs forever)
+    const heartbeatHandle = setInterval(() => {
+      const elapsed = Date.now() - syncStartMs;
+      debugLog(`🌙 dust sync: heartbeat ${(elapsed / 1000).toFixed(1)}s, totalStateUpdates=${totalStateUpdates}, lastHeight=${lastLoggedHeight}`);
+      // Dump state shape periodically too if we still have no progress.
+      if (totalStateUpdates > 0 && lastLoggedHeight < 0) {
+        try {
+          debugLog('🌙 dust sync: NO HEIGHT in state', {
+            keys: lastStateSnapshot && typeof lastStateSnapshot === 'object' ? Object.keys(lastStateSnapshot as object) : [],
+          });
+        } catch { /* ignore */ }
+      }
+    }, 5_000);
     // Bounded wait. Without this, a cold-sync that never converges (stuck
     // indexer subscription, unmet allowedGap default, partial network
     // drop) hangs the send dialog forever with no signal. 90s is a soft
@@ -180,9 +230,9 @@ export async function balanceAndSignUnshieldedTransfer(
           setTimeout(() => reject(new Error(`dust sync timed out after ${SYNC_TIMEOUT_MS / 1000}s`)), SYNC_TIMEOUT_MS),
         ),
       ]);
-      debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms)`);
+      debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates})`);
     } catch (timeoutErr) {
-      debugLog(`🌙 dust sync: TIMEOUT after ${Date.now() - syncStartMs}ms — retrying with allowedGap=1000`, timeoutErr);
+      debugLog(`🌙 dust sync: TIMEOUT after ${Date.now() - syncStartMs}ms (totalStateUpdates=${totalStateUpdates}) — retrying with allowedGap=1000`, timeoutErr);
       // Second attempt with a non-zero allowedGap. Caps at a separate
       // 30s budget — if THIS times out, we let the original error bubble
       // so the UI can surface a useful failure instead of hanging.
@@ -192,7 +242,9 @@ export async function balanceAndSignUnshieldedTransfer(
           setTimeout(() => reject(new Error('dust sync (gap=1000) timed out after 30s')), 30_000),
         ),
       ]);
-      debugLog(`🌙 dust sync: done with gap (${Date.now() - syncStartMs}ms)`);
+      debugLog(`🌙 dust sync: done with gap (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates})`);
+    } finally {
+      clearInterval(heartbeatHandle);
     }
 
     // ── Add DUST fee inputs (the step that needs the dust secret) ─
