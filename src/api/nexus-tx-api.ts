@@ -2,7 +2,7 @@
  * Nexus transaction builder API client.
  *
  * Replaces client-side buildCardanoTransaction calls with server-side builds via
- * nexus's /v1/tx/build* endpoints. Server-side building is preferable because:
+ * nexus's /api/tx/build* endpoints. Server-side building is preferable because:
  *   - protocol params are always fresh (server fetches from chain)
  *   - fee calculation matches the canonical Cardano JVM/Aiken impl
  *   - upgrades happen on the server, no extension release required
@@ -223,7 +223,7 @@ export const nexusTxApi = {
     network?: string
   ): Promise<BuildTxResponse> {
     const nexusNetwork = toNexusNetwork(network);
-    const url = nexusNetwork ? `/v1/tx/build?network=${nexusNetwork}` : '/v1/tx/build';
+    const url = nexusNetwork ? `/api/tx/build?network=${nexusNetwork}` : '/api/tx/build';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
     return data;
   },
@@ -238,7 +238,7 @@ export const nexusTxApi = {
     network?: string
   ): Promise<MaxAdaResponse> {
     const nexusNetwork = toNexusNetwork(network);
-    const url = nexusNetwork ? `/v1/tx/max-ada?network=${nexusNetwork}` : '/v1/tx/max-ada';
+    const url = nexusNetwork ? `/api/tx/max-ada?network=${nexusNetwork}` : '/api/tx/max-ada';
     const { data } = await nexusTxClient.post<MaxAdaResponse>(url, request);
     return data;
   },
