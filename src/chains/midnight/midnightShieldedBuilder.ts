@@ -140,8 +140,31 @@ export async function buildAndSignShieldedTransfer(
 
     // Cold sync: walk the full shielded chain. Slow on preview/mainnet —
     // see the file header for why we accept this in Phase 1.
-    await shieldedWallet.waitForSyncedState();
-    debugLog('🌙 shielded SDK: synced');
+    // Bounded wait + timeout-then-retry-with-gap, same pattern as the dust
+    // sync in midnightTxBuilder.ts. Shielded cold sync is longer than dust
+    // (every shielded tx the user can decrypt vs. just dust events for one
+    // address), so the timeout budget is doubled. State-persistence
+    // follow-up will eliminate the cold sync entirely.
+    const syncStartMs = Date.now();
+    const SYNC_TIMEOUT_MS = 180_000;
+    try {
+      await Promise.race([
+        shieldedWallet.waitForSyncedState(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`shielded sync timed out after ${SYNC_TIMEOUT_MS / 1000}s`)), SYNC_TIMEOUT_MS),
+        ),
+      ]);
+      debugLog(`🌙 shielded SDK: synced (${Date.now() - syncStartMs}ms)`);
+    } catch (timeoutErr) {
+      debugLog(`🌙 shielded SDK: sync TIMEOUT after ${Date.now() - syncStartMs}ms — retrying with allowedGap=1000`, timeoutErr);
+      await Promise.race([
+        shieldedWallet.waitForSyncedState(1000n),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shielded sync (gap=1000) timed out after 60s')), 60_000),
+        ),
+      ]);
+      debugLog(`🌙 shielded SDK: synced with gap (${Date.now() - syncStartMs}ms)`);
+    }
 
     // Map our wire outputs into the SDK's TokenTransfer shape.
     const sdkOutputs = args.outputs.map((o) => {

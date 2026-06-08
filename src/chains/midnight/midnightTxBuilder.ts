@@ -139,11 +139,61 @@ export async function balanceAndSignUnshieldedTransfer(
       LedgerParameters.initialParameters().dust,
     );
     // shareReplay({refCount:true}) on `state` requires an active subscriber
-    // to drive sync; without this `waitForSyncedState` can hang.
-    dustSubscription = dustWallet.state.subscribe(() => { /* keep-alive */ });
+    // to drive sync; without this `waitForSyncedState` can hang. We use the
+    // subscriber for two things here: (a) keep-alive for the refCount, and
+    // (b) progress logging — without observability the dust sync can sit at
+    // "waiting" for minutes on cold sync with no visible signal of whether
+    // the WS is delivering data or stalled. Logging is heuristic (the SDK
+    // doesn't publish a stable progress schema across versions) — we probe
+    // common shapes and fall through on misses.
+    let lastLoggedHeight = -1;
+    let stateUpdateCount = 0;
+    const syncStartMs = Date.now();
+    dustSubscription = dustWallet.state.subscribe((state: unknown) => {
+      stateUpdateCount += 1;
+      // Probe shapes we've seen on the dust/unshielded SDK state types.
+      const s = state as Record<string, unknown> | undefined;
+      const progress = (s?.['progress'] as Record<string, unknown> | undefined) ?? undefined;
+      const synced = (progress?.['synced'] as Record<string, unknown> | undefined) ?? undefined;
+      const height = typeof synced?.['height'] === 'number'
+        ? (synced['height'] as number)
+        : typeof (s?.['syncHeight'] as unknown) === 'number'
+          ? (s['syncHeight'] as number)
+          : null;
+      if (typeof height === 'number' && height - lastLoggedHeight >= 100) {
+        debugLog(`🌙 dust sync: progress height=${height} (Δ=${stateUpdateCount} updates, ${Date.now() - syncStartMs}ms)`);
+        lastLoggedHeight = height;
+        stateUpdateCount = 0;
+      }
+    });
     debugLog('🌙 dust sync: waiting');
-    await dustWallet.waitForSyncedState();
-    debugLog('🌙 dust sync: done');
+    // Bounded wait. Without this, a cold-sync that never converges (stuck
+    // indexer subscription, unmet allowedGap default, partial network
+    // drop) hangs the send dialog forever with no signal. 90s is a soft
+    // cap for preview's typical first-sync; if we hit it we retry with
+    // a generous allowedGap so the fee balance can still attempt.
+    const SYNC_TIMEOUT_MS = 90_000;
+    try {
+      await Promise.race([
+        dustWallet.waitForSyncedState(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`dust sync timed out after ${SYNC_TIMEOUT_MS / 1000}s`)), SYNC_TIMEOUT_MS),
+        ),
+      ]);
+      debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms)`);
+    } catch (timeoutErr) {
+      debugLog(`🌙 dust sync: TIMEOUT after ${Date.now() - syncStartMs}ms — retrying with allowedGap=1000`, timeoutErr);
+      // Second attempt with a non-zero allowedGap. Caps at a separate
+      // 30s budget — if THIS times out, we let the original error bubble
+      // so the UI can surface a useful failure instead of hanging.
+      await Promise.race([
+        dustWallet.waitForSyncedState(1000n),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('dust sync (gap=1000) timed out after 30s')), 30_000),
+        ),
+      ]);
+      debugLog(`🌙 dust sync: done with gap (${Date.now() - syncStartMs}ms)`);
+    }
 
     // ── Add DUST fee inputs (the step that needs the dust secret) ─
     // `dust.balanceTransactions` does NOT mutate or wrap the input tx — it
