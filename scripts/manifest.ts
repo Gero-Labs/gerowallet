@@ -74,6 +74,13 @@ function buildCSP(dev: boolean): string {
     'wss://*.strikefinance.org',
     'https://*.gerowallet.io',
     'wss://*.gerowallet.io',
+    // Midnight — the SDK's UnshieldedWallet/DustWallet/ShieldedWallet sync
+    // connects directly to the Midnight Foundation indexer (HTTP for queries,
+    // WS for subscriptions). Wildcard covers preview/preprod/mainnet plus
+    // any future subdomain the SDK reaches. RPC node URLs land here too
+    // (https://rpc.preview.midnight.network, etc).
+    'https://*.midnight.network',
+    'wss://*.midnight.network',
     // Dev-only
     ...(dev
       ? [
