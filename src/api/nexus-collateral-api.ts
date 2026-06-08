@@ -91,7 +91,7 @@ export const nexusCollateralApi = {
    * intentional, see the module-level note on collateral semantics.
    */
   async lend(): Promise<LendResponse> {
-    const { data } = await client.post<LendResponse>('/v1/collateral/lend');
+    const { data } = await client.post<LendResponse>('/api/collateral/lend');
     return data;
   },
 
@@ -101,7 +101,7 @@ export const nexusCollateralApi = {
    * check on the cached collateral entry.
    */
   async status(utxoRef: string): Promise<StatusResponse> {
-    const { data } = await client.get<StatusResponse>('/v1/collateral/status', {
+    const { data } = await client.get<StatusResponse>('/api/collateral/status', {
       params: { utxoRef },
     });
     return data;
@@ -113,7 +113,7 @@ export const nexusCollateralApi = {
    * guard) or 404 if the ref is no longer on-chain.
    */
   async cosign(txCbor: string, utxoRef: string): Promise<CosignResponse> {
-    const { data } = await client.post<CosignResponse>('/v1/collateral/cosign', {
+    const { data } = await client.post<CosignResponse>('/api/collateral/cosign', {
       txCbor,
       utxoRef,
     });
