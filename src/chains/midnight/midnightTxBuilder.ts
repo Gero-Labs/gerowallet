@@ -146,76 +146,84 @@ export async function balanceAndSignUnshieldedTransfer(
     // the WS is delivering data or stalled. Logging is heuristic (the SDK
     // doesn't publish a stable progress schema across versions) — we probe
     // common shapes and fall through on misses.
-    // BUILD-ID marker so we can confirm at runtime which version of this
-    // module is loaded into the BG service worker. If the user reports
-    // "still hangs" but doesn't see this exact line, the dev-server
-    // background bundle didn't rebuild (Vite has separate watch configs
-    // for the page bundle vs. background bundle — they don't always
-    // hot-reload in sync).
-    debugLog('🌙 dust sync: instrumentation BUILD=v2-heartbeat');
+    // BUILD-ID marker — v3 reads the SDK's actual SyncProgress getter
+    // (appliedIndex / highestIndex / isConnected per the
+    // wallet-sdk-abstractions SyncProgress.d.ts), not the made-up
+    // `progress.synced.height` shape v2 was probing.
+    debugLog('🌙 dust sync: instrumentation BUILD=v3-syncprogress');
 
-    let lastLoggedHeight = -1;
+    type SyncProgressLike = {
+      appliedIndex?: unknown;
+      highestRelevantWalletIndex?: unknown;
+      highestIndex?: unknown;
+      highestRelevantIndex?: unknown;
+      isConnected?: unknown;
+    };
+
+    function readProgress(state: unknown): {
+      applied: bigint | null;
+      highest: bigint | null;
+      isConnected: boolean | null;
+    } {
+      // The state is a DustWalletState class instance; `progress` is a
+      // getter (not an own property), so we access via dot notation
+      // which triggers the getter on the class prototype. Wrapped in
+      // try/catch because the getter throws before sync starts in some
+      // SDK paths.
+      let progress: SyncProgressLike | null = null;
+      try {
+        progress = (state as { progress?: SyncProgressLike } | null)?.progress ?? null;
+      } catch { /* getter threw — pre-sync state */ }
+      if (!progress) return { applied: null, highest: null, isConnected: null };
+      const applied = typeof progress.appliedIndex === 'bigint'
+        ? (progress.appliedIndex as bigint)
+        : null;
+      const highest = typeof progress.highestIndex === 'bigint'
+        ? (progress.highestIndex as bigint)
+        : null;
+      const isConnected = typeof progress.isConnected === 'boolean'
+        ? (progress.isConnected as boolean)
+        : null;
+      return { applied, highest, isConnected };
+    }
+
+    let lastLoggedApplied: bigint = -1n;
     let stateUpdateCount = 0;
     let totalStateUpdates = 0;
-    let lastStateSnapshot: unknown = null;
+    let lastProgress: { applied: bigint | null; highest: bigint | null; isConnected: boolean | null } = {
+      applied: null,
+      highest: null,
+      isConnected: null,
+    };
     const syncStartMs = Date.now();
     dustSubscription = dustWallet.state.subscribe((state: unknown) => {
       stateUpdateCount += 1;
       totalStateUpdates += 1;
-      lastStateSnapshot = state;
-      // First update: dump the entire state shape so we can see what the
-      // SDK is actually publishing. The probing in the heuristic block
-      // below is only useful if we know the field names.
+      const p = readProgress(state);
+      lastProgress = p;
       if (totalStateUpdates === 1) {
-        try {
-          debugLog('🌙 dust sync: FIRST state update', {
-            keys: state && typeof state === 'object' ? Object.keys(state) : [],
-            stringified: JSON.stringify(
-              state,
-              (_k, v) => (typeof v === 'bigint' ? `bigint:${v.toString()}` : v),
-            ).slice(0, 500),
-          });
-        } catch {
-          debugLog('🌙 dust sync: FIRST state update (unserializable)', { type: typeof state });
-        }
+        debugLog('🌙 dust sync: FIRST state update', {
+          applied: p.applied?.toString() ?? null,
+          highest: p.highest?.toString() ?? null,
+          isConnected: p.isConnected,
+        });
       }
-      // Probe shapes we've seen on the dust/unshielded SDK state types.
-      const s = state as Record<string, unknown> | undefined;
-      const progress = (s?.['progress'] as Record<string, unknown> | undefined) ?? undefined;
-      const synced = (progress?.['synced'] as Record<string, unknown> | undefined) ?? undefined;
-      const height = typeof synced?.['height'] === 'number'
-        ? (synced['height'] as number)
-        : typeof (s?.['syncHeight'] as unknown) === 'number'
-          ? (s['syncHeight'] as number)
-          : null;
-      if (typeof height === 'number' && height - lastLoggedHeight >= 100) {
-        debugLog(`🌙 dust sync: progress height=${height} (Δ=${stateUpdateCount} updates, ${Date.now() - syncStartMs}ms)`);
-        lastLoggedHeight = height;
+      // Log every time appliedIndex advances by 100+ blocks.
+      if (p.applied != null && (lastLoggedApplied < 0n || p.applied - lastLoggedApplied >= 100n)) {
+        debugLog(`🌙 dust sync: progress applied=${p.applied} highest=${p.highest ?? '?'} connected=${p.isConnected ?? '?'} (Δ=${stateUpdateCount} updates, ${Date.now() - syncStartMs}ms)`);
+        lastLoggedApplied = p.applied;
         stateUpdateCount = 0;
       }
     });
     debugLog('🌙 dust sync: waiting');
 
-    // 5s heartbeat so silent hangs are visible. Distinguishes three
-    // failure modes that all currently look identical:
-    //   - BG service worker still alive but SDK observable is silent
-    //     (heartbeat fires, totalStateUpdates stays 0)
-    //   - SDK observable emitting but our height extraction missed the
-    //     shape (heartbeat fires AND totalStateUpdates>0 but no
-    //     "progress height=" line)
-    //   - BG SW killed mid-await by Chrome's idle timeout (heartbeat
-    //     STOPS firing, send dialog hangs forever)
+    // 5s heartbeat — now includes the SyncProgress fields so we can see
+    // exactly where the sync is stuck (e.g., isConnected=false means
+    // the indexer WS never came up despite the SDK firing internal
+    // state updates).
     const heartbeatHandle = setInterval(() => {
       const elapsed = Date.now() - syncStartMs;
-      debugLog(`🌙 dust sync: heartbeat ${(elapsed / 1000).toFixed(1)}s, totalStateUpdates=${totalStateUpdates}, lastHeight=${lastLoggedHeight}`);
-      // Dump state shape periodically too if we still have no progress.
-      if (totalStateUpdates > 0 && lastLoggedHeight < 0) {
-        try {
-          debugLog('🌙 dust sync: NO HEIGHT in state', {
-            keys: lastStateSnapshot && typeof lastStateSnapshot === 'object' ? Object.keys(lastStateSnapshot as object) : [],
-          });
-        } catch { /* ignore */ }
-      }
+      debugLog(`🌙 dust sync: heartbeat ${(elapsed / 1000).toFixed(1)}s totalUpdates=${totalStateUpdates} applied=${lastProgress.applied?.toString() ?? 'null'} highest=${lastProgress.highest?.toString() ?? 'null'} connected=${lastProgress.isConnected ?? 'null'}`);
     }, 5_000);
     // Bounded wait. Without this, a cold-sync that never converges (stuck
     // indexer subscription, unmet allowedGap default, partial network
