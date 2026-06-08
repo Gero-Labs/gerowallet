@@ -217,47 +217,47 @@ export default {
   // ── Market Service ──────────────────────────────────────────────────────────
 
   async getAllPrices(): Promise<TokenPriceResponse[]> {
-    const { data } = await axiosInstance.get('/api/v1/market/prices');
+    const { data } = await axiosInstance.get('/api/market/prices');
     return data;
   },
 
   async getTokenPrice(assetId: string): Promise<TokenPriceResponse> {
-    const { data } = await axiosInstance.get(`/api/v1/market/prices/${assetId}`);
+    const { data } = await axiosInstance.get(`/api/market/prices/${assetId}`);
     return data;
   },
 
   async getTokenPricesAcrossDexes(assetId: string): Promise<TokenPriceResponse[]> {
-    const { data } = await axiosInstance.get(`/api/v1/market/prices/${assetId}/all`);
+    const { data } = await axiosInstance.get(`/api/market/prices/${assetId}/all`);
     return data;
   },
 
   async getTopByVolume(limit: number = 20): Promise<TokenPriceResponse[]> {
-    const { data } = await axiosInstance.get('/api/v1/market/prices/top-volume', { params: { limit } });
+    const { data } = await axiosInstance.get('/api/market/prices/top-volume', { params: { limit } });
     return data;
   },
 
   async getTopByTvl(limit: number = 20): Promise<TokenPriceResponse[]> {
-    const { data } = await axiosInstance.get('/api/v1/market/prices/top-tvl', { params: { limit } });
+    const { data } = await axiosInstance.get('/api/market/prices/top-tvl', { params: { limit } });
     return data;
   },
 
   async getAdaPrice(): Promise<AdaPriceResponse> {
-    const { data } = await axiosInstance.get('/api/v1/market/ada');
+    const { data } = await axiosInstance.get('/api/market/ada');
     return data;
   },
 
   async getPriceHistory(assetId: string, from: string, to: string): Promise<PriceHistoryResponse[]> {
-    const { data } = await axiosInstance.get(`/api/v1/market/history/${assetId}`, { params: { from, to } });
+    const { data } = await axiosInstance.get(`/api/market/history/${assetId}`, { params: { from, to } });
     return data;
   },
 
   async getPriceAtTime(assetId: string, time: string): Promise<PriceHistoryResponse> {
-    const { data } = await axiosInstance.get(`/api/v1/market/history/${assetId}/at`, { params: { time } });
+    const { data } = await axiosInstance.get(`/api/market/history/${assetId}/at`, { params: { time } });
     return data;
   },
 
   async getAllTokenIds(): Promise<string[]> {
-    const { data } = await axiosInstance.get('/api/v1/market/tokens');
+    const { data } = await axiosInstance.get('/api/market/tokens');
     return data;
   },
 
@@ -266,87 +266,87 @@ export default {
   async getCandles(assetId: string, resolution: string = '1h', from?: string, to?: string, currency?: string): Promise<CandleResponse[]> {
     // ADA uses a dedicated endpoint (the generic one returns [] for lovelace)
     if (assetId === 'lovelace' || assetId === 'ada') {
-      const { data } = await axiosInstance.get('/api/v1/prices/ada/candles', { params: { currency, resolution, from, to } });
+      const { data } = await axiosInstance.get('/api/prices/ada/candles', { params: { currency, resolution, from, to } });
       return data;
     }
-    const { data } = await axiosInstance.get('/api/v1/prices/historical/candles', { params: { assetId, resolution, from, to, currency } });
+    const { data } = await axiosInstance.get('/api/prices/historical/candles', { params: { assetId, resolution, from, to, currency } });
     return data;
   },
 
   async getLatestPrices(symbols?: string[]): Promise<LatestPricesResponse> {
-    const { data } = await axiosInstance.get('/api/v1/prices/latest', { params: { symbols: symbols?.join(',') } });
+    const { data } = await axiosInstance.get('/api/prices/latest', { params: { symbols: symbols?.join(',') } });
     return data;
   },
 
   // ── Wallet Service ──────────────────────────────────────────────────────────
 
   async getWalletPnl(stakeAddress: string): Promise<WalletPnlSummary> {
-    const { data } = await axiosInstance.get(`/api/v1/wallet/${stakeAddress}/pnl`, { timeout: 60000 });
+    const { data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/pnl`, { timeout: 60000 });
     return data;
   },
 
   async getWalletHistory(stakeAddress: string, resolution: string = '1D', adaOnly: boolean = true): Promise<WalletSnapshot[]> {
-    const { data } = await axiosInstance.get(`/api/v1/wallet/${stakeAddress}/history`, { params: { resolution, adaOnly } });
+    const { data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/history`, { params: { resolution, adaOnly } });
     return data;
   },
 
   async getWalletHoldings(stakeAddress: string): Promise<any> {
-    const { data } = await axiosInstance.get(`/api/v1/wallet/${stakeAddress}/holdings`);
+    const { data } = await axiosInstance.get(`/api/wallet/${stakeAddress}/holdings`);
     return data;
   },
 
   // ── DEX Service ─────────────────────────────────────────────────────────────
 
   async getPoolsByToken(policyId: string, assetName: string): Promise<LiquidityPool[]> {
-    const { data } = await axiosInstance.get(`/api/v1/dex/pools/token/${policyId}/${assetName}`);
+    const { data } = await axiosInstance.get(`/api/dex/pools/token/${policyId}/${assetName}`);
     return data;
   },
 
   async getOrderBook(poolId: string, levels: number = 20): Promise<OrderBook> {
-    const { data } = await axiosInstance.get(`/api/v1/dex/orderbook/${poolId}`, { params: { levels } });
+    const { data } = await axiosInstance.get(`/api/dex/orderbook/${poolId}`, { params: { levels } });
     return data;
   },
 
   async getSimulatedOrderBook(poolId: string, levels: number = 20): Promise<OrderBook> {
-    const { data } = await axiosInstance.get(`/api/v1/dex/orderbook/${poolId}/simulated`, { params: { levels } });
+    const { data } = await axiosInstance.get(`/api/dex/orderbook/${poolId}/simulated`, { params: { levels } });
     return data;
   },
 
   async getTopPoolsByTvl(limit: number = 20): Promise<LiquidityPool[]> {
-    const { data } = await axiosInstance.get('/api/v1/dex/pools/top-tvl', { params: { limit } });
+    const { data } = await axiosInstance.get('/api/dex/pools/top-tvl', { params: { limit } });
     return data;
   },
 
   // ── NFT Service ──────────────────────────────────────────────────────────────
 
   async getNftCollections(sort: string = 'volume', limit: number = 50): Promise<NftCollectionStats[]> {
-    const { data } = await axiosInstance.get('/api/v1/nft/collections', { params: { sort, limit } });
+    const { data } = await axiosInstance.get('/api/nft/collections', { params: { sort, limit } });
     return data;
   },
 
   async getNftCollectionStats(policyId: string): Promise<NftCollectionStats> {
-    const { data } = await axiosInstance.get(`/api/v1/nft/collection/${policyId}`);
+    const { data } = await axiosInstance.get(`/api/nft/collection/${policyId}`);
     return data;
   },
 
   async getNftCollectionSales(policyId: string, limit: number = 20): Promise<NftSale[]> {
-    const { data } = await axiosInstance.get(`/api/v1/nft/collection/${policyId}/sales`, { params: { limit } });
+    const { data } = await axiosInstance.get(`/api/nft/collection/${policyId}/sales`, { params: { limit } });
     return data;
   },
 
   async getNftFloorPrice(policyId: string): Promise<{ floorPriceLovelace: number }> {
-    const { data } = await axiosInstance.get(`/api/v1/nft/collection/${policyId}/floor`);
+    const { data } = await axiosInstance.get(`/api/nft/collection/${policyId}/floor`);
     return data;
   },
 
   async getNftAssetPrice(policyId: string, assetName: string): Promise<{ priceLovelace: number }> {
-    const { data } = await axiosInstance.get(`/api/v1/nft/asset/${policyId}/${assetName}/price`);
+    const { data } = await axiosInstance.get(`/api/nft/asset/${policyId}/${assetName}/price`);
     return data;
   },
 
   // ── Swap History ──────────────────────────────────────────────────────────
   async getTokenSwaps(policyId: string, assetName: string, limit: number = 20): Promise<SwapHistory[]> {
-    const { data } = await axiosInstance.get(`/api/v1/dex/swaps/token/${policyId}/${assetName}`, { params: { limit } });
+    const { data } = await axiosInstance.get(`/api/dex/swaps/token/${policyId}/${assetName}`, { params: { limit } });
     return data;
   },
 };
