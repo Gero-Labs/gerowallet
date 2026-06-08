@@ -26,7 +26,11 @@ import * as bip39 from 'bip39';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { createKeystore } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
-import { DustAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
+import {
+  DustAddress,
+  MidnightBech32m,
+  ShieldedEncryptionPublicKey,
+} from '@midnight-ntwrk/wallet-sdk-address-format';
 import { bech32, bech32m } from 'bech32';
 import {
   Bip32Ed25519,
@@ -81,14 +85,20 @@ export interface MidnightDerivedKeys {
    */
   zswapSecretKey: Uint8Array;
   /**
-   * Hex-encoded Zswap encryption public key — the viewing key. Gero-sync
-   * forwards this to the indexer's {@code connect(viewingKey)} mutation to
-   * open a shielded-tx subscription. Safe to persist on the wallet record
-   * (it lets the indexer filter to notes addressed to this user, but cannot
-   * spend; spend requires the matching private key). Treat as moderately
-   * sensitive — anyone with this can de-anonymize incoming shielded notes.
+   * Bech32m-encoded Zswap encryption public key — the viewing key. Gero-sync
+   * forwards this verbatim to the indexer's {@code connect(viewingKey)}
+   * mutation to open a shielded-tx subscription. Wire form (NOT raw hex) is
+   * what the indexer's bech32m decoder accepts; passing hex returns
+   * "invalid viewing key: cannot bech32m-decode viewing key". For mainnet
+   * the prefix is bare `mn_shield-epk_…`; for preview/preprod it's
+   * `mn_shield-epk_<network>1…`.
+   *
+   * Safe to persist on the wallet record — lets the indexer filter to
+   * notes addressed to this user, but cannot spend. Spend requires the
+   * matching private key. Treat as moderately sensitive: anyone with this
+   * can de-anonymize incoming shielded notes for this wallet.
    */
-  zswapViewingKeyHex: string;
+  zswapViewingKey: string;
   /** Computed bech32m unshielded address (`mn_addr_<network>1...`). */
   addresses: MidnightAddresses;
   /** Raw signing public key hex (`UnshieldedKeystore.getPublicKey()`). Needed by Nexus sidecar for seedless wallet construction. */
@@ -223,13 +233,26 @@ export async function deriveMidnightKeys(
   dustSk.clear();
 
   // Derive the viewing key from the Zswap secret. ZswapSecretKeys.fromSeed
-  // is the SDK's canonical constructor; we read encryptionPublicKey then
-  // wipe the secret material immediately. The returned keys object's
-  // encryptionPublicKey is already a hex string per ledger-v8's EncPublicKey
-  // type alias.
+  // is the SDK's canonical constructor; encryptionPublicKey is a hex string
+  // per ledger-v8's `EncPublicKey = string` type alias.
+  //
+  // The Midnight indexer's `connect(viewingKey: ViewingKey!)` mutation
+  // expects the viewing key in BECH32M form, NOT raw hex — we hit
+  // `"invalid viewing key: cannot bech32m-decode viewing key"` on preprod
+  // when we sent the raw hex. Convert immediately via the SDK's
+  // ShieldedEncryptionPublicKey codec so the persisted form on the wallet
+  // record is the one gero-sync can hand to the indexer unchanged.
+  //
+  // Network ID arg to the codec produces `mn_shield-epk_…` for mainnet and
+  // `mn_shield-epk_<network>1…` (bech32m with test-network HRP suffix) for
+  // preview/preprod — the format the indexer's bech32m decoder accepts.
   const zswapKeys = ZswapSecretKeys.fromSeed(zswapSecretKey);
-  const zswapViewingKeyHex = zswapKeys.encryptionPublicKey as unknown as string;
+  const zswapViewingKeyHexRaw = zswapKeys.encryptionPublicKey as unknown as string;
   zswapKeys.clear();
+  const zswapEpk = ShieldedEncryptionPublicKey.fromHexString(zswapViewingKeyHexRaw);
+  const zswapViewingKey = ShieldedEncryptionPublicKey.codec
+    .encode(networkId, zswapEpk)
+    .toString();
 
   // Wipe HD private material once the addresses are derived.
   hdWallet.clear();
@@ -253,7 +276,7 @@ export async function deriveMidnightKeys(
     dust: dustAddress,
     publicKeyHex,
     addressHex,
-    zswapViewingKey: zswapViewingKeyHex,
+    zswapViewingKey,
     cardanoXpub: cardano.cardanoXpub,
     cardanoBaseAddress: cardano.cardanoBaseAddress,
     cardanoStakeAddress: cardano.cardanoStakeAddress,
@@ -265,7 +288,7 @@ export async function deriveMidnightKeys(
     unshieldedSecretKey,
     dustSecretKey,
     zswapSecretKey,
-    zswapViewingKeyHex,
+    zswapViewingKey,
     addresses,
     publicKeyHex,
     addressHex,
