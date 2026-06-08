@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "orchestrator": {
+      "type": "http",
+      "url": "https://agents.adlabs.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ORCH_TOKEN:-}"
+      }
+    }
+  }
+}
