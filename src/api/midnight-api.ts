@@ -9,7 +9,7 @@
  * Endpoint shape mirrors what Nexus's `midnight-preview` PR shipped:
  * - `/api/blocks/...?network=midnight-{network}` for chain-agnostic reads
  *   (uses `?network=midnight-preview` etc., served by existing controllers)
- * - `/api/v1/midnight/{network}/...` for Midnight-specific resources
+ * - `/api/midnight/{network}/...` for Midnight-specific resources
  *   (DUST status, transaction UTxOs, GraphQL/RPC proxy, registration tx-build)
  *
  * All calls go through `nexusBaseUrl` from `midnightConfig.ts`.
@@ -345,7 +345,7 @@ export class MidnightApi {
   async getTransaction(txHash: string): Promise<MidnightTransactionDto> {
     try {
       const { data, status } = await this.axiosInstance.get<MidnightTransactionDto>(
-        `/v1/transactions/${encodeURIComponent(txHash)}?network=${this.nexusNetworkSlug}`,
+        `/transactions/${encodeURIComponent(txHash)}?network=${this.nexusNetworkSlug}`,
       );
       if (status === 200) return data;
       throw parseHttpError(data);
@@ -356,13 +356,13 @@ export class MidnightApi {
 
   /**
    * Batch-fetch transaction CBORs by hash.
-   * Backed by Nexus's `POST /v1/transactions/cbor`.
+   * Backed by Nexus's `POST /transactions/cbor`.
    */
   async batchTransactionCbors(txHashes: string[]): Promise<Record<string, string>> {
     if (txHashes.length === 0) return {};
     try {
       const { data, status } = await this.axiosInstance.post<Record<string, string>>(
-        `/v1/transactions/cbor?network=${this.nexusNetworkSlug}`,
+        `/transactions/cbor?network=${this.nexusNetworkSlug}`,
         { hashes: txHashes },
       );
       if (status === 200) return data ?? {};
@@ -374,7 +374,7 @@ export class MidnightApi {
 
   /**
    * Fetch the Midnight-shaped UTxOs for a given transaction (created + spent).
-   * Backed by Nexus's `GET /api/v1/midnight/{network}/transactions/{txHash}/utxos`.
+   * Backed by Nexus's `GET /api/midnight/{network}/transactions/{txHash}/utxos`.
    */
   async getTransactionUtxos(txHash: string): Promise<MidnightTransactionUtxosDto> {
     try {
@@ -505,7 +505,7 @@ export class MidnightApi {
    * Raw GraphQL POST proxy — for queries Nexus doesn't expose as REST yet
    * (e.g. shielded subscription queries via the wallet SDK).
    *
-   * Backed by Nexus's `POST /api/v1/midnight/{network}/indexer/graphql`.
+   * Backed by Nexus's `POST /api/midnight/{network}/indexer/graphql`.
    */
   async graphql<T = unknown>(
     query: string,
@@ -540,7 +540,7 @@ export class MidnightApi {
    * submitting.
    *
    * **Endpoint contract (Nexus-side TBD)**:
-   * `POST /api/v1/midnight/{network}/tx/build-unshielded`
+   * `POST /api/midnight/{network}/tx/build-unshielded`
    */
   async buildUnshieldedTx(request: BuildMidnightTxRequest): Promise<BuildMidnightTxResponse> {
     try {
@@ -561,7 +561,7 @@ export class MidnightApi {
    * tx pending; `InBlock`/`Finalized` are surfaced if Nexus waits.
    *
    * **Endpoint contract (Nexus-side TBD)**:
-   * `POST /api/v1/midnight/{network}/tx/submit`
+   * `POST /api/midnight/{network}/tx/submit`
    */
   async submitMidnightTx(request: SubmitMidnightTxRequest): Promise<SubmitMidnightTxResponse> {
     try {
@@ -579,7 +579,7 @@ export class MidnightApi {
    * which forwards to the sidecar's /tx/prove-and-submit. The sidecar runs
    * the ZK prover, binds the tx, and submits via the Midnight RPC node.
    *
-   * Endpoint: POST /api/v1/midnight/{network}/tx/prove-and-submit
+   * Endpoint: POST /api/midnight/{network}/tx/prove-and-submit
    *
    * Privacy: the {@code signedTxHex} body contains witness data that lets
    * whoever reads it link the user's shielded notes to this spend. The
