@@ -29,7 +29,7 @@ import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import {
   DustAddress,
   MidnightBech32m,
-  ShieldedEncryptionPublicKey,
+  ShieldedEncryptionSecretKey,
 } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { bech32, bech32m } from 'bech32';
 import {
@@ -85,18 +85,24 @@ export interface MidnightDerivedKeys {
    */
   zswapSecretKey: Uint8Array;
   /**
-   * Bech32m-encoded Zswap encryption public key — the viewing key. Gero-sync
-   * forwards this verbatim to the indexer's {@code connect(viewingKey)}
-   * mutation to open a shielded-tx subscription. Wire form (NOT raw hex) is
-   * what the indexer's bech32m decoder accepts; passing hex returns
-   * "invalid viewing key: cannot bech32m-decode viewing key". For mainnet
-   * the prefix is bare `mn_shield-epk_…`; for preview/preprod it's
-   * `mn_shield-epk_<network>1…`.
+   * Bech32m-encoded Zswap encryption SECRET key (`mn_shield-esk_<network>1…`
+   * for non-mainnet, bare `mn_shield-esk…` for mainnet) — what the Midnight
+   * indexer calls the "viewing key" in its `connect(viewingKey: ViewingKey!)`
+   * mutation. Despite the name, this is secret-key material — the indexer
+   * needs it to decrypt incoming shielded notes on the user's behalf
+   * (same shape as Zcash's IVK).
    *
-   * Safe to persist on the wallet record — lets the indexer filter to
-   * notes addressed to this user, but cannot spend. Spend requires the
-   * matching private key. Treat as moderately sensitive: anyone with this
-   * can de-anonymize incoming shielded notes for this wallet.
+   * Wire form is bech32m with HRP `shield-esk`, network-suffixed for non-
+   * mainnet. The indexer rejects raw hex AND rejects the encryption PUBLIC
+   * key under `shield-epk` — both produce
+   * `"invalid viewing key: cannot bech32m-decode viewing key"`.
+   *
+   * BLAST RADIUS: anyone with this string can decrypt every incoming
+   * shielded note for this wallet, forever. Cannot spend (spend requires
+   * the coin secret key) but can de-anonymize. Currently persisted on the
+   * wallet record in plain form alongside the public addresses (sandbox
+   * is extension-scoped IndexedDB); followup is encrypted-at-rest storage
+   * alongside the mnemonic.
    */
   zswapViewingKey: string;
   /** Computed bech32m unshielded address (`mn_addr_<network>1...`). */
@@ -233,26 +239,36 @@ export async function deriveMidnightKeys(
   dustSk.clear();
 
   // Derive the viewing key from the Zswap secret. ZswapSecretKeys.fromSeed
-  // is the SDK's canonical constructor; encryptionPublicKey is a hex string
-  // per ledger-v8's `EncPublicKey = string` type alias.
+  // is the SDK's canonical constructor.
   //
-  // The Midnight indexer's `connect(viewingKey: ViewingKey!)` mutation
-  // expects the viewing key in BECH32M form, NOT raw hex — we hit
-  // `"invalid viewing key: cannot bech32m-decode viewing key"` on preprod
-  // when we sent the raw hex. Convert immediately via the SDK's
-  // ShieldedEncryptionPublicKey codec so the persisted form on the wallet
-  // record is the one gero-sync can hand to the indexer unchanged.
+  // The Midnight indexer's `connect(viewingKey: ViewingKey!)` mutation —
+  // per the indexer source at
+  // `midnight-indexer/indexer-api/src/infra/api/v4/viewing_key.rs` —
+  // decodes the input as bech32m with HRP `shield-esk` (encryption SECRET
+  // key), then deserializes the bytes as a `ledger::SecretKey`. That's
+  // because the indexer needs the secret material to decrypt incoming
+  // notes on the user's behalf (same shape as Zcash's IVK: the "viewing
+  // key" IS a secret in this design, despite the term).
   //
-  // Network ID arg to the codec produces `mn_shield-epk_…` for mainnet and
-  // `mn_shield-epk_<network>1…` (bech32m with test-network HRP suffix) for
-  // preview/preprod — the format the indexer's bech32m decoder accepts.
+  // Subtle: an earlier iteration of this code encoded the encryption
+  // PUBLIC key under HRP `shield-epk`. That looks like it should work —
+  // it's still bech32m — but the indexer rejects it with InvalidHrp /
+  // SecretKey-deserialize failure. The wallet SDK's
+  // ShieldedEncryptionSecretKey codec is the one whose output the
+  // indexer accepts.
+  //
+  // PRIVACY: this is encryption SECRET-key material persisted in plain
+  // form on the wallet record. The blast radius is "anyone with this
+  // can decrypt every incoming shielded note for this wallet, forever"
+  // — strictly worse than a viewing key in the Zcash IPK sense. Sandbox
+  // is IndexedDB (extension-scoped). Followup: move to encrypted-at-rest
+  // storage alongside the mnemonic.
   const zswapKeys = ZswapSecretKeys.fromSeed(zswapSecretKey);
-  const zswapViewingKeyHexRaw = zswapKeys.encryptionPublicKey as unknown as string;
-  zswapKeys.clear();
-  const zswapEpk = ShieldedEncryptionPublicKey.fromHexString(zswapViewingKeyHexRaw);
-  const zswapViewingKey = ShieldedEncryptionPublicKey.codec
-    .encode(networkId, zswapEpk)
+  const zswapEsk = new ShieldedEncryptionSecretKey(zswapKeys.encryptionSecretKey);
+  const zswapViewingKey = ShieldedEncryptionSecretKey.codec
+    .encode(networkId, zswapEsk)
     .toString();
+  zswapKeys.clear();
 
   // Wipe HD private material once the addresses are derived.
   hdWallet.clear();
