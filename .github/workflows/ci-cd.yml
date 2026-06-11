@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: Build and Test
-    runs-on: ubuntu-latest
+    runs-on: gero-plain
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"
     steps:
@@ -34,7 +34,7 @@ jobs:
 
   publish:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: gero-plain
     if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout Repository
