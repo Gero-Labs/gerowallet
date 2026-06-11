@@ -8,7 +8,7 @@ jobs:
   claude-review:
     if: github.event.pull_request.user.login != 'dependabot[bot]'
 
-    runs-on: ubuntu-latest
+    runs-on: gero-plain
     permissions:
       contents: read
       pull-requests: write
