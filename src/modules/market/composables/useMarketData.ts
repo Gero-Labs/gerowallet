@@ -1,5 +1,4 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef, type WatchStopHandle } from 'vue';
-import SockJS from 'sockjs-client';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { xerberusStore } from '@/stores/xerberusStore';
@@ -8,8 +7,6 @@ import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import { debugLog } from '@/utils/debug';
-import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 
 export interface MarketToken {
   unit: string;
@@ -74,7 +71,6 @@ const error: Ref<string | null> = ref(null);
 
 let initialized = false;
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
-let _tokenIndexCache: Record<string, number> | null = null;
 
 // Module-level EUR rate for Apex price conversion
 const { usdToEurRate: _usdToEurRate, loadExchangeRate: _loadExchangeRate } = useCurrencyConverter();
@@ -195,7 +191,6 @@ async function fetchAllTokens(silent = false): Promise<void> {
     // Remove any existing lovelace entry, then prepend native token
     const filtered = tokens.filter(t => t.unit !== 'lovelace');
     allTokens.value = [nativeToken, ...filtered];
-    _tokenIndexCache = null; // Invalidate index on full refresh
 
     // Set adaData ref (used for native currency price display)
     adaData.value = {
@@ -370,150 +365,18 @@ function getTokenByUnit(unit: string): MarketToken | undefined {
   return allTokens.value.find(t => t.unit === unit);
 }
 
-// --- Live price streaming via SockJS + STOMP ---
+// --- Price polling state ---
 
-const MARKET_API_BASE = import.meta.env['VITE_NEXUS_URL'];
-const STOMP_TOPIC = '/topic/market/prices';
-
-let sock: WebSocket | null = null;
-let streamReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+// Kept for the portfolio "live data" indicator. The live WebSocket was removed
+// in favour of REST polling through the backend Nexus proxy; this now reflects
+// whether the most recent price poll succeeded.
 const wsConnected = ref(false);
-let renderPending = false;
 
-/** Build a token index for O(1) lookups (cached, invalidated on full refresh) */
-function buildTokenIndex(): Record<string, number> {
-  if (_tokenIndexCache) return _tokenIndexCache;
-  const index: Record<string, number> = {};
-  allTokens.value.forEach((t, i) => { index[t.unit] = i; });
-  _tokenIndexCache = index;
-  return index;
-}
-
-/** Merge incoming price updates into existing tokens silently */
-function mergePriceUpdates(updates: any) {
-  const tokenIndex = buildTokenIndex();
-  let changed = false;
-
-  (Array.isArray(updates) ? updates : [updates]).forEach((u: any) => {
-    if (!u.assetId) return;
-    const idx = tokenIndex[u.assetId];
-    if (idx == null) return;
-
-    const t = allTokens.value[idx];
-    if (u.priceAda != null) t.priceAda = u.priceAda;
-    if (u.priceUsd != null) t.price = u.priceUsd;
-    if (u.priceChange1h != null) t.change1h = u.priceChange1h;
-    if (u.priceChange24h != null) t.change24h = u.priceChange24h;
-    if (u.priceChange7d != null) t.change7d = u.priceChange7d;
-    if (u.volume24h != null) t.volume24h = u.volume24h;
-    if (u.tvl != null) t.tvl = u.tvl;
-    if (u.liquidity != null) t.liquidity = u.liquidity;
-    if (u.marketCap != null) t.mcap = u.marketCap;
-    if (u.holders != null) t.holders = u.holders;
-    if (u.isNew != null) t.isNew = u.isNew;
-    changed = true;
+/** Refresh all token prices via the backend proxy and track freshness. */
+function pollPrices(silent: boolean): void {
+  void fetchAllTokens(silent).finally(() => {
+    wsConnected.value = !error.value;
   });
-
-  if (!changed || renderPending) return;
-  renderPending = true;
-  setTimeout(() => {
-    renderPending = false;
-    allTokens.value = [...allTokens.value];
-  }, 2000);
-}
-
-/** Minimal STOMP framing */
-function stompFrame(command: string, headers: Record<string, string> = {}, body = ''): string {
-  let frame = command + '\n';
-  for (const [k, v] of Object.entries(headers)) frame += `${k}:${v}\n`;
-  frame += '\n' + body + '\0';
-  return frame;
-}
-
-function parseStompFrame(data: string): { command: string; headers: Record<string, string>; body: string } | null {
-  const idx = data.indexOf('\n\n');
-  if (idx < 0) return null;
-  const headerSection = data.substring(0, idx);
-  const body = data.substring(idx + 2).replace(/\0$/, '');
-  const lines = headerSection.split('\n');
-  const command = lines[0];
-  const headers: Record<string, string> = {};
-  for (let i = 1; i < lines.length; i++) {
-    const colon = lines[i].indexOf(':');
-    if (colon > 0) headers[lines[i].substring(0, colon)] = lines[i].substring(colon + 1);
-  }
-  return { command, headers, body };
-}
-
-async function connectStream(): Promise<void> {
-  if (sock) return;
-
-  const token = await getNexusAccessToken();
-  const url = `${MARKET_API_BASE}/ws/market?access_token=${encodeURIComponent(token)}`;
-  debugLog('📡 Market WS: connecting via SockJS to nexus /ws/market');
-  const socket = new SockJS(url) as unknown as WebSocket;
-  sock = socket;
-
-  let opened = false;
-
-  socket.onopen = () => {
-    opened = true;
-    console.log('📡 Market WS: SockJS opened, sending STOMP CONNECT');
-    socket.send(stompFrame('CONNECT', { 'accept-version': '1.2', 'heart-beat': '0,0' }));
-  };
-
-  socket.onmessage = (event: MessageEvent) => {
-    const data = typeof event.data === 'string' ? event.data : '';
-    if (!data || data === '\n') return; // heartbeat
-
-    const frame = parseStompFrame(data);
-    if (!frame) return;
-
-    if (frame.command === 'CONNECTED') {
-      socket.send(stompFrame('SUBSCRIBE', { id: 'sub-0', destination: STOMP_TOPIC }));
-      wsConnected.value = true;
-      console.log('📡 Market WS: subscribed to', STOMP_TOPIC);
-    } else if (frame.command === 'MESSAGE' && frame.body) {
-      try { mergePriceUpdates(JSON.parse(frame.body)); } catch { /* ignore */ }
-    } else if (frame.command === 'ERROR') {
-      console.error('📡 Market WS: STOMP ERROR:', frame.headers['message'], frame.body);
-    }
-  };
-
-  socket.onclose = () => {
-    console.log('📡 Market WS: closed, reconnecting in 5s');
-    sock = null;
-    wsConnected.value = false;
-    streamReconnectTimer = setTimeout(() => {
-      void (async () => {
-        if (!opened) {
-          // Handshake never completed — likely a server-side token rejection.
-          // Force a fresh token so the reconnect doesn't replay the rejected one.
-          debugLog('📡 Market WS: handshake failed, refreshing device token before reconnect');
-          try {
-            await reauthenticateNexus();
-          } catch (e) {
-            debugLog('Market WS: token refresh before reconnect failed', e);
-          }
-        }
-        void connectStream();
-      })();
-    }, 5000);
-  };
-}
-
-function disconnectStream(): void {
-  if (streamReconnectTimer) {
-    clearTimeout(streamReconnectTimer);
-    streamReconnectTimer = null;
-  }
-  if (sock) {
-    sock.onclose = null;
-    sock.onmessage = null;
-    sock.close();
-    sock = null;
-  }
-  wsConnected.value = false;
 }
 
 // --- Cleanup ---
@@ -522,7 +385,6 @@ let chainWatcherStop: WatchStopHandle | null = null;
 let coinGeckoWatcherStop: WatchStopHandle | null = null;
 
 function cleanup(): void {
-  disconnectStream();
   if (refreshInterval) {
     clearInterval(refreshInterval);
     refreshInterval = null;
@@ -544,18 +406,17 @@ export function useMarketData() {
   // Initialize once on first composable call
   if (!initialized) {
     initialized = true;
-    void fetchAllTokens().then(() => connectStream()); // WS after initial data is ready
-    // REST fallback every 5 minutes (in case WS is down)
+    pollPrices(false); // initial load
+    // Poll prices every 15s while the tab is visible (replaces the live WebSocket).
     refreshInterval = setInterval(() => {
-      if (!document.hidden) fetchAllTokens(true);
-    }, 300_000);
+      if (!document.hidden) pollPrices(true);
+    }, 15_000);
   }
 
   // Watch for wallet chain changes — re-fetch data when switching wallets
   if (!chainWatcherStop) {
     chainWatcherStop = watch(() => walletStore.loggedWallet?.chain, () => {
-      disconnectStream();
-      void fetchAllTokens().then(() => connectStream()); // Reconnect WS with fresh data
+      pollPrices(false);
     });
   }
 
