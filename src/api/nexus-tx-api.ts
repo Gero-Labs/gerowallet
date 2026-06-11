@@ -7,16 +7,14 @@
  *   - fee calculation matches the canonical Cardano JVM/Aiken impl
  *   - upgrades happen on the server, no extension release required
  *
- * Auth: every request gets an Authorization: Bearer <jwt> header from
- * nexusDevice.service. On 401 the token is invalidated and the request retried
- * once with a fresh token.
+ * Auth: none on the client. Requests go to gero-backend's Nexus proxy
+ * (VITE_NEXUS_URL → <backend>/api/nexus), which injects the Nexus API key
+ * server-side. The backend gates the extension by Origin/IP.
  */
 
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
 import { Cardano } from '@cardano-sdk/core';
-import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { Network } from '@/models/types';
-import { debugLog } from '@/utils/debug';
 
 // ── Request / response types matching nexus's BuildTxRequest / BuildTxResponse ──
 
@@ -101,32 +99,12 @@ const nexusTxClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-nexusTxClient.interceptors.request.use(async (config) => {
-  const token = await getNexusAccessToken();
-  config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// 401 → drop cached token, reauth, retry once
+// Surface the Nexus error body's message so callers can parse it
+// (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
+// The backend proxy forwards the upstream status + JSON body verbatim.
 nexusTxClient.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
-    const config = error.config as AxiosRequestConfig & { _retried?: boolean };
-    if (error.response?.status === 401 && config && !config._retried) {
-      config._retried = true;
-      try {
-        const token = await reauthenticateNexus();
-        if (config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return nexusTxClient.request(config);
-      } catch (refreshErr) {
-        debugLog('[nexus-tx-api] Reauth failed after 401:', refreshErr);
-        throw error;
-      }
-    }
-    // Surface the Nexus error body's message so callers can parse it
-    // (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
     const body = error.response?.data as { message?: string } | undefined;
     if (body?.message) {
       const enriched = new Error(body.message);
