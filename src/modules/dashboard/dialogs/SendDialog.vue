@@ -597,7 +597,7 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
 }
 
 /**
- * Build the transaction via Nexus backend (/v1/tx/build).
+ * Build the transaction via Nexus backend (/api/tx/build).
  */
 async function buildTx(options?: { selectAll?: boolean }) {
   const allValid = recipients.value.every((r: SendRecipient) =>
@@ -700,7 +700,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
     return;
   }
 
-  // ADA max: ask Nexus to compute precisely via /v1/tx/max-ada.
+  // ADA max: ask Nexus to compute precisely via /api/tx/max-ada.
   // All outputs are sent — the MAX recipient has lovelace="0", Nexus maximizes it.
   // Other recipients' ADA + tokens are subtracted automatically by Nexus.
 
@@ -736,7 +736,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
   };
 
   try {
-    // Step 1: get the max amount preview from /v1/tx/max-ada (for UI display)
+    // Step 1: get the max amount preview from /api/tx/max-ada (for UI display)
     const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network);
     const maxLovelace = BigInt(maxResult.max_lovelace);
     const changeMinUtxo = BigInt(maxResult.change_min_utxo);
@@ -810,7 +810,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
     try {
       await tryBuild();
     } catch (buildErr) {
-      // Nexus sometimes disagrees with /v1/tx/max-ada about change min-UTxO
+      // Nexus sometimes disagrees with /api/tx/max-ada about change min-UTxO
       // when native tokens remain in change — parse the shortage and retry with
       // an explicit reduced lovelace so build accepts it.
       const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
@@ -834,7 +834,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
       }
     }
   } catch (err) {
-    debugLog('setMax: /v1/tx/max-ada failed:', err);
+    debugLog('setMax: /api/tx/max-ada failed:', err);
   }
 
   isCalculatingMax.value = false;

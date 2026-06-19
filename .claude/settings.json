@@ -3,5 +3,101 @@
     "frontend-design@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true
+  },
+  "allowedHttpHookUrls": [
+    "https://agents.adlabs.dev/*"
+  ],
+  "httpHookAllowedEnvVars": [
+    "ORCH_TOKEN"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://agents.adlabs.dev/hooks/session-start",
+            "timeout": 30,
+            "headers": {
+              "Authorization": "Bearer $ORCH_TOKEN"
+            },
+            "allowedEnvVars": [
+              "ORCH_TOKEN"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://agents.adlabs.dev/hooks/pre-tool-use",
+            "timeout": 30,
+            "headers": {
+              "Authorization": "Bearer $ORCH_TOKEN"
+            },
+            "allowedEnvVars": [
+              "ORCH_TOKEN"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://agents.adlabs.dev/hooks/post-tool-use",
+            "timeout": 30,
+            "headers": {
+              "Authorization": "Bearer $ORCH_TOKEN"
+            },
+            "allowedEnvVars": [
+              "ORCH_TOKEN"
+            ]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://agents.adlabs.dev/hooks/stop",
+            "timeout": 30,
+            "headers": {
+              "Authorization": "Bearer $ORCH_TOKEN"
+            },
+            "allowedEnvVars": [
+              "ORCH_TOKEN"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://agents.adlabs.dev/hooks/session-end",
+            "timeout": 30,
+            "headers": {
+              "Authorization": "Bearer $ORCH_TOKEN"
+            },
+            "allowedEnvVars": [
+              "ORCH_TOKEN"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

@@ -286,6 +286,10 @@ function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
 
 const processedDomains: Set<string> = new Set<string>();
 
+// Own/trusted domains — registrable domain (tldts getDomain), covers all subdomains.
+// Always approved: skip the urlScan blacklist check.
+const TRUSTED_DOMAINS: Set<string> = new Set<string>(['gerowallet.io']);
+
 chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
   const domains = result['processedDomains'] || [];
   domains.forEach((domain: string) => processedDomains.add(domain));
@@ -426,6 +430,11 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
     const origin = url.origin;
     const domain = getDomain(url.hostname);
     if (!domain) {
+      return;
+    }
+
+    // Own/trusted domain — always approved, skip blacklist scan.
+    if (TRUSTED_DOMAINS.has(domain)) {
       return;
     }
 

@@ -786,3 +786,106 @@ export interface UserVaultPosition {
   /** String-encoded decimal */
   pnl: string;
 }
+
+// ---------------------------------------------------------------------------
+// Math layer helpers (added for the Strike parity sprint)
+// ---------------------------------------------------------------------------
+
+/**
+ * Numeric form of {@link MarginTier} used by the math layer
+ * (`src/modules/market/math/*`). Strike returns string-encoded decimals
+ * for these fields; convert once at the boundary so per-keystroke math
+ * stays cheap.
+ */
+export interface MarginTierNumeric {
+  max_notional: number;
+  max_leverage: number;
+  maintenance_margin_rate: number;
+  maintenance_amount: number;
+}
+
+// ---------------------------------------------------------------------------
+// Algo API — TWAP strategies
+// (POST/GET /v2/algo/twap, GET/DELETE /v2/algo/twap/{id})
+// ---------------------------------------------------------------------------
+
+export type TwapSide = 'BUY' | 'SELL';
+
+export type TwapStatus =
+  | 'pending'
+  | 'active'
+  | 'cancelling'
+  | 'completed'
+  | 'cancelled'
+  | 'expired'
+  | 'failed'
+  | 'liquidated';
+
+export type TwapListStatusFilter = 'active' | 'all' | TwapStatus;
+
+export interface CreateTwapRequest {
+  symbol: string;
+  side: TwapSide;
+  /** Total quantity to execute, decimal string */
+  total_size: string;
+  /** Execution duration in seconds (300–86400) */
+  duration_sec: number;
+  /** Optional hard cap price; slices that would cross it are skipped */
+  limit_price?: string;
+  /** If true, slices can only reduce an existing position */
+  reduce_only?: boolean;
+  /** Enable time/size jitter to reduce predictability */
+  randomize?: boolean;
+}
+
+export interface CreateTwapResponse {
+  /** Unique strategy identifier (UUID v7) */
+  strategy_id: string;
+  /** Initial status (always "active") */
+  status: string;
+}
+
+export interface CancelTwapRequest {
+  /** Strategy ID (UUID) */
+  id: string;
+}
+
+export interface CancelTwapResponse {
+  strategy_id: string;
+  /** Status after cancellation request (always "cancelling") */
+  status: string;
+}
+
+export interface TwapStrategyView {
+  strategy_id: string;
+  account_id: string;
+  /** Trading pair symbol (per spec field name `market`) */
+  market: string;
+  status: TwapStatus;
+  side: TwapSide;
+  /** String-encoded decimal */
+  total_size: string;
+  /** String-encoded decimal */
+  filled_size: string;
+  duration_sec: number;
+  slices_fired: number;
+  nominal_slices: number;
+  /** Unix ms */
+  created_at_ms: number;
+  /** Unix ms */
+  updated_at_ms: number;
+  /** Unix ms; null while active */
+  completed_at_ms: number | null;
+  last_error: string;
+}
+
+/** Convenience alias for TWAP order objects in UI code. */
+export type TwapOrder = TwapStrategyView;
+
+export interface TwapListResponse {
+  strategies: TwapStrategyView[];
+}
+
+export interface ListTwapParams {
+  status?: TwapListStatusFilter;
+}

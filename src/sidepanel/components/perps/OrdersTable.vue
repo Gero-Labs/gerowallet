@@ -87,23 +87,114 @@
         </div>
       </div>
     </div>
+
+    <!-- ── TWAP / Algorithmic section (additive) ─────────────────────────── -->
+    <div v-if="showTwapSection" class="ot-twap-section">
+      <div class="ot-header">
+        <span class="ot-title">
+          {{ $t('perps.algo.activeStrategies') }}
+          <span v-if="twapOrders.length" class="ot-count">{{ twapOrders.length }}</span>
+        </span>
+      </div>
+
+      <div v-if="!twapOrders.length" class="ot-empty">
+        <v-icon size="24" class="ot-empty-icon">mdi-clock-outline</v-icon>
+        <span class="ot-empty-text">{{ $t('perps.algo.noStrategies') }}</span>
+      </div>
+
+      <div v-else class="ot-list">
+        <div
+          v-for="strat in twapOrders"
+          :key="strat.strategy_id"
+          class="ot-card"
+        >
+          <div class="ot-card-header">
+            <div class="ot-left">
+              <span class="ot-badge type--tp">{{ $t('perps.algo.twap') }}</span>
+              <span
+                class="ot-badge"
+                :class="strat.side === 'BUY' ? 'badge--buy' : 'badge--sell'"
+              >
+                {{ strat.side === 'BUY' ? $t('perps.algo.buy') : $t('perps.algo.sell') }}
+              </span>
+              <span class="ot-symbol">{{ strat.market }}</span>
+            </div>
+            <button
+              v-if="strat.status === 'active' || strat.status === 'pending'"
+              class="ot-cancel-btn"
+              :title="$t('perps.algo.cancelStrategy')"
+              @click="$emit('cancel-twap', strat.strategy_id)"
+            >
+              <v-icon size="14">mdi-close</v-icon>
+            </button>
+          </div>
+
+          <div class="ot-fields-row">
+            <div class="ot-field">
+              <span class="ot-field-label">{{ $t('perps.algo.totalSize') }}</span>
+              <span class="ot-field-value">{{ formatNum(strat.total_size) }}</span>
+            </div>
+            <div class="ot-field ot-field--center">
+              <span class="ot-field-label">{{ $t('perps.algo.filled') }}</span>
+              <span class="ot-field-value">{{ formatNum(strat.filled_size) }}</span>
+            </div>
+            <div class="ot-field ot-field--right">
+              <span class="ot-field-label">{{ $t('perps.algo.slices') }}</span>
+              <span class="ot-field-value">
+                {{ strat.slices_fired }}/{{ strat.nominal_slices || '—' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="ot-fill-track">
+            <div
+              class="ot-fill-bar"
+              :style="{ width: twapFillPct(strat) + '%' }"
+            />
+          </div>
+
+          <div class="ot-status-row">
+            <span class="ot-status-chip" :class="twapStatusClass(strat.status)">
+              {{ twapStatusLabel(strat.status) }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { Order, OrderType, OrderStatus } from '@/api/strike-v2.types';
+import { computed } from 'vue';
+import i18n from '@/plugins/i18n';
+import type {
+  Order,
+  OrderType,
+  OrderStatus,
+  TwapOrder,
+  TwapStatus,
+} from '@/api/strike-v2.types';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   orders: Order[];
   loading?: boolean;
+  twapOrders?: TwapOrder[];
+  showTwap?: boolean;
 }>(), {
   loading: false,
+  twapOrders: () => [] as TwapOrder[],
+  showTwap: false,
 });
 
 defineEmits<{
   (e: 'cancel-order', orderId: string, symbol: string): void;
   (e: 'cancel-all'): void;
+  (e: 'cancel-twap', strategyId: string): void;
 }>();
+
+const showTwapSection = computed<boolean>(() => {
+  return props.showTwap || (props.twapOrders?.length ?? 0) > 0;
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +247,45 @@ function statusClass(status: OrderStatus): string {
     none: 'status--canceled',
   };
   return map[status] ?? '';
+}
+
+// ── TWAP helpers ────────────────────────────────────────────────────────────
+
+function twapFillPct(strat: TwapOrder): number {
+  const total = parseFloat(strat.total_size ?? '0');
+  const filled = parseFloat(strat.filled_size ?? '0');
+  if (!total) return 0;
+  return Math.min((filled / total) * 100, 100);
+}
+
+const TWAP_STATUS_LABEL: Record<TwapStatus, string> = {
+  pending: 'perps.algo.statusPending',
+  active: 'perps.algo.statusActive',
+  cancelling: 'perps.algo.statusCancelling',
+  completed: 'perps.algo.statusCompleted',
+  cancelled: 'perps.algo.statusCancelled',
+  expired: 'perps.algo.statusExpired',
+  failed: 'perps.algo.statusFailed',
+  liquidated: 'perps.algo.statusLiquidated',
+};
+
+function twapStatusLabel(status: TwapStatus): string {
+  const key = TWAP_STATUS_LABEL[status];
+  return key ? (i18n.t(key) as string) : status;
+}
+
+function twapStatusClass(status: TwapStatus): string {
+  switch (status) {
+    case 'active':
+    case 'pending':
+      return 'status--open';
+    case 'cancelling':
+      return 'status--pending';
+    case 'completed':
+      return 'status--filled';
+    default:
+      return 'status--canceled';
+  }
 }
 </script>
 
@@ -430,5 +560,15 @@ function statusClass(status: OrderStatus): string {
 .status--canceled {
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.35);
+}
+
+/* ── TWAP section ── */
+.ot-twap-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

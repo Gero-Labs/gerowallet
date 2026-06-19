@@ -13,7 +13,29 @@
 
       <!-- Description -->
       <div class="onboarding-desc">
-        {{ needsUnlock ? $t('perpetuals.unlockStrikeDescription') : $t('perpetuals.onboardingDescription') }}
+        {{ needsUnlock ? $t('perpetuals.unlockStrikeDescription') : $t('perps.connect.description') }}
+      </div>
+
+      <!-- In-progress step indicator -->
+      <div v-if="isLoading && connectStep !== 'idle'" class="onboarding-steps" aria-live="polite">
+        <div
+          v-for="(s, i) in stepLabels"
+          :key="s.id"
+          class="step-row"
+          :class="{ 'step-active': activeIndex === i, 'step-done': activeIndex > i }"
+        >
+          <v-icon v-if="activeIndex > i" size="14" color="#26FAB0" class="step-icon">mdi-check-circle</v-icon>
+          <v-progress-circular
+            v-else-if="activeIndex === i"
+            indeterminate
+            size="14"
+            width="2"
+            color="#00c7f3"
+            class="step-icon"
+          />
+          <v-icon v-else size="14" color="rgba(255,255,255,0.25)" class="step-icon">mdi-circle-outline</v-icon>
+          <span class="step-label">{{ s.label }}</span>
+        </div>
       </div>
 
       <!-- Error -->
@@ -55,7 +77,7 @@
         @keyup.enter="onSubmit()"
       />
 
-      <!-- Action button: Unlock if encrypted blob exists, otherwise Generate -->
+      <!-- Action button: Unlock if encrypted blob exists, otherwise Connect -->
       <v-btn
         v-if="!isConnected"
         block
@@ -65,8 +87,8 @@
         class="connect-btn"
         @click="onSubmit()"
       >
-        <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-key-variant' }}</v-icon>
-        {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perpetuals.generateApiKeys') }}
+        <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-link-variant' }}</v-icon>
+        {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta') }}
       </v-btn>
 
       <template v-else>
@@ -92,10 +114,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
+import i18n from '@/plugins/i18n';
 
 const emit = defineEmits<{
   (e: 'connected'): void;
 }>();
+
+const t = (key: string): string => i18n.t(key) as string;
 
 const {
   isConnected,
@@ -103,9 +128,10 @@ const {
   isLoading,
   publicKey,
   error,
+  connectStep,
   checkConnection,
   unlock,
-  generateAndConnect,
+  connectWithWallet,
   disconnect,
 } = useStrikeOnboarding();
 
@@ -120,11 +146,29 @@ const truncatedKey = computed(() => {
   return `${key.slice(0, 10)}...${key.slice(-8)}`;
 });
 
+// Step indicator — three logical phases visible to the user. The composable's
+// internal 'finalizing' phase is folded into 'verifying' for UX simplicity.
+const stepLabels = computed(() => [
+  { id: 'requesting', label: t('perps.connect.stepRequesting') },
+  { id: 'awaitingSignature', label: t('perps.connect.stepSigning') },
+  { id: 'verifying', label: t('perps.connect.stepVerifying') },
+]);
+
+const activeIndex = computed(() => {
+  switch (connectStep.value) {
+    case 'requesting': return 0;
+    case 'awaitingSignature': return 1;
+    case 'verifying':
+    case 'finalizing': return 2;
+    default: return -1;
+  }
+});
+
 async function onSubmit() {
   if (!password.value) return;
   const ok = needsUnlock.value
     ? await unlock(password.value)
-    : await generateAndConnect(password.value);
+    : await connectWithWallet(password.value);
   if (ok) password.value = '';
 }
 
@@ -216,6 +260,42 @@ watch(isConnected, (val) => {
   color: rgba(255, 255, 255, 0.5);
   text-align: center;
   line-height: 1.55;
+}
+
+.onboarding-steps {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 199, 243, 0.04);
+  border: 1px solid rgba(0, 199, 243, 0.18);
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  transition: color 0.2s ease;
+}
+
+.step-row.step-active {
+  color: #ffffff;
+}
+
+.step-row.step-done {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.step-icon {
+  flex-shrink: 0;
+}
+
+.step-label {
+  letter-spacing: 0.01em;
 }
 
 .onboarding-error {

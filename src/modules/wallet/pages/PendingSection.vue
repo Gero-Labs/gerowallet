@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
 import cardStore from '@/stores/modules/card';
@@ -20,6 +20,44 @@ const isCardRejected = computed(() => {
     return status === 'rejected' || status === 'REJECTED';
   });
 });
+
+// Poll KYC status every 15 seconds (between 10-20 as requested)
+let kycPollInterval: ReturnType<typeof setInterval> | null = null;
+let isPollInFlight = false;
+
+function stopKYCPolling() {
+  if (kycPollInterval) {
+    clearInterval(kycPollInterval);
+    kycPollInterval = null;
+  }
+}
+
+async function pollKYCStatus() {
+  // Skip if a previous request is still in flight (avoid stacking on slow networks)
+  if (isPollInFlight) return;
+  // Once verified, the page refreshes via wallet status management — stop polling
+  if (kycStatus.value === 'verified') {
+    stopKYCPolling();
+    return;
+  }
+  isPollInFlight = true;
+  try {
+    await cardStore.fetchUserKYCStatus();
+  } catch {
+    // Silent error handling - don't interrupt user experience
+  } finally {
+    isPollInFlight = false;
+  }
+}
+
+onMounted(() => {
+  // Start polling KYC status every 15 seconds
+  kycPollInterval = setInterval(pollKYCStatus, 15000);
+  // Also poll immediately on mount
+  pollKYCStatus();
+});
+
+onUnmounted(stopKYCPolling);
 
 async function handleLogout() {
   try {

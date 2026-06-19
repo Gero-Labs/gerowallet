@@ -11,7 +11,17 @@ import { debugLog } from '@/utils/debug';
 type StoreUpdateMessage = {
   type: 'STORE_UPDATE';
   storeName: string;
-  updates: Record<string, any>;
+  updates: Record<string, unknown>;
+  timestamp: number;
+};
+
+type StoreUpdateChunkMessage = {
+  type: 'STORE_UPDATE_CHUNK';
+  storeName: string;
+  updateId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  data: string;
   timestamp: number;
 };
 
@@ -20,9 +30,16 @@ type StoreSubscribeMessage = {
   storeName: string;
 };
 
-type Message = StoreUpdateMessage | StoreSubscribeMessage;
+type Message = StoreUpdateMessage | StoreUpdateChunkMessage | StoreSubscribeMessage;
 
-type StoreSubscriber = (updates: Record<string, any>) => void;
+type ChunkBuffer = {
+  storeName: string;
+  totalChunks: number;
+  received: number;
+  parts: string[];
+};
+
+type StoreSubscriber = (updates: Record<string, unknown>) => void;
 
 class StoreMessagingService {
   private port: chrome.runtime.Port | null = null;
@@ -32,6 +49,7 @@ class StoreMessagingService {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000; // Start with 1 second
   private reconnectTimeouts = new Set<NodeJS.Timeout>(); // Track reconnect timeouts
+  private chunkBuffers = new Map<string, ChunkBuffer>();
 
   constructor() {
     // Auto-initialize on construction - don't await to avoid blocking
@@ -87,6 +105,8 @@ class StoreMessagingService {
         this.port.onDisconnect.addListener(() => {
           debugLog('📡 Store messaging disconnected');
           this.port = null;
+          // Drop any partial chunks — sender will resend fresh on reconnect.
+          this.chunkBuffers.clear();
 
           // Attempt to reconnect with exponential backoff
           this.scheduleReconnect();
@@ -152,6 +172,41 @@ class StoreMessagingService {
       case 'STORE_UPDATE':
         this.notifySubscribers(message.storeName, message.updates);
         break;
+      case 'STORE_UPDATE_CHUNK':
+        this.handleChunk(message);
+        break;
+    }
+  }
+
+  /**
+   * Reassemble a chunked store update. Chrome runtime port messages are
+   * delivered in order on a single channel, so we just append by index.
+   */
+  private handleChunk(message: StoreUpdateChunkMessage) {
+    let buffer = this.chunkBuffers.get(message.updateId);
+    if (!buffer) {
+      buffer = {
+        storeName: message.storeName,
+        totalChunks: message.totalChunks,
+        received: 0,
+        parts: new Array(message.totalChunks),
+      };
+      this.chunkBuffers.set(message.updateId, buffer);
+    }
+
+    if (buffer.parts[message.chunkIndex] === undefined) {
+      buffer.parts[message.chunkIndex] = message.data;
+      buffer.received += 1;
+    }
+
+    if (buffer.received < buffer.totalChunks) return;
+
+    this.chunkBuffers.delete(message.updateId);
+    try {
+      const updates = JSON.parse(buffer.parts.join(''));
+      this.notifySubscribers(buffer.storeName, updates);
+    } catch (error) {
+      console.error(`Failed to reassemble chunked update for ${buffer.storeName}:`, error);
     }
   }
 
@@ -159,7 +214,7 @@ class StoreMessagingService {
   /**
    * Notify all subscribers of a store update
    */
-  private notifySubscribers(storeName: string, updates: Record<string, any>) {
+  private notifySubscribers(storeName: string, updates: Record<string, unknown>) {
     const storeSubscribers = this.subscribers.get(storeName);
     if (storeSubscribers) {
       storeSubscribers.forEach(callback => {
@@ -257,6 +312,7 @@ class StoreMessagingService {
     // Clear all subscribers
     this.subscribers.clear();
     this.subscribedStores.clear();
+    this.chunkBuffers.clear();
 
     // Reset connection state
     this.reconnectAttempts = 0;

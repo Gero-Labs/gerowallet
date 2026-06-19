@@ -29,6 +29,7 @@
         :key="filter.id"
         class="chip"
         :class="{ active: activeFilter === filter.id }"
+        :data-filter="filter.id"
         @click="selectFilter(filter.id)"
       >
         {{ filter.label }}
@@ -212,7 +213,6 @@ import { useMarketData, type MarketToken } from '@/modules/market/composables/us
 import { walletStore } from '@/stores/walletStore';
 import { getBalance } from '@/chrome/serialization';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
-import { debugLog } from '@/utils/debug';
 import BottomSheet from '../components/BottomSheet.vue';
 import { useChainContext } from '../composables/useChainContext';
 
@@ -265,6 +265,15 @@ function onChipPointerUp(e: PointerEvent) {
   if (!chipDragging) return;
   chipDragging = false;
   chipsRef.value?.releasePointerCapture(e.pointerId);
+
+  // setPointerCapture on the container retargets the synthesized click away
+  // from the child <button>, so the @click handler never fires. If this gesture
+  // was a tap (not a drag), resolve the chip under the pointer and fire it here.
+  if (chipDragged) return;
+  const target = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+  const chip = target?.closest('.chip') as HTMLElement | null;
+  const id = chip?.dataset['filter'];
+  if (id) selectFilter(id);
 }
 
 const filters = computed(() => [
@@ -354,9 +363,7 @@ function getTokenImg(token: any): string {
 }
 
 function selectFilter(id: string) {
-  debugLog('selectFilter called:', id, 'chipDragged:', chipDragged, 'current:', activeFilter.value);
   activeFilter.value = id;
-  debugLog('activeFilter now:', activeFilter.value, 'displayTokens count:', displayTokens.value.length);
 }
 
 function retry() {

@@ -471,7 +471,7 @@ export async function getCollateral(
   // big enough for collateral, so ask Nexus to lend one of the pool UTxOs at
   // its enterprise address. The returned ref points to a real on-chain UTxO
   // we don't control; on signTx the background detects the pool address and
-  // calls /v1/collateral/cosign for the witness.
+  // calls /api/collateral/cosign for the witness.
   try {
     const lent = await nexusCollateralApi.lend();
     const utxoCbor = buildNexusUtxoCbor(lent);
