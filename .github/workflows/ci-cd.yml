@@ -29,8 +29,71 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Materialize .env.production from repo Variables/Secrets so the shipped
+      # build's config comes from ONE controlled source instead of a
+      # per-developer gitignored .env.production (which drifts — a stale machine
+      # would ship e.g. the wrong VITE_NEXUS_URL). Values are passed through env:
+      # and written to the file via $VAR (never interpolated into the shell), so
+      # a value cannot inject commands. Registered secrets are masked in logs and
+      # only written to the file, never echoed.
+      - name: Write production env
+        env:
+          VITE_NEXUS_URL: ${{ vars.VITE_NEXUS_URL }}
+          VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL }}
+          VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
+          VITE_ADA_HANDLE_BASE_URL: ${{ vars.VITE_ADA_HANDLE_BASE_URL }}
+          VITE_FLAGS_BASE_URL: ${{ vars.VITE_FLAGS_BASE_URL }}
+          VITE_SYNC_WS_URL: ${{ vars.VITE_SYNC_WS_URL }}
+          VITE_KAISEREX_OAUTH_URL: ${{ vars.VITE_KAISEREX_OAUTH_URL }}
+          VITE_KRAKEN_API_URL: ${{ vars.VITE_KRAKEN_API_URL }}
+          VITE_KRAKEN_WS_URL: ${{ vars.VITE_KRAKEN_WS_URL }}
+          VITE_ZKFOLD_API_URL: ${{ vars.VITE_ZKFOLD_API_URL }}
+          VITE_ZKFOLD_PROVER_URL: ${{ vars.VITE_ZKFOLD_PROVER_URL }}
+          VITE_CASHBACK_ENVIRONMENT: ${{ vars.VITE_CASHBACK_ENVIRONMENT }}
+          VITE_CASHBACK_IDENTIFIER: ${{ vars.VITE_CASHBACK_IDENTIFIER }}
+          VITE_IS_BETA: ${{ vars.VITE_IS_BETA }}
+          VITE_DEBUG_STORES: ${{ vars.VITE_DEBUG_STORES }}
+          VITE_USE_MOCK_PROOF: ${{ vars.VITE_USE_MOCK_PROOF }}
+          VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
+          VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
+          VITE_ABLY_API_KEY: ${{ secrets.VITE_ABLY_API_KEY }}
+          VITE_ZKFOLD_API_KEY: ${{ secrets.VITE_ZKFOLD_API_KEY }}
+        run: |
+          {
+            echo "VITE_NEXUS_URL=$VITE_NEXUS_URL"
+            echo "VITE_BACKEND_URL=$VITE_BACKEND_URL"
+            echo "VITE_APP_NAME=$VITE_APP_NAME"
+            echo "VITE_ADA_HANDLE_BASE_URL=$VITE_ADA_HANDLE_BASE_URL"
+            echo "VITE_FLAGS_BASE_URL=$VITE_FLAGS_BASE_URL"
+            echo "VITE_SYNC_WS_URL=$VITE_SYNC_WS_URL"
+            echo "VITE_KAISEREX_OAUTH_URL=$VITE_KAISEREX_OAUTH_URL"
+            echo "VITE_KRAKEN_API_URL=$VITE_KRAKEN_API_URL"
+            echo "VITE_KRAKEN_WS_URL=$VITE_KRAKEN_WS_URL"
+            echo "VITE_ZKFOLD_API_URL=$VITE_ZKFOLD_API_URL"
+            echo "VITE_ZKFOLD_PROVER_URL=$VITE_ZKFOLD_PROVER_URL"
+            echo "VITE_CASHBACK_ENVIRONMENT=$VITE_CASHBACK_ENVIRONMENT"
+            echo "VITE_CASHBACK_IDENTIFIER=$VITE_CASHBACK_IDENTIFIER"
+            echo "VITE_IS_BETA=$VITE_IS_BETA"
+            echo "VITE_DEBUG_STORES=$VITE_DEBUG_STORES"
+            echo "VITE_USE_MOCK_PROOF=$VITE_USE_MOCK_PROOF"
+            echo "VITE_MOONPAY_API_KEY=$VITE_MOONPAY_API_KEY"
+            echo "VITE_GUARDARIAN_API_KEY=$VITE_GUARDARIAN_API_KEY"
+            echo "VITE_ABLY_API_KEY=$VITE_ABLY_API_KEY"
+            echo "VITE_ZKFOLD_API_KEY=$VITE_ZKFOLD_API_KEY"
+          } > .env.production
+          echo "Wrote .env.production ($(grep -c '^VITE_' .env.production) vars)"
+
       - name: Build Chrome Extension
         run: npm run build
+
+      # Upload the built extension (./extension is gitignored) so a release can
+      # be downloaded + uploaded to the Chrome Web Store from a single CI source.
+      - name: Upload extension build
+        uses: actions/upload-artifact@v4
+        with:
+          name: gero-extension-${{ github.sha }}
+          path: extension/
+          retention-days: 14
 
   publish:
     needs: build
