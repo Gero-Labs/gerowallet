@@ -23,6 +23,11 @@
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
+import {
+  loadWalletState,
+  saveWalletState,
+  clearWalletState,
+} from '@/chains/midnight/midnightWalletStatePersistence';
 
 export interface BuildAndSignShieldedTransferOutput {
   /** Hex-encoded shielded address (`mn_shield-addr_…`) of the recipient. */
@@ -84,17 +89,20 @@ export async function buildAndSignShieldedTransfer(
     import('@midnight-ntwrk/wallet-sdk-abstractions'),
     import('@midnight-ntwrk/wallet-sdk-address-format'),
   ]);
+  type ShieldedWalletInstance = {
+    start: (keys: ledger.ZswapSecretKeys) => Promise<void>;
+    waitForSyncedState: (allowedGap?: bigint) => Promise<unknown>;
+    transferTransaction: (
+      keys: ledger.ZswapSecretKeys,
+      outputs: ReadonlyArray<unknown>,
+    ) => Promise<ledger.UnprovenTransaction>;
+    serializeState: () => Promise<string>;
+    stop: () => Promise<void>;
+  };
   const { ShieldedWallet } = shieldedMod as unknown as {
     ShieldedWallet: (config: unknown) => {
-      startWithSecretKeys: (keys: ledger.ZswapSecretKeys) => {
-        start: (keys: ledger.ZswapSecretKeys) => Promise<void>;
-        waitForSyncedState: (allowedGap?: bigint) => Promise<unknown>;
-        transferTransaction: (
-          keys: ledger.ZswapSecretKeys,
-          outputs: ReadonlyArray<unknown>,
-        ) => Promise<ledger.UnprovenTransaction>;
-        stop: () => Promise<void>;
-      };
+      startWithSecretKeys: (keys: ledger.ZswapSecretKeys) => ShieldedWalletInstance;
+      restore: (serializedState: string) => ShieldedWalletInstance;
     };
   };
   const { ZswapSecretKeys } = ledgerMod;
@@ -135,7 +143,18 @@ export async function buildAndSignShieldedTransfer(
       txHistoryStorage,
     });
 
-    shieldedWallet = await startShieldedWallet(shieldedBuilder, zswapKeys);
+    // Warm-restart: load this wallet's persisted shielded SDK state (keyed by
+    // network + zswap seed hash). Shielded cold sync is the slowest path in
+    // the wallet (it walks every shielded tx the user can decrypt + maintains
+    // the commitment tree), so restoring from the saved appliedIndex cursor is
+    // the single biggest send-latency win. Miss / stale / corrupt → cold init.
+    const persistedShieldedState = await loadWalletState(
+      args.sdkNetworkId, 'shielded', args.zswapSecretKeySeed,
+    );
+    shieldedWallet = await startShieldedWallet(
+      shieldedBuilder, zswapKeys, persistedShieldedState,
+      args.sdkNetworkId, args.zswapSecretKeySeed,
+    );
     debugLog('🌙 shielded SDK: started, waiting for synced state');
 
     // Cold sync: walk the full shielded chain. Slow on preview/mainnet —
@@ -166,6 +185,17 @@ export async function buildAndSignShieldedTransfer(
       debugLog(`🌙 shielded SDK: synced with gap (${Date.now() - syncStartMs}ms)`);
     }
 
+    // Persist the now-synced shielded state so the next send restores warm.
+    // Best-effort; a save failure only costs a cold sync next time. Saved
+    // before transferTransaction so we keep the (expensive) sync progress
+    // even if the transfer build throws.
+    try {
+      const serialized = await shieldedWallet.serializeState();
+      await saveWalletState(args.sdkNetworkId, 'shielded', args.zswapSecretKeySeed, serialized);
+    } catch (e) {
+      debugLog('🌙 shielded state persist failed (non-fatal)', e);
+    }
+
     // Map our wire outputs into the SDK's TokenTransfer shape.
     const sdkOutputs = args.outputs.map((o) => {
       const tokenType = o.tokenType === 'native' ? NIGHT_RAW_TOKEN_TYPE : o.tokenType;
@@ -189,18 +219,48 @@ export async function buildAndSignShieldedTransfer(
   }
 }
 
-async function startShieldedWallet<W extends {
-  startWithSecretKeys: (keys: ledger.ZswapSecretKeys) => {
+async function startShieldedWallet<
+  I extends {
     start: (keys: ledger.ZswapSecretKeys) => Promise<void>;
     waitForSyncedState: (allowedGap?: bigint) => Promise<unknown>;
     transferTransaction: (
       keys: ledger.ZswapSecretKeys,
       outputs: ReadonlyArray<unknown>,
     ) => Promise<ledger.UnprovenTransaction>;
+    serializeState: () => Promise<string>;
     stop: () => Promise<void>;
-  };
-}>(builder: W, keys: ledger.ZswapSecretKeys) {
-  const wallet = builder.startWithSecretKeys(keys);
+  },
+  W extends {
+    startWithSecretKeys: (keys: ledger.ZswapSecretKeys) => I;
+    restore: (serializedState: string) => I;
+  },
+>(
+  builder: W,
+  keys: ledger.ZswapSecretKeys,
+  persistedState?: string | null,
+  network?: string,
+  identitySeed?: Uint8Array,
+): Promise<I> {
+  // Warm restore when we have persisted state; else cold init. Both return
+  // the instance and then need start(keys) to open the WS subscription —
+  // restore resumes from the saved cursor, cold init from genesis. If restore
+  // throws (corrupt / SDK-upgrade-incompatible blob), drop the bad state and
+  // cold-init this run so we self-heal rather than failing every send.
+  let wallet: I;
+  if (persistedState) {
+    try {
+      wallet = builder.restore(persistedState);
+      debugLog('🌙 shielded wallet: restored from persisted state (warm)');
+    } catch (e) {
+      debugLog('🌙 shielded wallet: restore failed — clearing bad state, cold init', e);
+      if (network && identitySeed) {
+        try { await clearWalletState(network, 'shielded', identitySeed); } catch { /* swallow */ }
+      }
+      wallet = builder.startWithSecretKeys(keys);
+    }
+  } else {
+    wallet = builder.startWithSecretKeys(keys);
+  }
   await wallet.start(keys);
   return wallet;
 }
