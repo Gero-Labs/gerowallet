@@ -23,6 +23,11 @@
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
+import {
+  loadWalletState,
+  saveWalletState,
+  clearWalletState,
+} from '@/chains/midnight/midnightWalletStatePersistence';
 
 export interface BalanceAndSignUnshieldedTransferArgs {
   /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
@@ -133,10 +138,21 @@ export async function balanceAndSignUnshieldedTransfer(
       costParameters: { feeBlocksMargin: 1 },
     } as unknown as Parameters<typeof DustWallet>[0]);
 
+    // Warm-restart: load this dust wallet's persisted SDK state (keyed by
+    // network + dust seed hash). On a hit, the wallet resumes from its saved
+    // appliedIndex cursor instead of cold-syncing the indexer from genesis —
+    // turning a 30s-to-minutes wait into a short catch-up. On a miss / stale /
+    // corrupt blob, dustBuilderStart falls back to a cold startWithSecretKey.
+    const persistedDustState = await loadWalletState(
+      args.sdkNetworkId, 'dust', args.dustSecretSeed,
+    );
     dustWallet = await dustBuilderStart(
       dustBuilder,
       dustSk,
       LedgerParameters.initialParameters().dust,
+      persistedDustState,
+      args.sdkNetworkId,
+      args.dustSecretSeed,
     );
     // shareReplay({refCount:true}) on `state` requires an active subscriber
     // to drive sync; without this `waitForSyncedState` can hang. We use the
@@ -255,6 +271,17 @@ export async function balanceAndSignUnshieldedTransfer(
       clearInterval(heartbeatHandle);
     }
 
+    // Persist the now-synced dust state so the NEXT send restores warm
+    // instead of cold-syncing again. Best-effort: a save failure only costs
+    // a cold sync next time. Done before the fee-balance step so even if
+    // balancing throws we keep the sync progress we paid for.
+    try {
+      const serialized = await dustWallet.serializeState();
+      await saveWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed, serialized);
+    } catch (e) {
+      debugLog('🌙 dust state persist failed (non-fatal)', e);
+    }
+
     // ── Add DUST fee inputs (the step that needs the dust secret) ─
     // `dust.balanceTransactions` does NOT mutate or wrap the input tx — it
     // returns a SEPARATE dust-only fee tx with its own intent containing the
@@ -324,8 +351,31 @@ async function dustBuilderStart(
   builder: ReturnType<typeof import('@midnight-ntwrk/wallet-sdk-dust-wallet').DustWallet>,
   sk: ledger.DustSecretKey,
   dustParams: ledger.DustParameters,
+  persistedState?: string | null,
+  network?: string,
+  identitySeed?: Uint8Array,
 ) {
-  const w = builder.startWithSecretKey(sk, dustParams);
+  // Warm restore when we have persisted state; otherwise cold init. Both
+  // paths return the wallet instance and then need start(sk) to open the WS
+  // subscription — restore resumes from the saved appliedIndex cursor, cold
+  // init starts from genesis. If restore throws (corrupt / incompatible blob
+  // across an SDK upgrade), drop the bad state and cold-init this run so we
+  // self-heal instead of failing every send.
+  let w: ReturnType<typeof builder.startWithSecretKey>;
+  if (persistedState) {
+    try {
+      w = builder.restore(persistedState);
+      debugLog('🌙 dust wallet: restored from persisted state (warm)');
+    } catch (e) {
+      debugLog('🌙 dust wallet: restore failed — clearing bad state, cold init', e);
+      if (network && identitySeed) {
+        try { await clearWalletState(network, 'dust', identitySeed); } catch { /* swallow */ }
+      }
+      w = builder.startWithSecretKey(sk, dustParams);
+    }
+  } else {
+    w = builder.startWithSecretKey(sk, dustParams);
+  }
   await w.start(sk);
   return w;
 }
