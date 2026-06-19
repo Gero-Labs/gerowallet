@@ -16,11 +16,12 @@
 
       <div class="text-container">
         <div class="subtitle">{{ $t('welcome.yourNew') }}</div>
-        <div class="title">
-          <span class="title-regular">{{ $t('welcome.singlePaneOf') }}</span>
-          <span :class="['title-gradient', gradientClass]">&nbsp;{{ $t('welcome.glass') }}</span>
-        </div>
-        <NetworkSelector @network-changed="onNetworkChanged" />
+        <v-list-item>
+          <v-list-item-content>
+            <v-list-item-title class="title-regular">{{ $t('welcome.singlePaneOf') }}</v-list-item-title>
+            <v-list-item-subtitle :class="['title-gradient', gradientClass]">{{ $t('welcome.glass') }}</v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
 
         <GButton
           block
@@ -34,7 +35,7 @@
         <GoogleLogin :selected-network="selectedNetwork" />
 
         <div class="zkfold-credit">
-          <span>{{ $t('welcome.poweredBy') }}</span>
+          <span>{{ $t('common.poweredBy') }}</span>
           <v-img :src="zkFold" contain class="zkfold-logo"></v-img>
         </div>
       </div>
@@ -46,26 +47,20 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
-import NetworkSelector from '@/options/modules/navigation/components/NetworkSelector.vue';
 import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { NetworkInfo } from '@/utils/networks';
 
 const emits = defineEmits<{
-  (e: 'networkChanged', network: any): void;
   (e: 'createOrImportSeedPhrase'): void;
 }>();
 
 const props = defineProps<{
   selectedNetwork: NetworkInfo;
-  createOrImportSeedPhrase: any;
+  createOrImportSeedPhrase: boolean;
 }>();
 
 const isApex = ref(false);
-
-const onNetworkChanged = (network: any) => {
-    emits('networkChanged', network);
-};
 
 const enableCreateOrImportSeedPhrase = (): void => {
     emits('createOrImportSeedPhrase');
@@ -137,9 +132,10 @@ const gradientClass = computed(() =>
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 18px;
   position: relative;
   z-index: 2;
+  max-width: 428px;
 }
 
 .logo-container {
@@ -152,11 +148,12 @@ const gradientClass = computed(() =>
 
 .text-container {
   width: 100%;
-  max-width: 360px;
+  max-width: 400px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  padding: 0 10px;
 }
 
 .subtitle {
@@ -167,22 +164,24 @@ const gradientClass = computed(() =>
 
 .title {
   font-size: 36px !important;
-  white-space: nowrap;
+  white-space: normal;
   margin-bottom: 20px;
-  line-height: 1 !important;
+  line-height: 1.2 !important;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .title-regular {
   font-weight: 400 !important;
   font-size: 36px !important;
-  line-height: 1 !important;
+  line-height: 1.2 !important;
   letter-spacing: 1.32px;
 }
 
 .title-gradient {
   font-weight: 700 !important;
   font-size: 36px !important;
-  line-height: 1 !important;
+  line-height: 1.2 !important;
   letter-spacing: 1.32px;
 }
 
@@ -223,5 +222,28 @@ const gradientClass = computed(() =>
   color: rgba(255, 255, 255, 0.7);
   position: relative;
   z-index: 2;
+}
+
+/* Responsive font sizing for longer text */
+@media (max-width: 1200px) {
+  .title {
+    font-size: 32px !important;
+  }
+
+  .title-regular,
+  .title-gradient {
+    font-size: 32px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .title {
+    font-size: 28px !important;
+  }
+
+  .title-regular,
+  .title-gradient {
+    font-size: 28px !important;
+  }
 }
 </style>

@@ -14,7 +14,7 @@
  */
 
 // Current app version - update this when releasing new features
-const APP_VERSION = '2.6.2';
+const APP_VERSION = '2.7.0';
 
 // Feature definitions - add new features here
 export interface FeatureDefinition {
@@ -31,12 +31,60 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.6.2',
     path: ['settings', 'security', 'lockSettings']
   },
+  // Settings > Profile > German Language
+  {
+    id: 'settings.profile.germanLanguage',
+    version: '2.6.3',
+    path: ['settings', 'profile', 'germanLanguage']
+  },
   // Navigation > Governance (example of new page in navigation menu)
   // {
   //   id: 'navigation.governance',
   //   version: '2.6.0',
   //   path: ['navigation', 'governance']
   // },
+  // Navigation > Pool Operator (SPO Management)
+  {
+    id: 'navigation.poolOperator',
+    version: '2.7.0',
+    path: ['navigation', 'poolOperator']
+  },
+  // Navigation > Market page
+  {
+    id: 'navigation.market',
+    version: '2.7.0',
+    path: ['navigation', 'market']
+  },
+  // Settings > Advanced > Default Extension Mode (Full/Mini Gero toggle)
+  {
+    id: 'settings.advanced.defaultExtensionMode',
+    version: '2.7.0',
+    path: ['settings', 'advanced', 'defaultExtensionMode']
+  },
+  // Transactions > UTxOs tab
+  {
+    id: 'transactions.utxos',
+    version: '2.7.0',
+    path: ['transactions', 'utxos']
+  },
+  // Settings > Profile > Profile Picture (upload / NFT picker)
+  {
+    id: 'settings.profile.profilePicture',
+    version: '2.7.0',
+    path: ['settings', 'profile', 'profilePicture']
+  },
+  // Settings > Collateral > Auto-detect status banner
+  {
+    id: 'settings.collateral.autoDetect',
+    version: '2.7.0',
+    path: ['settings', 'collateral', 'autoDetect']
+  },
+  // Settings > Advanced > Auto-withdraw staking rewards on every send
+  {
+    id: 'settings.advanced.autoWithdrawRewards',
+    version: '2.7.0',
+    path: ['settings', 'advanced', 'autoWithdrawRewards']
+  },
   // Add more features here as needed
 ];
 
@@ -54,17 +102,27 @@ interface FeatureNotificationStorage {
 function loadSeenFeatures(): Record<string, boolean> {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return {};
+    let seen: Record<string, boolean> = {};
 
-    const data: FeatureNotificationStorage = JSON.parse(stored);
-
-    // If stored version is different from current, reset (new version)
-    if (data.version !== APP_VERSION) {
-      console.log(`🔄 Version changed from ${data.version} to ${APP_VERSION}, resetting feature notifications`);
-      return {};
+    if (stored) {
+      const data: FeatureNotificationStorage = JSON.parse(stored);
+      if (data.version === APP_VERSION) {
+        return data.seenFeatures || {};
+      }
+      // Version changed — carry over previously seen features
+      seen = data.seenFeatures || {};
     }
 
-    return data.seenFeatures || {};
+    // Auto-mark features from older versions as seen (only current-version features should show as new)
+    for (const feature of FEATURE_DEFINITIONS) {
+      if (feature.version !== APP_VERSION && !seen[feature.id]) {
+        seen[feature.id] = true;
+      }
+    }
+
+    // Persist immediately so the upgrade logic only runs once
+    saveSeenFeatures(seen);
+    return seen;
   } catch (error) {
     console.error('Error loading feature notifications:', error);
     return {};
@@ -95,9 +153,10 @@ export function isFeatureNew(featureId: string): boolean {
   const feature = FEATURE_DEFINITIONS.find(f => f.id === featureId);
   if (!feature) return false;
 
-  // Feature is new if:
-  // 1. It exists in definitions
+  // Feature is new only if:
+  // 1. It was added in the current version
   // 2. It hasn't been marked as seen
+  if (feature.version !== APP_VERSION) return false;
   return !seenFeatures.value[featureId];
 }
 

@@ -133,16 +133,17 @@ export async function setWalletConfiguration(id: number, key: string, value) {
 
 export async function addOrUpdateContact(id: number, contact, address?: string) {
   const db: Dexie = await getDb(id);
+  const data = { address: contact.address, name: contact.name, handle: contact.handle || null };
   if (address) {
-    db.table('contacts').update(address, {address: contact.address, name: contact.name})
+    await db.table('contacts').update(address, data);
   } else {
-    db.table('contacts').put({address: contact.address, name: contact.name})
+    await db.table('contacts').put(data);
   }
 }
 
 export async function removeContact(id: number, address: string) {
   const db: Dexie = await getDb(id);
-  db.table('contacts').delete(address)
+  await db.table('contacts').delete(address);
 }
 
 export async function addConnectedDapp(walletId: number, domain: string) {

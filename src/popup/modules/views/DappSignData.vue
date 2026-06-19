@@ -230,7 +230,7 @@ const useSidePanel = computed(() => {
 // Check if wallet uses PRF encryption (PassKey)
 const isPrfWallet = computed(() => {
   return loggedWallet.value?.encryptionMethod === 'prf' ||
-         (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
+    (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
 });
 
 const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {

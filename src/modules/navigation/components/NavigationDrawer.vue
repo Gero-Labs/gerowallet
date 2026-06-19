@@ -41,21 +41,25 @@
           :to="item.link"
           v-show="item.enabled || item.soon"
           :disabled="item.soon || item.loading || item.underMaintenance"
-          :active-class="themeDark ? (isApex ? 'activePageDark apex' : 'activePageDark') : (isApex ? 'activePage apex' : 'activePage')"
+          :active-class="themeDark ? (isApex ? 'activePageDark apex' : isBitcoin ? 'activePageDark bitcoin' : 'activePageDark') : (isApex ? 'activePage apex' : isBitcoin ? 'activePage bitcoin' : 'activePage')"
           link
           class="menuItem"
           style="height: 40px"
           :key="index"
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
-            <v-img
-              width="18"
-              height="18"
-              :src="item.icon"
-              :alt="item.title"
-              contain
-              style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
-            />
+            <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
+              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="white">{{ item.icon }}</v-icon>
+              <v-img
+                v-else
+                width="18"
+                height="18"
+                :src="item.icon"
+                :alt="item.title"
+                contain
+                style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
+              />
+            </v-badge>
           </v-list-item-avatar>
 
           <v-list-item-content>
@@ -91,13 +95,13 @@
               x-small
               color="#FFD700"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
-            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> Maintenance</v-chip>
+            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
           </v-list-item-action>
           <v-list-item-action v-else-if="item.new">
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
-              color="primary"
+              color="geroButton"
               x-small
             >
               {{ $t('common.new') }}
@@ -144,12 +148,29 @@
       <v-list-item three-line class="px-0">
         <v-list-item-avatar style="margin: auto" class="mr-3" size="40">
           <v-img v-if="account" :src="avatar" />
-          <!-- Avatar change dialog commented out -->
         </v-list-item-avatar>
 
         <v-list-item-content class="py-0" style="align-self: initial">
-          <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account">
-            {{ account.name }}
+          <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account && !editingName">
+            <span
+              class="editable-name"
+              @click="startEditingName"
+              :title="t('settings.editWalletName')"
+            >{{ account.name }}<v-icon x-small class="ml-1 edit-icon">mdi-pencil</v-icon></span>
+          </v-list-item-title>
+          <v-list-item-title class="mb-0" style="font-size: 14px; display: flex; align-items: center;" v-if="account && editingName">
+            <input
+              ref="nameInput"
+              v-model="editNameValue"
+              class="name-edit-input"
+              maxlength="40"
+              @keydown.enter="saveWalletName"
+              @keydown.esc="cancelEditingName"
+              @blur="onNameInputBlur"
+            />
+            <v-btn icon x-small @mousedown.prevent="saveWalletName" :disabled="!isNameValid" color="success" class="ml-1" style="width: 16px; height: 16px;">
+              <v-icon style="font-size: 12px;">mdi-check</v-icon>
+            </v-btn>
           </v-list-item-title>
           <v-list-item-subtitle class="mb-0" style="font-size: 10px" v-if="account">
             {{ account.chain }}
@@ -187,7 +208,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
 import MusicStoreModule from '@/stores/musicStore'
@@ -195,6 +216,9 @@ import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
+import geroStoreDefault from '@/stores/geroStore';
+import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardStore from '@/stores/modules/card';
@@ -203,6 +227,7 @@ import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { debugLog } from '@/utils/debug';
+import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 
 interface NavigationItem {
   title?: string;
@@ -213,6 +238,7 @@ interface NavigationItem {
   enabled?: boolean;
   soon?: boolean;
   new?: boolean;
+  notificationDot?: boolean;
   underMaintenance?: boolean;
   loading?: boolean;
 }
@@ -222,6 +248,7 @@ type NavigationHrefItem = NavigationItem & { href: string };
 type NavigationHeaderItem = NavigationItem & { header: string };
 type NavigationItemUnion = NavigationLinkItem | NavigationHrefItem | NavigationHeaderItem;
 
+const { t } = useTranslation();
 const changeLogRef = ref(changeLog)
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
 // Define props and emit
@@ -267,9 +294,17 @@ const isApex = computed(() => {
     loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
+const isBitcoin = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.BITCOIN;
+});
+
 const items = computed((): NavigationItemUnion[] => {
   let isStakingEnabled = false;
-  if (loggedWallet.value?.baseAddress) {
+  // Only parse address for Cardano-based chains
+  if (loggedWallet.value?.baseAddress &&
+      (loggedWallet.value?.chain === Blockchain.CARDANO ||
+       loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+       loggedWallet.value?.chain === Blockchain.APEX_VECTOR)) {
     isStakingEnabled = Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !==
       Cardano.AddressType.EnterpriseScript
   }
@@ -292,27 +327,71 @@ const items = computed((): NavigationItemUnion[] => {
       underMaintenance: !isBlogEnabledByFeatureFlag.value,
     },
     { header: t('navigation.financialHub'), enabled: true },
-    { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
+    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
+    { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
     { title: t('navigation.multisig'), icon: assts.multisigTree, link: '/multisig', enabled: false }, // Disabled - under maintenance
     {
       title: t('navigation.geroCard'),
-      icon: assts.card,
+      icon: assts.cardIcon,
       link: '/card',
       enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
       new: true,
       underMaintenance: !isGeroCardEnabledByFeatureFlag.value,
       loading: loadingFFs.value
     },
+    {
+      title: t('navigation.goMining'),
+      icon: assts.gominingIcon,
+      link: '/gomining',
+      enabled: networks.resolveGoMiningSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      new: true,
+      underMaintenance: !isGoMiningEnabledByFeatureFlag.value,
+      loading: loadingFFs.value
+    },
+    {
+      title: t('navigation.staking'),
+      icon: assts.coinsStacked,
+      link: '/babylon',
+      enabled: networks.resolveBabylonSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      new: true,
+    },
+    {
+      title: t('navigation.ordinals'),
+      icon: 'mdi-image-multiple-outline',
+      link: '/ordinals',
+      enabled: networks.resolveOrdinalsSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      new: true,
+    },
+    {
+      title: t('navigation.thorchain'),
+      icon: 'mdi-swap-horizontal',
+      link: '/thorchain',
+      enabled: networks.resolveThorchainSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      new: true,
+    },
+    {
+      title: t('navigation.mempool'),
+      icon: 'mdi-database-clock',
+      link: '/mempool',
+      enabled: networks.resolveMempoolSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      new: true,
+    },
+    {
+      title: t('navigation.lightning'),
+      icon: 'mdi-lightning-bolt',
+      link: '/lightning',
+      enabled: networks.resolveLightningSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      new: true,
+    },
     { header: t('navigation.activitiesRewards'), enabled: hasActivitiesRewardsItems },
     { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
-    // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
-    { header: t('navigation.media'), enabled: musicPlaylist.value?.length > 0 },
-    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: musicPlaylist.value?.length > 0 },
+    { header: t('navigation.media'), enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
+    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
     // Uncomment to add more items:
     // { header: 'Tools' },
     // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
@@ -330,13 +409,16 @@ const loadingFFs = computed(() => {
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
 
-// Check if swap is enabled by LaunchDarkly feature flag
+// Check if Gero Card is enabled by feature flag
 const isGeroCardEnabledByFeatureFlag = computed(() => {
   return featureFlagsStore.isGeroCardEnabled();
 });
 
+const isGoMiningEnabledByFeatureFlag = computed(() => {
+  return featureFlagsStore.isGoMiningEnabled();
+});
+
 const isBlogEnabledByFeatureFlag = computed(() => {
-  console.log('isBlogEnabledByFeatureFlag:', featureFlagsStore.isBlogEnabled());
   return featureFlagsStore.isBlogEnabled();
 })
 
@@ -358,6 +440,48 @@ watch(() => breakpoint.mobile,
     }
   }
 )
+
+// Wallet name editing
+const { wallets } = toRefs(geroStore);
+const editingName = ref(false)
+const editNameValue = ref('')
+const nameInput = ref<HTMLInputElement | null>(null)
+
+const isNameValid = computed(() => {
+  const v = editNameValue.value.trim()
+  if (!v || v.length < 3 || v.length > 40) return false
+  if (v === account.value?.name) return false
+  const otherNames = Object.values(wallets.value)
+    .filter((w) => w.name !== account.value?.name)
+    .map((w) => w.name)
+  return !otherNames.includes(v)
+})
+
+function startEditingName() {
+  editNameValue.value = account.value?.name || ''
+  editingName.value = true
+  nextTick(() => {
+    nameInput.value?.focus()
+  })
+}
+
+function cancelEditingName() {
+  editingName.value = false
+}
+
+function onNameInputBlur() {
+  // Small delay so mousedown on check button fires first
+  setTimeout(() => { editingName.value = false }, 150)
+}
+
+function saveWalletName() {
+  if (!isNameValid.value) return
+  const newName = editNameValue.value.trim()
+  geroStoreDefault.setWalletName(loggedWallet.value.id, newName)
+  loggedWallet.value.name = newName
+  snackbar.fireSuccess(t('settings.walletNameUpdated'))
+  editingName.value = false
+}
 
 // Methods
 function toggleMiniPlayer() {
@@ -485,12 +609,38 @@ onUnmounted(() => {
   border: 1px solid transparent;
 }
 
+.menuItem ::v-deep .v-list-item__avatar {
+  overflow: visible !important;
+}
+
+.menuItem ::v-deep .v-avatar {
+  overflow: visible !important;
+}
+
+.menuItem ::v-deep .v-badge {
+  overflow: visible !important;
+}
+
+
 .activePage {
   background: linear-gradient(45deg, #00c7f3, #00ffd1);
+
+  .v-icon { color: white !important; }
+  .v-image { filter: brightness(0) invert(1) !important; }
 }
 
 .activePage.apex {
   background: linear-gradient(45deg, #F8A282, #FECB82);
+
+  .v-icon { color: white !important; }
+  .v-image { filter: brightness(0) invert(1) !important; }
+}
+
+.activePage.bitcoin {
+  background: linear-gradient(45deg, #F7931A, #F59E0B);
+
+  .v-icon { color: white !important; }
+  .v-image { filter: brightness(0) invert(1) !important; }
 }
 
 .activePageDark {
@@ -508,6 +658,10 @@ onUnmounted(() => {
   .v-image {
     filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
   }
+
+  .v-icon {
+    color: #00D1FF !important;
+  }
 }
 
 .activePageDark.apex {
@@ -524,6 +678,31 @@ onUnmounted(() => {
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(92%) sepia(45%) saturate(5319%) hue-rotate(301deg) brightness(100%) contrast(95%) !important;
+  }
+
+  .v-icon {
+    color: #F8A282 !important;
+  }
+}
+
+.activePageDark.bitcoin {
+  color: #FFFFFF;
+  background: #0C0E12;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: {
+    image: linear-gradient(to right, #0C0E12, #0C0E12),
+    linear-gradient(to right, #0C0E12 8%, #F7931A);
+    clip: padding-box, border-box;
+    origin: padding-box, border-box;
+  }
+
+  .v-image {
+    filter: brightness(0) saturate(100%) invert(63%) sepia(88%) saturate(2100%) hue-rotate(8deg) brightness(104%) contrast(103%) !important;
+  }
+
+  .v-icon {
+    color: #F7931A !important;
   }
 }
 
@@ -564,5 +743,49 @@ onUnmounted(() => {
   width: 100%;
   position: relative;
   z-index: 1;
+}
+
+.editable-name {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 0;
+  margin-left: -2px;
+  padding-left: 2px;
+  padding-right: 2px;
+  transition: background 0.15s;
+
+  .edit-icon {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+
+    .edit-icon {
+      opacity: 0.6;
+    }
+  }
+}
+
+.name-edit-input {
+  font-size: 14px;
+  line-height: 20px;
+  height: 20px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  padding: 0 4px;
+  width: 100%;
+  font-family: inherit;
+
+  &:focus {
+    border-bottom-color: #00c7f3;
+  }
 }
 </style>

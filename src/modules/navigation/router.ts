@@ -7,8 +7,7 @@ import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 
 // Critical parts loaded immediately
 import Welcome from '@/modules/welcome/views/Welcome.vue';
-import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
-import Login from '@/popup/modules/views/Login.vue';
+import PortfolioPage from '@/modules/portfolio/PortfolioPage.vue';
 
 // Lazy loading for other components (saves ~5MB initial load)
 const Staking = () => import("@/modules/staking/Staking.vue");
@@ -18,6 +17,7 @@ const SignTx = () => import('@/popup/modules/views/SignTx.vue');
 const Cashback = () => import("@/modules/cashback/Cashback.vue");
 const MediaPlayer = () => import("@/modules/media-player/MediaPlayer.vue");
 const Swap = () => import('@/modules/swap/Swap.vue');
+// Market.vue no longer used as standalone route — unified into PortfolioPage
 const DevTools = () => import('@/modules/devTools/DevTools.vue');
 const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
@@ -26,15 +26,26 @@ const Blog = () => import('@/modules/blog/Blog.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
+const GoMining = () => import('@/modules/gomining/GoMining.vue');
+const BabylonStaking = () => import('@/modules/babylon/BabylonStaking.vue');
+const Ordinals = () => import('@/modules/ordinals/Ordinals.vue');
+const ThorchainSwap = () => import('@/modules/thorchain/ThorchainSwap.vue');
+const MempoolExplorer = () => import('@/modules/mempool/MempoolExplorer.vue');
+const LightningLnurl = () => import('@/modules/lightning/LightningLnurl.vue');
+const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue');
+const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
+const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
+const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import networks from '@/utils/networks';
 
 const routes = [
   {
     path: '/',
     name: 'dashboard',
-    component: Dashboard,
+    component: PortfolioPage,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -50,7 +61,11 @@ const routes = [
   },
   {
     path: '/market',
-    name: 'market',
+    redirect: '/?view=all',
+  },
+  {
+    path: '/swap',
+    name: 'swap',
     component: Swap,
     meta: {
       layout: ContentLayout,
@@ -79,6 +94,15 @@ const routes = [
     path: '/governance',
     name: 'governance',
     component: Governance,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/pool-operator',
+    name: 'poolOperator',
+    component: PoolOperator,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -139,6 +163,33 @@ const routes = [
     },
   },
   {
+    path: '/sign-bitcoin-psbt',
+    name: 'sign-bitcoin-psbt',
+    component: BitcoinSignPsbt,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/sign-bitcoin-message',
+    name: 'sign-bitcoin-message',
+    component: BitcoinSignMessage,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/wc-session-proposal',
+    name: 'wc-session-proposal',
+    component: WCSessionProposal,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/warning',
     name: 'warning',
     component: WarningPopUp,
@@ -155,15 +206,6 @@ const routes = [
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
-    },
-  },
-  {
-    path: '/plogin',
-    name: 'plogin',
-    component: Login,
-    meta: {
-      layout: PopupLayout,
-      requiresAuth: false,
     },
   },
   // MultiSig route disabled - under maintenance
@@ -195,6 +237,60 @@ const routes = [
     },
   },
   {
+    path: '/gomining',
+    name: 'gomining',
+    component: GoMining,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/babylon',
+    name: 'babylon',
+    component: BabylonStaking,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/ordinals',
+    name: 'ordinals',
+    component: Ordinals,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/thorchain',
+    name: 'thorchain',
+    component: ThorchainSwap,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/mempool',
+    name: 'mempool',
+    component: MempoolExplorer,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/lightning',
+    name: 'lightning',
+    component: LightningLnurl,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '*',
     name: 'other',
     redirect: '/',
@@ -220,6 +316,14 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
       // Gero Card is under maintenance if feature flag is disabled
       return !featureFlagsStore.isGeroCardEnabled();
 
+    case 'gomining':
+      // GoMining is under maintenance if feature flag is disabled
+      return !featureFlagsStore.isGoMiningEnabled();
+
+    case 'poolOperator':
+      // Pool Operator dashboard gated by feature flag
+      return !featureFlagsStore.isPoolOperatorEnabled();
+
     case 'multisig':
       // MultiSig is currently under maintenance (route is commented out)
       return true;
@@ -236,8 +340,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
   const isLocked: boolean = WalletStore.state.isLocked;
+  const isSyncing: boolean = WalletStore.state.isSyncing;
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
+  console.log(`[ROUTER] ${from.path} → ${to.path} | loggedIn=${isLoggedIn} locked=${isLocked} syncing=${isSyncing} welcome=${isWelcome}`);
 
   // Prevent redirect loops: if we're already being redirected to welcome, just allow it
   if (isWelcome && from.path === '/') {
@@ -252,9 +358,13 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn && !isLocked) {
-    // already logged in and NOT locked → don't show welcome again
+  if (isWelcome && isLoggedIn && !isLocked && !isSyncing) {
+    // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
+  }
+  if (needsAuth && isSyncing) {
+    // Syncing wallet — stay on welcome until done
+    return next({ path: '/welcome' });
   }
   if (needsAuth && isLocked) {
     // wallet is locked → send to /welcome to unlock
@@ -263,6 +373,25 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
     return next({ path: redirectTo });
+  }
+
+  // Check chain/network feature support for restricted routes
+  // Note: Some routes (e.g. 'card') are also checked by isRouteUnderMaintenance below.
+  // These are intentionally dual-gated: network support (here) vs. feature flag/maintenance (below).
+  if (isLoggedIn) {
+    const { chain, network } = WalletStore.state.loggedWallet;
+    const routeNetworkGuards: Record<string, (c: string, n: string) => boolean> = {
+      cashback: (c, n) => networks.resolveCashbackSupport(c, n),
+      governance: (c, n) => networks.resolveGovernanceSupport(c, n),
+      staking: (c, n) => networks.resolveStakingSupport(c, n),
+      market: (c, n) => networks.resolveSwapSupport(c, n),
+      transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
+      card: (c, n) => networks.resolveGeroCardSupport(c, n),
+    };
+    const guard = routeNetworkGuards[to.name];
+    if (guard && !guard(chain, network)) {
+      return next({ path: '/' });
+    }
   }
 
   // Check if the route is under maintenance

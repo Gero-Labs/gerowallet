@@ -2,7 +2,7 @@ import Dexie from 'dexie';
 import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import * as bip39 from 'bip39';
 import { encrypt, encryptPrivateKey } from '@/shared/utils/crypto';
-import { CoinTypes, Currency, HARDENED, WalletType, WalletTypePurpose } from '@/models/types';
+import { Blockchain, CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
@@ -71,7 +71,41 @@ export async function getDb() {
 
   // Version 14: Add PRF encryption support (optional fields for new wallets only)
   // No migration needed - all new fields are optional
-  db.version(geroDBVersion).stores(geroDBSchema);
+  db.version(14).stores({
+    wallets:
+      '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId, encryptionMethod, webAuthnCredentialId',
+    config: '++id, key, value',
+    provider: '++id, [name+chain+network], baseUrl, apiKey',
+  });
+
+  // Version 15: Add addressType field for Bitcoin support
+  db.version(geroDBVersion).stores(geroDBSchema).upgrade(async (tx) => {
+    console.log('Upgrading GeroWalletDatabase to v15: Adding addressType field...');
+    try {
+      const wallets = await tx.table('wallets').toArray();
+
+      for (const wallet of wallets) {
+        let addressType: string;
+
+        // Determine addressType based on chain
+        if (wallet.chain === 'Cardano' || wallet.chain === 'Apex Fusion Prime' || wallet.chain === 'Apex Fusion Vector') {
+          addressType = 'shelley';  // Cardano base addresses
+        } else if (wallet.chain === 'Bitcoin') {
+          addressType = 'segwit';   // Default Bitcoin address type (P2WPKH)
+        } else {
+          addressType = 'unknown';  // Fallback for future chains
+        }
+
+        // Update wallet record with new field
+        await tx.table('wallets').update(wallet.id, { addressType });
+      }
+
+      console.log('✅ GeroWalletDatabase v15 migration complete');
+    } catch (error) {
+      console.error('❌ GeroWalletDatabase v15 migration failed:', error);
+      throw error;
+    }
+  });
 
   await db.open().catch(err => {
     console.error(`Failed to open database: ${err.stack || err}`);
@@ -104,11 +138,32 @@ export async function getLatestWalletByOrder() {
   return null;
 }
 
+/**
+ * Get the next available wallet ID
+ *
+ * This is the single source of truth for wallet ID allocation.
+ * Used for PRF wallets where the ID must be known before wallet creation
+ * (needed for PRF salt generation during credential registration).
+ *
+ * @returns Promise<number> - Next available wallet ID
+ * @throws Error if database is unavailable or operation fails
+ */
+export async function getNextWalletId(): Promise<number> {
+  try {
+    const db: Dexie = await getDb();
+    const maxWallet = await db['wallets'].orderBy('id').last();
+    return (maxWallet?.id || 0) + 1;
+  } catch (error) {
+    console.error('Failed to get next wallet ID:', error);
+    throw new Error('Unable to access wallet database. Please check browser permissions and try again.');
+  }
+}
+
 export async function getAllWallets() {
   const db: Dexie = await getDb();
   const wallets = await db['wallets'].toArray();
   const walletsMap = {};
-  wallets.forEach(wallet => {
+  wallets.forEach((wallet: Wallet) => {
     walletsMap[wallet.id] = wallet;
   });
   return walletsMap;
@@ -153,6 +208,22 @@ export async function createNewWalletDb(walletId: number|string, hasEncryptedMne
 }
 
 /**
+ * Helper function to get default address type by chain
+ */
+function getDefaultAddressType(chain: string): string {
+  switch (chain) {
+    case Blockchain.BITCOIN:
+      return 'segwit';  // P2WPKH (bc1q...)
+    case Blockchain.CARDANO:
+    case Blockchain.APEX_PRIME:
+    case Blockchain.APEX_VECTOR:
+      return 'shelley';
+    default:
+      return 'unknown';
+  }
+}
+
+/**
  * Create a new wallet with password or PRF encryption
  *
  * @param name - Wallet name
@@ -160,8 +231,9 @@ export async function createNewWalletDb(walletId: number|string, hasEncryptedMne
  * @param theme - Wallet theme
  * @param mnemonic - BIP39 mnemonic (24 words). If empty, generates new one
  * @param password - Spending password
- * @param chain - Blockchain (e.g., 'Cardano')
- * @param network - Network (e.g., 'Mainnet', 'Preprod')
+ * @param chain - Blockchain (e.g., 'Cardano', 'Bitcoin')
+ * @param network - Network (e.g., 'Mainnet', 'Preprod', 'Testnet')
+ * @param addressType - Address type (e.g., 'segwit' for Bitcoin, 'shelley' for Cardano)
  * @param options - Optional PRF encryption options
  * @param options.usePrf - Use PRF encryption instead of password encryption
  * @param options.credentialId - WebAuthn credential ID (required if usePrf is true)
@@ -177,12 +249,14 @@ export async function createNewWallet(
   password: string,
   chain: string,
   network: string,
+  addressType: string = getDefaultAddressType(chain),
   options?: {
     usePrf?: boolean;
     credentialId?: string;
     passwordUnlockEnabled?: boolean;
     backupMnemonic?: boolean;
     prfOutput?: ArrayBuffer; // PRF output from registration (avoids second prompt)
+    walletId?: number; // Pre-allocated wallet ID for PRF wallets (must match PRF salt)
   }
 ) {
   let isRestore = true;
@@ -191,8 +265,20 @@ export async function createNewWallet(
     mnemonic = bip39.generateMnemonic(256);
   }
 
-  const rootKey: Bip32PrivateKey = resolvePrivateKey(mnemonic);
-  const publicKey = await derivePublicKeyFromMnemonic(mnemonic);
+  // Derive keys based on chain
+  let rootKey: any;
+  let publicKey: string;
+
+  if (chain === Blockchain.BITCOIN) {
+    // Bitcoin key derivation
+    const { deriveBitcoinAccountXpub, deriveBitcoinRootKey } = await import('@/chains/bitcoin/bitcoinKeyManager');
+    rootKey = deriveBitcoinRootKey(mnemonic);
+    publicKey = deriveBitcoinAccountXpub(mnemonic, network, addressType);
+  } else {
+    // Cardano key derivation (existing logic)
+    rootKey = resolvePrivateKey(mnemonic);
+    publicKey = await derivePublicKeyFromMnemonic(mnemonic);
+  }
 
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
@@ -214,10 +300,18 @@ export async function createNewWallet(
       throw new Error('Credential ID is required for PRF encryption');
     }
 
-    // Step 1: Pre-allocate wallet ID (Option A from decisions document)
-    // We need the wallet ID before encryption for PRF salt generation
-    const maxWallet = await db['wallets'].orderBy('id').last();
-    const newWalletId = (maxWallet?.id || 0) + 1;
+    // Step 1: Get wallet ID (must be pre-allocated for PRF salt consistency)
+    // The wallet ID MUST match the one used for PRF salt during credential registration
+    let newWalletId: number;
+    if (options.walletId !== undefined) {
+      // Use pre-allocated ID (ensures PRF salt consistency)
+      newWalletId = options.walletId;
+    } else {
+      // Fallback: Calculate ID (backward compatibility, but risky for race conditions)
+      const maxWallet = await db['wallets'].orderBy('id').last();
+      newWalletId = (maxWallet?.id || 0) + 1;
+      console.warn('[PRF] ⚠️ Wallet ID not provided in options, calculating on-the-fly (potential race condition)');
+    }
 
     // Import PRF encryption functions
     const {
@@ -237,8 +331,13 @@ export async function createNewWallet(
 
     try {
       // Step 3: Encrypt private key using PRF output (no additional prompt)
+      // Extract key bytes based on chain
+      const keyBytes = chain === Blockchain.BITCOIN
+        ? rootKey.privateKey  // Bitcoin: BIP32 interface has privateKey as Uint8Array
+        : rootKey.bytes();    // Cardano: Bip32PrivateKey has bytes() method
+
       const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
-        rootKey.bytes(),
+        keyBytes,
         options.credentialId,
         newWalletId.toString(),
         prfOutput // Pass PRF output to avoid re-evaluation
@@ -269,6 +368,7 @@ export async function createNewWallet(
         passwordLastUpdate: new Date(),
         chain,
         network,
+        addressType,  // Version 15+: Address type
         // PRF encryption fields (Version 14+)
         encryptionMethod: 'prf',
         prfEncryptedPrivateKey,
@@ -282,8 +382,16 @@ export async function createNewWallet(
       await createNewWalletDb(newWalletId, !!prfEncryptedMnemonic, isRestore);
       return newWalletId;
     } finally {
+      // CRITICAL: Zero all ArrayBuffer references to prevent memory leaks
+      // Zero the local prfOutput reference
       if (prfOutput) {
         new Uint8Array(prfOutput).fill(0);
+      }
+
+      // Also zero the passed-in prfOutput if it exists and is a different reference
+      // (defensive programming - ensures caller's reference is also zeroed)
+      if (options?.prfOutput && options.prfOutput !== prfOutput) {
+        new Uint8Array(options.prfOutput).fill(0);
       }
     }
 
@@ -294,7 +402,20 @@ export async function createNewWallet(
     console.log('🔑 Password Encryption Branch Entered (usePrf was false)');
 
     const encryptedMnemonic: string = encrypt(mnemonic, password);
-    const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
+
+    // Encrypt private key based on chain
+    let encryptedPrivateKey: string;
+    if (chain === Blockchain.BITCOIN) {
+      // Bitcoin: Use raw key bytes
+      const { encryptWithPassword } = await import('@/shared/utils/crypto');
+      const CryptoTS = await import('crypto-ts');
+      const keyBytes = rootKey.privateKey;  // Uint8Array
+      const encryptedBytes = encryptWithPassword(password, keyBytes);
+      encryptedPrivateKey = CryptoTS.AES.encrypt(JSON.stringify(encryptedBytes), password).toString();
+    } else {
+      // Cardano: Use existing encryptPrivateKey function
+      encryptedPrivateKey = encryptPrivateKey(rootKey, password);
+    }
 
     const walletData = {
       name,
@@ -308,6 +429,7 @@ export async function createNewWallet(
       passwordLastUpdate: new Date(),
       chain,
       network,
+      addressType,  // Version 15+: Address type
       // Explicitly set encryptionMethod for clarity (optional for backward compatibility)
       encryptionMethod: 'password'
     };

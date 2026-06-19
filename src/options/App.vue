@@ -8,13 +8,17 @@
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
         <v-progress-linear
-            buffer-value="0"
-            color="primary"
-            reverse
-            stream
-            value="0"
-            style="color: cyan; width: 100px; text-align: center"
-        ></v-progress-linear>
+            :value="progress"
+            :indeterminate="progress === 0"
+            color="#16d9f3"
+            background-color="rgba(255,255,255,0.15)"
+            height="20"
+            rounded
+            class="glow-bar"
+            style="width: 220px"
+        >
+          <span v-if="progress > 0" style="color: black; font-size: 11px; font-weight: 700;">{{ progress }}%</span>
+        </v-progress-linear>
         <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
@@ -38,16 +42,16 @@ import { ref, computed, toRefs, watch, getCurrentInstance, onMounted } from 'vue
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
-import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 
-const { loading, isRestoring, text } = toRefs(loadingState);
-const { config } = toRefs(walletStore);
+const { loading, isRestoring, text, progress } = toRefs(loadingState);
+const geroConfig = toRefs(geroStore).config;
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy;
 
 const isLoading = computed(() => {
   return loading.value || isRestoring.value;
@@ -65,19 +69,36 @@ onMounted(async () => {
   }
 });
 
-watch(() => config.value?.locale, async (newLocale, oldLocale) => {
-  if (newLocale && vmProxy.$i18n && newLocale !== oldLocale) {
-    // CRITICAL FIX: Load language file before switching (race condition fix)
-    const { loadLanguage } = await import('@/plugins/i18n');
-    try {
-      await loadLanguage(newLocale);
+// Watch geroStore for locale changes (global preference) instead of walletStore
+// CRITICAL: The initial locale is set by main.ts BEFORE Vue mounts
+// This watcher should only react to SUBSEQUENT changes made by the user
+watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
+  // Skip if no locale value or i18n not ready
+  if (!newLocale || !vmProxy.$i18n) return;
 
-      // Update i18n locale ONLY after successful load
-      vmProxy.$i18n.locale = newLocale;
-    } catch (error) {
-      console.error(`Failed to load language ${newLocale}:`, error);
-      // Don't update i18n if load failed
-    }
+  // CRITICAL: Skip if this is the initial watcher run and i18n is already set correctly
+  // This prevents the watcher from overwriting the locale set by main.ts
+  // The geroStore default is 'us', but main.ts may have already loaded 'de' from storage
+  if (vmProxy.$i18n.locale === newLocale) {
+    return; // Already at the correct locale, no action needed
+  }
+
+  // Skip if oldLocale is undefined/null (first run) and newLocale is the default 'us'
+  // This means geroStore hasn't been hydrated yet, so trust main.ts's locale setting
+  if (!oldLocale && newLocale === 'us' && vmProxy.$i18n.locale !== 'us') {
+    console.log('🔄 App.vue: Skipping initial hydration reset, current i18n.locale:', vmProxy.$i18n.locale);
+    return;
+  }
+
+  // Proceed with locale change
+  console.log('🔄 App.vue: Locale change detected:', oldLocale, '->', newLocale);
+  const { loadLanguage } = await import('@/plugins/i18n');
+  try {
+    await loadLanguage(newLocale);
+    vmProxy.$i18n.locale = newLocale;
+    console.log('✅ App.vue: i18n.locale updated to:', newLocale);
+  } catch (error) {
+    console.error(`Failed to load language ${newLocale}:`, error);
   }
 }, { immediate: true, deep: true });
 </script>
@@ -176,10 +197,57 @@ watch(() => config.value?.locale, async (newLocale, oldLocale) => {
 .voerro-notifications-container {
   z-index: 99999 !important;
   border-radius: .3rem;
-  filter: opacity(90%);
+  width: max-content !important;
+  max-width: min(480px, calc(100vw - 40px)) !important;
+  min-width: unset !important;
 }
 
 .v-select.v-text-field input {
   cursor: pointer!important;
+}
+
+.glow-bar {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(22, 217, 243, 0.3)) drop-shadow(0 0 8px rgba(22, 217, 243, 0.15)); }
+  50% { filter: drop-shadow(0 0 8px rgba(22, 217, 243, 0.6)) drop-shadow(0 0 16px rgba(22, 217, 243, 0.35)); }
+}
+
+.glow-bar,
+.glow-bar * {
+  text-align: left !important;
+}
+
+.glow-bar {
+  border: 1px solid rgba(22, 217, 243, 0.3) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.glow-bar .v-progress-linear__background {
+  background: transparent !important;
+}
+
+.glow-bar .v-progress-linear__determinate {
+  position: relative !important;
+  background: #0a8fa8 !important;
+  overflow: hidden !important;
+}
+
+.glow-bar .v-progress-linear__determinate::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 80%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(126, 240, 255, 0.3), transparent);
+  animation: shimmer-sweep 3s ease-in-out infinite;
+}
+
+@keyframes shimmer-sweep {
+  0% { left: -80%; }
+  100% { left: 100%; }
 }
 </style>

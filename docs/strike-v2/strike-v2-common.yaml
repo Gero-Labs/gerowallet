@@ -1,0 +1,729 @@
+openapi: 3.0.3
+info:
+  title: Strike Common API
+  description: |
+    General-purpose public endpoints served by the API Service.
+    Base path: `/v2`
+  version: 2.0.0
+  contact:
+    name: Strike Finance
+    url: https://www.strikefinance.org
+  x-gitbook-description-document:
+    object: document
+    data:
+      schemaVersion: 9
+    nodes:
+      - object: block
+        type: paragraph
+        isVoid: false
+        data: {}
+        nodes:
+          - object: text
+            leaves:
+              - object: leaf
+                text: >-
+                  General-purpose public endpoints served by the API Service.
+                  Base path:
+                marks: []
+              - object: leaf
+                text: /v2
+                marks:
+                  - object: mark
+                    type: code
+                    data: {}
+            key: M84zMzA8VZgs
+        key: V7IcJQjVzV8i
+    key: kQDbfcNN3YM4
+  x-gitbook-description-html: >-
+    <p>General-purpose public endpoints served by the API Service. Base path:
+    <code>/v2</code></p>
+servers:
+  - url: https://api.strikefinance.org
+    description: Mainnet
+    x-gitbook-description-html: <p>Mainnet</p>
+  - url: https://api-v2-testnet.strikefinance.org
+    description: Testnet
+    x-gitbook-description-html: <p>Testnet</p>
+tags:
+  - name: General
+    description: Connectivity test and server time
+    x-gitbook-description-document:
+      object: document
+      data:
+        schemaVersion: 9
+      nodes:
+        - object: block
+          type: paragraph
+          isVoid: false
+          data: {}
+          nodes:
+            - object: text
+              leaves:
+                - object: leaf
+                  text: Connectivity test and server time
+                  marks: []
+              key: 4Z8pxE6MHZQp
+          key: aEZytz3xHy8X
+      key: fYi7Pnl7ve54
+    x-gitbook-description-html: <p>Connectivity test and server time</p>
+  - name: Fee Tiers
+    description: Trading fee schedule based on 30-day volume
+    x-gitbook-description-document:
+      object: document
+      data:
+        schemaVersion: 9
+      nodes:
+        - object: block
+          type: paragraph
+          isVoid: false
+          data: {}
+          nodes:
+            - object: text
+              leaves:
+                - object: leaf
+                  text: Trading fee schedule based on 30-day volume
+                  marks: []
+              key: EabsY7ctoDQA
+          key: WfOEEETa7xTl
+      key: KiFOy760Uv7V
+    x-gitbook-description-html: <p>Trading fee schedule based on 30-day volume</p>
+x-tagGroups:
+  - name: Common
+    tags:
+      - General
+      - Fee Tiers
+paths:
+  /v2/ping:
+    get:
+      tags:
+        - General
+      summary: Test Connectivity
+      description: |
+        Test connectivity to the API server. Returns an empty JSON object.
+
+        Use this endpoint to verify that your client can reach the server
+        and that the API is operational.
+      responses:
+        "200":
+          description: API is reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PingResponse"
+              example: {}
+          x-gitbook-description-html: <p>API is reachable</p>
+      x-gitbook-description-document:
+        object: document
+        data:
+          schemaVersion: 9
+        nodes:
+          - object: block
+            type: paragraph
+            isVoid: false
+            data: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: >-
+                      Test connectivity to the API server. Returns an empty JSON
+                      object.
+                    marks: []
+                key: EBlCBNqpYthB
+            key: mE5R2aq6sz5l
+          - object: block
+            type: paragraph
+            isVoid: false
+            data: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: >-
+                      Use this endpoint to verify that your client can reach the
+                      server and that the API is operational.
+                    marks: []
+                key: PxT1jmJ7tSN3
+            key: VtC2q8vpmr8Y
+        key: rztQsD9LkxVf
+      x-gitbook-description-html: >-
+        <p>Test connectivity to the API server. Returns an empty JSON
+        object.</p><p>Use this endpoint to verify that your client can reach the
+        server and that the API is operational.</p>
+  /v2/time:
+    get:
+      tags:
+        - General
+      summary: Server Time
+      description: |
+        Returns the current server time as a Unix timestamp in milliseconds.
+
+        Use this endpoint to synchronise your local clock with the server.
+        This is useful for time-sensitive operations such as signing requests.
+      responses:
+        "200":
+          description: Current server time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeResponse"
+              example:
+                serverTime: 1700000000000
+          x-gitbook-description-html: <p>Current server time</p>
+      x-gitbook-description-document:
+        object: document
+        data:
+          schemaVersion: 9
+        nodes:
+          - object: block
+            type: paragraph
+            isVoid: false
+            data: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: >-
+                      Returns the current server time as a Unix timestamp in
+                      milliseconds.
+                    marks: []
+                key: 2kJdu9yBlTEG
+            key: UiQILyGxGywJ
+          - object: block
+            type: paragraph
+            isVoid: false
+            data: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: >-
+                      Use this endpoint to synchronise your local clock with the
+                      server. This is useful for time-sensitive operations such
+                      as signing requests.
+                    marks: []
+                key: yj0tlw87CuWV
+            key: C30Cm8aaEC99
+        key: xDSVwCRjycLk
+      x-gitbook-description-html: >-
+        <p>Returns the current server time as a Unix timestamp in
+        milliseconds.</p><p>Use this endpoint to synchronise your local clock
+        with the server. This is useful for time-sensitive operations such as
+        signing requests.</p>
+  /v2/fee-tiers:
+    get:
+      tags:
+        - Fee Tiers
+      summary: Fee Tiers
+      description: >
+        Returns the global fee tier schedule. Each tier specifies a minimum
+        30-day trailing volume (USD) and the corresponding maker / taker fee
+        rates.
+
+
+        ### How fee tiers work
+
+
+        Your fee tier is determined by your **trailing 30-day trading volume**
+        (in USD). The highest tier whose `minVolume` threshold you meet is
+        applied to all subsequent trades.
+
+
+        | Field       | Type    | Description |
+
+        |-------------|---------|-------------|
+
+        | `tier`      | integer | Tier number (0 = base tier). |
+
+        | `minVolume` | number  | Minimum 30-day volume (USD) to qualify for
+        this tier. |
+
+        | `takerRate` | number  | Taker fee rate (e.g. `0.0005` = 0.05 %). |
+
+        | `makerRate` | number  | Maker fee rate (e.g. `0.0002` = 0.02 %). |
+
+
+        > **Note:** Fee rates are expressed as decimals, not percentages.
+
+        > Multiply by 100 to convert (e.g. `0.0005` → 0.05 %).
+      responses:
+        "200":
+          description: Fee tier schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeeTiersResponse"
+              example:
+                feeTiers:
+                  - tier: 0
+                    minVolume: 0
+                    takerRate: 0.0005
+                    makerRate: 0.0002
+                  - tier: 1
+                    minVolume: 1000000
+                    takerRate: 0.00045
+                    makerRate: 0.00015
+                  - tier: 2
+                    minVolume: 5000000
+                    takerRate: 0.0004
+                    makerRate: 0.0001
+          x-gitbook-description-html: <p>Fee tier schedule</p>
+      x-gitbook-description-document:
+        object: document
+        data:
+          schemaVersion: 9
+        nodes:
+          - object: block
+            type: paragraph
+            isVoid: false
+            data: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: >-
+                      Returns the global fee tier schedule. Each tier specifies
+                      a minimum 30-day trailing volume (USD) and the
+                      corresponding maker / taker fee rates.
+                    marks: []
+                key: etkZymQ8B45Y
+            key: Haa4ESKvDRGk
+          - object: block
+            type: heading-3
+            isVoid: false
+            data: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: How fee tiers work
+                    marks: []
+                key: QL4YYAb4O7Pk
+            key: F0ReocGZnkem
+          - object: block
+            type: paragraph
+            isVoid: false
+            data: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: "Your fee tier is determined by your "
+                    marks: []
+                  - object: leaf
+                    text: trailing 30-day trading volume
+                    marks:
+                      - object: mark
+                        type: bold
+                        data: {}
+                  - object: leaf
+                    text: " (in USD). The highest tier whose "
+                    marks: []
+                  - object: leaf
+                    text: minVolume
+                    marks:
+                      - object: mark
+                        type: code
+                        data: {}
+                  - object: leaf
+                    text: " threshold you meet is applied to all subsequent trades."
+                    marks: []
+                key: 5mmvzoHZXBRt
+            key: PmJUXoRxF2Bi
+          - object: block
+            type: table
+            isVoid: true
+            data:
+              records:
+                DAattYHX0ThE:
+                  orderIndex: "0|hzzznr:"
+                  values:
+                    a1UcTBhrbgEc: hD5i1w3ma39O
+                    VygtQAL6Ui4K: GMKi3KrJ9QhD
+                    1FYpBhX2933P: Ty35gscVxMrV
+                On56VqafgYzk:
+                  orderIndex: "0|i000hz:"
+                  values:
+                    a1UcTBhrbgEc: 9zteBok8Py1F
+                    VygtQAL6Ui4K: p3Xt9VYPLcL6
+                    1FYpBhX2933P: LaU0bFivd4OV
+                8wHftGcIIPbK:
+                  orderIndex: "0|i000in:"
+                  values:
+                    a1UcTBhrbgEc: glIM8Xb0W0h6
+                    VygtQAL6Ui4K: ci2DlXoIk5Vq
+                    1FYpBhX2933P: yYuIVSGBCKQp
+                ydNimc9fB6zN:
+                  orderIndex: "0|i0019j:"
+                  values:
+                    a1UcTBhrbgEc: mc4oHw0ZvUA1
+                    VygtQAL6Ui4K: OvMUccePRzoP
+                    1FYpBhX2933P: 9fHMpg1YwWXc
+              definition:
+                a1UcTBhrbgEc:
+                  id: a1UcTBhrbgEc
+                  title: Field
+                  type: text
+                  textAlignment: left
+                VygtQAL6Ui4K:
+                  id: VygtQAL6Ui4K
+                  title: Type
+                  type: text
+                  textAlignment: left
+                1FYpBhX2933P:
+                  id: 1FYpBhX2933P
+                  title: Description
+                  type: text
+                  textAlignment: left
+              view:
+                type: grid
+                columns:
+                  - a1UcTBhrbgEc
+                  - VygtQAL6Ui4K
+                  - 1FYpBhX2933P
+                useNewSizing: true
+                hideHeader: false
+                columnWidths: {}
+            nodes:
+              - object: text
+                leaves:
+                  - object: leaf
+                    text: ""
+                    marks: []
+                key: TVakQcykG5Ns
+            key: el8jonznh8Cg
+            fragments:
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: tier
+                            marks:
+                              - object: mark
+                                type: code
+                                data: {}
+                        key: RR4T0MJW1sw4
+                    key: X07m34UMLanS
+                key: ZCR6Yudo9jDT
+                fragment: hD5i1w3ma39O
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: integer
+                            marks: []
+                        key: vI0AgEMj8izw
+                    key: SD4nlvdmiAUe
+                key: 7RIUuexP1KMI
+                fragment: GMKi3KrJ9QhD
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: Tier number (0 = base tier).
+                            marks: []
+                        key: jrNj0NCoHHXk
+                    key: ikzwZY5F1cvH
+                key: ZGMJNEzu1KgQ
+                fragment: Ty35gscVxMrV
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: minVolume
+                            marks:
+                              - object: mark
+                                type: code
+                                data: {}
+                        key: 7YPVJatCkdIh
+                    key: 0xUEiK90N8Tn
+                key: lp9U7cw5VHvY
+                fragment: 9zteBok8Py1F
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: number
+                            marks: []
+                        key: WNnRLTMwxn6T
+                    key: qiXK6LSjaVea
+                key: VzfNlK8WBYuR
+                fragment: p3Xt9VYPLcL6
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: >-
+                              Minimum 30-day volume (USD) to qualify for this
+                              tier.
+                            marks: []
+                        key: zB70gDajlaaj
+                    key: JId7noDkVmqM
+                key: otq0bl0AciRi
+                fragment: LaU0bFivd4OV
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: takerRate
+                            marks:
+                              - object: mark
+                                type: code
+                                data: {}
+                        key: 1RYDM6bz6y1o
+                    key: RETzfgYFxMEE
+                key: NQpXedkbFS8O
+                fragment: glIM8Xb0W0h6
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: number
+                            marks: []
+                        key: CEJJnDCX1lC9
+                    key: 4DX8AdgOQLrV
+                key: fM5psVOHJ8EF
+                fragment: ci2DlXoIk5Vq
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: "Taker fee rate (e.g. "
+                            marks: []
+                          - object: leaf
+                            text: "0.0005"
+                            marks:
+                              - object: mark
+                                type: code
+                                data: {}
+                          - object: leaf
+                            text: " = 0.05 %)."
+                            marks: []
+                        key: HrkcVdSj3d7j
+                    key: pj9EJlQxjnJg
+                key: 6SKxwRsBFu1V
+                fragment: yYuIVSGBCKQp
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: makerRate
+                            marks:
+                              - object: mark
+                                type: code
+                                data: {}
+                        key: rO25XbDIDClO
+                    key: yzDF5zsMWniG
+                key: 8nEx0G8iNaa2
+                fragment: mc4oHw0ZvUA1
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: number
+                            marks: []
+                        key: jMTL0k82kPE5
+                    key: QHVdHnEERQUj
+                key: tHdzv5OrB9o5
+                fragment: OvMUccePRzoP
+                type: table-cell
+              - object: fragment
+                nodes:
+                  - object: block
+                    type: paragraph
+                    isVoid: false
+                    data: {}
+                    nodes:
+                      - object: text
+                        leaves:
+                          - object: leaf
+                            text: "Maker fee rate (e.g. "
+                            marks: []
+                          - object: leaf
+                            text: "0.0002"
+                            marks:
+                              - object: mark
+                                type: code
+                                data: {}
+                          - object: leaf
+                            text: " = 0.02 %)."
+                            marks: []
+                        key: evpU2sraYfEL
+                    key: hyIgbbVHaRsy
+                key: YsccsPJriVP4
+                fragment: 9fHMpg1YwWXc
+                type: table-cell
+          - object: block
+            type: blockquote
+            isVoid: false
+            data: {}
+            nodes:
+              - object: block
+                type: paragraph
+                isVoid: false
+                data: {}
+                nodes:
+                  - object: text
+                    leaves:
+                      - object: leaf
+                        text: "Note:"
+                        marks:
+                          - object: mark
+                            type: bold
+                            data: {}
+                      - object: leaf
+                        text: " Fee rates are expressed as decimals, not percentages. Multiply by 100 to convert (e.g. "
+                        marks: []
+                      - object: leaf
+                        text: "0.0005"
+                        marks:
+                          - object: mark
+                            type: code
+                            data: {}
+                      - object: leaf
+                        text: " → 0.05 %)."
+                        marks: []
+                    key: ktPLu6DGQ1QX
+                key: hi2k2F8Kact0
+            key: ZIKoGoSIgE1m
+        key: 9EBx3UPsWcxQ
+      x-gitbook-description-html: >-
+        <p>Returns the global fee tier schedule. Each tier specifies a minimum
+        30-day trailing volume (USD) and the corresponding maker / taker fee
+        rates.</p><h3>How fee tiers work</h3><p>Your fee tier is determined by
+        your <strong>trailing 30-day trading volume</strong> (in USD). The
+        highest tier whose <code>minVolume</code> threshold you meet is applied
+        to all subsequent
+        trades.</p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>tier</code></td><td>integer</td><td>Tier
+        number (0 = base
+        tier).</td></tr><tr><td><code>minVolume</code></td><td>number</td><td>Minimum
+        30-day volume (USD) to qualify for this
+        tier.</td></tr><tr><td><code>takerRate</code></td><td>number</td><td>Taker
+        fee rate (e.g. <code>0.0005</code> = 0.05
+        %).</td></tr><tr><td><code>makerRate</code></td><td>number</td><td>Maker
+        fee rate (e.g. <code>0.0002</code> = 0.02
+        %).</td></tr></tbody></table><blockquote><p><strong>Note:</strong> Fee
+        rates are expressed as decimals, not percentages. Multiply by 100 to
+        convert (e.g. <code>0.0005</code> → 0.05 %).</p></blockquote>
+components:
+  schemas:
+    PingResponse:
+      type: object
+      description: Empty JSON object. Confirms the API is reachable.
+      x-gitbook-description-html: <p>Empty JSON object. Confirms the API is reachable.</p>
+    TimeResponse:
+      type: object
+      properties:
+        serverTime:
+          type: integer
+          format: int64
+          description: Current server time (Unix milliseconds).
+          x-gitbook-description-html: <p>Current server time (Unix milliseconds).</p>
+    FeeTiersResponse:
+      type: object
+      properties:
+        feeTiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeeTier"
+          description: List of fee tiers sorted by ascending volume threshold.
+          x-gitbook-description-html: <p>List of fee tiers sorted by ascending volume threshold.</p>
+    FeeTier:
+      type: object
+      properties:
+        tier:
+          type: integer
+          description: Tier number (0 = base tier).
+          x-gitbook-description-html: <p>Tier number (0 = base tier).</p>
+        minVolume:
+          type: number
+          description: Minimum 30-day trailing volume (USD) to qualify.
+          x-gitbook-description-html: <p>Minimum 30-day trailing volume (USD) to qualify.</p>
+        takerRate:
+          type: number
+          description: Taker fee rate as a decimal (e.g. `0.0005` = 0.05 %).
+          x-gitbook-description-html: >-
+            <p>Taker fee rate as a decimal (e.g. <code>0.0005</code> = 0.05
+            %).</p>
+        makerRate:
+          type: number
+          description: Maker fee rate as a decimal (e.g. `0.0002` = 0.02 %).
+          x-gitbook-description-html: >-
+            <p>Maker fee rate as a decimal (e.g. <code>0.0002</code> = 0.02
+            %).</p>

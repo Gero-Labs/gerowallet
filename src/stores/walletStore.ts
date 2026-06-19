@@ -6,7 +6,8 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
 import LoadingState from '@/stores/loading';
 import priceService from '@/stores/priceStore';
-import { Keys } from '@/models/types';
+import { Contact, Keys } from '@/models/types';
+import type { IUnifiedUtxo, IBalance } from '@/chains/common/interfaces';
 
 interface WhitelistedEntry {
   domain: string;
@@ -47,25 +48,27 @@ export interface Account {
 export interface WalletStore {
   loggedWallet: any;
   isLocked: boolean;
+  isSyncing: boolean;
   account: Account;
   transactions: any[];
-  utxos: Cardano.Utxo[];
+  utxos: Cardano.Utxo[] | IUnifiedUtxo[];  // Support both Cardano and Bitcoin UTXOs
   collateral: Cardano.Utxo | null;
   keys: Keys;
   tokens: {};
   collections: {};
   config: any;
-  fiatRates: {};
-  fiatRatesIntervalId: any;
   rewards?: any[];
-  contacts?: any;
+  contacts?: Record<string, Contact>;
   connectedDapps?: any[];
+  // Bitcoin-specific state
+  bitcoinBalance?: IBalance;  // Bitcoin balance (available, total, locked)
 }
 
 // Create observable state
 export const walletStore = Vue.observable<WalletStore>({
   loggedWallet: null,
   isLocked: false,
+  isSyncing: false,  // true during first restore sync — prevents navigation to dashboard
   account: null,
   transactions: [],
   utxos: [],
@@ -81,18 +84,20 @@ export const walletStore = Vue.observable<WalletStore>({
     hideScamTokens: false,
     hideUnratedTokens: false,
     hideUnverifiedTokens: false,
+    hideBalances: false,
     stakingProView: false,
     currency: 'usd',
     locale: 'us',
     txAutoSubmit: true,
     useSidePanel: true,
     websiteProtection: true,
+    autoWithdrawRewards: false,
   },
-  fiatRates: null,
-  fiatRatesIntervalId: null,
   rewards: [],
   contacts: {},
-  connectedDapps: []
+  connectedDapps: [],
+  // Bitcoin state
+  bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
 });
 
 const STORE_NAME = 'walletStore';
@@ -116,8 +121,9 @@ if (context === 'browser') {
       Object.assign(walletStore, result[STORE_NAME]);
 
       // Initialize price service if wallet is logged in
-      if (result[STORE_NAME].loggedWallet && result[STORE_NAME].loggedWallet.chain === 'Cardano') {
-        priceService.initialize().catch(error => {
+      const hydratedWallet = result[STORE_NAME].loggedWallet;
+      if (hydratedWallet && (hydratedWallet.chain === 'Cardano' || hydratedWallet.chain === 'Bitcoin')) {
+        priceService.initialize(hydratedWallet.chain).catch(error => {
           console.error('Failed to initialize price service on hydration:', error);
         });
       }
@@ -188,13 +194,41 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
 }
 
 export default {
+  setSyncing(isSyncing: boolean) {
+    walletStore.isSyncing = isSyncing;
+    broadcastFromBackground({ isSyncing });
+  },
+
   setLoggedWallet(loggedWallet: any) {
+    const prevAddress = walletStore.loggedWallet?.baseAddress;
+    const newAddress = loggedWallet?.baseAddress;
     walletStore.loggedWallet = loggedWallet;
     broadcastFromBackground({ loggedWallet });
 
-    // Initialize price service when wallet is set
-    if (loggedWallet && loggedWallet.chain === 'Cardano') {
-      priceService.initialize().catch(error => {
+    // Notify every tab's content script that the active wallet address
+    // changed, so the Bring SDK (listening for `gero:login` / `gero:logout`)
+    // can refresh its cached walletAddress and trigger a fresh cashback token
+    // fetch. Without this, tabs loaded before login keep Bring's cache at
+    // null and cashback tokens are generated with walletAddress=null.
+    // Fires on login (null → addr), logout (addr → null), and wallet switch
+    // (addrA → addrB), but not on repeated sets with the same address.
+    if (typeof chrome !== 'undefined' && chrome.tabs?.query && prevAddress !== newAddress) {
+      chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id !== 'number') continue;
+          chrome.tabs.sendMessage(
+            tab.id,
+            { action: 'geroLoggedWalletChanged', loggedIn: !!newAddress },
+            // Swallow "Receiving end does not exist" — many tabs have no content script
+            () => void chrome.runtime.lastError,
+          );
+        }
+      });
+    }
+
+    // Initialize price service when wallet is set (chain-aware)
+    if (loggedWallet && (loggedWallet.chain === 'Cardano' || loggedWallet.chain === 'Bitcoin')) {
+      priceService.initialize(loggedWallet.chain).catch(error => {
         console.error('Failed to initialize price service:', error);
       });
     }
@@ -215,16 +249,30 @@ export default {
     broadcastFromBackground({ transactions });
   },
 
-  setUtxos(utxos: Cardano.Utxo[]) {
-    if (utxos) {
-      const collateralCandidates: Cardano.Utxo[] = utxos.filter((utxo: Cardano.Utxo) => {
-        const assetsSize = utxo[1].value.assets?.size || 0;
-        return assetsSize === 0 && Number(utxo[1].value.coins.toString()) >= 5000000 && Number(utxo[1].value.coins.toString()) <= 20000000
-      }).sort((a, b) => {
-        return Number(a[1].value.coins.toString()) - Number(b[1].value.coins.toString())
-      })
-      if (collateralCandidates && collateralCandidates.length > 0 && utxos.length > 1) {
-        this.setCollateral(collateralCandidates[0])
+  async setUtxos(utxos: Cardano.Utxo[] | IUnifiedUtxo[]) {
+    if (utxos && utxos.length > 0) {
+      // Determine if these are Cardano UTXOs by checking structure
+      const isCardanoUtxos = Array.isArray(utxos[0]) && utxos[0].length === 2;
+
+      if (isCardanoUtxos) {
+        // Cardano UTXO handling (existing logic)
+        const cardanoUtxos = utxos as Cardano.Utxo[];
+        const collateralCandidates: Cardano.Utxo[] = cardanoUtxos.filter((utxo: Cardano.Utxo) => {
+          const assetsSize = utxo[1].value.assets?.size || 0;
+          return assetsSize === 0 && Number(utxo[1].value.coins.toString()) >= 5000000 && Number(utxo[1].value.coins.toString()) <= 20000000
+        }).sort((a, b) => {
+          return Number(a[1].value.coins.toString()) - Number(b[1].value.coins.toString())
+        })
+        if (collateralCandidates && collateralCandidates.length > 0 && cardanoUtxos.length > 1) {
+          this.setCollateral(collateralCandidates[0])
+        }
+      } else {
+        // Bitcoin UTXO handling - calculate and store balance
+        const bitcoinUtxos = utxos as IUnifiedUtxo[];
+        const { calculateBitcoinBalance } = await import('@/chains/bitcoin/bitcoinUtxoManager');
+        const balance = calculateBitcoinBalance(bitcoinUtxos);
+        walletStore.bitcoinBalance = balance;
+        broadcastFromBackground({ bitcoinBalance: balance });
       }
     }
     walletStore.utxos = utxos;
@@ -254,16 +302,6 @@ export default {
   setConfig(config: {}) {
     walletStore.config = config;
     broadcastFromBackground({ config });
-  },
-
-  setFiatRates(fiatRates: any) {
-    walletStore.fiatRates = fiatRates;
-    broadcastFromBackground({ fiatRates });
-  },
-
-  setFiatRatesIntervalId(fiatRatesIntervalId: any) {
-    walletStore.fiatRatesIntervalId = fiatRatesIntervalId;
-    broadcastFromBackground({ fiatRatesIntervalId });
   },
 
   setRewards(rewards: any[]) {
@@ -317,6 +355,14 @@ export default {
     }
   },
 
+  setHideBalances(value: boolean) {
+    if (walletStore.config && walletStore.loggedWallet) {
+      walletStore.config.hideBalances = value;
+      broadcastFromBackground({ config: walletStore.config });
+      setWalletConfiguration(walletStore.loggedWallet.id, 'hideBalances', value);
+    }
+  },
+
   setHideUnverifiedTokens(value: boolean) {
     if (walletStore.config && walletStore.loggedWallet) {
       walletStore.config.hideUnverifiedTokens = value;
@@ -333,12 +379,11 @@ export default {
     }
   },
 
-  setLocale(value: string) {
-    if (walletStore.config && walletStore.loggedWallet) {
-      walletStore.config.locale = value;
-      broadcastFromBackground({ config: walletStore.config });
-      setWalletConfiguration(walletStore.loggedWallet.id, 'locale', value);
-    }
+  async setLocale(value: string) {
+    // CRITICAL: Only save to geroStore (global preference, persists across login/logout)
+    // DO NOT save to wallet-specific config to avoid duplicate liveQuery triggers
+    const { default: GeroStore } = await import('@/stores/geroStore');
+    await GeroStore.setLocale(value);
   },
 
   setWebsiteProtection(value: boolean) {
@@ -384,7 +429,7 @@ export default {
   isWhitelisted(origin: string): boolean {
     if (!walletStore.connectedDapps || !Array.isArray(walletStore.connectedDapps)) return false;
     const whitelisted = walletStore.connectedDapps as WhitelistedEntry[]
-    return !!whitelisted.find(el => origin.includes(el.domain));
+    return !!whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1);
   },
 
   logout() {
@@ -404,10 +449,9 @@ export default {
       tokens: {},
       collections: {},
       config: {},
-      fiatRates: null,
-      fiatRatesIntervalId: null,
       rewards: [],
-      connectedDapps: []
+      connectedDapps: [],
+      bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
     };
 
     // Apply to local state
@@ -427,12 +471,6 @@ export default {
     // CRITICAL: Clear wallet-specific alarms only (keep system alarms like auto-lock-check)
     clearWalletSpecificAlarms();
 
-    // Clear intervals to prevent memory leaks
-    if (walletStore.fiatRatesIntervalId) {
-      clearInterval(walletStore.fiatRatesIntervalId);
-      walletStore.fiatRatesIntervalId = null;
-    }
-
     // Clear all wallet-specific data immediately during wallet switching
     // This prevents cross-wallet data contamination
     const clearedState: Partial<WalletStore> = {
@@ -446,7 +484,7 @@ export default {
       rewards: [],
       contacts: {},
       connectedDapps: [],
-      fiatRatesIntervalId: null
+      bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) }
     };
 
     // Apply to a local state

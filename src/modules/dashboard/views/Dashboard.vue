@@ -26,29 +26,27 @@
         <v-col cols="12" xl="9" lg="9" md="12" sm="12">
           <!-- Chart row -->
           <v-row no-gutters>
-            <v-col cols="12" class="pa-2">
-              <v-card
-                outlined
-                class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
-              >
-                <v-card-text>
-                  <PortfolioChart
-                    :chart-data="computeChartData.adaData"
-                    :chart-data-usd="computeChartData.usdData"
-                    :chart-data-eur="computeChartData.eurData"
-                    :portfolio-value-ada="currentPortfolioValues.ada"
-                    :portfolio-value-usd="currentPortfolioValues.usd"
-                    :portfolio-value-eur="currentPortfolioValues.eur"
-                    :ada-only-value-ada="adaBalance"
-                    :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
-                    :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
-                    :loading="portfolioLoading"
-                    :progressive-loading="true"
-                    :first-loaded-currency="firstLoadedCurrency"
-                    @refresh="refreshPortfolioChart"
-                  />
-                </v-card-text>
-              </v-card>
+            <v-col cols="12" class="pa-2" style="height: 210px;">
+              <PortfolioChart
+                :chart-data="computeChartData.adaData"
+                :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
+                :portfolio-value-ada="currentPortfolioValues.ada"
+                :portfolio-value-usd="currentPortfolioValues.usd"
+                :portfolio-value-eur="currentPortfolioValues.eur"
+                :ada-only-value-ada="adaBalance"
+                :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+                :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+                :loading="portfolioLoading"
+                :progressive-loading="true"
+                :first-loaded-currency="firstLoadedCurrency"
+                :total-realized-pnl="pnlSummary?.totalRealizedPnlAda ?? null"
+                :total-unrealized-pnl="pnlSummary?.totalUnrealizedPnlAda ?? null"
+                :pnl-incomplete="pnlSummary?.tokens?.some(t => t.costBasisComplete === false) ?? false"
+                @refresh="refreshPortfolioChart"
+                @withdraw-rewards="handleWithdrawRewards"
+                @delegate-gero="handleDelegateGero"
+              />
             </v-col>
           </v-row>
 
@@ -75,8 +73,57 @@
         </v-col>
       </v-row>
 
+      <!-- Bitcoin wallet view -->
+      <template v-if="loggedWallet?.chain === Blockchain.BITCOIN">
+        <!-- Price history chart (full width) -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <BitcoinPriceChart />
+          </v-col>
+        </v-row>
+        <!-- Balance card + Mempool widget -->
+        <v-row no-gutters>
+          <v-col cols="12" xl="5" lg="5" md="6" sm="12" class="pa-2">
+            <BitcoinBalanceCard class="fill-height" />
+          </v-col>
+          <v-col cols="12" xl="7" lg="7" md="6" sm="12" class="pa-2">
+            <MempoolWidget class="fill-height" />
+          </v-col>
+        </v-row>
+        <!-- Bitcoin Ecosystem Hub -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <BitcoinEcosystemWidget />
+          </v-col>
+        </v-row>
+      </template>
+
       <!-- Separate chart row for non-Cardano wallets -->
       <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
+        <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2" style="height: 210px;">
+          <PortfolioChart
+            :chart-data="computeChartData.adaData"
+            :chart-data-usd="computeChartData.usdData"
+            :chart-data-eur="computeChartData.eurData"
+            :portfolio-value-ada="currentPortfolioValues.ada"
+            :portfolio-value-usd="currentPortfolioValues.usd"
+            :portfolio-value-eur="currentPortfolioValues.eur"
+            :ada-only-value-ada="adaBalance"
+            :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+            :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
+            :loading="portfolioLoading"
+            :progressive-loading="true"
+            :first-loaded-currency="firstLoadedCurrency"
+            @timeframe-change="handleChartTimeframeChange"
+            @mode-change="handleChartModeChange"
+            @refresh="refreshPortfolioChart"
+            @withdraw-rewards="handleWithdrawRewards"
+            @delegate-gero="handleDelegateGero"
+          />
+        </v-col>
+
+      <!-- Separate chart row for non-Cardano/non-Bitcoin wallets -->
+      <v-row no-gutters v-if="loggedWallet?.chain !== Blockchain.BITCOIN && (loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO)">
         <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
           <v-card
             outlined
@@ -138,15 +185,22 @@
         </v-col>
       </v-row>
 
-      <!-- Token Allocation Table Row -->
-      <v-row no-gutters>
+      <!-- Token Allocation Table Row (Cardano only) -->
+      <v-row no-gutters v-if="loggedWallet?.chain !== Blockchain.BITCOIN">
         <v-col cols="12" class="pa-2">
           <TokenAllocationTable />
         </v-col>
       </v-row>
 
-      <!-- Transactions and Staking Row + Swap Widget Column -->
-      <v-row no-gutters>
+      <!-- Transactions Row for Bitcoin (simplified) -->
+      <v-row no-gutters v-if="loggedWallet?.chain === Blockchain.BITCOIN">
+        <v-col cols="12" class="pa-2">
+          <TransactionsCard style="min-height: 426px"></TransactionsCard>
+        </v-col>
+      </v-row>
+
+      <!-- Transactions and Staking Row + Swap Widget Column (Cardano only) -->
+      <v-row no-gutters v-if="loggedWallet?.chain !== Blockchain.BITCOIN">
         <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
           <TransactionsCard style="min-height: 426px"></TransactionsCard>
         </v-col>
@@ -165,59 +219,51 @@
         <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
           <SwapWidget class="fill-height" />
         </v-col>
-        <!-- <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <CashbackCard></CashbackCard>
-      </v-col> -->
       </v-row>
 
-      <!-- KaiserEx Token Reception -->
-      <!--      <v-row no-gutters>-->
-      <!--        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">-->
-      <!--          <v-card outlined class="liquid-glass">-->
-      <!--            <v-card-title>KaiserEx Token Reception</v-card-title>-->
-      <!--            <v-card-text>-->
-      <!--              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">-->
-      <!--                Receive Token from KaiserEx-->
-      <!--              </v-btn>-->
-      <!--              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">-->
-      <!--                {{ kaiserExMessage.text }}-->
-      <!--              </v-alert>-->
-      <!--            </v-card-text>-->
-      <!--          </v-card>-->
-      <!--        </v-col>-->
-      <!--      </v-row>-->
+      <!-- Withdrawal Dialog -->
+      <WithdrawalDialog :isOpen="withdrawalDialog" :tx="withdrawalTxData" @close="closeWithdrawalDialog" />
+
+      <!-- Delegate Dialog -->
+      <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
     </template>
   </v-layout>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import EmptyStateHero from '../components/EmptyStateHero.vue';
+import BitcoinBalanceCard from '../components/BitcoinBalanceCard.vue';
+import BitcoinPriceChart from '../components/BitcoinPriceChart.vue';
+import MempoolWidget from '../components/MempoolWidget.vue';
+import BitcoinEcosystemWidget from '../components/BitcoinEcosystemWidget.vue';
 import { Blockchain, Network } from '@/models/types';
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
-// import CashbackCard from '@/modules/dashboard/components/CashbackCard.vue';
-// import SwapCard from '@/modules/dashboard/components/SwapCard.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
+import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
+import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
-
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-// Import carousel assets
+import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
+import { useWithdrawal } from '@/shared/composables/useWithdrawal';
+import { useDelegation } from '@/shared/composables/useDelegation';
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
 import { getBalance } from '@/chrome/serialization';
-// import { receiveKaiserExToken } from '@/services/kaiserEx.service';
+import { debugLog } from '@/utils/debug';
 
 // Translation composable
 const { t } = useTranslation();
@@ -225,17 +271,22 @@ const { t } = useTranslation();
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
 
+const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
+const { pnlSummary, fetchPnl } = useWalletPnl();
+fetchPnl();
+
 // Store refs
-const { loggedWallet, transactions, account, utxos, collateral } = toRefs(walletStore);
+const { loggedWallet, transactions, account, utxos, collateral, bitcoinBalance } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
+const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
+const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGero, closeDelegateDialog } = useDelegation();
+
+const proxy = instance?.proxy;
 
 // Load exchange rate immediately on component mount
 loadExchangeRate();
-
-// const kaiserExLoading = ref(false);
-// const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
 
 // Carousel state
 const currentCarouselIndex = ref(0);
@@ -278,28 +329,13 @@ const apexCarouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.apexBgDashboard,
     action: 'showApexWelcome',
   },
-  // {
-  //   id: 'apex-wallet',
-  //   title: 'Apex Wallet',
-  //   subtitle: 'Secure decentralized storage',
-  //   logo: assets.walletGeroApex,
-  //   logoAlt: 'Apex Wallet Logo',
-  //   backgroundImage: assets.apexImage,
-  //   action: 'showApexWallet',
-  // },
-  // {
-  //   id: 'apex-features',
-  //   title: 'Apex Features',
-  //   subtitle: 'Explore advanced capabilities',
-  //   logo: assets.apexSvg,
-  //   logoAlt: 'Apex Features Logo',
-  //   backgroundImage: assets.apexBgDashboard,
-  //   action: 'showApexFeatures',
-  // },
 ]);
 
 const isStakingEnabled = computed(() => {
-  if (loggedWallet.value?.baseAddress) {
+  // Only parse address for Cardano-based chains
+  if (loggedWallet.value?.baseAddress &&
+      (loggedWallet.value?.chain === Blockchain.CARDANO ||
+       loggedWallet.value?.chain === Blockchain.APEX_PRIME)) {
     return (
       Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
     );
@@ -312,7 +348,26 @@ const isSwapEnabled = computed(() => {
 });
 
 // Empty state computed
-const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === '0');
+const isWalletEmpty = computed(() => {
+  // Debug logging
+  debugLog('🔍 Dashboard Debug:', {
+    chain: loggedWallet.value?.chain,
+    isBitcoin: loggedWallet.value?.chain === Blockchain.BITCOIN,
+    bitcoinBalance: bitcoinBalance.value,
+    account: account.value?.controlled_amount,
+  });
+
+  // For Bitcoin wallets, never show empty state - always show balance card
+  // This allows users to receive Bitcoin even with 0 balance
+  if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
+    debugLog('✅ Bitcoin wallet detected - showing balance card');
+    return false;
+  }
+  // For Cardano wallets, check account controlled amount
+  const isEmpty = !account.value || account.value?.controlled_amount === '0';
+  debugLog('📊 Cardano wallet - isEmpty:', isEmpty);
+  return isEmpty;
+});
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
   // Access config directly from the reactive store for better reactivity
@@ -351,36 +406,51 @@ const computedValues = computed(() => {
   let totalValue;
   if (portfolio.value?.adaValue) {
     totalValue = portfolio.value.adaValue;
-  } else {
+  } else if (utxos.value && utxos.value.length > 0) {
     totalValue = Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
+  } else if (account.value?.controlled_amount && Number(account.value.controlled_amount) > 0) {
+    totalValue = Number(account.value.controlled_amount) / 1000000;
+  } else {
+    totalValue = 0;
   }
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
-// Initialize portfolio data composable with a 4-hour cache
-const portfolioComposable = usePortfolioData({
-  cacheTimeMs: 4 * 60 * 60 * 1000, // 4 hours
-  enableCache: true,
-});
-
+// Initialize portfolio data composable
 const {
   adaData: adaChartData,
   usdData: usdChartData,
   eurData: eurChartData,
   isLoading: portfolioLoading,
-  loadDataProgressively,
   refreshPortfolioData,
-  getCacheStats,
-  getCacheStatus,
+  loadForTimeframe,
   firstLoadedCurrency,
   latestPortfolioValues,
-} = portfolioComposable;
+} = usePortfolioData();
+
+// Read persisted chart settings to make the right initial API call
+const uiToApiTimeframe: Record<string, string> = {
+  DAY: '24h', WEEK: '7d', MONTH: '30d', QUARTER: '90d', YEAR: '1y',
+};
+
+function getPersistedChartSettings(walletId: number | undefined) {
+  if (!walletId) return { adaOnly: false, timeframe: '7d' };
+  const mode = localStorage.getItem(`portfolioMode_${walletId}`) || 'full';
+  const uiTimeframe = localStorage.getItem(`portfolioTab_${walletId}`) || 'WEEK';
+  return {
+    adaOnly: mode === 'ada-only',
+    timeframe: uiToApiTimeframe[uiTimeframe] || '7d',
+  };
+}
+
+const currentAdaOnly = ref(false);
+const currentTimeframe = ref('7d');
 
 // Cache current timestamp to avoid computed recalculation
 const currentTimestamp = ref(Date.now());
 
 const computeChartData = computed(() => {
-  // For Cardano mainnet, return ADA and USD data
+  // For Cardano mainnet, return data from market API (mode already applied via adaOnly param)
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
       adaData: adaChartData.value,
@@ -485,7 +555,7 @@ const currentPortfolioValues = computed(() => {
     return {
       ada: latestPortfolioValues.value.ada !== null ? latestPortfolioValues.value.ada : computedValues.value.totalValue,
       usd: latestPortfolioValues.value.usd !== null ? latestPortfolioValues.value.usd : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
-      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
+      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0) * usdToEurRate.value),
     };
   }
 
@@ -535,7 +605,6 @@ const showUpdateInfo = () => {
 };
 
 const showDebitCardInfo = () => {
-  const proxy = instance?.proxy as any;
   if (proxy && proxy.$router && proxy.$route.path !== '/card') {
     proxy.$router.push('/card');
   }
@@ -543,7 +612,6 @@ const showDebitCardInfo = () => {
 
 const navigateToCashback = () => {
   // Only navigate if not already on the cashback page
-  const proxy = instance?.proxy as any;
   if (proxy && proxy.$router && proxy.$route.path !== '/cashback') {
     proxy.$router.push('/cashback');
   }
@@ -561,39 +629,13 @@ const showApexFeatures = () => {
   // Add your Apex features logic here
 };
 
-// const handleReceiveKaiserExToken = async () => {
-//   kaiserExLoading.value = true;
-//   kaiserExMessage.value = null;
-//
-//   try {
-//     await receiveKaiserExToken(tokenData => {
-//       kaiserExMessage.value = {
-//         type: 'success',
-//         text: `Token received successfully! Token: ${tokenData.access_token}`,
-//       };
-//       kaiserExLoading.value = false;
-//     });
-//   } catch (error) {
-//     kaiserExMessage.value = {
-//       type: 'error',
-//       text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-//     };
-//     kaiserExLoading.value = false;
-//   } finally {
-//     // Always ensure loading state is cleared, even if popup was manually closed
-//     setTimeout(() => {
-//       kaiserExLoading.value = false;
-//     }, 1000);
-//   }
-// };
-
 // Empty state handlers
 const handleBuyCrypto = () => {
-  instance?.proxy?.$emit('open-buy-dialog');
+  openBuyDialog();
 };
 
 const handleShowReceive = () => {
-  instance?.proxy?.$emit('open-receive-dialog');
+  openReceiveDialog();
 };
 
 const handleOpenLearn = () => {
@@ -623,27 +665,47 @@ const adaBalance = computed(() => {
 const refreshPortfolioChart = async () => {
   const address = loggedWallet.value?.baseAddress;
   if (address && !isApex.value) {
-    await refreshPortfolioData(address);
+    await refreshPortfolioData(address, currentAdaOnly.value);
   }
 };
 
-// Utility function to get cache information (for debugging)
-const getPortfolioCacheInfo = async () => {
+const handleWithdrawRewards = () => {
+  withdrawRewards();
+};
+
+const handleDelegateGero = () => {
+  delegateToGero();
+};
+
+const handleChartTimeframeChange = async (timeframe: string) => {
+  debugLog(`📊 Dashboard handleChartTimeframeChange: timeframe=${timeframe}, adaOnly=${currentAdaOnly.value}`);
   const address = loggedWallet.value?.baseAddress;
   if (!address || isApex.value) {
-    return null;
+    debugLog(`📊 Dashboard handleChartTimeframeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    return;
   }
 
-  const stats = await getCacheStats();
-  const status = await getCacheStatus(address);
+  currentTimeframe.value = timeframe;
+  await loadForTimeframe(address, timeframe, currentAdaOnly.value);
+};
 
-  return { stats, status };
+const handleChartModeChange = async (adaOnly: boolean) => {
+  debugLog(`📊 Dashboard handleChartModeChange: adaOnly=${adaOnly}, timeframe=${currentTimeframe.value}`);
+  const address = loggedWallet.value?.baseAddress;
+  if (!address || isApex.value) {
+    debugLog(`📊 Dashboard handleChartModeChange: skipped (address=${address}, isApex=${isApex.value})`);
+    return;
+  }
+
+  currentAdaOnly.value = adaOnly;
+  debugLog(`📊 Dashboard: calling loadForTimeframe(${address}, ${currentTimeframe.value}, ${adaOnly})`);
+  await loadForTimeframe(address, currentTimeframe.value, adaOnly);
+  debugLog(`📊 Dashboard: loadForTimeframe completed, adaData=${adaChartData.value?.length}, usdData=${usdChartData.value?.length}`);
 };
 
 // Expose functions for potential use
 defineExpose({
   refreshPortfolioChart,
-  getPortfolioCacheInfo,
 });
 // Update timestamp when transactions change
 watch(
@@ -670,8 +732,11 @@ watch(
             loggedWallet.value?.chain === Blockchain.CARDANO &&
             loggedWallet.value?.network === Network.MAINNET
           ) {
-            // Start parallel loading immediately (don't await - let it run in the background)
-            loadDataProgressively(newAddress).catch(error => {
+            // Read persisted toggle + timeframe and load matching data
+            const settings = getPersistedChartSettings(loggedWallet.value?.id);
+            currentAdaOnly.value = settings.adaOnly;
+            currentTimeframe.value = settings.timeframe;
+            loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
               console.warn('Portfolio data loading failed:', error);
             });
           }

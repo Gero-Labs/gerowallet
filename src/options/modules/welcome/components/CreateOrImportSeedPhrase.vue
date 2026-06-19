@@ -7,23 +7,23 @@
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
-            Create Wallet
+            {{ $t('welcome.createWallet') }}
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
-            Set up a new wallet to manage your digital assets.
+            {{ $t('welcome.createWalletDescription') }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
       <v-list-item class="mb-6 py-2" @click="restoreWalletDialog = true;">
         <v-list-item-avatar size="50" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 14px; background-color: #13161B">
-          <v-img :src="keySvg" style="width: 22px;" max-width="22" contain></v-img>
+          <v-img :src="keyGeroSvg" style="width: 22px;" max-width="22" contain></v-img>
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
-            Restore Wallet
+            {{ $t('welcome.restoreWallet') }}
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
-            Restore a wallet using your recovery phrase.
+            {{ $t('welcome.restoreWalletDescription') }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -33,10 +33,10 @@
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
-            Pair Hardware Wallet
+            {{ $t('welcome.pairHardwareWallet') }}
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
-            Connect your hardware wallet.
+            {{ $t('welcome.pairHardwareWalletDescription') }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -46,7 +46,7 @@
       <v-icon>
         mdi-arrow-left
       </v-icon>
-      Back
+      {{ $t('common.back') }}
     </v-btn>
     <CreateWallet :is-open="createWalletDialog" @close="createWalletDialog = false" :persistent="false" :network="props.network"></CreateWallet>
     <RestoreWallet :dialog="restoreWalletDialog" @dialogChange="restoreWalletDialogChange" :network="props.network"></RestoreWallet>
@@ -62,7 +62,7 @@ import { computed, ref } from 'vue';
 import { NetworkInfo } from '@/utils/networks';
 
 interface Props {
-  network: NetworkInfo;
+  network?: NetworkInfo;
 }
 
 const props = defineProps<Props>();
@@ -90,18 +90,18 @@ const walletSvg = computed(() => {
   }
   return assets.walletGeroSvg
 })
-const keySvg = computed(() => {
+const keyGeroSvg = computed(() => {
   if (props.network?.blockchain?.includes('Apex')) {
     return assets.keyApexSvg
   }
-  return assets.keySvg
+  return assets.keyGeroSvg
 })
 
 const pairSvg = computed(() => {
   if (props.network?.blockchain?.includes('Apex')) {
     return assets.pairApexSvg
   }
-  return assets.pairSvg
+  return assets.pairGeroSvg
 })
 
 computed(() => {

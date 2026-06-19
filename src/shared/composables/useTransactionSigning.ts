@@ -179,7 +179,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
         tx,
         keys.value,
-        utxos.value,
+        utxos.value as Cardano.Utxo[],
         !isBT.value, // isUsb flag (inverted from isBT)
         networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network)
       );
@@ -218,20 +218,20 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       }) as BackgroundResponse<SignTxResponse>;
 
       if (!response.data.success) {
-        throw new Error(response.data.error || 'Trezor signing failed');
+        throw new Error(response.data.error || t('wallet.trezorSigningFailed'));
       }
 
       // Get signatures from Trezor response (comes as array from Chrome messaging)
       // Validate that signatures is an array before converting to Map
       if (!Array.isArray(response.data.signatures)) {
-        throw new Error('Invalid signature format from Trezor');
+        throw new Error(t('wallet.trezorInvalidSignatureFormat'));
       }
       // Validate array contains valid tuples
       if (!response.data.signatures.every(
         item => Array.isArray(item) && item.length === 2 &&
                 typeof item[0] === 'string' && typeof item[1] === 'string'
       )) {
-        throw new Error('Invalid signature tuple format from Trezor');
+        throw new Error(t('wallet.trezorInvalidSignatureFormat'));
       }
       const signatures: Cardano.Signatures = new Map(response.data.signatures);
 
@@ -269,7 +269,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
 
       // Validate that xfp exists for Keystone wallet
       if (!loggedWallet.value.xfp) {
-        throw new Error('Keystone wallet requires xfp (extended fingerprint). Please re-add your Keystone wallet.');
+        throw new Error(t('wallet.keystoneRequiresXfp'));
       }
 
       // Serialize transaction to CBOR
@@ -279,7 +279,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
 
       // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
-      const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
+      const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value as Cardano.Utxo[], keys.value);
 
       // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
       keystoneType.value = signRequestResponse.ur.type;
@@ -300,6 +300,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   const onKeystoneScan = async (ur: UR) => {
     try {
       const signature = parseSignature(ur);
+
+      // Validate witness set before using it
+      if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
+        throw new Error(t('wallet.invalidKeystoneSignature'));
+      }
 
       // Get witness set from signature (already a hex string)
       txWitnesses.value = signature.witnessSet;

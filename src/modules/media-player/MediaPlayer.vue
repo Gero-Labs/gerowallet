@@ -3,7 +3,14 @@
     <v-row no-gutters>
       <v-col cols="12" class="pa-0">
         <v-card flat outlined class="liquid-glass" style="min-height: calc(100vh - 80px);">
-          <v-row no-gutters v-if="musicPlaylist?.length > 0" style="min-height: calc(-80px + 100vh)">
+          <v-row no-gutters v-if="!musicPlaylist?.length" class="fill-height" align="center" justify="center" style="min-height: calc(-80px + 100vh)">
+            <v-col cols="12" class="text-center pa-8">
+              <v-icon size="64" color="grey lighten-1">mdi-music-off</v-icon>
+              <div class="mt-4 text-h6 grey--text text--lighten-1">{{ $t('emptyState.noMediaNFTs') }}</div>
+              <div class="mt-2 body-2 grey--text">{{ $t('emptyState.noMediaNFTsDescription') }}</div>
+            </v-col>
+          </v-row>
+          <v-row no-gutters v-else style="min-height: calc(-80px + 100vh)">
             <v-col cols="12" xl="6" lg="6" style="align-content: center;">
               <v-card flat class="pa-4 transparent" v-if="currentTrack" style="box-shadow: none!important;">
                 <v-card-text style="height: 433px; max-height: 433px;">

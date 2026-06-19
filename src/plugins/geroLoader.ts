@@ -1,6 +1,7 @@
 import Dexie, { liveQuery, Subscription } from 'dexie';
 import { getDb } from '@/db/gero-db';
 import GeroStore from '@/stores/geroStore';
+import { Wallet } from '@/models/types';
 
 const subscriptions: Map<string, Subscription> = new Map();
 
@@ -9,7 +10,7 @@ export async function loadWallets() {
   return new Promise((resolve, reject) => {
     subscriptions.set('wallets', liveQuery(() => geroDb.table('wallets').toArray()).subscribe({
       next: wallets => {
-        GeroStore.setWallets(wallets.reduce((map: Record<number, any>, wallet: any) => {
+        GeroStore.setWallets(wallets.reduce((map: Record<number, Wallet>, wallet: Wallet) => {
           map[wallet.id] = wallet;
           return map;
         }, {}))

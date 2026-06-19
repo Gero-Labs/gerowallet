@@ -67,7 +67,7 @@ The following `.env` files contain real API keys and must NEVER be committed to 
 - `VITE_ABLY_API_KEY=...` - Ably realtime messaging key
 - `GOOGLE_CLIENT_ID=...` - Google OAuth client ID
 - `MANIFEST_KEY=...` - Chrome extension signing key
-- `VITE_LD_CLIENT_SIDE_ID=...` - LaunchDarkly client ID
+- `VITE_FLAGS_BASE_URL=...` - Self-hosted feature flag service URL
 - `VITE_CASHBACK_IDENTIFIER=...` - Cashback service identifier
 
 **Action required:**
@@ -120,7 +120,7 @@ baseURL: import.meta.env.VITE_BACKEND_URL || 'https://dev.gerowallet.io'
 
 ### API Key Externalization
 - MoonPay, Guardarian, Ably keys use environment variables
-- LaunchDarkly client ID uses environment variable
+- Feature flag service URL uses environment variable
 - Backend URL uses environment variable
 
 ---
@@ -215,7 +215,7 @@ These services require API keys for full functionality:
 | Guardarian   | Fiat on-ramp                 | API key           |
 | Ably         | Real-time blockchain updates | API key with auth |
 | Google       | OAuth for Google Wallet      | Client ID         |
-| LaunchDarkly | Feature flags                | Client-side ID    |
+| gero-sync    | Feature flags                | Self-hosted URL   |
 | zkFold       | Google Wallet ZK proofs      | API key           |
 | KaiserEx     | Gero Card services           | OAuth flow        |
 | Blockfrost   | Cardano blockchain data      | Project ID        |
@@ -250,14 +250,14 @@ Three console.log statements were logging entire request objects that contained 
 
 The codebase implements industry-standard cryptographic practices:
 
-| Practice | Implementation | Status |
-|----------|----------------|--------|
-| Private Key Encryption | ChaCha20-Poly1305 AEAD with PBKDF2-HMAC-SHA512 | **Secure** |
-| Key Derivation | PBKDF2 with 100,000 iterations for PIN/patterns | **Secure** |
+| Practice                      | Implementation                                       | Status     |
+|-------------------------------|------------------------------------------------------|------------|
+| Private Key Encryption        | ChaCha20-Poly1305 AEAD with PBKDF2-HMAC-SHA512       | **Secure** |
+| Key Derivation                | PBKDF2 with 100,000 iterations for PIN/patterns      | **Secure** |
 | Key Derivation (private keys) | PBKDF2 with 19,162 iterations (CSL/EMIP3 compatible) | **Secure** |
-| Random Generation | `crypto.getRandomValues()` for salts/nonces | **Secure** |
-| PIN Verification | Constant-time comparison (timing attack resistant) | **Secure** |
-| WebAuthn/PassKey | Platform authenticator with device-bound keys | **Secure** |
+| Random Generation             | `crypto.getRandomValues()` for salts/nonces          | **Secure** |
+| PIN Verification              | Constant-time comparison (timing attack resistant)   | **Secure** |
+| WebAuthn/PassKey              | Platform authenticator with device-bound keys        | **Secure** |
 
 **Files:** `src/shared/utils/crypto.ts`, `src/shared/utils/security.ts`
 
@@ -308,10 +308,7 @@ The headers are simply ignored by browsers.
 
 #### HTTP Link in Privacy Policy
 
-One HTTP link found that should be HTTPS:
-- File: `src/options/modules/navigation/dialogs/PrivacyPolicyDialog.vue`
-- Link: `http://www.aboutads.info/choices/`
-- Recommendation: Update to HTTPS
+No HTTP links found. The inline privacy policy dialog has been removed in favor of linking to `https://gerowallet.io/legal/privacy/`.
 
 ---
 

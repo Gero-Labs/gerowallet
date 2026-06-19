@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="$t('security.walletLocked')"
+    :title="t('security.walletLocked')"
     :subtitle="unlockDescription"
     :width="400"
     icon="mdi-lock"
@@ -16,18 +16,8 @@
         <div class="mt-2 title white--text font-weight-bold">{{ walletName }}</div>
       </div>
 
-      <!-- Loading overlay during unlock -->
-      <div v-if="unlocking" class="unlock-loading-overlay">
-        <v-progress-circular
-          indeterminate
-          color="primary"
-          size="48"
-        ></v-progress-circular>
-        <div class="mt-4 subtitle-1 white--text">{{ $t('security.unlocking') }}</div>
-      </div>
-
       <!-- Unlock method content -->
-      <div v-else class="unlock-method-wrapper">
+      <div class="unlock-method-wrapper">
         <!-- PIN Input -->
         <div v-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
             <numeric-otp-input
@@ -68,6 +58,18 @@
 
           <!-- Pattern Input -->
           <div v-else-if="unlockMethod === 'pattern'" class="text-center unlock-method-container unlock-method-content">
+            <div class="pattern-tooltip-anchor">
+              <v-tooltip
+                v-model="patternTooltip"
+                top
+                color="red"
+              >
+                <template v-slot:activator="{ }">
+                  <div class="pattern-tooltip-target"></div>
+                </template>
+                <span>{{ patternError }}</span>
+              </v-tooltip>
+            </div>
             <pattern-lock
               v-model="pattern"
               @complete="handlePatternComplete"
@@ -111,15 +113,15 @@
                 <v-text-field
                   ref="passwordInputRef"
                   v-model="password"
-                  :label="$t('security.spendingPassword')"
+                  :label="configLoaded ? (isPrfWallet ? $t('security.lockPassword') : $t('security.spendingPassword')) : $t('wallet.password')"
                   :type="show ? 'text' : 'password'"
-                  :rules="[rules.required()]"
+                  :error="passwordError"
                   outlined
                   dense
                   hide-details
                   :append-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
                   @click:append="show = !show"
-                  @keydown.enter.stop="handleUnlock"
+                  @keydown.enter.stop="handleUnlock()"
                 >
                   <template v-slot:append-outer>
                     <v-btn
@@ -129,7 +131,7 @@
                       color="primary"
                       class="ml-2 px-1"
                       style="height: 40px;"
-                      @click="handleUnlock"
+                      @click="handleUnlock()"
                       :loading="unlocking"
                       :disabled="!canUnlock"
                     >
@@ -193,14 +195,18 @@ import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PatternLock from '../components/PatternLock.vue';
 import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
 import { authenticateWebAuthn } from '@/shared/utils/security';
 import { resolveIcon } from '@/shared/utils/resolver';
-import rules from '@/utils/rules';
+import { verifyPattern } from '@/shared/utils/security';
 import assets from '@/utils/assets';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { getAllWallets } from '@/db/gero-db';
 
+const { t } = useTranslation();
 // Define props and emits
 const props = defineProps<{
   value: boolean;
@@ -217,7 +223,7 @@ const emit = defineEmits<{
 }>();
 
 // Access Vue instance for $t
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy;
 
 // Reactive state
 const show = ref(false);
@@ -227,18 +233,26 @@ const show2FA = ref(false);
 const passKeyEnabled = ref(false);
 const webAuthnCredentialId = ref<string | null>(null);
 const passKeyAutoTriggerUnlock = ref(false);
+const preLoginEncryptionMethod = ref<string | null>(null);
+const cachedLockPasswordHash = ref<string | null>(null);
+const cachedPatternHash = ref<string | null>(null);
 
 const pinCode = ref('');
 const pinLength = ref(4);
 const pinError = ref('');
 const pattern = ref<number[]>([]);
+const patternError = ref<string>('');
+const patternTooltip = ref(false);
 const password = ref('');
+const passwordError = ref(false);
 const totpCode = ref('');
 
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
+const configLoaded = ref(false);
+const configLoadError = ref(false);
 const errorMessage = ref('');
-const tooltip = ref<any>({
+const tooltip = ref({
   enabled: false,
   text: ''
 });
@@ -247,12 +261,20 @@ const walletName = ref('');
 const walletIcon = ref('mdi-wallet');
 
 // Template refs for validation reset
-const pinInputRef = ref<any>(null);
-const passwordInputRef = ref<any>(null);
+const pinInputRef = ref(null);
+const passwordInputRef = ref(null);
 
 // Computed properties
+const isPrfWallet = computed(() => {
+  if (walletStore.loggedWallet) {
+    return walletStore.loggedWallet.encryptionMethod === 'prf';
+  }
+  // Pre-login: use encryption method resolved from wallet record
+  return preLoginEncryptionMethod.value === 'prf';
+});
+
 const canUnlock = computed(() => {
-  if (unlocking.value) return false;
+  if (unlocking.value || !configLoaded.value) return false;
 
   if (unlockMethod.value === 'pin') {
     return pinCode.value.length >= 4;
@@ -266,11 +288,14 @@ const canUnlock = computed(() => {
 
 const unlockDescription = computed(() => {
   if (unlockMethod.value === 'pin') {
-    return vmProxy.$t('security.enterPinToUnlock');
+    return t('security.enterPinToUnlock');
   } else if (unlockMethod.value === 'pattern') {
-    return vmProxy.$t('security.drawPatternToUnlock');
+    return t('security.drawPatternToUnlock');
   } else {
-    return vmProxy.$t('security.useSpendingPasswordToUnlock');
+    if (!configLoaded.value) return '';
+    return isPrfWallet.value
+      ? t('security.useLockPasswordToUnlock')
+      : t('security.useSpendingPasswordToUnlock');
   }
 });
 
@@ -292,7 +317,7 @@ async function loadWalletInfo() {
   } else {
     const wallet = walletStore.loggedWallet;
     if (wallet) {
-      console.log('Wallet info:', wallet);
+      debugLog('Wallet info:', wallet);
       walletName.value = wallet.name || 'Wallet';
       walletIcon.value = wallet.icon || 'mdi-wallet';
     }
@@ -303,7 +328,18 @@ async function loadSecurityConfig() {
   try {
     // Use pre-login walletId if provided, otherwise use logged wallet
     const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
-    if (!walletId) return;
+    if (!walletId) {
+      configLoaded.value = true; // Allow interaction (fallback to password)
+      return;
+    }
+
+    // Resolve wallet record for pre-login PRF detection and credential retrieval
+    let preLoginWalletRecord: any = null;
+    if (props.preLoginWalletId) {
+      const walletsMap = await getAllWallets();
+      preLoginWalletRecord = walletsMap[walletId] || null;
+      preLoginEncryptionMethod.value = preLoginWalletRecord?.encryptionMethod || null;
+    }
 
     const { getDb } = await import('@/db/wallet-db');
     const db = await getDb(walletId);
@@ -322,13 +358,30 @@ async function loadSecurityConfig() {
     pinLength.value = pinLengthConfig?.value || 6;
     passKeyAutoTriggerUnlock.value = autoTriggerUnlockConfig?.value || false;
 
+    // Pre-cache lock password hash for PRF wallets (avoids duplicate DB read in handleUnlock)
+    if (unlockMethodConfig?.value === 'password') {
+      const lockPasswordHashConfig = await configTable.where({ key: 'lockPasswordHash' }).first();
+      cachedLockPasswordHash.value = lockPasswordHashConfig?.value || null;
+    }
+
+    // Pre-cache pattern hash for instant local verification
+    if (unlockMethodConfig?.value === 'pattern') {
+      const patternHashConfig = await configTable.where({ key: 'encryptedPatternHash' }).first();
+      cachedPatternHash.value = patternHashConfig?.value || null;
+    }
+
     // Check for PRF wallets: credential ID stored in wallet record, not config
     const wallet = walletStore.loggedWallet;
-    const isPrfWallet = wallet?.encryptionMethod === 'prf';
+    const walletIsPrf = wallet?.encryptionMethod === 'prf' || preLoginEncryptionMethod.value === 'prf';
 
-    if (isPrfWallet && wallet?.webAuthnCredentialId) {
-      // PRF wallet: Use credential from wallet record
-      webAuthnCredentialId.value = wallet.webAuthnCredentialId;
+    if (walletIsPrf) {
+      // PRF wallet: Use credential from wallet record (not config table)
+      if (wallet?.webAuthnCredentialId) {
+        webAuthnCredentialId.value = wallet.webAuthnCredentialId;
+      } else if (preLoginWalletRecord) {
+        // Pre-login: use wallet record already fetched above
+        webAuthnCredentialId.value = preLoginWalletRecord.webAuthnCredentialId || null;
+      }
       // PRF wallets can always use PassKey for unlock
       passKeyEnabled.value = true;
     } else {
@@ -338,6 +391,8 @@ async function loadSecurityConfig() {
 
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
     // that works alongside PIN, password, or pattern
+
+    configLoaded.value = true;
   } catch (error) {
     console.error('Error loading security config:', error);
     unlockMethod.value = null;
@@ -345,6 +400,8 @@ async function loadSecurityConfig() {
     passKeyEnabled.value = false;
     webAuthnCredentialId.value = null;
     pinLength.value = 6;
+    configLoaded.value = true; // Allow interaction even on error (fallback to password)
+    configLoadError.value = true;
   }
 }
 
@@ -359,6 +416,19 @@ async function handlePinFinish(pin: string) {
 
 async function handlePatternComplete(patternData: number[]) {
   pattern.value = patternData;
+
+  // Verify pattern locally for instant feedback (if hash is cached)
+  if (cachedPatternHash.value) {
+    const isValid = await verifyPattern(patternData, cachedPatternHash.value);
+    if (!isValid) {
+      patternError.value = t('security.incorrectPattern');
+      patternTooltip.value = true;
+      pattern.value = [];
+      setTimeout(() => { patternTooltip.value = false; }, 2000);
+      return;
+    }
+  }
+
   if (twoFactorEnabled.value) {
     show2FA.value = true;
   } else {
@@ -375,26 +445,28 @@ async function handlePassKeyAuth() {
     }
 
     // Use WebAuthn for PassKey authentication
-    console.log('🔐 Authenticating with WebAuthn credential');
+    debugLog('🔐 Authenticating with WebAuthn credential');
     const authenticated = await authenticateWebAuthn(webAuthnCredentialId.value);
 
     if (authenticated) {
-      console.log('✅ PassKey authentication successful - unlocking wallet');
+      debugLog('✅ PassKey authentication successful - unlocking wallet');
 
-      // PassKey authentication successful - proceed to unlock
-      // (No auto-fill, just pure authentication signal like iPhone Face ID)
-      // Note: No need to modify unlockMethod - we use unlockCredential to signal PassKey auth
+      // Reset password field validation so it doesn't show red during PassKey unlock
+      if (passwordInputRef.value) {
+        (passwordInputRef.value as any).resetValidation();
+      }
+
       if (twoFactorEnabled.value) {
         show2FA.value = true;
       } else {
         await handleUnlock(true); // Pass passKeyAuthenticated flag
       }
     } else {
-      showError(vmProxy.$t('security.passKeyFailed'));
+      showError(t('security.passKeyFailed'));
     }
   } catch (error: any) {
     console.error('PassKey authentication error:', error);
-    showError(error.message || vmProxy.$t('security.passKeyFailed'));
+    showError(error.message || t('security.passKeyFailed'));
   } finally {
     passKeyLoading.value = false;
   }
@@ -403,7 +475,11 @@ async function handlePassKeyAuth() {
 async function handleUnlock(passKeyAuthenticated = false) {
   if (!canUnlock.value && !passKeyAuthenticated) return;
 
+  unlocking.value = true;
   errorMessage.value = '';
+
+  // Yield to browser so the loading spinner renders before any heavy computation
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   try {
     let unlockCredential: string | number[] | null;
@@ -416,8 +492,26 @@ async function handleUnlock(passKeyAuthenticated = false) {
       unlockCredential = pinCode.value;
     } else if (unlockMethod.value === 'pattern') {
       unlockCredential = pattern.value;
+    } else if (unlockMethod.value === 'password' && isPrfWallet.value) {
+      // PRF wallet lock password: verify locally in browser context
+      // (avoids crypto polyfill differences between browser and service worker)
+      // Uses hash cached during loadSecurityConfig() to avoid duplicate DB read
+      if (!cachedLockPasswordHash.value) {
+        showError(t(configLoadError.value ? 'security.unlockFailed' : 'security.lockPasswordNotConfigured'));
+        return;
+      }
+      const { verifyPin } = await import('@/shared/utils/security');
+      const isValid = await verifyPin(password.value, cachedLockPasswordHash.value);
+      if (!isValid) {
+        showError(t('security.wrongLockPassword'));
+        password.value = '';
+        passwordError.value = true;
+        return;
+      }
+      // Verification passed — signal background (same pattern as passkey-authenticated)
+      unlockCredential = 'lockpassword-verified';
     } else {
-      // Fallback to password
+      // Fallback to spending password (normal wallets)
       unlockCredential = password.value;
     }
 
@@ -435,23 +529,26 @@ async function handleUnlock(passKeyAuthenticated = false) {
         password: password.value || undefined
       }
     });
-    console.log('Unlock response:', response);
+    debugLog('Unlock response:', response);
     if (response.data.success) {
-      unlocking.value = true;
       emit('input', false);
       emit('unlocked');
     } else {
       // Show errors for each unlock method
       if (unlockMethod.value === 'pin') {
-        pinError.value = vmProxy.$t('security.incorrectPin');
+        pinError.value = t('security.incorrectPin');
         pinCode.value = '';  // Clear PIN input
       } else if (unlockMethod.value === 'pattern') {
-        showError(vmProxy.$t('security.incorrectPattern'));
+        patternError.value = t('security.incorrectPattern');
+        patternTooltip.value = true;
         pattern.value = [];  // Clear pattern
+        setTimeout(() => { patternTooltip.value = false; }, 2000);
       } else {
-        // Password unlock
-        showError(vmProxy.$t('wallet.wrongSpendingPassword'));
+        // Password unlock — for PRF wallets, lock password was already verified locally
+        // so a background failure means something else went wrong (DB error, wallet load, etc.)
+        showError(isPrfWallet.value ? t('security.unlockFailed') : t('wallet.wrongSpendingPassword'));
         password.value = '';  // Clear password input
+        passwordError.value = true;
       }
     }
   } catch (error: any) {
@@ -489,10 +586,18 @@ function resetForm() {
   pinCode.value = '';
   pinError.value = '';
   pattern.value = [];
+  patternError.value = '';
+  patternTooltip.value = false;
   password.value = '';
+  passwordError.value = false;
   totpCode.value = '';
   errorMessage.value = '';
   show2FA.value = false;
+  configLoaded.value = false;
+  configLoadError.value = false;
+  cachedLockPasswordHash.value = null;
+  cachedPatternHash.value = null;
+  preLoginEncryptionMethod.value = null;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 
@@ -504,6 +609,9 @@ function resetForm() {
     passwordInputRef.value.resetValidation();
   }
 }
+
+// Clear password error when user types (not when programmatically cleared to '')
+watch(password, (newVal) => { if (newVal.length > 0) passwordError.value = false; });
 
 // Watch for dialog open/close
 watch(() => props.value, async (newVal) => {
@@ -519,25 +627,26 @@ watch(() => props.value, async (newVal) => {
 
     // Auto-focus on the appropriate unlock method input
     if (unlockMethod.value === 'pin' && pinInputRef.value) {
-      console.log('🎯 Auto-focusing PIN input');
+      debugLog('🎯 Auto-focusing PIN input');
       pinInputRef.value.focus();
     } else if ((unlockMethod.value === 'password' || !unlockMethod.value) && passwordInputRef.value) {
-      console.log('🎯 Auto-focusing password input');
+      debugLog('🎯 Auto-focusing password input');
       passwordInputRef.value.focus();
     }
     // Pattern and PassKey don't need focus - pattern is already interactive, PassKey auto-triggers
 
-    // Auto-trigger PassKey prompt if auto-trigger setting is enabled
-    // (PassKey is a convenience feature, not a standalone unlock method)
+    // Auto-trigger PassKey prompt only when no explicit unlock method is set.
+    // If the user chose password/PIN/pattern, respect that choice — they can still
+    // manually click the PassKey button if they prefer biometric unlock.
     const shouldAutoTrigger = (
       passKeyAutoTriggerUnlock.value &&
       passKeyEnabled.value &&
-      webAuthnCredentialId.value
+      webAuthnCredentialId.value &&
+      !unlockMethod.value // Don't auto-trigger when an explicit unlock method is configured
     );
 
     if (shouldAutoTrigger) {
-      console.log('🔐 Auto-triggering PassKey prompt (auto-trigger unlock is enabled)');
-      // Reduced delay for smoother experience (200ms instead of 500ms)
+      debugLog('🔐 Auto-triggering PassKey prompt (auto-trigger unlock is enabled)');
       setTimeout(() => {
         handlePassKeyAuth();
       }, 200);
@@ -583,6 +692,17 @@ watch(() => props.value, async (newVal) => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+}
+
+.pattern-tooltip-anchor {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.pattern-tooltip-target {
+  width: 1px;
+  height: 1px;
 }
 
 /* Remove margin from append-outer slot */

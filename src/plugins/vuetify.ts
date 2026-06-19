@@ -52,11 +52,18 @@ const vuetify = new Vuetify({
   },
 });
 
-// Function to update Vuetify theme colors dynamically
-export const updateVuetifyTheme = (isApex: boolean, isDark: boolean = true) => {
-  const themeColors = isApex ? themes.apex : themes.cardano;
+// Function to update Vuetify theme colors dynamically based on wallet chain
+export const updateVuetifyTheme = (chain: string, isDark: boolean = true) => {
+  let themeColors: typeof themes.cardano;
+  if (chain === 'Bitcoin') {
+    themeColors = themes.bitcoin;
+  } else if (chain === 'Apex Fusion Prime' || chain === 'Apex Fusion Vector') {
+    themeColors = themes.apex;
+  } else {
+    themeColors = themes.cardano;
+  }
+
   const themeType = isDark ? 'dark' : 'light';
-  
   vuetify.framework.theme.themes[themeType].primary = themeColors.primary;
   vuetify.framework.theme.themes[themeType].secondary = themeColors.secondary;
   vuetify.framework.theme.themes[themeType].accent = themeColors.accent;

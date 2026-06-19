@@ -1,7 +1,14 @@
-import { METHOD } from '@/chrome/config';
+import { METHOD, BITCOIN_METHOD } from '@/chrome/config';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignature, Paginate } from '@/models/types';
 import { Cardano as CardanoCore } from '@cardano-sdk/core';
+
+// Envelope returned by the content-script proxy. Each call comes back as
+// `{ data, error?, target, sender, id }`; callers only ever read `data`/`error`.
+interface ContentReply<T = unknown> {
+  data: T;
+  error?: unknown;
+}
 
 export const getBalance = async (): Promise<string> => {
   console.log('🔵 [webpage.ts] getBalance called');
@@ -13,14 +20,14 @@ export const getBalance = async (): Promise<string> => {
   return result['data'];
 };
 
-export const enable = async (): Promise<any> => {
+export const enable = async (): Promise<boolean> => {
   console.log('🔵 [webpage.ts] enable called');
-  const result = await Messaging.sendToContent({
+  const result = (await Messaging.sendToContent({
     method: METHOD.enable,
     data: { userGesture: navigator.userActivation?.isActive }
-  });
+  })) as ContentReply<boolean>;
   console.log('🔵 [webpage.ts] enable result:', result);
-  return result['data'];
+  return result.data;
 };
 
 export const isEnabled = async (): Promise<boolean> => {
@@ -33,29 +40,12 @@ export const isEnabled = async (): Promise<boolean> => {
   return result['data'];
 };
 
-export const promptLogin = async (): Promise<void> => {
-  console.log('🔵 [webpage.ts] promptLogin called');
-  const result = await Messaging.sendToContent({
-    method: METHOD.popupLogin,
-    data: { userGesture: navigator.userActivation?.isActive },
-  });
-  console.log('🔵 [webpage.ts] promptLogin result:', result);
-  if (result['data']) {
-    window.dispatchEvent(new CustomEvent('gero:login', {
-      bubbles: true,
-      cancelable: true,
-      composed: false,
-    }))
-  }
-  return result['data'];
-};
-
 export const signData = async (address: CardanoCore.PaymentAddress | CardanoCore.RewardAccount | string, payload: string): Promise<DataSignature> => {
   console.log('🔵 [webpage.ts] signData called', { address, payload });
-  const result: any = await Messaging.sendToContent({
+  const result = (await Messaging.sendToContent({
     method: METHOD.signData,
     data: { address, payload, userGesture: navigator.userActivation?.isActive },
-  });
+  })) as ContentReply<DataSignature>;
   console.log('🔵 [webpage.ts] signData result:', result);
   return {
     key: result.data.key,
@@ -210,5 +200,99 @@ export const getNetworkMagic = async () => {
     data: {},
   });
   console.log('🔵 [webpage.ts] getNetworkMagic result:', result);
+  return result['data'];
+};
+
+// ─── Bitcoin (Unisat-compatible) ──────────────────────────────────────────────
+
+export const btcRequestAccounts = async (): Promise<string[]> => {
+  const result = await Messaging.sendToContent({
+    method: BITCOIN_METHOD.enable,
+    data: { userGesture: navigator.userActivation?.isActive },
+  });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcGetAccounts = async (): Promise<string[]> => {
+  const result = await Messaging.sendToContent({ method: BITCOIN_METHOD.getAccounts, data: {} });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcGetPublicKey = async (): Promise<string> => {
+  const result = await Messaging.sendToContent({ method: BITCOIN_METHOD.getPublicKey, data: {} });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcGetNetwork = async (): Promise<string> => {
+  const result = await Messaging.sendToContent({ method: BITCOIN_METHOD.getNetwork, data: {} });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcGetChain = async (): Promise<{ enum: string; name: string; network: string }> => {
+  const network = await btcGetNetwork();
+  if (network === 'testnet') {
+    return { enum: 'BITCOIN_TESTNET', name: 'Bitcoin Testnet', network: 'testnet' };
+  }
+  return { enum: 'BITCOIN_MAINNET', name: 'Bitcoin Mainnet', network: 'mainnet' };
+};
+
+export const btcGetBalance = async (): Promise<{ confirmed: number; unconfirmed: number; total: number }> => {
+  const result = await Messaging.sendToContent({ method: BITCOIN_METHOD.getBalance, data: {} });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcGetUtxos = async (): Promise<unknown[]> => {
+  const result = await Messaging.sendToContent({ method: BITCOIN_METHOD.getUtxos, data: {} });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcSignPsbt = async (psbtHex: string, options?: { autoFinalized?: boolean; toSignInputs?: unknown[] }): Promise<string> => {
+  const result = await Messaging.sendToContent({
+    method: BITCOIN_METHOD.signPsbt,
+    data: { psbtHex, options, userGesture: navigator.userActivation?.isActive },
+  });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcSignPsbts = async (psbtHexs: string[], options?: { autoFinalized?: boolean; toSignInputs?: unknown[] }): Promise<string[]> => {
+  const result = await Messaging.sendToContent({
+    method: BITCOIN_METHOD.signPsbts,
+    data: { psbtHexs, options, userGesture: navigator.userActivation?.isActive },
+  });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcSignMessage = async (message: string, type: 'ecdsa' | 'bip322-simple' = 'ecdsa'): Promise<string> => {
+  const result = await Messaging.sendToContent({
+    method: BITCOIN_METHOD.signMessage,
+    data: { message, type, userGesture: navigator.userActivation?.isActive },
+  });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcPushTx = async ({ rawtx }: { rawtx: string }): Promise<string> => {
+  const result = await Messaging.sendToContent({
+    method: BITCOIN_METHOD.pushTx,
+    data: { rawtx },
+  });
+  if (result['error']) throw result['error'];
+  return result['data'];
+};
+
+export const btcPushPsbt = async (psbtHex: string): Promise<string> => {
+  const result = await Messaging.sendToContent({
+    method: BITCOIN_METHOD.pushPsbt,
+    data: { psbtHex },
+  });
+  if (result['error']) throw result['error'];
   return result['data'];
 };

@@ -8,7 +8,7 @@
         </v-col>
         <v-col cols="5" style="align-content: center">
           <EditableTextField
-            :placeholder="$t('settings.walletNamePlaceholder')"
+            :placeholder="t('settings.walletNamePlaceholder')"
             :rules="[
               rules.required(),
               rules.minCharacters(3),
@@ -18,6 +18,7 @@
             ]"
             outlined
             dense
+            hide-details
             v-model="walletName"
             @onSave="setLoggedWalletName"
           ></EditableTextField>
@@ -25,32 +26,38 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">{{ $t('settings.walletProfilePicture') }}</h3>
+          <h3 style="color: white">
+            {{ $t('settings.walletProfilePicture') }}
+            <v-icon color="error" x-small class="ml-1" v-if="hasNewProfilePicture">
+              mdi-circle
+            </v-icon>
+          </h3>
           <span class="helper">{{ $t('settings.chooseProfilePicture') }}</span>
         </v-col>
-        <v-col cols="5" class="d-flex justify-space-between" style="align-content: center; flex-flow: wrap">
-          <v-row no-gutters>
-            <v-col cols="12" class="text-center py-2">
-              <v-avatar size="96" rounded>
-                <v-img v-if="loggedWallet" :src="avatar"></v-img>
-              </v-avatar>
-            </v-col>
-            <v-col cols="12" class="py-2">
-              <v-btn block outlined color="grey" autocapitalize="on" @click="uploadPicture">
-                <span>{{ $t('settings.uploadPicture') }}</span>
-                <v-icon right dark> mdi-cloud-upload-outline </v-icon>
-              </v-btn>
-              <input ref="fileInput" type="file" accept="image/*" style="display: none" @change="onFileChange" />
-            </v-col>
-            <v-col cols="12" class="py-2">
-              <v-btn block outlined color="grey" disabled>
-                <span>{{ $t('settings.chooseNFT') }}</span>
-                <v-icon right dark> mdi-account-box-outline </v-icon>
-              </v-btn>
-            </v-col>
-          </v-row>
+        <v-col cols="5" class="d-flex justify-center" style="align-content: center">
+          <v-tooltip top content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <NotificationDot :show="hasNewProfilePicture" overlap bordered pulse>
+                <v-avatar
+                  size="96"
+                  rounded
+                  class="profile-avatar-clickable"
+                  v-bind="attrs"
+                  v-on="on"
+                  @click="openProfilePicDialog"
+                >
+                  <v-img v-if="loggedWallet" :src="avatar" />
+                  <div class="profile-avatar-overlay">
+                    <v-icon color="white" size="20">mdi-camera</v-icon>
+                  </div>
+                </v-avatar>
+              </NotificationDot>
+            </template>
+            <span>{{ $t('settings.clickToChange') }}</span>
+          </v-tooltip>
         </v-col>
       </v-row>
+      <ProfilePictureDialog ref="profilePicDialog" />
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
           <h3 style="color: white">{{ $t('settings.currencyPreference') }}</h3>
@@ -71,18 +78,24 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">{{ $t('settings.displayLanguage') }}</h3>
+          <h3 style="color: white">
+            {{ $t('settings.displayLanguage') }}
+            <v-icon color="error" x-small class="ml-1" v-if="hasNewLanguage">
+              mdi-circle
+            </v-icon>
+          </h3>
           <span class="helper">{{ $t('settings.setLanguageHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-select
             v-model="loc"
-            :items="Object.values(languages)"
+            :items="availableLanguages"
             item-text="name"
             outlined
             dense
             hide-details
-            disabled
+            attach
+            @focus="handleLanguageSelectorFocus"
           >
             <template v-slot:item="{ item }">
               <v-list-item-avatar size="20">
@@ -135,6 +148,8 @@ import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
+import ProfilePictureDialog from '@/modules/dashboard/dialogs/ProfilePictureDialog.vue';
+import NotificationDot from '@/shared/components/NotificationDot.vue';
 import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
@@ -142,6 +157,7 @@ import geroStoreDefault from '@/stores/geroStore';
 import WalletStore from '@/stores/walletStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { setWalletConfiguration } from '@/db/wallet-db';
+import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 // Define emits
 const emit = defineEmits(['close']);
@@ -149,8 +165,21 @@ const emit = defineEmits(['close']);
 // Translation
 const { t } = useTranslation();
 
+import { READY_LANGUAGES } from '@/plugins/i18n/config';
+
+// Feature notifications for new German language
+const hasNewLanguage = computed(() => isFeatureNew('settings.profile.germanLanguage'));
+
+// Feature notification for new profile picture picker
+const hasNewProfilePicture = computed(() => isFeatureNew('settings.profile.profilePicture'));
+
+// Filter to only show ready languages
+const availableLanguages = computed(() => {
+  return Object.values(languages).filter(lang => READY_LANGUAGES.includes(lang.iso));
+});
+
 // Get store instance
-const { loggedWallet, config } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 const { wallets } = toRefs(geroStore);
 
 // Access Vue instance for i18n
@@ -183,7 +212,7 @@ const selectedCurrency = computed({
 
 const walletName = ref('');
 const loc = ref<string | undefined>(undefined);
-const fileInput = ref<HTMLInputElement | null>(null);
+const profilePicDialog = ref<InstanceType<typeof ProfilePictureDialog>>();
 
 // Computed properties
 const otherWalletNames = computed(() => {
@@ -219,52 +248,49 @@ const setLoggedWalletName = (newWalletName: string) => {
   geroStoreDefault.setWalletName(loggedWallet.value.id, newWalletName);
 };
 
-const uploadPicture = () => {
-  fileInput.value?.click();
+const openProfilePicDialog = () => {
+  if (hasNewProfilePicture.value) {
+    markFeatureAsSeen('settings.profile.profilePicture');
+  }
+  profilePicDialog.value?.open();
 };
 
-const onFileChange = async (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async e => {
-    const picBase64 = e.target?.result as string;
-    await geroStoreDefault.setWalletIcon(loggedWallet.value.id, picBase64);
-
-    // Update loggedWallet icon immediately for live preview
-    loggedWallet.value.icon = picBase64;
-  };
-  reader.readAsDataURL(file);
+const handleLanguageSelectorFocus = () => {
+  // Mark German language feature as seen when user opens the language selector
+  if (hasNewLanguage.value) {
+    markFeatureAsSeen('settings.profile.germanLanguage');
+  }
 };
 
 // Watchers
+// Watch for user changing the dropdown
 watch(loc, async (val) => {
   if (val) {
     const iso = Object.values(languages).find(value => value.name === val)?.iso;
     if (iso) {
-      // CRITICAL FIX: Load language file before switching (race condition fix)
+      // CRITICAL: Don't call setLocale if we're already at this locale
+      if (iso === geroStore.config?.locale) {
+        return;
+      }
+
+      // Load language file and update locale
       const { loadLanguage } = await import('@/plugins/i18n');
       try {
         await loadLanguage(iso);
-
-        // Update store and i18n locale ONLY after successful load
         await WalletStore.setLocale(iso);
         vmProxy.$i18n.locale = iso;
         await vmProxy.$nextTick();
       } catch (error) {
         console.error(`Failed to load language ${iso}:`, error);
-        // Don't update store if load failed - will cause UI inconsistency
       }
     }
   }
 }, { immediate: false });
 
-// Lifecycle
+// Lifecycle - Set initial value from store
 onMounted(() => {
   walletName.value = loggedWallet.value.name;
-  loc.value = languages[config.value.locale || 'us'].name;
+  loc.value = languages[geroStore.config?.locale || 'us'].name;
 });
 </script>
 
@@ -285,5 +311,31 @@ h2 {
 
 .col-6 {
   padding: 0 !important;
+}
+
+.profile-avatar-clickable {
+  cursor: pointer;
+  position: relative;
+  transition: opacity 0.2s;
+}
+
+.profile-avatar-clickable:hover {
+  opacity: 0.85;
+}
+
+.profile-avatar-clickable:hover .profile-avatar-overlay {
+  opacity: 1;
+}
+
+.profile-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 </style>

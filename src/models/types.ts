@@ -1,3 +1,5 @@
+import { Collectible, Token } from '@/models/send-flow.types';
+
 const HARDENED = 2147483648;
 
 const WalletType = {
@@ -17,7 +19,10 @@ export interface Wallet {
   network: string;
   icon?: string;
   type?: WalletTypeValue;
+  addressType?: string; // Version 15+: 'legacy' | 'segwit' | 'taproot' (Bitcoin) | 'shelley' (Cardano)
   // PRF Encryption Support (Version 14+)
+  encryptedPrivateKey?: string;
+  encryptedMnemonic?: string;
   encryptionMethod?: 'password' | 'prf'; // Encryption method for wallet keys
   prfEncryptedPrivateKey?: string; // Private key encrypted with PRF (hex)
   prfEncryptedMnemonic?: string; // Mnemonic encrypted with PRF (hex)
@@ -75,6 +80,7 @@ const WalletTypePurpose = {
 const CoinTypes = {
   CARDANO: HARDENED + coin_type.cardano, // HARD_DERIVATION_START + 1815;
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
+  BITCOIN: HARDENED + 0, // HARD_DERIVATION_START + 0 (Bitcoin BIP44 coin type);
 };
 
 const BIP44_SCAN_SIZE = 20;
@@ -93,12 +99,14 @@ enum Provider {
   KOIOS,
   BLOCKFROST,
   YACI,
+  BLOCKSTREAM,
 }
 
 const Blockchain = {
   CARDANO: 'Cardano',
   APEX_PRIME: 'Apex Fusion Prime',
   APEX_VECTOR: 'Apex Fusion Vector',
+  BITCOIN: 'Bitcoin',
 };
 
 const Network = {
@@ -387,4 +395,19 @@ export interface PaginationParams {
   pledge_met?: boolean;
   sort_by?: string;
   sort_direction?: string;
+}
+
+export interface Contact {
+  name: string;
+  address: string;
+  handle?: string;
+}
+
+export interface SendData {
+  selectedTokens: (Token & { balance?: string | number; name?: string; img?: string })[];
+  selectedCollectibles: Record<string, Collectible & { unit: string }>;
+  recipientAddress: string;
+  selectedWallet: Wallet | Record<string, never>;
+  minAda: number;
+  adaShortage: number;
 }

@@ -3,176 +3,239 @@
     :isOpen="isOpen"
     @close="emit('close')"
     :title="t('wallet.quickSend')"
-    :loading="txSubmitLoading"
+    :loading="txSignLoading"
     :min-height="0"
-    :subtitle="t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
+    :subtitle="t('wallet.quickSendSubtitle', { currency: nativeTicker })"
     :persistent="false"
     :img="assets.sendSvg"
+    :width="428"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
-    <v-card-title style="display: block;" class="py-0">
-      <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
-        <v-stepper-header>
-          <template v-for="(item, index) in steps">
-            <div
-              class="custom-step"
-              :key="item.name"
-              :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
-            >
-              <div class="icon-container">
-                <v-icon
-                  class="step-icon"
-                  :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
-                  size="20"
-                >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
-                </v-icon
-                >
-              </div>
-              <span class="step-label">{{ item.label }}</span>
-            </div>
-            <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
-                 v-if="index < steps.length - 1"></div>
-          </template>
-        </v-stepper-header>
-      </v-stepper>
-    </v-card-title>
-    <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
-      <CustomStepper :currentStep="currentStep" :steps="steps">
-        <v-stepper-content step="1">
-          <SendRecipientDetailsStep
-            :sendData="sendData"
-            @updateRecipientAddress="updateRecipientAddress"
-          ></SendRecipientDetailsStep>
-        </v-stepper-content>
-        <v-stepper-content step="2">
-          <AssetsToSendStep
-            v-model="sendData"
-            @select="selectCollectible"
-            :tokens="tokens"
-            @setMax="setMax"
-          ></AssetsToSendStep>
-        </v-stepper-content>
-        <v-stepper-content step="3">
-          <SummaryStep ref="summary" :sendData="sendData" :tx-data="tx" @next="signAndSubmitTx" @prev="prevStep"></SummaryStep>
-        </v-stepper-content>
-      </CustomStepper>
-
-      <!-- Keystone Sign Dialog -->
-      <KeystoneSignDialog
-        :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
-        :keystoneType="keystoneType"
-        :keystoneCbor="keystoneCbor"
-        @close="overlay = false"
-        @scan="onKeystoneScan"
-        @error="onKeystoneError"
-        @progress="onKeystoneProgress"
-      />
-    </v-card-text>
-    <v-card-actions class="text-center justify-center" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
-      <div class="" v-if="currentStep === 3">
-        <!-- PRF Wallet: PassKey Button or Submit Button -->
-        <div v-if="loggedWallet?.type === WalletType.Normal && isPrfWallet">
-          <!-- Before signing: PassKey button -->
-          <PassKeyAuthButton
-            v-if="!txWitnesses"
-            :disabled="txSubmitLoading"
-            @success="handlePassKeyAuthSuccess"
-            @error="handlePassKeyAuthError"
-            style="width: 295px"
-            class="mb-2"
-          />
-          <!-- After signing: Submit button -->
+    <!-- Empty wallet state -->
+    <template v-if="isWalletEmpty">
+      <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
+        <div class="empty-wallet-state">
+          <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
+          <div class="empty-wallet-title text-h6 mb-2">
+            {{ $t('wallet.emptyWalletSendTitle') }}
+          </div>
+          <div class="empty-wallet-description text-body-2 mb-6">
+            {{ $t('wallet.emptyWalletSendDescription', { currency: nativeTicker }) }}
+          </div>
           <v-btn
-            v-else
-            class="continue-button"
-            @click="nextStep"
-            :disabled="txSubmitLoading"
-            :loading="txSubmitLoading"
-            style="width: 295px"
+            outlined
+            color="#00DFF3"
+            @click="openReceiveDialog"
           >
-            {{ $t('common.confirm') }}
+            <v-icon small class="mr-1">mdi-qrcode</v-icon>
+            {{ $t('wallet.emptyWalletReceive', { currency: nativeTicker }) }}
           </v-btn>
         </div>
+      </v-card-text>
+    </template>
 
-        <!-- Password Wallet: Password Field -->
-        <PassKeyPasswordField
-          ref="passwordField"
-          v-else-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet"
-          :value="spendingPassword"
-          @input="spendingPassword = $event"
-          outlined
-          dense
-          hide-details
-          :rules="[rules.required()]"
-          :disabled="txSubmitLoading"
-          required
-          @enter="nextStep"
-          @passkey-autofill-success="handlePassKeySuccess"
-          @passkey-autofill-error="handlePassKeyError"
-          style="width: 295px"
-          class="mb-2"
+    <!-- Normal send flow -->
+    <template v-else>
+      <!-- Stepper indicator -->
+      <v-card-title style="display: block;" class="pa-0">
+        <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
+          <v-stepper-header>
+            <template v-for="(item, index) in steps">
+              <div
+                class="custom-step"
+                :key="item.name"
+                :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
+              >
+                <div class="icon-container">
+                  <v-icon
+                    class="step-icon"
+                    :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                    size="16"
+                  >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
+                  </v-icon>
+                </div>
+                <span class="step-label">{{ item.label }}</span>
+              </div>
+              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
+                   v-if="index < steps.length - 1"></div>
+            </template>
+          </v-stepper-header>
+        </v-stepper>
+      </v-card-title>
+
+      <!-- Content area -->
+      <v-card-text class="send-dialog-content pa-0">
+        <CustomStepper :currentStep="currentStep" :steps="steps">
+          <!-- Step 1: Recipients -->
+          <v-stepper-content step="1">
+            <div class="step-recipients-wrapper">
+              <div class="step-recipients-inner">
+                <SendRecipientCard
+                  v-for="(recipient, idx) in recipients"
+                  :key="recipient.id"
+                  :class="{ shake: shakeError && !isRecipientValid(recipient) }"
+                  :recipient="recipient"
+                  :index="idx"
+                  :is-expanded="expandedRecipientId === recipient.id"
+                  :can-delete="recipients.length > 1"
+                  :show-header="true"
+                  :available-tokens="availableTokensFor(recipient.id)"
+                  :excluded-collectible-fingerprints="excludedFingerprintsFor(recipient.id)"
+                  :duplicate-of-index="getDuplicateOfIndex(recipient.id, recipient.address)"
+                  @expand="expandRecipient(recipient.id)"
+                  @update:recipient="updateRecipient(recipient.id, $event)"
+                  @duplicate="duplicateRecipient(recipient.id)"
+                  @remove="removeRecipient(recipient.id)"
+                  @setMax="setMax(recipient.id, $event.tokenIndex)"
+                  @sendEntireWallet="sendEntireWallet(recipient.id)"
+                />
+
+                <!-- Add another recipient link -->
+                <div v-if="showAddLink" class="add-recipient-link">
+                  <v-btn text x-small color="#00DFF3" @click="addRecipient()">
+                    <v-icon x-small class="mr-1">mdi-plus</v-icon>
+                    {{ $t('wallet.addAnotherRecipient') }}
+                  </v-btn>
+                </div>
+
+                <!-- Global total -->
+                <div v-if="globalTotal.ada > 0 || globalTotal.usd > 0" class="global-total">
+                  <div v-if="globalTotal.formattedFee" class="global-total__row global-total__fee-row">
+                    <span class="global-total__fee-label">{{ $t('signTx.networkFee') }}</span>
+                    <span class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
+                  </div>
+                  <div v-if="globalTotal.formattedWithdrawal" class="global-total__row global-total__fee-row">
+                    <span class="global-total__fee-label">{{ $t('wallet.rewardsWithdrawn') }}</span>
+                    <span class="global-total__withdrawal">+ {{ globalTotal.formattedWithdrawal }}</span>
+                  </div>
+                  <div class="global-total__row global-total__total-row">
+                    <span class="global-total__label">{{ $t('common.total') }}</span>
+                    <div>
+                      <span class="global-total__ada">{{ globalTotal.formattedTotal }}</span>
+                      <span class="global-total__fiat">{{ '\u2248' }} {{ globalTotal.formattedUsd }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </v-stepper-content>
+
+          <!-- Step 2: Summary -->
+          <v-stepper-content step="2">
+            <SummaryStep
+              ref="summaryRef"
+              :recipients="recipients"
+              :tx-data="tx"
+              @next="handleSign"
+              @prev="prevStep"
+            />
+          </v-stepper-content>
+        </CustomStepper>
+
+        <!-- Keystone Sign Dialog -->
+        <KeystoneSignDialog
+          :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
+          :keystoneType="keystoneType"
+          :keystoneCbor="keystoneCbor"
+          @close="overlay = false"
+          @scan="onKeystoneScan"
+          @error="onKeystoneError"
+          @progress="onKeystoneProgress"
         />
+      </v-card-text>
 
-        <!-- Hardware Wallets: USB/Bluetooth Toggle -->
-        <div v-else-if="loggedWallet?.btSupported" class="pb-4" style="align-content: center;">
-          <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch :text-left="t('dashboard.usb')" icon-left="mdi-usb" :text-right="t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
-          </v-card-subtitle>
+      <!-- Actions -->
+      <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <!-- Transaction Authentication Section (step 2 only) -->
+        <div v-if="currentStep === 2">
+          <TransactionAuthSection
+            :wallet-type="loggedWallet?.type"
+            :is-prf-wallet="isPrfWallet"
+            :is-signed="isSubmit"
+            :loading="txSignLoading"
+            :password="spendingPassword"
+            @update:password="spendingPassword = $event"
+            :password-label="t('wallet.spendingPassword')"
+            :password-rules="passwordRules"
+            :submit-text="t('common.confirm')"
+            :show-bt-toggle="isBTSupported"
+            :is-b-t="isBT"
+            @update:isBT="isBT = $event"
+            :usb-text="t('dashboard.usb')"
+            :bluetooth-text="t('dashboard.bluetooth')"
+            @passkey-success="handlePassKeyAuthSuccess"
+            @passkey-error="handlePassKeyAuthError"
+            @autofill-success="handlePassKeySuccess"
+            @autofill-error="handlePassKeyError"
+            @submit="nextStep"
+            @password-field-ref="setPasswordFieldRef"
+            button-style="width: 295px; margin-bottom: 1px;"
+            button-class="mb-2"
+          />
         </div>
-      </div>
-      <div>
-        <v-btn
-          text
-          @click="prevStep"
-          v-if="currentStep > 1"
-          class="mr-2"
-          :disabled="txSubmitLoading"
-        >
-          <v-icon small class="mr-1">mdi-arrow-left</v-icon>Back
-        </v-btn>
-        <!-- Hide action button for PRF wallets on step 3 (handled above) -->
-        <v-btn
-          v-if="currentStep !== 3 || !isPrfWallet"
-          class="continue-button"
-          @click="nextStep"
-          :disabled="!isValid || txSubmitLoading"
-          :loading="txSubmitLoading"
-        >{{ currentStep === 3 ? (txAutoSubmit ? $t('wallet.signAndConfirm') : (!txWitnesses ? $t('wallet.sign') : $t('common.confirm'))) : $t('common.continue') + ' ' }}
-          <v-icon style="color: black!important;" small v-if="currentStep !==3" class="ml-1">mdi-arrow-right</v-icon>
-        </v-btn>
-      </div>
-    </v-card-actions>
+        <div>
+          <v-btn
+            text
+            @click="prevStep"
+            v-if="currentStep > 1"
+            class="mr-2"
+            :disabled="txSignLoading"
+          >
+            <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ $t('common.back') }}
+          </v-btn>
+          <!-- Step 1: Continue button -->
+          <v-btn
+            v-if="currentStep !== 2"
+            :class="['continue-button', { shake: shakeError }]"
+            @click="nextStep()"
+            :loading="txSignLoading"
+          >{{ $t('common.continue') + ' ' }}
+            <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+          </v-btn>
+          <!-- Step 2: Sign/Confirm button for non-PRF wallets -->
+          <v-btn
+            v-else-if="!isPrfWallet"
+            class="continue-button"
+            @click="nextStep"
+            :disabled="!isValid || txSignLoading"
+            :loading="txSignLoading"
+          >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
+          </v-btn>
+        </div>
+      </v-card-actions>
+    </template>
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { toRefs, ref, computed, getCurrentInstance, watch, onMounted } from 'vue';
+import { toRefs, ref, computed, watch, onMounted, nextTick } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
-import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
-import AssetsToSendStep from '../components/AssetsToSendStep.vue';
+import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
-import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import SendRecipientCard from '../components/SendRecipientCard.vue';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
+import { Token, Collectible, SendRecipient } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
-import snackbar from '@/plugins/snackbar';
-import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { isPaymentAddress } from '@/chrome/serialization';
-import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
-import { serializeCardanoJsSdkTx, BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import ledgerUtils from '@/shared/utils/ledger';
+import { priceStore } from '@/stores/priceStore';
+import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
+import debounce from 'lodash/debounce';
+import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest, type NexusTxAsset, type MaxAdaRequest } from '@/api/nexus-tx-api';
+import { Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
+import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
+import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
-import { UR } from '@keystonehq/keystone-sdk';
+import { debugLog } from '@/utils/debug';
+import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
+import { loadingState } from '@/stores/loading';
 
 interface Props {
   isOpen: boolean;
@@ -183,63 +246,81 @@ const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
 
-const { loggedWallet, utxos, tokens: resolvedAssets, keys, config } = toRefs(walletStore)
-const { tip, epochParams } = toRefs(networkStore)
+const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolvedCollections } = toRefs(walletStore)
+const { epochParams } = toRefs(networkStore)
+
+const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+const { openReceiveDialog: switchToReceive } = useQuickActionDialogs();
+
+async function openReceiveDialog() {
+  // Close send dialog first so receive dialog opens into a clean state without overlap
+  emit('close');
+  await nextTick();
+  switchToReceive();
+}
 
 const currentStep = ref<number>(1);
-const sendData = ref<any>({
-  selectedTokens: [],
-  selectedCollectibles: {},
-  recipientAddress: '',
-  selectedWallet: {},
-  minAda: 0,
-  adaShortage: 0
-});
+const expandedRecipientId = ref<string | null>(null);
 const txValid = ref<boolean>(false);
-const spendingPassword = ref<string>('');
-const passwordField = ref<any>(null);
-const privateKeyBytes = ref<Uint8Array | null>(null); // For PRF wallet authentication
-const steps = ref<any[]>([
-  {
-    name: 'recipientDetails',
-    label: t('wallet.recipientDetails'),
-  },
-  {
-    name: 'assetsToSend',
-    label: t('wallet.assetsToSend'),
-  },
-  {
-    name: 'summary',
-    label: t('wallet.summary'),
-  },
-]);
-const tx = ref<Cardano.Tx | undefined>(undefined);
-const txCbor = ref<string>('');
-const txWitnesses = ref<string>('');
-const isSubmit = ref<boolean>(false);
-const txSubmitLoading = ref<boolean>(false);
-const show1 = ref<boolean>(false);
-const isBT = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
-const overlay = ref<boolean>(false);
-const keystoneScan = ref<boolean>(false);
-const isInit = ref<boolean>(false);
-const keystoneType = ref<string>('');
-const keystoneCbor = ref<string>('');
-const keystoneUseHash = ref(false);
+const shakeError = ref<boolean>(false);
+const maxRecipientIds = ref<Set<string>>(new Set());
 
-const txAutoSubmit = computed(() => {
-  return config.value?.txAutoSubmit;
-});
+function createEmptyRecipient(): SendRecipient {
+  const nativeAsset = tokens.value.find((t: Token & { balance?: string | number; name?: string; img?: string; ticker: string }) => t.ticker === nativeTicker.value);
+  const adaToken = nativeAsset ? { ...nativeAsset, quantity: '0', verified: true } : null;
+  return {
+    id: crypto.randomUUID(),
+    address: '',
+    resolvedAddress: null,
+    selectedTokens: adaToken ? [adaToken] : [],
+    selectedCollectibles: {},
+    minAda: 0,
+    adaShortage: 0,
+  };
+}
 
-const isPrfWallet = computed(() => {
-  return loggedWallet.value?.encryptionMethod === 'prf' ||
-         (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
+const recipients = ref<SendRecipient[]>([]);
+
+const steps = ref([
+  { name: 'recipients', label: t('wallet.recipients') },
+  { name: 'summary', label: t('wallet.summary') },
+]);
+
+const tx = ref<Cardano.Tx | undefined>(undefined);
+
+// Transaction signing composable (handles sign, submit, password, hardware wallets, Keystone)
+const {
+  loading: txSignLoading,
+  spendingPassword,
+  isSubmit,
+  isBT,
+  isPrfWallet,
+  isBTSupported,
+  passwordRules,
+  handleSign,
+  resetState,
+  handlePassKeySuccess,
+  handlePassKeyError,
+  handlePassKeyAuthSuccess,
+  handlePassKeyAuthError,
+  setPasswordFieldRef,
+  overlay,
+  keystoneType,
+  keystoneCbor,
+  onKeystoneScan,
+  onKeystoneError,
+  onKeystoneProgress,
+} = useTransactionSigning({
+  tx,
+  successMessageKey: 'wallet.txSubmittedSuccess',
+  onClose: () => emit('close'),
 });
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
-    const tokens = Object.values(resolvedAssets.value).map((token: any) => {
+    const tokenList = (Object.values(resolvedAssets.value) as (Token & { metadata: { name: string; ticker: string; decimals: number }; img: string })[]).map(token => {
       return {
         ...token,
         name: token.metadata.name,
@@ -252,657 +333,590 @@ const tokens = computed(() => {
         verified: token.verified
       }
     })
-    tokens.sort((a,_b) => {
-      if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+    tokenList.sort((a, _b) => {
+      if (a.ticker === nativeTicker.value) {
         return -1
       }
       return 0;
-      // return (this.pinnedTokens.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker) TODO
     })
-    return tokens
+    return tokenList
   }
   return []
 })
 
+// walletStore.collections is typed as {}, but at runtime each key is a policy ID
+// with value { items: Array, name: string, ... }
+const hasCollectibles = computed(() => Object.keys(resolvedCollections.value).length > 0);
+
+const isWalletEmpty = computed(() => {
+  // Don't show empty state until wallet is fully initialised and data has loaded
+  if (!loggedWallet.value) return false;
+  if (loadingState.loading || loadingState.isSyncing || loadingState.loadingTxs) return false;
+  return tokens.value.length === 0 && !hasCollectibles.value;
+});
+
 const isValid = computed(() => {
   if (currentStep.value === 1) {
-    const fn = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
-    return fn(sendData.value.recipientAddress) !== 'Invalid Payment Address'
+    if (!txValid.value) return false;
+    return recipients.value.every((r: SendRecipient) => {
+      const addr = r.resolvedAddress ?? r.address;
+      const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
+      if (rule(addr) !== true) return false;
+      const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
+        Object.keys(r.selectedCollectibles).length > 0;
+      if (!hasAsset) return false;
+      if (r.adaShortage > 0) return false;
+      return true;
+    });
   }
   if (currentStep.value === 2) {
-    if (!txValid.value) {
-      return false;
-    }
-    const hasZeroQuantity = (items) => {
-      // Handle both arrays and objects
-      const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
-      return itemsArray.some(item => Number(item.quantity) === 0 || Number(item.toSendQuantity) === 0);
-    };
-    return !(hasZeroQuantity(sendData.value.selectedTokens) || hasZeroQuantity(sendData.value.selectedCollectibles));
-  }
-  if (currentStep.value === 3) {
+    if (isSubmit.value) return true; // Already signed, just need confirm click
     if (loggedWallet.value?.type === WalletType.Normal) {
-      // PRF wallet: Check for authenticated privateKeyBytes
-      if (isPrfWallet.value) {
-        return !!privateKeyBytes.value;
-      }
-      // Password wallet: Check for password
+      if (isPrfWallet.value) return true; // PRF handled by TransactionAuthSection
       return !!spendingPassword.value;
-    } else {
-      return true
     }
+    return true; // Hardware wallets always valid
   }
   return false;
 });
 
 const resetData = () => {
-  show1.value = false
-  keystoneScan.value = false
-  isInit.value = false
-  overlay.value = false
-  spendingPassword.value = ''
-  privateKeyBytes.value = null // Clear PRF authentication
+  resetState();
   currentStep.value = 1;
-  txSubmitLoading.value = false
-  tx.value = undefined
-  txCbor.value = ''
-  txWitnesses.value = ''
-  isSubmit.value = false
-  txValid.value = false  // Reset tx validation state
-  const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
-  const foundAsset = tokens.value.find(token => token.ticker === currencyTicker)
-  if (foundAsset) {
-    foundAsset.verified = true
+  tx.value = undefined;
+  txValid.value = false;
+  shakeError.value = false;
+  maxRecipientIds.value = new Set();
+  recipients.value = [createEmptyRecipient()];
+  expandedRecipientId.value = recipients.value[0].id;
+};
+
+function availableTokensFor(recipientId: string) {
+  const others = recipients.value.filter((r: SendRecipient) => r.id !== recipientId);
+  return tokens.value.map((token: Token & { balance?: string | number; name?: string; img?: string; decimals: number }) => {
+    const committed = others.reduce((sum: number, r: SendRecipient) => {
+      const t2 = r.selectedTokens.find((tk: Token) => tk.unit === token.unit);
+      if (!t2) return sum;
+      return sum + Math.floor(Number(t2.quantity) * Math.pow(10, token.decimals ?? 6));
+    }, 0);
+    const rawBalance = Number(token.balance ?? 0);
+    const newBalance = rawBalance - committed;
+    return { ...token, balance: newBalance < 0 ? 0 : newBalance };
+  });
+}
+
+function excludedFingerprintsFor(recipientId: string): Set<string> {
+  const others = recipients.value.filter((r: SendRecipient) => r.id !== recipientId);
+  const fingerprints = new Set<string>();
+  others.forEach((r: SendRecipient) => {
+    Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
+      if (col.fingerprint) fingerprints.add(col.fingerprint);
+    });
+  });
+  return fingerprints;
+}
+
+function updateRecipient(id: string, updated: SendRecipient) {
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
+  if (idx !== -1) {
+    // If ADA amount was manually changed, remove from MAX tracking
+    const old = recipients.value[idx];
+    const oldAda = old.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+    const newAda = updated.selectedTokens.find((tk: Token) => tk.ticker === nativeTicker.value);
+    if (oldAda && newAda && oldAda.quantity !== newAda.quantity && maxRecipientIds.value.has(id)) {
+      maxRecipientIds.value.delete(id);
+    }
+    recipients.value.splice(idx, 1, updated);
   }
-  sendData.value = {
-    selectedTokens: [foundAsset],
-    selectedCollectibles: {},
-    recipientAddress: '',
-    selectedWallet: loggedWallet.value,
-    minAda: 0,
-    adaShortage: 0
+}
+
+async function addRecipient() {
+  const r = createEmptyRecipient();
+  recipients.value.push(r);
+  await nextTick();
+  expandedRecipientId.value = r.id;
+}
+
+async function duplicateRecipient(id: string) {
+  const src = recipients.value.find((r: SendRecipient) => r.id === id);
+  if (!src) return;
+  const duped: SendRecipient = {
+    ...JSON.parse(JSON.stringify(src)),
+    id: crypto.randomUUID(),
+    resolvedAddress: src.resolvedAddress,
   };
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
+  recipients.value.splice(idx + 1, 0, duped);
+  await nextTick();
+  expandedRecipientId.value = duped.id;
 }
 
-const onKeystoneScan = async (ur: UR) => {
-  try {
-    // Parse the signature from Keystone
-    const signature = parseSignature(ur);
-
-    // Validate signature structure
-    if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-      throw new Error(t('wallet.invalidKeystoneSignature'));
-    }
-
-    // Get witness set from signature (already a hex string)
-    txWitnesses.value = signature.witnessSet;
-
-    // Close overlay
-    overlay.value = false;
-    keystoneScan.value = false;
-
-    // Submit if txAutoSubmit is enabled
-    if (txAutoSubmit.value) {
-      await submitTx();
-    } else {
-      isSubmit.value = true;
-    }
-  } catch (error) {
-    console.error('[Keystone] Error processing QR code:', error);
-    snackbar.setError(error instanceof Error ? error.message : t('wallet.keystoneQRScanError'));
-    overlay.value = false;
-    keystoneScan.value = false;
-  }
+async function removeRecipient(id: string) {
+  if (recipients.value.length <= 1) return;
+  const targetId = recipients.value[Math.max(0, recipients.value.findIndex((r: SendRecipient) => r.id === id) - 1)]?.id ?? null;
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === id);
+  recipients.value.splice(idx, 1);
+  await nextTick();
+  expandedRecipientId.value = targetId;
 }
 
-const onKeystoneError = (error: string) => {
-  console.error('[Keystone] Scanner error:', error);
-  snackbar.setError(error || t('wallet.keystoneScanError'));
+function expandRecipient(id: string) {
+  expandedRecipientId.value = id;
 }
 
-const onKeystoneProgress = (progress: number) => {
-  console.log('[Keystone] Scanner progress:', progress);
-  // Progress updates handled silently
+function getDuplicateOfIndex(recipientId: string, address: string): number | undefined {
+  if (!address) return undefined;
+  const current = recipients.value.find((r: SendRecipient) => r.id === recipientId);
+  const checkAddr = current?.resolvedAddress || address;
+  if (!checkAddr) return undefined;
+  const idx = recipients.value.findIndex((r: SendRecipient) =>
+    r.id !== recipientId && ((r.resolvedAddress || r.address) === checkAddr)
+  );
+  return idx >= 0 ? idx : undefined;
 }
 
-const handlePassKeySuccess = () => {
-  setTimeout(() => {
-    nextStep();
-  }, 300); // Small delay for UX feedback
+function isRecipientValid(r: SendRecipient): boolean {
+  const addr = r.resolvedAddress ?? r.address;
+  const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
+  if (rule(addr) !== true) return false;
+  const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
+    Object.keys(r.selectedCollectibles).length > 0;
+  if (!hasAsset) return false;
+  if (r.adaShortage > 0) return false;
+  return true;
 }
 
-const handlePassKeyError = (error: string) => {
-  console.error('PassKey autofill error in SendDialog:', error);
-  snackbar.setError(error || t('security.passKeyAuthFailed'));
-}
+const showAddLink = computed(() => {
+  return recipients.value.length > 0;
+});
 
-const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
-  privateKeyBytes.value = pkBytes;
-  // Automatically proceed to sign after successful authentication
-  setTimeout(() => {
-    nextStep();
-  }, 300);
-}
+/** Aggregate total across all recipients for the global total line. */
+const globalTotal = computed(() => {
+  let totalAda = 0;
+  let totalUsd = 0;
 
-const handlePassKeyAuthError = (error: Error) => {
-  console.error('PassKey authentication error:', error);
-  snackbar.setError(error.message || t('security.passKeyAuthFailed'));
-  privateKeyBytes.value = null;
-}
-
-const signTx = async (): Promise<boolean> => {
-  txSubmitLoading.value = true;
-  try {
-    // Serialize the Cardano.Tx to CBOR for Chrome messaging
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-
-    // Prepare signing data
-    const signingData: any = {
-      txCbor: txCbor.value,
-      partialSign: false,
-      password: spendingPassword.value,
-      accountIndex: 0,
-      utxos: utxos.value,
-      addresses: keys.value,
-      mergeWitnesses: false,
-    };
-
-    // For PRF wallets, pass the already-decrypted privateKeyBytes
-    if (isPrfWallet.value && privateKeyBytes.value) {
-      signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
-    }
-
-    // Sign the transaction via a background message
-    const witnessResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: signingData
-    }) as { data: { witnesses?: any; error?: string } };
-    if (witnessResult.data.error) {
-      throw new Error(witnessResult.data.error);
-    }
-    txWitnesses.value = witnessResult.data.witnesses;
-    return true;
-  } catch (e) {
-    console.error('Error signing send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
-    return false;
-  } finally {
-    txSubmitLoading.value = false;
-  }
-};
-
-const submitTx = async () => {
-  try {
-    txSubmitLoading.value = true;
-    const submitResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor: txCbor.value,
-        witnessHex: txWitnesses.value,
-        utxos: utxos.value
+  recipients.value.forEach((r: SendRecipient) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    r.selectedTokens.forEach((token: any) => {
+      const qty = parseFloat(String(token.quantity || '0').replace(/,/g, ''));
+      if (!qty || isNaN(qty)) return;
+      if (token.ticker === nativeTicker.value) {
+        totalAda += qty;
       }
-    }) as { data: { txId?: string; error?: string } };
+    });
+  });
 
-    if (submitResult.data.error) {
-      throw new Error(submitResult.data.error);
-    }
-
-    snackbar.fireSuccess(t('wallet.txSubmittedSuccess', { txId: submitResult.data.txId }));
-    emit('close');
-  } catch (e) {
-    console.error('Error submitting send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
-  } finally {
-    txSubmitLoading.value = false;
-    isSubmit.value = false;
+  // Extract fee from built tx
+  let feeAda = 0;
+  let formattedFee = '';
+  if (tx.value?.body?.fee) {
+    const feeLovelace = Number(tx.value.body.fee);
+    feeAda = feeLovelace / 1_000_000;
+    formattedFee = filters.toCurrency(feeLovelace, false, 6, '\u20B3', '', false, 6);
   }
-};
 
-const signLedgerTx = async () => {
-  txSubmitLoading.value = true;
-  try {
-    if (!tx.value) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
-      tx.value,
-      keys.value,
-      utxos.value,
-      !isBT.value, // isUsb flag (inverted from isBT)
-      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+  // Rewards being auto-withdrawn as part of this tx (if any). They subtract
+  // from what the wallet actually pays, since they enter the tx as fresh input
+  // coin from the stake account.
+  let withdrawalAda = 0;
+  let formattedWithdrawal = '';
+  if (tx.value?.body?.withdrawals && tx.value.body.withdrawals.length > 0) {
+    const wLovelace = tx.value.body.withdrawals.reduce<bigint>(
+      (acc: bigint, w: { quantity: bigint }) => acc + BigInt(w.quantity),
+      BigInt(0)
     );
-    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-      signatures,
-    })
-    txWitnesses.value = transactionWitnessSet.toCbor();
-
-    // Submit the transaction if txAutoSubmit is enabled
-    if (txAutoSubmit.value) {
-      await submitTx();
-    }
-  } catch (e) {
-    ledgerUtils.ledgerErrorHandling(e);
-  } finally {
-    txSubmitLoading.value = false;
+    withdrawalAda = Number(wLovelace) / 1_000_000;
+    formattedWithdrawal = filters.toCurrency(Number(wLovelace), false, 6, '\u20B3', '', false, 6);
   }
-};
 
-const signTrezorTx = async () => {
-  txSubmitLoading.value = true;
-  try {
-    if (!tx.value) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
+  const totalWithFee = totalAda + feeAda - withdrawalAda;
+  const adaPrice = Number(priceStore.adaUsd?.lastPrice || networkStore.price?.lastPrice || 0);
+  totalUsd = totalWithFee * adaPrice;
 
-    // Serialize transaction to CBOR hex for Chrome messaging (BigInt/Map not serializable)
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+  return {
+    ada: totalAda,
+    fee: feeAda,
+    withdrawal: withdrawalAda,
+    totalWithFee,
+    usd: totalUsd,
+    formattedAda: totalAda > 0
+      ? filters.toCurrency(totalAda * 1e6, false, 6, '\u20B3', '', false, 6)
+      : '\u20B30',
+    formattedTotal: totalWithFee > 0
+      ? filters.toCurrency(totalWithFee * 1e6, false, 6, '\u20B3', '', false, 6)
+      : '\u20B30',
+    formattedFee,
+    formattedWithdrawal,
+    formattedUsd: totalUsd > 0
+      ? `$${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '$0.00',
+  };
+});
 
-    // Send serialized transaction to background for Trezor signing
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.TREZOR,
-      data: {
-        method: 'signTx',
-        txCbor: txCbor.value
-      },
-    }) as BackgroundResponse<SignTxResponse>;
+/** Build Nexus output format from a recipient. Optionally override lovelace (for max-ada). */
+function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
+  const address = r.resolvedAddress ?? r.address;
+  let lovelace = overrideLovelace ?? '0';
+  const assets: NexusTxAsset[] = [];
 
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Trezor signing failed');
-    }
+  // Track units added via the token list so a collectible under the same
+  // policy+assetName can't duplicate it in the output.
+  const addedUnits = new Set<string>();
 
-    // Get signatures from Trezor response (comes as array from Chrome messaging)
-    // Convert array back to Map (cast via unknown to satisfy TypeScript)
-    const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
-    const signatures: Cardano.Signatures = new Map(signaturesArray);
-
-    // Create witness set from signatures
-    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-      signatures,
-    })
-    console.log('[TREZOR-SIGN] Signing successful:', transactionWitnessSet.toCbor());
-    txWitnesses.value = transactionWitnessSet.toCbor();
-
-    // Submit the transaction if txAutoSubmit is enabled
-    if (txAutoSubmit.value) {
-      await submitTx();
-    }
-  } catch (e) {
-    // Trezor-specific error handling
-    if (e instanceof Error) {
-      if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
-        snackbar.setError(t('wallet.trezorTransactionCancelled'));
-      } else if (e.message.toLowerCase().includes('device')) {
-        snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
-      } else {
-        snackbar.setError(e.message);
+  r.selectedTokens
+    .filter((tk: Token) => tk && (tk.unit !== undefined && tk.unit !== null))
+    .forEach((token: Token) => {
+      // Treat missing decimals as 0 — otherwise a no-metadata fungible would
+      // be silently dropped from the output and end up in change.
+      const decimals = token.decimals != null ? token.decimals : 0;
+      const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, decimals)));
+      if (token.ticker === nativeTicker.value) {
+        if (!overrideLovelace) lovelace = qty.toString();
+      } else if (token.unit) {
+        assets.push({
+          policyId: token.unit.slice(0, 56),
+          assetName: token.unit.slice(56),
+          quantity: qty.toString(),
+        });
+        addedUnits.add(token.unit);
       }
-    } else {
-      snackbar.setError(t('errors.unknownError'));
-    }
-  } finally {
-    txSubmitLoading.value = false;
-  }
-};
+    });
 
-async function signAndSubmitTx() {
-  if (loggedWallet.value?.type === WalletType.Normal) {
-    // PRF Wallet: Use privateKeyBytes from PassKey authentication
-    if (isPrfWallet.value) {
-      if (!privateKeyBytes.value) {
-        snackbar.setError(t('security.passKeyAuthRequired'));
-        return;
-      }
-      // privateKeyBytes already authenticated, proceed with signing
-      const isValid: boolean = await signTx();
-      if (!isValid) {
-        return;
-      }
-      // Submit if txAutoSubmit is enabled
-      if (txAutoSubmit.value) {
-        await submitTx();
-      }
-    } else {
-      // Password Wallet: Verify password first
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as BackgroundResponse<VerifyPasswordResponse>;
+  Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit?: string }) => {
+    const unit = col.unit || ((col.policy_id || '') + (col.asset_name || ''));
+    if (!unit || addedUnits.has(unit)) return;
+    assets.push({
+      policyId: unit.slice(0, 56),
+      assetName: unit.slice(56),
+      quantity: String(col.toSendQuantity || col.quantity || 1),
+    });
+    addedUnits.add(unit);
+  });
 
-      if (!passwordVerification.data.success) {
-        passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
-        return;
-      }
-      const isValid: boolean = await signTx();
-      if (!isValid) {
-        return;
-      }
-      // Submit if txAutoSubmit is enabled
-      if (txAutoSubmit.value) {
-        await submitTx();
-      }
-    }
-  } else if (loggedWallet.value?.type === WalletType.Keystone) {
-    // Keystone Hardware Wallet Signing
-    if (!tx.value) {
-      throw new Error(t('common.noTransactionToSign'));
-    }
-
-    // Serialize transaction to CBOR
-    txCbor.value = serializeCardanoJsSdkTx(tx.value);
-
-    // Convert Cardano.Tx to Serialization.Transaction for Keystone
-    const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
-
-    // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
-    const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value, keys.value);
-
-    // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
-    keystoneType.value = signRequestResponse.ur.type;
-    keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
-    keystoneUseHash.value = signRequestResponse.useHash;
-
-    // Show overlay with animated QR code
-    overlay.value = true;
-    keystoneScan.value = false;
-  } else if (loggedWallet.value?.type === WalletType.Ledger) {
-    // Ledger Hardware Wallet Signing
-    await signLedgerTx();
-  } else if (loggedWallet.value?.type === WalletType.Trezor) {
-    await signTrezorTx();
-  }
+  return { address, lovelace, assets: assets.length > 0 ? assets : undefined };
 }
 
-async function buildTx(sendTokens) {
-  if (!sendData.value.recipientAddress || !isPaymentAddress(sendData.value.recipientAddress)) {
-    return
-  }
+/**
+ * Build the transaction via Nexus backend (/api/tx/build).
+ */
+async function buildTx(options?: { selectAll?: boolean }) {
+  const allValid = recipients.value.every((r: SendRecipient) =>
+    isPaymentAddress(r.resolvedAddress ?? r.address)
+  );
+  if (!allValid) return;
 
-  // Proactive network data sync: If tip or epochParams are missing, trigger a fast REST sync
-  // This prevents race condition when user tries to send immediately after login
-  if (!tip.value || !epochParams.value) {
-    console.log('⏳ Network data not available, triggering sync...');
-    txValid.value = false;
+  const nexusOutputs = recipients.value.map((r: SendRecipient) => recipientToNexusOutput(r));
 
-    try {
-      const response = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SYNC_VIA_REST,
-        data: {}
-      }) as BackgroundResponse<{ success: boolean; error?: string }>;
-
-      if (response.data.success) {
-        console.log('✅ Network data synced successfully');
-        // Wait a moment for the store to be updated via messaging
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Check again if data is now available
-        if (!tip.value || !epochParams.value) {
-          console.warn('⚠️ Network data still not available after sync, will retry on next change');
-          return;
-        }
-      } else {
-        console.error('❌ Failed to sync network data:', response.data.error);
-        return;
-      }
-    } catch (error) {
-      console.error('❌ Error triggering sync:', error);
-      return;
-    }
-  }
-
-  const recipientAddress = sendData.value.recipientAddress;
-
-  // Build asset map for Cardano JS SDK
-  const assetsMap = new Map<Cardano.AssetId, bigint>();
-  let coinsAmount = BigInt(0);
-
-  if (sendTokens.length > 0) {
-    sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
-      const quantity = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
-
-      if (token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)) {
-        coinsAmount = quantity;
-      } else {
-        assetsMap.set(token.unit as Cardano.AssetId, quantity);
-      }
-    });
-  }
-
-  // selectedCollectibles is an object, convert to array
-  const collectiblesArray = Object.values(sendData.value.selectedCollectibles);
-  if (collectiblesArray.length > 0) {
-    collectiblesArray.forEach(collectible => {
-      assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
-    });
-  }
-
-  // Create output using Cardano JS SDK format
-  const outputs: Cardano.TxOut[] = [{
-    address: recipientAddress as Cardano.PaymentAddress,
-    value: {
-      coins: coinsAmount as Cardano.Lovelace,
-      assets: assetsMap
-    }
-  }];
+  const request: BuildTxRequest = {
+    outputs: nexusOutputs,
+    changeAddress: keys.value.payment[0].address,
+    utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+    network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+    selectAll: options?.selectAll,
+    withdrawals: currentRewardWithdrawals(),
+  };
 
   try {
-    tx.value = await buildCardanoTransaction({
-      outputs,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: loggedWallet.value.baseAddress,
-      tip: tip.value,
-      walletContext: {
-        keys: keys.value,
-        stakeAddress: loggedWallet.value.stakeAddress,
-        accountIndex: 0
-      }
-    });
+    const { tx_cbor: txCborHex, estimated_fee } = await nexusTxApi.buildTransferTx(
+      request,
+      loggedWallet.value.network
+    );
 
-    // Don't reset minAda here - it's set by the watch based on selected NFTs
-    sendData.value.adaShortage = 0;
+    // Reconstruct the Cardano.Tx from CBOR for the signing composable
+    const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+    tx.value = transaction.toCore();
     txValid.value = true;
-    console.log('Built transaction:', tx.value);
+    debugLog('Built multi-output tx via Nexus:', { txHash: txCborHex.slice(0, 20) + '...', estimated_fee });
   } catch (e) {
-    console.log(e);
+    if (!isCalculatingMax.value) debugLog('buildTx error:', e);
+    txValid.value = false;
     throw e;
   }
 }
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const summaryRef = ref<InstanceType<typeof SummaryStep>>();
 
-function nextStep() {
-  if (currentStep.value <= steps.value.length) {
-    if (currentStep.value === 1) {
-      currentStep.value++;
-    } else if (currentStep.value === 2) {
-      vmProxy.$refs.summary.scanTx(tx.value);
-      currentStep.value++;
-    } else if (currentStep.value === 3) {
-      // If txAutoSubmit is false and we have witnesses, just confirm (submit)
-      if (!txAutoSubmit.value && txWitnesses.value) {
-        submitTx();
-      } else {
-        // Otherwise sign (and auto-submit if enabled)
-        signAndSubmitTx();
-      }
+async function nextStep() {
+  if (currentStep.value === 1) {
+    if (!isValid.value) {
+      shakeError.value = true;
+      setTimeout(() => { shakeError.value = false; }, 600);
+      return;
     }
+    summaryRef.value?.scanTx(tx.value);
+    currentStep.value++;
+  } else if (currentStep.value === 2) {
+    if (!isValid.value) return;
+    await handleSign();
   }
 }
 
 function prevStep() {
-  if (currentStep.value > 1) {
-    currentStep.value--;
+  if (currentStep.value > 1) currentStep.value--;
+}
+
+/**
+ * Set max amount for a token. For ADA: uses a 2-call approach instead of
+ * binary search to avoid dozens of network round-trips to Nexus.
+ *
+ * 1. Build tx with a generous estimate (balance - 2 ADA fee buffer)
+ * 2. Read the actual fee from the response, adjust, rebuild once
+ */
+async function setMax(recipientId: string, tokenIndex: number) {
+  isCalculatingMax.value = true;
+  // Invalidate any previously built tx so a stale one can't be submitted if
+  // the new build fails (e.g. user came back from the summary step and
+  // re-clicked MAX). tx.value is repopulated only when build succeeds.
+  txValid.value = false;
+  tx.value = undefined;
+  // Track ADA MAX recipients for auto-adjust on build failure
+  const recipientForMax = recipients.value.find((r: SendRecipient) => r.id === recipientId);
+  if (recipientForMax && recipientForMax.selectedTokens[tokenIndex]?.ticker === nativeTicker.value) {
+    maxRecipientIds.value.add(recipientId);
   }
-}
+  const recipientIdx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
+  if (recipientIdx === -1) { isCalculatingMax.value = false; return; }
 
-function updateRecipientAddress(address) {
-  sendData.value.recipientAddress = address;
-}
+  const recipient = recipients.value[recipientIdx];
+  const sendTokensCopy = JSON.parse(JSON.stringify(recipient.selectedTokens));
+  const selectedToken = sendTokensCopy[tokenIndex];
+  if (!selectedToken) { isCalculatingMax.value = false; return; }
 
-function selectCollectible(collectible) {
-  console.log('selectCollectible called:', collectible.name);
-  if (sendData.value.selectedCollectibles[collectible.name]) {
-    vmProxy.$delete(sendData.value.selectedCollectibles, collectible.name);
-    console.log('Removed collectible:', collectible.name);
-  } else {
-    vmProxy.$set(sendData.value.selectedCollectibles, collectible.name, collectible);
-    console.log('Added collectible:', collectible.name);
-  }
-  console.log('Current selectedCollectibles:', sendData.value.selectedCollectibles);
-  console.log('Object.values:', Object.values(sendData.value.selectedCollectibles));
-}
-
-async function setMax(index) {
-  isCalculatingMax.value = true; // Disable watch while calculating max
-
-  const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
-  const selectedToken = sendTokensCopy[index];
-  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network);
-
-  // For non-ADA tokens, just use the full balance
-  if (selectedToken.ticker !== nativeTicker) {
-    if (selectedToken.decimals) {
-      selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
-    } else {
-      selectedToken.quantity = Number(selectedToken.balance);
-    }
-    await tryBuildMaxTx(sendTokensCopy, index);
+  // For non-ADA tokens: just set to full balance, single build.
+  // Use plain math for smallest-unit → decimal conversion — filters.toCurrency
+  // rounds to max 2 decimals when decimalPlaces isn't 4 or 6, which would
+  // over-commit tokens like AGIX (8 decimals, small balances).
+  if (selectedToken.ticker !== nativeTicker.value) {
+    const decimals = Number(selectedToken.decimals) || 0;
+    selectedToken.quantity = decimals > 0
+      ? Number(selectedToken.balance) / Math.pow(10, decimals)
+      : Number(selectedToken.balance);
+    try {
+      const updated = { ...recipient, selectedTokens: sendTokensCopy };
+      recipients.value.splice(recipientIdx, 1, updated);
+      await buildTx();
+    } catch { /* ignore */ }
     isCalculatingMax.value = false;
     return;
   }
 
-  // For ADA, use two-phase approach: coarse search (1 ADA) then fine-tune (1 lovelace)
-  const totalBalance = BigInt(selectedToken.balance);
-  const ADA_STEP = BigInt(1_000_000); // 1 ADA steps for coarse search
-  const MAX_BUFFER = BigInt(100_000_000); // Stop after 100 ADA buffer
+  // ADA max: ask Nexus to compute precisely via /api/tx/max-ada.
+  // All outputs are sent — the MAX recipient has lovelace="0", Nexus maximizes it.
+  // Other recipients' ADA + tokens are subtracted automatically by Nexus.
 
-  let buffer = BigInt(0);
-  let coarseAmount = BigInt(0);
-
-  // Phase 1: Coarse search with 1 ADA steps
-  console.log('Phase 1: Coarse search with 1 ADA steps...');
-  while (buffer <= MAX_BUFFER) {
-    const attemptAmount = totalBalance - buffer;
-
-    if (attemptAmount <= BigInt(0)) {
-      break;
-    }
-
-    if (selectedToken.decimals) {
-      selectedToken.quantity = Number(filters.toCurrency(Number(attemptAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",",""));
-    } else {
-      selectedToken.quantity = Number(attemptAmount);
-    }
-
-    try {
-      await buildTx(sendTokensCopy);
-      // Success! Found a working amount
-      coarseAmount = attemptAmount;
-      console.log(`✓ Coarse MAX found: ${Number(attemptAmount) / 1000000} ADA (buffer: ${Number(buffer) / 1000000} ADA)`);
-      break;
-    } catch (e) {
-      // Failed - try 1 ADA less
-      buffer += ADA_STEP;
-    }
-  }
-
-  if (coarseAmount === BigInt(0)) {
-    console.log('Could not find working amount in coarse search');
-    isCalculatingMax.value = false;
-    return;
-  }
-
-  // Phase 2: Binary search fine-tuning (try to add up to 1 ADA back)
-  console.log('Phase 2: Binary search fine-tuning...');
-  let low = coarseAmount;
-  let high = coarseAmount + ADA_STEP;
-  if (high > totalBalance) {
-    high = totalBalance;
-  }
-  let finalAmount = coarseAmount;
-
-  // Binary search with up to 20 iterations (enough for 1 lovelace precision in 1 ADA range)
-  for (let iteration = 0; iteration < 20 && high - low > BigInt(1); iteration++) {
-    const mid = (low + high) / BigInt(2);
-
-    if (selectedToken.decimals) {
-      selectedToken.quantity = Number(filters.toCurrency(Number(mid), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",",""));
-    } else {
-      selectedToken.quantity = Number(mid);
-    }
-
-    try {
-      await buildTx(sendTokensCopy);
-      // Success! Try higher
-      finalAmount = mid;
-      low = mid;
-      console.log(`✓ Binary search: ${Number(mid) / 1000000} ADA works (range: ${Number(high - low)} lovelace)`);
-    } catch (e) {
-      // Failed - try lower
-      high = mid;
-      console.log(`✗ Binary search: ${Number(mid) / 1000000} ADA failed (range: ${Number(high - low)} lovelace)`);
-    }
-  }
-
-  console.log(`✓ Final MAX found: ${Number(finalAmount) / 1000000} ADA (added ${Number(finalAmount - coarseAmount)} lovelace to coarse result)`);
-
-
-  console.log('MAX ADA calculation completed:', {
-    totalBalance: totalBalance.toString(),
-    finalAmount: finalAmount.toString(),
-    finalAmountADA: Number(finalAmount) / 1000000
-  });
-
-  // Update the quantity and then immediately re-enable the watch
-  // The watch will run once with the final amount
-  // Convert to string to match CurrencyTextField prop type
-  if (selectedToken.decimals) {
-    sendData.value.selectedTokens[index].quantity = filters.toCurrency(Number(finalAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",","");
-  } else {
-    sendData.value.selectedTokens[index].quantity = String(Number(finalAmount));
-  }
-
-  // Re-enable watch AFTER setting the final amount
-  // Wait a tick to ensure the update is processed
-  await new Promise(resolve => setTimeout(resolve, 0));
-  isCalculatingMax.value = false;
-}
-
-async function tryBuildMaxTx(tokens, index) {
-  try {
-    await buildTx(tokens)
-  } catch (e: any) {
-    const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
-    console.log('tryBuildMaxTx error:', errorMessage);
-
-    if (errorMessage.includes('Insufficient input in transaction.')) {
-      const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-      if (match) {
-        const maxBalance = Number(match[2]) - Number(match[3])
-        sendData.value.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-      }
-    } else if (errorMessage.includes('less than the minimum UTXO value')) {
-      const match = errorMessage.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
-      if (match) {
-        const adaMinBalance = match[2]
-        const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network))
-        if (nativeToken) {
-          nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-          sendData.value.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
+  // Build all outputs — the MAX recipient gets lovelace="0", others keep their amounts.
+  // If the MAX recipient has no address yet, use the change address as placeholder
+  // (the address only affects fee by a few bytes — close enough for MAX calculation).
+  const changeAddr = keys.value.payment[0].address;
+  const maxOutputs = recipients.value
+    .filter((r: SendRecipient) => {
+      // Skip other recipients that have no address and no amounts (empty cards)
+      if (r.id === recipientId) return true;
+      const addr = r.resolvedAddress ?? r.address;
+      return !!addr && isPaymentAddress(addr);
+    })
+    .map((r: SendRecipient) => {
+      if (r.id === recipientId) {
+        const out = recipientToNexusOutput(r, '0');
+        // Use change address as placeholder if recipient has no address
+        if (!out.address || !isPaymentAddress(out.address)) {
+          out.address = changeAddr;
         }
+        return out;
       }
-    } else if (errorMessage.includes('UTxO Fully Depleted')) {
-      // When all UTXOs are depleted, we can't send the full balance
-      // Reduce the amount by a small margin and try again
-      const currentQty = Number(tokens[index].quantity);
-      const reducedQty = currentQty * 0.95; // Reduce by 5%
-      sendData.value.selectedTokens[index].quantity = `${reducedQty.toFixed(6)}`;
-      console.log('UTxO Fully Depleted - reduced amount to:', reducedQty);
-    } else {
-      console.error('Unhandled error in tryBuildMaxTx:', e);
+      return recipientToNexusOutput(r);
+    });
+
+  const maxAdaRequest: MaxAdaRequest = {
+    outputs: maxOutputs,
+    changeAddress: keys.value.payment[0].address,
+    utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+    network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+    withdrawals: currentRewardWithdrawals(),
+  };
+
+  try {
+    // Step 1: get the max amount preview from /api/tx/max-ada (for UI display)
+    const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network);
+    const maxLovelace = BigInt(maxResult.max_lovelace);
+    const changeMinUtxo = BigInt(maxResult.change_min_utxo);
+
+    debugLog('setMax: Nexus max =', Number(maxLovelace) / 1_000_000, 'ADA (fee:', Number(maxResult.estimated_fee) / 1_000_000, ', changeMin:', Number(changeMinUtxo) / 1_000_000, ')');
+
+    if (maxLovelace <= BigInt(0)) {
+      // Max-ada couldn't fit an output (heavy NFTs etc.). Let the fallback
+      // debouncedBuild at the bottom of setMax surface the failure to the UI.
+      isCalculatingMax.value = false;
+      if (!txValid.value) debouncedBuild();
+      return;
     }
+
+    // Step 2: set the amount in the UI
+    const maxQty = Number(maxLovelace) / 1_000_000;
+    const finalTokens = [...recipients.value[recipientIdx].selectedTokens];
+    finalTokens[tokenIndex] = { ...finalTokens[tokenIndex], quantity: String(maxQty) };
+    const finalRecipient = { ...recipients.value[recipientIdx], selectedTokens: finalTokens };
+    if (changeMinUtxo > BigInt(0)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (finalRecipient as any).lockedForTokens = Number(changeMinUtxo) / 1_000_000;
+    }
+    recipients.value.splice(recipientIdx, 1, finalRecipient);
+
+    // Step 3: build the tx — send lovelace="0" so Nexus auto-maximizes using
+    // the same calculation as max-ada (no mismatch between two separate computations)
+    let adjustedLovelace: bigint = maxLovelace;
+    const tryBuild = async (loveOverride?: string): Promise<void> => {
+      const buildOutputs = recipients.value
+        .filter((r: SendRecipient) => {
+          if (r.id === recipientId) return true;
+          const addr = r.resolvedAddress ?? r.address;
+          return !!addr && isPaymentAddress(addr);
+        })
+        .map((r: SendRecipient) => {
+          if (r.id === recipientId) {
+            const out = recipientToNexusOutput(r, loveOverride ?? '0');
+            if (!out.address || !isPaymentAddress(out.address)) out.address = changeAddr;
+            return out;
+          }
+          return recipientToNexusOutput(r);
+        });
+
+      const buildRequest: BuildTxRequest = {
+        outputs: buildOutputs,
+        changeAddress: changeAddr,
+        utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+        network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+        selectAll: true,
+        withdrawals: currentRewardWithdrawals(),
+      };
+      const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(buildRequest, loggedWallet.value.network);
+      const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+      tx.value = transaction.toCore();
+      txValid.value = true;
+      const outs = tx.value.body.outputs;
+      debugLog('setMax: built tx', {
+        outputCount: outs.length,
+        outputs: outs.map((o) => ({
+          addr: String(o.address).slice(0, 10) + '…' + String(o.address).slice(-6),
+          coins: o.value.coins.toString(),
+          assetCount: o.value.assets
+            ? (o.value.assets instanceof Map ? o.value.assets.size : Object.keys(o.value.assets).length)
+            : 0,
+        })),
+        fee: tx.value.body.fee.toString(),
+      });
+    };
+
+    try {
+      await tryBuild();
+    } catch (buildErr) {
+      // Nexus sometimes disagrees with /api/tx/max-ada about change min-UTxO
+      // when native tokens remain in change — parse the shortage and retry with
+      // an explicit reduced lovelace so build accepts it.
+      const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
+      const match = msg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+      if (match) {
+        const shortage = BigInt(match[2]) - BigInt(match[1]);
+        adjustedLovelace = maxLovelace - shortage;
+        if (adjustedLovelace > BigInt(0)) {
+          const adjQty = Number(adjustedLovelace) / 1_000_000;
+          const adjTokens = [...recipients.value[recipientIdx].selectedTokens];
+          adjTokens[tokenIndex] = { ...adjTokens[tokenIndex], quantity: String(adjQty) };
+          recipients.value.splice(recipientIdx, 1, { ...recipients.value[recipientIdx], selectedTokens: adjTokens });
+          try {
+            await tryBuild(adjustedLovelace.toString());
+          } catch (retryErr) {
+            debugLog('setMax: retry after shortage adjustment also failed:', retryErr);
+          }
+        }
+      } else {
+        debugLog('setMax: build after max-ada failed:', msg);
+      }
+    }
+  } catch (err) {
+    debugLog('setMax: /api/tx/max-ada failed:', err);
   }
+
+  isCalculatingMax.value = false;
+
+  // If neither the initial build nor the backoff retry produced a tx (e.g.
+  // max-ada returned 0, threw, or the output is too heavy with NFTs),
+  // schedule a plain debouncedBuild so the continue button eventually
+  // becomes actionable. Otherwise the user is stuck — no reactive change
+  // will fire the watcher, nothing else triggers a rebuild.
+  if (!txValid.value) {
+    debouncedBuild();
+  }
+}
+
+/** Send entire wallet: all tokens + NFTs are already added by the child, just trigger MAX ADA */
+async function sendEntireWallet(recipientId: string) {
+  // Wait for the child's emit to propagate
+  await nextTick();
+
+  // Authoritative fix: rebuild the recipient's outbound assets straight from
+  // the on-chain UTxO set. Keep only ADA in selectedTokens (so max-ada fills
+  // it), and put EVERY other asset in selectedCollectibles at its full UTxO
+  // quantity. This sidesteps any drift between walletStore.tokens /
+  // resolvedCollections / child state that would otherwise leave stragglers
+  // in the change output.
+  const idx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
+  if (idx !== -1) {
+    const recipient = recipients.value[idx];
+
+    const totals = new Map<string, bigint>();
+    for (const utxo of (utxos.value as Cardano.Utxo[])) {
+      const raw = utxo[1].value.assets as unknown;
+      if (!raw) continue;
+      const add = (unit: string, qty: unknown) => {
+        totals.set(unit, (totals.get(unit) ?? BigInt(0)) + BigInt(String(qty)));
+      };
+      if (raw instanceof Map) {
+        raw.forEach((qty, unit) => add(String(unit), qty));
+      } else if (Array.isArray(raw)) {
+        for (const a of raw as { unit: string; quantity: unknown }[]) add(String(a.unit), a.quantity);
+      } else if (typeof raw === 'object') {
+        for (const [unit, qty] of Object.entries(raw as Record<string, unknown>)) add(unit, qty);
+      }
+    }
+
+    // Keep the ADA token entry (max-ada will set its amount) and drop every
+    // other token — those are re-emitted through the collectibles map with
+    // known-good quantities derived from the UTxOs.
+    const adaOnlyTokens = recipient.selectedTokens.filter((tk: Token) => tk?.ticker === nativeTicker.value);
+
+    const fullCollectibles: Record<string, Collectible & { unit: string }> = {};
+    for (const [unit, qty] of totals) {
+      if (!unit || unit === 'lovelace') continue;
+      const qtyNum = Number(qty);
+      fullCollectibles[unit] = {
+        unit,
+        policy_id: unit.slice(0, 56),
+        asset_name: unit.slice(56),
+        fingerprint: '',
+        quantity: qtyNum,
+        toSendQuantity: qtyNum,
+      } as Collectible & { unit: string };
+    }
+
+    recipients.value.splice(idx, 1, {
+      ...recipient,
+      selectedTokens: adaOnlyTokens,
+      selectedCollectibles: fullCollectibles,
+    });
+    await nextTick();
+
+    debugLog('sendEntireWallet: scanned', {
+      utxoCount: (utxos.value as Cardano.Utxo[]).length,
+      uniqueAssets: totals.size,
+      tokensKeptInRecipient: adaOnlyTokens.length,
+      collectiblesEmitted: Object.keys(fullCollectibles).length,
+    });
+  }
+
+  // Trigger MAX on ADA (index 0) — since every non-ADA asset is now on the
+  // recipient output, no change output should be needed.
+  await setMax(recipientId, 0);
 }
 
 watch(() => props.isOpen, (val) => {
@@ -911,151 +925,358 @@ watch(() => props.isOpen, (val) => {
   }
 })
 
-// Watch only the properties that should trigger recalculation, not minAda itself
-watch(() => ({
-  selectedTokens: sendData.value.selectedTokens,
-  selectedCollectibles: sendData.value.selectedCollectibles,
-  recipientAddress: sendData.value.recipientAddress
-}), async (val) => {
-  // Skip if we're calculating max - the setMax function handles building the tx
-  if (isCalculatingMax.value) {
+// Debounced build — avoids firing on every keystroke (e.g. typing "10" = "1" then "10")
+const debouncedBuild = debounce(async () => {
+  if (isCalculatingMax.value) return;
+
+  const hasAnyAmount = recipients.value.some((r: SendRecipient) =>
+    r.selectedTokens.some((t: Token) => Number(t.quantity) > 0) ||
+    Object.keys(r.selectedCollectibles).length > 0
+  );
+  if (!hasAnyAmount) {
+    txValid.value = false;
     return;
   }
 
   try {
-    // selectedCollectibles is an object, not an array
-    const collectiblesArray = val.selectedCollectibles ? Object.values(val.selectedCollectibles) : [];
-    if (!val.recipientAddress) {
-      return;
-    }
-
-    // Calculate minimum ADA required for any assets (tokens or NFTs) if selected
-    // Only count non-native assets (exclude ADA/tADA)
-    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-    const hasNonNativeAssets = collectiblesArray.length > 0 ||
-      val.selectedTokens.some(token => token?.unit && token.ticker !== nativeTicker);
-
-    if (hasNonNativeAssets && epochParams.value && val.recipientAddress) {
-      try {
-        console.log('Calculating minAda for assets:', {
-          collectibles: collectiblesArray.length,
-          tokens: val.selectedTokens.filter(t => t?.unit).length
-        });
-
-        // Build the asset map for both collectibles and tokens
-        const assetsMap = new Map<Cardano.AssetId, bigint>();
-
-        // Add collectibles to assets map
-        collectiblesArray.forEach((collectible: any) => {
-          console.log('Adding collectible:', collectible.unit, collectible.toSendQuantity);
-          assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
-        });
-
-        // Add tokens (non-ADA) to assets map
-        // Only add tokens that are NOT the native currency (ADA/tADA)
-        const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-        val.selectedTokens.forEach(token => {
-          if (token?.unit && token.ticker !== nativeTicker) { // Skip ADA/native currency
-            const quantity = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
-            if (quantity > 0) {
-              console.log('Adding token:', token.unit, quantity);
-              assetsMap.set(token.unit as Cardano.AssetId, BigInt(quantity));
+    // When a MAX recipient is tracked, always force selectAll so Nexus uses
+    // the same UTxO set as the auto-adjust path — prevents oscillation where
+    // plain build picks a different subset and fails differently.
+    const buildOpts = maxRecipientIds.value.size > 0 ? { selectAll: true } : undefined;
+    await buildTx(buildOpts);
+    txValid.value = true;
+    recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('less than the minimum UTXO value') || msg.includes('OutputTooSmallUTxO')) {
+      const match = msg.match(/minimum UTXO value (\d+)/);
+      if (match) {
+        const errMin = Number(filters.toCurrency(parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+        if (recipients.value[0]) recipients.value[0].minAda = Math.max(recipients.value[0].minAda, errMin);
+      }
+    } else if (msg.includes('Insufficient input in transaction.')) {
+      const match = msg.match(/\{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      if (match) {
+        const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+        if (recipients.value[0]) recipients.value[0].adaShortage = shortage;
+      }
+    } else if (msg.includes('Insufficient ADA to cover minimum UTXO for change')) {
+      // Nexus 400 — change output can't cover min-UTxO with native tokens.
+      // Show shortage in the first recipient (same UX as other shortage errors).
+      const match = msg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+      if (match && recipients.value[0]) {
+        const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
+        recipients.value[0].adaShortage = shortage;
+      }
+    } else if (msg.includes('Insufficient token balance')) {
+      // Nexus 400 — the output asked for more of a token than the wallet holds.
+      // Parse the asset identifier (policyId prefix + assetName hex, joined by
+      // "...") and the available amount, then cap the corresponding token in
+      // each recipient and rebuild once. If the cap fails, fall through and
+      // surface adaShortage so the recipient card shows the error.
+      const match = msg.match(/asset\s+([0-9a-f]+)\.\.\.([0-9a-f]+).*?Required:\s*(\d+),\s*available:\s*(\d+)/i);
+      if (match) {
+        const [, policyPrefix, assetNameSuffix, , availableStr] = match;
+        const available = BigInt(availableStr);
+        let capped = false;
+        for (const r of recipients.value) {
+          for (let i = 0; i < r.selectedTokens.length; i++) {
+            const tk = r.selectedTokens[i] as Token & { unit?: string };
+            if (!tk.unit) continue;
+            if (!tk.unit.startsWith(policyPrefix) || !tk.unit.endsWith(assetNameSuffix)) continue;
+            const decimals = tk.decimals ?? 0;
+            const newQty = Number(available) / Math.pow(10, decimals);
+            if (Number(tk.quantity) !== newQty) {
+              const updatedTokens = [...r.selectedTokens];
+              updatedTokens[i] = { ...tk, quantity: String(newQty) };
+              const idx = recipients.value.indexOf(r);
+              recipients.value.splice(idx, 1, { ...r, selectedTokens: updatedTokens });
+              capped = true;
             }
           }
-        });
-
-        console.log('Assets map size:', assetsMap.size);
-        console.log('Recipient address:', val.recipientAddress);
-        console.log('coinsPerUtxoByte:', epochParams.value.coinsPerUtxoByte);
-
-        // Create a mock output with all assets to calculate min ADA
-        const mockOutput: Cardano.TxOut = {
-          address: val.recipientAddress as Cardano.PaymentAddress,
-          value: {
-            coins: BigInt(0) as Cardano.Lovelace, // We're calculating the minimum, so start with 0
-            assets: assetsMap
+        }
+        if (capped) {
+          // Retry build immediately with the capped amount — avoid waiting for
+          // the watcher → debounce cycle, which would also re-run auto-adjust
+          // and loop.
+          isCalculatingMax.value = true;
+          try {
+            await buildTx({ selectAll: maxRecipientIds.value.size > 0 });
+            txValid.value = true;
+            recipients.value.forEach((rr: SendRecipient) => { rr.adaShortage = 0; });
+          } catch {
+            if (recipients.value[0]) recipients.value[0].adaShortage = 1;
+          } finally {
+            isCalculatingMax.value = false;
+            debouncedBuild.cancel();
           }
-        };
-
-        console.log('Mock output created with assets:', assetsMap.size);
-
-        // Use the actual protocol function to calculate minimum ADA
-        const minAdaLovelace = BrowserTxConstruction.minAdaRequired(
-          mockOutput,
-          BigInt(epochParams.value.coinsPerUtxoByte)
-        );
-
-        sendData.value.minAda = Number(minAdaLovelace) / 1000000;
-        console.log('Calculated minAda for all assets (accurate):', sendData.value.minAda, 'ADA');
-      } catch (error) {
-        console.error('Error calculating minAda:', error);
-        console.error('Error stack:', error instanceof Error ? error.stack : error);
-        sendData.value.minAda = 0;
-      }
-    } else {
-      sendData.value.minAda = 0;
-    }
-
-    await buildTx(val.selectedTokens)
-    txValid.value = true
-  } catch(e: any) {
-    console.error('Build tx error:', e)
-    const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
-    console.log('Error message:', errorMessage);
-
-    if (errorMessage.includes('less than the minimum UTXO value') || errorMessage.includes('OutputTooSmallUTxO')) {
-      const match = errorMessage.match(/minimum UTXO value (\d+)/);
-      const number = match ? parseInt(match[1], 10) : null;
-      if (number) {
-        const errorMinAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""));
-        console.log('Transaction builder reported minAda:', errorMinAda, 'but we calculated:', sendData.value.minAda);
-        // Only update if the error value is higher (more conservative)
-        if (errorMinAda > sendData.value.minAda) {
-          sendData.value.minAda = errorMinAda;
-          console.log('Updated minAda from error to:', sendData.value.minAda);
+          return;
         }
       }
-    } else if (errorMessage.includes('Insufficient input in transaction.')) {
-      const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-      const number = parseInt(match[2], 10) - parseInt(match[1], 10)
-      sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-      console.log('Set adaShortage to:', sendData.value.adaShortage);
-    } else if (errorMessage.includes('UTxO Fully Depleted')) {
-      // This can happen when trying to send all ADA - just mark as invalid, user needs to reduce amount
-      console.log('UTxO Fully Depleted - cannot build transaction with current amount');
-    } else if (errorMessage.includes('Maximum Input Count Exceeded')) {
-      // Wallet has too many small UTXOs - user needs to reduce the amount
-      console.log('Maximum Input Count Exceeded - wallet has too many small UTXOs, reduce amount');
+      if (recipients.value[0]) recipients.value[0].adaShortage = 1;
     }
-    txValid.value = false
+    txValid.value = false;
+    // Clear any stale tx so the summary step can't display / the user can't
+    // submit a previous build when the current inputs don't produce a valid
+    // one (e.g. returned from summary, tweaked amounts, new build failed).
+    tx.value = undefined;
+
+    // Auto-adjust MAX recipients on build failure (one attempt only)
+    if (maxRecipientIds.value.size > 0) {
+      isCalculatingMax.value = true; // Prevent watch from re-triggering during adjustment
+      try {
+        for (const maxId of maxRecipientIds.value) {
+          const maxIdx = recipients.value.findIndex((r: SendRecipient) => r.id === maxId);
+          if (maxIdx === -1) { maxRecipientIds.value.delete(maxId); continue; }
+          const maxRecipient = recipients.value[maxIdx];
+          const recipientAddress = maxRecipient.resolvedAddress ?? maxRecipient.address;
+          if (!isPaymentAddress(recipientAddress)) continue;
+          try {
+            const adjustOutputs = recipients.value.map((r: SendRecipient) =>
+              r.id === maxId
+                ? recipientToNexusOutput(r, '0')
+                : recipientToNexusOutput(r)
+            );
+            const maxResult = await nexusTxApi.calculateMaxAda({
+              outputs: adjustOutputs,
+              changeAddress: keys.value.payment[0].address,
+              utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+              network: loggedWallet.value.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
+              withdrawals: currentRewardWithdrawals(),
+            }, loggedWallet.value.network);
+            const maxLovelace = BigInt(maxResult.max_lovelace);
+            if (maxLovelace > BigInt(0)) {
+              const maxQty = Number(maxLovelace) / 1_000_000;
+              const adaIdx = maxRecipient.selectedTokens.findIndex((tk: Token) => tk.ticker === nativeTicker.value);
+              if (adaIdx >= 0) {
+                const finalTokens = [...maxRecipient.selectedTokens];
+                finalTokens[adaIdx] = { ...finalTokens[adaIdx], quantity: String(maxQty) };
+                recipients.value.splice(maxIdx, 1, { ...maxRecipient, selectedTokens: finalTokens });
+              }
+            }
+          } catch { /* ignore auto-adjust failure */ }
+        }
+        // Retry build after adjusting; if Nexus's max-ada disagrees with build
+        // about change min-UTxO, parse the shortage and back off the MAX
+        // recipient's ADA by that amount, then try once more.
+        try {
+          await buildTx({ selectAll: true });
+          txValid.value = true;
+          recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+        } catch (retryErr) {
+          const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+          const mm = retryMsg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+          if (mm) {
+            const shortageLovelace = BigInt(mm[2]) - BigInt(mm[1]);
+            // Apply backoff to every MAX recipient in case multiple are tracked
+            for (const maxId of maxRecipientIds.value) {
+              const idx = recipients.value.findIndex((r: SendRecipient) => r.id === maxId);
+              if (idx === -1) continue;
+              const mr = recipients.value[idx];
+              const adaIdx = mr.selectedTokens.findIndex((tk: Token) => tk.ticker === nativeTicker.value);
+              if (adaIdx < 0) continue;
+              const currentLovelace = BigInt(Math.floor(Number(mr.selectedTokens[adaIdx].quantity) * 1_000_000));
+              const adjusted = currentLovelace - shortageLovelace;
+              if (adjusted <= BigInt(0)) continue;
+              const finalTokens = [...mr.selectedTokens];
+              finalTokens[adaIdx] = { ...finalTokens[adaIdx], quantity: String(Number(adjusted) / 1_000_000) };
+              recipients.value.splice(idx, 1, { ...mr, selectedTokens: finalTokens });
+            }
+            try {
+              await buildTx({ selectAll: true });
+              txValid.value = true;
+              recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
+            } catch { /* still invalid — leave adaShortage set */ }
+          }
+        }
+      } finally {
+        // Drop any debouncedBuild calls queued by our own splices — without
+        // this the watcher re-fires with identical state and loops forever.
+        debouncedBuild.cancel();
+        isCalculatingMax.value = false;
+      }
+    }
   }
-}, { deep: true })
+}, 500);
+
+watch(
+  () => recipients.value,
+  () => {
+    if (isCalculatingMax.value) return;
+
+    // Synchronous: update minAda per recipient (local, no network call)
+    for (const r of recipients.value) {
+      if (!epochParams.value) continue;
+      const addr = r.resolvedAddress ?? r.address;
+      if (!addr) continue;
+      const assetsMap = new Map<Cardano.AssetId, bigint>();
+      Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
+        assetsMap.set(col.unit as Cardano.AssetId, BigInt(col.toSendQuantity || 0));
+      });
+      r.selectedTokens.forEach((token: Token) => {
+        if (token?.unit && token.ticker !== nativeTicker.value) {
+          const qty = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
+          if (qty > 0) assetsMap.set(token.unit as Cardano.AssetId, BigInt(qty));
+        }
+      });
+      if (assetsMap.size > 0) {
+        try {
+          // Iterate: the serialized size of the coin field grows with its
+          // varint length (1 byte for 0, up to 9 bytes for large amounts),
+          // so a one-shot calc with coins=0 under-reports min-UTxO for outputs
+          // that actually carry meaningful ADA. Feed the result back until
+          // stable so Nexus's calc (which sees the final coin value) agrees.
+          const coinsPerByte = BigInt(epochParams.value.coinsPerUtxoByte);
+          let coins = BigInt(0) as Cardano.Lovelace;
+          let minAdaLovelace = BigInt(0);
+          for (let i = 0; i < 5; i++) {
+            const mockOut: Cardano.TxOut = {
+              address: addr as Cardano.PaymentAddress,
+              value: { coins, assets: assetsMap }
+            };
+            const next = BrowserTxConstruction.minAdaRequired(mockOut, coinsPerByte);
+            if (next === minAdaLovelace) break;
+            minAdaLovelace = next;
+            coins = next as Cardano.Lovelace;
+          }
+          r.minAda = Number(minAdaLovelace) / 1_000_000;
+        } catch { r.minAda = 0; }
+      } else {
+        r.minAda = 0;
+      }
+    }
+
+    // Async: debounced network call to build tx
+    debouncedBuild();
+  },
+  { deep: true }
+);
 
 onMounted(() => {
-  if (resolvedAssets.value) {
-    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
-    const adaAssetFound = Object.values(resolvedAssets.value).find((asset: any) => asset.metadata.ticker === nativeTicker);
-    if (adaAssetFound) {
-      sendData.value.selectedTokens = [adaAssetFound];
-    }
-  }
-})
+  recipients.value = [createEmptyRecipient()];
+  expandedRecipientId.value = recipients.value[0]?.id ?? null;
+});
 </script>
 <style scoped>
-.titles {
+/* ─── Content area ─── */
+.send-dialog-content {
+  z-index: 1;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.send-dialog-content--empty {
+  min-height: 280px;
+  display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+/* ─── Step 1: Recipients ─── */
+.step-recipients-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.step-recipients-inner {
+  width: 100%;
+  min-width: 340px;
+  max-height: 480px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.add-recipient-link {
   text-align: center;
+  padding: 4px 0 2px;
+}
+
+/* ─── Global total ─── */
+.global-total {
+  padding: 10px 12px;
+  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.global-total__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.global-total__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #CECFD2;
+}
+
+.global-total__ada {
+  font-size: 14px;
+  font-weight: 600;
+  color: #00DFF3;
+}
+
+.global-total__fiat {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: 6px;
+}
+
+.global-total__fee-row {
+  margin-bottom: 4px;
+}
+
+.global-total__total-row {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.global-total__fee-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.global-total__fee {
+  font-size: 11px;
+  color: #FDA29B !important;
+}
+
+.global-total__withdrawal {
+  font-size: 11px;
+  color: #94CFA8;
+}
+
+/* ─── Empty wallet ─── */
+.empty-wallet-state {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
 }
 
-.arrow-left {
-  cursor: pointer;
-  position: absolute;
-  top: 10px;
-  left: 10px;
+.empty-wallet-title {
+  color: rgba(255, 255, 255, 0.7);
 }
 
+.empty-wallet-description {
+  color: rgba(255, 255, 255, 0.4);
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+/* ─── Actions ─── */
+.send-dialog-actions {
+  text-align: center;
+  justify-content: center;
+}
+
+/* ─── Buttons ─── */
 .continue-button {
   background: linear-gradient(to right, #00c7f3, #00fad5);
   color: black;
@@ -1064,8 +1285,9 @@ onMounted(() => {
     opacity: 0.5;
     color: black !important;
   }
-
 }
+
+/* ─── Stepper ─── */
 .stepper-container {
   background-color: transparent;
 
@@ -1078,11 +1300,11 @@ onMounted(() => {
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 5px;
-    width: 150px;
+    padding: 2px;
+    width: 68px;
 
     &.active .icon-container {
-      box-shadow: 0 0 0 5px #00dff327;
+      box-shadow: 0 0 0 4px #00dff327;
     }
 
     &.next .icon-container {
@@ -1095,16 +1317,16 @@ onMounted(() => {
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 24px;
-      width: 24px;
+      height: 20px;
+      width: 20px;
       padding-left: 1px;
     }
   }
 
   .step-label {
-    margin-top: 10px;
-    font-size: 14px;
-    line-height: 20px;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 16px;
     text-align: center;
     font-weight: 600;
     color: #CECFD2;
@@ -1114,9 +1336,9 @@ onMounted(() => {
     flex: 1;
     height: 2px;
     width: 100%;
-    margin-left: -75px;
-    margin-right: -75px;
-    margin-top: 16px;
+    margin-left: -38px;
+    margin-right: -38px;
+    margin-top: 11px;
     background-color: #292929;
 
     &.active-divider {
@@ -1124,7 +1346,19 @@ onMounted(() => {
     }
   }
 }
+
 .v-stepper__content {
   padding: 0;
+}
+
+/* ─── Shake animation ─── */
+.shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
 }
 </style>

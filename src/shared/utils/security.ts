@@ -2,8 +2,6 @@ import * as OTPAuth from 'otpauth';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import cryptoRandomString from 'crypto-random-string';
 import { Buffer } from 'buffer';
-import { pbkdf2 } from '@noble/hashes/pbkdf2';
-import { sha512 } from '@noble/hashes/sha2';
 import { debugLog } from '@/utils/debug';
 
 // Constants
@@ -62,20 +60,30 @@ export async function hashPin(pin: string): Promise<string> {
   const salt = new Uint8Array(SALT_SIZE);
   crypto.getRandomValues(salt);
 
-  // Derive key using PBKDF2-HMAC-SHA512
-  // High iterations for strong protection against brute force
-  // Even with only 10,000-1,000,000 PIN combinations, the time cost makes attacks impractical
-  const hash = pbkdf2(sha512, Buffer.from(pin, 'utf8'), salt, {
-    c: PBKDF2_ITERATIONS,
-    dkLen: KEY_SIZE
-  });
+  // Derive key using Web Crypto PBKDF2-HMAC-SHA512 (non-blocking)
+  const encoder = new TextEncoder();
+  const hash = await pbkdf2WebCrypto(encoder.encode(pin), salt, PBKDF2_ITERATIONS, KEY_SIZE);
 
   // Return format: salt:hash (hex-encoded)
   return `${Buffer.from(salt).toString('hex')}:${Buffer.from(hash).toString('hex')}`;
 }
 
 /**
+ * Derive PBKDF2 key using Web Crypto API (non-blocking, runs off main thread)
+ */
+async function pbkdf2WebCrypto(password: Uint8Array, salt: Uint8Array, iterations: number, dkLen: number): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey('raw', password.buffer as ArrayBuffer, 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations, hash: 'SHA-512' },
+    key,
+    dkLen * 8
+  );
+  return new Uint8Array(bits);
+}
+
+/**
  * Verify a PIN code against a salted hash
+ * Uses Web Crypto API for non-blocking PBKDF2 (won't freeze UI)
  * @param pin - PIN code to verify
  * @param hashedPin - Previously hashed PIN in format "salt:hash"
  * @returns True if PIN matches
@@ -92,11 +100,9 @@ export async function verifyPin(pin: string, hashedPin: string): Promise<boolean
     const salt = Buffer.from(saltHex, 'hex');
     const expectedHash = Buffer.from(expectedHashHex, 'hex');
 
-    // Re-derive hash with same salt and iterations
-    const actualHash = pbkdf2(sha512, Buffer.from(pin, 'utf8'), salt, {
-      c: PBKDF2_ITERATIONS,
-      dkLen: KEY_SIZE
-    });
+    // Re-derive hash with Web Crypto (async, non-blocking)
+    const encoder = new TextEncoder();
+    const actualHash = await pbkdf2WebCrypto(encoder.encode(pin), salt, PBKDF2_ITERATIONS, KEY_SIZE);
 
     // Constant-time comparison to prevent timing attacks
     if (actualHash.length !== expectedHash.length) return false;
@@ -330,9 +336,15 @@ export async function registerWebAuthnCredential(
       },
       timeout: 60000,
       attestation: 'none',
-      // Enable PRF extension for secure password encryption
+      // Enable PRF extension and probe with eval to ensure `enabled` is reliably reported.
+      // Some authenticators (Windows Hello, iCloud Keychain, cross-device passkeys) don't
+      // set `enabled: true` unless an actual evaluation is requested during registration.
       extensions: {
-        prf: {} // Request PRF support during registration
+        prf: {
+          eval: {
+            first: new TextEncoder().encode('gero-prf-probe-v1')
+          }
+        }
       }
     };
 
@@ -345,15 +357,18 @@ export async function registerWebAuthnCredential(
       throw new Error('Failed to create credential');
     }
 
-    // Check if PRF was enabled by the authenticator
+    // Check if PRF was enabled by the authenticator.
+    // Accept either `enabled: true` OR a non-null probe result — some authenticators
+    // return results without explicitly setting `enabled`.
     const extensionResults = credential.getClientExtensionResults();
     const prfResults = extensionResults?.prf;
-    const prfEnabled = prfResults?.enabled === true;
+    const prfEnabled = prfResults?.enabled === true || !!prfResults?.results?.first;
 
     debugLog('[WebAuthn] Registration extension results:', {
       hasExtensions: !!extensionResults,
       hasPrf: !!prfResults,
       prfEnabled: prfResults?.enabled,
+      hasProbeResult: !!prfResults?.results?.first,
       fullPrfResults: prfResults,
       allExtensions: extensionResults
     });
@@ -449,7 +464,7 @@ export async function authenticateWebAuthn(credentialId: string, timeoutMs: numb
  * @param buffer - ArrayBuffer to convert
  * @returns Base64-encoded string
  */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -463,7 +478,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  * @param base64 - Base64-encoded string
  * @returns ArrayBuffer
  */
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
+export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
