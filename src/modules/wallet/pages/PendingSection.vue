@@ -23,13 +23,30 @@ const isCardRejected = computed(() => {
 
 // Poll KYC status every 15 seconds (between 10-20 as requested)
 let kycPollInterval: ReturnType<typeof setInterval> | null = null;
+let isPollInFlight = false;
+
+function stopKYCPolling() {
+  if (kycPollInterval) {
+    clearInterval(kycPollInterval);
+    kycPollInterval = null;
+  }
+}
 
 async function pollKYCStatus() {
+  // Skip if a previous request is still in flight (avoid stacking on slow networks)
+  if (isPollInFlight) return;
+  // Once verified, the page refreshes via wallet status management — stop polling
+  if (kycStatus.value === 'verified') {
+    stopKYCPolling();
+    return;
+  }
+  isPollInFlight = true;
   try {
     await cardStore.fetchUserKYCStatus();
-    // If KYC is verified, the page will automatically refresh via wallet status management
-  } catch (error) {
+  } catch {
     // Silent error handling - don't interrupt user experience
+  } finally {
+    isPollInFlight = false;
   }
 }
 
@@ -40,12 +57,7 @@ onMounted(() => {
   pollKYCStatus();
 });
 
-onUnmounted(() => {
-  if (kycPollInterval) {
-    clearInterval(kycPollInterval);
-    kycPollInterval = null;
-  }
-});
+onUnmounted(stopKYCPolling);
 
 async function handleLogout() {
   try {
