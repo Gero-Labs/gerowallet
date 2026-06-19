@@ -13,6 +13,8 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
+import { nexusCollateralApi } from '@/api/nexus-collateral-api';
+import { debugLog } from '@/utils/debug';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -80,8 +82,12 @@ export function toStakeCredential(address: Cardano.Address): Cardano.Credential 
 }
 
 export function toStakeAddress(addressBech32: string, networkId: Cardano.NetworkId): string {
-  if (Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentKeyStakeKey &&
-      Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentScriptStakeKey) {
+  if (!addressBech32) return undefined;
+  const address = Cardano.Address.fromString(addressBech32);
+  if (!address) return undefined;
+  const type = address.getType();
+  if (type !== Cardano.AddressType.BasePaymentKeyStakeKey &&
+      type !== Cardano.AddressType.BasePaymentScriptStakeKey) {
     return undefined;
   }
   const stakeCredential: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(addressBech32));
@@ -421,28 +427,18 @@ const getFilterAmount = (amount: string): bigint => {
     return filterAmount;
 };
 
-export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {}, storedUtxos: Cardano.Utxo[]): string[] {
+export async function getCollateral(
+  { amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {},
+  storedUtxos: Cardano.Utxo[]
+): Promise<string[]> {
   if (!storedUtxos || !Array.isArray(storedUtxos)) {
     const error = APIError.InvalidRequest;
     error.info = 'No UTXOs available in wallet.';
     throw error;
   }
 
-  // Filter for pure ADA UTXOs (no assets) suitable for collateral
-  // Cardano.Utxo is [TxIn, TxOut] where TxOut has value: { coins: bigint, assets?: Map }
-  let filteredUtxos = storedUtxos.filter(utxo => {
-    const txOut = utxo[1];
-    return !txOut.value.assets || txOut.value.assets.size === 0;
-  });
-
-  if (filteredUtxos.length === 0) {
-    const error = APIError.InvalidRequest;
-    error.info = 'No pure ADA UTXOs available for collateral.';
-    throw error;
-  }
-
+  let filterAmount = MAX_COLLATERAL_AMOUNT;
   if (amount) {
-    let filterAmount = MAX_COLLATERAL_AMOUNT;
     try {
       filterAmount = getFilterAmount(amount);
     } catch (e) {
@@ -450,28 +446,66 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
       error.info = (e as Error)?.message || 'Unknown error';
       throw error;
     }
-
-    const utxos: Cardano.Utxo[] = [];
-    let totalCoins = 0n;
-    for (const utxo of filteredUtxos) {
-      const coins = utxo[1].value.coins;
-      totalCoins += BigInt(coins);
-      utxos.push(utxo);
-      if (totalCoins >= filterAmount) break;
-    }
-
-    if (totalCoins < filterAmount) {
-      const error = APIError.Refused;
-      error.info = 'not enough coins in configured collateral UTxOs';
-      throw error
-    }
-    filteredUtxos = utxos;
   }
 
-  // Convert Cardano.Utxo to CBOR strings
-  return filteredUtxos.map((utxo) => {
-    return Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor();
+  // Pass 1: try to satisfy from the user's own pure-ADA UTxOs.
+  // Cardano.Utxo is [TxIn, TxOut] where TxOut.value = { coins: bigint, assets?: Map }
+  const pureAdaUtxos = storedUtxos.filter((utxo) => {
+    const txOut = utxo[1];
+    return !txOut.value.assets || txOut.value.assets.size === 0;
   });
+
+  const selected: Cardano.Utxo[] = [];
+  let totalCoins = 0n;
+  for (const utxo of pureAdaUtxos) {
+    selected.push(utxo);
+    totalCoins += BigInt(utxo[1].value.coins);
+    if (totalCoins >= filterAmount) break;
+  }
+
+  if (totalCoins >= filterAmount) {
+    return selected.map((utxo) => Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor());
+  }
+
+  // Pass 2 — Nexus shared-pool fallback. The wallet has no own pure-ADA UTxO
+  // big enough for collateral, so ask Nexus to lend one of the pool UTxOs at
+  // its enterprise address. The returned ref points to a real on-chain UTxO
+  // we don't control; on signTx the background detects the pool address and
+  // calls /api/collateral/cosign for the witness.
+  try {
+    const lent = await nexusCollateralApi.lend();
+    const utxoCbor = buildNexusUtxoCbor(lent);
+    return [utxoCbor];
+  } catch (lendErr) {
+    debugLog('[getCollateral] Nexus lend fallback failed:', lendErr);
+    const error = APIError.Refused;
+    error.info = pureAdaUtxos.length === 0
+      ? 'No pure ADA UTXOs available for collateral.'
+      : 'not enough coins in configured collateral UTxOs';
+    throw error;
+  }
+}
+
+/**
+ * Build the CIP-30 {@code TransactionUnspentOutput} CBOR for a Nexus-lent UTxO.
+ * Nexus returns raw fields ({@code txHash}, {@code outputIndex}, {@code address},
+ * {@code lovelace}); we synthesize the cardano-sdk core shape here so the call
+ * site can return the same kind of value used elsewhere in this file.
+ */
+function buildNexusUtxoCbor(lent: { txHash: string; outputIndex: number; address: string; lovelace: string }): string {
+  const address = Cardano.PaymentAddress(lent.address);
+  const utxo: Cardano.Utxo = [
+    {
+      txId: Cardano.TransactionId(lent.txHash),
+      index: lent.outputIndex,
+      address,
+    },
+    {
+      address,
+      value: { coins: BigInt(lent.lovelace) },
+    },
+  ];
+  return Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor();
 }
 
 export function getUsedAddresses(keys: any, paginate?: Paginate): HexBlob[] {
@@ -684,16 +718,36 @@ export function toUTxO(utxo: UTxO): Serialization.TransactionUnspentOutput {
 }
 
 /**
- * Detect a type of hex encoded addr and convert to PaymentAddress or RewardAddress.
+ * Detect address format and convert to PaymentAddress or RewardAddress.
+ * Handles bech32 (addr1…, stake1…), hex-encoded raw bytes (CIP-30 spec), and DRepKeyHash.
  *
- * @param addr when hex encoded, it can be a PaymentAddress, RewardAddress or DRepKeyHash
- * @returns PaymentAddress | RewardAddress DRepKeyHash is converted to a type 6 address
+ * @param addr bech32 address, hex-encoded address bytes, or DRepKeyHash
+ * @returns PaymentAddress | RewardAddress (DRepKeyHash is converted to a type 6 address)
  */
 export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAccount | string): Cardano.PaymentAddress | Cardano.RewardAccount {
+  // 1. Try bech32 (addr1…, stake1…)
   try {
     return Cardano.isRewardAccount(addr) ? Cardano.RewardAccount(addr) : Cardano.PaymentAddress(addr);
   } catch {
-    // Try to parse as drep key hash
+    // Not bech32 — continue
+  }
+
+  // 2. Try hex-encoded address bytes (CIP-30 spec format)
+  try {
+    const addressBytes = Buffer.from(addr, 'hex');
+    const cardanoAddr = Cardano.Address.fromBytes(addressBytes);
+    const bech32Addr = cardanoAddr.toBech32();
+    const addrType = cardanoAddr.getType();
+    if (addrType === Cardano.AddressType.RewardKey || addrType === Cardano.AddressType.RewardScript) {
+      return bech32Addr as unknown as Cardano.RewardAccount;
+    }
+    return bech32Addr as unknown as Cardano.PaymentAddress;
+  } catch {
+    // Not hex address — continue
+  }
+
+  // 3. Try DRep key hash
+  try {
     const drepKeyHash = Ed25519KeyHashHex(addr);
     const drepId = Cardano.DRepID.cip129FromCredential({
       hash: Hash28ByteBase16(drepKeyHash),
@@ -704,6 +758,8 @@ export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAcco
       throw DataSignError.AddressNotPK;
     }
     return drepAddr.toBech32();
+  } catch {
+    throw DataSignError.AddressNotPK;
   }
 }
 
@@ -822,9 +878,71 @@ export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
  * @returns Array of converted transactions ready for database storage
  */
 export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[]): any[] {
+  // First pass: build a lookup map of all outputs (txHash#index → amount[])
+  // so that inputs in other transactions can find their native token amounts.
+  // We deserialize CBOR for transactions that have it but no body yet.
+  const outputLookup = new Map<string, any[]>();
+  for (const tx of txs) {
+    const txHash = tx.tx_hash || tx.id;
+    if (!txHash) continue;
+
+    let outputs: any[] | undefined;
+    if (tx.body?.outputs) {
+      outputs = tx.body.outputs;
+    } else if (tx.cbor && !tx.body) {
+      // Skip non-array CBOR (e.g. bare TxBody from Apex chain)
+      const firstByte = typeof tx.cbor === 'string' ? parseInt(tx.cbor.slice(0, 2), 16) : 0;
+      if ((firstByte >> 5) === 4) {
+        try {
+          const deserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(tx.cbor));
+          outputs = deserialized.body?.outputs;
+        } catch { /* skip */ }
+      }
+    }
+
+    if (outputs) {
+      outputs.forEach((output: any, index: number) => {
+        const amount: any[] = [{
+          unit: 'lovelace',
+          quantity: Number(output.value?.coins ?? output.value),
+        }];
+        if (output.value?.assets && output.value.assets.size > 0) {
+          output.value.assets.forEach((qty: bigint, assetId: string) => {
+            amount.push({ unit: assetId, quantity: Number(qty) });
+          });
+        }
+        if (amount.length > 1) {
+          outputLookup.set(`${txHash}#${index}`, amount);
+        }
+      });
+    }
+  }
+
   return txs.map(tx => {
     // Check if this is already a properly formatted transaction with utxo data
     if (tx.id && tx.utxo) {
+      // Rebuild outputs from body if available — the sync backend may only include
+      // lovelace in utxo.outputs[].amount, missing native tokens
+      if (tx.body?.outputs) {
+        tx.utxo.outputs = tx.body.outputs.map((output: any, index: number) => {
+          const amount: any[] = [{
+            unit: 'lovelace',
+            quantity: Number(output.value?.coins ?? output.value),
+          }];
+          if (output.value?.assets && output.value.assets.size > 0) {
+            output.value.assets.forEach((qty: bigint, assetId: string) => {
+              amount.push({ unit: assetId, quantity: Number(qty) });
+            });
+          }
+          const existing = tx.utxo?.outputs?.[index] || {};
+          return {
+            ...existing,
+            output_index: index,
+            address: output.address || existing.address,
+            amount,
+          };
+        });
+      }
       return tx;
     }
 
@@ -838,22 +956,94 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
 
     // Check if this is a transaction from sync with deserialized body
     if (tx.body && tx.cbor) {
-      // Transaction is already deserialized from sync process
-      // Just need to ensure it has the id field
       const txId = tx.tx_hash || tx.id;
+      // Rebuild UTxO structure from body to ensure native tokens are included in outputs
+      // The sync backend may only send lovelace in utxo.outputs[].amount
+      const utxo = tx.utxo || { inputs: [], outputs: [] };
+      if (tx.body.outputs) {
+        utxo.outputs = tx.body.outputs.map((output: any, index: number) => {
+          const amount: any[] = [{
+            unit: 'lovelace',
+            quantity: Number(output.value?.coins ?? output.value),
+          }];
+          if (output.value?.assets && output.value.assets.size > 0) {
+            output.value.assets.forEach((qty: bigint, assetId: string) => {
+              amount.push({ unit: assetId, quantity: Number(qty) });
+            });
+          }
+          // Preserve existing output fields (address, data_hash, etc.) if available
+          const existing = tx.utxo?.outputs?.[index] || {};
+          return {
+            ...existing,
+            output_index: index,
+            address: output.address || existing.address,
+            amount,
+          };
+        });
+      }
       return {
         ...tx,
-        id: txId
+        id: txId,
+        utxo,
       };
     }
 
     // Check if this is a raw transaction with CBOR that needs full conversion
     if (tx.cbor && !tx.body) {
+      // Cardano Tx CBOR is a top-level array (major type 4). Apex/non-Cardano
+      // chains may send a bare TxBody (map, major type 5). Skip those silently —
+      // they will be stored as-is and the UI guards via isCardanoTx.
+      const firstByte = typeof tx.cbor === 'string' ? parseInt(tx.cbor.slice(0, 2), 16) : 0;
+      const majorType = firstByte >> 5;
+      if (majorType !== 4) {
+        const txId = tx.tx_hash || tx.hash || 'unknown_' + Date.now();
+        return { ...tx, id: txId };
+      }
       try {
         // Use the already imported Serialization from the top of the file
         // Deserialize the transaction
         const txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(tx.cbor));
         const txId = tx.tx_hash || Serialization.Transaction.fromCore(txDeserialized).getId();
+
+        // Rebuild UTxO structure from deserialized body to include native tokens
+        // in both inputs and outputs. For outputs we use the CBOR body directly.
+        // For inputs, we enrich the backend-provided inputs with native tokens
+        // by looking up each input reference against ALL outputs in this batch.
+        const utxo = tx.utxo || { inputs: [], outputs: [] };
+
+        // Rebuild outputs from CBOR body
+        if (txDeserialized.body?.outputs) {
+          utxo.outputs = txDeserialized.body.outputs.map((output: any, index: number) => {
+            const amount: any[] = [{
+              unit: 'lovelace',
+              quantity: Number(output.value?.coins ?? output.value),
+            }];
+            if (output.value?.assets && output.value.assets.size > 0) {
+              output.value.assets.forEach((qty: bigint, assetId: string) => {
+                amount.push({ unit: assetId, quantity: Number(qty) });
+              });
+            }
+            const existing = tx.utxo?.outputs?.[index] || {};
+            return {
+              ...existing,
+              output_index: index,
+              address: output.address || existing.address,
+              amount,
+            };
+          });
+        }
+
+        // Enrich inputs with native tokens from the output lookup map
+        if (utxo.inputs && outputLookup.size > 0) {
+          utxo.inputs = utxo.inputs.map((input: any) => {
+            const key = `${input.tx_hash}#${input.output_index}`;
+            const enrichedAmount = outputLookup.get(key);
+            if (enrichedAmount && input.amount?.length <= 1) {
+              return { ...input, amount: enrichedAmount };
+            }
+            return input;
+          });
+        }
 
         // Return the transaction in the expected database format
         return {
@@ -863,7 +1053,7 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
           block_height: tx.block_height || 0,
           absolute_slot: tx.absolute_slot || 0,
           tx_timestamp: tx.tx_timestamp || Math.floor(Date.now() / 1000),
-          tx_size: tx.tx_size || 0,
+          tx_size: tx.tx_size || (tx.cbor ? tx.cbor.length / 2 : 0),
           epoch_no: tx.epoch_no || 0,
           cbor: tx.cbor,
           body: txDeserialized.body,
@@ -871,12 +1061,13 @@ export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[])
           auxiliaryData: txDeserialized.auxiliaryData,
           isValid: txDeserialized.isValid !== false,
           pending: false,
-          // Include UTXO data if available from sync
-          utxo: tx.utxo
+          utxo
         };
       } catch (e) {
-        console.error('Error deserializing transaction CBOR:', e);
-        // Fallback: ensure it at least has an id
+        const txHash = tx.tx_hash || tx.hash || 'unknown';
+        const cborPreview = typeof tx.cbor === 'string' ? tx.cbor.slice(0, 64) : '<non-string>';
+        console.warn(`Skipping tx ${txHash}: CBOR deserialize failed (${(e as Error).message}). CBOR head: ${cborPreview}`);
+        // Fallback: keep tx as-is so caller can still index it; UI helpers guard via isCardanoTx
         const fallbackId = tx.tx_hash || tx.hash || 'fallback_' + Date.now();
         return { ...tx, id: fallbackId };
       }
@@ -917,11 +1108,15 @@ export interface KeyAgent {
  * Implements CIP-30 signData specification without using @cardano-sdk/key-management
  * This avoids the problematic cip8 import that blocks Chrome event listeners
  *
+ * Returns proper COSE_Sign1 + COSE_Key structures as required by CIP-30:
+ *   signature: cbor<COSE_Sign1>
+ *   key:       cbor<COSE_Key>
+ *
  * @param keyAgent - Object with derivePublicKey and signBlob methods
  * @param knownAddresses - List of known addresses for the wallet
  * @param signWith - Address to sign with (payment or reward address)
  * @param payload - Hex payload to sign
- * @returns DataSignature with signature and key
+ * @returns DataSignature with COSE-encoded signature and key
  */
 export async function signDataCip8(
   keyAgent: KeyAgent,
@@ -967,12 +1162,36 @@ export async function signDataCip8(
     index: matchingAddress.index
   };
 
-  // Sign the payload with the appropriate key
-  const signResult = await keyAgent.signBlob(derivationPath, payload);
+  // Convert address to raw bytes for COSE headers
+  const addressBytes = Cardano.Address.fromBech32(signWith).toBytes();
 
-  // Return in CIP-30 DataSignature format
-  return {
-    signature: signResult.signature,
-    key: signResult.publicKey
-  };
+  // Dynamic import to avoid WASM loading issues at module init time
+  const { createBuilderWithSigStructure, createCoseKeyHex, safeFreeCSLObject } =
+    await import('@/shared/utils/converter');
+
+  // Build COSE_Sign1: create builder and extract Sig_structure for signing
+  const { builder, sigStrucBytes } = createBuilderWithSigStructure(addressBytes, payload);
+
+  let coseSign1: any = null;
+  try {
+    // Sign the Sig_structure (not the raw payload) — this is what CIP-8 requires
+    const signResult = await keyAgent.signBlob(derivationPath, sigStrucBytes);
+
+    // Finalize COSE_Sign1 with the Ed25519 signature
+    const signatureRaw = Buffer.from(signResult.signature, 'hex');
+    coseSign1 = builder.build(signatureRaw);
+    const signatureHex = Buffer.from(coseSign1.to_bytes()).toString('hex');
+
+    // Build COSE_Key
+    const keyHex = createCoseKeyHex(addressBytes, signResult.publicKey);
+
+    // Return in CIP-30 DataSignature format (COSE-encoded)
+    return {
+      signature: signatureHex,
+      key: keyHex
+    };
+  } finally {
+    safeFreeCSLObject(builder);
+    if (coseSign1) safeFreeCSLObject(coseSign1);
+  }
 }

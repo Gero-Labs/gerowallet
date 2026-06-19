@@ -58,7 +58,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import BaseDialog             from '@/shared/dialogs/BaseDialog.vue'
 import ContactsTab            from '@/modules/dashboard/components/ContactsTab.vue'
 import CollateralTab          from '@/modules/dashboard/components/CollateralTab.vue'
@@ -67,12 +67,12 @@ import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDapp
 import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
 import walletStoreDefault from '@/stores/walletStore';
 import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
-import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
+import { hasNewFeaturesInPath, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 const { t } = useTranslation();
 
 // Props & Emitting
-defineProps<{ isOpen: boolean }>()
+const props = defineProps<{ isOpen: boolean; initialTab?: string }>()
 defineEmits<{ (e: 'close'): void }>()
 
 // Derive whether we've ever loaded a backup setting
@@ -87,20 +87,55 @@ const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 // Check if there are new features in the security section
 const hasNewSecurityFeatures = computed(() => hasNewFeaturesInPath(['settings', 'security']))
 
+// Check if there are new features in the profile section (e.g., German language)
+const hasNewProfileFeatures = computed(() => hasNewFeaturesInPath(['settings', 'profile']))
+
+// Check if there are new features in the advanced section (e.g., default extension mode)
+const hasNewAdvancedFeatures = computed(() => hasNewFeaturesInPath(['settings', 'advanced']))
+
+// Check if there are new features in the collateral section (e.g., auto-detect banner)
+const hasNewCollateralFeatures = computed(() => hasNewFeaturesInPath(['settings', 'collateral']))
+
 // Local reactive state
 const tab     = ref<string | null>(null)
 const loading = ref(false)
+const visitedAdvancedTab = ref(false)
 
 // Build your tab array, injecting the dynamic badge
 const tabs = computed(() => [
-  { label: t('settings.profile'), value: 'profile' },
+  { label: t('settings.profile'), value: 'profile', badge: hasNewProfileFeatures.value },
   // { label: 'Password', value: 'password' },
-  { label: t('settings.collateral'), value: 'collateral', disabled: false },
+  { label: t('settings.collateral'), value: 'collateral', disabled: false, badge: hasNewCollateralFeatures.value },
   { label: t('settings.contacts'), value: 'contacts', disabled: false },
   { label: t('settings.dapps'), value: 'connectedDapps', disabled: false },
   { label: t('settings.security'), value: 'security', disabled: false, badge: shouldBackup.value || hasNewSecurityFeatures.value },
-  { label: t('settings.advanced'), value: 'advanced', disabled: false },
+  { label: t('settings.advanced'), value: 'advanced', disabled: false, badge: hasNewAdvancedFeatures.value },
 ])
+
+// Track when user visits the Advanced tab
+const advancedTabIndex = computed(() => tabs.value.findIndex(t => t.value === 'advanced'));
+watch(tab, (val) => {
+  if (val === advancedTabIndex.value) {
+    visitedAdvancedTab.value = true;
+  }
+});
+
+// Jump to a specific tab when initialTab prop changes or dialog opens
+// Mark seen advanced features when dialog closes
+watch(
+  () => props.isOpen,
+  (open) => {
+    if (open && props.initialTab) {
+      const idx = tabs.value.findIndex(t => t.value === props.initialTab);
+      if (idx >= 0) tab.value = idx as any;
+    }
+    if (!open && visitedAdvancedTab.value) {
+      markFeatureAsSeen('settings.advanced.defaultExtensionMode');
+      markFeatureAsSeen('settings.advanced.autoWithdrawRewards');
+      visitedAdvancedTab.value = false;
+    }
+  }
+);
 
 // Handle loading events from AdvancedSettingsTab
 function loadingChange(val: boolean) {

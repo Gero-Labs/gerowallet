@@ -15,6 +15,12 @@ import {
 } from '@cardano-sdk/tx-construction';
 import type { BuildTx } from '@cardano-sdk/tx-construction';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
+import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
+import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
+
+/** CIP-0149 metadata label for voluntary DRep compensation */
+export const CIP149_METADATA_LABEL = BigInt(3692);
 
 export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, outputAssets: Cardano.Value) {
   if (!inputAssets || !outputAssets) {
@@ -26,8 +32,8 @@ export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, out
   ]);
   const assetsArray = Array.from(allAssets)
     .map(assetId => {
-      const inValue: bigint = inputAssets.assets ? inputAssets.assets.get(assetId) : 0n;
-      const outValue: bigint = outputAssets.assets ? outputAssets.assets.get(assetId) : 0n;
+      const inValue: bigint = inputAssets.assets ? BigInt(inputAssets.assets.get(assetId) ?? 0) : 0n;
+      const outValue: bigint = outputAssets.assets ? BigInt(outputAssets.assets.get(assetId) ?? 0) : 0n;
       const difference: bigint = inValue - outValue;
       return {
         assetName: Cardano.AssetId(assetId),
@@ -39,7 +45,7 @@ export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, out
   const cardano = {
     assetName: 'cardano',
     policy: '',
-    quantity: inputAssets.coins - outputAssets.coins,
+    quantity: BigInt(inputAssets.coins) - BigInt(outputAssets.coins),
     id: 'cardano'
   }
   return [cardano, ...assetsArray]
@@ -79,7 +85,9 @@ export async function buildCardanoTransaction({
   changeAddress,
   tip,
   implicitCoin = BigInt(0),
-  walletContext
+  walletContext,
+  auxiliaryData,
+  excludeCollateral = true
 }: {
   certificates?: Cardano.Certificate[];
   withdrawals?: Cardano.Withdrawal[];
@@ -94,6 +102,8 @@ export async function buildCardanoTransaction({
     stakeAddress: string;
     accountIndex: number;
   };
+  auxiliaryData?: Cardano.AuxiliaryData;
+  excludeCollateral?: boolean;
 }): Promise<Cardano.Tx> {
   // Check if we have epoch parameters
   if (!epochParams) {
@@ -227,11 +237,17 @@ export async function buildCardanoTransaction({
       txBody.withdrawals = withdrawals;
     }
 
+    // Compute auxiliaryDataHash if metadata is provided
+    if (auxiliaryData) {
+      txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
+    }
+
     // Return the complete transaction
     return {
       id: Cardano.TransactionId('0'.repeat(64)),
       body: txBody,
-      witness: { signatures: new Map() }
+      witness: { signatures: new Map() },
+      auxiliaryData
     };
   };
 
@@ -267,8 +283,25 @@ export async function buildCardanoTransaction({
     computeSelectionLimit: computeSelectionLimit(protocolParams.maxTxSize, buildTx)
   };
 
+  // Eternl-style: exclude the auto-picked collateral UTxO from coin selection
+  // so a regular send doesn't accidentally spend the UTxO that dApps will use
+  // for collateral. Callers that explicitly need to use the collateral UTxO
+  // (e.g. CollateralTab.vue's "Set Collateral" flow) pass excludeCollateral: false.
+  let inputUtxos = utxos;
+  if (excludeCollateral && walletStore.collateral) {
+    const filtered = filterOutCollateralFromUTxOs(utxos, walletStore.collateral);
+    // Edge case: if filtering leaves no UTxOs (e.g. wallet has only the collateral
+    // UTxO), fall back to the unfiltered list so the tx can still be built.
+    if (filtered.length === 0) {
+      debugLog('[builder] Only UTxO is collateral; falling back to unfiltered set');
+      inputUtxos = utxos;
+    } else {
+      inputUtxos = filtered;
+    }
+  }
+
   // Convert UTXOs to proper format with BigInt values and ensure assets is always a Map
-  const formattedUtxos: Cardano.Utxo[] = utxos.map((utxo: any) => {
+  const formattedUtxos: Cardano.Utxo[] = inputUtxos.map((utxo: any) => {
 
     // Ensure assets is always a Map (not undefined or null)
     let assets: Map<Cardano.AssetId, bigint>;
@@ -364,13 +397,49 @@ export async function buildCardanoTransaction({
     txBody.withdrawals = withdrawals;
   }
 
+  // Compute auxiliaryDataHash if metadata is provided
+  if (auxiliaryData) {
+    txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
+  }
+
   // Create a final transaction
   return {
     id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
     body: txBody,
     witness: {
       signatures: new Map()
-    }
+    },
+    auxiliaryData
   };
 }
 
+/**
+ * Build CIP-0149 auxiliary data for voluntary DRep compensation.
+ * @param donationBasisPoints - Donation percentage in thousandths (1 = 0.1%, 10 = 1%, 50 = 5%, 100 = 10%)
+ * @returns AuxiliaryData with metadata label 3692
+ */
+export function buildCip149AuxiliaryData(donationBasisPoints: number): Cardano.AuxiliaryData {
+  const metadataMap: Cardano.MetadatumMap = new Map();
+  metadataMap.set('donationBasisPoints', BigInt(donationBasisPoints));
+
+  const blob: Cardano.TxMetadata = new Map();
+  blob.set(CIP149_METADATA_LABEL, metadataMap);
+
+  return { blob };
+}
+
+/**
+ * Extract CIP-0149 donationBasisPoints from transaction auxiliary data.
+ * @returns The basis points value, or null if not present
+ */
+export function extractCip149Compensation(auxiliaryData?: Cardano.AuxiliaryData): number | null {
+  if (!auxiliaryData?.blob) return null;
+
+  const cip149Data = auxiliaryData.blob.get(CIP149_METADATA_LABEL);
+  if (!cip149Data || !(cip149Data instanceof Map)) return null;
+
+  const bps = cip149Data.get('donationBasisPoints');
+  if (bps === undefined || bps === null) return null;
+
+  return Number(bps);
+}

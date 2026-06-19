@@ -1,6 +1,5 @@
 <template>
   <div class="hero-section">
-    <!-- Card Carousel and Balance Section -->
     <v-card flat class="transparent">
       <v-row>
         <v-col cols="12" md="6" class="py-0" style="align-content: center; justify-items: center">
@@ -22,25 +21,21 @@
           :current-card-has-u-u-i-d="currentCardHasUUID"
           :current-card-type="currentCardType"
           :current-card-status="currentCardStatus"
-          :current-order-needs-payment="currentOrderNeedsPayment"
           :is-current-card-rejected="isCurrentCardRejected"
           :should-show-order-card-section="shouldShowOrderCardSection"
           :show-order-timer="showOrderTimer"
           :timer-display="timerDisplay"
           :loading-order-details="loadingOrderDetails"
           :ordering-card="orderingCard"
-          :rejection-acknowledged="rejectionAcknowledged"
           :show-card-details="showCardDetails"
           :exchange-rate="exchangeRate"
-          :payment-transaction-found="paymentTransactionFound"
           :payment-details-cache="paymentDetailsCache"
           @top-up="handleTopUp"
-          @toggle-card-visibility="showCardDetails ? (showCardDetails = false) : (showConfirmationModal = true)"
+          @toggle-card-visibility="toggleCardVisibility"
           @order-new-card-after-rejection="handleOrderNewCardAfterRejection"
           @complete-payment="openPaymentModal"
           @open-order-card-flow="handleOpenOrderCardFlow"
           @show-promotion-modal="showPromotionModal = true"
-          @update:rejection-acknowledged="rejectionAcknowledged = $event"
           @update:timer-display="timerDisplay = $event"
         />
       </v-row>
@@ -65,35 +60,10 @@
       @success="handlePaymentSuccess"
     />
 
-    <!-- Confirmation Modal -->
-    <ConfirmationPasswordModal
-      :open="showConfirmationModal"
-      @close="showConfirmationModal = false"
-      @confirm="toggleCardVisibility"
-      :title="t('card.viewCardDetails')"
-      :subtitle="t('card.viewCardDetailsSubtitle')"
-    />
-    <!-- Confirmation Modal Manage Card-->
-    <ConfirmationPasswordModal
-      :open="showManageCardConfirmationModal"
-      @close="showManageCardConfirmationModal = false"
-      @confirm="showManageCardModal = true"
-      :title="t('card.manageCard')"
-      :subtitle="t('card.manageCardSubtitle')"
-    />
-    <!-- Confirmation Modal Order Card-->
-    <ConfirmationPasswordModal
-      :open="showOrderCardConfirmationModal"
-      @close="showOrderCardConfirmationModal = false"
-      @confirm="handleOrderCard"
-      :title="t('card.orderCardConfirmTitle')"
-      :subtitle="t('card.orderCardConfirmSubtitle')"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
@@ -104,11 +74,7 @@ import PayOrderModal from './dashboard/PayOrderModal.vue';
 import CardCarousel from './dashboard/CardCarousel.vue';
 import CardStatusSection from './dashboard/CardStatusSection.vue';
 import cardStoreModule from '@/stores/modules/card';
-import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
-import snackbar from '@/plugins/snackbar';
 import { CardInfo } from '@/models/card';
-
-const { t } = useTranslation();
 
 const currentCardIndex = computed({
   get: () => cardStoreModule.state.currentCardIndex,
@@ -118,9 +84,6 @@ const showCardDetails = ref(false);
 const showManageCardModal = ref(false);
 const showTopUpModal = ref(false);
 const showPromotionModal = ref(false);
-const showConfirmationModal = ref(false);
-const showManageCardConfirmationModal = ref(false);
-const showOrderCardConfirmationModal = ref(false);
 const showOrderPhysicalCardModal = ref(false);
 const showOrderCardFlowModal = ref(false);
 const showPayOrderModal = ref(false);
@@ -130,9 +93,7 @@ const pendingOrderUuid = ref<string | null>(null);
 const hiddenOrderUuids = ref<string[]>([]);
 const orderStatuses = ref<Record<string, string>>({});
 const timerDisplay = ref('');
-const rejectionAcknowledged = ref(false);
 const paymentDetailsCache = ref<Record<string, { expires_at?: string; status?: string }>>({});
-const paymentTransactionFound = ref<Record<string, boolean>>({});
 let timerInterval: ReturnType<typeof setInterval> | null = null;
 
 // Constants
@@ -191,6 +152,11 @@ const hasVirtualCard = computed(() => {
   );
 });
 
+const normalizeStatus = (status: string | null | undefined): string | null => {
+  if (!status) return null;
+  return status.toLowerCase();
+};
+
 const isCardRejectedOrExpired = (card: CardInfo): boolean => {
   const status = normalizeStatus(card.cardData?.status);
   return status === 'rejected' || status === 'expired';
@@ -206,11 +172,7 @@ const hasPhysicalCard = computed(() => {
       return false;
     }
 
-    if (card.cardData?.card_uuid) {
-      return true;
-    }
-
-    return false;
+    return !!card.cardData?.card_uuid;
   });
 });
 
@@ -237,7 +199,7 @@ const cardsWithOrderSlot = computed(() => {
 
   const virtualCards = cards.value.filter(card => {
     return card.cardData?.own_type === 'virtual' &&
-    (card.cardData?.card_uuid || card.cardData?.order_uuid)
+    (card.cardData?.card_uuid || card.cardData?.order_uuid) && card.cardData?.delivery?.payment_status !== 'expired'
   });
   const physicalCards = cards.value.filter(card => {
     if (card.cardData?.own_type !== 'physical') {
@@ -246,6 +208,10 @@ const cardsWithOrderSlot = computed(() => {
 
     const status = card.cardData?.status;
     if (status === 'rejected' || status === 'REJECTED') {
+      return false;
+    }
+
+    if (card.cardData?.delivery?.payment_status === 'expired') {
       return false;
     }
 
@@ -345,53 +311,12 @@ watch(
   { deep: true, immediate: true }
 );
 
-const handleOrderCard = async () => {
-  try {
-    orderingCard.value = true;
-    showOrderCardConfirmationModal.value = false;
-    await cardStoreModule.orderCard();
-    await cardStoreModule.fetchCardData();
-
-    snackbar.fireSuccess(t('card.cardOrderedSuccess'));
-  } catch (error: any) {
-    let errorReason: string;
-
-    if (typeof error?.response?.data === 'string' && error.response.data) {
-      errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
-    } else {
-      errorReason =
-        t('card.failedToOrderCard') +
-        ' ' +
-        (error?.response?.data?.error?.message ||
-          error?.response?.data?.error ||
-          error?.response?.data?.reason ||
-          error?.response?.data?.message ||
-          error?.message ||
-          t('card.pleaseTryAgain'));
-    }
-
-    snackbar.setError(errorReason);
-  } finally {
-    orderingCard.value = false;
-  }
-};
 const exchangeRate = computed(() => {
   return cardStoreModule.state.exchangeRate?.sell ? parseFloat(cardStoreModule.state.exchangeRate.sell) : 0.35;
 });
 
 const currentCardHasUUID = computed(() => {
   return cardsWithOrderSlot.value[currentCardIndex.value]?.cardData.card_uuid !== null;
-});
-
-const currentOrderNeedsPayment = computed(() => {
-  const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
-  if (!currentCard) return false;
-  return !!(
-    currentCard?.cardData?.id &&
-    currentCard?.cardData?.order_uuid &&
-    !currentCard?.cardData?.card_uuid &&
-    currentCard?.cardData?.own_type === 'physical'
-  );
 });
 
 const currentCardType = computed(() => {
@@ -420,11 +345,6 @@ const currentCardStatus = computed(() => {
   return null;
 });
 
-const normalizeStatus = (status: string | null | undefined): string | null => {
-  if (!status) return null;
-  return status.toLowerCase();
-};
-
 const isCurrentCardRejected = computed(() => {
   const status = normalizeStatus(currentCardStatus.value);
   return status === 'rejected' || status === 'expired';
@@ -450,12 +370,10 @@ const shouldShowOrderCardSection = computed(() => {
   if (currentCardHasUUID.value) return false;
 
   if (hasVirtualCard.value && hasPhysicalCard.value) return false;
-  
+
   if (isCurrentCardPending.value) return false;
 
-  if (canOrderNewCard.value) return true;
-
-  return false;
+  return canOrderNewCard.value;
 });
 
 const showOrderTimer = computed(() => {
@@ -470,18 +388,14 @@ const showOrderTimer = computed(() => {
   const paymentDetails = paymentDetailsCache.value[orderUuid];
   if (!paymentDetails) return false;
 
-  if (paymentDetails.status === 'expired') return false;
+  if (paymentDetails.status === 'expired' || paymentDetails.status === 'completed') return false;
   if (paymentDetails.status !== 'pending' && paymentDetails.status !== 'completed') return false;
 
   if (!paymentDetails.expires_at) return false;
 
   const expiresAt = new Date(paymentDetails.expires_at);
   const now = new Date();
-  if (now >= expiresAt) {
-    return false;
-  }
-
-  return true;
+  return now < expiresAt;
 });
 
 
@@ -516,18 +430,33 @@ const updateTimer = () => {
 
 watch(
   () => cardStoreModule.state.selectedCardId,
-  newCardId => {
+  (newCardId, oldCardId) => {
     if (newCardId && cardsWithOrderSlot.value.length > 0) {
       const index = cardsWithOrderSlot.value.findIndex(c => c.cardData.card_uuid === newCardId);
       if (index >= 0 && index !== currentCardIndex.value) {
         currentCardIndex.value = index;
       }
     } else if (!newCardId && cardsWithOrderSlot.value.length > 0) {
-      const emptyIndex = cardsWithOrderSlot.value.findIndex(
-        c => !c.cardData?.id && !c.cardData?.card_uuid && !c.cardData?.order_uuid
-      );
-      if (emptyIndex >= 0 && emptyIndex !== currentCardIndex.value) {
-        currentCardIndex.value = emptyIndex;
+      // Only auto-select the first card on initial load (when there was no previous selectedCardId)
+      // Don't interfere when user navigates to empty card slot
+      const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
+      const isOnValidCard = currentCard && (currentCard.cardData?.id || currentCard.cardData?.card_uuid || currentCard.cardData?.order_uuid !== undefined);
+
+      // Only default to first actual card if we're not already on a valid card/slot
+      if (!isOnValidCard || oldCardId === undefined) {
+        const firstActualCardIndex = cardsWithOrderSlot.value.findIndex(
+          c => c.cardData?.id || c.cardData?.card_uuid || c.cardData?.order_uuid
+        );
+        if (firstActualCardIndex >= 0) {
+          if (firstActualCardIndex !== currentCardIndex.value) {
+            currentCardIndex.value = firstActualCardIndex;
+          }
+          // Also select the card if it has a UUID
+          const firstCard = cardsWithOrderSlot.value[firstActualCardIndex];
+          if (firstCard?.cardData?.card_uuid) {
+            cardStoreModule.selectCard(firstCard.cardData.card_uuid);
+          }
+        }
       }
     }
   },
@@ -600,18 +529,6 @@ const checkCurrentCardStatus = async () => {
         }
       }
 
-      let transactionFound = false;
-      if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
-        transactionFound = cardStoreModule.checkDepositPayment(
-          paymentDetails.deposit_address,
-          String(paymentDetails.amount_ada)
-        );
-        paymentTransactionFound.value = {
-          ...paymentTransactionFound.value,
-          [currentCard.cardData.order_uuid]: transactionFound,
-        };
-      }
-
       paymentDetailsCache.value = {
         ...paymentDetailsCache.value,
         [currentCard.cardData.order_uuid]: {
@@ -660,20 +577,14 @@ watch(currentCardIndex, async (newIndex, oldIndex) => {
     }
   } else if (card.cardData.order_uuid) {
     cardStoreModule.selectCard(null);
-    await checkCurrentCardStatus();
   } else {
     cardStoreModule.selectCard(null);
   }
-
   updateTimer();
-  rejectionAcknowledged.value = false;
 });
 
 const handleOrderNewCardAfterRejection = () => {
-  if (rejectionAcknowledged.value) {
-    showOrderCardFlowModal.value = true;
-    rejectionAcknowledged.value = false;
-  }
+  showOrderCardFlowModal.value = true;
 };
 
 watch(showOrderTimer, (shouldShow) => {
@@ -773,7 +684,8 @@ const checkPendingOrders = async () => {
       card.cardData?.id &&
       card.cardData?.order_uuid &&
       !card.cardData?.card_uuid &&
-      !hiddenOrderUuids.value.includes(card.cardData.order_uuid)
+      !hiddenOrderUuids.value.includes(card.cardData.order_uuid) &&
+      card.cardData.delivery?.payment_status !== 'expired'
   );
 
   for (const card of pendingCards) {
@@ -812,15 +724,6 @@ const checkPendingOrders = async () => {
             paymentDetails.status = 'expired';
             orderStatuses.value[card.cardData.order_uuid] = 'expired';
           }
-        }
-
-        let transactionFound = false;
-        if (paymentDetails.deposit_address && paymentDetails.amount_ada) {
-          transactionFound = cardStoreModule.checkDepositPayment(
-            paymentDetails.deposit_address,
-            String(paymentDetails.amount_ada)
-          );
-          paymentTransactionFound.value[card.cardData.order_uuid] = transactionFound;
         }
 
         paymentDetailsCache.value[card.cardData.order_uuid] = {
@@ -888,7 +791,7 @@ const handleCardClick = (card: CardInfo) => {
   if (isEmpty) {
     handleOpenOrderCardFlow();
   } else if (currentCardHasUUID.value) {
-    showManageCardConfirmationModal.value = true;
+    showManageCardModal.value = true;
   }
 };
 

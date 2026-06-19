@@ -1,15 +1,5 @@
 <template>
-  <section class="application-status-section">
-    <!-- Logout Button -->
-    <v-btn
-      icon
-      class="logout-btn"
-      @click="$emit('logout')"
-      :title="$t('wallet.logout')"
-    >
-      <v-icon>mdi-logout</v-icon>
-    </v-btn>
-
+  <section class="application-status-section mt-8 mx-8">
     <div class="status-content">
       <!-- Left: Card Visual with Animated Status -->
       <div class="card-visual-container">
@@ -23,11 +13,7 @@
             <div class="ring ring-3"></div>
           </div>
           <div class="icon-center">
-            <svg v-if="kycStatus === 'verified'" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <svg v-else width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
               <path d="M12 7V12L15 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -42,11 +28,11 @@
         <!-- Main Content -->
         <div class="status-main">
           <h2 class="status-title">
-            {{ isCardRejected ? $t('card.cardRejected') : (kycStatus === 'verified' ? $t('card.kycVerification') : $t('card.reviewingApplication')) }}
+            {{ isCardRejected ? $t('card.cardRejected') : (kycStatus === 'verified' ? $t('card.kycApprovalInProgress') : $t('card.reviewingApplication')) }}
           </h2>
 
           <p class="status-description">
-            {{ isCardRejected ? $t('card.cardRejectedMessage') : (kycStatus === 'verified' ? $t('card.kycVerificationDesc') : $t('card.reviewingApplicationDesc')) }}
+            {{ isCardRejected ? $t('card.cardRejectedMessage') : (kycStatus === 'verified' ? $t('card.kycApprovalInProgressDesc') : $t('card.reviewingApplicationDesc')) }}
           </p>
         </div>
 
@@ -78,13 +64,6 @@
           </div>
         </div>
 
-        <!-- Auto-refresh message -->
-        <div v-if="!isCardRejected && kycStatus !== 'verified'" class="auto-refresh-message">
-          <p class="auto-refresh-text">
-            {{ $t('card.kycAutoRefreshMessage') }}
-          </p>
-        </div>
-
         <!-- Contact Support -->
         <div class="support-section">
           <p class="support-text">
@@ -96,9 +75,7 @@
     </div>
   </section>
 </template>
-
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 
 interface Props {
@@ -440,22 +417,6 @@ defineEmits(['logout']);
   }
 }
 
-// Auto-refresh message
-.auto-refresh-message {
-  padding-top: $spacing-md;
-  padding-bottom: $spacing-sm;
-}
-
-.auto-refresh-text {
-  font-family: $font-family-primary;
-  font-size: $font-size-sm;
-  font-weight: $font-weight-normal;
-  color: $text-muted;
-  margin: 0;
-  line-height: 1.5;
-  font-style: italic;
-}
-
 // Responsive Design
 @media (max-width: $breakpoint-lg) {
   .status-content {
@@ -540,6 +501,7 @@ defineEmits(['logout']);
   }
 
   .progress-section {
+    width: 100%;
     padding: $spacing-lg 0;
   }
 

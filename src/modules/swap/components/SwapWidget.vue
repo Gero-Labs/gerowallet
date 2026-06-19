@@ -86,12 +86,42 @@
               <span style="font-size: 11px">{{ pairPrice }}</span>
             </v-btn>
             <v-spacer></v-spacer>
+            <v-tooltip v-if="estimation.total_output > 0" bottom max-width="240" content-class="custom-tooltip">
+              <template v-slot:activator="{ on, attrs }">
+                <span v-bind="attrs" v-on="on" style="font-size: 11px; color: #88919e; cursor: pointer; display: flex; align-items: center">
+                  <v-icon x-small color="#88919e" class="mr-1">mdi-information-outline</v-icon>
+                  {{ $t('swap.fees') }}
+                </span>
+              </template>
+              <div style="font-size: 12px">
+                <div v-if="estimation.batcher_fee > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.batcherFee') }}</span>
+                  <span>{{ formattedBatcherFee }} ADA</span>
+                </div>
+                <div v-if="estimation.partner_fee > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.partnerFee') }}</span>
+                  <span>{{ formattedPartnerFee }} ADA</span>
+                </div>
+                <div v-if="estimation.deposits > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.deposits') }}</span>
+                  <span>{{ formattedDeposits }} ADA</span>
+                </div>
+                <div v-if="calculateWeightedPriceImpact > 0" style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.priceImpact') }}</span>
+                  <span :style="{ color: priceImpactColor }">{{ calculateWeightedPriceImpact.toFixed(2) }}%</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 16px" class="py-1">
+                  <span>{{ $t('swap.minReceive') }}</span>
+                  <span>{{ formattedMinReceive }} {{ selectedTokenB.ticker }}</span>
+                </div>
+              </div>
+            </v-tooltip>
             <v-btn
               text
               plain
               x-small
               color="primary"
-              class="px-0 no-opacity"
+              class="px-0 no-opacity ml-2"
               :ripple="false"
               @click="swapOverviewToggle = true"
               style="letter-spacing: normal"
@@ -193,9 +223,6 @@
               </div>
             </v-card-text>
           </v-card>
-          <div class="text-left" v-else>
-            <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
-          </div>
         </v-card-text>
         <SwapOverviewOverlay
           ref="swap"
@@ -210,7 +237,7 @@
         />
       </div>
     </v-card-text>
-    <v-card-actions class="px-3 pt-2 pb-3" style="justify-content: center">
+    <v-card-actions class="px-3 pt-2 pb-1" style="justify-content: center; flex-wrap: wrap">
       <v-btn
         max-width="420"
         style="color: black !important; width: 100%; border-radius: 10px"
@@ -223,6 +250,13 @@
           poolError ? $t('swap.poolNotFound') : swapButtonText
         }}</span>
       </v-btn>
+      <div style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 10px; color: #88919e; padding-top: 4px">
+        <span>{{ $t('common.poweredBy') }}</span>
+        <v-avatar size="14" tile>
+          <v-img :src="assets.dexHunterLogo" contain />
+        </v-avatar>
+        <span style="font-weight: 600; color: #b0b8c4">DexHunter</span>
+      </div>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
   </v-card>
@@ -249,6 +283,14 @@ import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { debugLog } from '@/utils/debug';
+import assets from '@/utils/assets';
+
+interface Props {
+  buyTokenUnit?: string;
+}
+const props = withDefaults(defineProps<Props>(), {
+  buyTokenUnit: undefined,
+});
 
 const emit = defineEmits(['onSwap']);
 
@@ -310,7 +352,7 @@ const intervalId = ref<any>(0);
 const loading = ref<boolean>(false);
 const swapOverviewToggle = ref<boolean>(false);
 const pairPriceToggle = ref<boolean>(false);
-const blacklisted_dexes = ref<any[]>([]);
+const blacklisted_dexes = ref([]);
 const search = ref(DexHunterStore.searchTokens);
 const poolError = ref<boolean>(false);
 const limit = ref<string>('0.0000000');
@@ -319,7 +361,7 @@ const limitSplit = ref<number>(1);
 
 const swapButtonText = computed(() => {
   if (isInsufficientBalance.value) {
-    return t('swap.insufficientBalance');
+    return t('errors.insufficientBalance');
   } else if (swapType.value === 'limit') {
     if (limitType.value === 'one' || (limitType.value === 'split' && limitSplit.value === 1)) {
       return t('swap.placeOrder');
@@ -379,7 +421,7 @@ const nativeTokenComputed = computed(() => {
   if (token) {
     return {
       ...token,
-      decimals: token.metadata?.decimals || token.decimals || 6,
+      decimals: token.metadata?.decimals ?? token.decimals ?? 6,
     };
   } else {
     return {
@@ -411,7 +453,7 @@ const availableTokens = computed(() => {
       const res = {
         ...token,
         balance: found ? found.quantity : 0,
-        decimals: token.metadata?.decimals || token.decimals || 6,
+        decimals: token.metadata?.decimals ?? token.decimals ?? 6,
       };
       if (found && selectedTokenB.value.unit === found.unit) {
         selectedTokenB.value.balance = res.balance;
@@ -479,6 +521,29 @@ const pairPrice = computed(() => {
   }
 });
 
+const formattedBatcherFee = computed(() => {
+  return filters.toCurrency(estimation.value.batcher_fee || 0, false, 2, '', '', false, 0);
+});
+
+const formattedPartnerFee = computed(() => {
+  return filters.toCurrency(estimation.value.partner_fee || 0, false, 2, '', '', false, 0);
+});
+
+const formattedDeposits = computed(() => {
+  return filters.toCurrency(estimation.value.deposits || 0, false, 2, '', '', false, 0);
+});
+
+const formattedMinReceive = computed(() => {
+  return filters.toCurrency(estimation.value.total_output || 0, false, 2, '', '', false, 0);
+});
+
+const priceImpactColor = computed(() => {
+  const impact = calculateWeightedPriceImpact.value;
+  if (impact >= 10) return '#FDA29B';
+  if (impact >= 3) return '#FEC84B';
+  return '#75E0A7';
+});
+
 watch(
   () => selectedTokenA.value?.ticker,
   async (newVal, oldVal) => {
@@ -488,15 +553,18 @@ watch(
     if (newVal === 'ADA') {
       // If selectedTokenA is changed to ADA, set selectedTokenB to last non-ADA tokenB if exists
       if (lastNonADATokenB.value) {
-        selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value?.ticker);
+        const found = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value?.ticker);
+        if (found) selectedTokenB.value = found;
       } else {
-        selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === oldVal);
+        const found = availableTokens.value.find(token => token['ticker'] === oldVal);
+        if (found) selectedTokenB.value = found;
       }
     } else {
       // Store the last non-ADA token for selectedTokenA
       lastNonADATokenA.value = { ...selectedTokenA.value };
       // Set selectedTokenB to ADA
-      selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
+      const found = availableTokens.value.find(token => token['ticker'] === 'ADA');
+      if (found) selectedTokenB.value = found;
     }
     await averagePrice(
       !selectedTokenA.value.unit ? selectedTokenA.value?.ticker : selectedTokenA.value.unit,
@@ -516,16 +584,19 @@ watch(
     if (newVal === 'ADA') {
       // If selectedTokenB is changed to ADA, set selectedTokenA to last non-ADA tokenA if exists
       if (lastNonADATokenA.value) {
-        selectedTokenA.value = availableTokens.value.find(token => token.ticker === lastNonADATokenA.value.ticker);
+        const found = availableTokens.value.find(token => token.ticker === lastNonADATokenA.value.ticker);
+        if (found) selectedTokenA.value = found;
       } else {
-        selectedTokenA.value = availableTokens.value.find(token => token.ticker === oldVal);
+        const found = availableTokens.value.find(token => token.ticker === oldVal);
+        if (found) selectedTokenA.value = found;
       }
     } else {
       // Store the last non-ADA token for selectedTokenB
       lastNonADATokenB.value = { ...selectedTokenB.value };
       // If selectedTokenB is not ADA, keep selectedTokenA as ADA
       if (selectedTokenA.value.ticker !== 'ADA') {
-        selectedTokenA.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
+        const found = availableTokens.value.find(token => token['ticker'] === 'ADA');
+        if (found) selectedTokenA.value = found;
       }
     }
     await averagePrice(
@@ -537,6 +608,21 @@ watch(
     isUpdating.value = false; // Reset flag
   }
 );
+
+// Pre-select buy token when passed from market page
+function applyBuyTokenPreselection(): boolean {
+  const unit = props.buyTokenUnit;
+  if (!unit) return false;
+  const tokens = availableTokens.value;
+  if (tokens.length <= 1) return false; // Only ADA (native) present — DexHunter tokens not loaded yet
+  const matchUnit = unit === 'lovelace' ? '' : unit;
+  const match = tokens.find((t: any) => t.unit === matchUnit);
+  if (match) {
+    selectedTokenB.value = match;
+    return true;
+  }
+  return false;
+}
 
 watch(
   () => limit.value,
@@ -569,6 +655,8 @@ const tokenAQuantityChange = val => {
 const debouncedEstimateTokenA = debounce(val => {
   if (!val || val === 0 || swapType.value === 'limit') {
     selectedTokenB.value.quantity = '0';
+    estimation.value = { net_price_reverse: 0, total_output: 0, deposits: 0, batcher_fee: 0, partner_fee: 0 };
+    splits.value = undefined;
   } else {
     estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, val, true);
   }
@@ -639,6 +727,7 @@ const estimate = (token_in: string, token_out: string, amount_in, update) => {
         total_output_without_slippage.value = data.total_output_without_slippage;
         splits.value = data.splits;
         estimation.value = data;
+        debugLog('[Swap] Estimation fees:', { batcher_fee: data.batcher_fee, partner_fee: data.partner_fee, deposits: data.deposits, total_output: data.total_output });
         if (swapType.value !== 'limit') {
           selectedTokenB.value.quantity = filters.toCurrency(
             total_output_without_slippage.value,
@@ -677,6 +766,8 @@ const averagePrice = (token_in, token_out) => {
 };
 
 const performPeriodicEstimate = async () => {
+  // Skip when page/tab is hidden to avoid unnecessary API calls
+  if (document.hidden) return;
   // Add defensive checks for undefined tokens
   if (!selectedTokenA.value || !selectedTokenB.value) {
     debugLog('[Swap] Tokens not properly initialized');
@@ -765,7 +856,8 @@ const submit = async (cborHex: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`);
+  const safeTxId = txId ? String(txId).replace(/[^a-f0-9]/gi, '') : '';
+  snackbar.fireSuccess(`${t('swap.orderSubmittedSuccess')}\nTx Id: ${safeTxId}`);
 
   // Clear the input fields after successful submission
   clearInputs();
@@ -813,12 +905,32 @@ const setMaxTokenA = () => {
   }
 };
 
+// Watch buyTokenUnit prop — handles subsequent opens when dialog stays alive
+watch(() => props.buyTokenUnit, (newUnit) => {
+  if (newUnit) {
+    if (!applyBuyTokenPreselection()) {
+      // DexHunter tokens not loaded yet — watch until they arrive
+      const stopWatch = watch(
+        () => availableTokens.value.length,
+        (len) => {
+          if (len > 1 && applyBuyTokenPreselection()) {
+            stopWatch();
+          }
+        }
+      );
+    }
+  }
+});
+
 onMounted(async () => {
+  // Pre-select buy token if provided from market page
+  applyBuyTokenPreselection();
+
   await averagePrice(
     !selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit,
     !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit
   );
-  intervalId.value = setInterval(performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
+  intervalId.value = setInterval(performPeriodicEstimate, 10000);
 });
 
 onBeforeUnmount(() => {

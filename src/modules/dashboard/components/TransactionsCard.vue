@@ -1,24 +1,218 @@
 <template>
-  <v-card outlined class="fill-height liquid-glass d-flex flex-column" :loading="loadingTxs">
-    <v-card-title class="pb-2 flex-grow-0">
-      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white"
-        >{{ $t('transactions.title') }}</router-link
-      >
-      <span v-else>{{ $t('transactions.title') }}</span>
+  <v-card
+    :class="['fill-height d-flex flex-column', isBitcoin ? 'tx-glass-card' : 'liquid-glass']"
+    :outlined="!isBitcoin"
+    :loading="loadingTxs"
+  >
+    <!-- Bitcoin header -->
+    <v-card-title v-if="isBitcoin" class="px-3 pt-3 pb-2 flex-grow-0 tx-card-title">
+      <div class="tx-icon-box">
+        <svg viewBox="0 0 20 20" fill="none" width="13" height="13">
+          <path d="M3 5h14M3 9h14M3 13h8M3 17h5" stroke="#F7931A" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="tx-heading-group ml-2">
+        <router-link v-if="!isFullList" to="/transactions" class="tx-heading-link">
+          {{ $t('transactions.title') }}
+        </router-link>
+        <span v-else class="tx-heading">{{ $t('transactions.title') }}</span>
+        <span class="tx-count">{{ transactions.length }} TXS</span>
+      </div>
       <v-spacer />
-      <!-- Search box -->
       <v-text-field
         v-model="search"
         dense
         flat
         solo
         hide-details
-        :placeholder="$t('transactions.search')"
+        :placeholder="$t('common.search')"
         prepend-inner-icon="mdi-magnify"
         clearable
-        style="max-width: 200px"
-        class="top-level-search"
-      ></v-text-field>
+        class="top-level-search tx-search-field"
+      />
+    </v-card-title>
+
+    <!-- Cardano/Apex header (original) -->
+    <v-card-title v-else class="pb-0 flex-grow-0">
+      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white">
+        {{ $t('transactions.title') }}
+      </router-link>
+      <span v-else>{{ $t('transactions.title') }}</span>
+      <v-spacer />
+
+      <!-- Expandable search (grows to the left) -->
+      <div class="expanding-search-wrap">
+        <input
+          ref="searchField"
+          v-model="search"
+          type="text"
+          class="expanding-search-input"
+          :placeholder="t('common.search')"
+          @keydown.esc="searchField?.blur()"
+        />
+        <v-icon small class="expanding-search-icon" color="white">mdi-magnify</v-icon>
+      </div>
+
+      <!-- Filter menu -->
+      <v-menu
+        v-if="props.isFullList"
+        v-model="filterMenuOpen"
+        :close-on-content-click="false"
+        offset-y
+        nudge-left="150"
+        nudge-bottom="4"
+        min-width="240"
+        max-width="300"
+        content-class="filter-menu"
+        transition="none"
+      >
+        <template v-slot:activator="{ on, attrs }">
+          <v-btn icon small v-bind="attrs" v-on="on" class="ml-1">
+            <v-badge color="transparent" avatar :value="activeFilterCount > 0" :content="activeFilterCount" overlap>
+              <template v-slot:badge>
+                <v-avatar size="14" height="14" style="height: 14px!important;" color="primary">
+                  <span style="font-size: 10px; color: black">{{ activeFilterCount }}</span>
+                </v-avatar>
+              </template>
+              <v-icon small>mdi-tune-variant</v-icon>
+            </v-badge>
+          </v-btn>
+        </template>
+        <v-card class="liquid-glass-compact" dark>
+          <v-card-text class="pa-3">
+            <!-- Date range -->
+            <div class="filter-section-label">{{ $t('transactions.dateRange') }}</div>
+            <div class="d-flex align-center" style="gap: 6px">
+              <v-menu
+                v-model="dateFromMenu"
+                :close-on-content-click="false"
+                offset-y
+                min-width="auto"
+                content-class="date-picker-menu"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-text-field
+                    :value="filterDateFrom || ''"
+                    :placeholder="$t('transactions.from')"
+                    dense
+                    outlined
+                    hide-details
+                    readonly
+                    v-bind="attrs"
+                    v-on="on"
+                    class="filter-date-field"
+                    clearable
+                    @click:clear="filterDateFrom = null"
+                  >
+                    <template v-slot:prepend-inner>
+                      <v-icon small class="mt-1" style="opacity: 0.5">mdi-calendar</v-icon>
+                    </template>
+                  </v-text-field>
+                </template>
+                <v-date-picker
+                  :value="filterDateFrom"
+                  @input="filterDateFrom = $event; dateFromMenu = false"
+                  :min="earliestTxDate"
+                  :max="filterDateTo || latestTxDate"
+                  :events="transactionDates"
+                  event-color="#00DFF3"
+                  no-title
+                  dark
+                  color="#00DFF3"
+                  class="filter-date-picker"
+                  @click:clear="filterDateTo = null"
+                />
+              </v-menu>
+              <v-menu
+                v-model="dateToMenu"
+                :close-on-content-click="false"
+                offset-y
+                min-width="auto"
+                content-class="date-picker-menu"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-text-field
+                    :value="filterDateTo || ''"
+                    :placeholder="$t('transactions.to')"
+                    dense
+                    outlined
+                    hide-details
+                    readonly
+                    v-bind="attrs"
+                    v-on="on"
+                    class="filter-date-field"
+                    clearable
+                  >
+                    <template v-slot:prepend-inner>
+                      <v-icon small class="mt-1" style="opacity: 0.5">mdi-calendar</v-icon>
+                    </template>
+                  </v-text-field>
+                </template>
+                <v-date-picker
+                  :value="filterDateTo"
+                  @input="filterDateTo = $event; dateToMenu = false"
+                  :min="filterDateFrom || earliestTxDate"
+                  :max="latestTxDate"
+                  :events="transactionDates"
+                  event-color="#00DFF3"
+                  no-title
+                  dark
+                  color="#00DFF3"
+                  class="filter-date-picker"
+                />
+              </v-menu>
+            </div>
+
+            <v-divider class="my-2" style="opacity: 0.1" />
+
+            <!-- Transaction type -->
+            <div class="filter-section-label">{{ $t('transactions.type') }}</div>
+            <v-chip-group v-model="filterTypes" multiple column>
+              <v-chip
+                v-for="ft in typeFilterOptions"
+                :key="ft.value"
+                :value="ft.value"
+                small
+                outlined
+                filter
+                class="filter-type-chip"
+              >{{ ft.text }}</v-chip>
+            </v-chip-group>
+
+            <v-divider class="my-2" style="opacity: 0.1" />
+
+            <!-- Token filter -->
+            <div class="filter-section-label">{{ $t('transactions.tokens') }}</div>
+            <v-chip-group v-model="filterTokenMode" column>
+              <v-chip value="all" small outlined filter class="filter-type-chip">{{ $t('common.all') }}</v-chip>
+              <v-chip value="ada_only" small outlined filter class="filter-type-chip">ADA {{ $t('common.only') }}</v-chip>
+              <v-chip value="with_tokens" small outlined filter class="filter-type-chip">{{ $t('transactions.withTokens') }}</v-chip>
+            </v-chip-group>
+
+            <v-divider class="my-2" style="opacity: 0.1" />
+
+            <!-- Export CSV -->
+            <v-btn text block small class="justify-start" @click="exportToCsv()">
+              <v-icon small class="mr-2">mdi-download</v-icon>
+              {{ $t('transactions.exportCsv') }}
+            </v-btn>
+
+            <!-- Clear all -->
+            <v-btn
+              :disabled="activeFilterCount === 0"
+              text
+              block
+              small
+              class="justify-start mt-1"
+              color="error"
+              @click="clearAllFilters()"
+            >
+              <v-icon small class="mr-2">mdi-close-circle-outline</v-icon>
+              {{ $t('transactions.clearFilters') }}
+            </v-btn>
+          </v-card-text>
+        </v-card>
+      </v-menu>
     </v-card-title>
     <v-card-text class="pa-0 text-center flex-grow-1 d-flex flex-column">
       <div :class="{ 'table-container': props.isFullList }" class="flex-grow-1">
@@ -68,7 +262,7 @@
                     </span>
                   </v-tooltip>
                 </v-list-item-subtitle>
-                <v-list-item-subtitle>
+                <v-list-item-subtitle class="chips-row">
                   <v-chip
                     v-if="isStakeRegistration(item)"
                     x-small
@@ -114,16 +308,26 @@
                     style="margin-left: 1px; margin-bottom: 1px"
                     >{{ $t('common.internal') }}</v-chip
                   >
-                  <v-chip
-                    v-if="getContactName(item)?.length > 0"
-                    v-for="(contact, index) in getContactName(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#FF9800"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    :key="index"
-                  ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contact }}</v-chip>
+                  <template v-for="(contact, index) in (getContactName(item) || [])">
+                    <v-chip
+                      v-if="contact.isHandle"
+                      outlined
+                      class="px-1"
+                      x-small
+                      color="white"
+                      style="margin-left: 1px; margin-bottom: 1px"
+                      :key="'h-' + index"
+                    ><span style="color: #0fd25b; font-weight: 600">$</span>{{ contact.label.replace(/^\$/, '') }}</v-chip>
+                    <v-chip
+                      v-else
+                      outlined
+                      class="px-1"
+                      x-small
+                      color="#FF9800"
+                      style="margin-left: 1px; margin-bottom: 1px"
+                      :key="'c-' + index"
+                    ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contact.label }}</v-chip>
+                  </template>
                   <v-chip
                     v-if="isStrike(item)"
                     outlined
@@ -202,19 +406,25 @@
                   textWrap: 'nowrap',
                 }"
               >
-                {{
-                  filters.toCurrency(
-                    item.ada ?? 0,
-                    true,
-                    0,
-                    networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
-                    '',
-                    false
-                  )
-                }}
+                <template v-if="hideBalances">••••••</template>
+                <template v-else>
+                  {{
+                    filters.toCurrency(
+                      item.ada ?? 0,
+                      true,
+                      0,
+                      networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
+                      '',
+                      false
+                    )
+                  }}
+                </template>
               </div>
               <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
-                {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
+                <template v-if="hideBalances">$•••</template>
+                <template v-else>
+                  {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
+                </template>
               </div>
             </div>
           </template>
@@ -246,7 +456,7 @@
     </v-card-text>
     <v-card-actions
       v-if="!props.isFullList && transactions.length > itemsPerPage"
-      class="pa-0 no-hover text-center justify-center"
+      :class="['pa-0 no-hover text-center justify-center', isBitcoin ? 'tx-pagination-bar' : '']"
     >
       <v-pagination
         v-model="currentPage"
@@ -257,11 +467,17 @@
         @input="handlePageChange"
       ></v-pagination>
     </v-card-actions>
+    <BitcoinTransactionDetailsDialog
+      v-if="transactionInfo && isBitcoin && state === '/' && !selectedTransaction"
+      :transactionInfo="transactionInfo"
+      @close="handleTransactionModalClose"
+    />
     <TransactionDetailsDialog
-      v-if="transactionInfo && state === '/' && !selectedTransaction"
+      v-if="transactionInfo && !isBitcoin && state === '/' && !selectedTransaction"
       :transactionInfo="transactionInfo"
       @close="handleTransactionModalClose"
     ></TransactionDetailsDialog>
+
   </v-card>
 </template>
 <script setup lang="ts">
@@ -270,16 +486,19 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
+import BitcoinTransactionDetailsDialog from '@/modules/dashboard/dialogs/BitcoinTransactionDetailsDialog.vue';
 import networks from '@/utils/networks';
 import time from '@/plugins/time';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Blockchain } from '@/models/types';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import { useDebounceFn } from '@vueuse/core';
+import debounce from 'lodash/debounce';
+import { isCardanoTx, StoredTransaction } from '@/models/transaction.types';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -303,26 +522,31 @@ const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
 
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
 
 const activityHeaders = computed(() => [
   { text: t('transactions.activity'), align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
-  { text: t('transactions.amount'), align: 'center text-nowrap', sortable: false, value: 'amount' },
-  { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: 110 },
+  { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: '78px' },
+  { text: t('transactions.amount'), align: 'end text-nowrap', sortable: false, value: 'amount', width: '90px' },
 ]);
 
-const transactionInfo = ref<any>(null);
+const transactionInfo = ref<StoredTransaction | null>(null);
 const sortBy = ref<string>('tx_timestamp');
 const sortDesc = ref<boolean>(true);
+
+const searchField = ref<HTMLInputElement | null>(null);
 
 // Search input and debounced search value
 const searchInput = ref<string>('');
 const debouncedSearch = ref<string>('');
 
-// Debounce function to update debouncedSearch after user stops typing using VueUse
-// VueUse's useDebounceFn returns a function with a cancel() method
-const debouncedUpdateSearch = useDebounceFn((value: string) => {
+// Debounce function to update debouncedSearch after user stops typing
+const debouncedUpdateSearch = debounce((value: string) => {
   debouncedSearch.value = value;
 }, 300); // 300ms debounce delay
 
@@ -331,16 +555,101 @@ watch(searchInput, (newValue) => {
   debouncedUpdateSearch(newValue);
 });
 
+// Cancel pending debounce on unmount to prevent state mutation after teardown
+onUnmounted(() => debouncedUpdateSearch.cancel());
+
 // Computed search property for v-model binding
+// Note: Vuetify clearable sets value to null, so we coerce to empty string
 const search = computed({
   get: () => searchInput.value,
   set: (value: string) => {
-    searchInput.value = value;
+    searchInput.value = value || '';
   },
 });
 
+// ---------------------------------------------------------------------------
+// Filter state
+// ---------------------------------------------------------------------------
+const filterMenuOpen = ref(false);
+const dateFromMenu = ref(false);
+const dateToMenu = ref(false);
+const filterDateFrom = ref<string | null>(null);
+
+const toDateString = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
+
+const earliestTxDate = computed(() => {
+  const all = txs.value as StoredTransaction[];
+  if (!all?.length) return undefined;
+  const earliest = all.reduce((min, tx) => tx.tx_timestamp < min ? tx.tx_timestamp : min, all[0].tx_timestamp);
+  return toDateString(earliest);
+});
+
+const latestTxDate = computed(() => {
+  return toDateString(Math.floor(Date.now() / 1000));
+});
+
+// Dates that have transactions — shown as dots on the date picker
+const transactionDates = computed(() => {
+  const all = txs.value as StoredTransaction[];
+  if (!all?.length) return [];
+  const dates = new Set<string>();
+  for (const tx of all) {
+    dates.add(toDateString(tx.tx_timestamp));
+  }
+  return Array.from(dates);
+});
+const filterDateTo = ref<string | null>(null);
+const filterTypes = ref<string[]>([]);
+const filterTokenMode = ref<string>('all');
+
+const typeFilterOptions = [
+  { value: 'sent', text: t('transactions.sentFunds') },
+  { value: 'received', text: t('transactions.receivedFunds') },
+  { value: 'delegation', text: t('transactions.delegatingToPool') },
+  { value: 'withdrawal', text: t('transactions.withdrawal') },
+  { value: 'internal', text: t('common.internal') },
+];
+
+const activeFilterCount = computed(() => {
+  let count = 0;
+  if (filterDateFrom.value || filterDateTo.value) count++;
+  count += filterTypes.value.length;
+  if (filterTokenMode.value && filterTokenMode.value !== 'all') count++;
+  return count;
+});
+
+function clearAllFilters() {
+  filterDateFrom.value = null;
+  filterDateTo.value = null;
+  filterTypes.value = [];
+  filterTokenMode.value = 'all';
+}
+
+function exportToCsv() {
+  filterMenuOpen.value = false;
+  const rows = transactions.value;
+  const csvHeaders = ['Date', 'Type', 'Amount (ADA)', 'Transaction ID'];
+  const csvRows = rows.map(tx => {
+    const date = new Date(tx.tx_timestamp * 1000).toISOString();
+    const status = transactionStatuses.value[tx.id] || buildBasicStatus(tx);
+    const ada = (tx.ada / 1_000_000).toFixed(6);
+    return [date, `"${status}"`, ada, tx.id].join(',');
+  });
+  const csv = [csvHeaders.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Version counter to detect and cancel stale async loads (prevents race conditions when typing fast)
+const loadVersion = ref(0);
+
 // Infinite scroll variables
-const displayedTransactions = ref<any[]>([]);
+const displayedTransactions = ref<StoredTransaction[]>([]);
 const currentIndex = ref<number>(0);
 const isLoadingMore = ref<boolean>(false);
 const hasReachedEnd = ref<boolean>(false);
@@ -362,11 +671,12 @@ const itemsPerBatch = computed(() => {
   return state.value === '/transactions' ? 20 : 10;
 });
 
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy as { $route: { path: string } };
 const state = computed(() => vmProxy.$route.path);
 
-const transactions = computed<any[]>(() => {
-  const filtered = txs.value.filter((tx: any) => {
+const transactions = computed<StoredTransaction[]>(() => {
+  // Apply date range filter
+  let result = (txs.value as StoredTransaction[]).filter((tx) => {
     if (debouncedSearch.value) {
       const searchLower = debouncedSearch.value.toLowerCase();
 
@@ -374,54 +684,92 @@ const transactions = computed<any[]>(() => {
       const matchesId = tx.id.toLowerCase().includes(searchLower);
 
       // Check assets
-      const matchesAsset = tx.assets.some((asset: any) => {
-        const assetInfo = assets.value[asset.unit] as any;
+      const matchesAsset = tx.assets.some((asset) => {
+        const assetInfo = assets.value[asset.unit];
         return (
           assetInfo?.metadata?.name?.toLowerCase().includes(searchLower) ||
           assetInfo?.metadata?.ticker?.toLowerCase().includes(searchLower)
         );
       });
 
-      // Check DEX/platform chips
-      const matchesChip =
-        ('minswap'.includes(searchLower) && isMinswap(tx)) ||
-        ('wingriders'.includes(searchLower) && isWingRiders(tx)) ||
-        ('muesliswap'.includes(searchLower) && isMuesliSwap(tx)) ||
-        ('vyfi'.includes(searchLower) && isVyFi(tx)) ||
-        ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
-        ('splash'.includes(searchLower) && isSplash(tx)) ||
-        ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
-        ('strike'.includes(searchLower) && isStrike(tx)) ||
-        ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
+      // Check tags/chips and certificates (CardanoTx-specific fields)
+      let matchesChip = false;
+      if (isCardanoTx(tx)) {
+        matchesChip =
+          ('minswap'.includes(searchLower) && isMinswap(tx)) ||
+          ('wingriders'.includes(searchLower) && isWingRiders(tx)) ||
+          ('muesliswap'.includes(searchLower) && isMuesliSwap(tx)) ||
+          ('vyfi'.includes(searchLower) && isVyFi(tx)) ||
+          ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
+          ('splash'.includes(searchLower) && isSplash(tx)) ||
+          ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
+          ('strike'.includes(searchLower) && isStrike(tx)) ||
+          ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
+          ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
+          ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
+          (tx.body.certificates?.some((cert) => cert.__typename.toLowerCase().includes(searchLower)) ?? false);
+      }
+
+      // Checks that work for all transaction types
+      matchesChip = matchesChip ||
         ('cashback'.includes(searchLower) && isCashback(tx)) ||
         ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
-        ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
-        ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
-        ('pending'.includes(searchLower) && tx.pending) ||
-        tx.body?.certificates?.some((cert: any) => {
-          const certType = cert.__typename;
-          return certType.toLowerCase().includes(searchLower);
-        });
+        ('pending'.includes(searchLower) && tx.pending);
 
       // Check contact name
-      const contactName: string[] = getContactName(tx);
-      const matchesContact = contactName && contactName.find(name => name.toLowerCase() == searchLower);
+      const contactName = getContactName(tx);
+      const matchesContact = contactName && contactName.find(c => c.label.toLowerCase() === searchLower);
 
       return matchesId || matchesAsset || matchesChip || matchesContact;
     }
-    return tx;
+    return true;
   });
+  if (filterDateFrom.value) {
+    const from = new Date(filterDateFrom.value).getTime() / 1000;
+    result = result.filter(tx => tx.tx_timestamp >= from);
+  }
+  if (filterDateTo.value) {
+    const to = new Date(filterDateTo.value).getTime() / 1000 + 86400; // end of day
+    result = result.filter(tx => tx.tx_timestamp < to);
+  }
+
+  // Apply type filters
+  if (filterTypes.value.length > 0) {
+    result = result.filter(tx => {
+      const net = tx.receivedAmount - tx.sentAmount;
+      return filterTypes.value.some(type => {
+        switch (type) {
+          case 'sent': return net < 0;
+          case 'received': return net > 0;
+          case 'delegation': return isCardanoTx(tx) && tx.body.certificates?.some(
+            c => c.__typename === Cardano.CertificateType.StakeDelegation ||
+                 c.__typename === Cardano.CertificateType.StakeRegistrationDelegation
+          );
+          case 'withdrawal': return isWithdrawal(tx);
+          case 'internal': return isInternalTransfer(tx);
+          default: return false;
+        }
+      });
+    });
+  }
+
+  // Apply token mode filter
+  if (filterTokenMode.value === 'ada_only') {
+    result = result.filter(tx => !tx.assets?.some(a => a.unit !== 'lovelace' && a.quantity !== 0));
+  } else if (filterTokenMode.value === 'with_tokens') {
+    result = result.filter(tx => tx.assets?.some(a => a.unit !== 'lovelace' && a.quantity !== 0));
+  }
 
   // Sort by timestamp descending (most recent first)
-  return filtered.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
+  return result.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 });
 
 // Store for transaction statuses with loaded pool data
 const transactionStatuses = ref<Record<string, string>>({});
 
 // Preload statuses for displayed transactions
-const preloadTransactionStatuses = async (transactions: any[]): Promise<void> => {
-  const promises = transactions.map(async item => {
+const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Promise<void> => {
+  const promises = transactions.map(async (item) => {
     const txId = item.id;
 
     // Skip if already loaded
@@ -430,9 +778,9 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
     }
 
     // Load status with pool data
-    const statuses = [];
+    const statuses: string[] = [];
 
-    if (item.body?.certificates?.length > 0) {
+    if (isCardanoTx(item) && item.body.certificates?.length) {
       for (const certificate of item.body.certificates) {
         const status = await processCertificate(certificate, true);
         if (status) statuses.push(status);
@@ -448,7 +796,7 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
 };
 
 // Get transaction status (reactive)
-const getTransactionStatus = (item: any): string => {
+const getTransactionStatus = (item: StoredTransaction): string => {
   // Check if transaction is pending for too long (> 1 hour) - show as "Failed Transaction"
   if (isPendingTooLong(item)) {
     return t('transactions.failedTransaction');
@@ -509,21 +857,39 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
 };
 
 // Add fund transfer status if applicable
-const addFundTransferStatus = (item: any, statuses: string[]): void => {
+const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): void => {
   // Skip if transaction has certificates (delegation, registration, etc.)
-  if (item.body?.certificates && item.body.certificates.length > 0) {
+  if (isCardanoTx(item) && item.body.certificates && item.body.certificates.length > 0) {
     return;
   }
   const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
   const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
-  const hasReceivedTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity > 0);
-  const hasSentTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity < 0);
+  const receivedTokenCount = item.assets?.filter((asset) => asset.unit !== 'lovelace' && asset.quantity > 0).length ?? 0;
+  const sentTokenCount = item.assets?.filter((asset) => asset.unit !== 'lovelace' && asset.quantity < 0).length ?? 0;
+  const hasReceivedTokens = receivedTokenCount > 0;
+  const hasSentTokens = sentTokenCount > 0;
+
+  // When tokens are present, a small ADA amount is just the min UTxO locked with the tokens.
+  // In that case, label as token-only (e.g. "Received Tokens" instead of "Received Funds & Tokens").
+  // TODO: min UTxO threshold (currently 2 ADA) should be derived from protocol params
+  // (coinsPerUtxoByte) rather than hardcoded, as it can change with protocol updates.
+  const netAdaAbs = Math.abs(item.receivedAmount - item.sentAmount) / 1_000_000;
+  const isMinUtxoOnly = netAdaAbs <= 2;
+
+  const receivedTokenLabel = receivedTokenCount === 1 ? t('transactions.receivedToken') : t('transactions.receivedTokens');
+  const sentTokenLabel = sentTokenCount === 1 ? t('transactions.sentToken') : t('transactions.sentTokens');
+  const receivedFundsAndTokensLabel = receivedTokenCount === 1 ? t('transactions.receivedFundsAndToken') : t('transactions.receivedFundsAndTokens');
+  const sentFundsAndTokensLabel = sentTokenCount === 1 ? t('transactions.sentFundsAndToken') : t('transactions.sentFundsAndTokens');
 
   // Build smart status message
-  if (hasReceivedFunds && hasReceivedTokens) {
-    statuses.push(t('transactions.receivedFundsAndTokens'));
+  if (hasReceivedFunds && hasReceivedTokens && isMinUtxoOnly) {
+    statuses.push(receivedTokenLabel);
+  } else if (hasSentFunds && hasSentTokens && isMinUtxoOnly) {
+    statuses.push(sentTokenLabel);
+  } else if (hasReceivedFunds && hasReceivedTokens) {
+    statuses.push(receivedFundsAndTokensLabel);
   } else if (hasSentFunds && hasSentTokens) {
-    statuses.push(t('transactions.sentFundsAndTokens'));
+    statuses.push(sentFundsAndTokensLabel);
   } else if (hasReceivedFunds && hasSentTokens) {
     statuses.push(t('transactions.receivedFundsAndSentTokens'));
   } else if (hasSentFunds && hasReceivedTokens) {
@@ -533,17 +899,33 @@ const addFundTransferStatus = (item: any, statuses: string[]): void => {
   } else if (hasSentFunds) {
     statuses.push(t('transactions.sentFunds'));
   } else if (hasReceivedTokens) {
-    statuses.push(t('transactions.receivedTokens'));
+    statuses.push(receivedTokenLabel);
   } else if (hasSentTokens) {
-    statuses.push(t('transactions.sentTokens'));
+    statuses.push(sentTokenLabel);
   }
 };
 
 // Build basic transaction status without pool API data
-const buildBasicStatus = (item: any): string => {
-  const statuses = [];
+const buildBasicStatus = (item: StoredTransaction): string => {
+  const statuses: string[] = [];
 
-  if (item.body?.certificates?.length > 0) {
+  // Bitcoin transaction status (simpler than Cardano)
+  if (item.type) {
+    // Bitcoin transaction with type field
+    switch (item.type) {
+      case 'receive':
+        return t('transactions.receivedFunds');
+      case 'send':
+        return t('transactions.sentFunds');
+      case 'self':
+        return t('transactions.selfTransfer');
+      default:
+        return t('transactions.transaction');
+    }
+  }
+
+  // Cardano transaction status (complex with certificates)
+  if (isCardanoTx(item) && item.body?.certificates?.length > 0) {
     item.body.certificates.forEach((certificate: Cardano.Certificate) => {
       const status = getCertificateBaseStatus(certificate.__typename);
       if (status) statuses.push(status);
@@ -570,51 +952,61 @@ const getPoolByIdFromApi = async (poolId: string) => {
 const loadMoreTransactions = async () => {
   if (isLoadingMore.value || hasReachedEnd.value) return;
 
+  const version = loadVersion.value;
   isLoadingMore.value = true;
 
   if (props.isFullList) {
     // Simulate loading delay for better UX
     await new Promise(resolve => setTimeout(resolve, 300));
+    // Bail out if a new search/reset happened during the delay
+    if (version !== loadVersion.value) return;
   }
 
-  let newTransactions: any[];
+  try {
+    let newTransactions: StoredTransaction[];
 
-  if (props.isFullList) {
-    // Infinite scroll mode
-    const endIndex = currentIndex.value + itemsPerBatch.value;
-    newTransactions = transactions.value.slice(currentIndex.value, endIndex);
+    if (props.isFullList) {
+      // Infinite scroll mode
+      const endIndex = currentIndex.value + itemsPerBatch.value;
+      newTransactions = transactions.value.slice(currentIndex.value, endIndex);
 
-    displayedTransactions.value.push(...newTransactions);
-    currentIndex.value = endIndex;
+      displayedTransactions.value.push(...newTransactions);
+      currentIndex.value = endIndex;
 
-    // Check if we've reached the end
-    if (endIndex >= transactions.value.length) {
-      hasReachedEnd.value = true;
+      // Check if we've reached the end
+      if (endIndex >= transactions.value.length) {
+        hasReachedEnd.value = true;
+      }
+    } else {
+      // Pagination mode
+      const start = (currentPage.value - 1) * itemsPerPage.value;
+      const end = start + itemsPerPage.value;
+      newTransactions = transactions.value.slice(start, end);
+      displayedTransactions.value = newTransactions;
+
+      // Check if we've reached the end
+      if (end >= transactions.value.length) {
+        hasReachedEnd.value = true;
+      }
     }
-  } else {
-    // Pagination mode
-    const start = (currentPage.value - 1) * itemsPerPage.value;
-    const end = start + itemsPerPage.value;
-    newTransactions = transactions.value.slice(start, end);
-    displayedTransactions.value = newTransactions;
 
-    // Check if we've reached the end
-    if (end >= transactions.value.length) {
-      hasReachedEnd.value = true;
+    // Preload statuses for new transactions and wait for completion
+    if (newTransactions.length > 0) {
+      await preloadTransactionStatuses(newTransactions);
+      // Bail out if a new search/reset happened during preload
+      if (version !== loadVersion.value) return;
     }
+  } finally {
+    isLoadingMore.value = false;
   }
-
-  // Preload statuses for new transactions and wait for completion
-  if (newTransactions.length > 0) {
-    await preloadTransactionStatuses(newTransactions);
-  }
-
-  isLoadingMore.value = false;
 };
 
 // Reset infinite scroll when search changes
 const resetInfiniteScroll = async () => {
-  displayedTransactions.value = [];
+  // Increment version to invalidate any in-progress loadMoreTransactions calls
+  loadVersion.value++;
+  isLoadingMore.value = false;
+
   currentIndex.value = 0;
   hasReachedEnd.value = false;
   currentPage.value = 1;
@@ -622,12 +1014,33 @@ const resetInfiniteScroll = async () => {
   // Clear cached transaction statuses
   transactionStatuses.value = {};
 
-  await loadMoreTransactions();
+  // Load first batch and replace atomically to prevent flicker
+  const endIndex = itemsPerBatch.value;
+  const firstBatch = transactions.value.slice(0, endIndex);
+  currentIndex.value = endIndex;
+  if (endIndex >= transactions.value.length) {
+    hasReachedEnd.value = true;
+  }
+  if (firstBatch.length > 0) {
+    await preloadTransactionStatuses(firstBatch);
+  }
+  displayedTransactions.value = firstBatch;
+  isLoadingMore.value = false;
 };
 
 // Watch for debounced search term changes to reset infinite scroll
 watch(
   () => debouncedSearch.value,
+  async () => {
+    if (props.isFullList) {
+      await resetInfiniteScroll();
+    }
+  }
+);
+
+// Watch for filter changes to reset infinite scroll
+watch(
+  [filterDateFrom, filterDateTo, filterTypes, filterTokenMode],
   async () => {
     if (props.isFullList) {
       await resetInfiniteScroll();
@@ -738,7 +1151,7 @@ const setupScrollFallback = () => {
   }
 };
 
-const handleOnTransactionsRowClick = row => {
+const handleOnTransactionsRowClick = (row: StoredTransaction) => {
   transactionInfo.value = row;
   emit('row-click', row);
 };
@@ -747,26 +1160,30 @@ const handleTransactionModalClose = () => {
   transactionInfo.value = null;
 };
 
-const isWithdrawal = item => {
+const isWithdrawal = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   return (
-    item.body?.withdrawals?.length > 0 &&
+    item.body.withdrawals?.length > 0 &&
     loggedWallet.value?.stakeAddress &&
-    item.body.withdrawals.some(withdrawal => withdrawal.stakeAddress === loggedWallet.value.stakeAddress)
-  );
+    item.body.withdrawals.some((withdrawal) => withdrawal.stakeAddress === loggedWallet.value.stakeAddress)
+  ) ?? false;
 };
 
-const getContactName = (item): string[] => {
-  const contactsResult = new Set<string>();
+const getContactName = (item: StoredTransaction): { label: string; isHandle: boolean }[] | null => {
+  const contactsResult = new Map<string, { label: string; isHandle: boolean }>();
   // Check if contacts are available (contacts is an object, not an array)
   if (!contacts.value || !item.utxo) {
     return null;
   }
 
-  // Create a map of contact addresses to names
-  const contactMap = new Map<string, string>();
-  Object.values(contacts.value).forEach((contact: any) => {
+  // Create a map of contact addresses to display info
+  const contactMap = new Map<string, { label: string; isHandle: boolean }>();
+  Object.values(contacts.value).forEach((contact) => {
     if (contact.address && contact.name) {
-      contactMap.set(contact.address, contact.name);
+      contactMap.set(contact.address, {
+        label: contact.handle || contact.name,
+        isHandle: !!contact.handle,
+      });
     }
   });
 
@@ -778,21 +1195,25 @@ const getContactName = (item): string[] => {
   // Check inputs for contact addresses
   for (const input of item.utxo.inputs || []) {
     if (contactMap.has(input.address)) {
-      contactsResult.add(contactMap.get(input.address))
+      const info = contactMap.get(input.address)!;
+      contactsResult.set(info.label, info);
     }
   }
 
-  // Check outputs for contact addresses
-  for (const output of item.body?.outputs || []) {
-    if (contactMap.has(output.address)) {
-      contactsResult.add(contactMap.get(output.address))
+  // Check outputs for contact addresses (CardanoTx only)
+  if (isCardanoTx(item)) {
+    for (const output of item.body.outputs || []) {
+      if (contactMap.has(output.address)) {
+        const info = contactMap.get(output.address)!;
+        contactsResult.set(info.label, info);
+      }
     }
   }
 
-  return Array.from(contactsResult);
+  return Array.from(contactsResult.values());
 };
 
-const isInternalTransfer = item => {
+const isInternalTransfer = (item: StoredTransaction): boolean => {
   // Check if keys are available
   if (!keys.value || !item.utxo) {
     return false;
@@ -825,46 +1246,50 @@ const isInternalTransfer = item => {
   }
 
   // Check all input addresses
-  const allInputsInternal = item.utxo.inputs?.every((input: any) => walletAddresses.has(input.address));
+  const allInputsInternal = item.utxo.inputs?.every((input) => walletAddresses.has(input.address));
 
-  // Check all output addresses
-  const allOutputsInternal = item.body?.outputs?.every((output: any) => walletAddresses.has(output.address));
+  // Check all output addresses (CardanoTx only)
+  const allOutputsInternal = isCardanoTx(item)
+    ? item.body.outputs?.every((output) => walletAddresses.has(output.address))
+    : true;
 
   // Transaction is internal if ALL inputs AND ALL outputs belong to this wallet
   return allInputsInternal && allOutputsInternal;
 };
 
-const isStrike = item => {
+const isStrike = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Strike Finance perpetual trading transactions
   const STRIKE_SCRIPT_HASH = 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5';
   const STRIKE_CONTRACT_ADDRESS = 'addr1wytzw530pgjxm4wxsxj5ufp23cxacrvzmytpjnlcgq6t7vsgz25ef';
 
   // Check for Strike contract address (primary indicator of platform interaction)
   const hasStrikeAddress =
-    item.utxo?.inputs?.some((input: any) => input.address === STRIKE_CONTRACT_ADDRESS) ||
-    item.body?.outputs?.some((output: any) => output.address === STRIKE_CONTRACT_ADDRESS);
+    item.utxo?.inputs?.some((input) => input.address === STRIKE_CONTRACT_ADDRESS) ||
+    item.body.outputs?.some((output) => output.address === STRIKE_CONTRACT_ADDRESS);
 
   // Check for Strike script hash in witness (indicates contract execution)
   const hasStrikeScript = item.witness?.scripts?.some(
-    script => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
+    (script) => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
   );
 
   // Only tag as Strike if there's actual platform interaction, not just position NFT transfers
-  return hasStrikeAddress || hasStrikeScript;
+  return hasStrikeAddress || hasStrikeScript || false;
 };
 
-const isDexHunter = item => {
+const isDexHunter = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Check for DexHunter order contract address (primary indicator)
   const DEXHUNTER_ORDER_ADDRESS =
     'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
   const hasDexHunterOrderAddress =
-    item.utxo?.inputs?.some((input: any) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
-    item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_ORDER_ADDRESS);
+    item.utxo?.inputs?.some((input) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
+    item.body.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS);
 
   // Check for DexHunter fee address (indicates completed trade)
   const DEXHUNTER_FEE_ADDRESS =
     'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
-  const hasDexHunterFeeAddress = item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_FEE_ADDRESS);
+  const hasDexHunterFeeAddress = item.body.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS);
 
   // Check metadata for DexHunter Trade message (indicates trade execution)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
@@ -872,10 +1297,11 @@ const isDexHunter = item => {
     msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter')) : false;
 
   // Only tag as DexHunter if there's actual platform interaction
-  return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata;
+  return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata || false;
 };
 
-const isMinswap = item => {
+const isMinswap = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Minswap V1 addresses
   const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
   const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
@@ -888,13 +1314,13 @@ const isMinswap = item => {
   // Check for Minswap order contract addresses (indicates DEX interaction)
   const hasMinswapOrderAddress =
     item.utxo?.inputs?.some(
-      (input: any) =>
+      (input) =>
         input.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
         input.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
         input.address === MINSWAP_V2_ORDER_ADDRESS
     ) ||
-    item.body?.outputs?.some(
-      (output: any) =>
+    item.body.outputs?.some(
+      (output) =>
         output.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
         output.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
         output.address === MINSWAP_V2_ORDER_ADDRESS
@@ -905,20 +1331,21 @@ const isMinswap = item => {
   const hasMinswapMetadata = msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Minswap')) : false;
 
   // Check for Minswap pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMinswapInOutputDatum = item.body?.outputs?.some((output: any) =>
-    output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  const hasMinswapInOutputDatum = (item.body.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>)?.some(
+    (output) => output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
   );
 
   // Check for Minswap pool NFT policy in witness datums (indicates pool interaction)
-  const hasMinswapInWitnessDatum = item.witness?.datums?.some((datum: any) =>
-    datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  const hasMinswapInWitnessDatum = (item.witness?.datums as Array<{ cbor?: string }> | undefined)?.some(
+    (datum) => datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
   );
 
   // Only tag as Minswap if there's actual DEX interaction, not just LP token transfers
-  return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum;
+  return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || false;
 };
 
-const isJpgStore = item => {
+const isJpgStore = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Check for jpg.store marketplace script address
   const JPGSTORE_SCRIPT_ADDRESS =
     'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
@@ -929,8 +1356,8 @@ const isJpgStore = item => {
 
   const hasJpgStoreAddress =
     item.utxo?.inputs?.some(
-      (input: any) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
-    ) || item.body?.outputs?.some((output: any) => output.address === JPGSTORE_SCRIPT_ADDRESS);
+      (input) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
+    ) || item.body.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS);
 
   // Check for jpg.store auxiliary data structure (fields 0-10, 30)
   const hasJpgStoreMetadata =
@@ -949,12 +1376,13 @@ const isJpgStore = item => {
       item.auxiliaryData.blob[30]);
 
   // Check for datum hash (indicating a marketplace listing)
-  const hasDatumHash = item.body?.outputs?.some((output: any) => output.datumHash);
+  const hasDatumHash = item.body.outputs?.some((output) => output.datumHash);
 
-  return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash);
+  return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash) || false;
 };
 
-const isWingRiders = item => {
+const isWingRiders = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // WingRiders V1 order address
   const WINGRIDERS_V1_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
 
@@ -964,40 +1392,45 @@ const isWingRiders = item => {
   // Check for WingRiders order contract addresses (indicates DEX interaction)
   const hasWingRidersOrderAddress =
     item.utxo?.inputs?.some(
-      (input: any) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
+      (input) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
     ) ||
-    item.body?.outputs?.some(
-      (output: any) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
+    item.body.outputs?.some(
+      (output) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
     );
 
   // Check for WingRiders V1 pool validity asset policy in datum CBOR (indicates pool interaction)
+  const enrichedOutputs = item.body.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
+  const enrichedDatums = item.witness?.datums as Array<{ cbor?: string }> | undefined;
+
   const hasWingRidersV1InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
     );
 
   // Check for WingRiders V2 pool validity asset policy in datum CBOR (indicates pool interaction)
   const hasWingRidersV2InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
     );
 
-  return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum;
+  return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum || false;
 };
 
-const isVyFi = item => {
+const isVyFi = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Check for VyFi metadata message (indicates platform interaction)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
   return typeof msg === 'string' && msg.includes('VyFi');
 };
 
-const isSundaeSwap = item => {
+const isSundaeSwap = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // SundaeSwap V1 addresses
   const SUNDAESWAP_V1_ORDER_ADDRESS = 'addr1wxaptpmxcxawvr3pzlhgnpmzz3ql43n2tc8mn3av5kx0yzs09tqh8';
   const SUNDAESWAP_V1_POOL_ADDRESS = 'addr1w9qzpelu9hn45pefc0xr4ac4kdxeswq7pndul2vuj59u8tqaxdznu';
@@ -1009,21 +1442,22 @@ const isSundaeSwap = item => {
   // Check for SundaeSwap contract addresses (indicates DEX interaction)
   return (
     item.utxo?.inputs?.some(
-      (input: any) =>
+      (input) =>
         input.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
         input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
         input.address === SUNDAESWAP_V3_POOL_ADDRESS
     ) ||
-    item.body?.outputs?.some(
-      (output: any) =>
+    item.body.outputs?.some(
+      (output) =>
         output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
         output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
         output.address === SUNDAESWAP_V3_POOL_ADDRESS
     )
-  );
+  ) ?? false;
 };
 
-const isSplash = item => {
+const isSplash = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // Splash DEX batcher key (primary indicator)
   const SPLASH_BATCHER_KEY = '5cb2c968e5d1c7197a6ce7615967310a375545d9bc65063a964335b2';
 
@@ -1031,52 +1465,58 @@ const isSplash = item => {
   const SPLASH_ORDER_SCRIPT_HASH = '464eeee89f05aff787d40045af2a40a83fd96c513197d32fbc54ff02';
 
   // Check for Splash batcher key in required signatures (indicates DEX interaction)
-  const hasSplashBatcherKey = item.body?.requiredExtraSignatures?.some((sig: any) => sig === SPLASH_BATCHER_KEY);
+  const hasSplashBatcherKey = item.body.requiredExtraSignatures?.some((sig) => sig === SPLASH_BATCHER_KEY);
 
   // Check for Splash order script in witness scripts
-  const hasSplashScript = item.witness?.scripts?.some((script: any) => script?.hash === SPLASH_ORDER_SCRIPT_HASH);
+  const hasSplashScript = item.witness?.scripts?.some(
+    (script) => Serialization.Script.fromCore(script).hash() === SPLASH_ORDER_SCRIPT_HASH
+  );
 
-  return hasSplashBatcherKey || hasSplashScript;
+  return hasSplashBatcherKey || hasSplashScript || false;
 };
 
-const isMuesliSwap = item => {
+const isMuesliSwap = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
   // MuesliSwap order address
   const MUESLISWAP_ORDER_ADDRESS =
     'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
 
   // Check for MuesliSwap order contract address (indicates DEX interaction)
   const hasMuesliSwapOrderAddress =
-    item.utxo?.inputs?.some((input: any) => input.address === MUESLISWAP_ORDER_ADDRESS) ||
-    item.body?.outputs?.some((output: any) => output.address === MUESLISWAP_ORDER_ADDRESS);
+    item.utxo?.inputs?.some((input) => input.address === MUESLISWAP_ORDER_ADDRESS) ||
+    item.body.outputs?.some((output) => output.address === MUESLISWAP_ORDER_ADDRESS);
+
+  const enrichedOutputs = item.body.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
+  const enrichedDatums = item.witness?.datums as Array<{ cbor?: string }> | undefined;
 
   // Check for MuesliSwap V1 pool NFT policy in datum CBOR (indicates pool interaction)
   const hasMuesliSwapV1InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
     );
 
   // Check for MuesliSwap V2 pool NFT policy in datum CBOR (indicates pool interaction)
   const hasMuesliSwapV2InDatum =
-    item.witness?.datums?.some((datum: any) =>
+    enrichedDatums?.some((datum) =>
       datum.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
     ) ||
-    item.body?.outputs?.some((output: any) =>
+    enrichedOutputs?.some((output) =>
       output.datum?.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
     );
 
   // Check for MuesliSwap factory token in assets (indicates pool interaction)
-  const hasMuesliSwapFactoryToken = item.assets?.some((asset: any) =>
+  const hasMuesliSwapFactoryToken = item.assets?.some((asset) =>
     asset.unit?.includes('de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f4d7565736c69537761705f414d4d')
   );
 
-  return hasMuesliSwapOrderAddress || hasMuesliSwapV1InDatum || hasMuesliSwapV2InDatum || hasMuesliSwapFactoryToken;
+  return hasMuesliSwapOrderAddress || hasMuesliSwapV1InDatum || hasMuesliSwapV2InDatum || hasMuesliSwapFactoryToken || false;
 };
 
-const isCashback = item => {
-  return !!item.utxo?.inputs?.some(input =>
+const isCashback = (item: StoredTransaction): boolean => {
+  return !!item.utxo?.inputs?.some((input) =>
     [
       'DdzFFzCqrhtBatWqyFge4w6M6VLgNUwRHiXTAg3xfQCUdTcjJxSrPHVZJBsQprUEc5pRhgMWQaGciTssoZVwrSKmG1fneZ1AeCtLgs5Y',
       'addr1qxj7hjwxkxlf2tyahw5fchm2w5tjm5xcedqywyd9gjh8hhpq3lssfl2enmaypvwdyfmpcvzkpdtlpa8ur332rnc0ksyq7eq6sd',
@@ -1084,11 +1524,13 @@ const isCashback = item => {
   );
 };
 
-const isStakeRegistration = item => {
+const isStakeRegistration = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
+  const certs = item.body?.certificates;
   return (
-    item.body?.certificates?.length > 0 &&
-    item.body.certificates.some(
-      certificate =>
+    (certs?.length ?? 0) > 0 &&
+    certs!.some(
+      (certificate) =>
         certificate.__typename === Cardano.CertificateType.StakeRegistration ||
         certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
         certificate.__typename === Cardano.CertificateType.Registration
@@ -1096,19 +1538,21 @@ const isStakeRegistration = item => {
   );
 };
 
-const isStakeDeRegistration = item => {
+const isStakeDeRegistration = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
+  const certs = item.body?.certificates;
   return (
-    item.body?.certificates?.length > 0 &&
-    item.body.certificates.some(
-      certificate =>
+    (certs?.length ?? 0) > 0 &&
+    certs!.some(
+      (certificate) =>
         certificate.__typename === Cardano.CertificateType.Unregistration ||
         certificate.__typename === Cardano.CertificateType.StakeDeregistration
     )
   );
 };
 
-const getColor = item => {
-  if (item.status === 'Pending') {
+const getColor = (item: StoredTransaction): string => {
+  if (item.pending) {
     return '#FEC84B';
   } else if (item.ada > 0) {
     return '#47cd89';
@@ -1118,8 +1562,8 @@ const getColor = item => {
   return '';
 };
 
-const getRowClass = item => {
-  if (props.selectedTransaction && props.selectedTransaction['id'] === item['id']) {
+const getRowClass = (item: StoredTransaction): string => {
+  if (props.selectedTransaction && props.selectedTransaction['id'] === item.id) {
     return 'selected-transaction';
   }
   return '';
@@ -1133,7 +1577,7 @@ const handlePageChange = async (page: number) => {
 };
 
 // Check if transaction has been pending for more than 1 hour
-const isPendingTooLong = (item: any): boolean => {
+const isPendingTooLong = (item: StoredTransaction): boolean => {
   if (!item.pending) return false;
 
   const currentTime = Date.now() / 1000; // Current time in seconds
@@ -1144,20 +1588,20 @@ const isPendingTooLong = (item: any): boolean => {
 };
 
 // Remove pending transaction
-const handleRemovePendingTransaction = async (item: any) => {
+const handleRemovePendingTransaction = async (item: StoredTransaction) => {
   try {
     const { Messaging } = await import('@/chrome/messaging');
     const { MessageTypes } = await import('@/models/MessageTypes');
 
-    const response: any = await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.REMOVE_PENDING_TRANSACTION,
       data: { txId: item.id }
-    });
+    }) as { data: { success: boolean; error?: string } };
 
     if (response.data?.success) {
       console.log('Pending transaction removed successfully');
     } else {
-      console.error('Failed to remove pending transaction:', response.data?.error || response.error);
+      console.error('Failed to remove pending transaction:', response.data?.error);
     }
   } catch (error) {
     console.error('Error removing pending transaction:', error);
@@ -1191,26 +1635,293 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
+/* ─── TX Liquid Glass Card ──────────────────────────────────── */
+.tx-glass-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.07) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 22px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.18),
+    0 16px 48px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.06) !important;
+  transition: box-shadow 0.3s ease !important;
+  overflow: hidden;
+}
+
+.tx-glass-card:hover {
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.22),
+    0 24px 60px rgba(0, 0, 0, 0.36),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ─── Card Title Header ─────────────────────────────────────── */
+.tx-card-title {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+
+.tx-icon-box {
+  width: 30px;
+  height: 30px;
+  background: rgba(247, 147, 26, 0.12);
+  border: 1px solid rgba(247, 147, 26, 0.2);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.tx-heading-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tx-heading,
+.tx-heading-link {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  text-decoration: none !important;
+  line-height: 1 !important;
+}
+
+.tx-heading-link:hover {
+  color: #F7931A !important;
+}
+
+.tx-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.52);
+  line-height: 1;
+}
+
+.tx-search-field {
+  max-height: 28px;
+  max-width: 170px !important;
+}
+
+.filter-section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.filter-date-field {
+  font-size: 12px !important;
+}
+
+.filter-date-field >>> .v-input__slot {
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  align-items: center !important;
+}
+
+.filter-date-field >>> .v-input__prepend-inner {
+  margin-top: 4px !important;
+  margin-right: 4px !important;
+  padding-right: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  height: 100% !important;
+}
+
+.filter-date-field >>> .v-input__append-inner {
+  margin-top: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.filter-date-field >>> .v-input__append-inner .v-icon {
+  font-size: 14px !important;
+}
+
+/* Date picker menu styling */
+.date-picker-menu {
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(45, 240, 247, 0.1) !important;
+}
+
+.filter-date-picker {
+  background: linear-gradient(135deg, #13161b 0%, #1a1e26 100%) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.filter-date-picker >>> .v-date-picker-header {
+  padding: 8px 16px !important;
+  background: transparent !important;
+}
+
+.filter-date-picker >>> .v-date-picker-header .v-btn {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table {
+  padding: 0 8px 8px !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table .v-btn {
+  border-radius: 8px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table .v-btn:hover {
+  background: rgba(45, 240, 247, 0.08) !important;
+}
+
+.filter-date-picker >>> .v-btn--active {
+  background-color: #00DFF3 !important;
+  color: #0d0f12 !important;
+}
+
+.filter-date-picker >>> .v-date-picker-table--date .v-btn--disabled {
+  opacity: 0.25 !important;
+}
+
+/* Expanding search — grows to the left */
+.expanding-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.expanding-search-icon {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+  color: white !important;
+  z-index: 1;
+  transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease;
+}
+
+.expanding-search-input {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 28px;
+  padding: 6px;
+  background-color: transparent;
+  outline: none;
+  font-size: 13px;
+  color: transparent;
+  cursor: pointer;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.3s ease,
+              color 0.2s ease;
+  overflow: hidden;
+}
+
+.expanding-search-input::placeholder {
+  color: transparent;
+  transition: color 0.2s ease;
+}
+
+.expanding-search-input:focus {
+  width: 180px;
+  padding: 6px 12px 6px 30px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: text;
+}
+
+.expanding-search-input:focus::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.expanding-search-wrap:focus-within .expanding-search-icon {
+  right: calc(100% - 22px);
+  opacity: 0.4;
+}
+
+/* Filter type chips */
+.filter-type-chip {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.filter-type-chip.v-chip--active {
+  background: rgba(0, 223, 243, 0.12) !important;
+  border-color: rgba(0, 223, 243, 0.4) !important;
+  color: #00DFF3 !important;
+}
+
+.filter-menu .v-chip--active {
+  background: rgba(0, 223, 243, 0.12) !important;
+  border-color: rgba(0, 223, 243, 0.4) !important;
+  color: #00DFF3 !important;
+}
+
+/* ─── Data Table Glass Overrides ────────────────────────────── */
+.tx-glass-card >>> .v-data-table__wrapper thead th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  color: rgba(255, 255, 255, 0.60) !important;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+}
+
+.tx-glass-card >>> .v-data-table__wrapper tbody td {
+  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ─── Pagination Bar ────────────────────────────────────────── */
+.tx-pagination-bar {
+  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  padding: 4px 0 !important;
+}
+
+/* ─── Existing Styles ───────────────────────────────────────── */
 .text-nowrap {
   text-wrap: nowrap;
 }
-.no-padding {
+
+.transactions-table >>> .no-padding {
   padding: 0 !important;
 }
-.selected-transaction {
-  background-color: rgba(33, 150, 243, 0.1) !important;
-  border-left: 3px solid #2196f3 !important;
-}
-.selected-transaction:hover {
-  background-color: rgba(33, 150, 243, 0.15) !important;
+.chips-row {
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
 }
 
-.transactions-table tbody tr {
+.transactions-table >>> table {
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+
+.transactions-table >>> tr.selected-transaction {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.transactions-table >>> tr {
   cursor: pointer;
 }
 
-.transactions-table tbody tr:hover:not(.selected-transaction) {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+.transactions-table >>> tr:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .transactions-table tbody tr {
@@ -1301,11 +2012,11 @@ onUnmounted(() => {
 
 /* Table container styling */
 .table-container {
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 227px);
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 /* Custom scrollbar styling for webkit browsers */
@@ -1318,12 +2029,12 @@ onUnmounted(() => {
 }
 
 .table-container::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(255, 255, 255, 0.15);
   border-radius: 3px;
 }
 
 .table-container::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.28);
 }
 
 /* Ensure table takes full width within container */

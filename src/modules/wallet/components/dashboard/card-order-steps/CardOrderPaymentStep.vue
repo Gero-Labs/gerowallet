@@ -28,10 +28,9 @@
     </v-alert>
 
     <!-- Important Information Alert -->
-    <v-alert v-else type="info" colored-border border="left" class="info-alert" elevation="0">
+    <v-alert v-else type="info" color="primary" prominent colored-border border="left" class="info-alert" elevation="0">
       <div class="alert-content">
         <div class="alert-title">
-          <v-icon small color="#00c7f3">mdi-information</v-icon>
           <span>{{ $t('card.importantInformation') }}</span>
         </div>
         <div class="alert-body">
@@ -42,34 +41,22 @@
       </div>
     </v-alert>
 
-    <!-- Spending Password Section -->
-    <div class="password-section">
-      <label class="input-label">{{ $t('wallet.spendingPassword') }}</label>
-      <v-text-field
+    <!-- Authentication Section -->
+    <div v-if="!isPrfWallet" class="auth-section">
+      <!-- Password Wallet: Password Field -->
+      <PassKeyPasswordField
         v-model="spendingPassword"
-        dense
+        :label="t('wallet.spendingPassword')"
         outlined
-        class="password-input"
-        :type="showPassword ? 'text' : 'password'"
+        dense
         hide-details
-        :placeholder="$t('card.enterSpendingPassword')"
-      >
-        <template v-slot:append>
-          <v-icon @click="showPassword = !showPassword" tabindex="-1">
-            {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-          </v-icon>
-        </template>
-      </v-text-field>
-    </div>
-
-    <!-- Actions -->
-    <div class="step-actions">
-      <SecondaryButton :text="$t('card.back')" @click="handleBack" :disabled="isValidating" />
-      <GradientButton 
-        :text="$t('card.confirmPayment')" 
-        @click="handleConfirm" 
-        :disabled="!spendingPassword || isValidating || isExpired"
-        :loading="isValidating"
+        :placeholder="t('card.enterSpendingPassword')"
+        :rules="[rules.required()]"
+        :disabled="isValidating"
+        required
+        @passkey-autofill-success="handleAutofillSuccess"
+        @passkey-autofill-error="handleAutofillError"
+        class="password-field"
       />
     </div>
   </div>
@@ -77,37 +64,47 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import SecondaryButton from '../../SecondaryButton.vue';
-import GradientButton from '../../GradientButton.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { cardStore } from '@/stores/modules/card';
+import { walletStore } from '@/stores/walletStore';
+import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
+import rules from '@/utils/rules';
+import { decryptPrivateKeyWithPrf } from '@/shared/utils/webauthn-prf';
 
 interface Props {
-  amountAda: number;
   amountEur: number;
   paymentStatus?: string;
 }
 
 interface Emits {
   (e: 'back'): void;
-  (e: 'confirm', password: string): void;
+  (e: 'confirm', password: string, privateKeyBytes?: Uint8Array): void;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const { t } = useTranslation();
+const { exchangeRate } = cardStore;
+
+const amountAda = computed(() => {
+  if (!exchangeRate?.buy || !props.amountEur) return 0;
+  return props.amountEur / Number(exchangeRate.buy);
+});
 
 const isExpired = computed(() => {
   const status = props.paymentStatus?.toLowerCase() || '';
   return status === 'expired';
 });
 
+// Check if wallet is PRF (PassKey) wallet
+const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
+
 // Local state
 const spendingPassword = ref('');
-const showPassword = ref(false);
 const isValidating = ref(false);
 
 // Handlers
@@ -115,10 +112,42 @@ const handleBack = () => {
   emit('back');
 };
 
+const handleAutofillSuccess = () => {
+  console.log('✅ PassKey autofill successful');
+};
+
+const handleAutofillError = (error: string) => {
+  console.error('❌ PassKey autofill failed:', error);
+};
+
 const handleConfirm = async () => {
   isValidating.value = true;
   try {
-    // Verify spending password
+    // For PRF wallets: Trigger PassKey authentication
+    if (isPrfWallet.value) {
+      const wallet = walletStore.loggedWallet;
+      const credentialId = wallet?.webAuthnCredentialId;
+      const encryptedPrivateKey = wallet?.prfEncryptedPrivateKey;
+      const walletId = wallet?.id;
+
+      if (!credentialId || !encryptedPrivateKey || !walletId) {
+        console.error('❌ Missing required fields:', {
+          credentialId: !!credentialId,
+          encryptedPrivateKey: !!encryptedPrivateKey,
+          walletId: !!walletId
+        });
+        throw new Error(t('wallet.passKeyNotRegistered'));
+      }
+
+      // Decrypt private key with PRF
+      const privateKeyBytes = await decryptPrivateKeyWithPrf(encryptedPrivateKey, credentialId, walletId);
+
+      // Emit with private key bytes for transaction signing
+      emit('confirm', '', privateKeyBytes);
+      return;
+    }
+
+    // Verify spending password for non-PRF wallets
     const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
       data: { password: spendingPassword.value },
@@ -130,16 +159,28 @@ const handleConfirm = async () => {
       return;
     }
 
-    console.log('✅ Password verified successfully');
     // Password is valid, emit to parent for transaction handling
     emit('confirm', spendingPassword.value);
-  } catch (error) {
-    console.error('❌ Error verifying password:', error);
-    snackbar.setError(t('wallet.invalidSpendingPassword'));
+  } catch (error: any) {
+    console.error('❌ Authentication failed:', error);
+    const errorMessage = isPrfWallet.value
+      ? t('wallet.passKeyAuthenticationFailed')
+      : t('wallet.invalidSpendingPassword');
+    snackbar.setError(error?.message || errorMessage);
   } finally {
     isValidating.value = false;
   }
 };
+
+// Expose handlers and state so parent can call them
+defineExpose({
+  handleBack,
+  handleConfirm,
+  spendingPassword,
+  isValidating,
+  isExpired,
+  isPrfWallet
+});
 
 </script>
 
@@ -196,12 +237,15 @@ const handleConfirm = async () => {
   font-weight: $font-weight-bold;
   font-size: $font-size-3xl;
   color: $text-primary;
+  line-height: 1.4;
 
   &.ada {
     background: $primary-gradient;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    display: inline-block;
+    padding: 2px 0;
   }
 }
 
@@ -266,65 +310,22 @@ const handleConfirm = async () => {
   }
 }
 
-.password-section {
-  @include flex-column;
-  gap: $spacing-xs;
-}
-
-.input-label {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-medium;
-  font-size: $font-size-sm;
-  color: $text-secondary;
-}
-
-.password-input {
-  :deep(.v-input__control) {
-    background: $background-card !important;
-    border: 1px solid $border-primary !important;
-    border-radius: $border-radius-md !important;
-  }
-
-  :deep(.v-input__slot) {
-    background: transparent !important;
-    box-shadow: none !important;
-    min-height: 44px !important;
-  }
-
-  :deep(.v-label) {
-    color: $text-secondary !important;
-    font-weight: $font-weight-medium;
-    font-size: $font-size-sm;
-  }
-
-  :deep(.v-text-field__details) {
-    display: none;
-  }
-
-  :deep(input) {
-    color: $text-primary !important;
-    font-size: $font-size-base;
-  }
-
-  :deep(.v-input--is-disabled) {
-    opacity: 0.6;
-  }
-}
-
-.step-actions {
-  display: flex;
-  gap: $spacing-md;
-  margin-top: $spacing-md;
-}
-
-.step-actions :deep(.secondary-button),
-.step-actions :deep(.gradient-button) {
-  flex: 1;
+.auth-section {
   width: 100%;
-  height: 44px;
-  font-size: $font-size-base;
-  font-weight: $font-weight-semibold;
-  text-transform: none;
+  @include flex-column;
+}
+
+.password-field {
+  width: 100%;
+}
+
+.prf-info-alert {
+  background: rgba($primary-cyan, 0.1) !important;
+  border-color: $primary-cyan !important;
+
+  :deep(.v-alert__content) {
+    width: 100%;
+  }
 }
 
 @media (max-width: $breakpoint-sm) {

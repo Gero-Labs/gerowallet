@@ -13,7 +13,8 @@
             <span>{{ $t('staking.delegatingTo') }}</span>
             <div v-if="currentPool" class="d-flex align-center justify-center">
               <v-avatar size="28" class="mr-2">
-                <v-img :src="JSON.parse(currentPool?.pool_extended_info)?.info?.url_png_icon_64x64" alt="pool logo" contain/>
+                <v-img v-if="poolExtendedInfo?.info?.url_png_icon_64x64" :src="poolExtendedInfo.info.url_png_icon_64x64" alt="pool logo" contain/>
+                <v-icon v-else small>mdi-server</v-icon>
               </v-avatar>
               <h3 class="staking2-pool-title">{{ `${currentPool.ticker}` }}</h3>
               <v-menu
@@ -293,13 +294,12 @@
               @click="unstake"
               block
               outlined
-              class="staking2-unstake-btn"
             >
               <span class="staking2-unstake-text">{{ $t('staking.unstake') }}</span>
             </v-btn>
           </v-col>
           <v-col cols="6" class="pl-3">
-            <v-tooltip top v-if="account?.withdrawable_amount > 0 && !account?.drep_id" max-width="250">
+            <v-tooltip top content-class="custom-tooltip" v-if="account && Number(account.withdrawable_amount) > 0 && !account?.drep_id && !isApex" max-width="250">
               <template v-slot:activator="{ on, attrs }">
                 <v-btn
                   elevation="2"
@@ -316,7 +316,7 @@
               <span>DRep delegation required to withdraw rewards. Visit the Governance tab to delegate.</span>
             </v-tooltip>
             <v-btn
-              v-else-if="account?.withdrawable_amount > 0"
+              v-else-if="account && Number(account?.withdrawable_amount) > 0"
               elevation="2"
               small
               color="#1a1a1a"
@@ -341,7 +341,10 @@
       </v-layout>
     </v-card-text>
     <UnstakeDialog :is-open="unstakeDialog" @close="closeUnstakeDialog" :tx="unstakeTxData"></UnstakeDialog>
-    <WithdrawalDialog :is-open="withdrawalDialog" @close="closeWithdrawalDialog" :tx="withdrawalTxData"></WithdrawalDialog>
+    <WithdrawalDialog :is-open="withdrawalDialog" @close="closeWithdrawalDialog" :tx="withdrawalTxData"
+      :compensation-info="compensationInfo" :skip-compensation="skipCompensation"
+      @update:skipCompensation="skipCompensation = $event"
+    ></WithdrawalDialog>
   </v-card>
 </template>
 <script setup lang="ts">
@@ -353,19 +356,15 @@ import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
 import { Blockchain } from '@/models/types';
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { useUnstake } from '@/shared/composables/useUnstake';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 
-const { t } = useTranslation();
-
 // Use the unstake and withdrawal composables
 const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
-const { txData: withdrawalTxData, withdrawalDialog, withdraw, closeWithdrawalDialog } = useWithdrawal();
+const { txData: withdrawalTxData, withdrawalDialog, withdraw, closeWithdrawalDialog, skipCompensation, compensationInfo } = useWithdrawal();
 
 const { loggedWallet, rewards, account } = toRefs(walletStore);
 const { loadingTxs } = toRefs(loadingState);
@@ -380,8 +379,12 @@ const isApex = computed(() => {
 });
 
 const poolExtendedInfo = computed(() => {
-  if (currentPool.value) {
-    return JSON.parse(currentPool.value.pool_extended_info);
+  if (currentPool.value?.pool_extended_info) {
+    const parsed = JSON.parse(currentPool.value.pool_extended_info);
+    if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
+      parsed.info.url_png_icon_64x64 = '';
+    }
+    return parsed;
   }
   return null;
 });
@@ -599,11 +602,6 @@ onMounted(async () => {
 .staking2-chart {
   height: 100%;
   width: 100%;
-}
-
-/* Action buttons styles */
-.staking2-unstake-btn {
-  text-transform: capitalize;
 }
 
 .staking2-unstake-text {

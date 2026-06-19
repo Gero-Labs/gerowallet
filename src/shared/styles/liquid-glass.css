@@ -220,3 +220,8 @@
     border-radius: 8px !important;
   }
 }
+
+/* Allow scrollable liquid-glass cards */
+.v-card.liquid-glass.detail-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
+  overflow: auto !important;
+}

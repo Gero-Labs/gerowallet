@@ -1,186 +1,145 @@
 <template>
-  <div class="shipping-address-selection">
+  <div>
     <!-- Address Selection Options -->
-    <div class="address-options">
-      <v-radio-group v-model="selectedOption" hide-details class="address-radio-group">
-        <v-radio value="new" color="#00c7f3">
-          <template v-slot:label>
-            <div class="radio-label">
-              <span class="label-title">{{ $t('card.enterNewAddress') }}</span>
-              <span class="label-description">{{ $t('card.provideNewShippingAddress') }}</span>
-            </div>
-          </template>
-        </v-radio>
-
-        <v-radio 
-          value="existing" 
-          color="#00c7f3" 
-          :disabled="!hasSavedAddress"
-        >
-          <template v-slot:label>
-            <div class="radio-label">
+    <v-radio-group v-model="selectedOption" hide-details class="address-radio-group mt-0 pb-5" row>
+      <v-radio
+        value="existing"
+        color="primary"
+        :disabled="!hasSavedAddress"
+      >
+        <template v-slot:label>
+          <div class="radio-label">
               <span class="label-title">
                 {{ $t('card.useExistingAddress') }}
                 <span v-if="!hasSavedAddress" class="disabled-badge">{{ $t('common.comingSoon') }}</span>
               </span>
-              <span class="label-description">{{ $t('card.useAddressRegisteredWithKaiserex') }}</span>
-            </div>
-          </template>
-        </v-radio>
-      </v-radio-group>
-    </div>
+            <span class="label-description">{{ $t('card.useAddressRegisteredWithKaiserex') }}</span>
+          </div>
+        </template>
+      </v-radio>
+      <v-radio value="new" color="primary">
+        <template v-slot:label>
+          <div class="radio-label">
+            <span class="label-title">{{ $t('card.enterNewAddress') }}</span>
+            <span class="label-description">{{ $t('card.provideNewShippingAddress') }}</span>
+          </div>
+        </template>
+      </v-radio>
+    </v-radio-group>
 
-    <!-- Existing Address Display -->
-    <div v-if="selectedOption === 'existing' && hasSavedAddress" class="existing-address-display">
-      <div class="address-card">
-        <div class="address-field">
-          <span class="field-label">{{ $t('card.streetAddress') }}:</span>
-          <span class="field-value">{{ savedAddress?.streetAddress }}</span>
-        </div>
-        <div class="address-field">
-          <span class="field-label">{{ $t('card.city') }}:</span>
-          <span class="field-value">{{ savedAddress?.city }}</span>
-        </div>
-        <div class="address-field">
-          <span class="field-label">{{ $t('card.stateProvince') }}:</span>
-          <span class="field-value">{{ savedAddress?.stateProvince }}</span>
-        </div>
-        <div class="address-field">
-          <span class="field-label">{{ $t('card.zipCode') }}:</span>
-          <span class="field-value">{{ savedAddress?.zipCode }}</span>
-        </div>
-        <div class="address-field">
-          <span class="field-label">{{ $t('card.country') }}:</span>
-          <span class="field-value">{{ getCountryName(savedAddress?.countryCode || '') }}</span>
-        </div>
-        <div class="address-field">
-          <span class="field-label">{{ $t('card.phone') }}:</span>
-          <span class="field-value">{{ savedAddress?.phone }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- New Address Form -->
-    <div v-if="selectedOption === 'new'" class="address-form">
-      <div class="form-row">
-        <div class="input-full">
-          <label class="input-label">{{ $t('card.streetAddress') }}</label>
-          <v-text-field
-            v-model="localAddress.streetAddress"
-            dense
-            outlined
-            class="form-input"
-            :placeholder="$t('card.enterStreetAddress')"
-            :error-messages="errors['streetAddress']"
-            @blur="validateStreetAddress"
-            @input="clearError('streetAddress')"
-          />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="input-full">
-          <label class="input-label">{{ $t('card.city') }}</label>
-          <v-text-field
-            v-model="localAddress.city"
-            dense
-            outlined
-            class="form-input"
-            :placeholder="$t('card.enterCity')"
-            :error-messages="errors['city']"
-            @blur="validateCity"
-            @input="clearError('city')"
-          />
-        </div>
-      </div>
-
-      <div class="form-row two-columns">
-        <div class="input-half">
-          <label class="input-label">{{ $t('card.stateProvince') }} *</label>
-          <v-text-field
-            v-model="localAddress.stateProvince"
-            dense
-            outlined
-            class="form-input"
-            :placeholder="$t('card.enterState')"
-            :error-messages="errors['stateProvince']"
-            @blur="validateStateProvince"
-            @input="clearError('stateProvince')"
-          />
-        </div>
-        <div class="input-half">
-          <label class="input-label">{{ $t('card.zipCode') }}</label>
-          <v-text-field
-            v-model="localAddress.zipCode"
-            dense
-            outlined
-            class="form-input"
-            :placeholder="$t('card.enterZipCode')"
-            :error-messages="errors['zipCode']"
-            @blur="validateZipCode"
-            @input="clearError('zipCode')"
-          />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="input-full">
-          <label class="input-label">{{ $t('card.country') }}</label>
-          <v-select
-            v-model="localAddress.countryCode"
-            :items="countries"
-            item-text="label"
-            item-value="code"
-            dense
-            outlined
-            class="form-input"
-            :placeholder="$t('card.selectCountry')"
-            :error-messages="errors['countryCode']"
-            @blur="validateCountryCode"
-            @change="clearError('countryCode')"
-            attach
-          />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="input-full">
-          <label class="input-label">{{ $t('card.phone') }}</label>
-          <v-text-field
-            v-model="localAddress.phone"
-            dense
-            outlined
-            class="form-input"
-            :placeholder="$t('card.enterPhone')"
-            :error-messages="errors['phone']"
-            @blur="validatePhone"
-            @input="clearError('phone')"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="step-actions">
-      <SecondaryButton :text="$t('card.back')" @click="handleBack" />
-      <GradientButton
-        :text="$t('card.continueButton')"
-        @click="handleContinue"
-        :disabled="!isFormValid"
-      />
-    </div>
+    <!-- Address Form -->
+    <v-card flat class="transparent">
+      <v-card-text class="px-0">
+        <v-form ref="form" v-model="isFormValid">
+          <v-row>
+            <v-col cols="12">
+              <PhoneNumberInput
+                v-model="localAddress.phone"
+                :label="t('card.phone')"
+                :placeholder="t('card.enterPhone')"
+                :disabled="selectedOption === 'existing'"
+                :rules="[rules.required()]"
+                dense
+              />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field
+                v-model="localAddress.streetAddress"
+                :label="$t('card.streetAddress')"
+                dense
+                outlined
+                :placeholder="$t('card.enterStreetAddress')"
+                :disabled="selectedOption === 'existing'"
+                :rules="[rules.required()]"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field
+                v-model="localAddress.city"
+                :label="$t('card.city')"
+                dense
+                outlined
+                :placeholder="$t('card.enterCity')"
+                :disabled="selectedOption === 'existing'"
+                :rules="[rules.required()]"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field
+                v-model="localAddress.stateProvince"
+                :label="$t('card.stateProvince')"
+                dense
+                outlined
+                :placeholder="$t('card.enterState')"
+                :disabled="selectedOption === 'existing'"
+                :rules="[rules.required()]"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field
+                v-model="localAddress.zipCode"
+                :label="$t('card.zipCode')"
+                dense
+                outlined
+                :placeholder="$t('card.enterZipCode')"
+                :rules="[rules.required()]"
+                :disabled="selectedOption === 'existing'"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="4">
+              <v-select
+                v-model="localAddress.countryCode"
+                :label="$t('card.country')"
+                :items="countries"
+                item-text="label"
+                item-value="code"
+                dense
+                outlined
+                :placeholder="$t('card.selectCountry')"
+                :disabled="selectedOption === 'existing'"
+                :rules="[rules.required()]"
+                hide-details
+                :menu-props="{ top: true }"
+              >
+                <template v-slot:selection="{ item }">
+                  <span class="d-flex align-center">
+                    <flag :iso="item.code.toLowerCase()" style="font-size: 16px; margin-right: 8px;"></flag>
+                    {{ item.label }}
+                  </span>
+                </template>
+                <template v-slot:item="{ item, attrs, on }">
+                  <v-list-item v-on="on" v-bind="attrs" dense>
+                    <v-list-item-avatar size="24" tile>
+                      <flag :iso="item.code.toLowerCase()" style="font-size: 20px;"></flag>
+                    </v-list-item-avatar>
+                    <v-list-item-content>
+                      <v-list-item-title>{{ item.label }}</v-list-item-title>
+                    </v-list-item-content>
+                  </v-list-item>
+                </template>
+              </v-select>
+            </v-col>
+          </v-row>
+        </v-form>
+      </v-card-text>
+    </v-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive, onMounted } from 'vue';
-import { useTranslation } from '@/shared/composables/useTranslation';
-import SecondaryButton from '../../SecondaryButton.vue';
-import GradientButton from '../../GradientButton.vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import countries from '@/plugins/countries';
 import cardStore from '@/stores/modules/card';
-
-const { t } = useTranslation();
+import rules from '@/utils/rules';
+import PhoneNumberInput from '@/shared/components/PhoneNumberInput.vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+const isFormValid = ref<boolean>(false);
+const form = ref(null);
+const { t } = useTranslation()
 
 interface AddressData {
   streetAddress: string;
@@ -192,13 +151,12 @@ interface AddressData {
 }
 
 interface Props {
-  useExisting: boolean;
   address: AddressData;
 }
 
 interface Emits {
   (e: 'back'): void;
-  (e: 'submit', payload: { useExisting: boolean; address?: AddressData }): void;
+  (e: 'submit', payload: { address?: AddressData }): void;
 }
 
 const props = defineProps<Props>();
@@ -208,20 +166,20 @@ const emit = defineEmits<Emits>();
 const getSavedDeliveryAddress = (): AddressData | null => {
   const cards = cardStore.state.cards || [];
   const physicalCards = cards.filter(card => card.cardData?.own_type === 'physical');
-  
+
   if (physicalCards.length === 0) return null;
-  
+
   // Get the most recent physical card (by created_at or updated_at)
   const lastPhysicalCard = physicalCards.sort((a, b) => {
     const dateA = new Date(b.cardData?.updated_at || b.cardData?.created_at || 0).getTime();
     const dateB = new Date(a.cardData?.updated_at || a.cardData?.created_at || 0).getTime();
     return dateA - dateB;
   })[0];
-  
+
   // Check if card has delivery object
-  const delivery = (lastPhysicalCard.cardData as any)?.delivery;
+  const delivery = lastPhysicalCard.cardData?.delivery;
   if (!delivery) return null;
-  
+
   return {
     streetAddress: delivery.address || '',
     city: delivery.city || '',
@@ -233,7 +191,7 @@ const getSavedDeliveryAddress = (): AddressData | null => {
 };
 
 // Local state
-const selectedOption = ref<'existing' | 'new'>('new');
+const selectedOption = ref<'existing' | 'new'>('existing');
 const savedAddress = getSavedDeliveryAddress();
 const localAddress = ref<AddressData>(savedAddress || { ...props.address });
 const hasSavedAddress = computed(() => !!savedAddress);
@@ -243,125 +201,6 @@ onMounted(() => {
   if (savedAddress && selectedOption.value === 'existing') {
     localAddress.value = { ...savedAddress };
   }
-});
-const errors = reactive<Record<string, string>>({
-  streetAddress: '',
-  city: '',
-  stateProvince: '',
-  zipCode: '',
-  countryCode: '',
-  phone: '',
-});
-
-// Validation functions
-const validateStreetAddress = () => {
-  const value = localAddress.value.streetAddress.trim();
-  if (!value) {
-    errors['streetAddress'] = t('validation.required');
-    return false;
-  }
-  if (value.length < 5) {
-    errors['streetAddress'] = t('validation.streetAddressTooShort');
-    return false;
-  }
-  errors['streetAddress'] = '';
-  return true;
-};
-
-const validateCity = () => {
-  const value = localAddress.value.city.trim();
-  if (!value) {
-    errors['city'] = t('validation.required');
-    return false;
-  }
-  if (value.length < 2) {
-    errors['city'] = t('validation.cityTooShort');
-    return false;
-  }
-  errors['city'] = '';
-  return true;
-};
-
-const validateStateProvince = () => {
-  const value = localAddress.value.stateProvince.trim();
-  if (!value) {
-    errors['stateProvince'] = t('validation.required');
-    return false;
-  }
-  errors['stateProvince'] = '';
-  return true;
-};
-
-const validateZipCode = () => {
-  const value = localAddress.value.zipCode.trim();
-  if (!value) {
-    errors['zipCode'] = t('validation.required');
-    return false;
-  }
-  const zipRegex = /^[A-Za-z0-9\s-]{3,10}$/;
-  if (!zipRegex.test(value)) {
-    errors['zipCode'] = t('validation.invalidZipCode');
-    return false;
-  }
-  errors['zipCode'] = '';
-  return true;
-};
-
-const validateCountryCode = () => {
-  if (!localAddress.value.countryCode) {
-    errors['countryCode'] = t('validation.required');
-    return false;
-  }
-  errors['countryCode'] = '';
-  return true;
-};
-
-const validatePhone = () => {
-  const value = localAddress.value.phone.trim();
-  if (!value) {
-    errors['phone'] = '';
-    return true;
-  }
-  const phoneRegex = /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/;
-  if (!phoneRegex.test(value)) {
-    errors['phone'] = t('validation.invalidPhoneNumber');
-    return false;
-  }
-  errors['phone'] = '';
-  return true;
-};
-
-const clearError = (field: string) => {
-  errors[field] = '';
-};
-
-const validateAllFields = () => {
-  const validations = [
-    validateStreetAddress(),
-    validateCity(),
-    validateStateProvince(),
-    validateZipCode(),
-    validateCountryCode(),
-    validatePhone(),
-  ];
-  return validations.every(result => result);
-};
-
-// Form validation
-const isFormValid = computed(() => {
-  if (selectedOption.value === 'existing') {
-    return true;
-  }
-  const hasAllRequiredFields =
-    localAddress.value.streetAddress.trim() !== '' &&
-    localAddress.value.city.trim() !== '' &&
-    localAddress.value.stateProvince.trim() !== '' &&
-    localAddress.value.zipCode.trim() !== '' &&
-    localAddress.value.countryCode !== '';
-
-  const hasNoErrors = !Object.values(errors).some(error => error !== '');
-
-  return hasAllRequiredFields && hasNoErrors;
 });
 
 // Watch for option changes - fill or clear fields
@@ -380,19 +219,12 @@ watch(selectedOption, (newOption) => {
       phone: '',
     };
     // Clear all errors
-    Object.keys(errors).forEach(key => {
-      errors[key] = '';
-    });
+
+    if (form.value) {
+      form.value.resetValidation()
+    }
   }
 });
-
-// Watch for prop changes
-watch(
-  () => props.useExisting,
-  newVal => {
-    selectedOption.value = newVal ? 'existing' : 'new';
-  }
-);
 
 watch(
   () => props.address,
@@ -404,35 +236,24 @@ watch(
   { deep: true }
 );
 
-// Get country name from code
-const getCountryName = (code: string): string => {
-  const country = countries.find(c => c.code === code);
-  return country?.label || code;
-};
-
-// Handlers
+// Handlers - exposed so parent can call them
 const handleBack = () => {
   emit('back');
 };
 
 const handleContinue = () => {
-  if (selectedOption.value === 'existing' && savedAddress) {
-    emit('submit', { 
-      useExisting: true,
-      address: savedAddress 
+  if (form.value.validate()) {
+    emit('submit', {
+      address: { ...localAddress.value }
     });
     return;
   }
-
-  if (!validateAllFields()) {
-    return;
-  }
-
-  emit('submit', {
-    useExisting: false,
-    address: { ...localAddress.value },
-  });
 };
+
+defineExpose({
+  handleBack,
+  handleContinue
+});
 </script>
 
 <style lang="scss" scoped>
@@ -442,11 +263,10 @@ const handleContinue = () => {
 .shipping-address-selection {
   width: 100%;
   @include flex-column;
-  gap: $spacing-xl;
 }
 
 .address-options {
-  background: $background-card;
+  background: transparent;
   border-radius: $border-radius-lg;
   padding: $spacing-lg;
 }
@@ -456,16 +276,23 @@ const handleContinue = () => {
     width: 100%;
   }
 
+  :deep(.v-input__slot) {
+    display: flex;
+    flex-direction: row;
+    gap: $spacing-lg;
+    width: 100%;
+  }
+
   :deep(.v-radio) {
-    margin-bottom: $spacing-md;
+    flex: 1;
+    margin: 0 !important;
     padding: $spacing-md;
     border-radius: $border-radius-md;
-    background: $background-dark;
     border: 1px solid $border-primary;
     transition: all 0.3s ease;
 
-    &:last-child {
-      margin-bottom: 0;
+    &:not(:last-child) {
+      margin-right: $spacing-lg !important;
     }
 
     &:hover {
@@ -483,6 +310,13 @@ const handleContinue = () => {
 
       &:hover {
         border-color: $border-primary;
+      }
+    }
+
+    // Remove hover effect from radio button circle
+    .v-input--selection-controls__ripple {
+      &:hover::before {
+        opacity: 0 !important;
       }
     }
   }
@@ -560,110 +394,17 @@ const handleContinue = () => {
   color: $text-secondary;
 }
 
-.form-input {
-  :deep(.v-input__control) {
+@media (max-width: $breakpoint-sm) {
+  .address-radio-group {
+    :deep(.v-input__slot) {
+      flex-direction: column;
+    }
 
-    border-radius: $border-radius-md !important;
-  }
-
-  :deep(.v-input__slot) {
-    background: transparent !important;
-    background: $background-dark !important;
-    border: 1px solid $border-primary !important;
-    box-shadow: none !important;
-    min-height: 44px !important;
-  }
-
-  :deep(.v-label) {
-    color: $text-secondary !important;
-    font-weight: $font-weight-medium;
-    font-size: $font-size-sm;
-  }
-
-  :deep(.v-text-field__details) {
-    padding: $spacing-xs 0 0 0;
-    margin: 0;
-  }
-
-  :deep(.v-messages) {
-    min-height: 20px;
-  }
-
-  :deep(.v-messages__message) {
-    color: #ff5252 !important;
-    font-size: $font-size-xs;
-    line-height: 1.2;
-  }
-
-  :deep(input) {
-    color: $text-primary !important;
-    font-size: $font-size-base;
-  }
-
-  :deep(.v-select__selections) {
-    color: $text-primary !important;
-    font-size: $font-size-base;
-  }
-
-  :deep(.v-select__selection) {
-    color: $text-primary !important;
-  }
-
-  &.error--text {
-    :deep(.v-input__control) {
-      border-color: #ff5252 !important;
+    :deep(.v-radio) {
+      width: 100%;
     }
   }
-}
 
-.existing-address-display {
-  padding: $spacing-lg;
-  background: $background-card;
-  border-radius: $border-radius-lg;
-}
-
-.address-card {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-md;
-}
-
-.address-field {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-  
-  .field-label {
-    font-family: $font-family-primary;
-    font-weight: $font-weight-medium;
-    font-size: $font-size-sm;
-    color: $text-secondary;
-  }
-  
-  .field-value {
-    font-family: $font-family-primary;
-    font-size: $font-size-base;
-    color: $text-primary;
-  }
-}
-
-.step-actions {
-  display: flex;
-  gap: $spacing-md;
-  margin-top: $spacing-md;
-}
-
-.step-actions :deep(.secondary-button),
-.step-actions :deep(.gradient-button) {
-  flex: 1;
-  width: 100%;
-  height: 44px;
-  font-size: $font-size-base;
-  font-weight: $font-weight-semibold;
-  text-transform: none;
-}
-
-@media (max-width: $breakpoint-sm) {
   .form-row.two-columns {
     flex-direction: column;
     gap: $spacing-lg;

@@ -3,7 +3,7 @@
     <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
       {{ $t('welcome.welcomeMessage') }}
     </v-card-title>
-    <v-card-subtitle class="text-center px-6" style="font-size: 20px">
+    <v-card-subtitle class="text-center px-0" style="font-size: 20px">
       {{ $t('welcome.chooseAWallet') }}
     </v-card-subtitle>
     <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
@@ -92,7 +92,7 @@ import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.v
 const selectedWallet = ref<string | null>(null);
 const showUnlockDialog = ref<boolean>(false);
 const pendingNavigation = ref<string | null>(null);
-const pendingLoginWalletId = ref<string | null>(null);
+const pendingLoginWalletId = ref<number | null>(null);
 
 // Pre-login unlock props
 const preLoginWalletId = ref<number | null>(null);
@@ -122,9 +122,9 @@ const isWalletLocked = (wallet: Wallet): boolean => {
   return loggedWallet.value?.id === wallet.id && isLocked.value;
 };
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 
-const submitLogin = async (walletId: string): Promise<void> => {
+const submitLogin = async (walletId: number): Promise<void> => {
   // Check if wallet is locked
   if (isLocked.value) {
     // If clicking on a different wallet while current wallet is locked, logout and login to new wallet
@@ -217,38 +217,48 @@ const submitLogin = async (walletId: string): Promise<void> => {
     });
 
     // Trust the background response
-    if (!response || (response as any).error) {
-      console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+    if (!response || response['error']) {
+      console.error('❌ Login failed:', (response as { error?: unknown })?.error || 'Unknown error');
       return;
     }
 
-    // Wait for login state to propagate using watcher (event-driven, not polling)
+    // Wait for login state to propagate AND sync to complete (event-driven, not polling)
     const loginSuccess = await new Promise<boolean>((resolve) => {
+      const checkReady = () => {
+        // Don't navigate while wallet is restoring/syncing
+        if (walletStore.isSyncing) return false;
+        return loggedWallet.value?.id === walletId;
+      };
+
       // Check immediately first
-      if (loggedWallet.value?.id === walletId) {
+      if (checkReady()) {
         debugLog('✅ Login already confirmed - loggedWallet.id matches target wallet');
         resolve(true);
         return;
       }
 
-      // Set up watcher for state change
-      const unwatch = watch(
-        () => loggedWallet.value?.id,
-        (newId) => {
-          if (newId === walletId) {
-            debugLog('✅ Login confirmed - loggedWallet.id matches target wallet');
-            unwatch();
+      // Set up watchers for both loggedWallet and restoring state
+      const unwatchWallet = watch(
+        () => [loggedWallet.value?.id, walletStore.isSyncing],
+        () => {
+          if (checkReady()) {
+            debugLog('✅ Login confirmed and restore complete');
+            unwatchWallet();
             resolve(true);
           }
         }
       );
 
-      // Safety timeout (2 seconds)
+      // Safety timeout (5 minutes — full restore can take time)
       setTimeout(() => {
-        unwatch();
-        console.warn('⚠️ Timeout waiting for login state to propagate');
-        resolve(false);
-      }, 2000);
+        unwatchWallet();
+        if (loggedWallet.value?.id === walletId) {
+          resolve(true); // wallet is set, just navigate
+        } else {
+          console.warn('⚠️ Timeout waiting for login state to propagate');
+          resolve(false);
+        }
+      }, 300000);
     });
 
     if (!loginSuccess) {
@@ -270,6 +280,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
     await navigateAfterLogin();
   } catch (error) {
     console.error(error);
+
   }
 };
 
@@ -316,6 +327,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
 
       if (!wallet) {
         console.error('❌ Wallet not found:', walletId);
+    
         return;
       }
 
@@ -325,8 +337,9 @@ const handleWalletUnlocked = async (): Promise<void> => {
         data: { wallet },
       });
 
-      if (!response || (response as any).error) {
-        console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
+      if (!response || response['error']) {
+        console.error('❌ Login failed:', (response as { error?: unknown })?.error || 'Unknown error');
+    
         return;
       }
 
@@ -358,6 +371,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
 
       if (!loginSuccess) {
         console.error('❌ Login state did not propagate in time');
+    
         return;
       }
 
@@ -374,6 +388,7 @@ const handleWalletUnlocked = async (): Promise<void> => {
       await navigateAfterLogin();
     } catch (error) {
       console.error('❌ Login error after pre-login unlock:', error);
+
     }
     return;
   }

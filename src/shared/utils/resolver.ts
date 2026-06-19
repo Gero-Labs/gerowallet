@@ -1,7 +1,7 @@
 import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/chrome/serialization';
-import { Asset, Cardano, Serialization, util } from '@cardano-sdk/core';
-import { HexBlob, isNotNil } from '@cardano-sdk/util';
+import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
+import { isNotNil } from '@cardano-sdk/util';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import DexHunterStore from '@/stores/dexHunterStore';
 import NetworkStore from '@/stores/networkStore';
@@ -22,6 +22,7 @@ const greenSvg = isServiceWorker ? '' : assetsModule.greenSvg;
 const purpleSvg = isServiceWorker ? '' : assetsModule.purpleSvg;
 const pinkSvg = isServiceWorker ? '' : assetsModule.pinkSvg;
 const orangeSvg = isServiceWorker ? '' : assetsModule.orangeSvg;
+const yellowSvg = isServiceWorker ? '' : assetsModule.yellowSvg;
 const blueSvg = isServiceWorker ? '' : assetsModule.blueSvg;
 const greySvg = isServiceWorker ? '' : assetsModule.greySvg;
 const errorImage = isServiceWorker ? '' : assetsModule.errorImage;
@@ -54,6 +55,8 @@ export function resolveIcon(icon: string): string {
     case 'green':
     case 'teal':
       return greenSvg;
+    case 'yellow':
+      return yellowSvg;
     case 'purple':
     case 'deep-purple':
       return purpleSvg;
@@ -348,6 +351,21 @@ export const fromPlutusData = (
 };
 
 
+// Token image overrides — replace bad/missing logos for specific tokens
+// In service worker (background), SVG imports are empty — overrides only apply in browser context.
+export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker ? {} : {
+  'NIGHT': assetsModule.nightTokenSvg,
+};
+
+/**
+ * Apply token image overrides for a given token name/ticker.
+ * Returns the override image if one exists, otherwise returns the original.
+ */
+export function applyTokenImageOverride(name: string | undefined, originalImg: string): string {
+  if (name && TOKEN_IMAGE_OVERRIDES[name]) return TOKEN_IMAGE_OVERRIDES[name];
+  return originalImg;
+}
+
 export function resolveAsset(token: any): any {
   const unit = token.unit;
   let metadata = null;
@@ -416,9 +434,13 @@ export function resolveAsset(token: any): any {
       }
     } else if (asset_name) {
       try {
-        name = Cardano.AssetName.toUTF8(Cardano.AssetName(asset_name), true);
+        const decoded = Cardano.AssetName.toUTF8(Cardano.AssetName(asset_name), true);
+        // Check if UTF-8 decoding produced valid readable text (no replacement chars or control chars)
+        const hasInvalidChars = /[\uFFFD\u0000-\u001F]/.test(decoded) ||
+          decoded.split('').some(ch => ch.charCodeAt(0) > 127 && ch.charCodeAt(0) < 160);
+        name = hasInvalidChars ? asset_name.slice(0, 16) + '...' : decoded;
       } catch (e) {
-        name = String(util.hexToBytes(HexBlob(asset_name)));
+        name = asset_name.slice(0, 16) + '...';
       }
     }
   }
@@ -443,18 +465,31 @@ export function resolveAsset(token: any): any {
         } else if (Array.isArray(asset.onchain_metadata.image)) {
           img = resolveIcon(asset.onchain_metadata.image.join(''))
         }
-      } else if (asset.onchain_metadata['721'] && asset.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
-        const obj = asset.onchain_metadata['721'][asset.policy_id][name];
-        onchain_metadata = obj
-        if (obj.image) {
-          if (typeof obj.image == "string") {
-            img = resolveIcon(obj.image)
-          } else if (Array.isArray(obj.image)) {
-            img = resolveIcon(obj.image.join(''))
+      } else if (asset.onchain_metadata['721']) {
+        // CIP-25 v1/v2 compatible lookup:
+        // v1: policy_id as hex text, asset_name as UTF-8 text
+        // v2: policy_id and asset_name as raw bytes (Koios returns "0x"-prefixed hex keys)
+        const cip25 = asset.onchain_metadata['721'];
+        const pid = policy_id || asset.policy_id;
+        const policyMeta = cip25[pid] || cip25[`0x${pid}`];
+        if (policyMeta) {
+          const aName = asset_name || asset.asset_name;
+          const obj = policyMeta[name]             // CIP-25v1: UTF-8 decoded name
+                   || policyMeta[aName]             // CIP-25v2: hex-encoded asset_name
+                   || policyMeta[`0x${aName}`];     // CIP-25v2: Koios "0x"-prefixed hex
+          if (obj) {
+            onchain_metadata = obj
+            if (obj.image) {
+              if (typeof obj.image == "string") {
+                img = resolveIcon(obj.image)
+              } else if (Array.isArray(obj.image)) {
+                img = resolveIcon(obj.image.join(''))
+              }
+            }
+            if (obj.name) {
+              name = obj.name
+            }
           }
-        }
-        if (obj.name) {
-          name = obj.name
         }
       }
       if (asset.onchain_metadata?.files && !img) {
@@ -469,6 +504,9 @@ export function resolveAsset(token: any): any {
       }
     }
   }
+  // Apply token image overrides
+  img = applyTokenImageOverride(name, img);
+
   return {
     unit,
     img,
@@ -685,6 +723,31 @@ export function analyzeTransactionForSignatures(
           type: 'stake'
         });
       }
+
+      // Pool operator certificates
+      if (certificate.__typename === Cardano.CertificateType.PoolRegistration) {
+        // Pool registration requires owner stake key signatures
+        // The cold key signature is handled separately (outside HD derivation tree)
+        const poolCert = certificate as Cardano.PoolRegistrationCertificate;
+        if (poolCert.poolParameters?.owners) {
+          for (const owner of poolCert.poolParameters.owners) {
+            // If this wallet's stake address is an owner, require stake key signature
+            if (owner === stakeAddress) {
+              requiredSigners.push({
+                derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+                type: 'stake'
+              });
+            }
+          }
+        }
+        // Flag that cold key signature is also needed (handled by pool signing flow)
+        (requiredSigners as any).requiresColdKeySignature = true;
+      }
+
+      if (certificate.__typename === Cardano.CertificateType.PoolRetirement) {
+        // Pool retirement requires cold key signature (handled by pool signing flow)
+        (requiredSigners as any).requiresColdKeySignature = true;
+      }
     }
   }
 
@@ -742,11 +805,18 @@ export function analyzeTransactionForSignatures(
   }
 
   // Remove duplicates
-  return requiredSigners.filter((signer, index, self) =>
+  const result = requiredSigners.filter((signer, index, self) =>
       index === self.findIndex(s =>
         s.derivationPath.join(',') === signer.derivationPath.join(',') && s.type === signer.type
       )
   );
+
+  // Carry forward the pool operator cold key flag (if set during certificate analysis)
+  if ((requiredSigners as any).requiresColdKeySignature) {
+    (result as any).requiresColdKeySignature = true;
+  }
+
+  return result;
 }
 
 /**

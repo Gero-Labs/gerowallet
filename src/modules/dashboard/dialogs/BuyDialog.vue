@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="$t('wallet.buySell')"
-    :subtitle="$t('wallet.buySellSubtitle')"
+    :title="t('wallet.buySell')"
+    :subtitle="t('wallet.buySellSubtitle')"
     :min-height="300"
     :persistent="false"
     :img="assets.dollarShieldSvg"
@@ -11,6 +11,17 @@
   >
     <v-card class="transparent" flat>
       <v-card-text>
+        <v-alert
+          v-if="signingError"
+          type="warning"
+          dense
+          dismissible
+          class="mb-2"
+          style="font-size: 12px;"
+          @input="signingError = ''"
+        >
+          {{ signingError }}
+        </v-alert>
         <v-stepper v-model="step" outlined style="background-color: transparent" >
           <v-stepper-header style="box-shadow: unset">
             <v-stepper-step
@@ -47,10 +58,10 @@
                       >
                         <parallax-card
                           style="margin-left: auto; margin-right: auto;"
-                          :data-image="assets.buyAda"
+                          :data-image="isBitcoin ? assets.bitcoinBg : assets.buyAda"
                         >
-                          <h1 slot="header" style="line-height: 1;">{{ $t('wallet.buyADA') }}</h1>
-                          <p slot="content">{{ $t('wallet.buyADADescription') }}</p>
+                          <h1 slot="header" style="line-height: 1;">{{ buyLabel }}</h1>
+                          <p slot="content">{{ buyDescription }}</p>
                         </parallax-card>
                       </div>
                     </v-card>
@@ -65,10 +76,10 @@
                       >
                         <parallax-card
                           style="margin-left: auto; margin-right: auto;"
-                          :data-image="assets.sellAda"
+                          :data-image="isBitcoin ? assets.bitcoinBg : assets.sellAda"
                         >
-                          <h1 slot="header" style="line-height: 1;">{{ $t('wallet.sellADA') }}</h1>
-                          <p slot="content">{{ $t('wallet.sellADADescription') }}</p>
+                          <h1 slot="header" style="line-height: 1;">{{ sellLabel }}</h1>
+                          <p slot="content">{{ sellDescription }}</p>
                         </parallax-card>
                       </div>
                     </v-card>
@@ -141,14 +152,17 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, watch, toRefs } from 'vue';
+import { ref, watch, toRefs, computed } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import ParallaxCard from '@/modules/welcome/components/ParallaxCard.vue';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 
+//@ts-ignore
 const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
+//@ts-ignore
 const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;
 
 const props = defineProps({
@@ -158,7 +172,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['close']);
+defineEmits(['close']);
 const { loggedWallet } = toRefs(walletStore);
 
 const url = ref('');
@@ -169,6 +183,13 @@ const methods = {
 };
 const { t } = useTranslation();
 
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+
+const buyLabel = computed(() => isBitcoin.value ? t('wallet.buyBTC') : t('wallet.buyADA'));
+const buyDescription = computed(() => isBitcoin.value ? t('wallet.buyBTCDescription') : t('wallet.buyADADescription'));
+const sellLabel = computed(() => isBitcoin.value ? t('wallet.sellBTC') : t('wallet.sellADA'));
+const sellDescription = computed(() => isBitcoin.value ? t('wallet.sellBTCDescription') : t('wallet.sellADADescription'));
+
 const providers = [
   {name: 'guardarian', image: assets.guardarian, subtitle: t('wallet.guardarianOffer') },
   {name: 'moonpay', image: assets.moonpay },
@@ -176,10 +197,11 @@ const providers = [
 const method = ref<string | undefined>(undefined);
 const provider = ref<string | undefined>(undefined);
 const loading = ref(true);
+const signingError = ref('');
 
 // 3D effect reactive refs
-const buyCardStyle = ref<any>({});
-const sellCardStyle = ref<any>({});
+const buyCardStyle = ref({});
+const sellCardStyle = ref({});
 
 const onIframeLoad = () => {
   loading.value = false;
@@ -249,25 +271,62 @@ const handleSellCardMouseLeave = () => {
 
 const chooseProvider = async (name: string) => {
   provider.value = name;
+
+  const btc = isBitcoin.value;
+  const currencyCode = btc ? 'btc' : 'ada';
+  const guardarianTicker = btc ? 'BTC' : 'ADA';
+  const guardarianNetwork = btc ? 'BTC' : 'ADA';
+  const guardarianColor = btc ? 'hex_F7931A' : 'hex_2f9cac';
+  const guardarianSelectBg = btc ? 'rgb(247,147,26)' : 'rgb(47,156,172)';
+  const moonpayColor = btc ? '%23F7931A' : '%232f9cac';
+  const walletAddress = btc
+    ? loggedWallet.value?.baseAddress
+    : loggedWallet.value?.baseAddress?.value ?? loggedWallet.value?.baseAddress;
+  const guardarianCurrencyList = encodeURIComponent(JSON.stringify([{ ticker: guardarianTicker, network: guardarianNetwork }]));
+
   if (method.value === methods.BUY) {
     if (name === 'moonpay') {
       try {
-        url.value = await moonPayApi.moonPaySign(`https://buy.moonpay.com/?apiKey=${moonPayApiKey}&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${loggedWallet.value?.baseAddress.value}&colorCode=%232f9cac&baseCurrencyCode=usd`);
+        const paymentMethodsParam = btc ? '' : '&enabledPaymentMethods=credit_debit_card';
+        const unsigned = `https://buy.moonpay.com/?apiKey=${moonPayApiKey}${paymentMethodsParam}&theme=dark&currencyCode=${currencyCode}&walletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=usd`;
+        const signed = await moonPayApi.moonPaySign(unsigned);
+        console.log('🌙 MoonPay signed URL:', signed);
+        if (typeof signed === 'string' && signed.includes('signature=')) {
+          url.value = signed;
+          signingError.value = '';
+        } else {
+          console.warn('🌙 MoonPay signing failed — loading unsigned URL. Response:', signed);
+          url.value = unsigned;
+          signingError.value = t('wallet.moonpaySigningWarning');
+        }
       } catch (error) {
         console.error(error);
       }
     } else if (name === 'guardarian') {
-      url.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=USD&default_crypto_currency=ADA&crypto_currencies_list=%5B%7B%22ticker%22%3A%22ADA%22%2C%22network%22%3A%22ADA%22%7D%5D&default_side=buy_crypto&side_toggle_disabled=true&body_background=transparent&button_background=hex_2f9cac&calc_background=hex_000000&select_background=rgb(47,156,172)&button_background_disabled=hex_2f9cac&submit_button_color=white&widget_height=390`;
+      const defaultFiat = btc ? 'EUR' : 'USD';
+      const fiatListParam = btc ? '' : '&fiat_currencies_list=%5B%7B%22ticker%22%3A%22USD%22%2C%22network%22%3A%22USD%22%7D%5D';
+      url.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=${defaultFiat}${fiatListParam}&default_crypto_currency=${guardarianTicker}&crypto_currencies_list=${guardarianCurrencyList}&default_side=buy_crypto&side_toggle_disabled=true&body_background=transparent&button_background=${guardarianColor}&calc_background=hex_000000&select_background=${guardarianSelectBg}&button_background_disabled=${guardarianColor}&submit_button_color=white&widget_height=390`;
     }
   } else if (method.value === methods.SELL) {
     if (name === 'moonpay') {
       try {
-        url.value = await moonPayApi.moonPaySign(`https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=ada&refundWalletAddress=${loggedWallet.value?.baseAddress.value}&colorCode=%232f9cac&baseCurrencyCode=eur`);
+        const unsigned = `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=${currencyCode}&refundWalletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=eur`;
+        const signed = await moonPayApi.moonPaySign(unsigned);
+        console.log('🌙 MoonPay sell signed URL:', signed);
+        if (typeof signed === 'string' && signed.includes('signature=')) {
+          url.value = signed;
+          signingError.value = '';
+        } else {
+          console.warn('🌙 MoonPay sell signing failed — loading unsigned URL. Response:', signed);
+          url.value = unsigned;
+          signingError.value = t('wallet.moonpaySigningWarning');
+        }
       } catch (error) {
         console.error(error);
       }
     } else if (name === 'guardarian') {
-      url.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=USD&default_crypto_currency=ADA&crypto_currencies_list=%5B%7B%22ticker%22%3A%22ADA%22%2C%22network%22%3A%22ADA%22%7D%5D&default_side=sell_crypto&side_toggle_disabled=true&body_background=transparent&button_background=hex_2f9cac&calc_background=hex_000000&select_background=rgb(47,156,172)&button_background_disabled=hex_2f9cac&submit_button_color=white&widget_height=390`;
+      const defaultFiat = btc ? 'EUR' : 'USD';
+      url.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=${defaultFiat}&default_crypto_currency=${guardarianTicker}&crypto_currencies_list=${guardarianCurrencyList}&default_side=sell_crypto&side_toggle_disabled=true&body_background=transparent&button_background=${guardarianColor}&calc_background=hex_000000&select_background=${guardarianSelectBg}&button_background_disabled=${guardarianColor}&submit_button_color=white&widget_height=390`;
     }
   }
   step.value++;
@@ -279,6 +338,7 @@ watch(() => props.isOpen, (newVal) => {
     url.value = '';
     provider.value = undefined;
     method.value = undefined;
+    signingError.value = '';
   }
 });
 
@@ -287,6 +347,7 @@ watch(step, (newVal) => {
     url.value = '';
     provider.value = undefined;
     loading.value = true;
+    signingError.value = '';
   }
 });
 </script>

@@ -379,3 +379,97 @@ export const qrCodeOptions = (encodedUR: string, size: number): Options => {
     }
   }
 }
+
+// ============================================================================
+// BITCOIN KEYSTONE INTEGRATION
+// ============================================================================
+
+/**
+ * Generate QR code for Bitcoin account sync (xpub derivation request)
+ * @param addressType - Bitcoin address type ('legacy', 'segwit', 'taproot')
+ * @param accountIndex - Account index (default 0)
+ * @returns QR code options for displaying sync request
+ */
+export const generateBitcoinSyncQR = (addressType: string = 'segwit', accountIndex: number = 0): Options => {
+  // Determine derivation path based on address type
+  let purpose: number;
+  switch (addressType) {
+    case 'legacy':
+      purpose = 44; // BIP44
+      break;
+    case 'taproot':
+      purpose = 86; // BIP86
+      break;
+    case 'segwit':
+    default:
+      purpose = 84; // BIP84
+      break;
+  }
+
+  const path = `m/${purpose}'/0'/${accountIndex}'`;
+
+  // Generate key derivation request for Bitcoin (secp256k1 curve)
+  const ur: UR = sdk.generateKeyDerivationCall({
+    schemas: [{
+      path,
+      curve: Curve.secp256k1, // Bitcoin uses secp256k1, not ed25519
+      algo: DerivationAlgorithm.slip10 // SLIP-0010 for secp256k1
+    }],
+    origin: 'gerowallet'
+  });
+
+  return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190);
+};
+
+/**
+ * Parse Bitcoin account info from scanned QR code
+ * @param ur - UR from scanned QR code
+ * @returns Object containing xpub, master fingerprint, and path
+ */
+export const parseBitcoinAccount = (ur: UR): {
+  xpub: string;
+  xfp: string;
+  path: string;
+  publicKey: string;
+  chainCode: string;
+} => {
+  // Parse the crypto-hdkey UR
+  const cryptoHDKey = (sdk as any).bitcoin.parseCryptoHDKey(ur);
+
+  return {
+    xpub: cryptoHDKey.getBip32Key(), // Base58 encoded xpub
+    xfp: cryptoHDKey.getOrigin()?.getSourceFingerprint()?.toString('hex') || '',
+    path: cryptoHDKey.getOrigin()?.getPath() || '',
+    publicKey: cryptoHDKey.getKey().toString('hex'),
+    chainCode: cryptoHDKey.getChainCode()?.toString('hex') || '',
+  };
+};
+
+/**
+ * Generate QR code for Bitcoin PSBT signing request
+ * @param psbtHex - Unsigned PSBT in hex format
+ * @param requestId - Unique request ID (UUID)
+ * @returns QR code options for displaying signing request
+ */
+export const generateBitcoinPSBTQR = (psbtHex: string, requestId: string = crypto.randomUUID()): Options => {
+  // Convert PSBT hex to Buffer
+  const psbtBuffer = Buffer.from(psbtHex, 'hex');
+
+  // Generate crypto-psbt UR
+  const ur: UR = (sdk as any).bitcoin.generatePSBT(psbtBuffer);
+
+  return qrCodeOptions(UREncoder.encodeSinglePart(ur), 190);
+};
+
+/**
+ * Parse signed Bitcoin PSBT from scanned QR code
+ * @param ur - UR from scanned QR code
+ * @returns Signed PSBT in hex format
+ */
+export const parseBitcoinSignature = (ur: UR): string => {
+  // Parse the signed crypto-psbt UR
+  const signedPsbt = (sdk as any).bitcoin.parsePSBT(ur);
+
+  // Return signed PSBT as hex
+  return signedPsbt.toHex();
+};

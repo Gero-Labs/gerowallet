@@ -13,7 +13,7 @@
         <FeatureListItem :text="t('card.onceApprovedOrder')" icon="check" />
       </div>
       <div class="promo-section">
-        <p class="promo-title">{{ t('card.enjoyZeroFeesUntilMay') }}</p>
+        <p class="promo-title">{{ t('card.enjoyZeroFeesUntil') }}</p>
         <div class="feature-list">
           <FeatureListItem :text="t('card.zeroMonthlyFees')" icon="check" />
           <FeatureListItem :text="t('card.zeroAdaEurFees')" icon="check" />

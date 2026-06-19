@@ -1,7 +1,7 @@
 <template>
-  <v-menu offset-y transition="scroll-y-transition" max-height="200">
+  <v-menu offset-y eager transition="none">
     <template v-slot:activator="{ on, attrs, value }">
-      <v-btn large plain v-bind="attrs" v-on="on" :ripple="false" width="128" style="font-weight: 600">
+      <v-btn large plain v-bind="attrs" v-on="on" :ripple="false" width="140" style="font-weight: 600">
         <v-avatar size="20">
           <flag :iso="currentLanguage.iso" style="font-size: 20px;"></flag>
         </v-avatar>
@@ -9,65 +9,80 @@
         <v-icon class="toggleUpDown" :class='{ "rotate": value }' small>mdi-chevron-down</v-icon>
       </v-btn>
     </template>
-    <v-list dense class="pa-0" light style="background-color: #ffffff88;">
-      <v-list-item-group v-model="selectedLang" mandatory>
-        <v-list-item v-for="(item, index) in languages" :key="index">
-          <v-list-item-avatar size="20">
-            <flag :iso="item.iso" style="font-size: 20px;"></flag>
-          </v-list-item-avatar>
-          <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
-        </v-list-item>
-      </v-list-item-group>
-    </v-list>
+    <v-card outlined class="liquid-glass-dialog" style="border: 1px solid rgba(255, 255, 255, 0.15) !important;">
+      <v-list dense class="pa-0 transparent">
+        <v-list-item-group v-model="selectedLang" mandatory>
+          <v-list-item v-for="(item, index) in availableLanguages" :key="index">
+            <v-list-item-avatar size="20">
+              <flag :iso="item.iso" style="font-size: 20px;"></flag>
+            </v-list-item-avatar>
+            <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
+          </v-list-item>
+        </v-list-item-group>
+      </v-list>
+    </v-card>
   </v-menu>
 </template>
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
-import { walletStore } from '@/stores/walletStore';
-import WalletStore from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
+import GeroStore from '@/stores/geroStore';
 import languages from '@/plugins/languages';
 import { loadLanguage } from '@/plugins/i18n';
+import { READY_LANGUAGES } from '@/plugins/i18n/config';
 
 const selectedLang = ref(-1);
 const instance = getCurrentInstance();
+
+// Filter to only show ready languages
+const availableLanguages = computed(() => {
+  return Object.entries(languages)
+    .filter(([key]) => READY_LANGUAGES.includes(key))
+    .map(([, value]) => value);
+});
+
+const availableLanguageKeys = computed(() => {
+  return Object.keys(languages).filter(key => READY_LANGUAGES.includes(key));
+});
 
 const currentLanguage = computed(() => {
   return languages[instance?.proxy?.$i18n?.locale || 'us']
 });
 
 const currentLocale = computed(() => {
-  return walletStore.config?.locale || 'us';
+  // CRITICAL: Read from geroStore (global preference) instead of walletStore
+  // This ensures locale persists across login/logout
+  return geroStore.config?.locale || 'us';
 });
 
 watch(selectedLang, async (val) => {
-  const localeKey = Object.keys(languages)[val]
-  
+  const localeKey = availableLanguageKeys.value[val]
+
   // CRITICAL FIX: Load language file before switching (race condition fix)
   try {
     await loadLanguage(localeKey);
-    
-    // Update store and i18n locale ONLY after successful load
-    WalletStore.setLocale(localeKey);
-    if (instance?.proxy?.$i18n) {
-      instance.proxy.$i18n.locale = localeKey;
-    }
+
+    // Update geroStore directly (source of truth for global locale preference)
+    // This updates i18n.locale internally and persists to database
+    await GeroStore.setLocale(localeKey);
   } catch (error) {
     console.error(`Failed to load language ${localeKey}:`, error);
     // Don't update store if load failed - will cause UI inconsistency
   }
 });
 
-onMounted(async () => {
-  selectedLang.value = Object.keys(languages).indexOf(currentLocale.value)
-  
-  // Load saved language on mount if not 'us'
-  if (currentLocale.value !== 'us') {
-    try {
-      await loadLanguage(currentLocale.value);
-    } catch (error) {
-      console.error(`Failed to load saved language ${currentLocale.value}:`, error);
-    }
+// Watch for locale changes from other sources (e.g., ProfileTab settings)
+watch(currentLocale, (newLocale) => {
+  const newIndex = availableLanguageKeys.value.indexOf(newLocale);
+  if (newIndex !== -1 && selectedLang.value !== newIndex) {
+    selectedLang.value = newIndex;
   }
+});
+
+onMounted(() => {
+  // Set the selected language index based on current locale
+  // The language file is already loaded by main.ts before the app mounts
+  selectedLang.value = availableLanguageKeys.value.indexOf(currentLocale.value);
 });
 </script>
 <style>
@@ -77,5 +92,20 @@ onMounted(async () => {
 
 .toggleUpDown.rotate {
   transform: rotate(180deg);
+}
+</style>
+
+<style>
+/* Liquid glass styling for the language selector dropdown */
+.liquid-glass-dialog.v-card {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
 }
 </style>

@@ -1,5 +1,6 @@
 import { CID } from 'multiformats/cid'
-import apexBg from '@/assets/apex.png'
+import apexBg from '@/assets/apexBg.png'
+import bitcoinBg from '@/assets/bitcoinBg.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
 import hardwareWalletBg from '@/modules/welcome/assets/hardware_wallet.png'
@@ -10,6 +11,7 @@ import greenSvg from '@/assets/svg/green.svg'
 import purpleSvg from '@/assets/svg/purple.svg'
 import pinkSvg from '@/assets/svg/pink.svg'
 import orangeSvg from '@/assets/svg/orange.svg'
+import yellowSvg from '@/assets/svg/yellow.svg'
 import blueSvg from '@/assets/svg/blue.svg'
 import greySvg from '@/assets/svg/grey.svg'
 import ledgerSvg from '@/assets/svg/ledger.svg'
@@ -29,6 +31,7 @@ import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
 import mediaPlayer from '@/assets/svg/play-square.svg'
+import cardIcon from '@/assets/svg/card.svg'
 import cashback from '@/assets/svg/cashback.svg'
 import governance from '@/assets/svg/governance.svg'
 import dao from '@/assets/svg/dao.svg'
@@ -84,6 +87,7 @@ import dappRiskPhishing from '@/assets/img/cardano-shield/dapp-phishing.png'
 import dappRiskSuspicious from '@/assets/img/cardano-shield/dapp-suspicious.png'
 import dappRiskTimeout from '@/assets/img/cardano-shield/dapp-timeout.png'
 import dappRiskUnknown from '@/assets/img/cardano-shield/dapp-unknown.png'
+import nightTokenSvg from '@/assets/svg/night-token.svg'
 import giftSvg from '@/assets/svg/gift.svg'
 import pendingSvg from '@/assets/svg/pending.svg'
 import piggyBankSvg from '@/assets/svg/piggybank.svg'
@@ -112,21 +116,22 @@ import rectangle2 from '@/assets/img/rectangle2.png';
 import walletGeroSvg from '@/assets/svg/walletGero.svg';
 import walletGeroApexSvg from '@/assets/svg/walletGeroApex.svg';
 import keySvg from '@/assets/svg/key.svg';
+import keyGeroSvg from '@/assets/svg/keyGero.svg';
 import keyApexSvg from '@/assets/svg/keyApex.svg';
 import pairSvg from '@/assets/svg/pair.svg';
+import pairGeroSvg from '@/assets/svg/pairGero.svg';
 import pairApexSvg from '@/assets/svg/pairApex.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
 import questionMark from '@/assets/svg/question-mark.svg'
 import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
-import apexBgDashboard from '@/assets/apexBg.png'
-import apexImage from '@/assets/apex.png'
+import apexBgDashboard from '@/assets/apexCarouselBg.png'
 import apexSvg from '@/assets/svg/ap3x.svg'
 import walletGeroApex from '@/assets/svg/walletGeroApex.svg'
 import debitCardBgImage from '@/assets/debitcardbg.png'
 import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
 import cashbackImage from '@/assets/cashback.png'
-import debitCardImage from '@/assets/front_card_no_mcx2.png' // Updated to new card design
+import debitCardImage from '@/assets/front_card_no_mcx2.png'
 import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
 import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/front_card_no_mcx2.png'
@@ -138,6 +143,11 @@ import geroDashboardXmas from '@/assets/gero dashboards xmas.png'
 import mediumSvg from '@/assets/svg/medium.svg'
 import adLabsLogo from '@/assets/svg/ad-labs_black.svg'
 import adLabsLogoWhite from '@/assets/svg/ad-labs_white.svg'
+import gominingIcon from '@/assets/svg/gomining.svg'
+import babylonStakingIcon from '@/assets/svg/babylon-staking.svg';
+import mempoolSvg from '@/assets/svg/mempool.svg';
+import dexHunterLogo from '@/assets/svg/dexhunter.svg'
+import miniModeSvg from '@/assets/svg/mini-mode.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -153,6 +163,7 @@ export default {
   purpleSvg,
   pinkSvg,
   orangeSvg,
+  yellowSvg,
   blueSvg,
   greySvg,
   ledgerSvg,
@@ -166,11 +177,13 @@ export default {
   connectKeystoneSvg,
   loadingAnimation,
   errorImage,
+  nightTokenSvg,
   geroDashboard,
   barChart,
   coinsStacked,
   blog,
   mediaPlayer,
+  cardIcon,
   cashback,
   governance,
   transactions,
@@ -254,6 +267,8 @@ export default {
       case 'green':
       case 'teal':
         return greenSvg;
+      case 'yellow':
+          return yellowSvg
       case 'purple':
       case 'deep-purple':
         return purpleSvg;
@@ -359,15 +374,17 @@ export default {
   walletGeroSvg,
   walletGeroApexSvg,
   keySvg,
+  keyGeroSvg,
   keyApexSvg,
   pairSvg,
   pairApexSvg,
+  pairGeroSvg,
   cardanoSvg,
   clarityLogo,
   questionMark,
   questionMarkDark,
   apexBgDashboard,
-  apexImage,
+  bitcoinBg,
   apexSvg,
   walletGeroApex,
   debitCardBgImage,
@@ -381,7 +398,12 @@ export default {
   geroDashboardXmas,
   mediumSvg,
   adLabsLogo,
-  adLabsLogoWhite
+  adLabsLogoWhite,
+  gominingIcon,
+  babylonStakingIcon,
+  mempoolSvg,
+  dexHunterLogo,
+  miniModeSvg,
 }
 
 export {
