@@ -87,7 +87,7 @@
     "json-bigint": "^1.0.0",
     "lightweight-charts": "^5.0.8",
     "lodash": "^4.18.1",
-    "lodash-es": "^4.17.23",
+    "lodash-es": "^4.18.1",
     "multiformats": "^13.3.7",
     "net": "^1.0.2",
     "node-stdlib-browser": "^1.2.1",
