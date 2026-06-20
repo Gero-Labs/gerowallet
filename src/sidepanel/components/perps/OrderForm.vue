@@ -28,7 +28,7 @@
     <!-- Leverage + Margin Mode row -->
     <div class="lev-margin-row">
       <button class="lev-badge" @click="leverageDialog = true">
-        <v-icon size="11" class="mr-1" style="color:#00c7f3">mdi-lightning-bolt</v-icon>
+        <v-icon size="11" class="mr-1" style="color: var(--chain-primary)">mdi-lightning-bolt</v-icon>
         {{ localLeverage }}x
       </button>
       <span class="margin-mode-label">
@@ -215,7 +215,7 @@
           :step="1"
           hide-details
           class="perp-slider lev-slider"
-          color="#00c7f3"
+          :color="primaryColor"
           track-color="rgba(255,255,255,0.1)"
         />
         <div class="lev-presets">
@@ -239,6 +239,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
+import { useChainContext } from '../../composables/useChainContext';
 import { strikeMarketApi } from '@/api/strike-v2.market';
 import {
   calcLiquidationPriceIsolated,
@@ -249,6 +250,9 @@ import {
 import type {
   CreateOrderRequest, OrderType, OrderSide, StrikeMarketConfig, MarginTierNumeric,
 } from '@/api/strike-v2.types';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 // ── Props & Emits ────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -589,9 +593,9 @@ watch(() => account.value, (acc) => {
 }
 
 .ot-chip--active {
-  border-color: #00c7f3;
-  color: #00c7f3;
-  background: rgba(0, 199, 243, 0.1);
+  border-color: var(--chain-primary);
+  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
 }
 
 /* ── Leverage / Margin Mode ── */
@@ -609,15 +613,15 @@ watch(() => account.value, (acc) => {
   border-radius: 5px;
   font-size: 11px;
   font-weight: 700;
-  color: #00c7f3;
-  background: rgba(0, 199, 243, 0.1);
-  border: 1px solid rgba(0, 199, 243, 0.25);
+  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent);
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
 .lev-badge:hover {
-  background: rgba(0, 199, 243, 0.18);
+  background: color-mix(in srgb, var(--chain-primary) 18%, transparent);
 }
 
 .margin-mode-label {
@@ -642,7 +646,7 @@ watch(() => account.value, (acc) => {
   font-size: 12px !important;
   font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
   color: #ffffff !important;
-  caret-color: #00c7f3 !important;
+  caret-color: var(--chain-primary) !important;
   padding: 0 8px !important;
 }
 
@@ -662,7 +666,7 @@ watch(() => account.value, (acc) => {
 }
 
 .perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: #00c7f3 !important;
+  border-color: var(--chain-primary) !important;
 }
 
 /* ── Size % Buttons ── */
@@ -688,9 +692,9 @@ watch(() => account.value, (acc) => {
 
 .pct-btn--active,
 .pct-btn:hover {
-  color: #00c7f3;
-  border-color: rgba(0, 199, 243, 0.3);
-  background: rgba(0, 199, 243, 0.08);
+  color: var(--chain-primary);
+  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent);
 }
 
 /* ── Slider ── */
@@ -772,8 +776,8 @@ watch(() => account.value, (acc) => {
 }
 
 .adv-checkbox:checked + .adv-checkmark {
-  background: #00c7f3;
-  border-color: #00c7f3;
+  background: var(--chain-primary);
+  border-color: var(--chain-primary);
 }
 
 .adv-checkbox:checked + .adv-checkmark::after {
@@ -884,7 +888,7 @@ watch(() => account.value, (acc) => {
   font-size: 40px;
   font-weight: 800;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: #00c7f3;
+  color: var(--chain-primary);
   line-height: 1;
   margin-bottom: 12px;
 }
@@ -919,15 +923,15 @@ watch(() => account.value, (acc) => {
 
 .lev-preset-btn.active,
 .lev-preset-btn:hover {
-  color: #00c7f3;
-  border-color: rgba(0, 199, 243, 0.35);
-  background: rgba(0, 199, 243, 0.1);
+  color: var(--chain-primary);
+  border-color: color-mix(in srgb, var(--chain-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
 }
 
 .lev-confirm-btn {
-  background: rgba(0, 199, 243, 0.15) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
   border-radius: 8px !important;
   font-size: 12px !important;
   font-weight: 700 !important;

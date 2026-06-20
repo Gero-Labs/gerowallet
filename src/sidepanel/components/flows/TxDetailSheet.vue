@@ -3,7 +3,7 @@
     <div v-if="tx" class="tx-detail">
       <!-- Amount -->
       <div class="tx-amount-section">
-        <v-icon :color="isReceive ? '#00c7f3' : '#ff8e8e'" size="36">
+        <v-icon :color="isReceive ? primaryColor : '#ff8e8e'" size="36">
           {{ isReceive ? 'mdi-arrow-bottom-left' : 'mdi-arrow-top-right' }}
         </v-icon>
         <div class="tx-amount" :class="isReceive ? 'accent--text' : 'error--text'">
@@ -64,7 +64,7 @@
         block
         outlined
         small
-        color="#00c7f3"
+        :color="primaryColor"
         class="mt-4"
         @click="openExplorer"
       >
@@ -80,10 +80,36 @@ import { computed } from 'vue';
 import BottomSheet from '../BottomSheet.vue';
 import filters from '@/shared/utils/filters';
 import { geroStore } from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
+import { getExplorerUrl } from '@/shared/utils/explorer';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
+
+type TxAsset = {
+  unit: string;
+  quantity: number | string;
+  decimals?: number;
+  name?: string;
+  img?: string;
+};
+
+type TxDetail = {
+  id: string;
+  ada: number | string;
+  pending?: boolean;
+  tx_timestamp: number;
+  block_height?: number;
+  epoch_no?: number;
+  body?: { fee?: number | string; certificates?: unknown[] };
+  assets?: TxAsset[];
+};
 
 const props = defineProps<{
   value: boolean;
-  tx: any;
+  tx: TxDetail | null;
 }>();
 
 defineEmits<{
@@ -101,8 +127,8 @@ const txStatusLabel = computed(() => {
     return 'Staking Operation';
   }
 
-  const hasSentTokens = item.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity < 0);
-  const hasReceivedTokens = item.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity > 0);
+  const hasSentTokens = item.assets?.some((a: TxAsset) => a.unit !== 'lovelace' && Number(a.quantity) < 0);
+  const hasReceivedTokens = item.assets?.some((a: TxAsset) => a.unit !== 'lovelace' && Number(a.quantity) > 0);
   const adaAmount = Number(item.ada);
 
   if (adaAmount > 0 && hasReceivedTokens) return 'Received Funds & Tokens';
@@ -116,14 +142,14 @@ const txStatusLabel = computed(() => {
 
 const txAssets = computed(() => {
   if (!props.tx?.assets) return [];
-  return props.tx.assets.filter((a: any) => a.unit !== 'lovelace');
+  return props.tx.assets.filter((a: TxAsset) => a.unit !== 'lovelace');
 });
 
 function formatAda(lovelace: number | string): string {
   return filters.toCurrency(Number(lovelace));
 }
 
-function formatAssetQty(asset: any): string {
+function formatAssetQty(asset: TxAsset): string {
   const qty = Number(asset.quantity);
   const decimals = asset.decimals || 0;
   const val = qty / Math.pow(10, decimals);
@@ -144,10 +170,10 @@ function copyToClipboard(text: string) {
 
 function openExplorer() {
   if (!props.tx?.id) return;
+  const chain = walletStore.loggedWallet?.chain || Blockchain.CARDANO;
   const network = geroStore.network?.network;
-  const prefix = network === 'Preprod' ? 'preprod.' : '';
-  const url = `https://${prefix}cexplorer.io/tx/${props.tx.id}`;
-  window.open(url, '_blank');
+  const url = getExplorerUrl(chain, props.tx.id, 'tx', network);
+  if (url) window.open(url, '_blank');
 }
 </script>
 
@@ -168,7 +194,7 @@ function openExplorer() {
 }
 
 .accent--text {
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
 }
 
 .error--text {
@@ -216,7 +242,7 @@ function openExplorer() {
 }
 
 .detail-value.clickable:hover {
-  color: #00c7f3;
+  color: var(--chain-primary);
 }
 
 .fee-text {

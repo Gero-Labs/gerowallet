@@ -139,7 +139,7 @@ import {
 import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketWs';
 import { strikeMarketApi } from '@/api/strike-v2.market';
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   positions: Position[];
   loading?: boolean;
   /** Optional: account info for cross-margin liquidation calc (wallet balance). */
@@ -512,8 +512,8 @@ function liqClass(row: Row): string {
 }
 
 .badge--leverage {
-  background: rgba(0, 199, 243, 0.15);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  color: var(--chain-primary);
 }
 
 .badge--margin-mode {

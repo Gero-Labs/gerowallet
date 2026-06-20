@@ -16,7 +16,7 @@
     <!-- Rewards summary -->
     <div v-if="eligible || pending" class="rewards-summary mx-4 mb-3">
       <div v-if="eligible" class="reward-item">
-        <v-icon small color="#00c7f3" class="mr-2">mdi-gift-outline</v-icon>
+        <v-icon small :color="primaryColor" class="mr-2">mdi-gift-outline</v-icon>
         <span class="text-caption white--text">Ready to claim:</span>
         <span class="text-caption accent-text ml-1 font-weight-bold">
           {{ formatReward(eligible) }}
@@ -115,7 +115,7 @@
 
     <!-- Infinite scroll sentinel + load more indicator -->
     <div v-if="supported && deals.length > 0 && nextPage" ref="sentinelEl" class="text-center py-3">
-      <v-progress-circular v-if="loadingMore" indeterminate size="24" color="#00c7f3" />
+      <v-progress-circular v-if="loadingMore" indeterminate size="24" :color="primaryColor" />
     </div>
 
     <!-- Retailer Detail Bottom Sheet -->
@@ -147,7 +147,7 @@
           <div class="text-caption white--text font-weight-bold mb-2">{{ $t('miniGero.cashbackTerms') }}</div>
           <div class="deal-terms-content">
             <div v-if="termsLoading" class="text-center py-4">
-              <v-progress-circular indeterminate size="24" color="#00c7f3" width="2" />
+              <v-progress-circular indeterminate size="24" :color="primaryColor" width="2" />
             </div>
             <div v-else-if="termsContent" class="text-caption grey--text terms-text" v-html="renderedTerms" />
             <div v-else class="text-caption grey--text">{{ $t('miniGero.noTermsAvailable') }}</div>
@@ -182,7 +182,11 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import axios from 'axios';
 import BottomSheet from '../components/BottomSheet.vue';
+import { useChainContext } from '../composables/useChainContext';
 import debounce from 'lodash/debounce';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const { bringCache } = toRefs(bringStore);
 const { loggedWallet } = toRefs(walletStore);
@@ -506,7 +510,7 @@ onMounted(async () => {
 }
 
 .accent-text {
-  color: #00c7f3;
+  color: var(--chain-primary);
 }
 
 .empty-state {
@@ -576,7 +580,7 @@ onMounted(async () => {
 }
 
 .filter-pill--active {
-  background: linear-gradient(135deg, #00c7f3, #00fad5);
+  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2));
   border-color: transparent;
   color: #000;
   font-weight: 600;
@@ -653,7 +657,7 @@ onMounted(async () => {
 }
 
 .start-shopping-btn {
-  background: linear-gradient(135deg, #00c7f3, #00ffd1) !important;
+  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2)) !important;
   color: #000 !important;
   font-weight: 600;
   text-transform: none;

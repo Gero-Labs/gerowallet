@@ -18,7 +18,7 @@
           <div class="text-caption grey--text mt-1 text-center">{{ $t('miniGero.txSubmittedDesc') }}</div>
           <div v-if="txId" class="tx-id-box mt-4" @click="copyTxId">
             <span class="text-caption grey--text">{{ truncateStr(txId) }}</span>
-            <v-icon x-small color="#00c7f3" class="ml-1">mdi-content-copy</v-icon>
+            <v-icon x-small :color="primaryColor" class="ml-1">mdi-content-copy</v-icon>
           </div>
         </template>
         <template v-else>
@@ -26,7 +26,7 @@
           <div class="text-h6 white--text mt-3">{{ $t('miniGero.swapFailed') }}</div>
           <div v-if="statusError" class="text-caption mt-2 text-center" style="color: #F97066">{{ statusError }}</div>
         </template>
-        <v-btn block color="#00c7f3" class="black--text font-weight-bold mt-6" @click="onDone">
+        <v-btn block :color="primaryColor" class="black--text font-weight-bold mt-6" @click="onDone">
           {{ txSuccess ? $t('miniGero.done') : $t('miniGero.tryAgain') }}
         </v-btn>
       </div>
@@ -66,7 +66,7 @@
             <v-icon
               v-if="(selectingTokenSide === 'A' && token.unit === selectedTokenA.unit) ||
                     (selectingTokenSide === 'B' && token.unit === selectedTokenB.unit)"
-              small color="#00c7f3" class="ml-2"
+              small :color="primaryColor" class="ml-2"
             >mdi-check-circle</v-icon>
           </div>
           <div v-if="filteredTokenList.length === 0" class="text-caption grey--text text-center pa-4">
@@ -89,7 +89,7 @@
               :key="preset.value"
               small
               :outlined="slippageRef !== preset.value"
-              :color="slippageRef === preset.value ? '#00c7f3' : 'rgba(255,255,255,0.15)'"
+              :color="slippageRef === preset.value ? primaryColor : 'rgba(255,255,255,0.15)'"
               :class="slippageRef === preset.value ? 'black--text' : 'white--text'"
               @click="slippageRef = preset.value"
             >
@@ -118,7 +118,7 @@
         <div class="glass-card pa-4">
           <div class="d-flex align-center justify-space-between mb-3">
             <span class="text-body-2 white--text font-weight-bold">{{ $t('miniGero.dexRouting') }}</span>
-            <v-btn x-small text color="#00c7f3" @click="toggleAllDexes">
+            <v-btn x-small text :color="primaryColor" @click="toggleAllDexes">
               {{ allDexesEnabled ? $t('miniGero.deselectAll') : $t('miniGero.selectAll') }}
             </v-btn>
           </div>
@@ -135,7 +135,7 @@
           </div>
         </div>
 
-        <v-btn block color="#00c7f3" class="black--text font-weight-bold mt-4" @click="step = previousStep">
+        <v-btn block :color="primaryColor" class="black--text font-weight-bold mt-4" @click="step = previousStep">
           {{ $t('miniGero.done') }}
         </v-btn>
       </div>
@@ -212,7 +212,7 @@
             @keydown.enter="executeSwap"
           />
           <v-btn
-            block color="#00c7f3" class="black--text font-weight-bold mt-4"
+            block :color="primaryColor" class="black--text font-weight-bold mt-4"
             :disabled="!spendingPassword || submitting"
             :loading="submitting"
             @click="executeSwap"
@@ -223,7 +223,7 @@
 
         <template v-else-if="isNormalWallet && isPrfWallet">
           <div class="hw-notice">
-            <v-icon size="40" color="#00c7f3" class="mb-2">mdi-fingerprint</v-icon>
+            <v-icon size="40" :color="primaryColor" class="mb-2">mdi-fingerprint</v-icon>
             <div class="text-body-2 white--text text-center mb-3">{{ $t('miniGero.prfAuthPrompt') }}</div>
           </div>
           <PassKeyAuthButton
@@ -237,19 +237,19 @@
 
         <template v-else-if="walletType === WalletType.Ledger">
           <div class="hw-notice">
-            <v-icon size="40" color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon size="40" :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.connectLedger') }}</div>
             <div v-if="loggedWallet?.btSupported" class="d-flex align-center justify-center mb-2" style="gap: 8px;">
-              <v-btn x-small :outlined="isBT" :color="!isBT ? '#00c7f3' : '#555'" class="black--text" @click="isBT = false">
+              <v-btn x-small :outlined="isBT" :color="!isBT ? primaryColor : '#555'" class="black--text" @click="isBT = false">
                 <v-icon x-small class="mr-1">mdi-usb</v-icon> USB
               </v-btn>
-              <v-btn x-small :outlined="!isBT" :color="isBT ? '#00c7f3' : '#555'" class="black--text" @click="isBT = true">
+              <v-btn x-small :outlined="!isBT" :color="isBT ? primaryColor : '#555'" class="black--text" @click="isBT = true">
                 <v-icon x-small class="mr-1">mdi-bluetooth</v-icon> BT
               </v-btn>
             </div>
           </div>
           <v-btn
-            block color="#00c7f3" class="black--text font-weight-bold"
+            block :color="primaryColor" class="black--text font-weight-bold"
             :disabled="submitting" :loading="submitting"
             @click="signLedger"
           >
@@ -260,11 +260,11 @@
 
         <template v-else-if="walletType === WalletType.Trezor">
           <div class="hw-notice">
-            <v-icon size="40" color="#00c7f3" class="mb-2">mdi-shield-check-outline</v-icon>
+            <v-icon size="40" :color="primaryColor" class="mb-2">mdi-shield-check-outline</v-icon>
             <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.connectTrezor') }}</div>
           </div>
           <v-btn
-            block color="#00c7f3" class="black--text font-weight-bold"
+            block :color="primaryColor" class="black--text font-weight-bold"
             :disabled="submitting" :loading="submitting"
             @click="signTrezor"
           >
@@ -275,11 +275,11 @@
 
         <template v-else-if="walletType === WalletType.Keystone">
           <div class="hw-notice">
-            <v-icon size="40" color="#00c7f3" class="mb-2">mdi-qrcode</v-icon>
+            <v-icon size="40" :color="primaryColor" class="mb-2">mdi-qrcode</v-icon>
             <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.keystoneSign') }}</div>
           </div>
           <v-btn
-            block color="#00c7f3" class="black--text font-weight-bold"
+            block :color="primaryColor" class="black--text font-weight-bold"
             :disabled="submitting" :loading="submitting"
             @click="signKeystone"
           >
@@ -346,7 +346,7 @@
           </div>
           <div class="d-flex align-center justify-space-between mt-1">
             <span class="text-caption grey--text">${{ getUsdValue(selectedTokenA) }}</span>
-            <v-btn x-small text color="#00c7f3" @click="setMaxTokenA" class="px-1" style="min-width: 0">
+            <v-btn x-small text :color="primaryColor" @click="setMaxTokenA" class="px-1" style="min-width: 0">
               {{ $t('miniGero.max') }}
             </v-btn>
           </div>
@@ -355,7 +355,7 @@
         <!-- Flip arrow -->
         <div class="text-center" style="margin: -4px 0; position: relative; z-index: 2">
           <v-btn icon small class="flip-btn" @click="switchPair">
-            <v-icon color="#00c7f3">mdi-swap-vertical</v-icon>
+            <v-icon :color="primaryColor">mdi-swap-vertical</v-icon>
           </v-btn>
         </div>
 
@@ -449,7 +449,7 @@
         <!-- Swap / Review button -->
         <div style="flex: 0 0 auto; padding-bottom: 64px">
           <v-btn
-            block color="#00c7f3" class="black--text font-weight-bold"
+            block :color="primaryColor" class="black--text font-weight-bold"
             :disabled="isSwapDisabled || loading || poolError"
             :loading="loading"
             @click="goToReview"
@@ -498,6 +498,10 @@ import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import { debugLog } from '@/utils/debug';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 type Step = 'swap' | 'limit' | 'token-select' | 'settings' | 'review' | 'status';
 
@@ -1498,7 +1502,7 @@ onBeforeUnmount(() => {
 }
 
 .active-toggle {
-  background: #00c7f3 !important;
+  background: var(--chain-primary) !important;
   color: black !important;
 }
 
@@ -1609,8 +1613,8 @@ onBeforeUnmount(() => {
 
 .dex-chip.active {
   opacity: 1;
-  border-color: #00c7f3;
-  background: rgba(0, 199, 243, 0.08);
+  border-color: var(--chain-primary);
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent);
 }
 
 /* Review */

@@ -214,7 +214,7 @@ watch(isConnected, (val) => {
   gap: 16px;
   background:
     linear-gradient(180deg, rgba(19, 22, 27, 0.7) 0%, rgba(10, 12, 16, 0.8) 100%),
-    radial-gradient(ellipse at 50% 0%, rgba(0, 199, 243, 0.08) 0%, transparent 60%);
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--chain-primary) 8%, transparent) 0%, transparent 60%);
   backdrop-filter: blur(32px) saturate(1.6);
   -webkit-backdrop-filter: blur(32px) saturate(1.6);
   border-radius: 16px;
@@ -235,16 +235,16 @@ watch(isConnected, (val) => {
   width: 68px;
   height: 68px;
   border-radius: 50%;
-  background: rgba(0, 199, 243, 0.1);
-  border: 1px solid rgba(0, 199, 243, 0.25);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 24px rgba(0, 199, 243, 0.15);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--chain-primary) 15%, transparent);
 }
 
 .onboarding-icon {
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
 }
 
 .onboarding-title {
@@ -351,9 +351,9 @@ watch(isConnected, (val) => {
   width: 100% !important;
   height: 42px !important;
   border-radius: 10px !important;
-  background: rgba(0, 199, 243, 0.12) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
@@ -362,7 +362,7 @@ watch(isConnected, (val) => {
 }
 
 .connect-btn:hover:not(.v-btn--disabled) {
-  background: rgba(0, 199, 243, 0.2) !important;
+  background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important;
 }
 
 .connected-state {

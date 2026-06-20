@@ -42,7 +42,7 @@
           v-if="hasRewards"
           x-small
           text
-          color="#00c7f3"
+          :color="primaryColor"
           class="ml-2 text-none claim-btn"
           :loading="claimLoading"
           @click="$emit('claim')"
@@ -62,6 +62,10 @@ import stakingStoreActions from '@/stores/stakingStore';
 import governanceStoreActions from '@/stores/governanceStore';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 defineProps<{
   claimLoading?: boolean;
@@ -157,6 +161,6 @@ const delegatingTo = computed(() => {
 }
 
 .accent--text {
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
 }
 </style>

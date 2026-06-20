@@ -30,8 +30,8 @@
       <svg v-else ref="svgEl" class="vpc-svg" :viewBox="`0 0 ${SVG_W} ${SVG_H}`" preserveAspectRatio="none">
         <defs>
           <linearGradient id="vpc-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#00c7f3" stop-opacity="0.25" />
-            <stop offset="100%" stop-color="#00c7f3" stop-opacity="0.01" />
+            <stop offset="0%" style="stop-color: var(--chain-primary)" stop-opacity="0.25" />
+            <stop offset="100%" style="stop-color: var(--chain-primary)" stop-opacity="0.01" />
           </linearGradient>
           <clipPath id="vpc-clip">
             <rect x="0" y="0" :width="SVG_W" :height="SVG_H" />
@@ -58,7 +58,7 @@
         <polyline
           :points="linePoints"
           fill="none"
-          stroke="#00c7f3"
+          style="stroke: var(--chain-primary)"
           stroke-width="1.5"
           stroke-linejoin="round"
           stroke-linecap="round"
@@ -71,7 +71,7 @@
           :cx="chartPoints[chartPoints.length - 1].x"
           :cy="chartPoints[chartPoints.length - 1].y"
           r="3"
-          fill="#00c7f3"
+          style="fill: var(--chain-primary)"
           opacity="0.9"
         />
       </svg>
@@ -197,14 +197,14 @@ function formatTvl(n: number): string {
 }
 
 .vpc-period-btn:hover {
-  border-color: rgba(0, 199, 243, 0.35);
-  color: rgba(0, 199, 243, 0.7);
+  border-color: color-mix(in srgb, var(--chain-primary) 35%, transparent);
+  color: color-mix(in srgb, var(--chain-primary) 70%, transparent);
 }
 
 .vpc-period-btn--active {
-  background: rgba(0, 199, 243, 0.12) !important;
-  border-color: rgba(0, 199, 243, 0.4) !important;
-  color: #00c7f3 !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--chain-primary) 40%, transparent) !important;
+  color: var(--chain-primary) !important;
 }
 
 /* ── Chart Wrapper ── */

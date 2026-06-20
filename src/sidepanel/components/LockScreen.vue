@@ -1,13 +1,13 @@
 <template>
   <div class="lock-screen">
     <div class="content">
-      <v-icon size="48" color="#00c7f3" class="mb-4">mdi-lock-outline</v-icon>
+      <v-icon size="48" :color="primaryColor" class="mb-4">mdi-lock-outline</v-icon>
       <h2 class="white--text text-h6 mb-1">{{ $t('miniGero.walletLocked') }}</h2>
       <p class="grey--text text-body-2 mb-4">{{ walletName }}</p>
 
       <!-- Loading config -->
       <div v-if="!configLoaded" class="text-center py-4">
-        <v-progress-circular indeterminate size="24" color="#00c7f3" />
+        <v-progress-circular indeterminate size="24" :color="primaryColor" />
       </div>
 
       <template v-else>
@@ -84,6 +84,10 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
+import { useChainContext } from '../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const password = ref('');
 const showPassword = ref(false);
@@ -218,7 +222,7 @@ function openDashboard() {
 
 .dashboard-btn {
   border-color: #333 !important;
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 13px !important;
