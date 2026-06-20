@@ -18,7 +18,7 @@
           <div class="reward-title text-body-2 white--text">{{ $t('miniGero.rewardsEpoch', { epoch: r.epoch }) }}</div>
           <div class="reward-date text-caption grey--text">{{ formatPool(r.pool_id) }}</div>
         </div>
-        <div class="reward-amount text-body-2" style="color: #47CD89">+{{ formatAmount(r.amount) }} {{ currencyTicker }}</div>
+        <div class="reward-amount text-body-2" :style="{ color: themeColors.primary }">+{{ formatAmount(r.amount) }} {{ currencyTicker }}</div>
       </div>
     </div>
   </div>
@@ -48,7 +48,7 @@ const rewards = computed<RewardEntry[]>(() => {
 const currencyTicker = computed(() => networkInfo.value?.currencyTicker || 'AP3X');
 
 function formatAmount(amount: bigint | number | string): string {
-  const n = typeof amount === 'bigint' ? Number(amount) : Number(amount);
+  const n = Number(amount);
   if (!isFinite(n)) return '0';
   const inUnits = n / 1_000_000;
   return inUnits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });

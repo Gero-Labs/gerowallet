@@ -34,7 +34,7 @@ import { useChainContext } from '../composables/useChainContext';
 import assets from '@/utils/assets';
 
 const { t } = useTranslation();
-const { networkInfo, themeColors } = useChainContext();
+const { networkInfo, themeColors, isApex } = useChainContext();
 
 const emit = defineEmits<{
   (e: 'action', id: string): void;
@@ -54,7 +54,7 @@ interface QuickAction {
 const allActions = computed<QuickAction[]>(() => {
   const primaryColor = themeColors.value.primary;
   // For Send icon: use the chain-specific iconFilter (terracotta on Apex, cyan on Cardano)
-  const sendFilter = networkInfo.value && networkInfo.value.blockchain.includes('Apex')
+  const sendFilter = isApex.value
     ? 'brightness(0) saturate(100%) invert(52%) sepia(85%) saturate(1100%) hue-rotate(345deg) brightness(108%) contrast(98%)'
     : 'invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%)';
 

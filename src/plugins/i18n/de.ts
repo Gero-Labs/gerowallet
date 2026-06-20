@@ -3239,7 +3239,6 @@ export default {
   'miniGero.openFullDashboard': 'Vollständiges Dashboard öffnen',
   'miniGero.miniMode': 'Mini-Modus',
   'miniGero.lockWallet': 'Wallet sperren',
-  'miniGero.buySellAda': 'ADA kaufen / verkaufen',
   'miniGero.buySell': '{ticker} kaufen / verkaufen',
   'miniGero.delegation': 'Delegation',
   'miniGero.rewardsEmpty': 'Noch keine Belohnungen — delegieren Sie an einen Pool, um zu verdienen.',
