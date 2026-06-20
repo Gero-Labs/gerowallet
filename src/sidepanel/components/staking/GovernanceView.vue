@@ -15,11 +15,11 @@
 
       <div class="info-links mt-2">
         <a href="https://gov.tools/" target="_blank" class="gov-link">
-          <v-icon x-small color="#00c7f3" class="mr-1">mdi-open-in-new</v-icon>
+          <v-icon x-small :color="primaryColor" class="mr-1">mdi-open-in-new</v-icon>
           <span class="text-caption">Governance Tools</span>
         </a>
         <a href="https://www.1694.io/en" target="_blank" class="gov-link">
-          <v-icon x-small color="#00c7f3" class="mr-1">mdi-open-in-new</v-icon>
+          <v-icon x-small :color="primaryColor" class="mr-1">mdi-open-in-new</v-icon>
           <span class="text-caption">CIP-1694</span>
         </a>
       </div>
@@ -64,7 +64,7 @@
 
     <!-- Loading -->
     <div v-if="loading" class="text-center py-6">
-      <v-progress-circular indeterminate color="#00c7f3" size="32" width="3" />
+      <v-progress-circular indeterminate :color="primaryColor" size="32" width="3" />
       <div class="grey--text text-caption mt-2">Loading DReps...</div>
     </div>
 
@@ -72,7 +72,7 @@
     <div v-else-if="error" class="text-center py-6">
       <v-icon color="error" class="mb-2">mdi-alert-circle-outline</v-icon>
       <div class="grey--text text-caption">{{ error }}</div>
-      <v-btn x-small text color="#00c7f3" class="mt-2" @click="loadDReps(1)">Retry</v-btn>
+      <v-btn x-small text :color="primaryColor" class="mt-2" @click="loadDReps(1)">Retry</v-btn>
     </div>
 
     <!-- DRep List -->
@@ -176,7 +176,11 @@ import filtersUtil from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
 import BottomSheet from '../../components/BottomSheet.vue';
+import { useChainContext } from '../../composables/useChainContext';
 import debounce from 'lodash/debounce';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const { truncate, toCurrency } = filtersUtil;
 
@@ -341,7 +345,7 @@ onMounted(async () => {
 .gov-link {
   display: flex;
   align-items: center;
-  color: #00c7f3;
+  color: var(--chain-primary);
   text-decoration: none;
   font-size: 12px;
 }
@@ -447,7 +451,7 @@ onMounted(async () => {
 }
 
 .drep-voting-power {
-  color: #00c7f3;
+  color: var(--chain-primary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -469,7 +473,7 @@ onMounted(async () => {
 }
 
 .delegate-btn {
-  background: linear-gradient(135deg, #00c7f3, #00ffd1) !important;
+  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2)) !important;
   color: #000 !important;
   font-weight: 600;
   text-transform: none;

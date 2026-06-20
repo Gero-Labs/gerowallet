@@ -319,8 +319,8 @@ function twapStatusClass(status: TwapStatus): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 199, 243, 0.2);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 20%, transparent);
+  color: var(--chain-primary);
   font-size: 9px;
   font-weight: 800;
   min-width: 16px;
@@ -431,8 +431,8 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .type--market {
-  background: rgba(0, 199, 243, 0.12);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  color: var(--chain-primary);
 }
 
 .type--limit {
@@ -522,7 +522,7 @@ function twapStatusClass(status: TwapStatus): string {
 
 .ot-fill-bar {
   height: 100%;
-  background: #00c7f3;
+  background: var(--chain-primary);
   border-radius: 1px;
   transition: width 0.3s ease;
 }
@@ -543,8 +543,8 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .status--open {
-  background: rgba(0, 199, 243, 0.12);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  color: var(--chain-primary);
 }
 
 .status--pending {

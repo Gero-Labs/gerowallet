@@ -13,14 +13,14 @@
         <div class="text-caption grey--text mb-2">{{ $t('miniGero.yourAddress') }}</div>
         <div class="address-box" @click="copyAddress">
           <span class="address-text">{{ receiveAddress }}</span>
-          <v-icon small color="#00c7f3" class="ml-2">mdi-content-copy</v-icon>
+          <v-icon small :color="primaryColor" class="ml-2">mdi-content-copy</v-icon>
         </div>
       </div>
 
       <!-- Copy button -->
       <v-btn
         block
-        color="#00c7f3"
+        :color="primaryColor"
         class="mt-4 black--text font-weight-bold"
         @click="copyAddress"
       >
@@ -39,6 +39,10 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import BottomSheet from '../BottomSheet.vue';
 import { walletStore } from '@/stores/walletStore';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const props = defineProps<{
   value: boolean;
@@ -144,7 +148,7 @@ function copyAddress() {
 }
 
 .address-box:hover {
-  border-color: #00c7f3;
+  border-color: var(--chain-primary);
 }
 
 .address-text {

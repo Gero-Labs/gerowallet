@@ -2,7 +2,7 @@
   <div class="card-new-view">
     <!-- Header -->
     <div class="new-header">
-      <v-icon large color="#00c7f3">mdi-card-plus-outline</v-icon>
+      <v-icon large :color="primaryColor">mdi-card-plus-outline</v-icon>
       <h2 class="new-title">{{ $t('card.getYourGeroCryptoCard') }}</h2>
       <p class="new-subtitle">{{ $t('card.chooseOptionBelow') }}</p>
     </div>
@@ -20,11 +20,11 @@
     <!-- Feature cards -->
     <div class="feature-cards">
       <div class="feature-card">
-        <v-icon small color="#00c7f3">mdi-credit-card-outline</v-icon>
+        <v-icon small :color="primaryColor">mdi-credit-card-outline</v-icon>
         <span>{{ $t('card.zeroMonthlyFees') }}</span>
       </div>
       <div class="feature-card">
-        <v-icon small color="#00c7f3">mdi-swap-horizontal</v-icon>
+        <v-icon small :color="primaryColor">mdi-swap-horizontal</v-icon>
         <span>{{ $t('card.zeroAdaEurFees') }}</span>
       </div>
     </div>
@@ -54,9 +54,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import cardHelpers from '@/stores/modules/card';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const { t } = useTranslation();
 
@@ -139,8 +143,8 @@ async function handleLogout() {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: rgba(0, 199, 243, 0.15);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  color: var(--chain-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -186,7 +190,7 @@ async function handleLogout() {
 .order-btn {
   height: 44px !important;
   border-radius: 10px !important;
-  background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
+  background: linear-gradient(135deg, var(--chain-gradient1) 0%, var(--chain-gradient2) 100%) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;

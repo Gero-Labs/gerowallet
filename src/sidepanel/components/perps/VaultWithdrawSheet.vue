@@ -207,9 +207,9 @@ watch(() => props.value, (val) => {
   height: 40px !important;
   padding: 0 12px !important;
   border-radius: 8px !important;
-  background: rgba(0, 199, 243, 0.1) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.25) !important;
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent) !important;
   font-size: 10px !important;
   font-weight: 800 !important;
   letter-spacing: 0.06em !important;
@@ -231,7 +231,7 @@ watch(() => props.value, (val) => {
   font-size: 13px !important;
   font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
   color: #ffffff !important;
-  caret-color: #00c7f3 !important;
+  caret-color: var(--chain-primary) !important;
 }
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 11px !important;
@@ -242,7 +242,7 @@ watch(() => props.value, (val) => {
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 .perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: #00c7f3 !important;
+  border-color: var(--chain-primary) !important;
 }
 
 /* ── Preview Card ── */
@@ -283,7 +283,7 @@ watch(() => props.value, (val) => {
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
 }
-.preview-value.highlight { color: #00c7f3; }
+.preview-value.highlight { color: var(--chain-primary); }
 .preview-value.muted { color: rgba(255, 255, 255, 0.45); font-weight: 400; }
 
 .preview-unit {
@@ -330,15 +330,15 @@ watch(() => props.value, (val) => {
 .action-btn {
   height: 44px !important;
   border-radius: 10px !important;
-  background: rgba(0, 199, 243, 0.12) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
   letter-spacing: 0.02em !important;
 }
-.action-btn:hover:not(.v-btn--disabled) { background: rgba(0, 199, 243, 0.2) !important; }
+.action-btn:hover:not(.v-btn--disabled) { background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important; }
 .action-btn.v-btn--disabled { opacity: 0.35 !important; }
 
 /* ── Transitions ── */

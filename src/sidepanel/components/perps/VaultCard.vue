@@ -4,7 +4,7 @@
     <div class="vault-card__header">
       <div class="vault-card__name-row">
         <span class="vault-card__name">{{ vault.name }}</span>
-        <v-icon v-if="vault.is_verified" size="14" color="#00c7f3" class="ml-1">mdi-check-decagram</v-icon>
+        <v-icon v-if="vault.is_verified" size="14" :color="primaryColor" class="ml-1">mdi-check-decagram</v-icon>
       </div>
       <v-chip
         x-small
@@ -52,7 +52,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { VaultInfo } from '@/api/strike-v2.types';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 defineProps<{
@@ -122,8 +127,8 @@ function formatDrawdown(raw: string): string {
 }
 
 .vault-card:hover {
-  background: rgba(0, 199, 243, 0.05);
-  border-color: rgba(0, 199, 243, 0.22);
+  background: color-mix(in srgb, var(--chain-primary) 5%, transparent);
+  border-color: color-mix(in srgb, var(--chain-primary) 22%, transparent);
   transform: translateY(-1px);
 }
 
@@ -164,9 +169,9 @@ function formatDrawdown(raw: string): string {
 }
 
 .chip--protocol {
-  background: rgba(0, 199, 243, 0.12) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.25) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent) !important;
 }
 
 .chip--user {
@@ -215,7 +220,7 @@ function formatDrawdown(raw: string): string {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.vault-metric__value--cyan   { color: #00c7f3; }
+.vault-metric__value--cyan   { color: var(--chain-primary); }
 .vault-metric__value--green  { color: #26FAB0; }
 .vault-metric__value--red    { color: #F97066; }
 

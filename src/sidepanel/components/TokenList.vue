@@ -257,12 +257,12 @@ function onImgError(event: Event) {
 }
 
 .token-item.ada-row {
-  background: rgba(0, 199, 243, 0.04);
-  border-color: rgba(0, 199, 243, 0.1);
+  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
+  border-color: color-mix(in srgb, var(--chain-primary) 10%, transparent);
 }
 
 .ada-avatar {
-  background: rgba(0, 199, 243, 0.12) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
 }
 
 .token-item:hover {

@@ -9,9 +9,9 @@
         <div class="text-caption grey--text mt-1 text-center">{{ $t('miniGero.txSubmittedDesc') }}</div>
         <div v-if="txId" class="tx-id-box mt-4" @click="copyTxId">
           <span class="text-caption grey--text">{{ truncateAddr(txId) }}</span>
-          <v-icon x-small color="#00c7f3" class="ml-1">mdi-content-copy</v-icon>
+          <v-icon x-small :color="primaryColor" class="ml-1">mdi-content-copy</v-icon>
         </div>
-        <v-btn block color="#00c7f3" class="black--text font-weight-bold mt-6" @click="onClose(false)">
+        <v-btn block :color="primaryColor" class="black--text font-weight-bold mt-6" @click="onClose(false)">
           {{ $t('miniGero.done') }}
         </v-btn>
       </div>
@@ -29,7 +29,7 @@
               <span v-if="step > 1" class="step-summary">{{ handleName || truncateAddr(paymentAddress) }}</span>
             </div>
             <v-btn v-if="step > 1 && !submitting" icon x-small @click.stop="editStep(1)">
-              <v-icon small color="#00c7f3">mdi-pencil</v-icon>
+              <v-icon small :color="primaryColor">mdi-pencil</v-icon>
             </v-btn>
           </div>
 
@@ -38,15 +38,15 @@
               <!-- Quick actions row -->
               <div class="quick-row">
                 <v-btn small outlined color="rgba(255,255,255,0.15)" class="quick-btn" @click="showContacts = !showContacts" :disabled="!hasContacts">
-                  <v-icon x-small color="#00c7f3" class="mr-1">mdi-book-open-variant-outline</v-icon>
+                  <v-icon x-small :color="primaryColor" class="mr-1">mdi-book-open-variant-outline</v-icon>
                   {{ $t('miniGero.contacts') }}
                 </v-btn>
                 <v-btn small outlined color="rgba(255,255,255,0.15)" class="quick-btn" @click="showQR = true">
-                  <v-icon x-small color="#00c7f3" class="mr-1">mdi-qrcode</v-icon>
+                  <v-icon x-small :color="primaryColor" class="mr-1">mdi-qrcode</v-icon>
                   {{ $t('wallet.qrScan') }}
                 </v-btn>
                 <v-btn small outlined color="rgba(255,255,255,0.15)" class="quick-btn" @click="pasteFromClipboard">
-                  <v-icon x-small color="#00c7f3" class="mr-1">mdi-content-paste</v-icon>
+                  <v-icon x-small :color="primaryColor" class="mr-1">mdi-content-paste</v-icon>
                   {{ $t('common.paste') }}
                 </v-btn>
               </div>
@@ -67,7 +67,7 @@
                 @input="onAddressInput"
               >
                 <template v-slot:append>
-                  <v-progress-circular v-if="handleLoading" size="18" width="2" indeterminate color="#00c7f3" />
+                  <v-progress-circular v-if="handleLoading" size="18" width="2" indeterminate :color="primaryColor" />
                   <v-icon v-else-if="handleResolved === false" color="#F97066" small>mdi-alert</v-icon>
                   <v-icon v-else-if="handleResolved === true" color="#47CD89" small>mdi-check-circle</v-icon>
                 </template>
@@ -104,7 +104,7 @@
                 </div>
               </v-expand-transition>
 
-              <v-btn block color="#00c7f3" class="black--text font-weight-bold mt-4" :disabled="!isAddressValid" @click="goToStep(2)">
+              <v-btn block :color="primaryColor" class="black--text font-weight-bold mt-4" :disabled="!isAddressValid" @click="goToStep(2)">
                 {{ $t('common.continue') }}
               </v-btn>
             </div>
@@ -123,7 +123,7 @@
               <span v-if="step > 2" class="step-summary">{{ assetsSummary }}</span>
             </div>
             <v-btn v-if="step > 2 && !submitting" icon x-small @click.stop="editStep(2)">
-              <v-icon small color="#00c7f3">mdi-pencil</v-icon>
+              <v-icon small :color="primaryColor">mdi-pencil</v-icon>
             </v-btn>
           </div>
 
@@ -153,7 +153,7 @@
                     step="0.1"
                     min="0"
                   />
-                  <v-btn x-small text color="#00c7f3" class="max-btn" @click="setAdaMax">
+                  <v-btn x-small text :color="primaryColor" class="max-btn" @click="setAdaMax">
                     {{ $t('miniGero.max') }}
                   </v-btn>
                 </div>
@@ -193,14 +193,14 @@
                     step="1"
                     min="0"
                   />
-                  <v-btn x-small text color="#00c7f3" class="max-btn" @click="setTokenMax(idx)">
+                  <v-btn x-small text :color="primaryColor" class="max-btn" @click="setTokenMax(idx)">
                     {{ $t('miniGero.max') }}
                   </v-btn>
                 </div>
               </div>
 
               <!-- Add Token button -->
-              <v-btn v-if="availableTokens.length > 0" small text color="#00c7f3" class="mt-2" @click="showTokenPicker = !showTokenPicker">
+              <v-btn v-if="availableTokens.length > 0" small text :color="primaryColor" class="mt-2" @click="showTokenPicker = !showTokenPicker">
                 <v-icon small class="mr-1">mdi-plus</v-icon>
                 {{ $t('assets.addToken') }}
               </v-btn>
@@ -243,7 +243,7 @@
 
               <!-- NFTs/Collectibles -->
               <div v-if="collectiblesList.length > 0" class="nft-section mt-3">
-                <v-btn small text color="#00c7f3" @click="showNfts = !showNfts">
+                <v-btn small text :color="primaryColor" @click="showNfts = !showNfts">
                   <v-icon small class="mr-1">{{ showNfts ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
                   {{ $t('assets.chooseCollectibles') }} ({{ collectiblesList.length }})
                   <span v-if="selectedNfts.length > 0" class="ml-1 nft-badge">{{ selectedNfts.length }}</span>
@@ -279,12 +279,12 @@
                           <span class="nft-item-name">{{ nft.name || 'NFT' }}</span>
                           <span v-if="nft.collection" class="nft-item-collection">{{ nft.collection }}</span>
                         </div>
-                        <v-icon v-if="isNftSelected(nft)" size="18" color="#00c7f3">mdi-check-circle</v-icon>
+                        <v-icon v-if="isNftSelected(nft)" size="18" :color="primaryColor">mdi-check-circle</v-icon>
                         <v-icon v-else size="18" color="#444">mdi-circle-outline</v-icon>
                       </div>
                       <!-- Sentinel for infinite scroll -->
                       <div v-if="nftDisplayCount < filteredNfts.length" ref="nftSentinelEl" class="nft-sentinel">
-                        <v-progress-circular indeterminate size="20" width="2" color="#00c7f3" />
+                        <v-progress-circular indeterminate size="20" width="2" :color="primaryColor" />
                       </div>
                       <div v-if="filteredNfts.length === 0" class="text-caption grey--text text-center pa-3">
                         {{ $t('miniGero.noTokens') }}
@@ -296,7 +296,7 @@
 
               <div class="step-actions-row mt-4">
                 <v-btn text small color="#888" @click="editStep(1)">{{ $t('miniGero.back') }}</v-btn>
-                <v-btn color="#00c7f3" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!isAssetsValid" :loading="buildingTx" @click="goToStep(3)">
+                <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!isAssetsValid" :loading="buildingTx" @click="goToStep(3)">
                   {{ $t('miniGero.review') }}
                 </v-btn>
               </div>
@@ -347,7 +347,7 @@
 
               <div class="step-actions-row mt-4">
                 <v-btn text small color="#888" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
-                <v-btn color="#00c7f3" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!txBuilt" @click="goToStep(4)">
+                <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!txBuilt" @click="goToStep(4)">
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
               </div>
@@ -387,7 +387,7 @@
                 />
                 <v-btn
                   block
-                  color="#00c7f3"
+                  :color="primaryColor"
                   class="black--text font-weight-bold mt-4"
                   :disabled="!spendingPassword || submitting"
                   :loading="submitting"
@@ -401,7 +401,7 @@
               <!-- ── PRF wallet (PassKey) ── -->
               <template v-else-if="isNormalWallet && isPrfWallet">
                 <div class="hw-notice">
-                  <v-icon size="40" color="#00c7f3" class="mb-2">mdi-fingerprint</v-icon>
+                  <v-icon size="40" :color="primaryColor" class="mb-2">mdi-fingerprint</v-icon>
                   <div class="text-body-2 white--text text-center mb-3">{{ $t('miniGero.prfAuthPrompt') }}</div>
                 </div>
                 <PassKeyAuthButton
@@ -415,7 +415,7 @@
                 <v-btn
                   v-else
                   block
-                  color="#00c7f3"
+                  :color="primaryColor"
                   class="black--text font-weight-bold"
                   :loading="submitting"
                   @click="submitSignedTx"
@@ -428,20 +428,20 @@
               <!-- ── Ledger wallet ── -->
               <template v-else-if="walletType === WalletType.Ledger">
                 <div class="hw-notice">
-                  <v-icon size="40" color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+                  <v-icon size="40" :color="primaryColor" class="mb-2">mdi-usb</v-icon>
                   <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.connectLedger') }}</div>
                   <div v-if="loggedWallet?.btSupported" class="d-flex align-center justify-center mb-2" style="gap: 8px;">
-                    <v-btn x-small :outlined="isBT" :color="!isBT ? '#00c7f3' : '#555'" class="black--text" @click="isBT = false">
+                    <v-btn x-small :outlined="isBT" :color="!isBT ? primaryColor : '#555'" class="black--text" @click="isBT = false">
                       <v-icon x-small class="mr-1">mdi-usb</v-icon> USB
                     </v-btn>
-                    <v-btn x-small :outlined="!isBT" :color="isBT ? '#00c7f3' : '#555'" class="black--text" @click="isBT = true">
+                    <v-btn x-small :outlined="!isBT" :color="isBT ? primaryColor : '#555'" class="black--text" @click="isBT = true">
                       <v-icon x-small class="mr-1">mdi-bluetooth</v-icon> BT
                     </v-btn>
                   </div>
                 </div>
                 <v-btn
                   block
-                  color="#00c7f3"
+                  :color="primaryColor"
                   class="black--text font-weight-bold"
                   :disabled="submitting"
                   :loading="submitting"
@@ -455,12 +455,12 @@
               <!-- ── Trezor wallet ── -->
               <template v-else-if="walletType === WalletType.Trezor">
                 <div class="hw-notice">
-                  <v-icon size="40" color="#00c7f3" class="mb-2">mdi-shield-check-outline</v-icon>
+                  <v-icon size="40" :color="primaryColor" class="mb-2">mdi-shield-check-outline</v-icon>
                   <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.connectTrezor') }}</div>
                 </div>
                 <v-btn
                   block
-                  color="#00c7f3"
+                  :color="primaryColor"
                   class="black--text font-weight-bold"
                   :disabled="submitting"
                   :loading="submitting"
@@ -474,12 +474,12 @@
               <!-- ── Keystone wallet ── -->
               <template v-else-if="walletType === WalletType.Keystone">
                 <div class="hw-notice">
-                  <v-icon size="40" color="#00c7f3" class="mb-2">mdi-qrcode</v-icon>
+                  <v-icon size="40" :color="primaryColor" class="mb-2">mdi-qrcode</v-icon>
                   <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.keystoneSign') }}</div>
                 </div>
                 <v-btn
                   block
-                  color="#00c7f3"
+                  :color="primaryColor"
                   class="black--text font-weight-bold"
                   :disabled="submitting"
                   :loading="submitting"
@@ -554,6 +554,10 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const props = defineProps<{ value: boolean }>();
 const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
@@ -1411,7 +1415,7 @@ function teardownNftObserver() {
 }
 .stepper-step.active {
   background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(0, 199, 243, 0.2);
+  border-color: color-mix(in srgb, var(--chain-primary) 20%, transparent);
 }
 .stepper-step.done {
   border-color: rgba(71, 205, 137, 0.15);
@@ -1444,7 +1448,7 @@ function teardownNftObserver() {
   transition: all 0.2s;
 }
 .step-circle.active {
-  background: #00c7f3;
+  background: var(--chain-primary);
   color: black;
 }
 .step-circle.done {
@@ -1552,8 +1556,8 @@ function teardownNftObserver() {
   padding: 10px;
 }
 .asset-input-section.ada-primary {
-  background: rgba(0, 199, 243, 0.04);
-  border-color: rgba(0, 199, 243, 0.15);
+  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
+  border-color: color-mix(in srgb, var(--chain-primary) 15%, transparent);
   padding: 12px;
 }
 .min-ada-hint {
@@ -1640,8 +1644,8 @@ function teardownNftObserver() {
   background: rgba(255, 255, 255, 0.07);
 }
 .nft-list-item.selected {
-  border-color: #00c7f3;
-  background: rgba(0, 199, 243, 0.06);
+  border-color: var(--chain-primary);
+  background: color-mix(in srgb, var(--chain-primary) 6%, transparent);
 }
 .nft-thumb {
   width: 40px;
@@ -1681,7 +1685,7 @@ function teardownNftObserver() {
   text-overflow: ellipsis;
 }
 .nft-badge {
-  background: #00c7f3;
+  background: var(--chain-primary);
   color: #000;
   border-radius: 10px;
   padding: 0 6px;
