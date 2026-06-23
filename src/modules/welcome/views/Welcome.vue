@@ -49,12 +49,12 @@
 
           <!-- Create/Import state -->
           <div v-else-if="createOrImportSeedPhrase" class="right-panel">
-            <WalletOnboarding @back="disableCreateOrImportSeedPhrase" @network-change="onOnboardingNetwork" />
+            <WalletOnboarding :network="selectedNetwork" @back="disableCreateOrImportSeedPhrase" @network-change="onOnboardingNetwork" />
           </div>
 
           <!-- Wallets list -->
           <div v-else class="right-panel">
-            <WalletsListLogin />
+            <WalletsListLogin @network-change="onOnboardingNetwork" />
           </div>
 
           <!-- Footer -->
@@ -86,6 +86,9 @@ const disableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = false;
 };
 const enableCreateOrImportSeedPhrase = (): void => {
+  // Start onboarding from a clean default network so a chain that was merely
+  // hovered in the login list (possibly coming-soon) isn't carried into the flow.
+  selectedNetwork.value = networks.networks[0];
   createOrImportSeedPhrase.value = true;
 };
 const onOnboardingNetwork = (n: NetworkInfo): void => {

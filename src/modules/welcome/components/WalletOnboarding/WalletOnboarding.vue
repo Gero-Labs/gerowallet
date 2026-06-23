@@ -44,27 +44,27 @@
       <div class="content-body">
         <StepNetwork
           v-if="currentStep.key === 'network'"
-          :network="selectedNetwork"
+          :network="network"
           @change="onNetworkChange"
           @next="step++"
           @back="$emit('back')"
         />
         <StepMethod
           v-else-if="currentStep.key === 'method'"
-          :network="selectedNetwork"
+          :network="network"
           @select="onMethodSelect"
           @back="step--"
         />
         <StepSecurity
           v-else-if="currentStep.key === 'security'"
-          :network="selectedNetwork"
+          :network="network"
           @select="onSecuritySelect"
           @next="step++"
           @back="step--"
         />
         <StepCreateConfirm
           v-else-if="currentStep.key === 'createConfirm'"
-          :network="selectedNetwork"
+          :network="network"
           :security-method="securityMethod"
           :name="walletName"
           @back="step--"
@@ -72,14 +72,14 @@
         />
         <StepSeedPhrase
           v-else-if="currentStep.key === 'seed'"
-          :network="selectedNetwork"
+          :network="network"
           @change="onMnemonicChange"
           @next="step++"
           @back="step--"
         />
         <StepRestoreConfirm
           v-else-if="currentStep.key === 'restoreConfirm'"
-          :network="selectedNetwork"
+          :network="network"
           :security-method="securityMethod"
           :name="walletName"
           :mnemonic="mnemonic"
@@ -88,21 +88,21 @@
         />
         <StepDevice
           v-else-if="currentStep.key === 'device'"
-          :network="selectedNetwork"
+          :network="network"
           @select="onDeviceSelect"
           @next="step++"
           @back="step--"
         />
         <StepConnect
           v-else-if="currentStep.key === 'connect'"
-          :network="selectedNetwork"
+          :network="network"
           :wallet-type="walletType"
           @connected="onConnected"
           @back="step--"
         />
         <StepReview
           v-else-if="currentStep.key === 'review'"
-          :network="selectedNetwork"
+          :network="network"
           :wallet-type="walletType"
           :connection="connection"
           :name="walletName"
@@ -145,11 +145,14 @@ interface StepDef {
   descKey: string;
 }
 
+// `network` is the single source of truth, owned by Welcome.vue and passed in.
+// The network step emits changes up via `network-change`; Welcome updates the
+// prop and also drives the background from it.
+defineProps<{ network: NetworkInfo }>();
 const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
 
 const step = ref<number>(1);
 const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
-const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 const securityMethod = ref<'prf' | 'password'>('prf');
 const walletName = ref<string>(generateWalletName());
 const mnemonic = ref<string[]>([]);
@@ -205,7 +208,6 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
   step.value = 3;
 };
 const onNetworkChange = (n: NetworkInfo): void => {
-  selectedNetwork.value = n;
   emit('network-change', n);
   // If the new network can't pair hardware, drop a stale Pair selection so the
   // user is forced to re-pick a supported method at the Method step.
