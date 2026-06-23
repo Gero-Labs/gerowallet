@@ -42,17 +42,17 @@
         <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
       </div>
       <div class="content-body">
-        <StepMethod
-          v-if="currentStep.key === 'method'"
-          :network="selectedNetwork"
-          @select="onMethodSelect"
-          @back="$emit('back')"
-        />
         <StepNetwork
-          v-else-if="currentStep.key === 'network'"
+          v-if="currentStep.key === 'network'"
           :network="selectedNetwork"
           @change="onNetworkChange"
           @next="step++"
+          @back="$emit('back')"
+        />
+        <StepMethod
+          v-else-if="currentStep.key === 'method'"
+          :network="selectedNetwork"
+          @select="onMethodSelect"
           @back="step--"
         />
         <StepSecurity
@@ -105,6 +105,8 @@
           :network="selectedNetwork"
           :wallet-type="walletType"
           :connection="connection"
+          :name="walletName"
+          @update:name="walletName = $event"
           @back="step--"
           @created="$emit('back')"
         />
@@ -114,8 +116,10 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
+import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import type { WalletTypeValue } from '@/models/types';
 import StepMethod from './steps/StepMethod.vue';
 import StepNetwork from './steps/StepNetwork.vue';
@@ -147,15 +151,15 @@ const step = ref<number>(1);
 const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
 const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 const securityMethod = ref<'prf' | 'password'>('prf');
-const walletName = ref<string>('');
+const walletName = ref<string>(generateWalletName());
 const mnemonic = ref<string[]>([]);
 const walletType = ref<WalletTypeValue | undefined>(undefined);
 const connection = ref<ConnectionPayload | null>(null);
 
 const steps = computed<StepDef[]>(() => {
   const base: StepDef[] = [
-    { key: 'method', titleKey: 'welcome.onboardingStepMethod', subtitleKey: 'welcome.onboardingSubMethod', descKey: 'welcome.onboardingDescMethod' },
     { key: 'network', titleKey: 'welcome.onboardingStepNetwork', subtitleKey: 'welcome.onboardingSubNetwork', descKey: 'welcome.onboardingDescNetwork' },
+    { key: 'method', titleKey: 'welcome.onboardingStepMethod', subtitleKey: 'welcome.onboardingSubMethod', descKey: 'welcome.onboardingDescMethod' },
   ];
   if (selectedMethod.value === 'create') {
     return [
@@ -197,11 +201,17 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
   mnemonic.value = [];
   connection.value = null;
   walletType.value = undefined;
-  step.value = 2;
+  // Network is step 1, Method is step 2 — method-specific steps start at 3.
+  step.value = 3;
 };
 const onNetworkChange = (n: NetworkInfo): void => {
   selectedNetwork.value = n;
   emit('network-change', n);
+  // If the new network can't pair hardware, drop a stale Pair selection so the
+  // user is forced to re-pick a supported method at the Method step.
+  if (selectedMethod.value === 'pair' && !n.supportedHardware) {
+    selectedMethod.value = null;
+  }
 };
 const onSecuritySelect = (m: 'prf' | 'password', name: string): void => {
   securityMethod.value = m;
@@ -217,6 +227,13 @@ const onConnected = (payload: ConnectionPayload): void => {
   connection.value = payload;
   step.value++;
 };
+
+// The network step previews its accent by mutating the global Vuetify theme.
+// If onboarding is abandoned (e.g. back to the wallet list), restore the
+// default theme so a not-yet-created wallet never leaves the app re-themed.
+onUnmounted(() => {
+  updateVuetifyTheme(networks.networks[0].blockchain, true);
+});
 </script>
 <style scoped>
 .onboarding-wrapper {

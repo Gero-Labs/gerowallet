@@ -3055,6 +3055,8 @@ export default {
   'welcome.onboardingDescRestoreConfirm': 'Überprüfen Sie Ihre Auswahl und stellen Sie Ihre Wallet wieder her.',
   'welcome.onboardingDescDevice': 'Wählen Sie die Hardware-Wallet, die Sie koppeln möchten.',
   'welcome.onboardingDescConnect': 'Verbinden und entsperren Sie Ihr Gerät, um fortzufahren.',
+  'welcome.pairNotSupportedOnNetwork': 'Hardware-Wallets werden auf {network} noch nicht unterstützt',
+  'welcome.hardwareConnectionFailed': 'Verbindung zur Hardware-Wallet fehlgeschlagen. Bitte erneut versuchen.',
 
   // Market
   'market.allTokens': 'Alle Token',

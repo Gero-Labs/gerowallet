@@ -90,7 +90,6 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
-import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import type { NetworkInfo } from '@/utils/networks';
 
 interface ConnectionPayload {
@@ -104,11 +103,13 @@ const props = defineProps<{
   network: NetworkInfo;
   walletType: string | undefined;
   connection: ConnectionPayload | null;
+  name: string;
 }>();
 
 const emit = defineEmits<{
   (e: 'back'): void;
   (e: 'created'): void;
+  (e: 'update:name', name: string): void;
 }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
@@ -117,7 +118,11 @@ const router = vmProxy?.$router;
 const form3 = ref<{ validate: () => boolean } | null>(null);
 const valid3 = ref(false);
 const creatingWalletLoader = ref(false);
-const walletName = ref<string>(generateWalletName());
+// Wallet name is owned by the orchestrator (single source); edit two-way.
+const walletName = computed<string>({
+  get: () => props.name,
+  set: (v: string) => emit('update:name', v),
+});
 const termsChecked = ref(false);
 
 const walletIconSrc = computed(() => {

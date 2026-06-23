@@ -2587,6 +2587,8 @@ export default {
   'welcome.onboardingDescRestoreConfirm': 'Review your choices and restore your wallet.',
   'welcome.onboardingDescDevice': 'Select the hardware wallet you want to pair.',
   'welcome.onboardingDescConnect': 'Connect and unlock your device to continue.',
+  'welcome.pairNotSupportedOnNetwork': 'Hardware wallets aren\'t supported on {network} yet',
+  'welcome.hardwareConnectionFailed': 'Could not connect to your hardware wallet. Please try again.',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',

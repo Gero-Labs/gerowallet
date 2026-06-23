@@ -270,7 +270,10 @@ const walletCreationStep2 = async (): Promise<void> => {
         emit('connected', payload);
       }
     } catch (e) {
-      console.log(e);
+      console.error(e);
+      snackbar.setError((e as Error)?.message || (t('welcome.hardwareConnectionFailed') as string));
+    } finally {
+      hardwareLoading.setLoading(false);
     }
   } else if (props.walletType === WalletType.Trezor) {
     hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: props.walletType }) as string);
@@ -297,7 +300,10 @@ const walletCreationStep2 = async (): Promise<void> => {
         throw new Error(response.data.error || 'Failed to initialize Trezor');
       }
     } catch (e) {
-      console.log(e);
+      console.error(e);
+      snackbar.setError((e as Error)?.message || (t('welcome.hardwareConnectionFailed') as string));
+    } finally {
+      hardwareLoading.setLoading(false);
     }
   } else if (props.walletType === WalletType.Keystone) {
     keystoneScan.value = true;
@@ -306,7 +312,6 @@ const walletCreationStep2 = async (): Promise<void> => {
       if (qrCodeRef.value) qrCodeRef.value.innerHTML = '';
     }
   }
-  hardwareLoading.setLoading(false);
 };
 </script>
 
