@@ -106,6 +106,22 @@ export interface BuildWithdrawalTxRequest {
   ttl?: number;
 }
 
+/**
+ * Stake-key registration / deregistration build request. Matches nexus
+ * `BuildStakeRegistrationTxRequest`. Note: this endpoint does NOT accept a
+ * `withdrawals` field, so a deregistration that also claims pending rewards
+ * must stay on the client builder until the endpoint gains withdrawal support.
+ */
+export interface BuildStakeRegistrationTxRequest {
+  stakeAddress: string;
+  changeAddress: string;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+  deregister: boolean;
+  ttl?: number;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -248,6 +264,24 @@ export const nexusTxApi = {
   ): Promise<BuildTxResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/build/withdrawal?network=${nexusNetwork}` : '/api/tx/build/withdrawal';
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    return data;
+  },
+
+  /**
+   * Build an unsigned stake-key registration/deregistration transaction via nexus
+   * (`/api/tx/build/stake-registration`). Returns CBOR ready for client-side signing.
+   * Does not support reward withdrawals — a deregistration that also claims rewards
+   * must use the client builder for now.
+   */
+  async buildStakeRegistrationTx(
+    request: BuildStakeRegistrationTxRequest,
+    network?: string
+  ): Promise<BuildTxResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork
+      ? `/api/tx/build/stake-registration?network=${nexusNetwork}`
+      : '/api/tx/build/stake-registration';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
     return data;
   },
