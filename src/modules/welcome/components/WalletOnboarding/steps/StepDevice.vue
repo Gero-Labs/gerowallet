@@ -36,18 +36,19 @@ import { ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import type { NetworkInfo } from '@/utils/networks';
+import type { WalletTypeValue } from '@/models/types';
 
 const { t } = useTranslation();
 
 defineProps<{ network: NetworkInfo }>();
 
 const emit = defineEmits<{
-  (e: 'select', walletType: string): void;
+  (e: 'select', walletType: WalletTypeValue): void;
   (e: 'next'): void;
   (e: 'back'): void;
 }>();
 
-const localWalletType = ref<string | undefined>(undefined);
+const localWalletType = ref<WalletTypeValue | undefined>(undefined);
 
 const walletTypes = [
   {
@@ -74,8 +75,8 @@ const walletTypes = [
 ];
 
 const selectType = (name: string): void => {
-  localWalletType.value = name;
-  emit('select', name);
+  localWalletType.value = name as WalletTypeValue;
+  emit('select', name as WalletTypeValue);
 };
 
 const onContinue = (): void => {

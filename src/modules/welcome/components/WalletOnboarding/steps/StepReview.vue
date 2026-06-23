@@ -143,6 +143,7 @@ const walletCreationStep3 = async (): Promise<void> => {
         theme: Theme.GERO,
         chain: props.network?.blockchain,
         network: props.network?.network,
+        icon: networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || ''),
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response: any = await Messaging.sendToBackgroundFromOptions({

@@ -272,6 +272,8 @@ export type Tip = {
   confirmations: number;
 };
 
+export type { WalletTypeValue };
+
 export {
   purpose,
   HARDENED,

@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
+import type { WalletTypeValue } from '@/models/types';
 import StepMethod from './steps/StepMethod.vue';
 import StepNetwork from './steps/StepNetwork.vue';
 import StepSecurity from './steps/StepSecurity.vue';
@@ -115,7 +116,7 @@ const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 const securityMethod = ref<'prf' | 'password'>('prf');
 const walletName = ref<string>('');
 const mnemonic = ref<string[]>([]);
-const walletType = ref<string | undefined>(undefined);
+const walletType = ref<WalletTypeValue | undefined>(undefined);
 const connection = ref<ConnectionPayload | null>(null);
 
 const steps = computed<{ key: string; titleKey: string }[]>(() => {
@@ -164,7 +165,7 @@ const onSecuritySelect = (m: 'prf' | 'password', name: string): void => {
 const onMnemonicChange = (m: string[]): void => {
   mnemonic.value = m;
 };
-const onDeviceSelect = (t: string): void => {
+const onDeviceSelect = (t: WalletTypeValue): void => {
   walletType.value = t;
 };
 const onConnected = (payload: ConnectionPayload): void => {
