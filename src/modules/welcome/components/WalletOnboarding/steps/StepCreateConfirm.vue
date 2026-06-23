@@ -3,13 +3,6 @@
 
     <!-- ===== PRF PATH ===== -->
     <template v-if="securityMethod === 'prf'">
-      <!-- Summary header -->
-      <div class="text-center mb-3">
-        <v-icon color="primary" size="28" class="mb-1">mdi-check-circle-outline</v-icon>
-        <h3 class="white--text mb-1 text-h6">{{ $t('welcome.almostDone') }}</h3>
-        <p class="grey--text text--lighten-1 mb-0">{{ $t('welcome.reviewYourChoices') }}</p>
-      </div>
-
       <!-- Wallet summary card -->
       <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
         <v-card-text class="pa-3">
@@ -80,8 +73,6 @@
 
     <!-- ===== PASSWORD PATH ===== -->
     <template v-else>
-      <h2 class="text-left white--text mb-3">{{ $t('welcome.setUpSpendingPassword') }}</h2>
-
       <v-form ref="passwordForm" v-model="passwordFormValid">
         <v-text-field
           v-model="password"
@@ -160,7 +151,7 @@
 
     <!-- Navigation buttons -->
     <div class="d-flex mt-4" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('welcome.back') }}</v-btn>
+      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         color="primary"

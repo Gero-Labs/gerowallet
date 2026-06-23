@@ -3047,6 +3047,14 @@ export default {
   'welcome.onboardingSubSeed': 'Wiederherstellungsphrase eingeben',
   'welcome.onboardingSubDevice': 'Gerät wählen',
   'welcome.onboardingSubConnect': 'Gerät verbinden',
+  'welcome.onboardingDescMethod': 'Wählen Sie, wie Sie eine Wallet hinzufügen möchten.',
+  'welcome.onboardingDescNetwork': 'Wählen Sie die Blockchain für diese Wallet.',
+  'welcome.onboardingDescSecurity': 'Wählen Sie, wie Sie diese Wallet entsperren.',
+  'welcome.onboardingDescSeed': 'Geben Sie Ihre Wiederherstellungsphrase ein, um Ihre Wallet wiederherzustellen.',
+  'welcome.onboardingDescCreateConfirm': 'Überprüfen Sie Ihre Auswahl und erstellen Sie Ihre Wallet.',
+  'welcome.onboardingDescRestoreConfirm': 'Überprüfen Sie Ihre Auswahl und stellen Sie Ihre Wallet wieder her.',
+  'welcome.onboardingDescDevice': 'Wählen Sie die Hardware-Wallet, die Sie koppeln möchten.',
+  'welcome.onboardingDescConnect': 'Verbinden und entsperren Sie Ihr Gerät, um fortzufahren.',
 
   // Market
   'market.allTokens': 'Alle Token',

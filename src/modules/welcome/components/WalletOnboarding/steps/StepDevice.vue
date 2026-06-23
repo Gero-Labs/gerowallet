@@ -1,6 +1,6 @@
 <template>
   <div class="step-device">
-    <div class="step-section-label mb-2 mt-4">{{ $t('welcome.hardwareWalletType') }}</div>
+    <div class="step-section-label mb-2">{{ $t('welcome.hardwareWalletType') }}</div>
     <div class="hw-grid">
       <div
         v-for="item in walletTypes"

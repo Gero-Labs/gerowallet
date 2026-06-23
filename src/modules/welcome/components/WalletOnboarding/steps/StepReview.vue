@@ -3,13 +3,6 @@
     <v-form ref="form3" v-model="valid3">
       <v-card flat class="transparent" :disabled="creatingWalletLoader">
 
-        <!-- Summary header -->
-        <div class="text-center mb-3">
-          <v-icon color="primary" size="28" class="mb-1">mdi-check-circle-outline</v-icon>
-          <h3 class="white--text mb-1 text-h6">{{ $t('welcome.almostDone') }}</h3>
-          <p class="grey--text text--lighten-1 mb-0">{{ $t('welcome.reviewYourChoices') }}</p>
-        </div>
-
         <!-- Wallet summary card -->
         <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
           <v-card-text class="pa-3">
@@ -83,7 +76,7 @@
         :disabled="!valid3 || creatingWalletLoader"
         @click="walletCreationStep3()"
       >
-        {{ $t('common.continue') }}
+        {{ $t('common.create') }}
       </v-btn>
     </div>
   </div>

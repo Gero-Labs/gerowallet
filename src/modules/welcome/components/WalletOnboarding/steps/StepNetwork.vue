@@ -1,7 +1,6 @@
 <template>
   <div class="step-network">
     <!-- Network — Mainnets -->
-    <div class="step-section-label mb-2">{{ $t('common.selectNetwork') }}</div>
     <div class="network-grid mb-3">
       <div
         v-for="net in mainnetNetworks"

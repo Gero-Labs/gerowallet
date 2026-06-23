@@ -2579,6 +2579,14 @@ export default {
   'welcome.onboardingSubSeed': 'Enter recovery phrase',
   'welcome.onboardingSubDevice': 'Choose your device',
   'welcome.onboardingSubConnect': 'Connect device',
+  'welcome.onboardingDescMethod': 'Choose how you\'d like to add a wallet.',
+  'welcome.onboardingDescNetwork': 'Select the blockchain this wallet will use.',
+  'welcome.onboardingDescSecurity': 'Choose how you\'ll unlock this wallet.',
+  'welcome.onboardingDescSeed': 'Enter your recovery phrase to restore your wallet.',
+  'welcome.onboardingDescCreateConfirm': 'Review your choices and create your wallet.',
+  'welcome.onboardingDescRestoreConfirm': 'Review your choices and restore your wallet.',
+  'welcome.onboardingDescDevice': 'Select the hardware wallet you want to pair.',
+  'welcome.onboardingDescConnect': 'Connect and unlock your device to continue.',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',

@@ -16,7 +16,7 @@
       style="width: 230px; height: 126px"
       :alt="$t('wallet.connectKeystone')"
     />
-    <v-alert color="white" dense outlined type="info" prominent border="left">
+    <v-alert color="primary" dense outlined type="info" border="left" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
         <ul class="text-left" style="line-height: 1.5">
           <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>

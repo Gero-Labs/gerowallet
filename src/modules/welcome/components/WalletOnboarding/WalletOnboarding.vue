@@ -39,6 +39,7 @@
       <div class="content-header">
         <div class="content-eyebrow">{{ $t('welcome.onboardingStepN', { n: step }) }}</div>
         <div class="content-title">{{ $t(currentStep.titleKey) }}</div>
+        <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
       </div>
       <div class="content-body">
         <StepMethod
@@ -137,6 +138,7 @@ interface StepDef {
   key: string;
   titleKey: string;
   subtitleKey: string;
+  descKey: string;
 }
 
 const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
@@ -152,30 +154,30 @@ const connection = ref<ConnectionPayload | null>(null);
 
 const steps = computed<StepDef[]>(() => {
   const base: StepDef[] = [
-    { key: 'method', titleKey: 'welcome.onboardingStepMethod', subtitleKey: 'welcome.onboardingSubMethod' },
-    { key: 'network', titleKey: 'welcome.onboardingStepNetwork', subtitleKey: 'welcome.onboardingSubNetwork' },
+    { key: 'method', titleKey: 'welcome.onboardingStepMethod', subtitleKey: 'welcome.onboardingSubMethod', descKey: 'welcome.onboardingDescMethod' },
+    { key: 'network', titleKey: 'welcome.onboardingStepNetwork', subtitleKey: 'welcome.onboardingSubNetwork', descKey: 'welcome.onboardingDescNetwork' },
   ];
   if (selectedMethod.value === 'create') {
     return [
       ...base,
-      { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity' },
-      { key: 'createConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm' },
+      { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity', descKey: 'welcome.onboardingDescSecurity' },
+      { key: 'createConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescCreateConfirm' },
     ];
   }
   if (selectedMethod.value === 'restore') {
     return [
       ...base,
-      { key: 'seed', titleKey: 'welcome.onboardingStepSeed', subtitleKey: 'welcome.onboardingSubSeed' },
-      { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity' },
-      { key: 'restoreConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm' },
+      { key: 'seed', titleKey: 'welcome.onboardingStepSeed', subtitleKey: 'welcome.onboardingSubSeed', descKey: 'welcome.onboardingDescSeed' },
+      { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity', descKey: 'welcome.onboardingDescSecurity' },
+      { key: 'restoreConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescRestoreConfirm' },
     ];
   }
   if (selectedMethod.value === 'pair') {
     return [
       ...base,
-      { key: 'device', titleKey: 'welcome.onboardingStepDevice', subtitleKey: 'welcome.onboardingSubDevice' },
-      { key: 'connect', titleKey: 'welcome.onboardingStepConnect', subtitleKey: 'welcome.onboardingSubConnect' },
-      { key: 'review', titleKey: 'welcome.onboardingStepReview', subtitleKey: 'welcome.onboardingSubConfirm' },
+      { key: 'device', titleKey: 'welcome.onboardingStepDevice', subtitleKey: 'welcome.onboardingSubDevice', descKey: 'welcome.onboardingDescDevice' },
+      { key: 'connect', titleKey: 'welcome.onboardingStepConnect', subtitleKey: 'welcome.onboardingSubConnect', descKey: 'welcome.onboardingDescConnect' },
+      { key: 'review', titleKey: 'welcome.onboardingStepReview', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescCreateConfirm' },
     ];
   }
   return base;
@@ -332,6 +334,7 @@ const onConnected = (payload: ConnectionPayload): void => {
 .onboarding-content {
   flex: 1;
   min-width: 0;
+  min-height: 440px;
   padding: 24px 28px;
   border-radius: 16px !important;
   display: flex;
@@ -339,7 +342,7 @@ const onConnected = (payload: ConnectionPayload): void => {
 }
 
 .content-header {
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .content-eyebrow {
@@ -356,6 +359,13 @@ const onConnected = (payload: ConnectionPayload): void => {
   line-height: 1.2;
   color: #fff;
   margin-top: 2px;
+}
+
+.content-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #94979c;
+  margin-top: 6px;
 }
 
 .content-body {
