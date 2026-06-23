@@ -22,10 +22,25 @@
             v-else-if="s.key === 'network'"
             :network="selectedNetwork"
             @change="onNetworkChange"
-            @next="step = 3"
-            @back="step = 1"
+            @next="step++"
+            @back="step--"
           />
-          <!-- security/etc. step components added in later tasks -->
+          <StepSecurity
+            v-else-if="s.key === 'security'"
+            :network="selectedNetwork"
+            @select="onSecuritySelect"
+            @next="step++"
+            @back="step--"
+          />
+          <StepCreateConfirm
+            v-else-if="s.key === 'createConfirm'"
+            :network="selectedNetwork"
+            :security-method="securityMethod"
+            :name="walletName"
+            @back="step--"
+            @created="$emit('back')"
+          />
+          <!-- placeholder for future steps (restore, pair) -->
           <div v-else class="pa-4 text-caption">{{ $t(s.titleKey) }} — coming next task</div>
         </v-stepper-content>
       </template>
@@ -41,12 +56,16 @@ import { ref, computed } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import StepMethod from './steps/StepMethod.vue';
 import StepNetwork from './steps/StepNetwork.vue';
+import StepSecurity from './steps/StepSecurity.vue';
+import StepCreateConfirm from './steps/StepCreateConfirm.vue';
 
 const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
 
 const step = ref<number>(1);
 const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
 const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
+const securityMethod = ref<'prf' | 'password'>('prf');
+const walletName = ref<string>('');
 
 const steps = computed<{ key: string; titleKey: string }[]>(() => {
   const base = [
@@ -86,6 +105,10 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
 const onNetworkChange = (n: NetworkInfo): void => {
   selectedNetwork.value = n;
   emit('network-change', n);
+};
+const onSecuritySelect = (m: 'prf' | 'password', name: string): void => {
+  securityMethod.value = m;
+  walletName.value = name;
 };
 const onBack = (): void => {
   if (step.value > 1) step.value -= 1;
