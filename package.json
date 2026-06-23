@@ -114,7 +114,7 @@
   "devDependencies": {
     "@babel/core": "^7.29.6",
     "@babel/eslint-parser": "^7.22.5",
-    "@babel/preset-env": "^7.25.4",
+    "@babel/preset-env": "^8.0.2",
     "@ffflorian/jszip-cli": "^3.8.2",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@trezor/connect-webextension": "^9.7.1",
