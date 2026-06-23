@@ -40,7 +40,23 @@
             @back="step--"
             @created="$emit('back')"
           />
-          <!-- placeholder for future steps (restore, pair) -->
+          <StepSeedPhrase
+            v-else-if="s.key === 'seed'"
+            :network="selectedNetwork"
+            @change="onMnemonicChange"
+            @next="step++"
+            @back="step--"
+          />
+          <StepRestoreConfirm
+            v-else-if="s.key === 'restoreConfirm'"
+            :network="selectedNetwork"
+            :security-method="securityMethod"
+            :name="walletName"
+            :mnemonic="mnemonic"
+            @back="step--"
+            @created="$emit('back')"
+          />
+          <!-- placeholder for future steps (pair) -->
           <div v-else class="pa-4 text-caption">{{ $t(s.titleKey) }} — coming next task</div>
         </v-stepper-content>
       </template>
@@ -58,6 +74,8 @@ import StepMethod from './steps/StepMethod.vue';
 import StepNetwork from './steps/StepNetwork.vue';
 import StepSecurity from './steps/StepSecurity.vue';
 import StepCreateConfirm from './steps/StepCreateConfirm.vue';
+import StepSeedPhrase from './steps/StepSeedPhrase.vue';
+import StepRestoreConfirm from './steps/StepRestoreConfirm.vue';
 
 const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
 
@@ -66,6 +84,7 @@ const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
 const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 const securityMethod = ref<'prf' | 'password'>('prf');
 const walletName = ref<string>('');
+const mnemonic = ref<string[]>([]);
 
 const steps = computed<{ key: string; titleKey: string }[]>(() => {
   const base = [
@@ -109,6 +128,9 @@ const onNetworkChange = (n: NetworkInfo): void => {
 const onSecuritySelect = (m: 'prf' | 'password', name: string): void => {
   securityMethod.value = m;
   walletName.value = name;
+};
+const onMnemonicChange = (m: string[]): void => {
+  mnemonic.value = m;
 };
 const onBack = (): void => {
   if (step.value > 1) step.value -= 1;
