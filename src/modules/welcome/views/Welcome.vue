@@ -49,7 +49,7 @@
 
           <!-- Create/Import state -->
           <div v-else-if="createOrImportSeedPhrase" class="right-panel">
-            <CreateOrImportSeedPhrase @back="disableCreateOrImportSeedPhrase" :network="selectedNetwork" />
+            <WalletOnboarding @back="disableCreateOrImportSeedPhrase" @network-change="onOnboardingNetwork" />
           </div>
 
           <!-- Wallets list -->
@@ -71,7 +71,7 @@ import assets from '@/utils/assets';
 import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
 import { Wallet, WalletType } from '@/models/types';
 import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
-import CreateOrImportSeedPhrase from '@/options/modules/welcome/components/CreateOrImportSeedPhrase.vue';
+import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
 import { geroStore } from '@/stores/geroStore';
 import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCreation.vue';
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
@@ -87,6 +87,9 @@ const disableCreateOrImportSeedPhrase = (): void => {
 };
 const enableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = true;
+};
+const onOnboardingNetwork = (n: NetworkInfo): void => {
+  selectedNetwork.value = n;
 };
 
 const availableWallets = computed(() => {

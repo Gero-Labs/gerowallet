@@ -2562,6 +2562,14 @@ export default {
   'welcome.chooseNameToIdentify': 'Choose a name to identify your wallet',
   'welcome.saveRecoveryBackup': 'I\'ll save my recovery phrase as a backup',
   'welcome.passwordNoRecoveryWarning': 'If you forget this password, you\'ll need your recovery phrase to restore your wallet.',
+  'welcome.onboardingStepMethod': 'Method',
+  'welcome.onboardingStepNetwork': 'Network',
+  'welcome.onboardingStepSecurity': 'Security',
+  'welcome.onboardingStepConfirm': 'Confirm',
+  'welcome.onboardingStepSeed': 'Seed Phrase',
+  'welcome.onboardingStepDevice': 'Device',
+  'welcome.onboardingStepConnect': 'Connect',
+  'welcome.onboardingStepReview': 'Review',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',

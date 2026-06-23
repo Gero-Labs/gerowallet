@@ -1,0 +1,82 @@
+<template>
+  <v-card class="liquid-glass transparent-override" flat style="width: 100%; max-width: 560px; margin: auto;">
+    <v-stepper v-model="step" vertical flat class="transparent">
+      <template v-for="(s, i) in steps">
+        <v-stepper-step
+          :key="`step-${i}`"
+          :step="i + 1"
+          :complete="step > i + 1"
+          editable
+          :rules="[() => true]"
+        >
+          {{ $t(s.titleKey) }}
+        </v-stepper-step>
+        <v-stepper-content :key="`content-${i}`" :step="i + 1">
+          <StepMethod
+            v-if="s.key === 'method'"
+            :network="selectedNetwork"
+            @select="onMethodSelect"
+            @back="$emit('back')"
+          />
+          <!-- network/security/etc. step components added in later tasks -->
+          <div v-else class="pa-4 text-caption">{{ $t(s.titleKey) }} — coming next task</div>
+        </v-stepper-content>
+      </template>
+    </v-stepper>
+    <v-divider class="mt-2" />
+    <v-btn text @click="onBack()">
+      <v-icon>mdi-arrow-left</v-icon> {{ $t('common.back') }}
+    </v-btn>
+  </v-card>
+</template>
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import networks, { NetworkInfo } from '@/utils/networks';
+import StepMethod from './steps/StepMethod.vue';
+
+const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
+
+const step = ref<number>(1);
+const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
+const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
+
+const steps = computed<{ key: string; titleKey: string }[]>(() => {
+  const base = [
+    { key: 'method', titleKey: 'welcome.onboardingStepMethod' },
+    { key: 'network', titleKey: 'welcome.onboardingStepNetwork' },
+  ];
+  if (selectedMethod.value === 'create') {
+    return [
+      ...base,
+      { key: 'security', titleKey: 'welcome.onboardingStepSecurity' },
+      { key: 'createConfirm', titleKey: 'welcome.onboardingStepConfirm' },
+    ];
+  }
+  if (selectedMethod.value === 'restore') {
+    return [
+      ...base,
+      { key: 'seed', titleKey: 'welcome.onboardingStepSeed' },
+      { key: 'security', titleKey: 'welcome.onboardingStepSecurity' },
+      { key: 'restoreConfirm', titleKey: 'welcome.onboardingStepConfirm' },
+    ];
+  }
+  if (selectedMethod.value === 'pair') {
+    return [
+      ...base,
+      { key: 'device', titleKey: 'welcome.onboardingStepDevice' },
+      { key: 'connect', titleKey: 'welcome.onboardingStepConnect' },
+      { key: 'review', titleKey: 'welcome.onboardingStepReview' },
+    ];
+  }
+  return base;
+});
+
+const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
+  selectedMethod.value = m;
+  step.value = 2;
+};
+const onBack = (): void => {
+  if (step.value > 1) step.value -= 1;
+  else emit('back');
+};
+</script>

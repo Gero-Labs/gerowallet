@@ -3030,6 +3030,14 @@ export default {
   'welcome.wouldYouLikeToLogin': 'Möchten Sie sich bei diesem Wallet anmelden?',
   'welcome.youllUseThisToLogin': 'Damit melden Sie sich bei Ihrem Wallet an und führen Transaktionen durch.',
   'welcome.yourNew': 'Ihr neues',
+  'welcome.onboardingStepMethod': 'Methode',
+  'welcome.onboardingStepNetwork': 'Netzwerk',
+  'welcome.onboardingStepSecurity': 'Sicherheit',
+  'welcome.onboardingStepConfirm': 'Bestätigen',
+  'welcome.onboardingStepSeed': 'Wiederherstellungsphrase',
+  'welcome.onboardingStepDevice': 'Gerät',
+  'welcome.onboardingStepConnect': 'Verbinden',
+  'welcome.onboardingStepReview': 'Überprüfen',
 
   // Market
   'market.allTokens': 'Alle Token',
