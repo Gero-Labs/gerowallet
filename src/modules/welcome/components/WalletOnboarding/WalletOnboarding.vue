@@ -1,5 +1,10 @@
 <template>
-  <div class="onboarding-root">
+  <div class="onboarding-wrapper">
+    <v-btn text small class="back-to-wallets" @click="$emit('back')">
+      <v-icon left size="18">mdi-arrow-left</v-icon>
+      {{ $t('welcome.backToWallets') }}
+    </v-btn>
+    <div class="onboarding-root">
     <!-- LEFT: static step rail card -->
     <v-card class="liquid-glass transparent-override onboarding-rail" flat>
       <ul class="rail-list">
@@ -104,6 +109,7 @@
         />
       </div>
     </v-card>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
@@ -211,12 +217,23 @@ const onConnected = (payload: ConnectionPayload): void => {
 };
 </script>
 <style scoped>
+.onboarding-wrapper {
+  width: 100%;
+  max-width: 820px;
+  margin: auto;
+}
+
+.back-to-wallets {
+  margin-bottom: 12px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #94979c !important;
+}
+
 .onboarding-root {
   display: flex;
   gap: 20px;
   width: 100%;
-  max-width: 820px;
-  margin: auto;
   align-items: stretch;
 }
 

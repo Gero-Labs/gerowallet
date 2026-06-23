@@ -3039,6 +3039,7 @@ export default {
   'welcome.onboardingStepConnect': 'Verbinden',
   'welcome.onboardingStepReview': 'Überprüfen',
   'welcome.onboardingStepN': 'Schritt {n}',
+  'welcome.backToWallets': 'Zurück zu Wallets',
   'welcome.onboardingSubMethod': 'Wallet hinzufügen',
   'welcome.onboardingSubNetwork': 'Blockchain wählen',
   'welcome.onboardingSubSecurity': 'Entsperrmethode',
