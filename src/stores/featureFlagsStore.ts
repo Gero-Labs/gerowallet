@@ -8,6 +8,7 @@ export interface FeatureFlags {
   isPhysicalCardOrderingEnabled: boolean;
   isGoMiningEnabled: boolean;
   isPoolOperatorEnabled: boolean;
+  isNexusWithdrawalEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -24,6 +25,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
     isPoolOperatorEnabled: false,
+    isNexusWithdrawalEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -65,6 +67,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
+    featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
   },
 
   /**
@@ -88,6 +91,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isPoolOperatorEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
     });
   },
 
@@ -134,6 +140,14 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if reward withdrawals should be built server-side via Nexus
+   * (`/api/tx/build/withdrawal`) instead of the client-side @cardano-sdk builder.
+   */
+  isNexusWithdrawalEnabled(): boolean {
+    return featureFlagsState.flags.isNexusWithdrawalEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -144,6 +158,7 @@ export const featureFlagsStore = {
       isPhysicalCardOrderingEnabled: false,
       isGoMiningEnabled: false,
       isPoolOperatorEnabled: false,
+      isNexusWithdrawalEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
