@@ -39,22 +39,9 @@
       <!-- Right column - Clean background, no glass effects -->
       <div class="welcome-right-column">
         <div class="right-content">
-          <!-- No wallets state -->
-          <div
-            v-if="!createOrImportSeedPhrase && Array.isArray(availableWallets) && availableWallets.length == 0"
-            class="right-panel"
-          >
-            <NoWalletsWelcomeCard />
-          </div>
-
-          <!-- Create/Import state -->
-          <div v-else-if="createOrImportSeedPhrase" class="right-panel">
-            <WalletOnboarding :network="selectedNetwork" @back="disableCreateOrImportSeedPhrase" @network-change="onOnboardingNetwork" />
-          </div>
-
-          <!-- Wallets list -->
-          <div v-else class="right-panel">
-            <WalletsListLogin @network-change="onOnboardingNetwork" />
+          <!-- Single mode host: empty (no wallets) | onboarding | login -->
+          <div class="right-panel">
+            <component :is="panel.is" v-bind="panel.props" v-on="panel.on" />
           </div>
 
           <!-- Footer -->
@@ -99,6 +86,22 @@ const availableWallets = computed(() => {
   return Object.values(wallets.value)?.filter(
     (wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
   );
+});
+
+// Right-column mode host: pick the panel component + its props/listeners for the
+// current state (onboarding / empty / login).
+const panel = computed(() => {
+  if (createOrImportSeedPhrase.value) {
+    return {
+      is: WalletOnboarding,
+      props: { network: selectedNetwork.value },
+      on: { back: disableCreateOrImportSeedPhrase, 'network-change': onOnboardingNetwork },
+    };
+  }
+  if (Array.isArray(availableWallets.value) && availableWallets.value.length === 0) {
+    return { is: NoWalletsWelcomeCard, props: {}, on: {} };
+  }
+  return { is: WalletsListLogin, props: {}, on: { 'network-change': onOnboardingNetwork } };
 });
 </script>
 <style scoped>
