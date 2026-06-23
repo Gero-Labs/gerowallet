@@ -30,13 +30,14 @@
                       v-for="net in mainnetNetworks"
                       :key="net.blockchain + net.network"
                       class="network-tile"
-                      :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                      :class="{ 'network-tile--active': isNetworkSelected(net), 'network-tile--disabled': net.comingSoon }"
                       @click="selectNetwork(net)"
                     >
                       <v-avatar size="22" class="network-tile__icon">
                         <v-img :src="net.icon" contain></v-img>
                       </v-avatar>
                       <span class="network-tile__label">{{ net.title }}</span>
+                      <v-chip v-if="net.comingSoon" color="warning" x-small style="height: 14px; font-size: 9px;">{{ $t('welcome.soon') }}</v-chip>
                     </div>
                   </div>
 
@@ -50,13 +51,14 @@
                       v-for="net in testnetNetworks"
                       :key="net.blockchain + net.network"
                       class="network-tile network-tile--testnet"
-                      :class="{ 'network-tile--active': isNetworkSelected(net) }"
+                      :class="{ 'network-tile--active': isNetworkSelected(net), 'network-tile--disabled': net.comingSoon }"
                       @click="selectNetwork(net)"
                     >
                       <v-avatar size="16" class="network-tile__icon">
                         <v-img :src="net.icon" contain></v-img>
                       </v-avatar>
                       <span class="network-tile__label">{{ net.title }}</span>
+                      <v-chip v-if="net.comingSoon" color="warning" x-small style="height: 14px; font-size: 9px;">{{ $t('welcome.soon') }}</v-chip>
                     </div>
                   </div>
                   <v-divider class="mb-4" style="border-color: rgba(255, 255, 255, 0.08);" />
@@ -464,6 +466,7 @@ const isNetworkSelected = (net: NetworkInfo) =>
   localNetwork.value?.blockchain === net.blockchain && localNetwork.value?.network === net.network;
 
 const selectNetwork = (net: NetworkInfo) => {
+  if (net.comingSoon) return;
   localNetwork.value = net;
   onNetworkChange(net);
 };
@@ -556,7 +559,10 @@ watch(() => props.dialog, (newValue) => {
   } else {
     document.removeEventListener('keydown', onKeydown);
   }
-});
+  // Keep the global theme in sync with this dialog's selected network.
+  // Open: match the highlighted tile. Close: restore the default (Cardano) theme.
+  updateVuetifyTheme((newValue ? localNetwork.value : networks.networks[0])?.blockchain, true);
+}, { immediate: true });
 
 // Lifecycle hooks
 onMounted(async () => {
@@ -944,9 +950,19 @@ onUnmounted(() => {
   }
 
   &--active {
-    border-color: rgba(45, 240, 247, 0.55);
-    background: rgba(45, 240, 247, 0.06);
-    box-shadow: 0 0 14px rgba(45, 240, 247, 0.07);
+    border-color: #{"rgb(from var(--v-primary-base) r g b / 0.55)"};
+    background: #{"rgb(from var(--v-primary-base) r g b / 0.06)"};
+    box-shadow: 0 0 14px #{"rgb(from var(--v-primary-base) r g b / 0.07)"};
+  }
+
+  &--disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+
+    &:hover {
+      border-color: rgba(255, 255, 255, 0.07);
+      background: rgba(255, 255, 255, 0.03);
+    }
   }
 
   &__label {
