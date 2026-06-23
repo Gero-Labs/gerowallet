@@ -18,7 +18,14 @@
             @select="onMethodSelect"
             @back="$emit('back')"
           />
-          <!-- network/security/etc. step components added in later tasks -->
+          <StepNetwork
+            v-else-if="s.key === 'network'"
+            :network="selectedNetwork"
+            @change="onNetworkChange"
+            @next="step = 3"
+            @back="step = 1"
+          />
+          <!-- security/etc. step components added in later tasks -->
           <div v-else class="pa-4 text-caption">{{ $t(s.titleKey) }} — coming next task</div>
         </v-stepper-content>
       </template>
@@ -33,6 +40,7 @@
 import { ref, computed } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import StepMethod from './steps/StepMethod.vue';
+import StepNetwork from './steps/StepNetwork.vue';
 
 const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
 
@@ -74,6 +82,10 @@ const steps = computed<{ key: string; titleKey: string }[]>(() => {
 const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
   selectedMethod.value = m;
   step.value = 2;
+};
+const onNetworkChange = (n: NetworkInfo): void => {
+  selectedNetwork.value = n;
+  emit('network-change', n);
 };
 const onBack = (): void => {
   if (step.value > 1) step.value -= 1;
