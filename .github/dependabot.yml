@@ -28,6 +28,14 @@ updates:
     # Allow only direct updates, no increase in transitive dependencies
     allow:
       - dependency-type: "direct"
+    # Coupled peer conflict: @zxing/browser@0.2.0 requires @zxing/library ~0.22.x,
+    # but dependabot wants @zxing/library 0.23.0 — bumping either alone fails
+    # `npm ci` with ERESOLVE, and they cannot both advance to those versions
+    # together. Ignore both until @zxing/browser ships a release whose peer
+    # range accepts @zxing/library 0.23+, then remove these and bump as a pair.
+    ignore:
+      - dependency-name: "@zxing/browser"
+      - dependency-name: "@zxing/library"
     # Security updates should be created immediately
     commit-message:
       prefix: "chore"
