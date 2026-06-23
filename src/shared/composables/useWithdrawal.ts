@@ -92,11 +92,14 @@ export function useWithdrawal() {
       if (useNexus) {
         const request: BuildWithdrawalTxRequest = {
           stakeAddress: loggedWallet.value.stakeAddress,
-          amount: String(account.value?.withdrawable_amount),
+          // Reuse the amount already validated/captured when building `withdrawals`
+          // (this branch only runs when withdrawals.length > 0).
+          amount: withdrawals[0].quantity.toString(),
           changeAddress: keys.value.payment[0].address,
           utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
         };
         const { tx_cbor } = await nexusTxApi.buildWithdrawalTx(request, loggedWallet.value.network);
+        if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
         txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
       } else {
         // Build the withdrawal transaction with wallet context for accurate fee estimation
