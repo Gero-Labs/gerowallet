@@ -3038,6 +3038,14 @@ export default {
   'welcome.onboardingStepDevice': 'Gerät',
   'welcome.onboardingStepConnect': 'Verbinden',
   'welcome.onboardingStepReview': 'Überprüfen',
+  'welcome.onboardingStepN': 'Schritt {n}',
+  'welcome.onboardingSubMethod': 'Wallet hinzufügen',
+  'welcome.onboardingSubNetwork': 'Blockchain wählen',
+  'welcome.onboardingSubSecurity': 'Entsperrmethode',
+  'welcome.onboardingSubConfirm': 'Prüfen & erstellen',
+  'welcome.onboardingSubSeed': 'Wiederherstellungsphrase eingeben',
+  'welcome.onboardingSubDevice': 'Gerät wählen',
+  'welcome.onboardingSubConnect': 'Gerät verbinden',
 
   // Market
   'market.allTokens': 'Alle Token',

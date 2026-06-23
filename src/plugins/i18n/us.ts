@@ -2570,6 +2570,14 @@ export default {
   'welcome.onboardingStepDevice': 'Device',
   'welcome.onboardingStepConnect': 'Connect',
   'welcome.onboardingStepReview': 'Review',
+  'welcome.onboardingStepN': 'Step {n}',
+  'welcome.onboardingSubMethod': 'How to add a wallet',
+  'welcome.onboardingSubNetwork': 'Choose a blockchain',
+  'welcome.onboardingSubSecurity': 'Unlock method',
+  'welcome.onboardingSubConfirm': 'Review & create',
+  'welcome.onboardingSubSeed': 'Enter recovery phrase',
+  'welcome.onboardingSubDevice': 'Choose your device',
+  'welcome.onboardingSubConnect': 'Connect device',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',

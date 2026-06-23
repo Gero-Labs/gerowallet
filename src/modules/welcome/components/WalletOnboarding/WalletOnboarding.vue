@@ -1,91 +1,110 @@
 <template>
-  <v-card class="liquid-glass transparent-override" flat style="width: 100%; max-width: 560px; margin: auto;">
-    <v-stepper v-model="step" vertical flat class="transparent">
-      <template v-for="(s, i) in steps">
-        <v-stepper-step
-          :key="`step-${i}`"
-          :step="i + 1"
-          :complete="step > i + 1"
-          :editable="step > i + 1"
-          :rules="[() => true]"
+  <div class="onboarding-root">
+    <!-- LEFT: static step rail card -->
+    <v-card class="liquid-glass transparent-override onboarding-rail" flat>
+      <ul class="rail-list">
+        <li
+          v-for="(s, i) in steps"
+          :key="`rail-${i}`"
+          class="rail-item"
+          :class="{
+            'rail-item--done': i + 1 < step,
+            'rail-item--active': i + 1 === step,
+            'rail-item--clickable': i + 1 < step,
+          }"
+          @click="goToStep(i + 1)"
         >
-          {{ $t(s.titleKey) }}
-        </v-stepper-step>
-        <v-stepper-content :key="`content-${i}`" :step="i + 1">
-          <StepMethod
-            v-if="s.key === 'method'"
-            :network="selectedNetwork"
-            @select="onMethodSelect"
-            @back="$emit('back')"
-          />
-          <StepNetwork
-            v-else-if="s.key === 'network'"
-            :network="selectedNetwork"
-            @change="onNetworkChange"
-            @next="step++"
-            @back="step--"
-          />
-          <StepSecurity
-            v-else-if="s.key === 'security'"
-            :network="selectedNetwork"
-            @select="onSecuritySelect"
-            @next="step++"
-            @back="step--"
-          />
-          <StepCreateConfirm
-            v-else-if="s.key === 'createConfirm'"
-            :network="selectedNetwork"
-            :security-method="securityMethod"
-            :name="walletName"
-            @back="step--"
-            @created="$emit('back')"
-          />
-          <StepSeedPhrase
-            v-else-if="s.key === 'seed'"
-            :network="selectedNetwork"
-            @change="onMnemonicChange"
-            @next="step++"
-            @back="step--"
-          />
-          <StepRestoreConfirm
-            v-else-if="s.key === 'restoreConfirm'"
-            :network="selectedNetwork"
-            :security-method="securityMethod"
-            :name="walletName"
-            :mnemonic="mnemonic"
-            @back="step--"
-            @created="$emit('back')"
-          />
-          <StepDevice
-            v-else-if="s.key === 'device'"
-            :network="selectedNetwork"
-            @select="onDeviceSelect"
-            @next="step++"
-            @back="step--"
-          />
-          <StepConnect
-            v-else-if="s.key === 'connect'"
-            :network="selectedNetwork"
-            :wallet-type="walletType"
-            @connected="onConnected"
-            @back="step--"
-          />
-          <StepReview
-            v-else-if="s.key === 'review'"
-            :network="selectedNetwork"
-            :wallet-type="walletType"
-            :connection="connection"
-            @back="step--"
-            @created="$emit('back')"
-          />
-        </v-stepper-content>
-      </template>
-    </v-stepper>
-    <v-divider class="mt-2" />
-    <v-btn text @click="onBack()">
-      <v-icon>mdi-arrow-left</v-icon> {{ $t('common.back') }}
-    </v-btn>
-  </v-card>
+          <div class="rail-marker-col">
+            <div class="rail-marker">
+              <v-icon v-if="i + 1 < step" size="18" color="white">mdi-check</v-icon>
+              <span v-else>{{ i + 1 }}</span>
+            </div>
+            <div v-if="i < steps.length - 1" class="rail-connector"></div>
+          </div>
+          <div class="rail-text">
+            <div class="rail-title">{{ $t(s.titleKey) }}</div>
+            <div class="rail-subtitle">{{ $t(s.subtitleKey) }}</div>
+          </div>
+        </li>
+      </ul>
+    </v-card>
+
+    <!-- RIGHT: active step content card (only the current step is rendered) -->
+    <v-card class="liquid-glass transparent-override onboarding-content" flat>
+      <div class="content-header">
+        <div class="content-eyebrow">{{ $t('welcome.onboardingStepN', { n: step }) }}</div>
+        <div class="content-title">{{ $t(currentStep.titleKey) }}</div>
+      </div>
+      <div class="content-body">
+        <StepMethod
+          v-if="currentStep.key === 'method'"
+          :network="selectedNetwork"
+          @select="onMethodSelect"
+          @back="$emit('back')"
+        />
+        <StepNetwork
+          v-else-if="currentStep.key === 'network'"
+          :network="selectedNetwork"
+          @change="onNetworkChange"
+          @next="step++"
+          @back="step--"
+        />
+        <StepSecurity
+          v-else-if="currentStep.key === 'security'"
+          :network="selectedNetwork"
+          @select="onSecuritySelect"
+          @next="step++"
+          @back="step--"
+        />
+        <StepCreateConfirm
+          v-else-if="currentStep.key === 'createConfirm'"
+          :network="selectedNetwork"
+          :security-method="securityMethod"
+          :name="walletName"
+          @back="step--"
+          @created="$emit('back')"
+        />
+        <StepSeedPhrase
+          v-else-if="currentStep.key === 'seed'"
+          :network="selectedNetwork"
+          @change="onMnemonicChange"
+          @next="step++"
+          @back="step--"
+        />
+        <StepRestoreConfirm
+          v-else-if="currentStep.key === 'restoreConfirm'"
+          :network="selectedNetwork"
+          :security-method="securityMethod"
+          :name="walletName"
+          :mnemonic="mnemonic"
+          @back="step--"
+          @created="$emit('back')"
+        />
+        <StepDevice
+          v-else-if="currentStep.key === 'device'"
+          :network="selectedNetwork"
+          @select="onDeviceSelect"
+          @next="step++"
+          @back="step--"
+        />
+        <StepConnect
+          v-else-if="currentStep.key === 'connect'"
+          :network="selectedNetwork"
+          :wallet-type="walletType"
+          @connected="onConnected"
+          @back="step--"
+        />
+        <StepReview
+          v-else-if="currentStep.key === 'review'"
+          :network="selectedNetwork"
+          :wallet-type="walletType"
+          :connection="connection"
+          @back="step--"
+          @created="$emit('back')"
+        />
+      </div>
+    </v-card>
+  </div>
 </template>
 <script setup lang="ts">
 import { ref, computed } from 'vue';
@@ -108,6 +127,12 @@ interface ConnectionPayload {
   xfp?: string;
 }
 
+interface StepDef {
+  key: string;
+  titleKey: string;
+  subtitleKey: string;
+}
+
 const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
 
 const step = ref<number>(1);
@@ -119,36 +144,45 @@ const mnemonic = ref<string[]>([]);
 const walletType = ref<WalletTypeValue | undefined>(undefined);
 const connection = ref<ConnectionPayload | null>(null);
 
-const steps = computed<{ key: string; titleKey: string }[]>(() => {
-  const base = [
-    { key: 'method', titleKey: 'welcome.onboardingStepMethod' },
-    { key: 'network', titleKey: 'welcome.onboardingStepNetwork' },
+const steps = computed<StepDef[]>(() => {
+  const base: StepDef[] = [
+    { key: 'method', titleKey: 'welcome.onboardingStepMethod', subtitleKey: 'welcome.onboardingSubMethod' },
+    { key: 'network', titleKey: 'welcome.onboardingStepNetwork', subtitleKey: 'welcome.onboardingSubNetwork' },
   ];
   if (selectedMethod.value === 'create') {
     return [
       ...base,
-      { key: 'security', titleKey: 'welcome.onboardingStepSecurity' },
-      { key: 'createConfirm', titleKey: 'welcome.onboardingStepConfirm' },
+      { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity' },
+      { key: 'createConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm' },
     ];
   }
   if (selectedMethod.value === 'restore') {
     return [
       ...base,
-      { key: 'seed', titleKey: 'welcome.onboardingStepSeed' },
-      { key: 'security', titleKey: 'welcome.onboardingStepSecurity' },
-      { key: 'restoreConfirm', titleKey: 'welcome.onboardingStepConfirm' },
+      { key: 'seed', titleKey: 'welcome.onboardingStepSeed', subtitleKey: 'welcome.onboardingSubSeed' },
+      { key: 'security', titleKey: 'welcome.onboardingStepSecurity', subtitleKey: 'welcome.onboardingSubSecurity' },
+      { key: 'restoreConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm' },
     ];
   }
   if (selectedMethod.value === 'pair') {
     return [
       ...base,
-      { key: 'device', titleKey: 'welcome.onboardingStepDevice' },
-      { key: 'connect', titleKey: 'welcome.onboardingStepConnect' },
-      { key: 'review', titleKey: 'welcome.onboardingStepReview' },
+      { key: 'device', titleKey: 'welcome.onboardingStepDevice', subtitleKey: 'welcome.onboardingSubDevice' },
+      { key: 'connect', titleKey: 'welcome.onboardingStepConnect', subtitleKey: 'welcome.onboardingSubConnect' },
+      { key: 'review', titleKey: 'welcome.onboardingStepReview', subtitleKey: 'welcome.onboardingSubConfirm' },
     ];
   }
   return base;
 });
+
+// The currently active step definition. Clamped so it never points past the
+// list (the list shrinks/grows when the method changes).
+const currentStep = computed<StepDef>(() => steps.value[Math.min(step.value, steps.value.length) - 1]);
+
+const goToStep = (target: number): void => {
+  // Only allow navigating BACK to an already-completed step via the rail.
+  if (target < step.value) step.value = target;
+};
 
 const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
   selectedMethod.value = m;
@@ -175,8 +209,148 @@ const onConnected = (payload: ConnectionPayload): void => {
   connection.value = payload;
   step.value++;
 };
-const onBack = (): void => {
-  if (step.value > 1) step.value -= 1;
-  else emit('back');
-};
 </script>
+<style scoped>
+.onboarding-root {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+  max-width: 820px;
+  margin: auto;
+  align-items: stretch;
+}
+
+/* LEFT RAIL */
+.onboarding-rail {
+  flex: 0 0 240px;
+  padding: 24px 20px;
+  border-radius: 16px !important;
+}
+
+.rail-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.rail-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.rail-item--clickable {
+  cursor: pointer;
+}
+
+.rail-marker-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+}
+
+.rail-marker {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #94979c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.2s ease;
+}
+
+.rail-item--active .rail-marker {
+  background-color: var(--v-primary-base);
+  color: #fff;
+  border-color: var(--v-primary-base);
+}
+
+.rail-item--done .rail-marker {
+  background-color: var(--v-primary-base);
+  color: #fff;
+  border-color: var(--v-primary-base);
+}
+
+.rail-connector {
+  flex: 1;
+  width: 2px;
+  min-height: 26px;
+  margin: 4px 0;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.rail-item--done .rail-connector {
+  background-color: var(--v-primary-base);
+}
+
+.rail-text {
+  padding-bottom: 22px;
+}
+
+.rail-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.rail-item:not(.rail-item--active):not(.rail-item--done) .rail-title {
+  color: #94979c;
+}
+
+.rail-subtitle {
+  font-size: 12px;
+  color: #94979c;
+  margin-top: 2px;
+}
+
+/* RIGHT CONTENT */
+.onboarding-content {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 28px;
+  border-radius: 16px !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-header {
+  margin-bottom: 18px;
+}
+
+.content-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #94979c;
+}
+
+.content-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.content-body {
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .onboarding-root {
+    flex-direction: column;
+  }
+  .onboarding-rail {
+    flex: 0 0 auto;
+  }
+}
+</style>
