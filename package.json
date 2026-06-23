@@ -58,7 +58,7 @@
     "@stomp/stompjs": "^7.3.0",
     "@trezor/connect-webextension": "^9.7.1",
     "@vueuse/core": "6.6.2",
-    "@vueuse/rxjs": "6.6.2",
+    "@vueuse/rxjs": "14.3.0",
     "@walletconnect/core": "^2.23.6",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
