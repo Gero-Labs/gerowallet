@@ -6,7 +6,7 @@
           :key="`step-${i}`"
           :step="i + 1"
           :complete="step > i + 1"
-          editable
+          :editable="step > i + 1"
           :rules="[() => true]"
         >
           {{ $t(s.titleKey) }}
@@ -152,6 +152,9 @@ const steps = computed<{ key: string; titleKey: string }[]>(() => {
 
 const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
   selectedMethod.value = m;
+  mnemonic.value = [];
+  connection.value = null;
+  walletType.value = undefined;
   step.value = 2;
 };
 const onNetworkChange = (n: NetworkInfo): void => {
