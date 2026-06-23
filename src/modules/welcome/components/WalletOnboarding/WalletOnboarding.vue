@@ -56,8 +56,28 @@
             @back="step--"
             @created="$emit('back')"
           />
-          <!-- placeholder for future steps (pair) -->
-          <div v-else class="pa-4 text-caption">{{ $t(s.titleKey) }} — coming next task</div>
+          <StepDevice
+            v-else-if="s.key === 'device'"
+            :network="selectedNetwork"
+            @select="onDeviceSelect"
+            @next="step++"
+            @back="step--"
+          />
+          <StepConnect
+            v-else-if="s.key === 'connect'"
+            :network="selectedNetwork"
+            :wallet-type="walletType"
+            @connected="onConnected"
+            @back="step--"
+          />
+          <StepReview
+            v-else-if="s.key === 'review'"
+            :network="selectedNetwork"
+            :wallet-type="walletType"
+            :connection="connection"
+            @back="step--"
+            @created="$emit('back')"
+          />
         </v-stepper-content>
       </template>
     </v-stepper>
@@ -76,6 +96,16 @@ import StepSecurity from './steps/StepSecurity.vue';
 import StepCreateConfirm from './steps/StepCreateConfirm.vue';
 import StepSeedPhrase from './steps/StepSeedPhrase.vue';
 import StepRestoreConfirm from './steps/StepRestoreConfirm.vue';
+import StepDevice from './steps/StepDevice.vue';
+import StepConnect from './steps/StepConnect.vue';
+import StepReview from './steps/StepReview.vue';
+
+interface ConnectionPayload {
+  publicKey: string;
+  keys: Array<{ publicKey: string; chainCode: string; path: string }>;
+  btSupported: boolean;
+  xfp?: string;
+}
 
 const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
 
@@ -85,6 +115,8 @@ const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 const securityMethod = ref<'prf' | 'password'>('prf');
 const walletName = ref<string>('');
 const mnemonic = ref<string[]>([]);
+const walletType = ref<string | undefined>(undefined);
+const connection = ref<ConnectionPayload | null>(null);
 
 const steps = computed<{ key: string; titleKey: string }[]>(() => {
   const base = [
@@ -131,6 +163,13 @@ const onSecuritySelect = (m: 'prf' | 'password', name: string): void => {
 };
 const onMnemonicChange = (m: string[]): void => {
   mnemonic.value = m;
+};
+const onDeviceSelect = (t: string): void => {
+  walletType.value = t;
+};
+const onConnected = (payload: ConnectionPayload): void => {
+  connection.value = payload;
+  step.value++;
 };
 const onBack = (): void => {
   if (step.value > 1) step.value -= 1;
