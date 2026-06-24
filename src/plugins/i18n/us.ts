@@ -2756,6 +2756,7 @@ export default {
   'market.makerCount': 'Makers',
   'market.totalSupply': 'Supply',
   'market.markets': 'Markets',
+  'market.snekfun': 'snek.fun',
   'market.marketCap': 'MCap',
   'market.swap': 'Swap',
   'market.swapToken': 'Swap this token',

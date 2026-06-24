@@ -3057,6 +3057,7 @@ export default {
   'market.makerCount': 'Makers',
   'market.totalSupply': 'Angebot',
   'market.markets': 'Märkte',
+  'market.snekfun': 'snek.fun',
   'market.marketCap': 'Marktk.',
   'market.swap': 'Tauschen',
   'market.swapToken': 'Diesen Token tauschen',

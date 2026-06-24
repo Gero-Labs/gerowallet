@@ -52,7 +52,13 @@
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
           <v-icon
-            v-if="item.verified"
+            v-if="item.isSnekFun"
+            class="snek-badge"
+            style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: #0d0d11; border-radius: 50%;"
+            title="snek.fun"
+          >mdi-snake</v-icon>
+          <v-icon
+            v-else-if="item.verified"
             color="primary"
             class="verified-check"
             style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: #0d0d11; border-radius: 50%;"

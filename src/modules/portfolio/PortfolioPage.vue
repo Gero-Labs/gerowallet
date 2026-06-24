@@ -294,6 +294,7 @@ const instance = getCurrentInstance();
 const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
 const {
   allTokens,
+  snekTokens,
   loading: marketLoading,
   wsConnected: marketWsConnected,
 } = useMarketData();
@@ -347,7 +348,7 @@ const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
 
-type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist';
+type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist' | 'snekfun';
 const activeView = ref<ViewMode>('holdings');
 
 // Compact chip mode — collapse labels to icons when space is tight
@@ -602,6 +603,10 @@ const filterChips = computed(() => {
       { value: 'market' as ViewMode, label: t('navigation.market'), icon: 'mdi-chart-line' },
       { value: 'watchlist' as ViewMode, label: t('portfolio.watchlist'), icon: 'mdi-star' },
     );
+    // snek.fun bonding-curve tokens — only surface the tab when the feed returns some
+    if (snekTokens.value.length > 0) {
+      chips.push({ value: 'snekfun' as ViewMode, label: t('market.snekfun'), icon: 'mdi-snake' });
+    }
   }
   return chips;
 });
@@ -625,6 +630,9 @@ const displayedTokens = computed(() => {
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
+      break;
+    case 'snekfun':
+      tokens = snekTokens.value;
       break;
     case 'collectibles':
       // Collectibles use NftCollectionTable, not MarketTokenTable
