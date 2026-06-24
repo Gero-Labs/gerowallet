@@ -42,18 +42,12 @@
         <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
       </div>
       <div class="content-body">
-        <StepNetwork
-          v-if="currentStep.key === 'network'"
+        <StepStart
+          v-if="currentStep.key === 'start'"
           :network="network"
           @change="onNetworkChange"
-          @next="step++"
-          @back="$emit('back')"
-        />
-        <StepMethod
-          v-else-if="currentStep.key === 'method'"
-          :network="network"
           @select="onMethodSelect"
-          @back="step--"
+          @back="$emit('back')"
         />
         <StepSecurity
           v-else-if="currentStep.key === 'security'"
@@ -121,8 +115,7 @@ import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import type { WalletTypeValue } from '@/models/types';
-import StepMethod from './steps/StepMethod.vue';
-import StepNetwork from './steps/StepNetwork.vue';
+import StepStart from './steps/StepStart.vue';
 import StepSecurity from './steps/StepSecurity.vue';
 import StepCreateConfirm from './steps/StepCreateConfirm.vue';
 import StepSeedPhrase from './steps/StepSeedPhrase.vue';
@@ -161,8 +154,7 @@ const connection = ref<ConnectionPayload | null>(null);
 
 const steps = computed<StepDef[]>(() => {
   const base: StepDef[] = [
-    { key: 'network', titleKey: 'welcome.onboardingStepNetwork', subtitleKey: 'welcome.onboardingSubNetwork', descKey: 'welcome.onboardingDescNetwork' },
-    { key: 'method', titleKey: 'welcome.onboardingStepMethod', subtitleKey: 'welcome.onboardingSubMethod', descKey: 'welcome.onboardingDescMethod' },
+    { key: 'start', titleKey: 'welcome.onboardingStepStart', subtitleKey: 'welcome.onboardingSubStart', descKey: 'welcome.onboardingDescStart' },
   ];
   if (selectedMethod.value === 'create') {
     return [
@@ -204,8 +196,8 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
   mnemonic.value = [];
   connection.value = null;
   walletType.value = undefined;
-  // Network is step 1, Method is step 2 — method-specific steps start at 3.
-  step.value = 3;
+  // Network + Method share step 1 — method-specific steps start at 2.
+  step.value = 2;
 };
 const onNetworkChange = (n: NetworkInfo): void => {
   emit('network-change', n);

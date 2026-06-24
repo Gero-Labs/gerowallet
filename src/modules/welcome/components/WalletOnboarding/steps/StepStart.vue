@@ -1,7 +1,8 @@
 <template>
-  <div class="step-network">
-    <!-- Network — Mainnets -->
-    <div class="network-grid mb-3">
+  <div class="step-start">
+    <!-- ── Network ─────────────────────────────────────────── -->
+    <div class="step-section-label mb-2">{{ $t('common.network') }}</div>
+    <div class="network-grid mb-2">
       <div
         v-for="net in mainnetNetworks"
         :key="net.blockchain + net.network"
@@ -17,12 +18,11 @@
       </div>
     </div>
 
-    <!-- Testnets — collapsed by default -->
-    <div class="testnet-toggle mb-4" @click="showTestnets = !showTestnets">
+    <div class="testnet-toggle mb-2" @click="showTestnets = !showTestnets">
       <v-icon size="12" class="mr-1" style="color: inherit;">{{ showTestnets ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
       <span>{{ $t('welcome.developerNetworks') }}</span>
     </div>
-    <div v-if="showTestnets" class="network-grid mb-4">
+    <div v-if="showTestnets" class="network-grid mb-2">
       <div
         v-for="net in testnetNetworks"
         :key="net.blockchain + net.network"
@@ -38,31 +38,70 @@
       </div>
     </div>
 
-    <!-- Navigation buttons -->
-    <div class="d-flex mt-4" style="gap: 12px;">
+    <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
+
+    <!-- ── Method ──────────────────────────────────────────── -->
+    <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
+    <v-list class="transparent" dense nav style="width: inherit;">
+      <v-list-item class="method-item mb-2" @click="$emit('select', 'create')">
+        <v-list-item-avatar size="44" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 12px; background-color: #13161B">
+          <v-img :src="walletSvg" style="width: 20px;" max-width="20" contain></v-img>
+        </v-list-item-avatar>
+        <v-list-item-content>
+          <v-list-item-title style="font-size: 17px; font-weight: 600;">{{ $t('welcome.createWallet') }}</v-list-item-title>
+          <v-list-item-subtitle>{{ $t('welcome.createWalletDescription') }}</v-list-item-subtitle>
+        </v-list-item-content>
+      </v-list-item>
+
+      <v-list-item class="method-item mb-2" @click="$emit('select', 'restore')">
+        <v-list-item-avatar size="44" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 12px; background-color: #13161B">
+          <v-img :src="keyGeroSvg" style="width: 20px;" max-width="20" contain></v-img>
+        </v-list-item-avatar>
+        <v-list-item-content>
+          <v-list-item-title style="font-size: 17px; font-weight: 600;">{{ $t('welcome.restoreWallet') }}</v-list-item-title>
+          <v-list-item-subtitle>{{ $t('welcome.restoreWalletDescription') }}</v-list-item-subtitle>
+        </v-list-item-content>
+      </v-list-item>
+
+      <v-list-item
+        class="method-item"
+        :class="{ 'method-item--disabled': !pairSupported }"
+        @click="pairSupported && $emit('select', 'pair')"
+      >
+        <v-list-item-avatar size="44" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 12px; background-color: #13161B">
+          <v-img :src="pairSvg" style="width: 20px;" max-width="20" contain></v-img>
+        </v-list-item-avatar>
+        <v-list-item-content>
+          <v-list-item-title style="font-size: 17px; font-weight: 600;">{{ $t('welcome.pairHardwareWallet') }}</v-list-item-title>
+          <v-list-item-subtitle>
+            {{ pairSupported ? $t('welcome.pairHardwareWalletDescription') : $t('welcome.pairNotSupportedOnNetwork', { network: localNetwork ? localNetwork.title : '' }) }}
+          </v-list-item-subtitle>
+        </v-list-item-content>
+      </v-list-item>
+    </v-list>
+
+    <!-- Navigation -->
+    <div class="d-flex mt-2">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
-      <v-spacer />
-      <v-btn :disabled="!localNetwork || localNetwork.comingSoon" color="primary" @click="$emit('next')">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import assets from '@/utils/assets';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 
 const props = defineProps<{ network: NetworkInfo }>();
 const emit = defineEmits<{
   (e: 'change', n: NetworkInfo): void;
-  (e: 'next'): void;
+  (e: 'select', method: 'create' | 'restore' | 'pair'): void;
   (e: 'back'): void;
 }>();
 
 const localNetwork = ref<NetworkInfo>(props.network);
-const showTestnets = ref<boolean>(
-  props.network?.network !== 'Mainnet' && props.network != null
-);
+const showTestnets = ref<boolean>(props.network?.network !== 'Mainnet' && props.network != null);
 
 const mainnetNetworks = computed(() => networks.networks.filter(n => n.network === 'Mainnet'));
 const testnetNetworks = computed(() => networks.networks.filter(n => n.network !== 'Mainnet'));
@@ -76,26 +115,30 @@ const selectNetwork = (net: NetworkInfo): void => {
   updateVuetifyTheme(net.blockchain, true);
   emit('change', net);
 };
+
+const isApex = computed(() => !!localNetwork.value?.blockchain?.includes('Apex'));
+const walletSvg = computed(() => (isApex.value ? assets.walletGeroApexSvg : assets.walletGeroSvg));
+const keyGeroSvg = computed(() => (isApex.value ? assets.keyApexSvg : assets.keyGeroSvg));
+const pairSvg = computed(() => (isApex.value ? assets.pairApexSvg : assets.pairGeroSvg));
+const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
 </script>
 
 <style scoped lang="scss">
-// ─── Section labels ───────────────────────────────────────────────────────────
 .step-section-label {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: white
+  color: rgba(255, 255, 255, 0.7);
 }
 
-// ─── Testnet toggle ───────────────────────────────────────────────────────────
 .testnet-toggle {
   display: inline-flex;
   align-items: center;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
-  color: white;
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
   user-select: none;
   transition: color 0.15s ease;
@@ -105,7 +148,6 @@ const selectNetwork = (net: NetworkInfo): void => {
   }
 }
 
-// ─── Network grid ─────────────────────────────────────────────────────────────
 .network-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -148,7 +190,6 @@ const selectNetwork = (net: NetworkInfo): void => {
     }
   }
 
-  // Testnet variant
   &--testnet {
     min-height: 46px;
     padding: 7px 8px 6px;
@@ -169,5 +210,11 @@ const selectNetwork = (net: NetworkInfo): void => {
   &--active &__label {
     color: rgba(255, 255, 255, 0.9);
   }
+}
+
+.method-item--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 </style>
