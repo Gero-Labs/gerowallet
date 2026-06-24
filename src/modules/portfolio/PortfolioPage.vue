@@ -667,6 +667,15 @@ const displayedTokens = computed(() => {
     }
   }
 
+  // Dedupe by unit — a token can appear in both the registered market list and the
+  // snek.fun feed (and the snek feed can list the same token more than once).
+  const seen = new Set<string>();
+  tokens = tokens.filter(t => {
+    if (seen.has(t.unit)) return false;
+    seen.add(t.unit);
+    return true;
+  });
+
   return tokens;
 });
 
