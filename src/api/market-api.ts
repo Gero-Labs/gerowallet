@@ -274,7 +274,11 @@ export default {
    * NOTE: may 404 until prod deploys /api/prices/sparklines — callers must treat it as best-effort.
    */
   async getSparklines(window: string = '7d'): Promise<SparklineResponse> {
-    const { data } = await axiosInstance.get('/api/prices/sparklines', { params: { window } });
+    // The Nexus proxy does not forward /sparklines, but the public market backend
+    // serves it (same source the market-data website uses). Hit it directly —
+    // CSP/host_permissions already allow *.gerowallet.io.
+    const base = (import.meta.env['VITE_MARKET_API_URL'] as string | undefined) || 'https://market.gerowallet.io';
+    const { data } = await axios.get(`${base}/api/v1/prices/sparklines`, { params: { window }, timeout: 15000 });
     return data;
   },
 

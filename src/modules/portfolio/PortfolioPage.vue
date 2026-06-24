@@ -63,7 +63,7 @@
             <!-- Filter chips + search + filter menu — single row -->
             <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
-              <div ref="chipBarRef" class="filter-chip-bar d-flex align-center" style="gap: 4px; overflow-x: auto; flex: 1; min-width: 0;">
+              <div ref="chipBarRef" class="filter-chip-bar d-flex align-center flex-shrink-0" style="gap: 4px; overflow-x: auto; min-width: 0;">
                 <v-tooltip v-for="chip in filterChips" :key="chip.value" bottom :disabled="!compactChips">
                   <template v-slot:activator="{ on, attrs }">
                     <v-chip
@@ -83,6 +83,20 @@
                   <span>{{ chip.label }}</span>
                 </v-tooltip>
               </div>
+
+              <!-- Visible search bar (primary) — sits left, right after the chips -->
+              <v-text-field
+                v-model="searchQuery"
+                :placeholder="activeView === 'collectibles'
+                  ? $t('assets.searchCollections')
+                  : $t('market.searchPlaceholder')"
+                prepend-inner-icon="mdi-magnify"
+                dense flat solo rounded hide-details clearable
+                background-color="rgba(255,255,255,0.04)"
+                class="header-search flex-shrink-0"
+              />
+
+              <v-spacer />
 
               <!-- NFT view toggle (only in collectibles mode) -->
               <div v-if="activeView === 'collectibles'" class="d-flex align-center flex-shrink-0" style="gap: 2px;">
@@ -104,23 +118,6 @@
                 </template>
                 <span>{{ marketWsConnected ? $t('market.liveUpdates') : $t('market.connecting') }}</span>
               </v-tooltip>
-
-              <!-- Visible search bar (primary) -->
-              <v-text-field
-                v-model="searchQuery"
-                :placeholder="activeView === 'collectibles'
-                  ? $t('assets.searchCollections')
-                  : $t('market.searchPlaceholder')"
-                prepend-inner-icon="mdi-magnify"
-                dense
-                flat
-                solo
-                rounded
-                hide-details
-                clearable
-                background-color="rgba(255,255,255,0.04)"
-                class="header-search flex-shrink-0"
-              />
 
               <!-- Unified filter menu (filters + columns) -->
               <v-menu
