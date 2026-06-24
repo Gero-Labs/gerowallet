@@ -27,7 +27,7 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue';
-import { geroDashboardApex, geroDashboard } from '@/utils/assets';
+import { geroDashboardApex, geroDashboardPrime, geroDashboardVector, geroDashboard } from '@/utils/assets';
 import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
 import { NetworkInfo } from '@/utils/networks';
 
@@ -43,9 +43,14 @@ const onNetworkChange = (n: NetworkInfo): void => {
   emit('network-change', n);
 };
 
-// Logo reacts to the selected network (Apex variant vs default).
-const isApex = computed(() => !!props.selectedNetwork?.blockchain?.includes('Apex'));
-const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
+// Logo reacts to the selected network's brand colors.
+const logo = computed(() => {
+  const bc = props.selectedNetwork?.blockchain;
+  if (bc === 'Apex Fusion Prime') return geroDashboardPrime;
+  if (bc === 'Apex Fusion Vector') return geroDashboardVector;
+  if (bc?.includes('Apex')) return geroDashboardApex;
+  return geroDashboard;
+});
 </script>
 <style scoped>
 .welcome-left-column {

@@ -1,5 +1,7 @@
 import { CID } from 'multiformats/cid'
 import apexBg from '@/assets/apexBg.png'
+import apexPrimeBg from '@/assets/apexPrimeBg.png'
+import apexVectorBg from '@/assets/apexVectorBg.png'
 import bitcoinBg from '@/assets/bitcoinBg.png'
 import bitcoinWavesBg from '@/assets/bitcoinWavesBg.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
@@ -28,6 +30,8 @@ import loadingAnimation from '@/assets/webm/loading.webm'
 import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
+import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
+import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
 import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
@@ -153,6 +157,8 @@ const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 export default {
   apexBg,
+  apexPrimeBg,
+  apexVectorBg,
   walletCreateBg,
   walletRestoreBg,
   hardwareWalletBg,
@@ -408,6 +414,8 @@ export default {
 
 export {
   geroDashboardApex,
+  geroDashboardPrime,
+  geroDashboardVector,
   geroDashboard,
   google,
 }

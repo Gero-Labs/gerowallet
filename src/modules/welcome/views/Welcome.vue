@@ -9,9 +9,14 @@
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Cardano') }"
       />
       <img
-        :src="assets.apexBg"
+        :src="assets.apexPrimeBg"
         class="welcome-background-image"
-        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Apex') }"
+        :class="{ 'background-active': selectedNetwork?.blockchain === 'Apex Fusion Prime' }"
+      />
+      <img
+        :src="assets.apexVectorBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain === 'Apex Fusion Vector' }"
       />
       <img
         :src="assets.bitcoinWavesBg"
