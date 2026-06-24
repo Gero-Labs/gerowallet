@@ -1,8 +1,6 @@
 <template>
   <div class="welcome-glass-panel">
     <div class="welcome-content">
-      <WalletsListLogin class="wallet-list-block" @network-change="onNetworkChange" />
-
       <div class="logo-container">
         <div
           class="logo"
@@ -15,6 +13,8 @@
           }"
         />
       </div>
+
+      <WalletsListLogin class="wallet-list-block" @network-change="onNetworkChange" />
     </div>
 
     <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
@@ -99,8 +99,7 @@ const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
 }
 
 .logo-container {
-  margin-top: auto; /* push the logo down toward the bottom of the panel */
-  padding-top: 24px;
+  margin-bottom: 24px;
 }
 
 .wallet-list-block {
