@@ -47,6 +47,7 @@ export interface MarketToken {
   realizedPnl?: number | null;
   unrealizedPnl?: number | null;
   isNative?: boolean;
+  isSnekFun?: boolean;
 }
 
 export interface CandlestickDataPoint {
@@ -69,6 +70,7 @@ export interface AdaMarketData {
 // --- Singleton state (shared across all component instances) ---
 
 const allTokens: Ref<MarketToken[]> = ref([]);
+const snekTokens: Ref<MarketToken[]> = ref([]);
 const adaData: Ref<AdaMarketData | null> = ref(null);
 const loading = ref(false);
 const error: Ref<string | null> = ref(null);
@@ -126,6 +128,7 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     decimals: apiToken.decimals ?? dhToken?.decimals ?? 0,
     organicVolume24h: apiToken.organicVolume24h ?? 0,
     dex: apiToken.dex ?? undefined,
+    isSnekFun: apiToken.source === 'SNEKFUN' || apiToken.dex === 'SNEKFUN',
   };
 }
 
@@ -216,6 +219,14 @@ async function fetchAllTokens(silent = false): Promise<void> {
     // Remove any existing lovelace entry, then prepend native token
     const filtered = tokens.filter(t => t.unit !== 'lovelace');
     allTokens.value = [nativeToken, ...filtered];
+
+    // snek.fun bonding-curve tokens (separate list, shown under the snek.fun
+    // filter). Fire-and-forget so it never blocks the main table.
+    if (!isApex) {
+      marketApi.getSnekFunTokens()
+        .then(snekRaw => { snekTokens.value = (snekRaw || []).map(tp => enrichWithStores(tp)); })
+        .catch(e => console.debug('Market: snek.fun unavailable', e));
+    }
 
     // Set adaData ref (used for native currency price display)
     adaData.value = {
@@ -489,6 +500,7 @@ export function useMarketData() {
 
   return {
     allTokens,
+    snekTokens,
     adaData,
     trendingTokens,
     topGainers,
