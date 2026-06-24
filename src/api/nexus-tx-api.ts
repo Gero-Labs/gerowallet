@@ -205,7 +205,10 @@ export const nexusTxApi = {
   ): Promise<BuildTxResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/build?network=${nexusNetwork}` : '/api/tx/build';
-    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    // The body's `network` must be Nexus's enum keyName ('cardano-mainnet'), NOT the
+    // wallet's 'MAINNET'/'PREPROD' — the Network @JsonCreator rejects the latter and
+    // Spring returns "Malformed request body". Override with the resolved slug.
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork });
     return data;
   },
 
@@ -220,7 +223,8 @@ export const nexusTxApi = {
   ): Promise<MaxAdaResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/max-ada?network=${nexusNetwork}` : '/api/tx/max-ada';
-    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, request);
+    // Body `network` must be the slug ('cardano-mainnet'), not 'MAINNET' — see buildTransferTx.
+    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, { ...request, network: nexusNetwork });
     return data;
   },
 };
