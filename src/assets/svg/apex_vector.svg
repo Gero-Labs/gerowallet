@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <circle cx="24" cy="24" r="21" stroke="#E94E36" stroke-opacity="0.55" stroke-width="2" stroke-linecap="round" stroke-dasharray="78 52" transform="rotate(-90 24 24)"/>
+  <circle cx="24" cy="24" r="15.5" fill="#E94E36"/>
+  <path d="M18.5 16.6h11" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M27.6 14.9l2 1.7-2 1.7" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="24" y="26" dy="0.32em" text-anchor="middle" font-family="'Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="600" fill="#ffffff">V</text>
+</svg>

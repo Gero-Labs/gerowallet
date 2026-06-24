@@ -140,8 +140,8 @@ watch(
 
 /* ── Chain tiles ──────────────────────────────────── */
 .chain-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -169,8 +169,17 @@ watch(
   }
 
   &--disabled {
-    opacity: 0.4;
     cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  &--disabled &__label {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  &--disabled &__icon {
+    opacity: 0.45;
   }
 
   &__label {
