@@ -92,7 +92,7 @@ const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
   flex-direction: column;
   align-items: center;
   justify-content: flex-start; /* wallet list + header sit near the top */
-  padding: 40px 18px 18px;
+  padding: 20px 18px 18px;
   position: relative;
   z-index: 2;
   max-width: 428px;
@@ -104,7 +104,7 @@ const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
 
 .wallet-list-block {
   width: 100%;
-  margin-top: -8px; /* tighten gap to the logo */
+  margin-top: -20px; /* pull welcome + list up toward the logo */
 }
 
 .logo-container .logo {
