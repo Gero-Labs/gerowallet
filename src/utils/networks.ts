@@ -353,7 +353,6 @@ export default {
       title: 'Bitcoin Testnet',
       blockchain: Blockchain.BITCOIN,
       network: Network.TESTNET,
-      comingSoon: true,
       supportedHardware: true,
       networkId: 1,
       currencySymbol: 'tBTC',
