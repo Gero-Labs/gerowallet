@@ -39,7 +39,7 @@
       <div class="welcome-right-column">
         <div class="right-content">
           <div class="right-panel">
-            <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" />
+            <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
           </div>
 
           <!-- Footer -->
