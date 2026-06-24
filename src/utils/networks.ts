@@ -3,7 +3,8 @@ import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
 import apex from '@/assets/img/apex.jpg';
-import bitcoinLogo from '@/assets/bitcoin-logo.svg';
+// NOTE: bitcoinLogo import removed for 2.7 — the only references were the
+// commented-out Bitcoin network entries below (HIDE+GATE). Re-add when BTC returns.
 
 export interface NetworkInfo {
   icon: string;
@@ -233,6 +234,12 @@ export default {
         networkMagic: 1
       }
     },
+    // Bitcoin networks removed for 2.7 (HIDE+GATE master switch).
+    // Removing the Bitcoin entries makes every resolve*Support() helper
+    // (gomining/babylon/ordinals/thorchain/mempool/lightning) return false,
+    // which cascades to nav, dialogs, dApp surfaces, and route guards.
+    // Bitcoin code remains in-repo; only user access is severed here.
+    /* BITCOIN_REMOVED_2_7
     // Bitcoin Mainnet
     {
       icon: bitcoinLogo,
@@ -331,6 +338,7 @@ export default {
         networkMagic: 0x0709110B  // Bitcoin testnet magic bytes
       }
     },
+    BITCOIN_REMOVED_2_7 */
   ]  as NetworkInfo[],
   resolveNetwork(chain: string, network: string): NetworkInfo {
     return this.networks.find(element => element.blockchain === chain && element.network === network);

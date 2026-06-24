@@ -131,6 +131,30 @@
       </span>
     </template>
 
+    <template v-slot:[`item.change30d`]="{ item }">
+      <span :style="{ color: changeColor(item.change30d ?? 0), fontSize: '12px', whiteSpace: 'nowrap' }">
+        <v-avatar tile size="10" class="mr-1">
+          <v-img :src="changeIcon(item.change30d ?? 0)" alt="trend" />
+        </v-avatar>
+        {{ formatChange(item.change30d ?? 0) }}
+      </span>
+    </template>
+
+    <!-- Sparkline column (7D) -->
+    <template v-slot:[`item.sparkline`]="{ item }">
+      <svg v-if="item.sparkline && item.sparkline.length > 1" width="72" height="22" viewBox="0 0 72 22" preserveAspectRatio="none" style="display: block">
+        <polyline
+          :points="sparklinePoints(item.sparkline)"
+          fill="none"
+          :stroke="sparklineColor(item.sparkline)"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+        />
+      </svg>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
     <!-- Volume column -->
     <template v-slot:[`item.volume24h`]="{ item }">
       <v-tooltip top :open-delay="300" content-class="custom-tooltip">
@@ -141,14 +165,47 @@
       </v-tooltip>
     </template>
 
+    <!-- Volume 7D column -->
+    <template v-slot:[`item.volume7d`]="{ item }">
+      <v-tooltip v-if="item.volume7d" top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.volume7d) }}</span>
+        </template>
+        ${{ (item.volume7d ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+      </v-tooltip>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
+    <!-- TXN count (24h) column -->
+    <template v-slot:[`item.txnCount24h`]="{ item }">
+      <span style="font-size: 12px">{{ formatInt(item.txnCount24h) }}</span>
+    </template>
+
+    <!-- Maker count (24h) column -->
+    <template v-slot:[`item.makerCount24h`]="{ item }">
+      <span style="font-size: 12px">{{ formatInt(item.makerCount24h) }}</span>
+    </template>
+
+    <!-- Total Supply column -->
+    <template v-slot:[`item.totalSupply`]="{ item }">
+      <v-tooltip v-if="item.totalSupply != null" top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ formatCompact(item.totalSupply) }}</span>
+        </template>
+        {{ (item.totalSupply ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+      </v-tooltip>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
     <!-- Market Cap column -->
     <template v-slot:[`item.mcap`]="{ item }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+      <v-tooltip v-if="item.mcap != null" top :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.mcap) }}</span>
         </template>
         ${{ (item.mcap ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
     </template>
 
     <!-- TVL column -->
@@ -435,9 +492,15 @@ const baseHeaders = computed(() => {
     { text: t('market.change1h'), value: 'change1h', sortable: true, width: '70px' },
     { text: t('market.change24h'), value: 'change24h', sortable: true, width: '70px' },
     { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px' },
+    { text: t('market.change30d'), value: 'change30d', sortable: true, width: '70px' },
+    { text: t('market.sparkline'), value: 'sparkline', sortable: false, width: '90px' },
     { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px' },
+    { text: t('market.volume7d'), value: 'volume7d', sortable: true, width: '90px' },
+    { text: t('market.txnCount'), value: 'txnCount24h', sortable: true, width: '80px' },
+    { text: t('market.makerCount'), value: 'makerCount24h', sortable: true, width: '80px' },
+    { text: t('market.totalSupply'), value: 'totalSupply', sortable: true, width: '90px' },
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
-    { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px' },
+    { text: t('market.liquidity'), value: 'tvl', sortable: true, width: '90px' },
     ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px' }] : []),
     { text: t('market.risk'), value: 'risk', sortable: true, width: '70px' },
   ];
@@ -524,7 +587,32 @@ function handleImgError(e: Event) {
   if (target) target.style.display = 'none';
 }
 
-import { formatPrice, formatCompact, formatBalance, formatChange, changeColor } from '@/modules/market/utils/formatters';
+import { formatPrice, formatCompact, formatBalance, formatChange, changeColor, formatInt } from '@/modules/market/utils/formatters';
+
+/** Build an SVG polyline points string scaled to a 72x22 viewbox from a price series */
+function sparklinePoints(series: number[]): string {
+  if (!series || series.length < 2) return '';
+  const w = 72;
+  const h = 22;
+  const pad = 2;
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const range = max - min || 1;
+  const stepX = (w - pad * 2) / (series.length - 1);
+  return series
+    .map((v, i) => {
+      const x = pad + i * stepX;
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+/** Green if the series ends up vs starts, red if down */
+function sparklineColor(series: number[]): string {
+  if (!series || series.length < 2) return '#A3A3A3';
+  return series[series.length - 1] >= series[0] ? '#47CD89' : '#F97066';
+}
 
 function changeIcon(change: number): string {
   if (change === 0) return assets.arrowRightSvg;

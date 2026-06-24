@@ -87,7 +87,6 @@ import dappRiskPhishing from '@/assets/img/cardano-shield/dapp-phishing.png'
 import dappRiskSuspicious from '@/assets/img/cardano-shield/dapp-suspicious.png'
 import dappRiskTimeout from '@/assets/img/cardano-shield/dapp-timeout.png'
 import dappRiskUnknown from '@/assets/img/cardano-shield/dapp-unknown.png'
-import nightTokenSvg from '@/assets/svg/night-token.svg'
 import giftSvg from '@/assets/svg/gift.svg'
 import pendingSvg from '@/assets/svg/pending.svg'
 import piggyBankSvg from '@/assets/svg/piggybank.svg'
@@ -177,7 +176,6 @@ export default {
   connectKeystoneSvg,
   loadingAnimation,
   errorImage,
-  nightTokenSvg,
   geroDashboard,
   barChart,
   coinsStacked,

@@ -41,7 +41,7 @@
               :color="token.change24h >= 0 ? '#1b5e20' : '#b71c1c'"
               :text-color="token.change24h >= 0 ? '#47CD89' : '#F97066'"
             >
-              {{ token.change24h >= 0 ? '+' : '' }}{{ token.change24h.toFixed(2) }}%
+              {{ token.change24h >= 0 ? '+' : '-' }}{{ formatChange(token.change24h) }}
             </v-chip>
           </div>
           <div class="text--secondary text-caption mt-1">{{ secondaryPrice }}</div>
@@ -136,6 +136,7 @@
         <v-tabs v-model="rightTab" dense background-color="transparent" height="28" class="detail-sub-tabs mb-3">
           <v-tab>{{ $t('market.swap') }}</v-tab>
           <v-tab>{{ $t('market.depth') }}</v-tab>
+          <v-tab v-if="!isApex && token.unit !== 'lovelace'">{{ $t('market.markets') }}</v-tab>
         </v-tabs>
 
         <!-- Swap tab -->
@@ -232,6 +233,11 @@
             {{ $t('market.na') }}
           </div>
         </div>
+
+        <!-- Markets tab (cross-DEX price comparison) -->
+        <div v-else-if="rightTab === 2" key="markets">
+          <CrossDexPrices :asset-id="token.unit" />
+        </div>
         </transition>
       </div>
     </div>
@@ -250,6 +256,7 @@ import DepthChart from './DepthChart.vue';
 import QuickSwap from './QuickSwap.vue';
 import RecentTrades from './RecentTrades.vue';
 import BuySellVolume from './BuySellVolume.vue';
+import CrossDexPrices from './CrossDexPrices.vue';
 import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
@@ -434,7 +441,7 @@ const compactStats = computed(() => {
   const tok = props.token;
   const sym = currencySymbol.value;
   return [
-    { label: t('market.marketCap'), value: sym + formatCompact(convertUsd(tok.mcap)) },
+    { label: t('market.marketCap'), value: tok.mcap != null ? sym + formatCompact(convertUsd(tok.mcap)) : t('market.na') },
     { label: t('market.volume24h'), value: sym + formatCompact(convertUsd(tok.volume24h)) },
     { label: t('market.tvl'), value: tok.tvl ? sym + formatCompact(convertUsd(tok.tvl)) : t('market.na') },
     { label: t('market.holders'), value: tok.holders != null ? tok.holders.toLocaleString() : t('market.na') },
@@ -490,7 +497,7 @@ function formatPnlSigned(adaValue: number): string {
   return sign + currencySymbol.value + converted.toFixed(2);
 }
 
-import { formatPriceRaw, formatPrice, formatCompact } from '@/modules/market/utils/formatters';
+import { formatPriceRaw, formatPrice, formatCompact, formatChange } from '@/modules/market/utils/formatters';
 
 function openExplorer() {
   const fingerprint = props.token.fingerprint;

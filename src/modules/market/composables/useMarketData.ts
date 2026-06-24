@@ -20,8 +20,14 @@ export interface MarketToken {
   change1h: number;
   change24h: number;
   change7d: number;
+  change30d?: number;
   volume24h: number;
-  mcap: number;
+  volume7d?: number;
+  txnCount24h?: number | null;
+  makerCount24h?: number | null;
+  totalSupply?: number | null;
+  sparkline?: number[];
+  mcap: number | null;
   tvl: number | null;
   liquidity: number;
   holders: number;
@@ -79,7 +85,7 @@ let consumerCount = 0;
 
 // --- Helper: enrich API data with store data (DexHunter as fallback) ---
 
-function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
+function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<string, number[]>): MarketToken {
   const assetId = apiToken.assetId;
 
   // DexHunter data as fallback for fields the backend doesn't yet provide
@@ -93,6 +99,11 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
     ? (xerberusStore.risks as Record<string, any>)[fingerprint]
     : null;
 
+  // Market cap: trust the backend value. The backend already suppresses implausible /
+  // placeholder-supply market caps (isPlausibleMarketCapAda) and returns null for them, so
+  // we surface that null as-is ('—'). DexHunter is metadata-only — no numeric mcap fallback.
+  const mcap = apiToken.marketCap ?? null;
+
   return {
     unit: assetId,
     name: apiToken.name || dhToken?.name || apiToken.assetNameAscii || assetId,
@@ -105,8 +116,14 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
     change1h: apiToken.priceChange1h ?? 0,
     change24h: apiToken.priceChange24h ?? 0,
     change7d: apiToken.priceChange7d ?? 0,
+    change30d: apiToken.priceChange30d ?? 0,
     volume24h: apiToken.volume24h ?? 0,
-    mcap: apiToken.marketCap ?? dhToken?.mcap ?? 0,
+    volume7d: apiToken.volume7d ?? 0,
+    txnCount24h: apiToken.txnCount24h ?? null,
+    makerCount24h: apiToken.makerCount24h ?? null,
+    totalSupply: apiToken.totalSupply ?? null,
+    sparkline: sparklineMap?.[assetId] ?? [],
+    mcap,
     tvl: apiToken.tvl ?? null,
     liquidity: apiToken.liquidity ?? 0,
     holders: apiToken.holders ?? dhToken?.holders ?? 0,
@@ -156,8 +173,19 @@ async function fetchAllTokens(silent = false): Promise<void> {
     // Apex wallets don't have market API token listings — only show native token
     const allPrices = isApex ? [] : await marketApi.getAllPrices();
 
+    // 7D sparklines (best-effort — failure must not block the table)
+    let sparklineMap: Record<string, number[]> = {};
+    if (!isApex) {
+      try {
+        const resp = await marketApi.getSparklines('7d');
+        sparklineMap = resp?.data ?? {};
+      } catch (e) {
+        console.debug('Market: sparklines unavailable', e);
+      }
+    }
+
     // Map API tokens through enrichment (backend already aggregates per token)
-    const tokens: MarketToken[] = allPrices.map(tp => enrichWithStores(tp));
+    const tokens: MarketToken[] = allPrices.map(tp => enrichWithStores(tp, sparklineMap));
 
     // Build native token (ADA / AP3X) at position 0
     const nativeName = networks.resolveCurrencyName(chain, walletStore.loggedWallet?.network) || 'Cardano';
@@ -175,7 +203,13 @@ async function fetchAllTokens(silent = false): Promise<void> {
       change1h: 0,
       change24h: nativePrice.priceChange24h,
       change7d: 0,
+      change30d: 0,
       volume24h: nativePrice.volume24h,
+      volume7d: 0,
+      txnCount24h: null,
+      makerCount24h: null,
+      totalSupply: null,
+      sparkline: [],
       mcap: nativePrice.marketCap,
       tvl: null,
       liquidity: 0,

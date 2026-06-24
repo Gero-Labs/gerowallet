@@ -189,6 +189,13 @@
               </v-menu>
             </div>
 
+            <!-- Market overview stat bar (market view only) -->
+            <MarketStatBar
+              v-if="activeView === 'market' && isMainnetCardano && marketStatTokens.length"
+              :tokens="marketStatTokens"
+              @token-click="openTokenByUnit"
+            />
+
             <!-- Token table (all views except collectibles) -->
             <MarketTokenTable
               v-if="activeView !== 'collectibles'"
@@ -271,6 +278,7 @@ import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
 import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransactionsCard.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
+import MarketStatBar from '@/modules/market/components/MarketStatBar.vue';
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import NftCollectionTable from '@/modules/market/components/NftCollectionTable.vue';
@@ -302,9 +310,15 @@ const columnOptions: { key: ColumnKey; label: string }[] = [
   { key: 'change1h', label: t('market.change1h') },
   { key: 'change24h', label: t('market.change24h') },
   { key: 'change7d', label: t('market.change7d') },
+  { key: 'change30d', label: t('market.change30d') },
+  { key: 'sparkline', label: t('market.sparkline') },
   { key: 'volume24h', label: t('market.volume24h') },
+  { key: 'volume7d', label: t('market.volume7d') },
+  { key: 'txnCount24h', label: t('market.txnCount') },
+  { key: 'makerCount24h', label: t('market.makerCount') },
+  { key: 'totalSupply', label: t('market.totalSupply') },
   { key: 'mcap', label: t('market.marketCap') },
-  { key: 'tvl', label: t('market.tvl') },
+  { key: 'tvl', label: t('market.liquidity') },
   { key: 'risk', label: t('market.risk') },
   { key: 'allocation', label: t('common.allocation') },
 ];
@@ -544,8 +558,14 @@ const myHoldings = computed<MarketToken[]>(() => {
       change1h: marketToken?.change1h || 0,
       change24h: marketToken?.change24h || 0,
       change7d: marketToken?.change7d || 0,
+      change30d: marketToken?.change30d || 0,
       volume24h: marketToken?.volume24h || 0,
-      mcap: marketToken?.mcap || dhToken?.mcap || 0,
+      volume7d: marketToken?.volume7d || 0,
+      txnCount24h: marketToken?.txnCount24h ?? null,
+      makerCount24h: marketToken?.makerCount24h ?? null,
+      totalSupply: marketToken?.totalSupply ?? null,
+      sparkline: marketToken?.sparkline ?? [],
+      mcap: marketToken?.mcap ?? null,
       tvl: marketToken?.tvl || null,
       liquidity: marketToken?.liquidity || 0,
       holders: marketToken?.holders || dhToken?.holders || 0,
@@ -593,6 +613,9 @@ const filterChips = computed(() => {
 });
 
 const watchlistedTokens = computed(() => allTokens.value.filter(tok => isWatched(tok.unit)));
+
+// Market overview stat bar: aggregate over all listed (non-native) market tokens
+const marketStatTokens = computed(() => allTokens.value.filter(t => !t.isNative));
 
 // ── Computed: Unified displayed tokens ────────────────────────────────────────
 

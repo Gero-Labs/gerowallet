@@ -8,6 +8,9 @@ import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
+import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 
 /**
  * Strike v2 withdraw quote – wraps the validator response and adds local
@@ -128,6 +131,83 @@ async function signCip8(message: string, password: string): Promise<string> {
   return res.data.signature;
 }
 
+/**
+ * Cardano-only pre-step (STRIKE_V2_INTEGRATOR_GUIDE §16.2): before POST /v2/withdraw,
+ * the user must build + submit a ~2 ADA batcher-fee transaction to the current
+ * validator leader. Strike returns the unsigned tx CBOR (`txData`); we sign and
+ * submit it via the same background SIGN_TX / SUBMIT_TX path the deposit flow uses.
+ *
+ * Returns the on-chain txId of the batcher transaction.
+ *
+ * NOTE: pending live testnet verification. Two things to confirm against the live
+ * server: (1) the `address` param of /api/perpetuals/withdraw-batcher (leader vs.
+ * payer) and (2) whether /v2/withdraw must wait for this tx to confirm on-chain
+ * rather than just be submitted. Adjust here once the live test reveals the truth.
+ */
+async function submitBatcherTx(withdrawId: string, password: string): Promise<string> {
+  const wallet = walletStore.loggedWallet;
+  const keys = walletStore.keys;
+  const utxos = walletStore.utxos as Cardano.Utxo[];
+  if (!wallet || !keys?.payment?.[0]?.address) {
+    throw new Error('No active wallet — cannot build batcher transaction.');
+  }
+  if (!password) {
+    throw new Error('Spending password is required for Cardano withdrawals.');
+  }
+
+  // 1. Current validator leader (recipient of the batcher fee).
+  const leader = await strikeUserApi.getValidatorLeader('cardano');
+
+  // 2. Ask Strike for the unsigned batcher-fee tx CBOR.
+  const { txData } = await strikeUserApi.getWithdrawBatcherTx({
+    withdraw_id: withdrawId,
+    address: leader.address,
+    chain: 'cardano',
+  });
+  if (!txData) {
+    throw new Error('Strike returned no batcher transaction.');
+  }
+
+  // 3. Re-serialize to the wallet's signing CBOR (mirrors useStrikeDeposit).
+  const transaction = Serialization.Transaction.fromCbor(HexBlob(txData));
+  const txCbor = serializeCardanoJsSdkTx(transaction.toCore());
+
+  // 4. Verify password, then sign via background.
+  const pwCheck = (await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+    data: { password },
+  })) as { data: { success: boolean } };
+  if (!pwCheck.data.success) {
+    throw new Error('Incorrect spending password.');
+  }
+
+  const signResult = (await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SIGN_TX,
+    data: {
+      txCbor,
+      partialSign: false,
+      password,
+      accountIndex: 0,
+      utxos,
+      addresses: keys,
+      mergeWitnesses: false,
+    },
+  })) as { data: { witnesses?: string; error?: string } };
+  if (signResult.data.error || !signResult.data.witnesses) {
+    throw new Error(signResult.data.error || 'Failed to sign batcher transaction.');
+  }
+
+  // 5. Submit to chain.
+  const submitResult = (await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SUBMIT_TX,
+    data: { txCbor, witnessHex: signResult.data.witnesses, utxos },
+  })) as { data: { txId?: string; error?: string } };
+  if (submitResult.data.error || !submitResult.data.txId) {
+    throw new Error(submitResult.data.error || 'Failed to submit batcher transaction.');
+  }
+  return submitResult.data.txId;
+}
+
 async function pollSettlement(reqId: string, generation: number): Promise<void> {
   const start = Date.now();
 
@@ -241,7 +321,12 @@ export function useStrikeWithdraw() {
       status.value = 'signing';
       const walletSignature = await signCip8(quote.value.message_to_sign, password);
 
+      // Cardano requires an on-chain batcher-fee tx before the withdraw is
+      // executed (STRIKE_V2_INTEGRATOR_GUIDE §16.2). Build + sign + submit it,
+      // then proceed to POST /v2/withdraw.
       status.value = 'submitting';
+      await submitBatcherTx(quote.value.withdraw_id, password);
+
       const submitRes = await strikeUserApi.executeWithdraw(
         quote.value.withdraw_id,
         walletSignature,
