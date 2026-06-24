@@ -1,32 +1,33 @@
 <template>
   <div class="step-device">
     <div class="step-section-label mb-2">{{ $t('welcome.hardwareWalletType') }}</div>
-    <div class="hw-grid">
-      <div
+    <div class="hw-list">
+      <button
         v-for="item in walletTypes"
         :key="item.name"
-        class="hw-tile"
+        type="button"
+        class="hw-card"
         :class="{
-          'hw-tile--active': localWalletType === item.name,
-          'hw-tile--disabled': !item.enabled
+          'hw-card--active': localWalletType === item.name,
+          'hw-card--disabled': !item.enabled,
         }"
+        :disabled="!item.enabled"
         @click="item.enabled && selectType(item.name)"
       >
-        <img
-          :src="item.icon"
-          class="hw-tile__logo"
-          :alt="item.name"
-        />
-        <span class="hw-tile__label">{{ item.name }}</span>
-        <v-chip v-if="!item.enabled" color="red" x-small style="height: 14px; font-size: 9px;">{{ $t('welcome.soon') }}</v-chip>
-      </div>
+        <img :src="item.icon" class="hw-card__logo" :alt="item.name" />
+        <span class="hw-card__text">
+          <span class="hw-card__name">{{ item.name }}</span>
+          <span class="hw-card__desc">{{ item.description }}</span>
+        </span>
+        <v-icon class="hw-card__check" size="20">{{ localWalletType === item.name ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
+      </button>
     </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
-      <v-btn color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <v-btn class="onb-btn" color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>
@@ -94,58 +95,87 @@ const onContinue = (): void => {
   color: white;
 }
 
-.hw-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.onb-btn {
+  border-radius: 8px !important;
 }
 
-.hw-tile {
+.hw-list {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+}
+
+.hw-card {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 18px 10px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  gap: 16px;
+  width: 100%;
+  min-height: 86px;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-  min-height: 100px;
-  gap: 8px;
-  user-select: none;
 
-  &:hover {
-    border-color: rgba(255, 255, 255, 0.18);
+  &:hover:not(.hw-card--disabled) {
+    border-color: rgba(255, 255, 255, 0.24);
     background: rgba(255, 255, 255, 0.05);
   }
 
   &--active {
-    border-color: #{"rgb(from var(--v-primary-base) r g b / 0.55)"};
-    background: #{"rgb(from var(--v-primary-base) r g b / 0.06)"};
-    box-shadow: 0 0 14px #{"rgb(from var(--v-primary-base) r g b / 0.07)"};
+    border-color: var(--v-primary-base);
+    background: #{"rgb(from var(--v-primary-base) r g b / 0.1)"};
+    box-shadow: 0 0 16px #{"rgb(from var(--v-primary-base) r g b / 0.08)"};
   }
 
   &--disabled {
-    opacity: 0.35;
+    opacity: 0.4;
     cursor: not-allowed;
   }
 
   &__logo {
-    width: 100px;
-    height: 32px;
+    width: 120px;
+    min-width: 120px;
+    height: 41px;
     object-fit: contain;
+    object-position: left center;
     filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);
   }
 
-  &__label {
-    font-size: 11px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.5);
+  &__text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
   }
 
-  &--active &__label {
-    color: rgba(255, 255, 255, 0.9);
+  &__name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.25;
+  }
+
+  &__desc {
+    font-size: 12.5px;
+    color: #94979c;
+    margin-top: 2px;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  &__check {
+    color: rgba(255, 255, 255, 0.25) !important;
+  }
+
+  &--active &__check {
+    color: var(--v-primary-base) !important;
   }
 }
 </style>
