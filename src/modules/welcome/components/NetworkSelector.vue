@@ -108,7 +108,7 @@ const isNetActive = (net: NetworkInfo): boolean =>
 // "Apex Prime Mainnet" -> "Prime Mainnet".
 const optionLabel = (net: NetworkInfo): string => {
   const fam = familyName(net.blockchain);
-  return net.title.replace(new RegExp(`^${fam}\\s+`), '') || net.network;
+  return net.title.startsWith(fam + ' ') ? net.title.slice(fam.length + 1) : (net.title || net.network);
 };
 
 const commit = (net: NetworkInfo): void => {

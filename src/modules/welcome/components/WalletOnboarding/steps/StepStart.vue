@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import assets from '@/utils/assets';
 import { NetworkInfo } from '@/utils/networks';
 import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
@@ -74,6 +74,10 @@ const emit = defineEmits<{
 }>();
 
 const localNetwork = ref<NetworkInfo>(props.network);
+// Keep in sync when the parent changes the network externally (e.g. hovering a
+// wallet in the left list flows back down as a new prop).
+watch(() => props.network, (n) => { localNetwork.value = n; });
+
 const selectedMethod = ref<Method | null>(null);
 const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
 

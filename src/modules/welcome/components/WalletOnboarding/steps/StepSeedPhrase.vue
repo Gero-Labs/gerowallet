@@ -129,7 +129,7 @@ const pasteFromClipboard = async () => {
   try {
     const text = await navigator.clipboard.readText();
     if (!text?.trim()) return;
-    recoverySeedPhrase.value = text.split(' ');
+    recoverySeedPhrase.value = text.trim().split(/\s+/);
     if ([12, 15, 24].includes(recoverySeedPhrase.value.length)) {
       seedPhraseLength.value = recoverySeedPhrase.value.length.toString();
     }

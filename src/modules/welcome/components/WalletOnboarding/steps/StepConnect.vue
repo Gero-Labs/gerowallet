@@ -111,6 +111,7 @@ import { Bip32PublicKey } from '@cardano-sdk/crypto';
 import snackbar from '@/plugins/snackbar';
 import { bech32 } from 'bech32';
 import { UR } from '@keystonehq/keystone-sdk';
+import { debugLog } from '@/utils/debug';
 import type { NetworkInfo } from '@/utils/networks';
 
 interface ConnectionPayload {
@@ -165,7 +166,7 @@ onMounted(() => {
 
 const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void> => {
   try {
-    console.log('[Keystone] QR code scanned:', ur);
+    debugLog('[Keystone] QR code scanned', ur.type);
 
     if (props.network?.blockchain === Blockchain.BITCOIN) {
       const bitcoinUR = UR.from(ur.cbor, 'hex');
@@ -190,12 +191,9 @@ const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void>
 
     const cborBuffer = Buffer.from(ur.cbor, 'hex');
     const cryptoMultiAccounts = CryptoMultiAccounts.fromCBOR(cborBuffer);
-    console.log('[Keystone] Parsed CryptoMultiAccounts:', cryptoMultiAccounts);
 
     const device = cryptoMultiAccounts.getDevice();
-    console.log('[Keystone] Device:', device);
-    const version = cryptoMultiAccounts.getVersion();
-    console.log('[Keystone] Version:', version);
+    debugLog('[Keystone] Parsed device', device);
     const keys = cryptoMultiAccounts.getKeys();
     const masterFingerprint = cryptoMultiAccounts.getMasterFingerprint();
 
@@ -234,7 +232,7 @@ const onKeystoneError = (error: string): void => {
 };
 
 const onKeystoneProgress = (progress: number): void => {
-  console.log('[Keystone] Scan progress:', Math.round(progress * 100) + '%');
+  debugLog('[Keystone] Scan progress', Math.round(progress * 100) + '%');
 };
 
 const walletCreationStep2 = async (): Promise<void> => {
@@ -288,7 +286,7 @@ const walletCreationStep2 = async (): Promise<void> => {
         data: { method: 'initTrezor', chain: props.network?.blockchain, network: props.network?.network },
       });
 
-      console.log('[TREZOR Dialog] Response:', response);
+      debugLog('[TREZOR] init success', response?.data?.success);
 
       if (response.data.success && response.data.coldWalletProps) {
         const coldWalletProps = response.data.coldWalletProps;

@@ -168,6 +168,8 @@ const walletCreationStep3 = async (): Promise<void> => {
     }
   } catch (e) {
     console.error('Error creating wallet:', e);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (vmProxy as any)?.['$snackbar']?.setError(vmProxy?.$t('welcome.hardwareConnectionFailed') as string);
   } finally {
     creatingWalletLoader.value = false;
   }
