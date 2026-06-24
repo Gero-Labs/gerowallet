@@ -94,7 +94,7 @@ const currentMidPrice = ref<number | null>(null);
 let unsubscribe: (() => void) | null = null;
 
 // ── Composable ───────────────────────────────────────────────────────────────
-const { subscribeOrderBook } = useStrikeMarketWs();
+const { subscribeDepth } = useStrikeMarketWs();
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 
@@ -202,23 +202,14 @@ function applySnapshot(data: { bids?: [string, string][]; asks?: [string, string
   updateMidPrice();
 }
 
-function applyDelta(data: unknown) {
+// Per Integrator Guide Section 5.2 each depthUpdate is a full-book snapshot
+// (fields `a` = asks, `b` = bids), so rebuild both sides on every event rather
+// than applying incremental deltas. Matches the dashboard useOrderBook handler.
+function applyDepthUpdate(data: unknown) {
   const d = data as { b?: [string, string][]; a?: [string, string][] };
-  if (d.b) mergeDepth(orderBook.value.bids, d.b);
-  if (d.a) mergeDepth(orderBook.value.asks, d.a);
+  if (d.a) orderBook.value.asks = d.a;
+  if (d.b) orderBook.value.bids = d.b;
   updateMidPrice();
-}
-
-function mergeDepth(side: [string, string][], updates: [string, string][]) {
-  for (const [price, qty] of updates) {
-    const idx = side.findIndex((e) => e[0] === price);
-    if (parseFloat(qty) === 0) {
-      if (idx !== -1) side.splice(idx, 1);
-    } else {
-      if (idx !== -1) side[idx] = [price, qty];
-      else side.push([price, qty]);
-    }
-  }
 }
 
 function updateMidPrice() {
@@ -246,7 +237,7 @@ async function loadAndSubscribe(symbol: string) {
   }
 
   // Subscribe to live updates
-  unsubscribe = subscribeOrderBook(symbol, applyDelta);
+  unsubscribe = subscribeDepth(symbol, applyDepthUpdate);
 }
 
 onMounted(() => {

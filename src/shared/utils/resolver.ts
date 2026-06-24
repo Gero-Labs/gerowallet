@@ -353,9 +353,7 @@ export const fromPlutusData = (
 
 // Token image overrides — replace bad/missing logos for specific tokens
 // In service worker (background), SVG imports are empty — overrides only apply in browser context.
-export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker ? {} : {
-  'NIGHT': assetsModule.nightTokenSvg,
-};
+export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker ? {} : {};
 
 /**
  * Apply token image overrides for a given token name/ticker.
