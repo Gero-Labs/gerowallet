@@ -1,9 +1,5 @@
 <template>
   <div class="onboarding-wrapper">
-    <v-btn text small class="back-to-wallets" @click="$emit('back')">
-      <v-icon left size="18">mdi-arrow-left</v-icon>
-      {{ $t('welcome.backToWallets') }}
-    </v-btn>
     <!-- Single content card — only the active step is rendered -->
     <v-card class="liquid-glass transparent-override onboarding-content" flat>
       <div class="content-header">
@@ -16,7 +12,6 @@
           :network="network"
           @change="onNetworkChange"
           @select="onMethodSelect"
-          @back="$emit('back')"
         />
         <StepSecurity class="onboarding-step"
           v-else-if="currentStep.key === 'security'"
@@ -31,7 +26,6 @@
           :security-method="securityMethod"
           :name="walletName"
           @back="step--"
-          @created="$emit('back')"
         />
         <StepSeedPhrase class="onboarding-step"
           v-else-if="currentStep.key === 'seed'"
@@ -47,7 +41,6 @@
           :name="walletName"
           :mnemonic="mnemonic"
           @back="step--"
-          @created="$emit('back')"
         />
         <StepDevice class="onboarding-step"
           v-else-if="currentStep.key === 'device'"
@@ -71,7 +64,6 @@
           :name="walletName"
           @update:name="walletName = $event"
           @back="step--"
-          @created="$emit('back')"
         />
       </div>
     </v-card>
@@ -110,7 +102,7 @@ interface StepDef {
 // The network step emits changes up via `network-change`; Welcome updates the
 // prop and also drives the background from it.
 defineProps<{ network: NetworkInfo }>();
-const emit = defineEmits<{ (e: 'back'): void; (e: 'network-change', n: NetworkInfo): void }>();
+const emit = defineEmits<{ (e: 'network-change', n: NetworkInfo): void }>();
 
 const step = ref<number>(1);
 const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
@@ -201,14 +193,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 64px);
-}
-
-.back-to-wallets {
-  align-self: flex-start; /* left-aligned with the card's left edge */
-  margin-bottom: 12px;
-  text-transform: none;
-  letter-spacing: normal;
-  color: #94979c !important;
 }
 
 /* CONTENT */

@@ -43,7 +43,6 @@
 
     <!-- Navigation -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
@@ -62,7 +61,6 @@ const props = defineProps<{ network: NetworkInfo }>();
 const emit = defineEmits<{
   (e: 'change', n: NetworkInfo): void;
   (e: 'select', method: Method): void;
-  (e: 'back'): void;
 }>();
 
 const localNetwork = ref<NetworkInfo>(props.network);

@@ -14,26 +14,7 @@
         />
       </div>
 
-      <div class="text-container">
-        <div class="subtitle">{{ $t('welcome.yourNew') }}</div>
-        <v-list-item>
-          <v-list-item-content>
-            <v-list-item-title class="title-regular">{{ $t('welcome.singlePaneOf') }}</v-list-item-title>
-            <v-list-item-subtitle :class="['title-gradient', gradientClass]">{{ $t('welcome.glass') }}</v-list-item-subtitle>
-          </v-list-item-content>
-        </v-list-item>
-
-        <GButton
-          block
-          :class="['create-btn', isApex ? 'apexButton transition' : 'geroButton transition']"
-          large
-          @click="enableCreateOrImportSeedPhrase"
-        >
-          {{ $t('welcome.createOrImportSeedPhrase') }}
-        </GButton>
-
-        <GoogleLogin :selected-network="selectedNetwork" />
-      </div>
+      <WalletsListLogin class="wallet-list-block" @network-change="onNetworkChange" />
     </div>
 
     <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
@@ -42,28 +23,24 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { geroDashboardApex, geroDashboard } from '@/utils/assets';
-import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
-import GButton from '@/shared/components/GButton/GButton.vue';
+import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
 import { NetworkInfo } from '@/utils/networks';
-
-const emits = defineEmits<{
-  (e: 'createOrImportSeedPhrase'): void;
-}>();
 
 const props = defineProps<{
   selectedNetwork: NetworkInfo;
-  createOrImportSeedPhrase: boolean;
 }>();
 
-const enableCreateOrImportSeedPhrase = (): void => {
-    emits('createOrImportSeedPhrase');
+const emit = defineEmits<{
+  (e: 'network-change', n: NetworkInfo): void;
+}>();
+
+const onNetworkChange = (n: NetworkInfo): void => {
+  emit('network-change', n);
 };
 
-// Pure, reactive derivations of the selected network — no side effects, so the
-// logo and gradient update reliably every time the network changes.
+// Logo reacts to the selected network (Apex variant vs default).
 const isApex = computed(() => !!props.selectedNetwork?.blockchain?.includes('Apex'));
 const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
-const gradientClass = computed(() => (isApex.value ? 'apex-gradient-text' : 'gradient-text'));
 </script>
 <style scoped>
 .welcome-left-column {
@@ -122,7 +99,11 @@ const gradientClass = computed(() => (isApex.value ? 'apex-gradient-text' : 'gra
 }
 
 .logo-container {
-  margin-bottom: 40px;
+  margin-bottom: 32px;
+}
+
+.wallet-list-block {
+  width: 100%;
 }
 
 .logo-container .logo {

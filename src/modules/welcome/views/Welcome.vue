@@ -27,21 +27,19 @@
 
     <!-- Main container -->
     <div class="welcome-container">
-      <!-- Left column - Liquid glass panel -->
+      <!-- Left column - logo + existing wallet list -->
       <div class="welcome-left-column">
         <WalletCreation
           :selectedNetwork="selectedNetwork"
-          :createOrImportSeedPhrase="createOrImportSeedPhrase"
-          @createOrImportSeedPhrase="enableCreateOrImportSeedPhrase"
+          @network-change="onOnboardingNetwork"
         />
       </div>
 
-      <!-- Right column - Clean background, no glass effects -->
+      <!-- Right column - create / import onboarding (always shown) -->
       <div class="welcome-right-column">
         <div class="right-content">
-          <!-- Single mode host: empty (no wallets) | onboarding | login -->
           <div class="right-panel">
-            <component :is="panel.is" v-bind="panel.props" v-on="panel.on" />
+            <WalletOnboarding :network="selectedNetwork" @network-change="onOnboardingNetwork" />
           </div>
 
           <!-- Footer -->
@@ -52,57 +50,19 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs } from 'vue';
+import { ref } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
-import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
-import { Wallet, WalletType } from '@/models/types';
-import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
-import { geroStore } from '@/stores/geroStore';
 import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCreation.vue';
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
 
-const createOrImportSeedPhrase = ref<boolean>(false);
 const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 
-const { wallets } = toRefs(geroStore);
-
-const disableCreateOrImportSeedPhrase = (): void => {
-  createOrImportSeedPhrase.value = false;
-};
-const enableCreateOrImportSeedPhrase = (): void => {
-  // Start onboarding from a clean default network so a chain that was merely
-  // hovered in the login list (possibly coming-soon) isn't carried into the flow.
-  selectedNetwork.value = networks.networks[0];
-  createOrImportSeedPhrase.value = true;
-};
 const onOnboardingNetwork = (n: NetworkInfo): void => {
   selectedNetwork.value = n;
 };
-
-const availableWallets = computed(() => {
-  return Object.values(wallets.value)?.filter(
-    (wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
-  );
-});
-
-// Right-column mode host: pick the panel component + its props/listeners for the
-// current state (onboarding / empty / login).
-const panel = computed(() => {
-  if (createOrImportSeedPhrase.value) {
-    return {
-      is: WalletOnboarding,
-      props: { network: selectedNetwork.value },
-      on: { back: disableCreateOrImportSeedPhrase, 'network-change': onOnboardingNetwork },
-    };
-  }
-  if (Array.isArray(availableWallets.value) && availableWallets.value.length === 0) {
-    return { is: NoWalletsWelcomeCard, props: {}, on: {} };
-  }
-  return { is: WalletsListLogin, props: {}, on: { 'network-change': onOnboardingNetwork } };
-});
 </script>
 <style scoped>
 .welcome-root {
