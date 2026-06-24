@@ -304,21 +304,31 @@ const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
 const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
 const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
 
-const columnOptions: { key: ColumnKey; label: string }[] = [
-  { key: 'change1h', label: t('market.change1h') },
-  { key: 'change24h', label: t('market.change24h') },
-  { key: 'change7d', label: t('market.change7d') },
-  { key: 'change30d', label: t('market.change30d') },
-  { key: 'sparkline', label: t('market.sparkline') },
-  { key: 'volume24h', label: t('market.volume24h') },
-  { key: 'volume7d', label: t('market.volume7d') },
-  { key: 'txnCount24h', label: t('market.txnCount') },
-  { key: 'makerCount24h', label: t('market.makerCount') },
-  { key: 'totalSupply', label: t('market.totalSupply') },
-  { key: 'mcap', label: t('market.marketCap') },
-  { key: 'tvl', label: t('market.liquidity') },
-  { key: 'allocation', label: t('common.allocation') },
-];
+const columnOptions = computed<{ key: ColumnKey; label: string }[]>(() => {
+  const opts: { key: ColumnKey; label: string }[] = [
+    { key: 'change1h', label: t('market.change1h') },
+    { key: 'change24h', label: t('market.change24h') },
+    { key: 'change7d', label: t('market.change7d') },
+    { key: 'change30d', label: t('market.change30d') },
+    { key: 'sparkline', label: t('market.sparkline') },
+    { key: 'volume24h', label: t('market.volume24h') },
+    { key: 'volume7d', label: t('market.volume7d') },
+    { key: 'txnCount24h', label: t('market.txnCount') },
+    { key: 'makerCount24h', label: t('market.makerCount') },
+    { key: 'totalSupply', label: t('market.totalSupply') },
+    { key: 'mcap', label: t('market.marketCap') },
+    { key: 'tvl', label: t('market.liquidity') },
+    { key: 'allocation', label: t('common.allocation') },
+  ];
+  // Avg cost + P&L only apply to the holdings view (per-holding metrics).
+  if (activeView.value === 'holdings') {
+    opts.push(
+      { key: 'avgCostBasis', label: t('market.avgCost') },
+      { key: 'totalPnl', label: t('market.totalPnl') },
+    );
+  }
+  return opts;
+});
 
 const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
 const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGero, closeDelegateDialog } = useDelegation();

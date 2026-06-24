@@ -507,7 +507,9 @@ const baseHeaders = computed(() => {
 });
 
 const LOCKED_COLUMNS = ['rank', 'name', 'price', 'watchlist'];
-const HOLDINGS_COLUMNS = ['balance', 'value', 'avgCostBasis', 'totalPnl'];
+// balance + value are core to the holdings view (always shown); avgCostBasis &
+// totalPnl are now user-configurable via column preferences.
+const HOLDINGS_COLUMNS = ['balance', 'value'];
 
 const activeHeaders = computed(() => {
   return baseHeaders.value.filter(header => {
