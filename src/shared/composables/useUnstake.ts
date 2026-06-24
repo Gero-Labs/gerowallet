@@ -1,9 +1,12 @@
 import { ref, toRefs } from 'vue';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { nexusTxApi, cardanoUtxoToNexusInput, type BuildStakeRegistrationTxRequest } from '@/api/nexus-tx-api';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 
 /**
@@ -68,22 +71,42 @@ export function useUnstake() {
         });
       }
 
-      // Build the unstaking transaction with wallet context for accurate fee estimation
-      // For unstaking, deposit is returned (negative implicit coin)
-      txData.value = await buildCardanoTransaction({
-        certificates,
-        withdrawals,
-        utxos: utxos.value as Cardano.Utxo[],
-        epochParams: epochParams.value,
-        changeAddress: keys.value.payment[0].address,
-        tip: tip.value,
-        implicitCoin: -stakeKeyDepositLovelace, // Deposit is returned
-        walletContext: {
-          keys: keys.value,
-          stakeAddress: loggedWallet.value?.stakeAddress || '',
-          accountIndex: 0,
-        }
-      });
+      // Phase 1 Nexus migration: build the deregistration server-side when the flag is on
+      // and there are no pending rewards (the /build/stake-registration endpoint has no
+      // `withdrawals` field). A deregistration that also claims rewards stays on the
+      // client-side @cardano-sdk builder below.
+      const useNexus =
+        featureFlagsStore.isNexusUnstakeEnabled() &&
+        withdrawals.length === 0;
+
+      if (useNexus) {
+        const request: BuildStakeRegistrationTxRequest = {
+          stakeAddress: loggedWallet.value.stakeAddress,
+          changeAddress: keys.value.payment[0].address,
+          utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+          deregister: true,
+        };
+        const { tx_cbor } = await nexusTxApi.buildStakeRegistrationTx(request, loggedWallet.value.network);
+        if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+        txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
+      } else {
+        // Build the unstaking transaction with wallet context for accurate fee estimation
+        // For unstaking, deposit is returned (negative implicit coin)
+        txData.value = await buildCardanoTransaction({
+          certificates,
+          withdrawals,
+          utxos: utxos.value as Cardano.Utxo[],
+          epochParams: epochParams.value,
+          changeAddress: keys.value.payment[0].address,
+          tip: tip.value,
+          implicitCoin: -stakeKeyDepositLovelace, // Deposit is returned
+          walletContext: {
+            keys: keys.value,
+            stakeAddress: loggedWallet.value?.stakeAddress || '',
+            accountIndex: 0,
+          }
+        });
+      }
 
       unstakeDialog.value = true;
     } catch (error: any) {
