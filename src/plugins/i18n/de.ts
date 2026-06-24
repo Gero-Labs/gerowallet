@@ -1839,6 +1839,10 @@ export default {
   'perps.connect.stepRequesting': 'Signatur-Challenge wird angefordert…',
   'perps.connect.stepSigning': 'Wallet-Signatur wird erwartet…',
   'perps.connect.stepVerifying': 'Wird mit Strike verifiziert…',
+  // Inline-Verbindungsaufforderung für authentifizierte Aktionen
+  'perps.connect.gateDeposit': 'Mit Strike verbinden, um Guthaben einzuzahlen.',
+  'perps.connect.gateWithdraw': 'Mit Strike verbinden, um Guthaben auszuzahlen.',
+  'perps.connect.submitCta': 'Mit Strike Verbinden',
 
   // Strike v2 Einzahlung/Auszahlung
   'perpetuals.deposit': 'Einzahlen',
