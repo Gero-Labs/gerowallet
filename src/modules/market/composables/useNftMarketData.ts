@@ -102,42 +102,35 @@ export function useNftMarketData() {
       // Show immediately, merging anything already cached.
       applyCachedStats(baseCollections);
 
-      // Only hit the network for collections we have no cached answer for. The
-      // cache stores `null` for collections Nexus has no data for (404), so we
-      // never re-request them — this is what stops the per-sync 404/429 spam.
+      // Only do work for collections we have no cached answer for.
       const uncached = baseCollections.filter(c => !statsCache.has(c.policyId));
       if (uncached.length === 0) return;
 
-      // Source 1: bulk top-collections endpoint (covers popular ones in one call).
+      // Enrich ONLY from the bulk top-collections endpoint — a single request that
+      // covers popular collections. We deliberately do NOT make per-collection
+      // /api/nft/collection/{policy} calls: Nexus 404s collections it doesn't track
+      // and 429-rate-limits the burst, and those collections have no market data to
+      // show anyway. That per-collection loop was the source of the console spam.
       const uncachedIds = new Set(uncached.map(c => c.policyId));
+      let bulkOk = false;
       try {
         const topCollections = await marketApi.getNftCollections('volume', 200);
         if (Array.isArray(topCollections)) {
+          bulkOk = true;
           for (const tc of topCollections) {
             if (tc.policyId && uncachedIds.has(tc.policyId)) statsCache.set(tc.policyId, tc);
           }
         }
       } catch {
-        // Bulk endpoint not available — fall through to individual calls.
+        // Bulk endpoint unavailable — leave collections un-enriched and retry next round.
       }
 
-      // Source 2: individual calls for whatever's still uncached (capped + paced
-      // to avoid Nexus 429s). Cache EVERY attempt — stats on success, null on
-      // 404/error — so each collection is a one-time cost, not per sync tick.
-      const MAX_INDIVIDUAL = 20;
-      const missing = uncached.filter(c => !statsCache.has(c.policyId)).slice(0, MAX_INDIVIDUAL);
-      const BATCH_SIZE = 4;
-      for (let i = 0; i < missing.length; i += BATCH_SIZE) {
-        const batch = missing.slice(i, i + BATCH_SIZE);
-        const results = await Promise.allSettled(
-          batch.map(async (col) => ({ policyId: col.policyId, stats: await marketApi.getNftCollectionStats(col.policyId) })),
-        );
-        results.forEach((r, j) => {
-          statsCache.set(batch[j].policyId, r.status === 'fulfilled' ? (r.value.stats ?? null) : null);
-        });
-        // Gentle pacing between batches to stay under Nexus rate limits.
-        if (i + BATCH_SIZE < missing.length) {
-          await new Promise(res => setTimeout(res, 250));
+      // After a successful bulk pass, cache everything else as "no data" so we never
+      // re-request it on subsequent sync ticks. (If the bulk call failed we leave it
+      // uncached so a later run can retry — no permanent blanking.)
+      if (bulkOk) {
+        for (const c of uncached) {
+          if (!statsCache.has(c.policyId)) statsCache.set(c.policyId, null);
         }
       }
 
