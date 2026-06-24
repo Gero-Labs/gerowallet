@@ -230,7 +230,7 @@ onUnmounted(() => {
   border-radius: 16px !important;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .content-header {
@@ -277,6 +277,10 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: visible;
+  border-radius: 0;
+  padding: 0 2px 4px; /* keep the action button off the scroll-clip edge */
+  margin: 0 -2px;
   display: flex;
   flex-direction: column;
 }
