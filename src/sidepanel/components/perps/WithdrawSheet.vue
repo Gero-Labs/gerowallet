@@ -195,6 +195,15 @@
           >
             {{ $t('perps.withdraw.requote') }}
           </v-btn>
+          <!-- PRF wallets: tap PassKey to authenticate, then sign + submit -->
+          <PassKeyAuthButton
+            v-else-if="isPrfWallet"
+            class="action-btn"
+            :disabled="!canSign || withdrawStatus === 'signing' || withdrawStatus === 'submitting'"
+            :text="$t('perps.withdraw.confirmSign')"
+            @success="handlePassKeyConfirm"
+            @error="onPassKeyError"
+          />
           <v-btn
             v-else
             depressed
@@ -275,6 +284,8 @@ import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboa
 import { walletStore } from '@/stores/walletStore';
 import i18n from '@/plugins/i18n';
 import StrikeOnboarding from './StrikeOnboarding.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ───────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -358,7 +369,11 @@ const canQuote = computed(() =>
   withdrawStatus.value !== 'quoting',
 );
 
-const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
+const isPrfWallet = computed(() => {
+  const w = walletStore.loggedWallet;
+  return w?.encryptionMethod === 'prf' ||
+    (!!w?.prfEncryptedPrivateKey && !!w?.webAuthnCredentialId);
+});
 const isHwWallet = computed(() => {
   const t = walletStore.loggedWallet?.type;
   return t === 'Ledger' || t === 'Trezor' || t === 'Keystone';
@@ -465,6 +480,23 @@ async function confirmAndSign() {
   if (ok) {
     emit('withdrawn');
   }
+}
+
+/**
+ * PRF (passkey) wallets: PassKeyAuthButton decrypted the root key and handed
+ * us the bytes. Pass them to signAndSubmit as privateKeyBytes (signs the CIP-8
+ * withdrawal message via SIGN_DATA's privateKeyBytes path).
+ */
+async function handlePassKeyConfirm(pkBytes: Uint8Array) {
+  if (!canSign.value) return;
+  const ok = await signAndSubmit('', pkBytes);
+  if (ok) {
+    emit('withdrawn');
+  }
+}
+
+function onPassKeyError(err: Error) {
+  snackbar.setError(err?.message || (i18n.t('security.passKeyAuthFailed') as string));
 }
 
 function goBackToAmount() {

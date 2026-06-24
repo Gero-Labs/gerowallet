@@ -97,8 +97,11 @@ function getActiveStakeAddress(): string | null {
  * @param message  Plain UTF-8 message returned by the validator.
  * @param password Spending password (empty string for HW / PRF wallets — the
  *                 background path will use the appropriate auth flow).
+ * @param pkBytes  Pre-decrypted root key bytes for PRF (passkey) wallets,
+ *                 obtained from PassKeyAuthButton. When present these are sent
+ *                 as privateKeyBytes and the password is ignored.
  */
-async function signCip8(message: string, password: string): Promise<string> {
+async function signCip8(message: string, password: string, pkBytes?: Uint8Array): Promise<string> {
   const stakeAddress = getActiveStakeAddress();
   if (!stakeAddress) {
     throw new Error('No active wallet — cannot sign withdrawal message.');
@@ -111,7 +114,9 @@ async function signCip8(message: string, password: string): Promise<string> {
     data: {
       address: stakeAddress,
       payload: payloadHex,
-      password,
+      // PRF wallets pass the pre-decrypted root key bytes instead of a password.
+      password: pkBytes ? '' : password,
+      ...(pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
       accountIndex: 0,
       isUsb: false,
     },
@@ -236,7 +241,7 @@ export function useStrikeWithdraw() {
    * Step 2 — sign the quote message and submit. Drives status through
    * `signing → submitting → pending → settled`.
    */
-  async function signAndSubmit(password: string): Promise<boolean> {
+  async function signAndSubmit(password: string, pkBytes?: Uint8Array): Promise<boolean> {
     if (!quote.value) {
       error.value = 'No active withdrawal quote.';
       status.value = 'error';
@@ -250,7 +255,7 @@ export function useStrikeWithdraw() {
 
     try {
       status.value = 'signing';
-      const walletSignature = await signCip8(quote.value.message_to_sign, password);
+      const walletSignature = await signCip8(quote.value.message_to_sign, password, pkBytes);
 
       status.value = 'submitting';
       const submitRes = await strikeUserApi.executeWithdraw(
