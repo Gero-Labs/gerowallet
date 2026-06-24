@@ -938,6 +938,38 @@ export class WalletBg {
     // Decrypt root private key (supports both password and PRF encryption)
     const rootKey = await this.decryptRootPrivateKey(password);
 
+    return this.deriveAccountKey(rootKey, type, accountIndex, index);
+  }
+
+  /**
+   * Derive an account key from pre-decrypted root private key bytes (PRF
+   * wallets — the root key was already decrypted in the browser context via
+   * the WebAuthn PRF extension, mirroring signTx's privateKeyBytes path).
+   *
+   * Uses the SAME derivation as requestAccountKey; the only difference is the
+   * root key comes from Bip32PrivateKey.fromBytes() instead of decrypt.
+   */
+  private requestAccountKeyFromBytes(
+    type: 'stake' | 'payment' | 'change' | 'drep',
+    privateKeyBytes: Uint8Array,
+    accountIndex: number,
+    index: number,
+  ): Ed25519PrivateKey {
+    const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(privateKeyBytes);
+    return this.deriveAccountKey(rootKey, type, accountIndex, index);
+  }
+
+  /**
+   * Shared CIP-1852 derivation used by both the password (requestAccountKey)
+   * and PRF (requestAccountKeyFromBytes) paths. Keeps the two byte-for-byte
+   * identical so PRF signatures match password signatures.
+   */
+  private deriveAccountKey(
+    rootKey: Bip32PrivateKey,
+    type: 'stake' | 'payment' | 'change' | 'drep',
+    accountIndex: number,
+    index: number,
+  ): Ed25519PrivateKey {
     // Derive account key
     const accountKey: Bip32PrivateKey = rootKey.derive([
       WalletTypePurpose.CIP1852,
@@ -1650,6 +1682,7 @@ export class WalletBg {
     password: string,
     accountIndex: number,
     keys: Keys,
+    privateKeyBytes?: Uint8Array, // Optional pre-decrypted root key for PRF wallets
   ) {
     // Use Cardano SDK's cip30signData implementation directly (same as Lace)
     // This ensures 100% compatibility with the Cardano SDK standard
@@ -1687,8 +1720,13 @@ export class WalletBg {
           throw new Error(`Unknown derivation role: ${derivationPath.role}`);
         }
 
-        // Get the private key
-        const privateKey = await this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
+        // Get the private key. PRF wallets pass the pre-decrypted root key
+        // bytes (already authenticated in the browser via WebAuthn PRF); all
+        // other wallets decrypt the root key with the spending password. The
+        // derivation is identical in both branches.
+        const privateKey = privateKeyBytes
+          ? this.requestAccountKeyFromBytes(keyType, privateKeyBytes, accountIndex, derivationPath.index)
+          : await this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
 
         // Sign the blob
         const signature = privateKey.sign(HexBlob(blob));
@@ -1702,7 +1740,9 @@ export class WalletBg {
 
     // Call custom CIP-8 signing implementation (avoids blocking cip8 import)
     // This implementation matches the SDK's cip30signData behavior
-    return await signDataCip8(keyAgent, knownAddresses, signWith, payload);
+    const result = await signDataCip8(keyAgent, knownAddresses, signWith, payload);
+    password = null; // Clear password reference from memory (mirrors signTx)
+    return result;
   }
 
   /**

@@ -1606,6 +1606,7 @@ export default {
   'perps.connect.gateDeposit': 'Connect to Strike to deposit funds.',
   'perps.connect.gateWithdraw': 'Connect to Strike to withdraw funds.',
   'perps.connect.submitCta': 'Connect to Strike',
+  'perps.passkeySignHint': 'Authenticate with your PassKey to sign this transaction.',
 
   // Strike v2 deposit/withdraw
   'perpetuals.deposit': 'Deposit',

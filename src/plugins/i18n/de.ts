@@ -1843,6 +1843,7 @@ export default {
   'perps.connect.gateDeposit': 'Mit Strike verbinden, um Guthaben einzuzahlen.',
   'perps.connect.gateWithdraw': 'Mit Strike verbinden, um Guthaben auszuzahlen.',
   'perps.connect.submitCta': 'Mit Strike Verbinden',
+  'perps.passkeySignHint': 'Mit Ihrem PassKey authentifizieren, um diese Transaktion zu signieren.',
 
   // Strike v2 Einzahlung/Auszahlung
   'perpetuals.deposit': 'Einzahlen',

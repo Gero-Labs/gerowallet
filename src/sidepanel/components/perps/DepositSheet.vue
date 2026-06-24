@@ -145,6 +145,12 @@
           @click:append="showPassword = !showPassword"
         />
 
+        <!-- PRF (passkey) wallets confirm by authenticating with their PassKey -->
+        <div v-else-if="isPrfWallet" class="info-banner mt-3" style="background: rgba(0,199,243,0.06); border-color: rgba(0,199,243,0.22); color: #00c7f3;">
+          <v-icon size="14" color="#00c7f3" class="mr-2" style="flex-shrink:0">mdi-fingerprint</v-icon>
+          <span>{{ $t('perps.passkeySignHint') }}</span>
+        </div>
+
         <div v-else class="info-banner mt-3">
           <v-icon size="14" color="#FFB454" class="mr-2" style="flex-shrink:0">mdi-information-outline</v-icon>
           <span>{{ $t('perpetuals.deposit.hwNotSupported', { addr: truncatedAddress }) }}</span>
@@ -173,6 +179,15 @@
             <v-icon size="14" class="mr-2">mdi-shield-check</v-icon>
             {{ $t('perpetuals.deposit.confirmSign') }}
           </v-btn>
+          <!-- PRF wallets: tap PassKey to authenticate, then build + sign -->
+          <PassKeyAuthButton
+            v-else-if="isPrfWallet"
+            class="flex-grow-1"
+            :disabled="isSigning || quoteCountdown <= 0"
+            :text="$t('perpetuals.deposit.confirmSign')"
+            @success="handlePassKeyConfirm"
+            @error="onPassKeyError"
+          />
           <v-btn
             v-else
             depressed
@@ -276,6 +291,8 @@ import { walletStore } from '@/stores/walletStore';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import StrikeOnboarding from './StrikeOnboarding.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -386,7 +403,11 @@ const canQuote = computed(() => amountNum.value > 0 && amountNum.value <= availa
 // an interactive flow that the deposit composable doesn't yet drive (the
 // Send dialog handles those paths). Until that's wired, surface a clear
 // "not supported" message instead of a permanently-disabled confirm button.
-const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
+const isPrfWallet = computed(() => {
+  const w = walletStore.loggedWallet;
+  return w?.encryptionMethod === 'prf' ||
+    (!!w?.prfEncryptedPrivateKey && !!w?.webAuthnCredentialId);
+});
 const isHwWallet = computed(() => {
   const t = walletStore.loggedWallet?.type;
   return t === 'Ledger' || t === 'Trezor' || t === 'Keystone';
@@ -490,6 +511,24 @@ async function handleConfirm() {
   if (ok) {
     emit('deposited');
   }
+}
+
+/**
+ * PRF (passkey) wallets: PassKeyAuthButton decrypted the root key and handed
+ * us the bytes. Pass them to buildAndSign as privateKeyBytes (skips password
+ * verification, signs via SIGN_TX's privateKeyBytes path).
+ */
+async function handlePassKeyConfirm(pkBytes: Uint8Array) {
+  if (quoteCountdown.value <= 0) return;
+  phase.value = 'status';
+  const ok = await buildAndSign('', undefined, pkBytes);
+  if (ok) {
+    emit('deposited');
+  }
+}
+
+function onPassKeyError(err: Error) {
+  snackbar.setError(err?.message || t('security.passKeyAuthFailed'));
 }
 
 function retryFromError() {
