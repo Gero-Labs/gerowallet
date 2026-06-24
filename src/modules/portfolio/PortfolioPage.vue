@@ -646,15 +646,22 @@ const displayedTokens = computed(() => {
       break;
     case 'market':
       tokens = allTokens.value.filter(t => !t.isNative);
-      // Graduated snek.fun tokens are shown inline in the market list (with the
-      // snek icon), toggled via the "snek.fun" filter (default on).
-      if (showSnekfun.value) tokens = [...tokens, ...snekTokens.value];
+      // Graduated snek.fun tokens already live in the main list (rich data, flagged
+      // isSnekFun); snekTokens adds the remaining bonding-curve tokens. The snek.fun
+      // toggle (default on) controls visibility of ALL snek-origin tokens.
+      if (showSnekfun.value) {
+        tokens = [...tokens, ...snekTokens.value];
+      } else {
+        tokens = tokens.filter(t => !t.isSnekFun);
+      }
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
       break;
     case 'snekfun':
-      tokens = snekTokens.value;
+      // All snek.fun-origin tokens: graduated ones from the main list (rich data) +
+      // pre-graduation bonding-curve ones from the snek feed.
+      tokens = [...allTokens.value.filter(t => t.isSnekFun && !t.isNative), ...snekTokens.value];
       break;
     case 'collectibles':
       // Collectibles use NftCollectionTable, not MarketTokenTable

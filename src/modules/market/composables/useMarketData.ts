@@ -132,7 +132,11 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     decimals: apiToken.decimals ?? dhToken?.decimals ?? 0,
     organicVolume24h: apiToken.organicVolume24h ?? 0,
     dex: apiToken.dex ?? undefined,
-    isSnekFun: apiToken.source === 'SNEKFUN' || apiToken.dex === 'SNEKFUN',
+    // Match both the pre-graduation feed (source 'SNEKFUN') and graduated tokens
+    // that have moved to the bulk /prices feed (source 'SNEKFUN_GRADUATE'). Without
+    // the prefix match, graduated snek tokens (which are unverified) get stripped by
+    // the verified/scam filter and only their stale bonding-curve snapshot survives.
+    isSnekFun: String(apiToken.source ?? '').startsWith('SNEKFUN') || apiToken.dex === 'SNEKFUN',
   };
 }
 
@@ -229,8 +233,17 @@ async function fetchAllTokens(silent = false): Promise<void> {
     if (!isApex) {
       marketApi.getSnekFunTokens()
         .then(snekRaw => {
-          snekTokens.value = (snekRaw || []).map(tp => enrichWithStores(tp));
-          console.info('[snek] loaded', snekTokens.value.length, 'tokens:', snekTokens.value.slice(0, 5).map(t => t.ticker));
+          // Graduated snek tokens (source SNEKFUN_GRADUATE) already appear in the
+          // bulk /prices feed above with RICHER data (real price, changes, volume,
+          // txns). Keep only the snek-feed tokens NOT already in the bulk feed
+          // (pre-graduation bonding-curve tokens) so we never surface the partial
+          // snek snapshot in place of the rich one. Pass sparklineMap so these get
+          // mini-charts too.
+          const existing = new Set(allTokens.value.map(t => t.unit));
+          snekTokens.value = (snekRaw || [])
+            .map(tp => enrichWithStores(tp, sparklineMap))
+            .filter(t => !existing.has(t.unit));
+          console.info('[snek] loaded', snekTokens.value.length, 'bonding-curve tokens not in bulk feed');
         })
         .catch(e => console.warn('[snek] load FAILED:', e?.message || e));
     }
