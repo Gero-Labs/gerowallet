@@ -129,7 +129,6 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   width: 100%;
   height: 100%;
   display: flex;
-  gap: 60px;
   z-index: 1;
   max-width: 1440px;
   margin: 0 auto;
@@ -137,7 +136,7 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
 
 /* RIGHT COLUMN - CLEAN BACKGROUND */
 .welcome-right-column {
-  width: 62%; /* Increased from 58.333333% to account for left column reduction */
+  width: 73%;
   height: 100%;
   position: relative;
   /* NO backdrop-filter or blur effects here */
@@ -173,9 +172,9 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   }
 
   .welcome-left-column {
-    width: 100%;
     height: auto;
     min-height: 300px;
+    width: 450px;
   }
 
   .welcome-right-column {
