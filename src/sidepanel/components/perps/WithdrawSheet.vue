@@ -17,6 +17,13 @@
       <v-card-text class="dialog-body">
         <div class="withdraw-content">
 
+      <!-- ── Connect gate: must connect to Strike before withdrawing ──── -->
+      <template v-if="!isConnected">
+        <div class="connect-gate-sub">{{ $t('perps.connect.gateWithdraw') }}</div>
+        <StrikeOnboarding />
+      </template>
+
+      <template v-else>
       <!-- ── Step indicator ─────────────────────────────────────── -->
       <div class="step-rail">
         <div class="step-dot" :class="{ active: stepNum >= 1, done: stepNum > 1 }">1</div>
@@ -252,6 +259,7 @@
           </template>
         </div>
       </div>
+      </template>
 
         </div>
       </v-card-text>
@@ -263,8 +271,10 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
 import i18n from '@/plugins/i18n';
+import StrikeOnboarding from './StrikeOnboarding.vue';
 
 // ── Props & Emits ───────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -288,6 +298,10 @@ const {
 } = useStrikeWithdraw();
 
 const { account, marginRatio } = useStrikeAccount();
+
+// Gate the withdraw flow behind a Strike connection — opening this sheet while
+// disconnected shows the inline connect/unlock UI instead of the step form.
+const { isConnected } = useStrikeOnboarding();
 
 // ── Local state ─────────────────────────────────────────────────────────────
 const amount = ref('');
@@ -517,6 +531,14 @@ watch(() => props.value, (val) => {
   display: flex;
   flex-direction: column;
   padding-bottom: 8px;
+}
+
+.connect-gate-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 4px;
 }
 
 /* ── Step rail ── */

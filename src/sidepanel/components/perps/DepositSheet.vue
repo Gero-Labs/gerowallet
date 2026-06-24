@@ -17,8 +17,14 @@
       <v-card-text class="dialog-body">
         <div class="deposit-content">
 
+      <!-- ── Connect gate: must connect to Strike before depositing ────── -->
+      <template v-if="!isConnected">
+        <div class="connect-gate-sub">{{ $t('perps.connect.gateDeposit') }}</div>
+        <StrikeOnboarding @connected="onConnected" />
+      </template>
+
       <!-- ── Phase 1: Amount input ─────────────────────────────────────── -->
-      <template v-if="phase === 'amount'">
+      <template v-else-if="phase === 'amount'">
         <div class="balance-row">
           <span class="balance-label">{{ $t('perpetuals.deposit.available') }}</span>
           <span class="balance-value" @click="setMax()">
@@ -265,9 +271,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import StrikeOnboarding from './StrikeOnboarding.vue';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -293,6 +301,15 @@ const {
   buildAndSign,
   resetDeposit,
 } = useStrikeDeposit();
+
+// Gate the deposit form behind a Strike connection — opening this sheet while
+// disconnected shows the inline connect/unlock UI instead of the amount form.
+const { isConnected } = useStrikeOnboarding();
+
+function onConnected() {
+  // Once connected, fall through to the amount phase (already the default).
+  phase.value = 'amount';
+}
 
 // ── Local state ───────────────────────────────────────────────────────────────
 type Phase = 'amount' | 'review' | 'status';
@@ -523,6 +540,14 @@ watch(() => props.value, (val) => {
   flex-direction: column;
   gap: 0;
   padding-bottom: 8px;
+}
+
+.connect-gate-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 4px;
 }
 
 /* ── Balance row ── */

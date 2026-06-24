@@ -1602,6 +1602,10 @@ export default {
   'perps.connect.stepRequesting': 'Requesting signature challenge…',
   'perps.connect.stepSigning': 'Awaiting wallet signature…',
   'perps.connect.stepVerifying': 'Verifying with Strike…',
+  // Inline "connect first" gating for authenticated actions
+  'perps.connect.gateDeposit': 'Connect to Strike to deposit funds.',
+  'perps.connect.gateWithdraw': 'Connect to Strike to withdraw funds.',
+  'perps.connect.submitCta': 'Connect to Strike',
 
   // Strike v2 deposit/withdraw
   'perpetuals.deposit': 'Deposit',

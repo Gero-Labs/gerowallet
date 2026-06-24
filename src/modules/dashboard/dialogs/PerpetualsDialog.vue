@@ -197,7 +197,15 @@
           :last-trade-class="lastTradeClass"
         />
         <!-- RIGHT COLUMN — Order Form (component) -->
+        <!-- Gate the trade form behind a Strike connection; chart + order book
+             (public) remain visible. The deposit/withdraw sheets inside
+             PerpsAccountSection are gated independently (they reuse the same
+             connect-aware DepositSheet/WithdrawSheet). -->
+        <div v-if="!isConnected" class="col-right connect-col">
+          <StrikeOnboarding @connected="onConnected" />
+        </div>
         <PerpsOrderForm
+          v-else
           :symbol="selectedSymbol"
           :base-asset="baseAsset"
           :account="account"
@@ -268,6 +276,7 @@ import PerpsOrderBook from '@/modules/dashboard/components/perps/PerpsOrderBook.
 import PerpsAccountSection from '@/modules/dashboard/components/perps/PerpsAccountSection.vue';
 import PerpsPositionsPanel from '@/modules/dashboard/components/perps/PerpsPositionsPanel.vue';
 import PerpsOrderForm from '@/modules/dashboard/components/perps/PerpsOrderForm.vue';
+import StrikeOnboarding from '@/sidepanel/components/perps/StrikeOnboarding.vue';
 
 const {
   formatPrice, formatFullNumber, formatChange, formatFundingRate,
@@ -475,6 +484,17 @@ async function refreshPositionsAndOrders() {
   positionsPanelRef.value?.resetTabs?.();
 }
 
+// Fired by the inline StrikeOnboarding card once connect/unlock succeeds. The
+// isConnected watcher already loads account/positions/orders while the dialog
+// is open; this is a no-op placeholder kept for an explicit template binding.
+function onConnected() {
+  if (isConnected.value && dialogVisible.value) {
+    loadAccount();
+    loadPositions(selectedSymbol.value);
+    loadOpenOrders(selectedSymbol.value);
+  }
+}
+
 function onLogoError(e: Event) {
   (e.target as HTMLImageElement).style.display = 'none';
 }
@@ -637,6 +657,17 @@ function onLogoError(e: Event) {
   border-right: 1px solid #2b2f36;
   min-width: 0;
   overflow: hidden;
+}
+
+/* Connect gate slot — occupies the order-form column when disconnected */
+.connect-col {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 280px;
+  overflow-y: auto;
 }
 
 /* ── Chart area ───────────────────────────────────────────────────────── */

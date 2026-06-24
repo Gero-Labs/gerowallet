@@ -189,8 +189,25 @@
       </div>
     </transition>
 
+    <!-- Connect gate: not connected → primary CTA becomes "Connect to Strike"
+         and opens the inline connect/unlock flow instead of placing an order. -->
+    <template v-if="!isConnected">
+      <v-btn
+        v-if="!showConnect"
+        block
+        depressed
+        class="place-order-btn place-order-btn--connect"
+        @click="showConnect = true"
+      >
+        <v-icon size="14" class="mr-1">mdi-link-variant</v-icon>
+        {{ $t('perps.connect.submitCta') }}
+      </v-btn>
+      <StrikeOnboarding v-else @connected="onConnected" />
+    </template>
+
     <!-- Place Order Button -->
     <v-btn
+      v-else
       block
       depressed
       :loading="submitting"
@@ -239,8 +256,10 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { useChainContext } from '../../composables/useChainContext';
 import { strikeMarketApi } from '@/api/strike-v2.market';
+import StrikeOnboarding from './StrikeOnboarding.vue';
 import {
   calcLiquidationPriceIsolated,
   calcVwapMarketFill,
@@ -267,6 +286,15 @@ const emit = defineEmits<{
 // ── Composables ──────────────────────────────────────────────────────────────
 const { placeOrder, setLeverage, availableBalance, account } = useStrikeTrading();
 const { getSymbolInfo, getTicker } = useStrikeMarket();
+
+// When not connected, the primary CTA reveals the inline connect/unlock flow
+// instead of attempting an (unauthenticated, 401-bound) order.
+const { isConnected } = useStrikeOnboarding();
+const showConnect = ref(false);
+
+function onConnected() {
+  showConnect.value = false;
+}
 
 // ── Market config (margin tiers, tick size) — fetched once per session ──────
 const marketConfig = ref<StrikeMarketConfig | null>(null);
@@ -884,6 +912,16 @@ watch(() => account.value, (acc) => {
 
 .place-order-btn--sell:not(.v-btn--disabled):hover {
   background: rgba(249, 112, 102, 0.22) !important;
+}
+
+.place-order-btn--connect {
+  background: color-mix(in srgb, var(--chain-primary) 14%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 32%, transparent) !important;
+}
+
+.place-order-btn--connect:not(.v-btn--disabled):hover {
+  background: color-mix(in srgb, var(--chain-primary) 22%, transparent) !important;
 }
 
 .place-order-btn.v-btn--disabled {
