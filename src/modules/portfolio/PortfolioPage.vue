@@ -132,7 +132,7 @@
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :value="!verifiedOnly || !hideScam || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                    <v-badge :value="!verifiedOnly || !hideScam || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
                       <v-icon small>mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
@@ -155,6 +155,17 @@
                         </v-icon>
                       </v-list-item-action>
                       <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
+                    </v-list-item>
+                    <!-- Graduated snek.fun tokens: show inline in the market list (like verified-only) -->
+                    <v-list-item v-if="activeView !== 'collectibles'" @click="showSnekfun = !showSnekfun">
+                      <v-list-item-action class="mr-2">
+                        <v-icon small :color="showSnekfun ? 'primary' : ''">
+                          {{ showSnekfun ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </v-list-item-action>
+                      <v-list-item-title style="font-size: 13px;">
+                        <v-icon x-small color="#A3E635" class="mr-1">mdi-snake</v-icon>{{ $t('market.snekfun') }}
+                      </v-list-item-title>
                     </v-list-item>
 
                     <!-- Column preferences (Cardano only) -->
@@ -380,6 +391,8 @@ const searchQuery = ref('');
 const filterMenuOpen = ref(false);
 const verifiedOnly = ref(true);
 const hideScam = ref(true);
+// Graduated snek.fun tokens shown inline in the market list (toggle, default on)
+const showSnekfun = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
 const nftDialogData = ref<Record<string, unknown> | null>(null);
 const selectedToken = ref<MarketToken | null>(null);
@@ -613,10 +626,6 @@ const filterChips = computed(() => {
       { value: 'market' as ViewMode, label: t('navigation.market'), icon: 'mdi-chart-line' },
       { value: 'watchlist' as ViewMode, label: t('portfolio.watchlist'), icon: 'mdi-star' },
     );
-    // snek.fun bonding-curve tokens — only surface the tab when the feed returns some
-    if (snekTokens.value.length > 0) {
-      chips.push({ value: 'snekfun' as ViewMode, label: t('market.snekfun'), icon: 'mdi-snake' });
-    }
   }
   return chips;
 });
@@ -637,9 +646,9 @@ const displayedTokens = computed(() => {
       break;
     case 'market':
       tokens = allTokens.value.filter(t => !t.isNative);
-      // When searching, also surface snek.fun tokens (e.g. SONG) so they're
-      // findable from the Market tab even though they live in a separate feed.
-      if (debouncedSearchQuery.value) tokens = [...tokens, ...snekTokens.value];
+      // Graduated snek.fun tokens are shown inline in the market list (with the
+      // snek icon), toggled via the "snek.fun" filter (default on).
+      if (showSnekfun.value) tokens = [...tokens, ...snekTokens.value];
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
