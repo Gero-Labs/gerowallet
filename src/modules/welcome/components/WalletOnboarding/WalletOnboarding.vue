@@ -4,37 +4,7 @@
       <v-icon left size="18">mdi-arrow-left</v-icon>
       {{ $t('welcome.backToWallets') }}
     </v-btn>
-    <div class="onboarding-root">
-    <!-- LEFT: static step rail card -->
-    <v-card class="liquid-glass transparent-override onboarding-rail" flat>
-      <ul class="rail-list">
-        <li
-          v-for="(s, i) in steps"
-          :key="`rail-${i}`"
-          class="rail-item"
-          :class="{
-            'rail-item--done': i + 1 < step,
-            'rail-item--active': i + 1 === step,
-            'rail-item--clickable': i + 1 < step,
-          }"
-          @click="goToStep(i + 1)"
-        >
-          <div class="rail-marker-col">
-            <div class="rail-marker">
-              <v-icon v-if="i + 1 < step" size="18" color="white">mdi-check</v-icon>
-              <span v-else>{{ i + 1 }}</span>
-            </div>
-            <div v-if="i < steps.length - 1" class="rail-connector"></div>
-          </div>
-          <div class="rail-text">
-            <div class="rail-title">{{ $t(s.titleKey) }}</div>
-            <div class="rail-subtitle">{{ $t(s.subtitleKey) }}</div>
-          </div>
-        </li>
-      </ul>
-    </v-card>
-
-    <!-- RIGHT: active step content card (only the current step is rendered) -->
+    <!-- Single content card — only the active step is rendered -->
     <v-card class="liquid-glass transparent-override onboarding-content" flat>
       <div class="content-header">
         <div class="content-eyebrow">{{ $t('welcome.onboardingStepN', { n: step }) }}</div>
@@ -106,7 +76,6 @@
         />
       </div>
     </v-card>
-    </div>
   </div>
 </template>
 <script setup lang="ts">
@@ -186,11 +155,6 @@ const steps = computed<StepDef[]>(() => {
 // list (the list shrinks/grows when the method changes).
 const currentStep = computed<StepDef>(() => steps.value[Math.min(step.value, steps.value.length) - 1]);
 
-const goToStep = (target: number): void => {
-  // Only allow navigating BACK to an already-completed step via the rail.
-  if (target < step.value) step.value = target;
-};
-
 const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
   selectedMethod.value = m;
   mnemonic.value = [];
@@ -247,112 +211,14 @@ onUnmounted(() => {
   color: #94979c !important;
 }
 
-.onboarding-root {
-  display: flex;
-  gap: 20px;
-  width: 100%;
-  flex: 1;
-  min-height: 0;
-  align-items: stretch;
-}
-
-/* LEFT RAIL */
-.onboarding-rail {
-  flex: 0 0 240px;
-  padding: 24px 20px;
-  border-radius: 16px !important;
-  overflow-y: auto;
-}
-
-.rail-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.rail-item {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-}
-
-.rail-item--clickable {
-  cursor: pointer;
-}
-
-.rail-marker-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  align-self: stretch;
-}
-
-.rail-marker {
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
-  background-color: rgba(255, 255, 255, 0.08);
-  color: #94979c;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  transition: all 0.2s ease;
-}
-
-.rail-item--active .rail-marker {
-  background-color: var(--v-primary-base);
-  color: #fff;
-  border-color: var(--v-primary-base);
-}
-
-.rail-item--done .rail-marker {
-  background-color: var(--v-primary-base);
-  color: #fff;
-  border-color: var(--v-primary-base);
-}
-
-.rail-connector {
-  flex: 1;
-  width: 2px;
-  min-height: 26px;
-  margin: 4px 0;
-  background-color: rgba(255, 255, 255, 0.12);
-}
-
-.rail-item--done .rail-connector {
-  background-color: var(--v-primary-base);
-}
-
-.rail-text {
-  padding-bottom: 22px;
-}
-
-.rail-title {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.2;
-  color: #fff;
-}
-
-.rail-item:not(.rail-item--active):not(.rail-item--done) .rail-title {
-  color: #94979c;
-}
-
-.rail-subtitle {
-  font-size: 12px;
-  color: #94979c;
-  margin-top: 2px;
-}
-
-/* RIGHT CONTENT */
+/* CONTENT */
 .onboarding-content {
   flex: 1;
   min-width: 0;
   min-height: 440px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
   padding: 24px 28px;
   border-radius: 16px !important;
   display: flex;
