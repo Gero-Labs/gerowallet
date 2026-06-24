@@ -11,21 +11,21 @@
         <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
       </div>
       <div class="content-body">
-        <StepStart
+        <StepStart class="onboarding-step"
           v-if="currentStep.key === 'start'"
           :network="network"
           @change="onNetworkChange"
           @select="onMethodSelect"
           @back="$emit('back')"
         />
-        <StepSecurity
+        <StepSecurity class="onboarding-step"
           v-else-if="currentStep.key === 'security'"
           :network="network"
           @select="onSecuritySelect"
           @next="step++"
           @back="step--"
         />
-        <StepCreateConfirm
+        <StepCreateConfirm class="onboarding-step"
           v-else-if="currentStep.key === 'createConfirm'"
           :network="network"
           :security-method="securityMethod"
@@ -33,14 +33,14 @@
           @back="step--"
           @created="$emit('back')"
         />
-        <StepSeedPhrase
+        <StepSeedPhrase class="onboarding-step"
           v-else-if="currentStep.key === 'seed'"
           :network="network"
           @change="onMnemonicChange"
           @next="step++"
           @back="step--"
         />
-        <StepRestoreConfirm
+        <StepRestoreConfirm class="onboarding-step"
           v-else-if="currentStep.key === 'restoreConfirm'"
           :network="network"
           :security-method="securityMethod"
@@ -49,21 +49,21 @@
           @back="step--"
           @created="$emit('back')"
         />
-        <StepDevice
+        <StepDevice class="onboarding-step"
           v-else-if="currentStep.key === 'device'"
           :network="network"
           @select="onDeviceSelect"
           @next="step++"
           @back="step--"
         />
-        <StepConnect
+        <StepConnect class="onboarding-step"
           v-else-if="currentStep.key === 'connect'"
           :network="network"
           :wallet-type="walletType"
           @connected="onConnected"
           @back="step--"
         />
-        <StepReview
+        <StepReview class="onboarding-step"
           v-else-if="currentStep.key === 'review'"
           :network="network"
           :wallet-type="walletType"
@@ -248,6 +248,22 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Each step fills the body so its action row pins to the card bottom; tall
+   steps grow and the body scrolls. */
+.content-body ::v-deep .onboarding-step {
+  flex: 1 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-body ::v-deep .onboarding-actions {
+  margin-top: auto;
+  padding-top: 16px;
 }
 
 @media (max-width: 768px) {

@@ -14,7 +14,8 @@
         :class="{ 'opt-pill--active': selectedMethod === 'create' }"
         @click="selectedMethod = 'create'"
       >
-        {{ $t('welcome.createWallet') }}
+        <v-img :src="walletSvg" class="opt-pill__icon" contain />
+        <span>{{ $t('welcome.createWallet') }}</span>
       </button>
       <button
         type="button"
@@ -22,7 +23,8 @@
         :class="{ 'opt-pill--active': selectedMethod === 'restore' }"
         @click="selectedMethod = 'restore'"
       >
-        {{ $t('welcome.restoreWallet') }}
+        <v-img :src="keyGeroSvg" class="opt-pill__icon" contain />
+        <span>{{ $t('welcome.restoreWallet') }}</span>
       </button>
       <button
         type="button"
@@ -31,7 +33,8 @@
         :disabled="!pairSupported"
         @click="selectedMethod = 'pair'"
       >
-        {{ $t('welcome.pairHardwareWallet') }}
+        <v-img :src="pairSvg" class="opt-pill__icon" contain />
+        <span>{{ $t('welcome.pairHardwareWallet') }}</span>
       </button>
     </div>
     <div v-if="!pairSupported" class="method-hint mt-2">
@@ -39,7 +42,7 @@
     </div>
 
     <!-- Navigation -->
-    <div class="d-flex mt-6" style="gap: 12px;">
+    <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
@@ -49,6 +52,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import assets from '@/utils/assets';
 import { NetworkInfo } from '@/utils/networks';
 import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
 
@@ -64,6 +68,11 @@ const emit = defineEmits<{
 const localNetwork = ref<NetworkInfo>(props.network);
 const selectedMethod = ref<Method | null>(null);
 const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
+
+const isApex = computed(() => !!localNetwork.value?.blockchain?.includes('Apex'));
+const walletSvg = computed(() => (isApex.value ? assets.walletGeroApexSvg : assets.walletGeroSvg));
+const keyGeroSvg = computed(() => (isApex.value ? assets.keyApexSvg : assets.keyGeroSvg));
+const pairSvg = computed(() => (isApex.value ? assets.pairApexSvg : assets.pairGeroSvg));
 
 const onNetworkChange = (n: NetworkInfo): void => {
   localNetwork.value = n;
@@ -95,7 +104,10 @@ const onContinue = (): void => {
 }
 
 .opt-pill {
-  padding: 10px 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.03);
@@ -104,6 +116,13 @@ const onContinue = (): void => {
   color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.opt-pill__icon {
+  width: 18px;
+  max-width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
 }
 
 .opt-pill:hover:not(.opt-pill--disabled) {

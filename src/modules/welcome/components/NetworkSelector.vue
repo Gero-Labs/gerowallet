@@ -127,8 +127,8 @@ const selectNet = (net: NetworkInfo): void => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px 8px 10px;
-  border-radius: 12px;
+  padding: 8px 16px 8px 10px;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;

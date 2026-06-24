@@ -151,7 +151,7 @@
     </template>
 
     <!-- Navigation buttons -->
-    <div class="d-flex mt-4" style="gap: 12px;">
+    <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-btn text @click="$emit('back')" :disabled="creatingWalletLoader">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn

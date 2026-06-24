@@ -74,7 +74,7 @@
     </div>
 
     <!-- Navigation buttons -->
-    <div class="d-flex mt-4" style="gap: 12px; text-align: initial;">
+    <div class="onboarding-actions d-flex" style="gap: 12px; text-align: initial;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn color="primary" @click="walletCreationStep2()">{{ $t('common.continue') }}</v-btn>
