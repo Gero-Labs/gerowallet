@@ -27,7 +27,7 @@
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
-      <v-btn class="onb-btn" color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <v-btn class="onb-btn" depressed color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>
@@ -97,6 +97,7 @@ const onContinue = (): void => {
 
 .onb-btn {
   border-radius: 8px !important;
+  box-shadow: none !important;
 }
 
 .hw-list {
