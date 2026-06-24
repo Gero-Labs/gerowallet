@@ -27,7 +27,7 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue';
-import { geroDashboardApex, geroDashboardPrime, geroDashboardVector, geroDashboard } from '@/utils/assets';
+import { geroDashboardApex, geroDashboardPrime, geroDashboardVector, geroDashboardBitcoin, geroDashboard } from '@/utils/assets';
 import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
 import { NetworkInfo } from '@/utils/networks';
 
@@ -49,6 +49,7 @@ const logo = computed(() => {
   if (bc === 'Apex Fusion Prime') return geroDashboardPrime;
   if (bc === 'Apex Fusion Vector') return geroDashboardVector;
   if (bc?.includes('Apex')) return geroDashboardApex;
+  if (bc?.includes('Bitcoin')) return geroDashboardBitcoin;
   return geroDashboard;
 });
 </script>

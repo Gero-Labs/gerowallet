@@ -32,6 +32,7 @@ import geroDashboard from '@/assets/svg/gero_dashboard.svg'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
 import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
 import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
+import geroDashboardBitcoin from '@/assets/svg/gero_dashboard_bitcoin.svg'
 import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
@@ -416,6 +417,7 @@ export {
   geroDashboardApex,
   geroDashboardPrime,
   geroDashboardVector,
+  geroDashboardBitcoin,
   geroDashboard,
   google,
 }
