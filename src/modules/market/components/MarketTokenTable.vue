@@ -4,6 +4,7 @@
     class="transparent tokens-table market-token-table"
     :headers="activeHeaders"
     :items="paginatedTokens"
+    item-key="unit"
     :sort-by.sync="sortBy"
     :sort-desc.sync="sortDesc"
     :custom-sort="customSort"
@@ -82,17 +83,26 @@
       </div>
     </template>
 
-    <!-- Price column -->
+    <!-- Price column (with live green/red flash on price change) -->
     <template v-slot:[`item.price`]="{ item }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 13px; white-space: nowrap">{{ formatPrice(item.price) }}</span>
-        </template>
-        <div>${{ (item.price ?? 0).toFixed(8) }}</div>
-        <div v-if="!item.isNative" style="opacity: 0.7">
-          {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} {{ nativeSymbol }}
-        </div>
-      </v-tooltip>
+      <div class="price-flash-wrap">
+        <span
+          v-if="priceFlash[item.unit]"
+          :key="priceFlash[item.unit].seq"
+          aria-hidden="true"
+          class="price-flash-overlay"
+          :class="priceFlash[item.unit].dir === 'up' ? 'market-flash-up' : 'market-flash-down'"
+        ></span>
+        <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <span v-bind="attrs" v-on="on" style="font-size: 13px; white-space: nowrap; position: relative;">{{ formatPrice(item.price) }}</span>
+          </template>
+          <div>${{ (item.price ?? 0).toFixed(8) }}</div>
+          <div v-if="!item.isNative" style="opacity: 0.7">
+            {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} {{ nativeSymbol }}
+          </div>
+        </v-tooltip>
+      </div>
     </template>
 
     <!-- Change columns -->
@@ -531,6 +541,36 @@ const paginatedTokens = computed(() => {
   return sortedTokens.value.slice(start, start + itemsPerPage);
 });
 
+// --- Live price-cell flash (green up / red down) — mirrors the market-data
+// website's method. Each 15s price poll replaces props.tokens; any token whose
+// price actually moved gets a one-shot background flash, and a monotonically
+// rising seq re-keys the overlay so the CSS animation replays on every change.
+// New/unseen tokens seed silently (no first-render flash), and a currency-display
+// toggle never flashes because `price` is always the USD base value. ---
+const priceFlash = ref<Record<string, { dir: 'up' | 'down'; seq: number }>>({});
+const prevPrices: Record<string, number> = {};
+let flashSeq = 0;
+
+watch(
+  () => props.tokens,
+  (tokens) => {
+    let changed = false;
+    const next = { ...priceFlash.value };
+    for (const tk of tokens) {
+      const price = tk.price;
+      if (typeof price !== 'number' || !Number.isFinite(price)) continue;
+      const prev = prevPrices[tk.unit];
+      if (prev !== undefined && price !== prev) {
+        flashSeq += 1;
+        next[tk.unit] = { dir: price > prev ? 'up' : 'down', seq: flashSeq };
+        changed = true;
+      }
+      prevPrices[tk.unit] = price;
+    }
+    if (changed) priceFlash.value = next;
+  },
+);
+
 function handleRowClick(item: MarketToken) {
   emit('token-click', item);
 }
@@ -652,6 +692,32 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   flex-shrink: 0;
   line-height: 0;
 }
+
+/* Live price-cell flash (green up / red down) — same effect as the market-data
+   website: a 0.9s background fade behind the price on each price change. */
+.price-flash-wrap {
+  position: relative;
+  display: inline-block;
+}
+.price-flash-overlay {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: -8px;
+  right: -8px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+@keyframes market-flash-up {
+  0% { background-color: rgba(38, 194, 129, 0.16); }
+  100% { background-color: transparent; }
+}
+@keyframes market-flash-down {
+  0% { background-color: rgba(246, 70, 93, 0.16); }
+  100% { background-color: transparent; }
+}
+.market-flash-up { animation: market-flash-up 0.9s ease; }
+.market-flash-down { animation: market-flash-down 0.9s ease; }
 
 .name-cell .token-ticker {
   white-space: nowrap;
