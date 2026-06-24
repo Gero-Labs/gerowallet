@@ -44,63 +44,55 @@
 
     <!-- Token name column -->
     <template v-slot:[`item.name`]="{ item }">
-      <v-list-item dense class="px-0">
-        <v-list-item-action class="my-0" style="margin-right: 12px !important">
-          <v-badge overlap avatar color="transparent" :offset-y="34" v-if="item.verified">
+      <div class="name-cell d-flex align-center">
+        <div class="token-avatar mr-2">
+          <v-badge overlap avatar color="transparent" :offset-y="26" :offset-x="6" v-if="item.verified">
             <template v-slot:badge>
               <v-avatar color="transparent" tile>
                 <v-icon x-small color="primary">mdi-check-decagram</v-icon>
               </v-avatar>
             </template>
-            <v-avatar size="28">
+            <v-avatar size="26">
               <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
               <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
               <v-icon v-else>mdi-circle-outline</v-icon>
             </v-avatar>
           </v-badge>
-          <v-avatar size="28" v-else>
+          <v-avatar size="26" v-else>
             <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
             <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
-        </v-list-item-action>
-        <v-list-item-content>
-          <v-list-item-title style="font-size: 13px">
-            <span class="font-weight-bold">{{ item.ticker }}</span>
-            <v-chip
-              v-if="showOwnedBadge && ownedUnits.has(item.unit)"
-              x-small label
-              color="primary"
-              class="ml-1"
-              style="height: 16px; font-size: 9px; padding: 0 4px;"
-            >
-              {{ $t('market.owned') }}
-            </v-chip>
-          </v-list-item-title>
-          <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
-            {{ item.name }}
-          </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
+        </div>
+        <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <span class="font-weight-bold token-ticker" style="font-size: 13px" v-bind="attrs" v-on="on">{{ item.ticker }}</span>
+          </template>
+          {{ item.name }}
+        </v-tooltip>
+        <v-chip
+          v-if="showOwnedBadge && ownedUnits.has(item.unit)"
+          x-small label
+          color="primary"
+          class="ml-1 flex-shrink-0"
+          style="height: 16px; font-size: 9px; padding: 0 4px;"
+        >
+          {{ $t('market.owned') }}
+        </v-chip>
+      </div>
     </template>
 
     <!-- Price column -->
     <template v-slot:[`item.price`]="{ item }">
-      <v-list-item two-line class="px-0" style="min-height: unset">
-        <v-list-item-content class="pa-0">
-          <v-list-item-title style="font-size: 13px; margin-bottom: 0">
-            <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <span v-bind="attrs" v-on="on">{{ formatPrice(item.price) }}</span>
-              </template>
-              ${{ (item.price ?? 0).toFixed(8) }}
-            </v-tooltip>
-          </v-list-item-title>
-          <v-list-item-subtitle v-if="!item.isNative" style="font-size: 10px; opacity: 0.5">
-            {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} {{ nativeSymbol }}
-          </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
+      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 13px; white-space: nowrap">{{ formatPrice(item.price) }}</span>
+        </template>
+        <div>${{ (item.price ?? 0).toFixed(8) }}</div>
+        <div v-if="!item.isNative" style="opacity: 0.7">
+          {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} {{ nativeSymbol }}
+        </div>
+      </v-tooltip>
     </template>
 
     <!-- Change columns -->
@@ -656,8 +648,30 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 }
 
 .market-token-table >>> td {
-  padding-top: 4px !important;
-  padding-bottom: 4px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  height: 40px !important;
+}
+
+.market-token-table >>> tbody tr td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Name cell — single-line, compact */
+.name-cell {
+  min-height: unset;
+}
+
+.name-cell .token-avatar {
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.name-cell .token-ticker {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
 }
 
 /* Allocation progress bar */

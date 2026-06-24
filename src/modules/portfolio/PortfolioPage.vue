@@ -105,7 +105,24 @@
                 <span>{{ marketWsConnected ? $t('market.liveUpdates') : $t('market.connecting') }}</span>
               </v-tooltip>
 
-              <!-- Unified filter menu (search + filters + columns) -->
+              <!-- Visible search bar (primary) -->
+              <v-text-field
+                v-model="searchQuery"
+                :placeholder="activeView === 'collectibles'
+                  ? $t('assets.searchCollections')
+                  : $t('market.searchPlaceholder')"
+                prepend-inner-icon="mdi-magnify"
+                dense
+                flat
+                solo
+                rounded
+                hide-details
+                clearable
+                background-color="rgba(255,255,255,0.04)"
+                class="header-search flex-shrink-0"
+              />
+
+              <!-- Unified filter menu (filters + columns) -->
               <v-menu
                 v-model="filterMenuOpen"
                 offset-y
@@ -118,29 +135,12 @@
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :value="!!searchQuery || !verifiedOnly || !hideScam || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                    <v-badge :value="!verifiedOnly || !hideScam || (!isApex && hasCustomColumns)" dot color="primary" overlap>
                       <v-icon small>mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
                 </template>
                 <v-card flat class="liquid-glass-dialog">
-                  <!-- Search -->
-                  <div class="px-3 pt-3 pb-1">
-                    <v-text-field
-                      ref="searchFieldRef"
-                      v-model="searchQuery"
-                      :placeholder="activeView === 'collectibles'
-                        ? $t('assets.searchCollections')
-                        : $t('market.searchPlaceholder')"
-                      prepend-inner-icon="mdi-magnify"
-                      dense
-                      flat
-                      hide-details
-                      clearable
-                      class="filter-panel-search"
-                    />
-                  </div>
-
                   <!-- Filters -->
                   <v-list dense class="transparent pa-0">
                     <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
@@ -370,7 +370,6 @@ function setActiveView(view: ViewMode) {
 
 const searchQuery = ref('');
 const filterMenuOpen = ref(false);
-const searchFieldRef = ref<HTMLElement | null>(null);
 const verifiedOnly = ref(true);
 const hideScam = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
@@ -893,6 +892,57 @@ watch(
 .filter-chip-bar .v-chip {
   flex-shrink: 0;
   cursor: pointer;
+}
+
+/* ── Visible header search ────────────────────────────────────────────────────── */
+
+.header-search {
+  width: 180px;
+  max-width: 180px;
+  transition: width 0.2s ease, max-width 0.2s ease;
+}
+
+.header-search ::v-deep .v-input__slot {
+  min-height: 30px !important;
+  border-radius: 8px !important;
+  padding: 0 10px !important;
+}
+
+.header-search ::v-deep input {
+  font-size: 12px;
+}
+
+.header-search ::v-deep input::placeholder {
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.header-search ::v-deep .v-input__prepend-inner {
+  margin-top: 4px !important;
+}
+
+.header-search ::v-deep .v-input__prepend-inner .v-icon {
+  font-size: 18px;
+  opacity: 0.55;
+}
+
+.header-search ::v-deep .v-input__icon--clear .v-icon {
+  font-size: 16px;
+}
+
+/* Collapse the search bar on the narrow extension popup width */
+@media (max-width: 600px) {
+  .header-search {
+    width: 120px;
+    max-width: 120px;
+  }
+}
+
+@media (max-width: 420px) {
+  .header-search {
+    width: 90px;
+    max-width: 90px;
+  }
 }
 
 /* ── Holdings mode toggle ─────────────────────────────────────────────────── */

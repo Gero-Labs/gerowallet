@@ -133,14 +133,14 @@
       <div class="right-col">
         <!-- Right column tabs -->
         <v-tabs v-model="rightTab" dense background-color="transparent" height="28" class="detail-sub-tabs mb-3">
-          <v-tab>{{ $t('market.swap') }}</v-tab>
-          <v-tab>{{ $t('market.depth') }}</v-tab>
-          <v-tab v-if="!isApex && token.unit !== 'lovelace'">{{ $t('market.markets') }}</v-tab>
+          <v-tab tab-value="swap">{{ $t('market.swap') }}</v-tab>
+          <v-tab tab-value="depth">{{ $t('market.depth') }}</v-tab>
+          <v-tab v-if="!isApex && token.unit !== 'lovelace'" tab-value="markets">{{ $t('market.markets') }}</v-tab>
         </v-tabs>
 
         <!-- Swap tab -->
         <transition name="tab-fade" mode="out-in">
-        <div v-if="rightTab === 0" key="swap">
+        <div v-if="rightTab === 'swap'" key="swap">
           <!-- QuickSwap (Cardano DEX only) -->
           <QuickSwap
             v-if="!isApex && token.unit !== 'lovelace'"
@@ -214,7 +214,7 @@
         </div>
 
         <!-- Depth tab (Cardano DEX data only) -->
-        <div v-else-if="rightTab === 1" key="depth">
+        <div v-else-if="rightTab === 'depth'" key="depth">
           <div v-if="!isApex" style="display: flex; flex-direction: column; gap: 12px">
             <DepthChart
               v-if="tokenPolicyId && tokenAssetName"
@@ -234,7 +234,7 @@
         </div>
 
         <!-- Markets tab (cross-DEX price comparison) -->
-        <div v-else-if="rightTab === 2" key="markets">
+        <div v-else-if="rightTab === 'markets'" key="markets">
           <CrossDexPrices :asset-id="token.unit" />
         </div>
         </transition>
@@ -337,7 +337,7 @@ const secondaryPrice = computed(() => {
 });
 
 const selectedTimeframe = ref('1h');
-const rightTab = ref(0);
+const rightTab = ref('swap');
 
 const tokenPnl = computed(() => getTokenPnl(props.token.unit));
 const totalPnl = computed(() => {
@@ -502,7 +502,7 @@ function openExplorer() {
 // Reset timeframe and reload candles when token changes
 watch(() => props.token, () => {
   selectedTimeframe.value = '1h';
-  rightTab.value = 0;
+  rightTab.value = 'swap';
   loadCandles();
 });
 
