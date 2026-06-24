@@ -82,18 +82,21 @@ const walletSvg = assets.walletGeroSvg;
 const keyGeroSvg = assets.keyGeroSvg;
 const pairSvg = assets.pairGeroSvg;
 
-// Method icons take the selected network's accent (matches the chain ring).
-const NET_COLORS: Record<string, string> = {
-  'Cardano': '#0072ce',
-  'Apex Fusion Prime': '#057468',
-  'Apex Fusion Vector': '#f25140',
-  'Bitcoin': '#F7931A',
+// Method icons take the selected network's accent gradient (lighter -> base),
+// matching the per-network logo gradients.
+const NET_GRADIENTS: Record<string, string> = {
+  'Cardano': 'linear-gradient(160deg, #00eaef, #0ca3fb)',
+  'Apex Fusion Prime': 'linear-gradient(160deg, #16b89e, #057468)',
+  'Apex Fusion Vector': 'linear-gradient(160deg, #ff7a66, #f25140)',
+  'Bitcoin': 'linear-gradient(160deg, #ffd279, #f7931a)',
 };
-const methodColor = computed(() => NET_COLORS[localNetwork.value?.blockchain || ''] || 'var(--v-primary-base)');
+const methodBg = computed(
+  () => NET_GRADIENTS[localNetwork.value?.blockchain || ''] || 'var(--v-primary-base)',
+);
 const glyphStyle = (url: string): Record<string, string> => ({
   '-webkit-mask-image': `url("${url}")`,
   'mask-image': `url("${url}")`,
-  backgroundColor: methodColor.value,
+  background: methodBg.value,
 });
 
 const onNetworkChange = (n: NetworkInfo): void => {
