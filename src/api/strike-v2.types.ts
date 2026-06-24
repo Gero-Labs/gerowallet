@@ -682,8 +682,9 @@ export interface DepositQuoteResponse {
 export interface WithdrawQuoteRequest {
   usd_value: string;
   blockchain: string;
-  recipient_address: string;
-  asset: string;
+  // NOTE: no recipient_address — Strike uses the account's registered wallet
+  // address as the recipient (prevents API-wallet holders redirecting funds).
+  asset?: string;
 }
 
 export interface WithdrawQuoteResponse {

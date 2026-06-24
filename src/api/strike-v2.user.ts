@@ -133,36 +133,6 @@ export const strikeUserApi = {
     return data;
   },
 
-  // Cardano withdraw batcher step (per STRIKE_V2_INTEGRATOR_GUIDE §16).
-  // Before POST /v2/withdraw on Cardano, the caller must build and submit a
-  // ~2 ADA batcher-fee transaction to the current validator leader address.
-
-  /** Look up the current validator leader address for a chain (default cardano). */
-  async getValidatorLeader(chain = 'cardano'): Promise<{ address: string }> {
-    const { data } = await strikeClient.get('/v2/validator/leader', { params: { chain } });
-    return data;
-  },
-
-  /**
-   * Request the unsigned batcher-fee transaction CBOR for a Cardano withdrawal.
-   * Returns `txData` (hex CBOR) which the caller must sign with the wallet and
-   * submit on-chain BEFORE calling executeWithdraw().
-   *
-   * NOTE: this endpoint lives under /api/perpetuals (NOT /v2) per the
-   * integrator guide, so we pass an absolute-from-root path. The auth
-   * interceptor signs the pathname + query as usual.
-   */
-  async getWithdrawBatcherTx(
-    req: { withdraw_id: string; address: string; chain?: string },
-  ): Promise<{ txData: string }> {
-    const { data } = await strikeClient.post('/api/perpetuals/withdraw-batcher', {
-      withdraw_id: req.withdraw_id,
-      address: req.address,
-      chain: req.chain ?? 'cardano',
-    });
-    return data;
-  },
-
   // Transaction status
   async getTransactionStatus(requestId: string, type: 'deposit' | 'withdraw'): Promise<import('./strike-v2.types').TransactionStatusResponse> {
     const { data } = await strikeClient.get('/v2/transaction/status', { params: { request_id: requestId, type } });

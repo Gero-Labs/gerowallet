@@ -1,7 +1,6 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef, type WatchStopHandle } from 'vue';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
-import { xerberusStore } from '@/stores/xerberusStore';
 import { walletStore } from '@/stores/walletStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
@@ -31,7 +30,6 @@ export interface MarketToken {
   tvl: number | null;
   liquidity: number;
   holders: number;
-  riskRating: string | null;
   isNew: boolean;
   policyLocked: boolean;
   fingerprint: string;
@@ -94,11 +92,6 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
   // Fingerprint: prefer API, fallback to DexHunter
   const fingerprint = apiToken.fingerprint || dhToken?.fingerprint || '';
 
-  // Xerberus risk by fingerprint
-  const xerberusRisk = fingerprint
-    ? (xerberusStore.risks as Record<string, any>)[fingerprint]
-    : null;
-
   // Market cap: trust the backend value. The backend already suppresses implausible /
   // placeholder-supply market caps (isPlausibleMarketCapAda) and returns null for them, so
   // we surface that null as-is ('—'). DexHunter is metadata-only — no numeric mcap fallback.
@@ -127,7 +120,6 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     tvl: apiToken.tvl ?? null,
     liquidity: apiToken.liquidity ?? 0,
     holders: apiToken.holders ?? dhToken?.holders ?? 0,
-    riskRating: xerberusRisk?.risk || null,
     isNew: apiToken.isNew ?? false,
     policyLocked: false, // TODO: get from API — default false until backend provides minting policy status
     fingerprint,
@@ -214,7 +206,6 @@ async function fetchAllTokens(silent = false): Promise<void> {
       tvl: null,
       liquidity: 0,
       holders: 0,
-      riskRating: 'AAA',
       isNew: false,
       policyLocked: true,
       fingerprint: '',

@@ -53,15 +53,6 @@
               </div>
             </v-tooltip>
             <span v-else>{{ item.name }}</span>
-            <v-avatar size="16" style="margin-top: -2px; margin-left: 4px !important">
-              <v-img
-                width="32"
-                style="margin: auto"
-                v-if="item.risk && item.risk !== 'N/A'"
-                :src="assets.resolveRisk(item.risk)"
-                :alt="item.risk"
-              />
-            </v-avatar>
           </v-list-item-title>
         </v-list-item-content>
       </v-list-item>
@@ -171,7 +162,6 @@ import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { xerberusStore } from '@/stores/xerberusStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { realFiStore } from '@/stores/realFiStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
@@ -186,7 +176,6 @@ interface Props {
   sortOptions: any;
   hideScam?: boolean;
   hideUnverified?: boolean;
-  hideUnrated?: boolean;
   searchTerm?: string;
   containerHeight?: number;
 }
@@ -194,7 +183,6 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   hideScam: false,
   hideUnverified: false,
-  hideUnrated: false,
   searchTerm: '',
   containerHeight: 348,
 });
@@ -205,7 +193,6 @@ const { t } = useTranslation();
 // Store references
 const { price } = toRefs(networkStore);
 const { loggedWallet, tokens } = toRefs(walletStore);
-const { risks } = toRefs(xerberusStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
@@ -280,25 +267,7 @@ const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
       const sortKey = sortBy[0];
       const compareA = a[sortKey];
       const compareB = b[sortKey];
-      if (sortKey === 'risk') {
-        const riskOrder = {
-          AAA: 1,
-          AA: 2,
-          A: 3,
-          BBB: 4,
-          BB: 5,
-          B: 6,
-          CCC: 7,
-          CC: 8,
-          C: 9,
-          D: 10,
-        };
-
-        const rankA = riskOrder[compareA] || 11; // Default for unknown ratings
-        const rankB = riskOrder[compareB] || 11;
-
-        return sortDesc[0] ? rankA - rankB : rankB - rankA;
-      } else if (sortKey === 'quantity') {
+      if (sortKey === 'quantity') {
         const quantityA = Number(
           filters.toCurrency(a.quantity, false, 6, '', '', false, a.metadata?.decimals).replaceAll(',', '')
         );
@@ -338,7 +307,6 @@ const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
 const tokensList = computed(() => {
   let res = Object.values(tokens.value).map((token: any) => {
     if (token.policy_id === '') {
-      token.risk = 'AAA';
       // Use Kraken WebSocket price for ADA, fallback to network store price (in USD)
       // Convert to user's selected currency (USD or EUR)
       const usdPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
@@ -359,7 +327,6 @@ const tokensList = computed(() => {
       // Use Kraken WebSocket price change for ADA, fallback to network store
       token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
     } else {
-      token.risk = risks.value[token.fingerprint]?.risk;
       // DexHunter prices are in ADA, convert to USD first, then to user's selected currency
       const priceInAda = dexHunterTokens.value[token.unit]?.price || 0;
       const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
@@ -385,9 +352,6 @@ const tokensList = computed(() => {
       return false;
     }
     if (props.hideUnverified && !token.verified) {
-      return false;
-    }
-    if (props.hideUnrated && !token.risk) {
       return false;
     }
     return true;
@@ -475,7 +439,6 @@ const handleTokenRowClick = (row: any) => {
     tvl: null,
     liquidity: 0,
     holders: 0,
-    riskRating: row.risk || null,
     isNew: false,
     policyLocked: false,
     fingerprint: row.fingerprint || '',

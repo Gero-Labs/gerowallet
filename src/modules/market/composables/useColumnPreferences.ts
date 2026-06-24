@@ -1,6 +1,6 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
 
-export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'change30d' | 'volume24h' | 'volume7d' | 'txnCount24h' | 'makerCount24h' | 'totalSupply' | 'sparkline' | 'mcap' | 'tvl' | 'holders' | 'risk' | 'allocation';
+export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'change30d' | 'volume24h' | 'volume7d' | 'txnCount24h' | 'makerCount24h' | 'totalSupply' | 'sparkline' | 'mcap' | 'tvl' | 'holders' | 'allocation';
 
 export interface ColumnPreferences {
   change1h: boolean;
@@ -16,7 +16,6 @@ export interface ColumnPreferences {
   mcap: boolean;
   tvl: boolean;
   holders: boolean;
-  risk: boolean;
   allocation: boolean;
 }
 
@@ -36,7 +35,6 @@ const DEFAULTS: ColumnPreferences = {
   mcap: true,
   tvl: false,
   holders: false,
-  risk: false,
   allocation: false,
 };
 
