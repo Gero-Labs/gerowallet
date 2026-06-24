@@ -224,8 +224,11 @@ async function fetchAllTokens(silent = false): Promise<void> {
     // filter). Fire-and-forget so it never blocks the main table.
     if (!isApex) {
       marketApi.getSnekFunTokens()
-        .then(snekRaw => { snekTokens.value = (snekRaw || []).map(tp => enrichWithStores(tp)); })
-        .catch(e => console.debug('Market: snek.fun unavailable', e));
+        .then(snekRaw => {
+          snekTokens.value = (snekRaw || []).map(tp => enrichWithStores(tp));
+          console.info('[snek] loaded', snekTokens.value.length, 'tokens:', snekTokens.value.slice(0, 5).map(t => t.ticker));
+        })
+        .catch(e => console.warn('[snek] load FAILED:', e?.message || e));
     }
 
     // Set adaData ref (used for native currency price display)
