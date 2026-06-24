@@ -199,8 +199,9 @@ onUnmounted(() => {
 .onboarding-content {
   width: 100%;
   min-width: 0;
-  /* Consistent card height across every step; content scrolls inside. */
-  height: 680px;
+  /* Grow to fit content (no scroll) with a consistent floor; only very tall
+     steps (e.g. seed phrase) hit the cap and scroll inside. */
+  min-height: 520px;
   max-height: calc(100vh - 80px);
   padding: 24px 28px;
   border-radius: 16px !important;
