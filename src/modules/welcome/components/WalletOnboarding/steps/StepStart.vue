@@ -5,78 +5,78 @@
 
     <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
 
-    <!-- ── Method ──────────────────────────────────────────── -->
+    <!-- ── Method (toggle pills) ───────────────────────────── -->
     <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
-    <v-list class="transparent" dense nav style="width: inherit;">
-      <v-list-item class="method-item mb-2" @click="$emit('select', 'create')">
-        <v-list-item-avatar size="44" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 12px; background-color: #13161B">
-          <v-img :src="walletSvg" style="width: 20px;" max-width="20" contain></v-img>
-        </v-list-item-avatar>
-        <v-list-item-content>
-          <v-list-item-title style="font-size: 17px; font-weight: 600;">{{ $t('welcome.createWallet') }}</v-list-item-title>
-          <v-list-item-subtitle>{{ $t('welcome.createWalletDescription') }}</v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
-
-      <v-list-item class="method-item mb-2" @click="$emit('select', 'restore')">
-        <v-list-item-avatar size="44" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 12px; background-color: #13161B">
-          <v-img :src="keyGeroSvg" style="width: 20px;" max-width="20" contain></v-img>
-        </v-list-item-avatar>
-        <v-list-item-content>
-          <v-list-item-title style="font-size: 17px; font-weight: 600;">{{ $t('welcome.restoreWallet') }}</v-list-item-title>
-          <v-list-item-subtitle>{{ $t('welcome.restoreWalletDescription') }}</v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
-
-      <v-list-item
-        class="method-item"
-        :class="{ 'method-item--disabled': !pairSupported }"
-        @click="pairSupported && $emit('select', 'pair')"
+    <div class="method-row">
+      <button
+        type="button"
+        class="opt-pill"
+        :class="{ 'opt-pill--active': selectedMethod === 'create' }"
+        @click="selectedMethod = 'create'"
       >
-        <v-list-item-avatar size="44" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 12px; background-color: #13161B">
-          <v-img :src="pairSvg" style="width: 20px;" max-width="20" contain></v-img>
-        </v-list-item-avatar>
-        <v-list-item-content>
-          <v-list-item-title style="font-size: 17px; font-weight: 600;">{{ $t('welcome.pairHardwareWallet') }}</v-list-item-title>
-          <v-list-item-subtitle>
-            {{ pairSupported ? $t('welcome.pairHardwareWalletDescription') : $t('welcome.pairNotSupportedOnNetwork', { network: localNetwork ? localNetwork.title : '' }) }}
-          </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
-    </v-list>
+        {{ $t('welcome.createWallet') }}
+      </button>
+      <button
+        type="button"
+        class="opt-pill"
+        :class="{ 'opt-pill--active': selectedMethod === 'restore' }"
+        @click="selectedMethod = 'restore'"
+      >
+        {{ $t('welcome.restoreWallet') }}
+      </button>
+      <button
+        type="button"
+        class="opt-pill"
+        :class="{ 'opt-pill--active': selectedMethod === 'pair', 'opt-pill--disabled': !pairSupported }"
+        :disabled="!pairSupported"
+        @click="selectedMethod = 'pair'"
+      >
+        {{ $t('welcome.pairHardwareWallet') }}
+      </button>
+    </div>
+    <div v-if="!pairSupported" class="method-hint mt-2">
+      {{ $t('welcome.pairNotSupportedOnNetwork', { network: localNetwork ? localNetwork.title : '' }) }}
+    </div>
 
     <!-- Navigation -->
-    <div class="d-flex mt-2">
+    <div class="d-flex mt-6" style="gap: 12px;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-spacer />
+      <v-btn color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import assets from '@/utils/assets';
 import { NetworkInfo } from '@/utils/networks';
 import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
+
+type Method = 'create' | 'restore' | 'pair';
 
 const props = defineProps<{ network: NetworkInfo }>();
 const emit = defineEmits<{
   (e: 'change', n: NetworkInfo): void;
-  (e: 'select', method: 'create' | 'restore' | 'pair'): void;
+  (e: 'select', method: Method): void;
   (e: 'back'): void;
 }>();
 
 const localNetwork = ref<NetworkInfo>(props.network);
+const selectedMethod = ref<Method | null>(null);
+const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
 
 const onNetworkChange = (n: NetworkInfo): void => {
   localNetwork.value = n;
   emit('change', n);
+  // Drop a stale Pair choice if the new network can't pair hardware.
+  if (selectedMethod.value === 'pair' && !n.supportedHardware) {
+    selectedMethod.value = null;
+  }
 };
 
-const isApex = computed(() => !!localNetwork.value?.blockchain?.includes('Apex'));
-const walletSvg = computed(() => (isApex.value ? assets.walletGeroApexSvg : assets.walletGeroSvg));
-const keyGeroSvg = computed(() => (isApex.value ? assets.keyApexSvg : assets.keyGeroSvg));
-const pairSvg = computed(() => (isApex.value ? assets.pairApexSvg : assets.pairGeroSvg));
-const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
+const onContinue = (): void => {
+  if (selectedMethod.value) emit('select', selectedMethod.value);
+};
 </script>
 
 <style scoped>
@@ -88,9 +88,42 @@ const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
   color: rgba(255, 255, 255, 0.7);
 }
 
-.method-item--disabled {
+.method-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.opt-pill {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.opt-pill:hover:not(.opt-pill--disabled) {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.opt-pill--active {
+  border-color: var(--v-primary-base);
+  background: rgb(from var(--v-primary-base) r g b / 0.12);
+  color: #fff;
+}
+
+.opt-pill--disabled {
   opacity: 0.4;
   cursor: not-allowed;
-  pointer-events: none;
+}
+
+.method-hint {
+  font-size: 12px;
+  color: #94979c;
 }
 </style>

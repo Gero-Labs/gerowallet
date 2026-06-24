@@ -7,7 +7,6 @@
     <!-- Single content card — only the active step is rendered -->
     <v-card class="liquid-glass transparent-override onboarding-content" flat>
       <div class="content-header">
-        <div class="content-eyebrow">{{ $t('welcome.onboardingStepN', { n: step }) }}</div>
         <div class="content-title">{{ $t(currentStep.titleKey) }}</div>
         <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
       </div>
@@ -196,15 +195,16 @@ onUnmounted(() => {
 <style scoped>
 .onboarding-wrapper {
   width: 100%;
-  max-width: 100%;
+  max-width: 720px;
   margin: 0 auto;
+  align-self: center; /* vertically centered within the right column */
   display: flex;
   flex-direction: column;
-  /* Fill the available height up to a sensible cap; content scrolls inside. */
-  max-height: calc(100vh - 96px);
+  max-height: calc(100vh - 64px);
 }
 
 .back-to-wallets {
+  align-self: flex-start; /* left-aligned with the card's left edge */
   margin-bottom: 12px;
   text-transform: none;
   letter-spacing: normal;
@@ -213,12 +213,11 @@ onUnmounted(() => {
 
 /* CONTENT */
 .onboarding-content {
-  flex: 1;
-  min-width: 0;
-  min-height: 440px;
-  max-width: 720px;
   width: 100%;
-  margin: 0 auto;
+  min-width: 0;
+  /* Consistent card height across every step; content scrolls inside. */
+  height: 600px;
+  max-height: calc(100vh - 110px);
   padding: 24px 28px;
   border-radius: 16px !important;
   display: flex;
@@ -228,14 +227,6 @@ onUnmounted(() => {
 
 .content-header {
   margin-bottom: 20px;
-}
-
-.content-eyebrow {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: #94979c;
 }
 
 .content-title {
