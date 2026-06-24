@@ -134,7 +134,7 @@ const onContinue = (): void => {
   gap: 14px;
   width: 100%;
   text-align: left;
-  padding: 11px 16px;
+  padding: 6px 16px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
@@ -162,18 +162,15 @@ const onContinue = (): void => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: 1px solid #373a41;
-  background-color: #13161b66;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
 }
 
 .method-card__glyph {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;

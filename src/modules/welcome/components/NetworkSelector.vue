@@ -75,7 +75,9 @@ const families = computed<Family[]>(() => {
     fam.nets.push(n);
     if (!n.comingSoon) fam.comingSoon = false;
   }
-  return order.map(k => map.get(k)!);
+  // Non-Apex chains first (Cardano / Bitcoin / Midnight), Apex chains second.
+  const list = order.map(k => map.get(k)!);
+  return [...list.filter(f => !f.name.includes('Apex')), ...list.filter(f => f.name.includes('Apex'))];
 });
 
 const activeFamily = computed<string>(() => familyName(props.network?.blockchain || ''));
@@ -92,8 +94,10 @@ const isFamilySelectable = (fam: Family): boolean => (props.devMode ? !fam.comin
 // Per-network accent for the active tile ring (matches the theme primary set in
 // updateVuetifyTheme). Empty string => fall back to the CSS class (primary var).
 const CHAIN_COLORS: Record<string, string> = {
+  'Cardano': '#00c7f3',
   'Apex Fusion Prime': '#057468',
   'Apex Fusion Vector': '#f25140',
+  'Bitcoin': '#F7931A'
 };
 const chainColor = (name: string): string => CHAIN_COLORS[name] || '';
 
