@@ -10,6 +10,7 @@
         <StepStart class="onboarding-step"
           v-if="currentStep.key === 'start'"
           :network="network"
+          :dev-mode="devMode"
           @change="onNetworkChange"
           @select="onMethodSelect"
         />
@@ -101,7 +102,7 @@ interface StepDef {
 // `network` is the single source of truth, owned by Welcome.vue and passed in.
 // The network step emits changes up via `network-change`; Welcome updates the
 // prop and also drives the background from it.
-defineProps<{ network: NetworkInfo }>();
+defineProps<{ network: NetworkInfo; devMode?: boolean }>();
 const emit = defineEmits<{ (e: 'network-change', n: NetworkInfo): void }>();
 
 const step = ref<number>(1);

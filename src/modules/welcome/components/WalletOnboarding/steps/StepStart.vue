@@ -1,7 +1,7 @@
 <template>
   <div class="step-start">
     <!-- ── Network (two-step: blockchain → network) ────────── -->
-    <NetworkSelector :network="localNetwork" @change="onNetworkChange" />
+    <NetworkSelector :network="localNetwork" :dev-mode="devMode" @change="onNetworkChange" />
 
     <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
 
@@ -67,7 +67,7 @@ import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
 
 type Method = 'create' | 'restore' | 'pair';
 
-const props = defineProps<{ network: NetworkInfo }>();
+const props = defineProps<{ network: NetworkInfo; devMode?: boolean }>();
 const emit = defineEmits<{
   (e: 'change', n: NetworkInfo): void;
   (e: 'select', method: Method): void;

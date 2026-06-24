@@ -1,45 +1,47 @@
 <template>
   <div class="network-selector">
-    <!-- Step 1 — Blockchain family -->
+    <!-- Blockchain family -->
     <div class="ns-label mb-2">{{ $t('welcome.blockchain') }}</div>
-    <div class="chain-row mb-3">
+    <div class="chain-row" :class="{ 'mb-3': devMode }">
       <button
         v-for="fam in families"
         :key="fam.name"
         type="button"
         class="chain-tile"
-        :class="{ 'chain-tile--active': fam.name === activeFamily, 'chain-tile--disabled': fam.comingSoon }"
-        :disabled="fam.comingSoon"
+        :class="{ 'chain-tile--active': fam.name === activeFamily, 'chain-tile--disabled': !isFamilySelectable(fam) }"
+        :disabled="!isFamilySelectable(fam)"
         @click="selectFamily(fam)"
       >
         <v-avatar size="26" class="chain-tile__icon">
           <v-img :src="fam.icon" contain></v-img>
         </v-avatar>
         <span class="chain-tile__label">{{ fam.name }}</span>
-        <v-chip v-if="fam.comingSoon" color="warning" x-small class="chain-tile__soon">{{ $t('welcome.soon') }}</v-chip>
+        <v-chip v-if="!isFamilySelectable(fam)" color="warning" x-small class="chain-tile__soon">{{ $t('welcome.soon') }}</v-chip>
       </button>
     </div>
 
-    <!-- Step 2 — Network within the chosen family -->
-    <div class="ns-label mb-2">{{ $t('common.network') }}</div>
-    <div class="net-row">
-      <button
-        v-for="net in activeNets"
-        :key="net.blockchain + net.network"
-        type="button"
-        class="net-pill"
-        :class="{ 'net-pill--active': isNetActive(net), 'net-pill--disabled': net.comingSoon }"
-        :disabled="net.comingSoon"
-        @click="selectNet(net)"
-      >
-        {{ optionLabel(net) }}
-      </button>
-    </div>
+    <!-- Network within the chosen family — dev only -->
+    <template v-if="devMode">
+      <div class="ns-label mb-2">{{ $t('common.network') }}</div>
+      <div class="net-row">
+        <button
+          v-for="net in activeNets"
+          :key="net.blockchain + net.network"
+          type="button"
+          class="net-pill"
+          :class="{ 'net-pill--active': isNetActive(net), 'net-pill--disabled': net.comingSoon }"
+          :disabled="net.comingSoon"
+          @click="selectNet(net)"
+        >
+          {{ optionLabel(net) }}
+        </button>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 
@@ -50,7 +52,7 @@ interface Family {
   comingSoon: boolean;
 }
 
-const props = defineProps<{ network: NetworkInfo }>();
+const props = defineProps<{ network: NetworkInfo; devMode?: boolean }>();
 const emit = defineEmits<{ (e: 'change', n: NetworkInfo): void }>();
 
 // Group networks into display families. Apex Prime + Apex Vector are distinct
@@ -76,6 +78,14 @@ const families = computed<Family[]>(() => {
 const activeFamily = computed<string>(() => familyName(props.network?.blockchain || ''));
 const activeNets = computed<NetworkInfo[]>(() => families.value.find(f => f.name === activeFamily.value)?.nets || []);
 
+const famHasLiveMainnet = (fam: Family): boolean => fam.nets.some(n => n.network === 'Mainnet' && !n.comingSoon);
+const currentIsTestnet = computed<boolean>(() => !!props.network && props.network.network !== 'Mainnet');
+
+// Without dev mode a chain is only pickable if it has a live mainnet (a chain
+// like Bitcoin that's testnet-only is hidden from regular users). With dev mode
+// any chain that has at least one live network is pickable.
+const isFamilySelectable = (fam: Family): boolean => (props.devMode ? !fam.comingSoon : famHasLiveMainnet(fam));
+
 const isNetActive = (net: NetworkInfo): boolean =>
   props.network?.blockchain === net.blockchain && props.network?.network === net.network;
 
@@ -92,12 +102,10 @@ const commit = (net: NetworkInfo): void => {
 };
 
 const selectFamily = (fam: Family): void => {
-  if (fam.comingSoon) return;
+  if (!isFamilySelectable(fam)) return;
   if (fam.name === activeFamily.value) return;
-  const def =
-    fam.nets.find(n => !n.comingSoon && n.network === 'Mainnet') ||
-    fam.nets.find(n => !n.comingSoon) ||
-    fam.nets[0];
+  const liveMainnet = fam.nets.find(n => n.network === 'Mainnet' && !n.comingSoon);
+  const def = liveMainnet || fam.nets.find(n => !n.comingSoon) || fam.nets[0];
   if (def) commit(def);
 };
 
@@ -105,6 +113,18 @@ const selectNet = (net: NetworkInfo): void => {
   if (net.comingSoon) return;
   commit(net);
 };
+
+// Turning dev mode off while on a testnet snaps back to a live mainnet.
+watch(
+  () => props.devMode,
+  (dev) => {
+    if (!dev && currentIsTestnet.value) {
+      const fam = families.value.find(f => f.name === activeFamily.value);
+      const main = fam?.nets.find(n => n.network === 'Mainnet' && !n.comingSoon);
+      commit(main || networks.networks[0]);
+    }
+  },
+);
 </script>
 
 <style scoped lang="scss">
@@ -116,7 +136,7 @@ const selectNet = (net: NetworkInfo): void => {
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* ── Step 1: chain tiles ──────────────────────────── */
+/* ── Chain tiles ──────────────────────────────────── */
 .chain-row {
   display: flex;
   flex-wrap: wrap;
@@ -162,7 +182,7 @@ const selectNet = (net: NetworkInfo): void => {
   }
 }
 
-/* ── Step 2: network pills ────────────────────────── */
+/* ── Network pills (dev mode) ─────────────────────── */
 .net-row {
   display: flex;
   flex-wrap: wrap;

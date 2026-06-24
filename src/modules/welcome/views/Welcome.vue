@@ -31,7 +31,9 @@
       <div class="welcome-left-column">
         <WalletCreation
           :selectedNetwork="selectedNetwork"
+          :dev-mode="devMode"
           @network-change="onOnboardingNetwork"
+          @update:dev-mode="devMode = $event"
         />
       </div>
 
@@ -39,7 +41,7 @@
       <div class="welcome-right-column">
         <div class="right-content">
           <div class="right-panel">
-            <WalletOnboarding :network="selectedNetwork" @network-change="onOnboardingNetwork" />
+            <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" />
           </div>
 
           <!-- Footer -->
@@ -50,7 +52,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
@@ -58,7 +60,14 @@ import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCr
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
 
+const DEV_NETWORKS_KEY = 'gero:devNetworks';
+
 const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
+const devMode = ref<boolean>(localStorage.getItem(DEV_NETWORKS_KEY) === 'true');
+
+watch(devMode, (val) => {
+  localStorage.setItem(DEV_NETWORKS_KEY, String(val));
+});
 
 const onOnboardingNetwork = (n: NetworkInfo): void => {
   selectedNetwork.value = n;
@@ -104,8 +113,8 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
 
 .language-selector-container {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 0;
+  right: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
   border-radius: 8px;
