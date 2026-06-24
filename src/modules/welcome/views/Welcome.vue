@@ -31,9 +31,7 @@
       <div class="welcome-left-column">
         <WalletCreation
           :selectedNetwork="selectedNetwork"
-          :dev-mode="devMode"
           @network-change="onOnboardingNetwork"
-          @update:dev-mode="devMode = $event"
         />
       </div>
 

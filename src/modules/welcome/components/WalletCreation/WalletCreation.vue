@@ -22,21 +22,7 @@
       <WalletsListLogin :hide-header="true" class="wallet-list-block" @network-change="onNetworkChange" />
     </div>
 
-    <div class="footer-left">
-      <v-switch
-        class="dev-switch ma-0 pa-0"
-        :input-value="devMode"
-        dense
-        inset
-        hide-details
-        @change="onDevToggle"
-      >
-        <template v-slot:label>
-          <span class="dev-switch__label">{{ $t('welcome.developerNetworks') }}</span>
-        </template>
-      </v-switch>
-      <span>&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</span>
-    </div>
+    <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
   </div>
 </template>
 <script setup lang="ts">
@@ -47,20 +33,14 @@ import { NetworkInfo } from '@/utils/networks';
 
 const props = defineProps<{
   selectedNetwork: NetworkInfo;
-  devMode?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'network-change', n: NetworkInfo): void;
-  (e: 'update:dev-mode', val: boolean): void;
 }>();
 
 const onNetworkChange = (n: NetworkInfo): void => {
   emit('network-change', n);
-};
-
-const onDevToggle = (val: boolean | null): void => {
-  emit('update:dev-mode', !!val);
 };
 
 // Logo reacts to the selected network (Apex variant vs default).
@@ -208,27 +188,11 @@ const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
 }
 
 .footer-left {
-  padding: 10px 20px 12px;
+  padding: 12px 20px;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.7);
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dev-switch {
-  flex: none;
-}
-
-.dev-switch__label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.dev-switch ::v-deep .v-input--selection-controls__input {
-  transform: scale(0.8);
 }
 
 /* Responsive font sizing for longer text */

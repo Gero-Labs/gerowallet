@@ -183,8 +183,8 @@ watch(
 /* Corner ribbon "Soon" badge (matches the disabled swap quick-action). */
 .ribbon {
   position: absolute;
-  top: -0.375rem;
-  right: -0.5rem;
+  top: 0;
+  right: 0;
   width: 1.75rem;
   height: 1.75rem;
   overflow: hidden;

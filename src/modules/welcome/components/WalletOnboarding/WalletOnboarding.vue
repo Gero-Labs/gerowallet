@@ -3,7 +3,22 @@
     <!-- Single content card — only the active step is rendered -->
     <v-card class="liquid-glass transparent-override onboarding-content" flat>
       <div class="content-header">
-        <div class="content-title">{{ $t(currentStep.titleKey) }}</div>
+        <div class="content-header-row">
+          <div class="content-title">{{ $t(currentStep.titleKey) }}</div>
+          <v-switch
+            v-if="currentStep.key === 'start'"
+            class="dev-switch ma-0 pa-0"
+            :input-value="devMode"
+            dense
+            inset
+            hide-details
+            @change="onDevToggle"
+          >
+            <template v-slot:label>
+              <span class="dev-switch__label">{{ $t('welcome.developerNetworks') }}</span>
+            </template>
+          </v-switch>
+        </div>
         <div class="content-desc">{{ $t(currentStep.descKey) }}</div>
       </div>
       <div class="content-body">
@@ -103,7 +118,14 @@ interface StepDef {
 // The network step emits changes up via `network-change`; Welcome updates the
 // prop and also drives the background from it.
 defineProps<{ network: NetworkInfo; devMode?: boolean }>();
-const emit = defineEmits<{ (e: 'network-change', n: NetworkInfo): void }>();
+const emit = defineEmits<{
+  (e: 'network-change', n: NetworkInfo): void;
+  (e: 'update:dev-mode', val: boolean): void;
+}>();
+
+const onDevToggle = (val: boolean | null): void => {
+  emit('update:dev-mode', !!val);
+};
 
 const step = ref<number>(1);
 const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
@@ -213,6 +235,27 @@ onUnmounted(() => {
 
 .content-header {
   margin-bottom: 20px;
+}
+
+.content-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dev-switch {
+  flex: none;
+}
+
+.dev-switch__label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.dev-switch ::v-deep .v-input--selection-controls__input {
+  transform: scale(0.8);
 }
 
 .content-title {
