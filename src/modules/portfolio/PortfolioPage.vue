@@ -627,6 +627,9 @@ const displayedTokens = computed(() => {
       break;
     case 'market':
       tokens = allTokens.value.filter(t => !t.isNative);
+      // When searching, also surface snek.fun tokens (e.g. SONG) so they're
+      // findable from the Market tab even though they live in a separate feed.
+      if (debouncedSearchQuery.value) tokens = [...tokens, ...snekTokens.value];
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
