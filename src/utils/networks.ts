@@ -5,8 +5,7 @@ import apexSvg from '@/assets/svg/ap3x.svg';
 import apexPrimeSvg from '@/assets/svg/apex_prime.svg';
 import apexVectorSvg from '@/assets/svg/apex_vector.svg';
 import midnightLogo from '@/assets/svg/midnight.svg';
-// NOTE: bitcoinLogo import removed for 2.7 — its only live references were the
-// commented-out Bitcoin network entries below (HIDE+GATE). Re-add when BTC returns.
+import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 
 export interface NetworkInfo {
   icon: string;
@@ -458,6 +457,56 @@ export default {
         networkMagic: 0
       }
     })) as NetworkInfo[]),
+    // Bitcoin — coming soon (HIDE+GATE teaser only: all features off, not selectable)
+    {
+      icon: bitcoinLogo,
+      iconColor: 'orange',
+      title: 'Bitcoin Mainnet',
+      blockchain: Blockchain.BITCOIN,
+      network: Network.MAINNET,
+      comingSoon: true,
+      supportedHardware: false,
+      networkId: 1,
+      currencySymbol: 'BTC',
+      currencyTicker: 'BTC',
+      currencyName: 'Bitcoin',
+      currencyDescription: 'Bitcoin',
+      currencyImage: bitcoinLogo,
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.UNDEFINED,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: false,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
+      networkParams: {
+        networkMagic: 0
+      }
+    } as NetworkInfo,
   ]  as NetworkInfo[],
   resolveNetwork(chain: string, network: string): NetworkInfo {
     return this.networks.find(element => element.blockchain === chain && element.network === network);
