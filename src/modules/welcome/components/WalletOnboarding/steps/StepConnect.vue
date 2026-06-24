@@ -1,20 +1,22 @@
 <template>
   <div class="step-connect" style="text-align: -webkit-center;">
     <img
+      style="width: 400px; align-self: center;"
       v-if="walletType === WalletType.Ledger"
       :src="assets.connectLedgerSvg"
-      :alt="$t('wallet.connectLedger')"
+      :alt="t('wallet.connectLedger')"
     />
     <img
+      style="width: 400px; align-self: center;"
       v-if="walletType === WalletType.Trezor"
       :src="assets.connectTrezorSvg"
-      :alt="$t('wallet.connectTrezor')"
+      :alt="t('wallet.connectTrezor')"
     />
     <img
       v-if="walletType === WalletType.Keystone && !keystoneScan"
       :src="assets.connectKeystoneSvg"
-      style="width: 230px; height: 126px"
-      :alt="$t('wallet.connectKeystone')"
+      style="width: 230px; height: 126px; align-self: center;"
+      :alt="t('wallet.connectKeystone')"
     />
     <v-alert color="primary" dense outlined type="info" border="left" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
