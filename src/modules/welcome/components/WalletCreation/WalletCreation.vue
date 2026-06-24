@@ -33,11 +33,6 @@
         </GButton>
 
         <GoogleLogin :selected-network="selectedNetwork" />
-
-        <div class="zkfold-credit">
-          <span>{{ $t('common.poweredBy') }}</span>
-          <v-img :src="zkFold" contain class="zkfold-logo"></v-img>
-        </div>
       </div>
     </div>
 
@@ -46,7 +41,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
+import { geroDashboardApex, geroDashboard } from '@/utils/assets';
 import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { NetworkInfo } from '@/utils/networks';
@@ -197,23 +192,6 @@ const gradientClass = computed(() =>
   letter-spacing: normal;
   border-radius: 8px;
   text-transform: none;
-}
-
-.zkfold-credit {
-  width: 100%;
-  font-size: 10px;
-  font-weight: 300;
-  margin-top: 3px;
-  color: #5b5b5b;
-  display: flex;
-  align-items: center;
-}
-
-.zkfold-credit .zkfold-logo {
-  height: 14px;
-  width: 43px;
-  margin-left: 2px;
-  max-width: 43px;
 }
 
 .footer-left {

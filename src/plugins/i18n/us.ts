@@ -2571,6 +2571,7 @@ export default {
   'welcome.onboardingStepConnect': 'Connect',
   'welcome.onboardingStepReview': 'Review',
   'welcome.onboardingStepN': 'Step {n}',
+  'welcome.blockchain': 'Blockchain',
   'welcome.onboardingStepStart': 'Get Started',
   'welcome.onboardingSubStart': 'Network & method',
   'welcome.onboardingDescStart': 'Choose a blockchain and how you\'d like to add your wallet.',

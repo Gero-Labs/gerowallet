@@ -3039,6 +3039,7 @@ export default {
   'welcome.onboardingStepConnect': 'Verbinden',
   'welcome.onboardingStepReview': 'Überprüfen',
   'welcome.onboardingStepN': 'Schritt {n}',
+  'welcome.blockchain': 'Blockchain',
   'welcome.onboardingStepStart': 'Los geht\'s',
   'welcome.onboardingSubStart': 'Netzwerk & Methode',
   'welcome.onboardingDescStart': 'Wählen Sie eine Blockchain und wie Sie Ihre Wallet hinzufügen möchten.',

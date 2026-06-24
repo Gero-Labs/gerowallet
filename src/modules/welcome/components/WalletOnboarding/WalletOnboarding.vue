@@ -232,8 +232,12 @@ onUnmounted(() => {
 <style scoped>
 .onboarding-wrapper {
   width: 100%;
-  max-width: 820px;
-  margin: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  /* Fill the available height up to a sensible cap; content scrolls inside. */
+  max-height: calc(100vh - 96px);
 }
 
 .back-to-wallets {
@@ -247,6 +251,8 @@ onUnmounted(() => {
   display: flex;
   gap: 20px;
   width: 100%;
+  flex: 1;
+  min-height: 0;
   align-items: stretch;
 }
 
@@ -255,6 +261,7 @@ onUnmounted(() => {
   flex: 0 0 240px;
   padding: 24px 20px;
   border-radius: 16px !important;
+  overflow-y: auto;
 }
 
 .rail-list {
@@ -350,6 +357,7 @@ onUnmounted(() => {
   border-radius: 16px !important;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .content-header {
@@ -381,6 +389,8 @@ onUnmounted(() => {
 
 .content-body {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 @media (max-width: 768px) {
