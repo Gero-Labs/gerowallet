@@ -29,7 +29,7 @@ export interface MarketToken {
   mcap: number | null;
   tvl: number | null;
   liquidity: number;
-  holders: number;
+  holders: number | null;
   isNew: boolean;
   policyLocked: boolean;
   fingerprint: string;
@@ -121,7 +121,11 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     mcap,
     tvl: apiToken.tvl ?? null,
     liquidity: apiToken.liquidity ?? 0,
-    holders: apiToken.holders ?? dhToken?.holders ?? 0,
+    // The bulk /api/market/prices endpoint does not return a holders count, so
+    // this is null (renders "—") unless DexHunter happens to have it. Showing 0
+    // would be misleading. (A real count needs the backend to add holders to the
+    // bulk endpoint, or proxy /api/dex/tokens/{p}/{n}/holders.)
+    holders: apiToken.holders ?? dhToken?.holders ?? null,
     isNew: apiToken.isNew ?? false,
     policyLocked: false, // TODO: get from API — default false until backend provides minting policy status
     fingerprint,
@@ -208,7 +212,7 @@ async function fetchAllTokens(silent = false): Promise<void> {
       mcap: nativePrice.marketCap,
       tvl: null,
       liquidity: 0,
-      holders: 0,
+      holders: null,
       isNew: false,
       policyLocked: true,
       fingerprint: '',

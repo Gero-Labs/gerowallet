@@ -587,7 +587,7 @@ const myHoldings = computed<MarketToken[]>(() => {
       mcap: marketToken?.mcap ?? null,
       tvl: marketToken?.tvl || null,
       liquidity: marketToken?.liquidity || 0,
-      holders: marketToken?.holders || dhToken?.holders || 0,
+      holders: marketToken?.holders ?? dhToken?.holders ?? null,
       isNew: false,
       policyLocked: true,
       fingerprint: marketToken?.fingerprint || dhToken?.fingerprint || '',

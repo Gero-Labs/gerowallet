@@ -1,6 +1,6 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
 
-export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'change30d' | 'volume24h' | 'volume7d' | 'txnCount24h' | 'makerCount24h' | 'totalSupply' | 'sparkline' | 'mcap' | 'tvl' | 'holders' | 'allocation' | 'avgCostBasis' | 'totalPnl';
+export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'change30d' | 'volume24h' | 'volume7d' | 'txnCount24h' | 'makerCount24h' | 'totalSupply' | 'sparkline' | 'mcap' | 'tvl' | 'allocation' | 'avgCostBasis' | 'totalPnl';
 
 export interface ColumnPreferences {
   change1h: boolean;
@@ -15,7 +15,6 @@ export interface ColumnPreferences {
   sparkline: boolean;
   mcap: boolean;
   tvl: boolean;
-  holders: boolean;
   allocation: boolean;
   avgCostBasis: boolean;
   totalPnl: boolean;
@@ -28,7 +27,7 @@ const STORAGE_KEY = 'gero_market_columns_v2';
 
 // Default column set mirrors the market-data website table
 // (cardano-market-data MarketTable.tsx): price, 1h/24h/7d/30d, sparkline,
-// vol 24h/7d, TXN, Makers, Liquidity (tvl), Market Cap, Supply, plus holders.
+// vol 24h/7d, TXN, Makers, Liquidity (tvl), Market Cap, Supply.
 const DEFAULTS: ColumnPreferences = {
   change1h: true,
   change24h: true,
@@ -42,7 +41,6 @@ const DEFAULTS: ColumnPreferences = {
   sparkline: true,
   mcap: true,
   tvl: true,
-  holders: true,
   allocation: false,
   avgCostBasis: true,
   totalPnl: true,

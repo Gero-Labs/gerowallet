@@ -211,12 +211,6 @@
       <span v-else style="font-size: 12px; opacity: 0.4">—</span>
     </template>
 
-    <!-- Holders column -->
-    <template v-slot:[`item.holders`]="{ item }">
-      <span v-if="item.holders != null" style="font-size: 12px">{{ formatCompact(item.holders) }}</span>
-      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
-    </template>
-
     <!-- Holdings columns (when showHoldingsColumns) -->
     <template v-slot:[`item.balance`]="{ item }">
       <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
@@ -361,15 +355,6 @@
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.holders`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
-        </template>
-        {{ $t('market.holdersTooltip') }}
-      </v-tooltip>
-    </template>
-
     <template v-slot:[`header.avgCostBasis`]="{ header }">
       <v-tooltip top :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
@@ -473,7 +458,6 @@ const baseHeaders = computed(() => {
     { text: t('market.totalSupply'), value: 'totalSupply', sortable: true, width: '90px' },
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
     { text: t('market.liquidity'), value: 'tvl', sortable: true, width: '90px' },
-    ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px' }] : []),
   ];
 
   // Allocation is toggleable via column preferences (works in both market and holdings views)
