@@ -5,40 +5,50 @@
 
     <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
 
-    <!-- ── Method (toggle pills) ───────────────────────────── -->
+    <!-- ── Method (stacked selectable cards) ───────────────── -->
     <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
-    <div class="method-row">
+    <div class="method-list">
       <button
         type="button"
-        class="opt-pill"
-        :class="{ 'opt-pill--active': selectedMethod === 'create' }"
+        class="method-card"
+        :class="{ 'method-card--active': selectedMethod === 'create' }"
         @click="selectedMethod = 'create'"
       >
-        <v-img :src="walletSvg" class="opt-pill__icon" contain />
-        <span>{{ $t('welcome.createWallet') }}</span>
+        <span class="method-card__icon"><v-img :src="walletSvg" width="20" max-width="20" contain /></span>
+        <span class="method-card__text">
+          <span class="method-card__title">{{ $t('welcome.createWallet') }}</span>
+          <span class="method-card__desc">{{ $t('welcome.createWalletDescription') }}</span>
+        </span>
       </button>
+
       <button
         type="button"
-        class="opt-pill"
-        :class="{ 'opt-pill--active': selectedMethod === 'restore' }"
+        class="method-card"
+        :class="{ 'method-card--active': selectedMethod === 'restore' }"
         @click="selectedMethod = 'restore'"
       >
-        <v-img :src="keyGeroSvg" class="opt-pill__icon" contain />
-        <span>{{ $t('welcome.restoreWallet') }}</span>
+        <span class="method-card__icon"><v-img :src="keyGeroSvg" width="20" max-width="20" contain /></span>
+        <span class="method-card__text">
+          <span class="method-card__title">{{ $t('welcome.restoreWallet') }}</span>
+          <span class="method-card__desc">{{ $t('welcome.restoreWalletDescription') }}</span>
+        </span>
       </button>
+
       <button
         type="button"
-        class="opt-pill"
-        :class="{ 'opt-pill--active': selectedMethod === 'pair', 'opt-pill--disabled': !pairSupported }"
+        class="method-card"
+        :class="{ 'method-card--active': selectedMethod === 'pair', 'method-card--disabled': !pairSupported }"
         :disabled="!pairSupported"
         @click="selectedMethod = 'pair'"
       >
-        <v-img :src="pairSvg" class="opt-pill__icon" contain />
-        <span>{{ $t('welcome.pairHardwareWallet') }}</span>
+        <span class="method-card__icon"><v-img :src="pairSvg" width="20" max-width="20" contain /></span>
+        <span class="method-card__text">
+          <span class="method-card__title">{{ $t('welcome.pairHardwareWallet') }}</span>
+          <span class="method-card__desc">
+            {{ pairSupported ? $t('welcome.pairHardwareWalletDescription') : $t('welcome.pairNotSupportedOnNetwork', { network: localNetwork ? localNetwork.title : '' }) }}
+          </span>
+        </span>
       </button>
-    </div>
-    <div v-if="!pairSupported" class="method-hint mt-2">
-      {{ $t('welcome.pairNotSupportedOnNetwork', { network: localNetwork ? localNetwork.title : '' }) }}
     </div>
 
     <!-- Navigation -->
@@ -95,52 +105,71 @@ const onContinue = (): void => {
   color: rgba(255, 255, 255, 0.7);
 }
 
-.method-row {
+.method-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.opt-pill {
-  display: inline-flex;
+.method-card {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.opt-pill__icon {
-  width: 18px;
-  max-width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+.method-card:hover:not(.method-card--disabled) {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.opt-pill:hover:not(.opt-pill--disabled) {
-  border-color: rgba(255, 255, 255, 0.28);
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.opt-pill--active {
+.method-card--active {
   border-color: var(--v-primary-base);
-  background: rgb(from var(--v-primary-base) r g b / 0.12);
-  color: #fff;
+  background: rgb(from var(--v-primary-base) r g b / 0.1);
+  box-shadow: 0 0 16px rgb(from var(--v-primary-base) r g b / 0.08);
 }
 
-.opt-pill--disabled {
+.method-card--disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.method-hint {
-  font-size: 12px;
+.method-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid #373a41;
+  background-color: #13161b;
+}
+
+.method-card__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.method-card__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.25;
+}
+
+.method-card__desc {
+  font-size: 13px;
   color: #94979c;
+  margin-top: 2px;
+  line-height: 1.35;
 }
 </style>
