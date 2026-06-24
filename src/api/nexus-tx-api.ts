@@ -91,6 +91,21 @@ export interface BuildTxResponse {
   estimated_signatures?: number;
 }
 
+/**
+ * Plain reward-withdrawal build request. Matches nexus `BuildWithdrawalTxRequest`.
+ * Note: this endpoint takes a single stakeAddress + amount and does NOT accept extra
+ * outputs/metadata — so the CIP-149 donation path stays on the client builder for now.
+ */
+export interface BuildWithdrawalTxRequest {
+  stakeAddress: string;
+  amount: string;
+  changeAddress: string;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+  ttl?: number;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -218,6 +233,22 @@ export const nexusTxApi = {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/max-ada?network=${nexusNetwork}` : '/api/tx/max-ada';
     const { data } = await nexusTxClient.post<MaxAdaResponse>(url, request);
+    return data;
+  },
+
+  /**
+   * Build an unsigned plain reward-withdrawal transaction via nexus
+   * (`/api/tx/build/withdrawal`). Returns CBOR ready for client-side signing.
+   * For withdrawals that also carry a CIP-149 donation output, use the client
+   * builder instead — this endpoint does not accept extra outputs.
+   */
+  async buildWithdrawalTx(
+    request: BuildWithdrawalTxRequest,
+    network?: string
+  ): Promise<BuildTxResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork ? `/api/tx/build/withdrawal?network=${nexusNetwork}` : '/api/tx/build/withdrawal';
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
     return data;
   },
 };
