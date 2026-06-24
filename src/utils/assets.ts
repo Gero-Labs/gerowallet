@@ -4,6 +4,7 @@ import apexPrimeBg from '@/assets/apexPrimeBg.png'
 import apexVectorBg from '@/assets/apexVectorBg.png'
 import bitcoinBg from '@/assets/bitcoinBg.png'
 import bitcoinWavesBg from '@/assets/bitcoinWavesBg.png'
+import midnightBg from '@/assets/midnightBg.webp'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
 import hardwareWalletBg from '@/modules/welcome/assets/hardware_wallet.png'
@@ -149,6 +150,7 @@ export default {
   apexBg,
   apexPrimeBg,
   apexVectorBg,
+  midnightBg,
   walletCreateBg,
   walletRestoreBg,
   hardwareWalletBg,
