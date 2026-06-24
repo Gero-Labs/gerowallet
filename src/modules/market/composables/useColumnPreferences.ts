@@ -1,6 +1,6 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
 
-export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'change30d' | 'volume24h' | 'volume7d' | 'txnCount24h' | 'makerCount24h' | 'totalSupply' | 'sparkline' | 'mcap' | 'tvl' | 'holders' | 'allocation';
+export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'change30d' | 'volume24h' | 'volume7d' | 'txnCount24h' | 'makerCount24h' | 'totalSupply' | 'sparkline' | 'mcap' | 'tvl' | 'holders' | 'allocation' | 'avgCostBasis' | 'totalPnl';
 
 export interface ColumnPreferences {
   change1h: boolean;
@@ -17,6 +17,8 @@ export interface ColumnPreferences {
   tvl: boolean;
   holders: boolean;
   allocation: boolean;
+  avgCostBasis: boolean;
+  totalPnl: boolean;
 }
 
 // Bumped to _v2 so the richer, website-matching default column set applies for
@@ -42,6 +44,8 @@ const DEFAULTS: ColumnPreferences = {
   tvl: true,
   holders: true,
   allocation: false,
+  avgCostBasis: true,
+  totalPnl: true,
 };
 
 function loadFromStorage(): ColumnPreferences {
