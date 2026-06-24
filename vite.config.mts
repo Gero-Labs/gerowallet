@@ -177,6 +177,11 @@ export default defineConfig(({ command }) => {
     base: command === 'serve' ? `http://localhost:${port}/` : './',
     server: {
       port,
+      // `base` and `origin` above are pinned to `port`. If the port is taken,
+      // vite would otherwise serve on a different port while still emitting
+      // asset URLs at the pinned port — large (non-inlined) assets then 404
+      // (e.g. the welcome logo SVG). Fail loudly instead of silently breaking.
+      strictPort: true,
       hmr: {
         host: 'localhost',
         overlay: false,
