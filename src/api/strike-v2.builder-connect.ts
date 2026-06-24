@@ -89,9 +89,18 @@ export interface BuilderVerifySignatureResponse {
 export async function requestBuilderSignature(
   req: BuilderRequestSignatureRequest,
 ): Promise<BuilderRequestSignatureResponse> {
+  // Mainnet's request-signature uses a strict JSON decoder that rejects unknown
+  // fields. It does NOT accept `max_fee_bps` ("json: unknown field max_fee_bps")
+  // even though the testnet builder-reference sends it — the builder fee is
+  // configured server-side per builder code. Send only the accepted fields.
   const { data } = await builderClient.post<BuilderRequestSignatureResponse>(
     '/auth/builder/request-signature',
-    req,
+    {
+      address: req.address,
+      chain: req.chain,
+      public_key: req.public_key,
+      code: req.code,
+    },
   );
   return data;
 }
