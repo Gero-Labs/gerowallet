@@ -99,11 +99,12 @@ const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
 }
 
 .logo-container {
-  margin-bottom: 24px;
+  margin-bottom: 0;
 }
 
 .wallet-list-block {
   width: 100%;
+  margin-top: -8px; /* tighten gap to the logo */
 }
 
 .logo-container .logo {
