@@ -243,9 +243,8 @@ async function fetchAllTokens(silent = false): Promise<void> {
           snekTokens.value = (snekRaw || [])
             .map(tp => enrichWithStores(tp, sparklineMap))
             .filter(t => !existing.has(t.unit));
-          console.info('[snek] loaded', snekTokens.value.length, 'bonding-curve tokens not in bulk feed');
         })
-        .catch(e => console.warn('[snek] load FAILED:', e?.message || e));
+        .catch(() => { /* snek feed is optional — ignore failures */ });
     }
 
     // Set adaData ref (used for native currency price display)
