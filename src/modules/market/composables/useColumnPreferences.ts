@@ -31,7 +31,7 @@ const DEFAULTS: ColumnPreferences = {
   txnCount24h: false,
   makerCount24h: false,
   totalSupply: false,
-  sparkline: false,
+  sparkline: true,
   mcap: true,
   tvl: false,
   holders: false,
