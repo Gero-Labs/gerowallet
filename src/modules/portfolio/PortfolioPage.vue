@@ -93,7 +93,7 @@
                 prepend-inner-icon="mdi-magnify"
                 dense flat solo rounded hide-details clearable
                 background-color="rgba(255,255,255,0.04)"
-                class="header-search flex-shrink-0"
+                class="header-search"
               />
 
               <v-spacer />
@@ -880,22 +880,28 @@ watch(
 .filter-chip-bar .v-chip {
   flex-shrink: 0;
   cursor: pointer;
-  height: 30px !important;
+  height: 34px !important;
 }
 
 /* ── Visible header search ────────────────────────────────────────────────────── */
 
 .header-search {
-  width: 180px;
-  max-width: 180px;
-  transition: width 0.2s ease, max-width 0.2s ease;
+  flex: 1 1 auto;
+  min-width: 220px;   /* enough for the full "Search tokens by name" placeholder */
+  max-width: 440px;
+}
+
+/* A Vuetify solo field defaults to ~48px via .v-input__control — override both
+   the control and the slot so the field height matches the 34px chips. */
+.header-search ::v-deep .v-input__control,
+.header-search ::v-deep .v-input__slot {
+  min-height: 34px !important;
+  height: 34px !important;
 }
 
 .header-search ::v-deep .v-input__slot {
-  min-height: 30px !important;
-  height: 30px !important;
   border-radius: 8px !important;
-  padding: 0 10px !important;
+  padding: 0 12px !important;
 }
 
 .header-search ::v-deep input {
@@ -908,7 +914,8 @@ watch(
 }
 
 .header-search ::v-deep .v-input__prepend-inner {
-  margin-top: 4px !important;
+  margin-top: 0 !important;
+  align-self: center;
 }
 
 .header-search ::v-deep .v-input__prepend-inner .v-icon {
@@ -920,18 +927,10 @@ watch(
   font-size: 16px;
 }
 
-/* Collapse the search bar on the narrow extension popup width */
+/* On narrow widths let the search shrink rather than force a fixed tiny width */
 @media (max-width: 600px) {
   .header-search {
-    width: 120px;
-    max-width: 120px;
-  }
-}
-
-@media (max-width: 420px) {
-  .header-search {
-    width: 90px;
-    max-width: 90px;
+    min-width: 130px;
   }
 }
 
