@@ -655,15 +655,16 @@ const displayedTokens = computed(() => {
     );
   }
 
-  // Apply verified filter
-  if (verifiedOnly.value) {
-    tokens = tokens.filter(tok => tok.verified);
-  }
-
-  // Apply scam filter
-  // TODO(product): hideScam now verified-only after Xerberus removal
-  if (hideScam.value) {
-    tokens = tokens.filter(tok => tok.verified);
+  // Apply verified / scam filters — but NEVER strip snek.fun tokens (bonding-curve
+  // tokens are inherently unverified) or apply these on the snek.fun tab itself.
+  // TODO(product): hideScam is verified-only after Xerberus removal.
+  if (activeView.value !== 'snekfun') {
+    if (verifiedOnly.value) {
+      tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
+    }
+    if (hideScam.value) {
+      tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
+    }
   }
 
   return tokens;
