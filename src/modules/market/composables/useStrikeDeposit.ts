@@ -8,6 +8,7 @@ import {
 } from '@/api/nexus-tx-api';
 import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 import { strikeUserApi } from '@/api/strike-v2.user';
+import { hasStrikeApiKeys } from '@/api/strike-v2.client';
 import type {
   DepositQuoteResponse,
   TransactionStatusResponse,
@@ -149,6 +150,14 @@ export function useStrikeDeposit() {
     txHash.value = null;
     requestId.value = null;
     status.value = 'quoting';
+
+    // Authenticated endpoint — without a loaded API-wallet key this would be sent
+    // unauthenticated and 401. Surface a clear prompt instead of a silent failure.
+    if (!hasStrikeApiKeys()) {
+      error.value = 'Connect to Strike first — open the Vaults tab and tap "Connect to Strike".';
+      status.value = 'error';
+      return;
+    }
 
     const numeric = typeof amountAda === 'string' ? parseFloat(amountAda) : amountAda;
     if (!numeric || isNaN(numeric) || numeric <= 0) {
