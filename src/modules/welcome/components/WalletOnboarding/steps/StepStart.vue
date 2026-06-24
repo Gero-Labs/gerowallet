@@ -14,7 +14,7 @@
         :class="{ 'method-card--active': selectedMethod === 'create' }"
         @click="selectedMethod = 'create'"
       >
-        <span class="method-card__icon"><v-img :src="walletSvg" width="20" max-width="20" contain /></span>
+        <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(walletSvg)" /></span>
         <span class="method-card__text">
           <span class="method-card__title">{{ $t('welcome.createWallet') }}</span>
           <span class="method-card__desc">{{ $t('welcome.createWalletDescription') }}</span>
@@ -27,7 +27,7 @@
         :class="{ 'method-card--active': selectedMethod === 'restore' }"
         @click="selectedMethod = 'restore'"
       >
-        <span class="method-card__icon"><v-img :src="keyGeroSvg" width="20" max-width="20" contain /></span>
+        <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(keyGeroSvg)" /></span>
         <span class="method-card__text">
           <span class="method-card__title">{{ $t('welcome.restoreWallet') }}</span>
           <span class="method-card__desc">{{ $t('welcome.restoreWalletDescription') }}</span>
@@ -41,7 +41,7 @@
         :disabled="!pairSupported"
         @click="selectedMethod = 'pair'"
       >
-        <span class="method-card__icon"><v-img :src="pairSvg" width="20" max-width="20" contain /></span>
+        <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(pairSvg)" /></span>
         <span class="method-card__text">
           <span class="method-card__title">{{ $t('welcome.pairHardwareWallet') }}</span>
           <span class="method-card__desc">
@@ -77,10 +77,24 @@ const localNetwork = ref<NetworkInfo>(props.network);
 const selectedMethod = ref<Method | null>(null);
 const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
 
-const isApex = computed(() => !!localNetwork.value?.blockchain?.includes('Apex'));
-const walletSvg = computed(() => (isApex.value ? assets.walletGeroApexSvg : assets.walletGeroSvg));
-const keyGeroSvg = computed(() => (isApex.value ? assets.keyApexSvg : assets.keyGeroSvg));
-const pairSvg = computed(() => (isApex.value ? assets.pairApexSvg : assets.pairGeroSvg));
+// Base icon shapes (recolored per network via CSS mask).
+const walletSvg = assets.walletGeroSvg;
+const keyGeroSvg = assets.keyGeroSvg;
+const pairSvg = assets.pairGeroSvg;
+
+// Method icons take the selected network's accent (matches the chain ring).
+const NET_COLORS: Record<string, string> = {
+  'Cardano': '#0072ce',
+  'Apex Fusion Prime': '#057468',
+  'Apex Fusion Vector': '#f25140',
+  'Bitcoin': '#F7931A',
+};
+const methodColor = computed(() => NET_COLORS[localNetwork.value?.blockchain || ''] || 'var(--v-primary-base)');
+const glyphStyle = (url: string): Record<string, string> => ({
+  '-webkit-mask-image': `url("${url}")`,
+  'mask-image': `url("${url}")`,
+  backgroundColor: methodColor.value,
+});
 
 const onNetworkChange = (n: NetworkInfo): void => {
   localNetwork.value = n;
@@ -150,7 +164,19 @@ const onContinue = (): void => {
   height: 44px;
   border-radius: 12px;
   border: 1px solid #373a41;
-  background-color: #13161b;
+  background-color: #13161b66;
+}
+
+.method-card__glyph {
+  display: block;
+  width: 20px;
+  height: 20px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .method-card__text {
