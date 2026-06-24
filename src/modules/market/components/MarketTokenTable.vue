@@ -45,24 +45,18 @@
     <!-- Token name column -->
     <template v-slot:[`item.name`]="{ item }">
       <div class="name-cell d-flex align-center">
-        <div class="token-avatar mr-2">
-          <v-badge overlap avatar color="transparent" :offset-y="26" :offset-x="6" v-if="item.verified">
-            <template v-slot:badge>
-              <v-avatar color="transparent" tile>
-                <v-icon x-small color="primary">mdi-check-decagram</v-icon>
-              </v-avatar>
-            </template>
-            <v-avatar size="26">
-              <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
-              <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
-              <v-icon v-else>mdi-circle-outline</v-icon>
-            </v-avatar>
-          </v-badge>
-          <v-avatar size="26" v-else>
+        <div class="token-avatar mr-2" style="position: relative; width: 26px; height: 26px; flex-shrink: 0;">
+          <v-avatar size="26">
             <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
             <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
+          <v-icon
+            v-if="item.verified"
+            color="primary"
+            class="verified-check"
+            style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: #0d0d11; border-radius: 50%;"
+          >mdi-check-decagram</v-icon>
         </div>
         <v-tooltip top :open-delay="300" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
