@@ -57,8 +57,10 @@ export const updateVuetifyTheme = (chain: string, isDark: boolean = true) => {
   let themeColors: typeof themes.cardano;
   if (chain === 'Bitcoin') {
     themeColors = themes.bitcoin;
-  } else if (chain === 'Apex Fusion Prime' || chain === 'Apex Fusion Vector') {
-    themeColors = themes.apex;
+  } else if (chain === 'Apex Fusion Prime') {
+    themeColors = { ...themes.apex, primary: '#057468' };
+  } else if (chain === 'Apex Fusion Vector') {
+    themeColors = { ...themes.apex, primary: '#f25140' };
   } else {
     themeColors = themes.cardano;
   }

@@ -1,6 +1,9 @@
 import { CID } from 'multiformats/cid'
 import apexBg from '@/assets/apexBg.png'
+import apexPrimeBg from '@/assets/apexPrimeBg.png'
+import apexVectorBg from '@/assets/apexVectorBg.png'
 import bitcoinBg from '@/assets/bitcoinBg.png'
+import bitcoinWavesBg from '@/assets/bitcoinWavesBg.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
 import hardwareWalletBg from '@/modules/welcome/assets/hardware_wallet.png'
@@ -27,6 +30,9 @@ import loadingAnimation from '@/assets/webm/loading.webm'
 import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
+import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
+import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
+import geroDashboardBitcoin from '@/assets/svg/gero_dashboard_bitcoin.svg'
 import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
@@ -107,7 +113,6 @@ import sellAda from '@/modules/dashboard/assets/sell-ada.png'
 import { DappRisk, DappScore } from '@/models/cardano-shield-types';
 import google from '@/assets/svg/google.svg';
 import googleSvg from '@/assets/svg/googleWhite.svg'
-import zkFold from '@/assets/svg/zkfold.svg';
 import cashbackBags from '@/assets/img/cashback.png';
 import cardanoBg from '@/assets/cardanoBg.png';
 import cashbackBg from '@/assets/cashbackBg.png';
@@ -153,6 +158,8 @@ const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 export default {
   apexBg,
+  apexPrimeBg,
+  apexVectorBg,
   walletCreateBg,
   walletRestoreBg,
   hardwareWalletBg,
@@ -365,7 +372,6 @@ export default {
   },
   google,
   googleSvg,
-  zkFold,
   cashbackBags,
   cardanoBg,
   cashbackBg,
@@ -385,6 +391,7 @@ export default {
   questionMarkDark,
   apexBgDashboard,
   bitcoinBg,
+  bitcoinWavesBg,
   apexSvg,
   walletGeroApex,
   debitCardBgImage,
@@ -408,7 +415,9 @@ export default {
 
 export {
   geroDashboardApex,
+  geroDashboardPrime,
+  geroDashboardVector,
+  geroDashboardBitcoin,
   geroDashboard,
   google,
-  zkFold
 }

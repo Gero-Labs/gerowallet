@@ -2,8 +2,10 @@ import { Blockchain, Network, Provider } from '@/models/types';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
-import apex from '@/assets/img/apex.jpg';
+import apexPrimeSvg from '@/assets/svg/apex_prime.svg';
+import apexVectorSvg from '@/assets/svg/apex_vector.svg';
 import bitcoinLogo from '@/assets/bitcoin-logo.svg';
+import midnightLogo from '@/assets/svg/midnight.svg';
 
 export interface NetworkInfo {
   icon: string;
@@ -11,6 +13,7 @@ export interface NetworkInfo {
   title: string;
   blockchain: string;
   network: string;
+  comingSoon?: boolean;  // Network shown but not yet selectable
   supportedHardware: boolean;
   networkId: number;
   currencySymbol: string;
@@ -151,7 +154,54 @@ export default {
       }
     },
     {
-      icon: apex,
+      icon: cardanoBlueLogo,
+      iconColor: 'blue',
+      title: 'Cardano Preview',
+      blockchain: Blockchain.CARDANO,
+      network: Network.PREVIEW,
+      supportedHardware: false,
+      networkId: 0,
+      currencySymbol: 't₳',
+      currencyTicker: 'tADA',
+      currencyName: 'Cardano',
+      currencyDescription: 'Cardano Native Token',
+      currencyImage: cardanoSvg,
+      protocolParams: {
+        min_fee_a: 44,
+        min_fee_b: 155381,
+        max_tx_size: 16384,
+        min_utxo_value: "0",
+        key_deposit: "2000000",
+        pool_deposit: "500000000",
+        max_val_size: 5000,
+        price_mem: 0.0577,
+        price_step: 0.0000721,
+        coins_per_utxo_size: "4310"
+      },
+      defaultProvider: Provider.KOIOS,
+      cashbackSupport: false,
+      stakingSupport: true,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport:true,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
+      networkParams: {
+        networkMagic: 2
+      }
+    },
+    {
+      icon: apexPrimeSvg,
       iconColor: 'orange',
       title: 'Apex Prime Mainnet',
       blockchain: Blockchain.APEX_PRIME,
@@ -199,21 +249,35 @@ export default {
       }
     },
     {
-      icon: apex,
+      icon: apexVectorSvg,
       iconColor: 'orange',
-      title: 'Apex Vector Testnet',
+      title: 'Apex Vector Mainnet',
       blockchain: Blockchain.APEX_VECTOR,
-      network: Network.TESTNET,
+      network: Network.MAINNET,
       supportedHardware: false,
-      networkId: 0,
-      currencySymbol: 'tÂ',
-      currencyTicker: 'tAP3X',
+      networkId: 1,
+      currencySymbol: 'Â',
+      currencyTicker: 'AP3X',
       currencyName: 'Apex Fusion',
       currencyDescription: 'Apex Fusion Native Token',
       currencyImage: apexSvg,
-      defaultProvider: Provider.BLOCKFROST,
+      // Live values from yaci-apex-vector-mainnet /api/v1/epochs/latest/parameters (epoch 233)
+      protocolParams: {
+        min_fee_a: 45,
+        min_fee_b: 156253,
+        max_tx_size: 16384,
+        min_utxo_value: "0",
+        key_deposit: "500000000",
+        pool_deposit: "5000000000000",
+        max_val_size: 5000,
+        price_mem: 0.0577,
+        price_step: 0.0000721,
+        coins_per_utxo_size: "4310"
+      },
+      geroPool: '',
+      defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
-      stakingSupport: false,
+      stakingSupport: true,
       governanceSupport: false,
       daoSupport: false,
       transactionSupport:true,
@@ -230,7 +294,7 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       networkParams: {
-        networkMagic: 1
+        networkMagic: 764824073  // Apex Vector cardano-node shelley/byron genesis (RequiresNoMagic)
       }
     },
     // Bitcoin Mainnet
@@ -240,6 +304,7 @@ export default {
       title: 'Bitcoin Mainnet',
       blockchain: Blockchain.BITCOIN,
       network: Network.MAINNET,
+      comingSoon: true,
       supportedHardware: true,
       networkId: 0,
       currencySymbol: '\u20BF',  // ₿ symbol
@@ -331,6 +396,60 @@ export default {
         networkMagic: 0x0709110B  // Bitcoin testnet magic bytes
       }
     },
+    // Midnight — coming soon
+    ...([
+      { title: 'Midnight Mainnet', network: Network.MAINNET, networkId: 1 },
+      { title: 'Midnight Preview', network: Network.PREVIEW, networkId: 0 },
+      { title: 'Midnight Preprod', network: Network.PREPROD, networkId: 0 },
+    ].map(({ title, network, networkId }) => ({
+      icon: midnightLogo,
+      iconColor: 'grey',
+      title,
+      blockchain: Blockchain.MIDNIGHT,
+      network,
+      comingSoon: true,
+      supportedHardware: false,
+      networkId,
+      currencySymbol: 'tDUST',
+      currencyTicker: 'tDUST',
+      currencyName: 'Midnight',
+      currencyDescription: 'Midnight Native Token',
+      currencyImage: midnightLogo,
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.UNDEFINED,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: false,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
+      networkParams: {
+        networkMagic: 0
+      }
+    })) as NetworkInfo[]),
   ]  as NetworkInfo[],
   resolveNetwork(chain: string, network: string): NetworkInfo {
     return this.networks.find(element => element.blockchain === chain && element.network === network);
