@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { strikeUserApi } from '@/api/strike-v2.user';
+import { hasStrikeApiKeys } from '@/api/strike-v2.client';
 import type {
   WithdrawQuoteResponse,
   TransactionStatusResponse,
@@ -187,6 +188,14 @@ export function useStrikeWithdraw() {
     quote.value = null;
     requestId.value = null;
     status.value = 'quoting';
+
+    // Authenticated endpoint — guard against an unauthenticated 401 when no
+    // API-wallet key is loaded.
+    if (!hasStrikeApiKeys()) {
+      error.value = 'Connect to Strike first — open the Vaults tab and tap "Connect to Strike".';
+      status.value = 'error';
+      return;
+    }
 
     try {
       const recipient = walletStore.loggedWallet?.baseAddress ?? '';
