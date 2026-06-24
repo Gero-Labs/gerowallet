@@ -773,25 +773,16 @@ onMounted(() => {
 
   // Watch chip bar width — go compact when content would overflow
   if (chipBarRef.value) {
-    // Capture the full (expanded) scroll width on mount before any compaction
-    let expandedScrollWidth = chipBarRef.value.scrollWidth;
-
+    // Compact chips to icons ONLY when the toolbar is genuinely narrow. Observe
+    // the toolbar (the chip bar's parent) against a fixed threshold — measuring
+    // the chip bar's own width was self-referential: it collapses when compact,
+    // so it could never re-expand and got stuck in icon mode at fine resolutions.
+    const COMPACT_BELOW = 560; // px — show full chip labels at/above this width
+    const target = chipBarRef.value.parentElement ?? chipBarRef.value;
     chipBarObserver = new ResizeObserver(([entry]) => {
-      const availableWidth = entry.contentRect.width;
-      if (!compactChips.value) {
-        // Currently expanded — record the full content width and check overflow
-        expandedScrollWidth = chipBarRef.value?.scrollWidth ?? expandedScrollWidth;
-        if (expandedScrollWidth > availableWidth) {
-          compactChips.value = true;
-        }
-      } else {
-        // Currently compact — expand only if the cached full width fits
-        if (expandedScrollWidth <= availableWidth) {
-          compactChips.value = false;
-        }
-      }
+      compactChips.value = entry.contentRect.width < COMPACT_BELOW;
     });
-    chipBarObserver.observe(chipBarRef.value);
+    chipBarObserver.observe(target);
   }
 });
 
@@ -889,6 +880,7 @@ watch(
 .filter-chip-bar .v-chip {
   flex-shrink: 0;
   cursor: pointer;
+  height: 30px !important;
 }
 
 /* ── Visible header search ────────────────────────────────────────────────────── */
@@ -901,6 +893,7 @@ watch(
 
 .header-search ::v-deep .v-input__slot {
   min-height: 30px !important;
+  height: 30px !important;
   border-radius: 8px !important;
   padding: 0 10px !important;
 }
