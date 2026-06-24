@@ -61,7 +61,7 @@
         <v-col cols="12" class="pa-2">
           <v-card flat class="liquid-glass holdings-table-card">
             <!-- Filter chips + search + filter menu — single row -->
-            <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
+            <div class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
               <div ref="chipBarRef" class="filter-chip-bar d-flex align-center flex-shrink-0" style="gap: 4px; overflow-x: auto; min-width: 0;">
                 <v-tooltip v-for="chip in filterChips" :key="chip.value" bottom :disabled="!compactChips">
@@ -880,7 +880,7 @@ watch(
 .filter-chip-bar .v-chip {
   flex-shrink: 0;
   cursor: pointer;
-  height: 34px !important;
+  height: 28px !important;
 }
 
 /* ── Visible header search ────────────────────────────────────────────────────── */
@@ -895,8 +895,8 @@ watch(
    the control and the slot so the field height matches the 34px chips. */
 .header-search ::v-deep .v-input__control,
 .header-search ::v-deep .v-input__slot {
-  min-height: 34px !important;
-  height: 34px !important;
+  min-height: 28px !important;
+  height: 28px !important;
 }
 
 .header-search ::v-deep .v-input__slot {
