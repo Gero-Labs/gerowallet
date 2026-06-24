@@ -1,6 +1,7 @@
 import { CID } from 'multiformats/cid'
 import apexBg from '@/assets/apexBg.png'
 import bitcoinBg from '@/assets/bitcoinBg.png'
+import bitcoinWavesBg from '@/assets/bitcoinWavesBg.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
 import hardwareWalletBg from '@/modules/welcome/assets/hardware_wallet.png'
@@ -383,6 +384,7 @@ export default {
   questionMarkDark,
   apexBgDashboard,
   bitcoinBg,
+  bitcoinWavesBg,
   apexSvg,
   walletGeroApex,
   debitCardBgImage,

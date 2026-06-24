@@ -14,7 +14,7 @@
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Apex') }"
       />
       <img
-        :src="assets.bitcoinBg"
+        :src="assets.bitcoinWavesBg"
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
       />
