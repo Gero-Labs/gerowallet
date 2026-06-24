@@ -54,7 +54,7 @@
     <!-- Navigation -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-spacer />
-      <v-btn color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <v-btn class="onb-btn" color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>
@@ -120,6 +120,10 @@ const onContinue = (): void => {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.onb-btn {
+  border-radius: 8px !important;
 }
 
 .method-list {
