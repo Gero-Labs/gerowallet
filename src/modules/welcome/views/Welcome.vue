@@ -23,6 +23,11 @@
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
       />
+      <img
+        :src="assets.midnightBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Midnight') }"
+      />
     </div>
 
     <!-- Language Selector - Floating top-right -->
