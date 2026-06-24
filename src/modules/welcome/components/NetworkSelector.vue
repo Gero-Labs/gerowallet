@@ -16,7 +16,9 @@
           <v-img :src="fam.icon" contain></v-img>
         </v-avatar>
         <span class="chain-tile__label">{{ fam.name }}</span>
-        <v-chip v-if="!isFamilySelectable(fam)" color="warning" x-small class="chain-tile__soon">{{ $t('welcome.soon') }}</v-chip>
+        <div v-if="!isFamilySelectable(fam)" class="ribbon top-right" aria-hidden="true">
+          <span>{{ $t('welcome.soon') }}</span>
+        </div>
       </button>
     </div>
 
@@ -144,6 +146,7 @@ watch(
 }
 
 .chain-tile {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -175,11 +178,57 @@ watch(
     font-weight: 600;
     color: rgba(255, 255, 255, 0.92);
   }
+}
 
-  &__soon {
-    height: 15px;
-    font-size: 9px;
-  }
+/* Corner ribbon "Soon" badge (matches the disabled swap quick-action). */
+.ribbon {
+  position: absolute;
+  top: -0.375rem;
+  right: -0.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  overflow: hidden;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.ribbon span {
+  position: absolute;
+  display: block;
+  width: 46px;
+  padding: 2px 0;
+  background-color: #bd1550;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 7px;
+  font-weight: 700;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  text-transform: uppercase;
+  text-align: center;
+  right: -12px;
+  top: 4px;
+  transform: rotate(45deg);
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+
+.ribbon span::before,
+.ribbon span::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  z-index: -1;
+  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
+  border-top: 2px solid #8b0e3c;
+}
+
+.ribbon span::before {
+  left: 0;
+}
+
+.ribbon span::after {
+  right: 0;
 }
 
 /* ── Network pills (dev mode) ─────────────────────── */
