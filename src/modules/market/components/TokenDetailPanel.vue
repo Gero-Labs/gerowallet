@@ -442,7 +442,6 @@ const compactStats = computed(() => {
     { label: t('market.marketCap'), value: tok.mcap != null ? sym + formatCompact(convertUsd(tok.mcap)) : t('market.na') },
     { label: t('market.volume24h'), value: sym + formatCompact(convertUsd(tok.volume24h)) },
     { label: t('market.tvl'), value: tok.tvl ? sym + formatCompact(convertUsd(tok.tvl)) : t('market.na') },
-    { label: t('market.holders'), value: tok.holders != null ? tok.holders.toLocaleString() : t('market.na') },
     {
       label: t('market.verified'),
       value: tok.verified ? '✓' : t('market.no'),
