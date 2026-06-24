@@ -9,6 +9,7 @@
         type="button"
         class="chain-tile"
         :class="{ 'chain-tile--active': fam.name === activeFamily, 'chain-tile--disabled': !isFamilySelectable(fam) }"
+        :style="fam.name === activeFamily && chainColor(fam.name) ? { borderColor: chainColor(fam.name), boxShadow: `0 0 16px -4px ${chainColor(fam.name)}` } : null"
         :disabled="!isFamilySelectable(fam)"
         @click="selectFamily(fam)"
       >
@@ -87,6 +88,14 @@ const currentIsTestnet = computed<boolean>(() => !!props.network && props.networ
 // like Bitcoin that's testnet-only is hidden from regular users). With dev mode
 // any chain that has at least one live network is pickable.
 const isFamilySelectable = (fam: Family): boolean => (props.devMode ? !fam.comingSoon : famHasLiveMainnet(fam));
+
+// Per-network accent for the active tile ring (matches the theme primary set in
+// updateVuetifyTheme). Empty string => fall back to the CSS class (primary var).
+const CHAIN_COLORS: Record<string, string> = {
+  'Apex Fusion Prime': '#057468',
+  'Apex Fusion Vector': '#f25140',
+};
+const chainColor = (name: string): string => CHAIN_COLORS[name] || '';
 
 const isNetActive = (net: NetworkInfo): boolean =>
   props.network?.blockchain === net.blockchain && props.network?.network === net.network;
