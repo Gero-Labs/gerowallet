@@ -199,9 +199,9 @@ onUnmounted(() => {
 .onboarding-content {
   width: 100%;
   min-width: 0;
-  /* Grow to fit content (no scroll) with a consistent floor; only very tall
-     steps (e.g. seed phrase) hit the cap and scroll inside. */
-  min-height: 520px;
+  /* Consistent height across every step; only very tall steps (seed phrase)
+     overflow and scroll inside. */
+  height: 620px;
   max-height: calc(100vh - 80px);
   padding: 24px 28px;
   border-radius: 16px !important;

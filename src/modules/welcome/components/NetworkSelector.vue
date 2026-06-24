@@ -2,7 +2,7 @@
   <div class="network-selector">
     <!-- Step 1 — Blockchain family -->
     <div class="ns-label mb-2">{{ $t('welcome.blockchain') }}</div>
-    <div class="chain-row mb-4">
+    <div class="chain-row mb-3">
       <button
         v-for="fam in families"
         :key="fam.name"

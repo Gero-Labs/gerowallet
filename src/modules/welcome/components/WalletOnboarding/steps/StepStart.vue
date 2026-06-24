@@ -3,7 +3,7 @@
     <!-- ── Network (two-step: blockchain → network) ────────── -->
     <NetworkSelector :network="localNetwork" @change="onNetworkChange" />
 
-    <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
+    <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
 
     <!-- ── Method (stacked selectable cards) ───────────────── -->
     <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
@@ -108,7 +108,7 @@ const onContinue = (): void => {
 .method-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .method-card {
@@ -117,7 +117,7 @@ const onContinue = (): void => {
   gap: 14px;
   width: 100%;
   text-align: left;
-  padding: 14px 16px;
+  padding: 11px 16px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
