@@ -200,8 +200,8 @@ onUnmounted(() => {
   width: 100%;
   min-width: 0;
   /* Consistent card height across every step; content scrolls inside. */
-  height: 600px;
-  max-height: calc(100vh - 110px);
+  height: 680px;
+  max-height: calc(100vh - 80px);
   padding: 24px 28px;
   border-radius: 16px !important;
   display: flex;
