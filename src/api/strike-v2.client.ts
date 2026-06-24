@@ -118,7 +118,11 @@ export const strikeClient: AxiosInstance = axios.create({
 strikeClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
     if (!hasStrikeApiKeys()) {
-      // No keys — allow public endpoints that don't require auth
+      // No keys — allow public endpoints that don't require auth. NOTE: an
+      // authenticated endpoint hit here WILL 401 — it means the user hasn't
+      // connected/unlocked Strike (keys are stored encrypted and only loaded
+      // into the client after a successful connect or unlock).
+      console.warn('[StrikeAuth] NO API-WALLET KEYS — sending UNAUTHENTICATED:', (config.method ?? 'get').toUpperCase(), config.url);
       return config;
     }
 
@@ -160,6 +164,7 @@ strikeClient.interceptors.request.use(
     // (config.headers is always defined inside a request interceptor — an
     // AxiosHeaders instance — so we assign onto it directly.)
     Object.assign(config.headers, authHeaders);
+    console.debug('[StrikeAuth] signed', method, path, '(pubkey', (_publicKeyHex ?? '').slice(0, 8) + '…)');
 
     return config;
   },
@@ -181,6 +186,7 @@ strikeClient.interceptors.response.use(
   (err) => {
     const status = err?.response?.status;
     if (status === 401 || status === 403) {
+      console.error('[StrikeAuth]', status, err?.config?.method?.toUpperCase(), err?.config?.url, '→ server said:', err?.response?.data);
       clearStrikeApiKeys();
       authFailureHandlers.forEach((h) => {
         try { h(); } catch { /* never let a handler swallow the original error */ }
