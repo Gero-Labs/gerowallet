@@ -14,7 +14,12 @@
         />
       </div>
 
-      <WalletsListLogin class="wallet-list-block" @network-change="onNetworkChange" />
+      <div class="welcome-heading">
+        <div class="welcome-title">{{ $t('welcome.welcomeMessage') }}</div>
+        <div class="welcome-subtitle">{{ $t('welcome.chooseAWallet') }}</div>
+      </div>
+
+      <WalletsListLogin :hide-header="true" class="wallet-list-block" @network-change="onNetworkChange" />
     </div>
 
     <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
@@ -91,20 +96,38 @@ const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start; /* wallet list + header sit near the top */
-  padding: 20px 18px 18px;
+  justify-content: flex-start; /* logo, heading, list stack from the top */
+  padding: 18px;
   position: relative;
   z-index: 2;
   max-width: 428px;
 }
 
 .logo-container {
-  margin-bottom: 0;
+  margin-top: 56px; /* bring the logo down from the top edge */
+  margin-bottom: 16px;
+}
+
+.welcome-heading {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.welcome-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.welcome-subtitle {
+  font-size: 17px;
+  color: #94979c;
+  margin-top: 4px;
 }
 
 .wallet-list-block {
   width: 100%;
-  margin-top: -20px; /* pull welcome + list up toward the logo */
 }
 
 .logo-container .logo {

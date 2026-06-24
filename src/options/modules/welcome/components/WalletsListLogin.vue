@@ -1,11 +1,13 @@
 <template>
-  <v-card class="transparent-override" flat style="max-width: 600px; margin: auto; box-shadow: unset!important; background: transparent!important;">
-    <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
-      {{ $t('welcome.welcomeMessage') }}
-    </v-card-title>
-    <v-card-subtitle class="text-center px-0" style="font-size: 20px">
-      {{ $t('welcome.chooseAWallet') }}
-    </v-card-subtitle>
+  <v-card class="transparent-override" flat style="max-width: 600px; width: 100%; box-shadow: unset!important; background: transparent!important;">
+    <template v-if="!hideHeader">
+      <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
+        {{ $t('welcome.welcomeMessage') }}
+      </v-card-title>
+      <v-card-subtitle class="text-center px-0" style="font-size: 20px">
+        {{ $t('welcome.chooseAWallet') }}
+      </v-card-subtitle>
+    </template>
     <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
       <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
         <v-list-item-group v-model="selectedWallet" color="primary">
@@ -119,6 +121,7 @@ const resolveNetworkIcon = (item: Wallet): string => {
   return '';
 };
 
+defineProps<{ hideHeader?: boolean }>();
 const emit = defineEmits<{ (e: 'network-change', n: NetworkInfo): void }>();
 
 // Drive the welcome background from the wallet the user is focused on, instead
