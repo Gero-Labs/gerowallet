@@ -57,9 +57,9 @@ interface Family {
 const props = defineProps<{ network: NetworkInfo; devMode?: boolean }>();
 const emit = defineEmits<{ (e: 'change', n: NetworkInfo): void }>();
 
-// Group networks into display families. Apex Prime + Apex Vector are distinct
-// blockchains in code but presented as one "Apex" family with two networks.
-const familyName = (blockchain: string): string => (blockchain.includes('Apex') ? 'Apex' : blockchain);
+// One family per blockchain. The blockchain enum values are already display
+// names (e.g. "Apex Fusion Prime", "Apex Fusion Vector", "Cardano").
+const familyName = (blockchain: string): string => blockchain;
 
 const families = computed<Family[]>(() => {
   const order: string[] = [];
