@@ -14,70 +14,44 @@
         />
       </div>
 
-      <div class="text-container">
-        <div class="subtitle">{{ $t('welcome.yourNew') }}</div>
-        <v-list-item>
-          <v-list-item-content>
-            <v-list-item-title class="title-regular">{{ $t('welcome.singlePaneOf') }}</v-list-item-title>
-            <v-list-item-subtitle :class="['title-gradient', gradientClass]">{{ $t('welcome.glass') }}</v-list-item-subtitle>
-          </v-list-item-content>
-        </v-list-item>
-
-        <GButton
-          block
-          :class="['create-btn', isApex ? 'apexButton transition' : 'geroButton transition']"
-          large
-          @click="enableCreateOrImportSeedPhrase"
-        >
-          {{ $t('welcome.createOrImportSeedPhrase') }}
-        </GButton>
-
-        <GoogleLogin :selected-network="selectedNetwork" />
-
-        <div class="zkfold-credit">
-          <span>{{ $t('common.poweredBy') }}</span>
-          <v-img :src="zkFold" contain class="zkfold-logo"></v-img>
-        </div>
+      <div class="welcome-heading">
+        <div class="welcome-title">{{ $t('welcome.welcomeMessage') }}</div>
+        <div class="welcome-subtitle">{{ $t('welcome.chooseAWallet') }}</div>
       </div>
+
+      <WalletsListLogin :hide-header="true" class="wallet-list-block" @network-change="onNetworkChange" />
     </div>
 
     <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
-import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
-import GButton from '@/shared/components/GButton/GButton.vue';
+import { computed } from 'vue';
+import { geroDashboardApex, geroDashboardPrime, geroDashboardVector, geroDashboardBitcoin, geroDashboard } from '@/utils/assets';
+import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
 import { NetworkInfo } from '@/utils/networks';
-
-const emits = defineEmits<{
-  (e: 'createOrImportSeedPhrase'): void;
-}>();
 
 const props = defineProps<{
   selectedNetwork: NetworkInfo;
-  createOrImportSeedPhrase: boolean;
 }>();
 
-const isApex = ref(false);
+const emit = defineEmits<{
+  (e: 'network-change', n: NetworkInfo): void;
+}>();
 
-const enableCreateOrImportSeedPhrase = (): void => {
-    emits('createOrImportSeedPhrase');
+const onNetworkChange = (n: NetworkInfo): void => {
+  emit('network-change', n);
 };
 
+// Logo reacts to the selected network's brand colors.
 const logo = computed(() => {
-  if (props.selectedNetwork && props.selectedNetwork.blockchain?.includes('Apex')) {
-    isApex.value = true;
-    return geroDashboardApex;
-  }
-  isApex.value = false;
+  const bc = props.selectedNetwork?.blockchain;
+  if (bc === 'Apex Fusion Prime') return geroDashboardPrime;
+  if (bc === 'Apex Fusion Vector') return geroDashboardVector;
+  if (bc?.includes('Apex')) return geroDashboardApex;
+  if (bc?.includes('Bitcoin')) return geroDashboardBitcoin;
   return geroDashboard;
 });
-
-const gradientClass = computed(() =>
-  isApex.value ? 'apex-gradient-text' : 'gradient-text'
-);
 </script>
 <style scoped>
 .welcome-left-column {
@@ -92,9 +66,6 @@ const gradientClass = computed(() =>
   display: flex;
   flex-direction: column;
   position: relative;
-  background: linear-gradient(135deg, rgba(19, 22, 27, 0.6) 0%, rgba(19, 22, 27, 0.5) 100%),
-    radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
   border-right: 1px solid rgba(255, 255, 255, 0.15);
@@ -131,7 +102,7 @@ const gradientClass = computed(() =>
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start; /* logo, heading, list stack from the top */
   padding: 18px;
   position: relative;
   z-index: 2;
@@ -139,7 +110,30 @@ const gradientClass = computed(() =>
 }
 
 .logo-container {
-  margin-bottom: 40px;
+  margin-top: 56px; /* bring the logo down from the top edge */
+  margin-bottom: 16px;
+}
+
+.welcome-heading {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.welcome-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.welcome-subtitle {
+  font-size: 17px;
+  color: #94979c;
+  margin-top: 4px;
+}
+
+.wallet-list-block {
+  width: 100%;
 }
 
 .logo-container .logo {
@@ -197,23 +191,6 @@ const gradientClass = computed(() =>
   letter-spacing: normal;
   border-radius: 8px;
   text-transform: none;
-}
-
-.zkfold-credit {
-  width: 100%;
-  font-size: 10px;
-  font-weight: 300;
-  margin-top: 3px;
-  color: #5b5b5b;
-  display: flex;
-  align-items: center;
-}
-
-.zkfold-credit .zkfold-logo {
-  height: 14px;
-  width: 43px;
-  margin-left: 2px;
-  max-width: 43px;
 }
 
 .footer-left {
