@@ -19,22 +19,28 @@ export interface ColumnPreferences {
   allocation: boolean;
 }
 
-const STORAGE_KEY = 'gero_market_columns';
+// Bumped to _v2 so the richer, website-matching default column set applies for
+// everyone (old saved prefs under the v1 key are ignored). Users can still
+// hide columns via the column picker.
+const STORAGE_KEY = 'gero_market_columns_v2';
 
+// Default column set mirrors the market-data website table
+// (cardano-market-data MarketTable.tsx): price, 1h/24h/7d/30d, sparkline,
+// vol 24h/7d, TXN, Makers, Liquidity (tvl), Market Cap, Supply, plus holders.
 const DEFAULTS: ColumnPreferences = {
-  change1h: false,
+  change1h: true,
   change24h: true,
-  change7d: false,
-  change30d: false,
-  volume24h: false,
-  volume7d: false,
-  txnCount24h: false,
-  makerCount24h: false,
-  totalSupply: false,
+  change7d: true,
+  change30d: true,
+  volume24h: true,
+  volume7d: true,
+  txnCount24h: true,
+  makerCount24h: true,
+  totalSupply: true,
   sparkline: true,
   mcap: true,
-  tvl: false,
-  holders: false,
+  tvl: true,
+  holders: true,
   allocation: false,
 };
 
