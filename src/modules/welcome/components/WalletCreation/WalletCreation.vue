@@ -40,7 +40,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { geroDashboardApex, geroDashboard } from '@/utils/assets';
 import GoogleLogin from '@/modules/welcome/components/GoogleLogIn/GoogleLogIn.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -55,24 +55,15 @@ const props = defineProps<{
   createOrImportSeedPhrase: boolean;
 }>();
 
-const isApex = ref(false);
-
 const enableCreateOrImportSeedPhrase = (): void => {
     emits('createOrImportSeedPhrase');
 };
 
-const logo = computed(() => {
-  if (props.selectedNetwork && props.selectedNetwork.blockchain?.includes('Apex')) {
-    isApex.value = true;
-    return geroDashboardApex;
-  }
-  isApex.value = false;
-  return geroDashboard;
-});
-
-const gradientClass = computed(() =>
-  isApex.value ? 'apex-gradient-text' : 'gradient-text'
-);
+// Pure, reactive derivations of the selected network — no side effects, so the
+// logo and gradient update reliably every time the network changes.
+const isApex = computed(() => !!props.selectedNetwork?.blockchain?.includes('Apex'));
+const logo = computed(() => (isApex.value ? geroDashboardApex : geroDashboard));
+const gradientClass = computed(() => (isApex.value ? 'apex-gradient-text' : 'gradient-text'));
 </script>
 <style scoped>
 .welcome-left-column {
@@ -87,9 +78,6 @@ const gradientClass = computed(() =>
   display: flex;
   flex-direction: column;
   position: relative;
-  background: linear-gradient(135deg, rgba(19, 22, 27, 0.6) 0%, rgba(19, 22, 27, 0.5) 100%),
-    radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
   border-right: 1px solid rgba(255, 255, 255, 0.15);
