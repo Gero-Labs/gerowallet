@@ -9,6 +9,7 @@ export interface FeatureFlags {
   isGoMiningEnabled: boolean;
   isPoolOperatorEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
+  isNexusUnstakeEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -26,6 +27,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isGoMiningEnabled: false,
     isPoolOperatorEnabled: false,
     isNexusWithdrawalEnabled: false,
+    isNexusUnstakeEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -68,6 +70,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
+    featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
   },
 
   /**
@@ -94,6 +97,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isNexusUnstakeEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isNexusUnstakeEnabled', newValue);
     });
   },
 
@@ -148,6 +154,14 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if stake deregistration (unstake) should be built server-side via Nexus
+   * (`/api/tx/build/stake-registration`) instead of the client-side @cardano-sdk builder.
+   */
+  isNexusUnstakeEnabled(): boolean {
+    return featureFlagsState.flags.isNexusUnstakeEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -159,6 +173,7 @@ export const featureFlagsStore = {
       isGoMiningEnabled: false,
       isPoolOperatorEnabled: false,
       isNexusWithdrawalEnabled: false,
+      isNexusUnstakeEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
