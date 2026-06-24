@@ -322,13 +322,10 @@ async function connectWithWallet(password: string): Promise<boolean> {
       throw new Error('Wallet returned an invalid signature payload');
     }
 
-    // The CIP-30 DataSignature has two halves; Strike needs both to verify.
-    // We send them as a JSON envelope so the backend can extract `signature`
-    // (COSE_Sign1) and `key` (COSE_Key) without ambiguity.
-    const walletSignature = JSON.stringify({
-      signature: signResp.data.signature,
-      key: signResp.data.key,
-    });
+    // Strike expects the Cardano signature as the CIP-30 COSE pair joined by a
+    // colon: `${coseSign1Hex}:${coseKeyHex}` (per the Strike builder reference —
+    // strike-builder-reference/src/api/withdraw.ts + strike-finance-skills).
+    const walletSignature = `${signResp.data.signature}:${signResp.data.key}`;
 
     // 4. Verify with Strike — receive account_id + API-wallet metadata
     connectStep.value = 'verifying';

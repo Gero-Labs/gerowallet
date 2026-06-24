@@ -11,7 +11,6 @@
         <div class="d-flex align-center">
           <span class="text-h6 font-weight-bold mr-2">{{ token.ticker }}</span>
           <v-icon v-if="token.verified" small color="primary" class="mr-1">mdi-check-decagram</v-icon>
-          <TokenRiskBadge v-if="token.riskRating" :rating="token.riskRating" size="small" />
         </div>
         <span class="text--secondary text-caption">{{ token.name }}</span>
       </div>
@@ -245,12 +244,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, markRaw, type Ref } from 'vue';
+import { ref, computed, watch, type Ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
 import TechnicalAnalysisChart from './TechnicalAnalysisChart.vue';
-import TokenRiskBadge from './TokenRiskBadge.vue';
 import OrderBookTable from './OrderBookTable.vue';
 import DepthChart from './DepthChart.vue';
 import QuickSwap from './QuickSwap.vue';
@@ -445,12 +443,6 @@ const compactStats = computed(() => {
     { label: t('market.volume24h'), value: sym + formatCompact(convertUsd(tok.volume24h)) },
     { label: t('market.tvl'), value: tok.tvl ? sym + formatCompact(convertUsd(tok.tvl)) : t('market.na') },
     { label: t('market.holders'), value: tok.holders != null ? tok.holders.toLocaleString() : t('market.na') },
-    {
-      label: t('market.risk'),
-      value: tok.riskRating || t('market.na'),
-      component: tok.riskRating ? markRaw(TokenRiskBadge) : undefined,
-      componentProps: tok.riskRating ? { rating: tok.riskRating, size: 'small' } : undefined,
-    },
     {
       label: t('market.verified'),
       value: tok.verified ? '✓' : t('market.no'),

@@ -42,7 +42,6 @@ import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
 import { deriveBitcoinAddress } from '@/chains/bitcoin/bitcoinKeyManager';
 import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
-import XerberusStore from '@/stores/xerberusStore';
 import {
   analyzeTransactionForSignatures,
   findCollectionDescription,
@@ -405,16 +404,12 @@ export class WalletBg {
 
     WalletStore.setTokens(tokens);
     chrome.alarms.onAlarm.addListener(alarmListener);
-    const isSwapSupported = networks.resolveSwapSupport(this.chain, this.network);
     const isStakingSupported = networks.resolveStakingSupport(this.chain, this.network);
     if (!this.isEnterpriseAddress() && isStakingSupported) {
       chrome.alarms.create('refreshStakingPools', { delayInMinutes: 0, periodInMinutes: 240 });
     }
     if (!this.isEnterpriseAddress() && networks.resolveGovernanceSupport(this.chain, this.network)) {
       chrome.alarms.create('refreshDReps', { delayInMinutes: 0, periodInMinutes: 280 });
-    }
-    if (isSwapSupported) {
-      chrome.alarms.create('refreshXerberusRisks', { delayInMinutes: 0, periodInMinutes: 720 });
     }
     // Set Collections
     const collectibles = Object.fromEntries(resolvedAssets.filter(([, resolved]) => !Boolean(resolved.metadata)));
@@ -1790,12 +1785,7 @@ export class WalletBg {
 
 }
 
-export function alarmListener(alarm) {
-  if (
-    alarm.name === 'refreshXerberusRisks' &&
-    WalletStore.state.account &&
-    Number(WalletStore.state.account.controlled_amount) > 0
-  ) {
-    XerberusStore.updateRisks(Object.values(WalletStore.state.tokens).map((token: any) => token.fingerprint));
-  }
+export function alarmListener(_alarm) {
+  // No-op: Xerberus risk-refresh alarm removed. Kept (exported + registered) because
+  // walletManager.service.ts relies on this reference for addListener/removeListener.
 }

@@ -225,17 +225,6 @@
       <span v-else style="font-size: 12px; opacity: 0.4">—</span>
     </template>
 
-    <!-- Risk Rating column -->
-    <template v-slot:[`item.risk`]="{ item }">
-      <v-avatar size="24" v-if="item.riskRating">
-        <v-img
-          :src="assets.resolveRisk(item.riskRating)"
-          :alt="item.riskRating"
-        />
-      </v-avatar>
-      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
-    </template>
-
     <!-- Holdings columns (when showHoldingsColumns) -->
     <template v-slot:[`item.balance`]="{ item }">
       <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
@@ -389,15 +378,6 @@
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.risk`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
-        </template>
-        {{ $t('market.riskTooltip') }}
-      </v-tooltip>
-    </template>
-
     <template v-slot:[`header.avgCostBasis`]="{ header }">
       <v-tooltip top :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
@@ -502,7 +482,6 @@ const baseHeaders = computed(() => {
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
     { text: t('market.liquidity'), value: 'tvl', sortable: true, width: '90px' },
     ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px' }] : []),
-    { text: t('market.risk'), value: 'risk', sortable: true, width: '70px' },
   ];
 
   // Allocation is toggleable via column preferences (works in both market and holdings views)
@@ -628,13 +607,6 @@ function rowClass(item: MarketToken): string {
   return item.isNative ? 'native-token-row' : '';
 }
 
-// Risk rating sort weight: AAA (highest/safest) → D (lowest/riskiest)
-const RISK_WEIGHT: Record<string, number> = {
-  'AAA': 10, 'AA': 9, 'A': 8,
-  'BBB': 7, 'BB': 6, 'B': 5,
-  'CCC': 4, 'CC': 3, 'C': 2, 'D': 1,
-};
-
 // Pin native token (ADA) to the top regardless of sort column
 function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: boolean[]): MarketToken[] {
   const sortKey = sortByArr[0];
@@ -644,10 +616,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   const rest = [...items.filter(i => !i.isNative)];
 
   if (sortKey) {
-    // Remap header value to data field name where they differ
-    const effectiveSortKey = sortKey === 'risk' ? 'riskRating' : sortKey;
-
-    const key = effectiveSortKey as keyof MarketToken;
+    const key = sortKey as keyof MarketToken;
     rest.sort((a: MarketToken, b: MarketToken) => {
       const va = a[key];
       const vb = b[key];
@@ -655,12 +624,6 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
-      // Risk rating: use weight map for correct ordering (AAA > AA > A > BBB > ...)
-      if (key === 'riskRating') {
-        const wa = RISK_WEIGHT[va as string] ?? 0;
-        const wb = RISK_WEIGHT[vb as string] ?? 0;
-        return desc ? wb - wa : wa - wb;
-      }
       if (typeof va === 'string' && typeof vb === 'string') {
         return desc ? vb.localeCompare(va) : va.localeCompare(vb);
       }

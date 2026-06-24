@@ -91,16 +91,6 @@ import giftSvg from '@/assets/svg/gift.svg'
 import pendingSvg from '@/assets/svg/pending.svg'
 import piggyBankSvg from '@/assets/svg/piggybank.svg'
 import withdrawalSvg from '@/assets/svg/withdrawal.svg'
-import riskA from '@/assets/svg/risk/A.svg'
-import riskAA from '@/assets/svg/risk/AA.svg'
-import riskAAA from '@/assets/svg/risk/AAA.svg'
-import riskB from '@/assets/svg/risk/B.svg'
-import riskBB from '@/assets/svg/risk/BB.svg'
-import riskBBB from '@/assets/svg/risk/BBB.svg'
-import riskC from '@/assets/svg/risk/C.svg'
-import riskCC from '@/assets/svg/risk/CC.svg'
-import riskCCC from '@/assets/svg/risk/CCC.svg'
-import riskD from '@/assets/svg/risk/D.svg'
 import buyAda from '@/modules/dashboard/assets/buy-ada.png'
 import sellAda from '@/modules/dashboard/assets/sell-ada.png'
 import { DappRisk, DappScore } from '@/models/cardano-shield-types';
@@ -309,30 +299,6 @@ export default {
     if (e && e.target) {
       e.target.src = this.errorImage
     }
-  },
-  resolveRisk(risk: string): string {
-    if (risk === 'A') {
-      return riskA
-    } else if (risk === 'AA') {
-      return riskAA
-    } else if (risk === 'AAA') {
-      return riskAAA
-    } else if (risk === 'B') {
-      return riskB
-    } else if (risk === 'BB') {
-      return riskBB
-    } else if (risk === 'BBB') {
-      return riskBBB
-    } else if (risk === 'C') {
-      return riskC
-    } else if (risk === 'CC') {
-      return riskCC
-    } else if (risk === 'CCC') {
-      return riskCCC
-    } else if (risk === 'D') {
-      return riskD
-    }
-    return errorImage
   },
   resolveDappRisk(risk: number): string {
     switch (risk) {

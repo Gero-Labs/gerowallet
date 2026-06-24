@@ -319,7 +319,6 @@ const columnOptions: { key: ColumnKey; label: string }[] = [
   { key: 'totalSupply', label: t('market.totalSupply') },
   { key: 'mcap', label: t('market.marketCap') },
   { key: 'tvl', label: t('market.liquidity') },
-  { key: 'risk', label: t('market.risk') },
   { key: 'allocation', label: t('common.allocation') },
 ];
 
@@ -569,7 +568,6 @@ const myHoldings = computed<MarketToken[]>(() => {
       tvl: marketToken?.tvl || null,
       liquidity: marketToken?.liquidity || 0,
       holders: marketToken?.holders || dhToken?.holders || 0,
-      riskRating: marketToken?.riskRating || null,
       isNew: false,
       policyLocked: true,
       fingerprint: marketToken?.fingerprint || dhToken?.fingerprint || '',
@@ -656,11 +654,9 @@ const displayedTokens = computed(() => {
   }
 
   // Apply scam filter
+  // TODO(product): hideScam now verified-only after Xerberus removal
   if (hideScam.value) {
-    tokens = tokens.filter(tok => {
-      if (!tok.verified && tok.riskRating && ['C', 'D'].includes(tok.riskRating)) return false;
-      return true;
-    });
+    tokens = tokens.filter(tok => tok.verified);
   }
 
   return tokens;
