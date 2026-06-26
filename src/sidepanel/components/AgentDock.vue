@@ -25,6 +25,10 @@
             v-else-if="m.intent && m.intent.type === 'swap'"
             :intent="m.intent.swap"
           />
+          <StakingCard
+            v-else-if="m.intent && m.intent.type === 'staking'"
+            :intent="m.intent.staking"
+          />
         </div>
         <p v-if="dock.busy.value" class="agent-dock__busy">...</p>
       </div>
@@ -47,10 +51,11 @@ import { defineComponent, ref } from 'vue';
 import { agentDock } from '@/sidepanel/composables/useAgentDock';
 import ChartCard from '@/sidepanel/components/agent/ChartCard.vue';
 import SwapCard from '@/sidepanel/components/agent/SwapCard.vue';
+import StakingCard from '@/sidepanel/components/agent/StakingCard.vue';
 
 export default defineComponent({
   name: 'AgentDock',
-  components: { ChartCard, SwapCard },
+  components: { ChartCard, SwapCard, StakingCard },
   setup() {
     const draft = ref('');
     const dock = agentDock;

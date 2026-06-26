@@ -7,10 +7,13 @@ import { parseIntent } from '@/services/agent/intentRouter';
 import { resolveSymbolToAssetId } from '@/services/agent/tokenResolver';
 import { parseSwapIntent } from '@/services/agent/swapIntent';
 import type { SwapIntent } from '@/services/agent/swapIntent';
+import { parseStakingIntent } from '@/services/agent/stakingIntent';
+import type { StakingIntent } from '@/services/agent/stakingIntent';
 
 export type DockMessageIntent =
   | { type: 'chart-token'; symbol: string; assetId: string | null }
-  | { type: 'swap'; swap: SwapIntent };
+  | { type: 'swap'; swap: SwapIntent }
+  | { type: 'staking'; staking: StakingIntent };
 
 export interface DockMessage {
   id: number;
@@ -56,6 +59,11 @@ export function createAgentDock(
         const swapParsed = parseSwapIntent(trimmed);
         if (swapParsed) {
           intent = { type: 'swap', swap: swapParsed };
+        } else {
+          const stakingParsed = parseStakingIntent(trimmed);
+          if (stakingParsed) {
+            intent = { type: 'staking', staking: stakingParsed };
+          }
         }
       }
       messages.value.push({ id: nextId++, role: 'assistant', text: res.reply, intent });
