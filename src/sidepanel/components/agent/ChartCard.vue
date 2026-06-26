@@ -6,7 +6,7 @@
       <span v-if="error" class="agent-chart-card__error">{{ error }}</span>
     </div>
     <div v-if="loading" class="agent-chart-card__loading">{{ $t('copilot.chart.loading') }}</div>
-    <TradingViewChart v-else-if="candles.length" :data="(candles as any)" height="180px" />
+    <TradingViewChart v-else-if="candles.length" :data="candles" height="180px" />
     <div v-else-if="!error" class="agent-chart-card__empty">{{ $t('copilot.chart.noData') }}</div>
   </div>
 </template>

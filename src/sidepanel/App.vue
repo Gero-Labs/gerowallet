@@ -21,6 +21,7 @@
         @settings="openDashboardSettings"
       />
       <DAppOverlay />
+      <AgentDock />
     </template>
 
     <!-- Wallet switcher bottom sheet (available from header) -->
@@ -42,6 +43,7 @@ import WalletSelector from './components/WalletSelector.vue';
 import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
 import BottomSheet from './components/BottomSheet.vue';
+import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Wallet } from '@/models/types';
 import { useChainContext } from './composables/useChainContext';
