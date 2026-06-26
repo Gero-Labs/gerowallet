@@ -152,10 +152,10 @@ Moves the agent from "sign every tx" to "bounded, revocable authority," enabling
 - **Proactive engine:** detector threshold tests; narrate-once/fan-out dedup; dial/mutes honored.
 - **E2E:** "swap 100 ADA for GERO" inline completes and signs; per-screen context routes correctly; streaming + fallback paths.
 
-## 14. Open decisions
+## 14. Decisions (resolved 2026-06-26)
 
-1. MVP action set confirmation (recommended: read + swap first; perps gated on 2.7 Strike fixes).
-2. Allowance funding UX and default limits; when to graduate hot sub-account -> script-escrow.
-3. Whether the proactive friend and the chat share one thread or two surfaces with one history.
-4. Centralizing the router/Guardrail in Nexus now vs per-client first (recommended: Nexus-first to prevent forking the invariant).
-5. Branding of the agent vs the proactive "friend" persona.
+1. **MVP action set:** read intents (charts, P&L, cashback/card status, portfolio Q&A) + the proactive feed ship first (Phase 0, zero custody risk); **swap** is the first action (Phase 1); **perps** follow and are gated on the 2.7 Strike auth fixes.
+2. **Agent Allowance:** start as a **bounded hot sub-account** with conservative defaults (user-set total budget; a per-payment cap and a daily cap; default 30-day expiry; default-deny allowlist). Graduate a budget to on-chain script-escrow when it exceeds a configurable threshold. Top-ups and limit increases are signed; de-escalations are instant.
+3. **One agent, one history, two surfaces:** the proactive "friend" and the chat share a single conversation/event history, surfaced as (a) a scrollable feed view and (b) the global chat dock. Not two separate threads.
+4. **Centralize router + Guardrail in Nexus** (shared intent API) so Swift + extension cannot fork the invariant. Clients only present, diff, and sign.
+5. **Branding:** the agent is **Gero Copilot**; the proactive persona is a **voice mode** of the same agent (the "friend" tone), not a separate product/brand.
