@@ -60,4 +60,8 @@ describe('verifyWithdrawTx', () => {
     const v = verifyWithdrawTx(wTx({ certificates: [{ kind: 'StakeDelegation', poolId: 'pool1x' }] }), exp);
     expect(v.ok).toBe(false);
   });
+  it('FAILS when a governance vote-delegation cert is sneaked into a withdraw', () => {
+    const v = verifyWithdrawTx(wTx({ certificates: [{ kind: 'VoteDelegation' }] }), exp);
+    expect(v.ok).toBe(false);
+  });
 });
