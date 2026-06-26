@@ -9,6 +9,8 @@ const expectation: SwapExpectation = {
   ownAddresses: [OWN],
   outputAssetId: 'policyGERO.4745524f', // resolved by the WALLET, not the agent
   minOutput: 880n,
+  sellAssetId: 'lovelace', // selling ADA
+  amountIn: 100_000000n, // 100 ADA in lovelace
   maxSpendLovelace: 105_000000n, // amountIn + fees + batcher cap
 };
 
@@ -57,5 +59,50 @@ describe('verifySwapTx', () => {
     const v = verifySwapTx(tx, expectation);
     expect(v.ok).toBe(false);
     expect(v.reasons.join(' ')).toMatch(/exceeds the maximum/i);
+  });
+
+  it('FAILS on a partial buy-token drain even when the own output meets the minimum', () => {
+    const exp: SwapExpectation = { ...expectation, minOutput: 400n };
+    const tx: DecodedTx = {
+      outputs: [
+        { address: OWN, lovelace: 2_000000n, assets: { 'policyGERO.4745524f': 500n } }, // own >= min
+        { address: FOREIGN, lovelace: 2_000000n, assets: { 'policyGERO.4745524f': 900n } }, // buy token siphoned out
+      ],
+    };
+    const v = verifySwapTx(tx, exp);
+    expect(v.ok).toBe(false);
+    expect(v.reasons.join(' ')).toMatch(/not yours/i);
+  });
+
+  it('FAILS when an unexpected (other) token would leave the wallet to a foreign address', () => {
+    const tx: DecodedTx = {
+      outputs: [
+        { address: OWN, lovelace: 2_000000n, assets: { 'policyGERO.4745524f': 900n } }, // good buy output
+        { address: FOREIGN, lovelace: 2_000000n, assets: { 'policyOTHER.00': 5000n } }, // unexpected drain
+      ],
+    };
+    const v = verifySwapTx(tx, expectation);
+    expect(v.ok).toBe(false);
+    expect(v.reasons.join(' ')).toMatch(/unexpected token/i);
+  });
+
+  it('FAILS when more of the SELL token leaves than the amount being swapped (token sell)', () => {
+    const exp: SwapExpectation = {
+      ownAddresses: [OWN],
+      outputAssetId: 'lovelace', // buying ADA
+      minOutput: 1_000000n,
+      sellAssetId: 'policySNEK.534e454b', // selling SNEK
+      amountIn: 100n,
+      maxSpendLovelace: 105_000000n,
+    };
+    const tx: DecodedTx = {
+      outputs: [
+        { address: OWN, lovelace: 2_000000n, assets: { lovelace: 2_000000n } }, // receives enough buy token (ADA)
+        { address: FOREIGN, lovelace: 2_000000n, assets: { 'policySNEK.534e454b': 250n } }, // over the 100 swapped
+      ],
+    };
+    const v = verifySwapTx(tx, exp);
+    expect(v.ok).toBe(false);
+    expect(v.reasons.join(' ')).toMatch(/selling would leave/i);
   });
 });
