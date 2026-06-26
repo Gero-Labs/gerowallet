@@ -30,6 +30,14 @@ export interface SwapVerdict {
  * Unified safety rule: the ONLY token allowed to leave to a foreign (non-own) address is
  * the SELL token (the swap deposit), and no more of it than `amountIn`. Any buy-token or
  * other-token leaving to a foreign address is a drain and blocks signing.
+ *
+ * The buy-side check (youReceive >= minOutput) assumes the buy token is delivered in THIS
+ * signed tx, which holds for atomic/direct swaps. For order/batcher-based Cardano DEX deposit
+ * txs the buy token arrives in a later batcher tx, so for those this check is approximate (for
+ * an ADA buy it also counts the change output) and the order datum must be validated against the
+ * real Nexus aggregator tx shape when that rail lands. The sell-side bound (only the sell token
+ * leaves to foreign, <= amountIn), the other-token-drain block, and the ADA-outflow bound are
+ * correct for the deposit tx regardless and are the robust core.
  */
 export function verifySwapTx(tx: DecodedTx, exp: SwapExpectation): SwapVerdict {
   if (exp.ownAddresses.length === 0) {
@@ -45,7 +53,8 @@ export function verifySwapTx(tx: DecodedTx, exp: SwapExpectation): SwapVerdict {
 
   let youReceive = 0n;
   for (const o of tx.outputs) {
-    if (own.has(o.address)) youReceive += o.assets[exp.outputAssetId] ?? 0n;
+    if (!own.has(o.address)) continue;
+    youReceive += exp.outputAssetId === 'lovelace' ? o.lovelace : (o.assets[exp.outputAssetId] ?? 0n);
   }
 
   let lovelaceToForeign = 0n;

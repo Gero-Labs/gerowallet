@@ -97,12 +97,32 @@ describe('verifySwapTx', () => {
     };
     const tx: DecodedTx = {
       outputs: [
-        { address: OWN, lovelace: 2_000000n, assets: { lovelace: 2_000000n } }, // receives enough buy token (ADA)
+        { address: OWN, lovelace: 2_000000n, assets: {} }, // receives enough buy token (ADA) via o.lovelace
         { address: FOREIGN, lovelace: 2_000000n, assets: { 'policySNEK.534e454b': 250n } }, // over the 100 swapped
       ],
     };
     const v = verifySwapTx(tx, exp);
     expect(v.ok).toBe(false);
     expect(v.reasons.join(' ')).toMatch(/selling would leave/i);
+  });
+
+  it('does NOT false-block a token->ADA swap: ADA buy is verified via o.lovelace', () => {
+    const exp: SwapExpectation = {
+      ownAddresses: [OWN],
+      outputAssetId: 'lovelace',
+      minOutput: 800n,
+      sellAssetId: 'policySNEK.534e454b',
+      amountIn: 100n,
+      maxSpendLovelace: 5_000000n,
+    };
+    const tx: DecodedTx = {
+      outputs: [
+        { address: OWN, lovelace: 900n, assets: {} }, // ADA received lives in o.lovelace, not o.assets
+        { address: FOREIGN, lovelace: 2_000000n, assets: { 'policySNEK.534e454b': 100n } }, // sell deposit, == amountIn
+      ],
+    };
+    const v = verifySwapTx(tx, exp);
+    expect(v.ok).toBe(true);
+    expect(v.derived.youReceive).toBe(900n);
   });
 });
