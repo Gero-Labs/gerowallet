@@ -11,6 +11,7 @@ const routes: RouteConfig[] = [
   { path: '/perps', name: 'perps', component: () => import('./pages/PerpetualsPage.vue') },
   { path: '/vaults', name: 'vaults', component: () => import('./pages/VaultsPage.vue') },
   { path: '/activity', name: 'activity', component: () => import('./pages/ActivityPage.vue') },
+  { path: '/feed', name: 'feed', component: () => import('./pages/FeedPage.vue') },
   { path: '*', redirect: '/' },
 ];
 
