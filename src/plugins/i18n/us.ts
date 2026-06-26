@@ -1245,6 +1245,7 @@ export default {
   'navigation.connectWithGeroDashboard': 'Connect with Gero Dashboard',
   'navigation.connectWithGeroWallet': 'Connect with Gero Wallet',
   'navigation.connecting': 'Connecting...',
+  'navigation.copilotFeed': 'Feed',
   'navigation.continue': 'Continue',
   'navigation.continueToSite': 'Continue to site',
   'navigation.cred': 'Cred',

@@ -127,6 +127,15 @@ const routes = [
     },
   },
   {
+    path: '/copilot-feed',
+    name: 'copilotFeed',
+    component: () => import('@/sidepanel/pages/FeedPage.vue'),
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/dev-tools',
     name: 'devTools',
     component: DevTools,
