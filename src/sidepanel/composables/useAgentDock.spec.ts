@@ -32,4 +32,13 @@ describe('useAgentDock', () => {
     const last = dock.messages.value[dock.messages.value.length - 1];
     expect(last.intent).toEqual({ type: 'chart-token', symbol: 'GERO', assetId: 'bbb.4745524f' });
   });
+
+  it('sends prior history only, never the current message, to the provider', async () => {
+    const provider = { chat: vi.fn().mockResolvedValue({ reply: 'r', usedTools: null }) };
+    const dock = createAgentDock(provider);
+    await dock.send('first');
+    expect(provider.chat).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: 'first', history: [] }),
+    );
+  });
 });

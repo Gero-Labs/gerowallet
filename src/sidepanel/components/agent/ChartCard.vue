@@ -3,7 +3,7 @@
   <div class="agent-chart-card">
     <div class="agent-chart-card__header">
       <span class="agent-chart-card__symbol">{{ symbol }}</span>
-      <span v-if="error" class="agent-chart-card__error">{{ error }}</span>
+      <span v-if="error" class="agent-chart-card__error">{{ $t(error) }}</span>
     </div>
     <div v-if="loading" class="agent-chart-card__loading">{{ $t('copilot.chart.loading') }}</div>
     <TradingViewChart v-else-if="candles.length" :data="candles" height="180px" />
@@ -30,14 +30,14 @@ export default defineComponent({
 
     onMounted(async () => {
       if (!props.assetId) {
-        error.value = 'Token not found';
+        error.value = 'copilot.chart.tokenNotFound';
         loading.value = false;
         return;
       }
       try {
         candles.value = await marketApi.getCandles(props.assetId, '1h');
       } catch {
-        error.value = 'Could not load chart';
+        error.value = 'copilot.chart.loadError';
       } finally {
         loading.value = false;
       }

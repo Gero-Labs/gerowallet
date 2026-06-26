@@ -1,5 +1,6 @@
 // src/sidepanel/composables/useAgentDock.ts
 import { ref, type Ref } from 'vue';
+import i18n from '@/plugins/i18n';
 import { defaultAgentProvider } from '@/services/agent/agentProvider';
 import type { AgentProvider } from '@/services/agent/types';
 import { parseIntent } from '@/services/agent/intentRouter';
@@ -18,12 +19,11 @@ export interface DockMessage {
   intent?: DockMessageIntent;
 }
 
-let nextId = 1;
-
 export function createAgentDock(
   provider: AgentProvider = defaultAgentProvider,
   resolver: (symbol: string) => Promise<string | null> = resolveSymbolToAssetId,
 ) {
+  let nextId = 1;
   const isOpen: Ref<boolean> = ref(false);
   const busy: Ref<boolean> = ref(false);
   const messages: Ref<DockMessage[]> = ref([]);
@@ -43,10 +43,10 @@ export function createAgentDock(
   async function send(text: string): Promise<void> {
     const trimmed = (text || '').trim();
     if (!trimmed || busy.value) return;
+    const history = messages.value.map((m) => ({ role: m.role, text: m.text }));
     messages.value.push({ id: nextId++, role: 'user', text: trimmed });
     busy.value = true;
     try {
-      const history = messages.value.map((m) => ({ role: m.role, text: m.text }));
       const res = await provider.chat({ message: trimmed, history });
       const parsed = parseIntent(trimmed);
       let intent: DockMessageIntent | undefined;
@@ -58,7 +58,7 @@ export function createAgentDock(
       messages.value.push({
         id: nextId++,
         role: 'assistant',
-        text: 'Sorry, I could not reach the agent right now. Please try again.',
+        text: i18n.t('copilot.error.agentUnavailable') as string,
       });
     } finally {
       busy.value = false;
