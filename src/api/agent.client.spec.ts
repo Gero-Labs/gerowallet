@@ -34,8 +34,9 @@ describe('agent-api client', () => {
       .spyOn(mod.agentAxiosInstance, 'post')
       .mockResolvedValue({ data: { reply: 'ok' } } as never);
 
-    await mod.agentApi.chat({ message: 'hi' });
+    const result = await mod.agentApi.chat({ message: 'hi' });
 
     expect(spy).toHaveBeenCalledWith('/api/agent/chat', expect.objectContaining({ max_tokens: 800 }));
+    expect(result.usedTools).toBeNull();
   });
 });

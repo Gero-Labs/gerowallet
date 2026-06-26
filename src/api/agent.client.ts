@@ -1,7 +1,6 @@
 import axios, { type AxiosInstance } from 'axios';
 
-// @ts-ignore Vite env
-const NEXUS_BASE: string = import.meta.env.VITE_NEXUS_URL || '';
+const NEXUS_BASE: string = import.meta.env['VITE_NEXUS_URL'] || '';
 
 export const agentAxiosInstance: AxiosInstance = axios.create({
   baseURL: NEXUS_BASE,
@@ -24,7 +23,7 @@ export interface AgentChatInput {
 export interface AgentChatResult {
   reply: string;
   model?: string;
-  usedTools?: unknown;
+  usedTools: unknown;
 }
 
 export const agentApi = {
@@ -35,6 +34,8 @@ export const agentApi = {
       history: input.history,
       max_tokens: input.maxTokens ?? 800,
     });
-    return { reply: data.reply, model: data.model, usedTools: data.used_tools ?? null };
+    const res = data as { reply?: string; model?: string; used_tools?: unknown };
+    if (!res.reply) throw new Error('Agent response missing reply field');
+    return { reply: res.reply, model: res.model, usedTools: res.used_tools ?? null };
   },
 };
