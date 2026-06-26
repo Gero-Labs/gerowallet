@@ -1460,6 +1460,7 @@ export default {
   'navigation.connectWithGeroWallet': 'Mit Gero Wallet verbinden',
   'navigation.connecting': 'Verbindung wird hergestellt...',
   'navigation.contactInformation': 'Kontaktinformationen',
+  'navigation.copilotFeed': 'Feed',
   'navigation.continue': 'Weiter',
   'navigation.continueToSite': 'Weiter zur Website',
   'navigation.cred': 'Zugangsdaten',
