@@ -285,6 +285,7 @@ import changeLogPlugin from '@/plugins/changeLog';
 import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
@@ -370,6 +371,8 @@ const kesRemainingGlobal = computed(() => {
 });
 
 const kesWarningVisible = computed(() => {
+  // Pool Operator hard-gated off for 2.7 — suppress the KES bell entirely.
+  if (!featureFlagsStore.isPoolOperatorEnabled()) return false;
   return kesRemainingGlobal.value !== null && kesRemainingGlobal.value < 50;
 });
 
@@ -545,9 +548,10 @@ onMounted(async () => {
   // Ensure colors are set on mount
   updateThemeColors();
 
-  // Load SPO node config and start polling for KES notifications
+  // Load SPO node config and start polling for KES notifications.
+  // Pool Operator is hard-gated off for 2.7 — skip polling entirely.
   const walletId = walletStore.loggedWallet?.id;
-  if (walletId && poolOperatorStore.nodes.length === 0) {
+  if (featureFlagsStore.isPoolOperatorEnabled() && walletId && poolOperatorStore.nodes.length === 0) {
     try {
       const { loadPoolOperatorConfig } = await import('@/stores/poolOperatorStore');
       await loadPoolOperatorConfig(walletId);

@@ -19,6 +19,16 @@ interface HistoryParams {
   endTime?: number;
   limit?: number;
   vault_id?: string;
+  /**
+   * Cursor for fill / funding / transaction history — set to the last item's
+   * `id` to fetch the next page (cursor-based pagination, guide §17).
+   */
+  fromId?: number;
+  /**
+   * Cursor for order history — set to the last order's `id` to fetch the next
+   * page (guide §17.1).
+   */
+  fromOrderID?: number;
 }
 
 export const strikeUserApi = {

@@ -41,7 +41,11 @@
 
       <!-- Trade segment -->
       <div v-if="activeSegment === 'trade'" class="segment-content px-3">
+        <!-- Authenticated action (place order) is gated behind connect; the
+             public order book stays visible regardless. -->
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
         <OrderForm
+          v-else
           :symbol="selectedSymbol"
           @order-placed="onOrderPlaced"
         />
@@ -55,6 +59,8 @@
 
       <!-- Positions segment -->
       <div v-if="activeSegment === 'positions'" class="segment-content px-3">
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
+        <template v-else>
         <div v-if="trading.loading.value && positions.length === 0" class="text-center py-6">
           <v-progress-circular indeterminate color="#26FAB0" size="32" width="3" />
           <div class="grey--text text-caption mt-2">{{ $t('perpetuals.loadingPositions') }}</div>
@@ -110,10 +116,13 @@
             </div>
           </div>
         </div>
+        </template>
       </div>
 
       <!-- Orders segment -->
       <div v-if="activeSegment === 'orders'" class="segment-content px-3">
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
+        <template v-else>
         <div v-if="trading.loading.value && openOrders.length === 0" class="text-center py-6">
           <v-progress-circular indeterminate color="#26FAB0" size="32" width="3" />
           <div class="grey--text text-caption mt-2">{{ $t('perpetuals.loadingLimitOrders') }}</div>
@@ -177,10 +186,13 @@
             </div>
           </div>
         </template>
+        </template>
       </div>
 
       <!-- History segment -->
       <div v-if="activeSegment === 'history'" class="segment-content px-3">
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
+        <template v-else>
         <!-- History tabs -->
         <div class="segment-toggle mb-3" style="margin-left:0; margin-right:0;">
           <button
@@ -287,6 +299,7 @@
             </v-btn>
           </div>
         </template>
+        </template>
       </div>
     </template>
   </div>
@@ -305,6 +318,7 @@ import SymbolSelector from '../components/perps/SymbolSelector.vue';
 import PriceTicker from '../components/perps/PriceTicker.vue';
 import OrderForm from '../components/perps/OrderForm.vue';
 import OrderBook from '../components/perps/OrderBook.vue';
+import StrikeOnboarding from '../components/perps/StrikeOnboarding.vue';
 
 // ── Store / composables ──
 
@@ -405,6 +419,16 @@ function onOrderPlaced() {
 
 function onPriceClick(_price: string) {
   // Future: pass price to OrderForm via shared ref or event bus
+}
+
+// Fired by the inline StrikeOnboarding card once connect/unlock succeeds. The
+// isConnected watcher already loads account/positions/orders; here we also
+// refresh the History tab if the user connected from that segment.
+function onConnected() {
+  if (activeSegment.value === 'history') {
+    if (historyTab.value === 'closed') loadClosedPositions();
+    else loadFillHistory();
+  }
 }
 
 // ── Close position ──

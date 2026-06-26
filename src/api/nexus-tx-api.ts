@@ -150,12 +150,15 @@ nexusTxClient.interceptors.response.use(
 
 /**
  * Map the wallet's typed Network value (e.g. 'Mainnet', 'Preprod') to nexus's
- * uppercase enum name. Returns undefined if the network isn't supported by nexus,
- * which lets the server fall back to its default.
+ * `network` query-param format. Nexus expects the chain-prefixed slug
+ * (`cardano-mainnet` / `cardano-preprod`) — the same format its other endpoints
+ * (/api/addresses/{addr}/utxos, /api/aggregator/*) use. It rejects the bare
+ * `MAINNET`/`PREPROD` with "Invalid value '…' for parameter 'network'".
+ * Returns undefined if unsupported, letting the server fall back to its default.
  */
-function toNexusNetwork(network: string | undefined): 'MAINNET' | 'PREPROD' | undefined {
-  if (network === Network.MAINNET) return 'MAINNET';
-  if (network === Network.PREPROD) return 'PREPROD';
+function toNexusNetwork(network: string | undefined): 'cardano-mainnet' | 'cardano-preprod' | undefined {
+  if (network === Network.MAINNET) return 'cardano-mainnet';
+  if (network === Network.PREPROD) return 'cardano-preprod';
   return undefined;
 }
 
@@ -233,7 +236,10 @@ export const nexusTxApi = {
   ): Promise<BuildTxResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/build?network=${nexusNetwork}` : '/api/tx/build';
-    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    // The body's `network` must be Nexus's enum keyName ('cardano-mainnet'), NOT the
+    // wallet's 'MAINNET'/'PREPROD' — the Network @JsonCreator rejects the latter and
+    // Spring returns "Malformed request body". Override with the resolved slug.
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork });
     return data;
   },
 
@@ -248,7 +254,8 @@ export const nexusTxApi = {
   ): Promise<MaxAdaResponse> {
     const nexusNetwork = toNexusNetwork(network);
     const url = nexusNetwork ? `/api/tx/max-ada?network=${nexusNetwork}` : '/api/tx/max-ada';
-    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, request);
+    // Body `network` must be the slug ('cardano-mainnet'), not 'MAINNET' — see buildTransferTx.
+    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, { ...request, network: nexusNetwork });
     return data;
   },
 

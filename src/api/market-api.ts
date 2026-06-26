@@ -18,6 +18,7 @@ export { axiosInstance as marketAxiosInstance };
 export interface TokenPriceResponse {
   assetId: string;
   dex: string | null;
+  source?: string | null;
   assetNameAscii: string;
   priceAda: number;
   priceUsd: number;
@@ -25,9 +26,14 @@ export interface TokenPriceResponse {
   priceChange1h: number | null;
   priceChange24h: number | null;
   priceChange7d: number | null;
+  priceChange30d: number | null;
   tvl: number;
   volume24h: number;
+  volume7d: number | null;
   organicVolume24h: number;
+  txnCount24h: number | null;
+  makerCount24h: number | null;
+  totalSupply: number | null;
   marketCap: number | null;
   liquidity: number | null;
   holders: number | null;
@@ -71,6 +77,15 @@ export interface CandleResponse {
   close: number;
   volume: number;
   currency?: string;
+}
+
+export interface SparklineResponse {
+  /** Window the series covers, e.g. '24h' | '7d' | '30d'. */
+  window: string;
+  /** Number of points per series. */
+  points: number;
+  /** Per-token close-price series keyed by assetId (backend shape: { window, points, data }). */
+  data: Record<string, number[]>;
 }
 
 export interface WalletPnlToken {
@@ -251,6 +266,31 @@ export default {
 
   async getLatestPrices(symbols?: string[]): Promise<LatestPricesResponse> {
     const { data } = await axiosInstance.get('/api/prices/latest', { params: { symbols: symbols?.join(',') } });
+    return data;
+  },
+
+  /**
+   * Inline sparkline price series for every token over the given window (e.g. '7d').
+   * Backend shape: { window, points, data: { [assetId]: number[] } } (PriceController#getSparklines).
+   * NOTE: may 404 until prod deploys /api/prices/sparklines — callers must treat it as best-effort.
+   */
+  async getSparklines(window: string = '7d'): Promise<SparklineResponse> {
+    // The Nexus proxy does not forward /sparklines, but the public market backend
+    // serves it (same source the market-data website uses). Hit it directly —
+    // CSP/host_permissions already allow *.gerowallet.io.
+    const base = (import.meta.env['VITE_MARKET_API_URL'] as string | undefined) || 'https://market.gerowallet.io';
+    const { data } = await axios.get(`${base}/api/v1/prices/sparklines`, { params: { window }, timeout: 15000 });
+    return data;
+  },
+
+  /**
+   * snek.fun bonding-curve tokens — a separate off-chain feed (source: "SNEKFUN").
+   * Not forwarded by the Nexus proxy, so hit the public market backend directly
+   * (same pattern as getSparklines).
+   */
+  async getSnekFunTokens(): Promise<TokenPriceResponse[]> {
+    const base = (import.meta.env['VITE_MARKET_API_URL'] as string | undefined) || 'https://market.gerowallet.io';
+    const { data } = await axios.get(`${base}/api/v1/market/snekfun`, { timeout: 15000 });
     return data;
   },
 
