@@ -1,31 +1,49 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
 
-export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'volume24h' | 'mcap' | 'tvl' | 'holders' | 'risk' | 'allocation';
+export type ColumnKey = 'change1h' | 'change24h' | 'change7d' | 'change30d' | 'volume24h' | 'volume7d' | 'txnCount24h' | 'makerCount24h' | 'totalSupply' | 'sparkline' | 'mcap' | 'tvl' | 'allocation' | 'avgCostBasis' | 'totalPnl';
 
 export interface ColumnPreferences {
   change1h: boolean;
   change24h: boolean;
   change7d: boolean;
+  change30d: boolean;
   volume24h: boolean;
+  volume7d: boolean;
+  txnCount24h: boolean;
+  makerCount24h: boolean;
+  totalSupply: boolean;
+  sparkline: boolean;
   mcap: boolean;
   tvl: boolean;
-  holders: boolean;
-  risk: boolean;
   allocation: boolean;
+  avgCostBasis: boolean;
+  totalPnl: boolean;
 }
 
-const STORAGE_KEY = 'gero_market_columns';
+// Bumped to _v2 so the richer, website-matching default column set applies for
+// everyone (old saved prefs under the v1 key are ignored). Users can still
+// hide columns via the column picker.
+const STORAGE_KEY = 'gero_market_columns_v2';
 
+// Default column set mirrors the market-data website table
+// (cardano-market-data MarketTable.tsx): price, 1h/24h/7d/30d, sparkline,
+// vol 24h/7d, TXN, Makers, Liquidity (tvl), Market Cap, Supply.
 const DEFAULTS: ColumnPreferences = {
-  change1h: false,
+  change1h: true,
   change24h: true,
-  change7d: false,
-  volume24h: false,
+  change7d: true,
+  change30d: true,
+  volume24h: true,
+  volume7d: true,
+  txnCount24h: true,
+  makerCount24h: true,
+  totalSupply: true,
+  sparkline: true,
   mcap: true,
-  tvl: false,
-  holders: false,
-  risk: false,
+  tvl: true,
   allocation: false,
+  avgCostBasis: true,
+  totalPnl: true,
 };
 
 function loadFromStorage(): ColumnPreferences {

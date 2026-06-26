@@ -17,8 +17,14 @@
       <v-card-text class="dialog-body">
         <div class="deposit-content">
 
+      <!-- ── Connect gate: must connect to Strike before depositing ────── -->
+      <template v-if="!isConnected">
+        <div class="connect-gate-sub">{{ $t('perps.connect.gateDeposit') }}</div>
+        <StrikeOnboarding @connected="onConnected" />
+      </template>
+
       <!-- ── Phase 1: Amount input ─────────────────────────────────────── -->
-      <template v-if="phase === 'amount'">
+      <template v-else-if="phase === 'amount'">
         <div class="balance-row">
           <span class="balance-label">{{ $t('perpetuals.deposit.available') }}</span>
           <span class="balance-value" @click="setMax()">
@@ -139,6 +145,12 @@
           @click:append="showPassword = !showPassword"
         />
 
+        <!-- PRF (passkey) wallets confirm by authenticating with their PassKey -->
+        <div v-else-if="isPrfWallet" class="info-banner mt-3" style="background: rgba(0,199,243,0.06); border-color: rgba(0,199,243,0.22); color: #00c7f3;">
+          <v-icon size="14" color="#00c7f3" class="mr-2" style="flex-shrink:0">mdi-fingerprint</v-icon>
+          <span>{{ $t('perps.passkeySignHint') }}</span>
+        </div>
+
         <div v-else class="info-banner mt-3">
           <v-icon size="14" color="#FFB454" class="mr-2" style="flex-shrink:0">mdi-information-outline</v-icon>
           <span>{{ $t('perpetuals.deposit.hwNotSupported', { addr: truncatedAddress }) }}</span>
@@ -167,6 +179,15 @@
             <v-icon size="14" class="mr-2">mdi-shield-check</v-icon>
             {{ $t('perpetuals.deposit.confirmSign') }}
           </v-btn>
+          <!-- PRF wallets: tap PassKey to authenticate, then build + sign -->
+          <PassKeyAuthButton
+            v-else-if="isPrfWallet"
+            class="flex-grow-1"
+            :disabled="isSigning || quoteCountdown <= 0"
+            :text="$t('perpetuals.deposit.confirmSign')"
+            @success="handlePassKeyConfirm"
+            @error="onPassKeyError"
+          />
           <v-btn
             v-else
             depressed
@@ -265,9 +286,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import StrikeOnboarding from './StrikeOnboarding.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -293,6 +318,15 @@ const {
   buildAndSign,
   resetDeposit,
 } = useStrikeDeposit();
+
+// Gate the deposit form behind a Strike connection — opening this sheet while
+// disconnected shows the inline connect/unlock UI instead of the amount form.
+const { isConnected } = useStrikeOnboarding();
+
+function onConnected() {
+  // Once connected, fall through to the amount phase (already the default).
+  phase.value = 'amount';
+}
 
 // ── Local state ───────────────────────────────────────────────────────────────
 type Phase = 'amount' | 'review' | 'status';
@@ -369,7 +403,11 @@ const canQuote = computed(() => amountNum.value > 0 && amountNum.value <= availa
 // an interactive flow that the deposit composable doesn't yet drive (the
 // Send dialog handles those paths). Until that's wired, surface a clear
 // "not supported" message instead of a permanently-disabled confirm button.
-const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
+const isPrfWallet = computed(() => {
+  const w = walletStore.loggedWallet;
+  return w?.encryptionMethod === 'prf' ||
+    (!!w?.prfEncryptedPrivateKey && !!w?.webAuthnCredentialId);
+});
 const isHwWallet = computed(() => {
   const t = walletStore.loggedWallet?.type;
   return t === 'Ledger' || t === 'Trezor' || t === 'Keystone';
@@ -475,6 +513,24 @@ async function handleConfirm() {
   }
 }
 
+/**
+ * PRF (passkey) wallets: PassKeyAuthButton decrypted the root key and handed
+ * us the bytes. Pass them to buildAndSign as privateKeyBytes (skips password
+ * verification, signs via SIGN_TX's privateKeyBytes path).
+ */
+async function handlePassKeyConfirm(pkBytes: Uint8Array) {
+  if (quoteCountdown.value <= 0) return;
+  phase.value = 'status';
+  const ok = await buildAndSign('', undefined, pkBytes);
+  if (ok) {
+    emit('deposited');
+  }
+}
+
+function onPassKeyError(err: Error) {
+  snackbar.setError(err?.message || t('security.passKeyAuthFailed'));
+}
+
 function retryFromError() {
   // Send the user back to the amount step with a clean slate; the quote may
   // be stale, the password may have been wrong, or the build may have failed.
@@ -523,6 +579,14 @@ watch(() => props.value, (val) => {
   flex-direction: column;
   gap: 0;
   padding-bottom: 8px;
+}
+
+.connect-gate-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 4px;
 }
 
 /* ── Balance row ── */

@@ -17,6 +17,13 @@
       <v-card-text class="dialog-body">
         <div class="withdraw-content">
 
+      <!-- ── Connect gate: must connect to Strike before withdrawing ──── -->
+      <template v-if="!isConnected">
+        <div class="connect-gate-sub">{{ $t('perps.connect.gateWithdraw') }}</div>
+        <StrikeOnboarding />
+      </template>
+
+      <template v-else>
       <!-- ── Step indicator ─────────────────────────────────────── -->
       <div class="step-rail">
         <div class="step-dot" :class="{ active: stepNum >= 1, done: stepNum > 1 }">1</div>
@@ -188,6 +195,15 @@
           >
             {{ $t('perps.withdraw.requote') }}
           </v-btn>
+          <!-- PRF wallets: tap PassKey to authenticate, then sign + submit -->
+          <PassKeyAuthButton
+            v-else-if="isPrfWallet"
+            class="action-btn"
+            :disabled="!canSign || withdrawStatus === 'signing' || withdrawStatus === 'submitting'"
+            :text="$t('perps.withdraw.confirmSign')"
+            @success="handlePassKeyConfirm"
+            @error="onPassKeyError"
+          />
           <v-btn
             v-else
             depressed
@@ -252,6 +268,7 @@
           </template>
         </div>
       </div>
+      </template>
 
         </div>
       </v-card-text>
@@ -263,8 +280,12 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
 import i18n from '@/plugins/i18n';
+import StrikeOnboarding from './StrikeOnboarding.vue';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ───────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -288,6 +309,10 @@ const {
 } = useStrikeWithdraw();
 
 const { account, marginRatio } = useStrikeAccount();
+
+// Gate the withdraw flow behind a Strike connection — opening this sheet while
+// disconnected shows the inline connect/unlock UI instead of the step form.
+const { isConnected } = useStrikeOnboarding();
 
 // ── Local state ─────────────────────────────────────────────────────────────
 const amount = ref('');
@@ -344,7 +369,11 @@ const canQuote = computed(() =>
   withdrawStatus.value !== 'quoting',
 );
 
-const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
+const isPrfWallet = computed(() => {
+  const w = walletStore.loggedWallet;
+  return w?.encryptionMethod === 'prf' ||
+    (!!w?.prfEncryptedPrivateKey && !!w?.webAuthnCredentialId);
+});
 const isHwWallet = computed(() => {
   const t = walletStore.loggedWallet?.type;
   return t === 'Ledger' || t === 'Trezor' || t === 'Keystone';
@@ -453,6 +482,23 @@ async function confirmAndSign() {
   }
 }
 
+/**
+ * PRF (passkey) wallets: PassKeyAuthButton decrypted the root key and handed
+ * us the bytes. Pass them to signAndSubmit as privateKeyBytes (signs the CIP-8
+ * withdrawal message via SIGN_DATA's privateKeyBytes path).
+ */
+async function handlePassKeyConfirm(pkBytes: Uint8Array) {
+  if (!canSign.value) return;
+  const ok = await signAndSubmit('', pkBytes);
+  if (ok) {
+    emit('withdrawn');
+  }
+}
+
+function onPassKeyError(err: Error) {
+  snackbar.setError(err?.message || (i18n.t('security.passKeyAuthFailed') as string));
+}
+
 function goBackToAmount() {
   // Only safe before any submit attempt — buttons are disabled during signing.
   resetWithdraw();
@@ -517,6 +563,14 @@ watch(() => props.value, (val) => {
   display: flex;
   flex-direction: column;
   padding-bottom: 8px;
+}
+
+.connect-gate-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 4px;
 }
 
 /* ── Step rail ── */

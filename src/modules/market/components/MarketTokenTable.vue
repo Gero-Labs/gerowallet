@@ -4,6 +4,7 @@
     class="transparent tokens-table market-token-table"
     :headers="activeHeaders"
     :items="paginatedTokens"
+    item-key="unit"
     :sort-by.sync="sortBy"
     :sort-desc.sync="sortDesc"
     :custom-sort="customSort"
@@ -44,63 +45,64 @@
 
     <!-- Token name column -->
     <template v-slot:[`item.name`]="{ item }">
-      <v-list-item dense class="px-0">
-        <v-list-item-action class="my-0" style="margin-right: 12px !important">
-          <v-badge overlap avatar color="transparent" :offset-y="34" v-if="item.verified">
-            <template v-slot:badge>
-              <v-avatar color="transparent" tile>
-                <v-icon x-small color="primary">mdi-check-decagram</v-icon>
-              </v-avatar>
-            </template>
-            <v-avatar size="28">
-              <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
-              <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
-              <v-icon v-else>mdi-circle-outline</v-icon>
-            </v-avatar>
-          </v-badge>
-          <v-avatar size="28" v-else>
+      <div class="name-cell d-flex align-center">
+        <div class="token-avatar mr-2" style="position: relative; width: 26px; height: 26px; flex-shrink: 0;">
+          <v-avatar size="26">
             <img v-if="item.img" :src="item.img" :alt="`${item.ticker} Logo`" @error="handleImgError" />
             <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
-        </v-list-item-action>
-        <v-list-item-content>
-          <v-list-item-title style="font-size: 13px">
-            <span class="font-weight-bold">{{ item.ticker }}</span>
-            <v-chip
-              v-if="showOwnedBadge && ownedUnits.has(item.unit)"
-              x-small label
-              color="primary"
-              class="ml-1"
-              style="height: 16px; font-size: 9px; padding: 0 4px;"
-            >
-              {{ $t('market.owned') }}
-            </v-chip>
-          </v-list-item-title>
-          <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
-            {{ item.name }}
-          </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
+          <v-icon
+            v-if="item.isSnekFun"
+            class="snek-badge"
+            style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: #0d0d11; border-radius: 50%;"
+            title="snek.fun"
+          >mdi-snake</v-icon>
+          <v-icon
+            v-else-if="item.verified"
+            color="primary"
+            class="verified-check"
+            style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: #0d0d11; border-radius: 50%;"
+          >mdi-check-decagram</v-icon>
+        </div>
+        <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <span class="font-weight-bold token-ticker" style="font-size: 13px" v-bind="attrs" v-on="on">{{ item.ticker }}</span>
+          </template>
+          {{ item.name }}
+        </v-tooltip>
+        <v-chip
+          v-if="showOwnedBadge && ownedUnits.has(item.unit)"
+          x-small label
+          color="primary"
+          class="ml-1 flex-shrink-0"
+          style="height: 16px; font-size: 9px; padding: 0 4px;"
+        >
+          {{ $t('market.owned') }}
+        </v-chip>
+      </div>
     </template>
 
-    <!-- Price column -->
+    <!-- Price column (with live green/red flash on price change) -->
     <template v-slot:[`item.price`]="{ item }">
-      <v-list-item two-line class="px-0" style="min-height: unset">
-        <v-list-item-content class="pa-0">
-          <v-list-item-title style="font-size: 13px; margin-bottom: 0">
-            <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <span v-bind="attrs" v-on="on">{{ formatPrice(item.price) }}</span>
-              </template>
-              ${{ (item.price ?? 0).toFixed(8) }}
-            </v-tooltip>
-          </v-list-item-title>
-          <v-list-item-subtitle v-if="!item.isNative" style="font-size: 10px; opacity: 0.5">
+      <div class="price-flash-wrap">
+        <span
+          v-if="priceFlash[item.unit]"
+          :key="priceFlash[item.unit].seq"
+          aria-hidden="true"
+          class="price-flash-overlay"
+          :class="priceFlash[item.unit].dir === 'up' ? 'market-flash-up' : 'market-flash-down'"
+        ></span>
+        <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <span v-bind="attrs" v-on="on" style="font-size: 13px; white-space: nowrap; position: relative;">{{ formatPrice(item.price) }}</span>
+          </template>
+          <div>${{ (item.price ?? 0).toFixed(8) }}</div>
+          <div v-if="!item.isNative" style="opacity: 0.7">
             {{ (item.priceAda ?? 0).toFixed((item.priceAda ?? 0) < 1 ? 4 : 2) }} {{ nativeSymbol }}
-          </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
+          </div>
+        </v-tooltip>
+      </div>
     </template>
 
     <!-- Change columns -->
@@ -131,6 +133,30 @@
       </span>
     </template>
 
+    <template v-slot:[`item.change30d`]="{ item }">
+      <span :style="{ color: changeColor(item.change30d ?? 0), fontSize: '12px', whiteSpace: 'nowrap' }">
+        <v-avatar tile size="10" class="mr-1">
+          <v-img :src="changeIcon(item.change30d ?? 0)" alt="trend" />
+        </v-avatar>
+        {{ formatChange(item.change30d ?? 0) }}
+      </span>
+    </template>
+
+    <!-- Sparkline column (7D) -->
+    <template v-slot:[`item.sparkline`]="{ item }">
+      <svg v-if="item.sparkline && item.sparkline.length > 1" width="72" height="22" viewBox="0 0 72 22" preserveAspectRatio="none" style="display: block">
+        <polyline
+          :points="sparklinePoints(item.sparkline)"
+          fill="none"
+          :stroke="sparklineColor(item.sparkline)"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+        />
+      </svg>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
     <!-- Volume column -->
     <template v-slot:[`item.volume24h`]="{ item }">
       <v-tooltip top :open-delay="300" content-class="custom-tooltip">
@@ -141,14 +167,47 @@
       </v-tooltip>
     </template>
 
+    <!-- Volume 7D column -->
+    <template v-slot:[`item.volume7d`]="{ item }">
+      <v-tooltip v-if="item.volume7d" top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.volume7d) }}</span>
+        </template>
+        ${{ (item.volume7d ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+      </v-tooltip>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
+    <!-- TXN count (24h) column -->
+    <template v-slot:[`item.txnCount24h`]="{ item }">
+      <span style="font-size: 12px">{{ formatInt(item.txnCount24h) }}</span>
+    </template>
+
+    <!-- Maker count (24h) column -->
+    <template v-slot:[`item.makerCount24h`]="{ item }">
+      <span style="font-size: 12px">{{ formatInt(item.makerCount24h) }}</span>
+    </template>
+
+    <!-- Total Supply column -->
+    <template v-slot:[`item.totalSupply`]="{ item }">
+      <v-tooltip v-if="item.totalSupply != null" top :open-delay="300" content-class="custom-tooltip">
+        <template v-slot:activator="{ on, attrs }">
+          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ formatCompact(item.totalSupply) }}</span>
+        </template>
+        {{ (item.totalSupply ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
+      </v-tooltip>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
+    </template>
+
     <!-- Market Cap column -->
     <template v-slot:[`item.mcap`]="{ item }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+      <v-tooltip v-if="item.mcap != null" top :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on" style="font-size: 12px">${{ formatCompact(item.mcap) }}</span>
         </template>
         ${{ (item.mcap ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
+      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
     </template>
 
     <!-- TVL column -->
@@ -159,23 +218,6 @@
         </template>
         {{ getCurrencySymbol() }}{{ convertFiat(item.tvl).toLocaleString('en-US', { maximumFractionDigits: 0 }) }}
       </v-tooltip>
-      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
-    </template>
-
-    <!-- Holders column -->
-    <template v-slot:[`item.holders`]="{ item }">
-      <span v-if="item.holders != null" style="font-size: 12px">{{ formatCompact(item.holders) }}</span>
-      <span v-else style="font-size: 12px; opacity: 0.4">—</span>
-    </template>
-
-    <!-- Risk Rating column -->
-    <template v-slot:[`item.risk`]="{ item }">
-      <v-avatar size="24" v-if="item.riskRating">
-        <v-img
-          :src="assets.resolveRisk(item.riskRating)"
-          :alt="item.riskRating"
-        />
-      </v-avatar>
       <span v-else style="font-size: 12px; opacity: 0.4">—</span>
     </template>
 
@@ -323,24 +365,6 @@
       </v-tooltip>
     </template>
 
-    <template v-slot:[`header.holders`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
-        </template>
-        {{ $t('market.holdersTooltip') }}
-      </v-tooltip>
-    </template>
-
-    <template v-slot:[`header.risk`]="{ header }">
-      <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on">{{ header.text }}</span>
-        </template>
-        {{ $t('market.riskTooltip') }}
-      </v-tooltip>
-    </template>
-
     <template v-slot:[`header.avgCostBasis`]="{ header }">
       <v-tooltip top :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
@@ -435,11 +459,15 @@ const baseHeaders = computed(() => {
     { text: t('market.change1h'), value: 'change1h', sortable: true, width: '70px' },
     { text: t('market.change24h'), value: 'change24h', sortable: true, width: '70px' },
     { text: t('market.change7d'), value: 'change7d', sortable: true, width: '70px' },
+    { text: t('market.change30d'), value: 'change30d', sortable: true, width: '70px' },
+    { text: t('market.sparkline'), value: 'sparkline', sortable: false, width: '90px' },
     { text: t('market.volume24h'), value: 'volume24h', sortable: true, width: '90px' },
+    { text: t('market.volume7d'), value: 'volume7d', sortable: true, width: '90px' },
+    { text: t('market.txnCount'), value: 'txnCount24h', sortable: true, width: '80px' },
+    { text: t('market.makerCount'), value: 'makerCount24h', sortable: true, width: '80px' },
+    { text: t('market.totalSupply'), value: 'totalSupply', sortable: true, width: '90px' },
     { text: t('market.marketCap'), value: 'mcap', sortable: true, width: '90px' },
-    { text: t('market.tvl'), value: 'tvl', sortable: true, width: '90px' },
-    ...(!props.showHoldingsColumns ? [{ text: t('market.holders'), value: 'holders', sortable: true, width: '80px' }] : []),
-    { text: t('market.risk'), value: 'risk', sortable: true, width: '70px' },
+    { text: t('market.liquidity'), value: 'tvl', sortable: true, width: '90px' },
   ];
 
   // Allocation is toggleable via column preferences (works in both market and holdings views)
@@ -473,7 +501,9 @@ const baseHeaders = computed(() => {
 });
 
 const LOCKED_COLUMNS = ['rank', 'name', 'price', 'watchlist'];
-const HOLDINGS_COLUMNS = ['balance', 'value', 'avgCostBasis', 'totalPnl'];
+// balance + value are core to the holdings view (always shown); avgCostBasis &
+// totalPnl are now user-configurable via column preferences.
+const HOLDINGS_COLUMNS = ['balance', 'value'];
 
 const activeHeaders = computed(() => {
   return baseHeaders.value.filter(header => {
@@ -511,6 +541,36 @@ const paginatedTokens = computed(() => {
   return sortedTokens.value.slice(start, start + itemsPerPage);
 });
 
+// --- Live price-cell flash (green up / red down) — mirrors the market-data
+// website's method. Each 15s price poll replaces props.tokens; any token whose
+// price actually moved gets a one-shot background flash, and a monotonically
+// rising seq re-keys the overlay so the CSS animation replays on every change.
+// New/unseen tokens seed silently (no first-render flash), and a currency-display
+// toggle never flashes because `price` is always the USD base value. ---
+const priceFlash = ref<Record<string, { dir: 'up' | 'down'; seq: number }>>({});
+const prevPrices: Record<string, number> = {};
+let flashSeq = 0;
+
+watch(
+  () => props.tokens,
+  (tokens) => {
+    let changed = false;
+    const next = { ...priceFlash.value };
+    for (const tk of tokens) {
+      const price = tk.price;
+      if (typeof price !== 'number' || !Number.isFinite(price)) continue;
+      const prev = prevPrices[tk.unit];
+      if (prev !== undefined && price !== prev) {
+        flashSeq += 1;
+        next[tk.unit] = { dir: price > prev ? 'up' : 'down', seq: flashSeq };
+        changed = true;
+      }
+      prevPrices[tk.unit] = price;
+    }
+    if (changed) priceFlash.value = next;
+  },
+);
+
 function handleRowClick(item: MarketToken) {
   emit('token-click', item);
 }
@@ -524,7 +584,32 @@ function handleImgError(e: Event) {
   if (target) target.style.display = 'none';
 }
 
-import { formatPrice, formatCompact, formatBalance, formatChange, changeColor } from '@/modules/market/utils/formatters';
+import { formatPrice, formatCompact, formatBalance, formatChange, changeColor, formatInt } from '@/modules/market/utils/formatters';
+
+/** Build an SVG polyline points string scaled to a 72x22 viewbox from a price series */
+function sparklinePoints(series: number[]): string {
+  if (!series || series.length < 2) return '';
+  const w = 72;
+  const h = 22;
+  const pad = 2;
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const range = max - min || 1;
+  const stepX = (w - pad * 2) / (series.length - 1);
+  return series
+    .map((v, i) => {
+      const x = pad + i * stepX;
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+/** Green if the series ends up vs starts, red if down */
+function sparklineColor(series: number[]): string {
+  if (!series || series.length < 2) return '#A3A3A3';
+  return series[series.length - 1] >= series[0] ? '#47CD89' : '#F97066';
+}
 
 function changeIcon(change: number): string {
   if (change === 0) return assets.arrowRightSvg;
@@ -540,13 +625,6 @@ function rowClass(item: MarketToken): string {
   return item.isNative ? 'native-token-row' : '';
 }
 
-// Risk rating sort weight: AAA (highest/safest) → D (lowest/riskiest)
-const RISK_WEIGHT: Record<string, number> = {
-  'AAA': 10, 'AA': 9, 'A': 8,
-  'BBB': 7, 'BB': 6, 'B': 5,
-  'CCC': 4, 'CC': 3, 'C': 2, 'D': 1,
-};
-
 // Pin native token (ADA) to the top regardless of sort column
 function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: boolean[]): MarketToken[] {
   const sortKey = sortByArr[0];
@@ -556,10 +634,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   const rest = [...items.filter(i => !i.isNative)];
 
   if (sortKey) {
-    // Remap header value to data field name where they differ
-    const effectiveSortKey = sortKey === 'risk' ? 'riskRating' : sortKey;
-
-    const key = effectiveSortKey as keyof MarketToken;
+    const key = sortKey as keyof MarketToken;
     rest.sort((a: MarketToken, b: MarketToken) => {
       const va = a[key];
       const vb = b[key];
@@ -567,12 +642,6 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
-      // Risk rating: use weight map for correct ordering (AAA > AA > A > BBB > ...)
-      if (key === 'riskRating') {
-        const wa = RISK_WEIGHT[va as string] ?? 0;
-        const wb = RISK_WEIGHT[vb as string] ?? 0;
-        return desc ? wb - wa : wa - wb;
-      }
       if (typeof va === 'string' && typeof vb === 'string') {
         return desc ? vb.localeCompare(va) : va.localeCompare(vb);
       }
@@ -605,8 +674,56 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 }
 
 .market-token-table >>> td {
-  padding-top: 4px !important;
-  padding-bottom: 4px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  height: 40px !important;
+}
+
+.market-token-table >>> tbody tr td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Name cell — single-line, compact */
+.name-cell {
+  min-height: unset;
+}
+
+.name-cell .token-avatar {
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+/* Live price-cell flash (green up / red down) — same effect as the market-data
+   website: a 0.9s background fade behind the price on each price change. */
+.price-flash-wrap {
+  position: relative;
+  display: inline-block;
+}
+.price-flash-overlay {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: -8px;
+  right: -8px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+@keyframes market-flash-up {
+  0% { background-color: rgba(38, 194, 129, 0.16); }
+  100% { background-color: transparent; }
+}
+@keyframes market-flash-down {
+  0% { background-color: rgba(246, 70, 93, 0.16); }
+  100% { background-color: transparent; }
+}
+.market-flash-up { animation: market-flash-up 0.9s ease; }
+.market-flash-down { animation: market-flash-down 0.9s ease; }
+
+.name-cell .token-ticker {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
 }
 
 /* Allocation progress bar */

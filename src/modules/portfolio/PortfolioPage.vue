@@ -61,9 +61,9 @@
         <v-col cols="12" class="pa-2">
           <v-card flat class="liquid-glass holdings-table-card">
             <!-- Filter chips + search + filter menu — single row -->
-            <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
+            <div class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
-              <div ref="chipBarRef" class="filter-chip-bar d-flex align-center" style="gap: 4px; overflow-x: auto; flex: 1; min-width: 0;">
+              <div ref="chipBarRef" class="filter-chip-bar d-flex align-center flex-shrink-0" style="gap: 4px; overflow-x: auto; min-width: 0;">
                 <v-tooltip v-for="chip in filterChips" :key="chip.value" bottom :disabled="!compactChips">
                   <template v-slot:activator="{ on, attrs }">
                     <v-chip
@@ -83,6 +83,20 @@
                   <span>{{ chip.label }}</span>
                 </v-tooltip>
               </div>
+
+              <!-- Visible search bar (primary) — sits left, right after the chips -->
+              <v-text-field
+                v-model="searchQuery"
+                :placeholder="activeView === 'collectibles'
+                  ? $t('assets.searchCollections')
+                  : $t('market.searchPlaceholder')"
+                prepend-inner-icon="mdi-magnify"
+                dense flat solo rounded hide-details clearable
+                background-color="rgba(255,255,255,0.04)"
+                class="header-search"
+              />
+
+              <v-spacer />
 
               <!-- NFT view toggle (only in collectibles mode) -->
               <div v-if="activeView === 'collectibles'" class="d-flex align-center flex-shrink-0" style="gap: 2px;">
@@ -105,7 +119,7 @@
                 <span>{{ marketWsConnected ? $t('market.liveUpdates') : $t('market.connecting') }}</span>
               </v-tooltip>
 
-              <!-- Unified filter menu (search + filters + columns) -->
+              <!-- Unified filter menu (filters + columns) -->
               <v-menu
                 v-model="filterMenuOpen"
                 offset-y
@@ -118,29 +132,12 @@
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :value="!!searchQuery || !verifiedOnly || !hideScam || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                    <v-badge :value="!verifiedOnly || !hideScam || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
                       <v-icon small>mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
                 </template>
                 <v-card flat class="liquid-glass-dialog">
-                  <!-- Search -->
-                  <div class="px-3 pt-3 pb-1">
-                    <v-text-field
-                      ref="searchFieldRef"
-                      v-model="searchQuery"
-                      :placeholder="activeView === 'collectibles'
-                        ? $t('assets.searchCollections')
-                        : $t('market.searchPlaceholder')"
-                      prepend-inner-icon="mdi-magnify"
-                      dense
-                      flat
-                      hide-details
-                      clearable
-                      class="filter-panel-search"
-                    />
-                  </div>
-
                   <!-- Filters -->
                   <v-list dense class="transparent pa-0">
                     <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
@@ -158,6 +155,17 @@
                         </v-icon>
                       </v-list-item-action>
                       <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
+                    </v-list-item>
+                    <!-- Graduated snek.fun tokens: show inline in the market list (like verified-only) -->
+                    <v-list-item v-if="activeView !== 'collectibles'" @click="showSnekfun = !showSnekfun">
+                      <v-list-item-action class="mr-2">
+                        <v-icon small :color="showSnekfun ? 'primary' : ''">
+                          {{ showSnekfun ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                        </v-icon>
+                      </v-list-item-action>
+                      <v-list-item-title style="font-size: 13px;">
+                        <v-icon x-small color="#A3E635" class="mr-1">mdi-snake</v-icon>{{ $t('market.snekfun') }}
+                      </v-list-item-title>
                     </v-list-item>
 
                     <!-- Column preferences (Cardano only) -->
@@ -188,6 +196,13 @@
                 </v-card>
               </v-menu>
             </div>
+
+            <!-- Market overview stat bar (market view only) -->
+            <MarketStatBar
+              v-if="activeView === 'market' && isMainnetCardano && marketStatTokens.length"
+              :tokens="marketStatTokens"
+              @token-click="openTokenByUnit"
+            />
 
             <!-- Token table (all views except collectibles) -->
             <MarketTokenTable
@@ -271,6 +286,7 @@ import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
 import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransactionsCard.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
+import MarketStatBar from '@/modules/market/components/MarketStatBar.vue';
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import NftCollectionTable from '@/modules/market/components/NftCollectionTable.vue';
@@ -289,6 +305,7 @@ const instance = getCurrentInstance();
 const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
 const {
   allTokens,
+  snekTokens,
   loading: marketLoading,
   wsConnected: marketWsConnected,
 } = useMarketData();
@@ -298,16 +315,31 @@ const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
 const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
 const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
 
-const columnOptions: { key: ColumnKey; label: string }[] = [
-  { key: 'change1h', label: t('market.change1h') },
-  { key: 'change24h', label: t('market.change24h') },
-  { key: 'change7d', label: t('market.change7d') },
-  { key: 'volume24h', label: t('market.volume24h') },
-  { key: 'mcap', label: t('market.marketCap') },
-  { key: 'tvl', label: t('market.tvl') },
-  { key: 'risk', label: t('market.risk') },
-  { key: 'allocation', label: t('common.allocation') },
-];
+const columnOptions = computed<{ key: ColumnKey; label: string }[]>(() => {
+  const opts: { key: ColumnKey; label: string }[] = [
+    { key: 'change1h', label: t('market.change1h') },
+    { key: 'change24h', label: t('market.change24h') },
+    { key: 'change7d', label: t('market.change7d') },
+    { key: 'change30d', label: t('market.change30d') },
+    { key: 'sparkline', label: t('market.sparkline') },
+    { key: 'volume24h', label: t('market.volume24h') },
+    { key: 'volume7d', label: t('market.volume7d') },
+    { key: 'txnCount24h', label: t('market.txnCount') },
+    { key: 'makerCount24h', label: t('market.makerCount') },
+    { key: 'totalSupply', label: t('market.totalSupply') },
+    { key: 'mcap', label: t('market.marketCap') },
+    { key: 'tvl', label: t('market.liquidity') },
+    { key: 'allocation', label: t('common.allocation') },
+  ];
+  // Avg cost + P&L only apply to the holdings view (per-holding metrics).
+  if (activeView.value === 'holdings') {
+    opts.push(
+      { key: 'avgCostBasis', label: t('market.avgCost') },
+      { key: 'totalPnl', label: t('market.totalPnl') },
+    );
+  }
+  return opts;
+});
 
 const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
 const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGero, closeDelegateDialog } = useDelegation();
@@ -337,7 +369,7 @@ const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
 
-type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist';
+type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist' | 'snekfun';
 const activeView = ref<ViewMode>('holdings');
 
 // Compact chip mode — collapse labels to icons when space is tight
@@ -357,9 +389,10 @@ function setActiveView(view: ViewMode) {
 
 const searchQuery = ref('');
 const filterMenuOpen = ref(false);
-const searchFieldRef = ref<HTMLElement | null>(null);
 const verifiedOnly = ref(true);
 const hideScam = ref(true);
+// Graduated snek.fun tokens shown inline in the market list (toggle, default on)
+const showSnekfun = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
 const nftDialogData = ref<Record<string, unknown> | null>(null);
 const selectedToken = ref<MarketToken | null>(null);
@@ -544,12 +577,17 @@ const myHoldings = computed<MarketToken[]>(() => {
       change1h: marketToken?.change1h || 0,
       change24h: marketToken?.change24h || 0,
       change7d: marketToken?.change7d || 0,
+      change30d: marketToken?.change30d || 0,
       volume24h: marketToken?.volume24h || 0,
-      mcap: marketToken?.mcap || dhToken?.mcap || 0,
+      volume7d: marketToken?.volume7d || 0,
+      txnCount24h: marketToken?.txnCount24h ?? null,
+      makerCount24h: marketToken?.makerCount24h ?? null,
+      totalSupply: marketToken?.totalSupply ?? null,
+      sparkline: marketToken?.sparkline ?? [],
+      mcap: marketToken?.mcap ?? null,
       tvl: marketToken?.tvl || null,
       liquidity: marketToken?.liquidity || 0,
-      holders: marketToken?.holders || dhToken?.holders || 0,
-      riskRating: marketToken?.riskRating || null,
+      holders: marketToken?.holders ?? dhToken?.holders ?? null,
       isNew: false,
       policyLocked: true,
       fingerprint: marketToken?.fingerprint || dhToken?.fingerprint || '',
@@ -594,6 +632,9 @@ const filterChips = computed(() => {
 
 const watchlistedTokens = computed(() => allTokens.value.filter(tok => isWatched(tok.unit)));
 
+// Market overview stat bar: aggregate over all listed (non-native) market tokens
+const marketStatTokens = computed(() => allTokens.value.filter(t => !t.isNative));
+
 // ── Computed: Unified displayed tokens ────────────────────────────────────────
 
 const displayedTokens = computed(() => {
@@ -605,9 +646,22 @@ const displayedTokens = computed(() => {
       break;
     case 'market':
       tokens = allTokens.value.filter(t => !t.isNative);
+      // Graduated snek.fun tokens already live in the main list (rich data, flagged
+      // isSnekFun); snekTokens adds the remaining bonding-curve tokens. The snek.fun
+      // toggle (default on) controls visibility of ALL snek-origin tokens.
+      if (showSnekfun.value) {
+        tokens = [...tokens, ...snekTokens.value];
+      } else {
+        tokens = tokens.filter(t => !t.isSnekFun);
+      }
       break;
     case 'watchlist':
       tokens = watchlistedTokens.value;
+      break;
+    case 'snekfun':
+      // All snek.fun-origin tokens: graduated ones from the main list (rich data) +
+      // pre-graduation bonding-curve ones from the snek feed.
+      tokens = [...allTokens.value.filter(t => t.isSnekFun && !t.isNative), ...snekTokens.value];
       break;
     case 'collectibles':
       // Collectibles use NftCollectionTable, not MarketTokenTable
@@ -627,18 +681,26 @@ const displayedTokens = computed(() => {
     );
   }
 
-  // Apply verified filter
-  if (verifiedOnly.value) {
-    tokens = tokens.filter(tok => tok.verified);
+  // Apply verified / scam filters — but NEVER strip snek.fun tokens (bonding-curve
+  // tokens are inherently unverified) or apply these on the snek.fun tab itself.
+  // TODO(product): hideScam is verified-only after Xerberus removal.
+  if (activeView.value !== 'snekfun') {
+    if (verifiedOnly.value) {
+      tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
+    }
+    if (hideScam.value) {
+      tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
+    }
   }
 
-  // Apply scam filter
-  if (hideScam.value) {
-    tokens = tokens.filter(tok => {
-      if (!tok.verified && tok.riskRating && ['C', 'D'].includes(tok.riskRating)) return false;
-      return true;
-    });
-  }
+  // Dedupe by unit — a token can appear in both the registered market list and the
+  // snek.fun feed (and the snek feed can list the same token more than once).
+  const seen = new Set<string>();
+  tokens = tokens.filter(t => {
+    if (seen.has(t.unit)) return false;
+    seen.add(t.unit);
+    return true;
+  });
 
   return tokens;
 });
@@ -758,25 +820,16 @@ onMounted(() => {
 
   // Watch chip bar width — go compact when content would overflow
   if (chipBarRef.value) {
-    // Capture the full (expanded) scroll width on mount before any compaction
-    let expandedScrollWidth = chipBarRef.value.scrollWidth;
-
+    // Compact chips to icons ONLY when the toolbar is genuinely narrow. Observe
+    // the toolbar (the chip bar's parent) against a fixed threshold — measuring
+    // the chip bar's own width was self-referential: it collapses when compact,
+    // so it could never re-expand and got stuck in icon mode at fine resolutions.
+    const COMPACT_BELOW = 560; // px — show full chip labels at/above this width
+    const target = chipBarRef.value.parentElement ?? chipBarRef.value;
     chipBarObserver = new ResizeObserver(([entry]) => {
-      const availableWidth = entry.contentRect.width;
-      if (!compactChips.value) {
-        // Currently expanded — record the full content width and check overflow
-        expandedScrollWidth = chipBarRef.value?.scrollWidth ?? expandedScrollWidth;
-        if (expandedScrollWidth > availableWidth) {
-          compactChips.value = true;
-        }
-      } else {
-        // Currently compact — expand only if the cached full width fits
-        if (expandedScrollWidth <= availableWidth) {
-          compactChips.value = false;
-        }
-      }
+      compactChips.value = entry.contentRect.width < COMPACT_BELOW;
     });
-    chipBarObserver.observe(chipBarRef.value);
+    chipBarObserver.observe(target);
   }
 });
 
@@ -874,6 +927,58 @@ watch(
 .filter-chip-bar .v-chip {
   flex-shrink: 0;
   cursor: pointer;
+  height: 28px !important;
+}
+
+/* ── Visible header search ────────────────────────────────────────────────────── */
+
+.header-search {
+  flex: 1 1 auto;
+  min-width: 220px;   /* enough for the full "Search tokens by name" placeholder */
+  max-width: 440px;
+}
+
+/* A Vuetify solo field defaults to ~48px via .v-input__control — override both
+   the control and the slot so the field height matches the 34px chips. */
+.header-search ::v-deep .v-input__control,
+.header-search ::v-deep .v-input__slot {
+  min-height: 28px !important;
+  height: 28px !important;
+}
+
+.header-search ::v-deep .v-input__slot {
+  border-radius: 8px !important;
+  padding: 0 12px !important;
+}
+
+.header-search ::v-deep input {
+  font-size: 12px;
+}
+
+.header-search ::v-deep input::placeholder {
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.header-search ::v-deep .v-input__prepend-inner {
+  margin-top: 0 !important;
+  align-self: center;
+}
+
+.header-search ::v-deep .v-input__prepend-inner .v-icon {
+  font-size: 18px;
+  opacity: 0.55;
+}
+
+.header-search ::v-deep .v-input__icon--clear .v-icon {
+  font-size: 16px;
+}
+
+/* On narrow widths let the search shrink rather than force a fixed tiny width */
+@media (max-width: 600px) {
+  .header-search {
+    min-width: 130px;
+  }
 }
 
 /* ── Holdings mode toggle ─────────────────────────────────────────────────── */

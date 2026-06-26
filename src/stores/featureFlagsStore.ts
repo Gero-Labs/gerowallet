@@ -135,14 +135,16 @@ export const featureFlagsStore = {
    * Check if GoMining integration is enabled
    */
   isGoMiningEnabled(): boolean {
-    return featureFlagsState.flags.isGoMiningEnabled;
+    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
+    return false;
   },
 
   /**
    * Check if Pool Operator dashboard is enabled
    */
   isPoolOperatorEnabled(): boolean {
-    return featureFlagsState.flags.isPoolOperatorEnabled;
+    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
+    return false;
   },
 
   /**
