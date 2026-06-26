@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { strikeUserApi } from '@/api/strike-v2.user';
+import { hasStrikeApiKeys } from '@/api/strike-v2.client';
 import type {
   WithdrawQuoteResponse,
   TransactionStatusResponse,
@@ -96,8 +97,11 @@ function getActiveStakeAddress(): string | null {
  * @param message  Plain UTF-8 message returned by the validator.
  * @param password Spending password (empty string for HW / PRF wallets — the
  *                 background path will use the appropriate auth flow).
+ * @param pkBytes  Pre-decrypted root key bytes for PRF (passkey) wallets,
+ *                 obtained from PassKeyAuthButton. When present these are sent
+ *                 as privateKeyBytes and the password is ignored.
  */
-async function signCip8(message: string, password: string): Promise<string> {
+async function signCip8(message: string, password: string, pkBytes?: Uint8Array): Promise<string> {
   const stakeAddress = getActiveStakeAddress();
   if (!stakeAddress) {
     throw new Error('No active wallet — cannot sign withdrawal message.');
@@ -110,7 +114,9 @@ async function signCip8(message: string, password: string): Promise<string> {
     data: {
       address: stakeAddress,
       payload: payloadHex,
-      password,
+      // PRF wallets pass the pre-decrypted root key bytes instead of a password.
+      password: pkBytes ? '' : password,
+      ...(pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
       accountIndex: 0,
       isUsb: false,
     },
@@ -122,10 +128,13 @@ async function signCip8(message: string, password: string): Promise<string> {
   if (res?.data?.error) {
     throw new Error(res.data.error);
   }
-  if (!res?.data?.signature) {
+  if (!res?.data?.signature || !res?.data?.key) {
     throw new Error('Wallet returned no signature');
   }
-  return res.data.signature;
+  // Strike expects the Cardano signature as the CIP-30 COSE pair joined by a
+  // colon: `${coseSign1Hex}:${coseKeyHex}` (per the Strike builder reference —
+  // strike-builder-reference/src/api/withdraw.ts + strike-finance-skills).
+  return `${res.data.signature}:${res.data.key}`;
 }
 
 async function pollSettlement(reqId: string, generation: number): Promise<void> {
@@ -185,6 +194,14 @@ export function useStrikeWithdraw() {
     requestId.value = null;
     status.value = 'quoting';
 
+    // Authenticated endpoint — guard against an unauthenticated 401 when no
+    // API-wallet key is loaded.
+    if (!hasStrikeApiKeys()) {
+      error.value = 'Connect to Strike first — open the Vaults tab and tap "Connect to Strike".';
+      status.value = 'error';
+      return;
+    }
+
     try {
       const recipient = walletStore.loggedWallet?.baseAddress ?? '';
       if (!recipient) {
@@ -198,7 +215,6 @@ export function useStrikeWithdraw() {
       const raw = await strikeUserApi.getWithdrawQuote({
         usd_value: amountUsd,
         blockchain: 'cardano',
-        recipient_address: recipient,
         asset,
       }) as WithdrawQuoteResponse & {
         fee?: string;
@@ -225,7 +241,7 @@ export function useStrikeWithdraw() {
    * Step 2 — sign the quote message and submit. Drives status through
    * `signing → submitting → pending → settled`.
    */
-  async function signAndSubmit(password: string): Promise<boolean> {
+  async function signAndSubmit(password: string, pkBytes?: Uint8Array): Promise<boolean> {
     if (!quote.value) {
       error.value = 'No active withdrawal quote.';
       status.value = 'error';
@@ -239,7 +255,7 @@ export function useStrikeWithdraw() {
 
     try {
       status.value = 'signing';
-      const walletSignature = await signCip8(quote.value.message_to_sign, password);
+      const walletSignature = await signCip8(quote.value.message_to_sign, password, pkBytes);
 
       status.value = 'submitting';
       const submitRes = await strikeUserApi.executeWithdraw(

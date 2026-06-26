@@ -8,6 +8,7 @@ import {
 } from '@/api/nexus-tx-api';
 import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 import { strikeUserApi } from '@/api/strike-v2.user';
+import { hasStrikeApiKeys } from '@/api/strike-v2.client';
 import type {
   DepositQuoteResponse,
   TransactionStatusResponse,
@@ -150,6 +151,14 @@ export function useStrikeDeposit() {
     requestId.value = null;
     status.value = 'quoting';
 
+    // Authenticated endpoint — without a loaded API-wallet key this would be sent
+    // unauthenticated and 401. Surface a clear prompt instead of a silent failure.
+    if (!hasStrikeApiKeys()) {
+      error.value = 'Connect to Strike first — open the Vaults tab and tap "Connect to Strike".';
+      status.value = 'error';
+      return;
+    }
+
     const numeric = typeof amountAda === 'string' ? parseFloat(amountAda) : amountAda;
     if (!numeric || isNaN(numeric) || numeric <= 0) {
       error.value = 'Invalid deposit amount.';
@@ -205,6 +214,10 @@ export function useStrikeDeposit() {
     password: string,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _vaultId?: string,
+    // Pre-decrypted root key bytes for PRF (passkey) wallets, obtained from
+    // PassKeyAuthButton. When present we skip password verification and pass
+    // these as privateKeyBytes to SIGN_TX (mirrors useTransactionSigning).
+    pkBytes?: Uint8Array,
   ): Promise<boolean> {
     if (!quote.value || !requestId.value) {
       error.value = 'No active deposit quote. Call requestQuote() first.';
@@ -245,21 +258,26 @@ export function useStrikeDeposit() {
       const txCore = transaction.toCore();
       const txCbor = serializeCardanoJsSdkTx(txCore);
 
-      // ── 2. Sign via background. Password-only for now — hardware wallets
-      // and Keystone require an interactive UI flow that's out of scope for
-      // this composable; the Send dialog handles those paths. ──
+      // ── 2. Sign via background. Hardware wallets and Keystone require an
+      // interactive UI flow that's out of scope for this composable; the Send
+      // dialog handles those paths. PRF (passkey) wallets pass pre-decrypted
+      // root key bytes and skip password verification (mirrors
+      // useTransactionSigning); password wallets verify then sign. ──
       status.value = 'signing';
-      if (!password) {
-        throw new Error(
-          'Spending password is required for Strike deposits from this flow.',
-        );
-      }
-      const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password },
-      })) as BackgroundResponse<VerifyPasswordResponse>;
-      if (!passwordVerification.data.success) {
-        throw new Error('Incorrect spending password.');
+      const isPrf = !!pkBytes;
+      if (!isPrf) {
+        if (!password) {
+          throw new Error(
+            'Spending password is required for Strike deposits from this flow.',
+          );
+        }
+        const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+          data: { password },
+        })) as BackgroundResponse<VerifyPasswordResponse>;
+        if (!passwordVerification.data.success) {
+          throw new Error('Incorrect spending password.');
+        }
       }
 
       const signResult = (await Messaging.sendToBackgroundFromOptions({
@@ -267,7 +285,8 @@ export function useStrikeDeposit() {
         data: {
           txCbor,
           partialSign: false,
-          password,
+          password: isPrf ? '' : password,
+          ...(isPrf && pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
           accountIndex: 0,
           utxos,
           addresses: keys,

@@ -60,36 +60,47 @@
         </div>
       </div>
 
-      <!-- Spending password (required to encrypt/decrypt the Strike key) -->
-      <v-text-field
-        v-if="!isConnected"
-        v-model="password"
-        :type="showPassword ? 'text' : 'password'"
-        :label="$t('perpetuals.spendingPassword')"
-        :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        outlined
-        dense
-        hide-details
-        autocomplete="current-password"
-        class="password-field"
-        :disabled="isLoading"
-        @click:append="showPassword = !showPassword"
-        @keyup.enter="onSubmit()"
-      />
+      <!-- PRF (passkey) wallet: authenticate with PassKey instead of password -->
+      <template v-if="!isConnected && isPrfWallet">
+        <PassKeyAuthButton
+          :disabled="isLoading"
+          :text="needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta')"
+          @success="onPassKeySuccess"
+          @error="onPassKeyError"
+        />
+      </template>
 
-      <!-- Action button: Unlock if encrypted blob exists, otherwise Connect -->
-      <v-btn
-        v-if="!isConnected"
-        block
-        depressed
-        :loading="isLoading"
-        :disabled="!password"
-        class="connect-btn"
-        @click="onSubmit()"
-      >
-        <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-link-variant' }}</v-icon>
-        {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta') }}
-      </v-btn>
+      <!-- Password wallet: spending password field + action button -->
+      <template v-else-if="!isConnected">
+        <!-- Spending password (required to encrypt/decrypt the Strike key) -->
+        <v-text-field
+          v-model="password"
+          :type="showPassword ? 'text' : 'password'"
+          :label="$t('perpetuals.spendingPassword')"
+          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+          outlined
+          dense
+          hide-details
+          autocomplete="current-password"
+          class="password-field"
+          :disabled="isLoading"
+          @click:append="showPassword = !showPassword"
+          @keyup.enter="onSubmit()"
+        />
+
+        <!-- Action button: Unlock if encrypted blob exists, otherwise Connect -->
+        <v-btn
+          block
+          depressed
+          :loading="isLoading"
+          :disabled="!password"
+          class="connect-btn"
+          @click="onSubmit()"
+        >
+          <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-link-variant' }}</v-icon>
+          {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta') }}
+        </v-btn>
+      </template>
 
       <template v-else>
         <div class="connected-state">
@@ -114,6 +125,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import snackbar from '@/plugins/snackbar';
 import i18n from '@/plugins/i18n';
 
 const emit = defineEmits<{
@@ -125,6 +138,7 @@ const t = (key: string): string => i18n.t(key) as string;
 const {
   isConnected,
   needsUnlock,
+  isPrfWallet,
   isLoading,
   publicKey,
   error,
@@ -170,6 +184,26 @@ async function onSubmit() {
     ? await unlock(password.value)
     : await connectWithWallet(password.value);
   if (ok) password.value = '';
+}
+
+/**
+ * PRF (passkey) wallets: PassKeyAuthButton has decrypted the wallet's root
+ * private key and handed us the bytes. For connect we pass these to
+ * connectWithWallet so the builder message is signed via SIGN_DATA's
+ * privateKeyBytes path. For unlock we don't need the root key — unlock()
+ * decrypts the stored Strike blob via its own passkey prompt — so we call it
+ * with an empty password.
+ */
+async function onPassKeySuccess(pkBytes: Uint8Array) {
+  if (needsUnlock.value) {
+    await unlock('');
+  } else {
+    await connectWithWallet('', pkBytes);
+  }
+}
+
+function onPassKeyError(err: Error) {
+  snackbar.setError(err?.message || t('security.passKeyAuthFailed'));
 }
 
 async function onDisconnect() {
