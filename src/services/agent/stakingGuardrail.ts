@@ -12,7 +12,7 @@ export interface DelegateExpectation { ownAddresses: string[]; targetPoolId: str
 export interface WithdrawExpectation { ownAddresses: string[]; stakeAddress: string; withdrawableAmount: bigint; maxFeeLovelace: bigint }
 export interface StakeVerdict { ok: boolean; reasons: string[] }
 
-const DELEG_KINDS = new Set(['StakeDelegation', 'StakeVoteDelegation', 'StakeVoteRegistrationDelegation', 'StakeRegistrationDelegation']);
+const DELEG_KINDS = new Set(['StakeDelegation', 'StakeVoteDelegation', 'StakeVoteRegistrationDelegation', 'StakeRegistrationDelegation', 'VoteDelegation', 'VoteRegistrationDelegation']);
 
 function foreignLovelace(tx: DecodedStakeTx, own: Set<string>): { ada: bigint; tokens: boolean } {
   let ada = 0n;
