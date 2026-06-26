@@ -4,8 +4,8 @@ import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
 import apexPrimeSvg from '@/assets/svg/apex_prime.svg';
 import apexVectorSvg from '@/assets/svg/apex_vector.svg';
-import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 import midnightLogo from '@/assets/svg/midnight.svg';
+import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 
 export interface NetworkInfo {
   icon: string;
@@ -297,6 +297,12 @@ export default {
         networkMagic: 764824073  // Apex Vector cardano-node shelley/byron genesis (RequiresNoMagic)
       }
     },
+    // Bitcoin networks removed for 2.7 (HIDE+GATE master switch).
+    // Removing the Bitcoin entries makes every resolve*Support() helper
+    // (gomining/babylon/ordinals/thorchain/mempool/lightning) return false,
+    // which cascades to nav, dialogs, dApp surfaces, and route guards.
+    // Bitcoin code remains in-repo; only user access is severed here.
+    /* BITCOIN_REMOVED_2_7
     // Bitcoin Mainnet
     {
       icon: bitcoinLogo,
@@ -396,6 +402,7 @@ export default {
         networkMagic: 0x0709110B  // Bitcoin testnet magic bytes
       }
     },
+    BITCOIN_REMOVED_2_7 */
     // Midnight — coming soon
     ...([
       { title: 'Midnight Mainnet', network: Network.MAINNET, networkId: 1 },
@@ -450,6 +457,56 @@ export default {
         networkMagic: 0
       }
     })) as NetworkInfo[]),
+    // Bitcoin — coming soon (HIDE+GATE teaser only: all features off, not selectable)
+    {
+      icon: bitcoinLogo,
+      iconColor: 'orange',
+      title: 'Bitcoin Mainnet',
+      blockchain: Blockchain.BITCOIN,
+      network: Network.MAINNET,
+      comingSoon: true,
+      supportedHardware: false,
+      networkId: 1,
+      currencySymbol: 'BTC',
+      currencyTicker: 'BTC',
+      currencyName: 'Bitcoin',
+      currencyDescription: 'Bitcoin',
+      currencyImage: bitcoinLogo,
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.UNDEFINED,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: false,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
+      networkParams: {
+        networkMagic: 0
+      }
+    } as NetworkInfo,
   ]  as NetworkInfo[],
   resolveNetwork(chain: string, network: string): NetworkInfo {
     return this.networks.find(element => element.blockchain === chain && element.network === network);

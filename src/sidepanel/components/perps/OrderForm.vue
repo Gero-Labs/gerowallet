@@ -189,8 +189,25 @@
       </div>
     </transition>
 
+    <!-- Connect gate: not connected → primary CTA becomes "Connect to Strike"
+         and opens the inline connect/unlock flow instead of placing an order. -->
+    <template v-if="!isConnected">
+      <v-btn
+        v-if="!showConnect"
+        block
+        depressed
+        class="place-order-btn place-order-btn--connect"
+        @click="showConnect = true"
+      >
+        <v-icon size="14" class="mr-1">mdi-link-variant</v-icon>
+        {{ $t('perps.connect.submitCta') }}
+      </v-btn>
+      <StrikeOnboarding v-else @connected="onConnected" />
+    </template>
+
     <!-- Place Order Button -->
     <v-btn
+      v-else
       block
       depressed
       :loading="submitting"
@@ -239,8 +256,10 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { useChainContext } from '../../composables/useChainContext';
 import { strikeMarketApi } from '@/api/strike-v2.market';
+import StrikeOnboarding from './StrikeOnboarding.vue';
 import {
   calcLiquidationPriceIsolated,
   calcVwapMarketFill,
@@ -248,7 +267,8 @@ import {
   normalizeMarginTiers,
 } from '@/modules/market/math';
 import type {
-  CreateOrderRequest, OrderType, OrderSide, StrikeMarketConfig, MarginTierNumeric,
+  CreateOrderRequest, CreateStrategyOrderRequest, OrderType, OrderSide,
+  StrikeMarketConfig, MarginTierNumeric,
 } from '@/api/strike-v2.types';
 
 const { themeColors } = useChainContext();
@@ -266,6 +286,15 @@ const emit = defineEmits<{
 // ── Composables ──────────────────────────────────────────────────────────────
 const { placeOrder, setLeverage, availableBalance, account } = useStrikeTrading();
 const { getSymbolInfo, getTicker } = useStrikeMarket();
+
+// When not connected, the primary CTA reveals the inline connect/unlock flow
+// instead of attempting an (unauthenticated, 401-bound) order.
+const { isConnected } = useStrikeOnboarding();
+const showConnect = ref(false);
+
+function onConnected() {
+  showConnect.value = false;
+}
 
 // ── Market config (margin tiers, tick size) — fetched once per session ──────
 const marketConfig = ref<StrikeMarketConfig | null>(null);
@@ -343,11 +372,10 @@ const symbolInfo = computed(() => getSymbolInfo(props.symbol));
 const baseAsset = computed(() => symbolInfo.value?.baseAsset ?? props.symbol.replace('USDT', ''));
 
 const estimatedMargin = computed(() => {
-  const s = parseFloat(size.value);
-  if (!s || s <= 0) return '—';
-  const p = parseFloat(price.value) || 1;
-  const notional = orderType.value === 'market' ? s : s * p;
-  return (notional / localLeverage.value).toFixed(2);
+  // Mirror the dashboard form: collateral = notional / leverage, where notional
+  // is always size * entry price (VWAP for market, limit/ref price otherwise).
+  if (requiredMargin.value <= 0) return '—';
+  return requiredMargin.value.toFixed(2);
 });
 
 const canSubmit = computed(() => {
@@ -485,7 +513,7 @@ async function handleSubmit() {
   if (!canSubmit.value || submitting.value) return;
   submitting.value = true;
   try {
-    const req: CreateOrderRequest & { takeProfitPrice?: string; stopLossPrice?: string } = {
+    const base: CreateOrderRequest = {
       symbol: props.symbol,
       side: side.value as OrderSide,
       type: orderType.value,
@@ -494,9 +522,35 @@ async function handleSubmit() {
       ...(showTriggerInput.value && stopPrice.value ? { stop_price: stopPrice.value } : {}),
       reduce_only: reduceOnly.value,
       post_only: postOnly.value,
-      ...(tpPrice.value ? { takeProfitPrice: tpPrice.value } : {}),
-      ...(slPrice.value ? { stopLossPrice: slPrice.value } : {}),
     };
+
+    // Carry TP/SL as spec-correct singular strategy legs (tp_order / sl_order),
+    // mirroring the dashboard PerpsOrderForm. placeOrder() routes any request
+    // with a strategy_id to the createStrategyOrder endpoint.
+    const hasTpSl = !!tpPrice.value || !!slPrice.value;
+    let req: CreateOrderRequest = base;
+    if (hasTpSl) {
+      const strategy: CreateStrategyOrderRequest = {
+        ...base,
+        strategy_id: crypto.randomUUID(),
+      };
+      if (tpPrice.value) {
+        strategy.tp_order = {
+          type: 'take_profit',
+          size: size.value,
+          stop_price: tpPrice.value,
+        };
+      }
+      if (slPrice.value) {
+        strategy.sl_order = {
+          type: 'stop',
+          size: size.value,
+          stop_price: slPrice.value,
+        };
+      }
+      req = strategy;
+    }
+
     const result = await placeOrder(req);
     if (result) emit('order-placed');
   } finally {
@@ -519,7 +573,8 @@ watch(() => props.symbol, () => {
 
 watch(() => account.value, (acc) => {
   if (!acc) return;
-  const setting = acc.symbol_settings?.find((s) => s.symbol === props.symbol);
+  // symbol_settings is a symbol-keyed object map (per spec), not an array.
+  const setting = acc.symbol_settings?.[props.symbol];
   if (setting?.leverage) localLeverage.value = setting.leverage;
 }, { immediate: true });
 </script>
@@ -857,6 +912,16 @@ watch(() => account.value, (acc) => {
 
 .place-order-btn--sell:not(.v-btn--disabled):hover {
   background: rgba(249, 112, 102, 0.22) !important;
+}
+
+.place-order-btn--connect {
+  background: color-mix(in srgb, var(--chain-primary) 14%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 32%, transparent) !important;
+}
+
+.place-order-btn--connect:not(.v-btn--disabled):hover {
+  background: color-mix(in srgb, var(--chain-primary) 22%, transparent) !important;
 }
 
 .place-order-btn.v-btn--disabled {

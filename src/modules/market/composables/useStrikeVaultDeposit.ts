@@ -36,6 +36,21 @@ const status = ref<DepositStatus>('idle');
 const txHash = ref<string | null>(null);
 const error = ref<string | null>(null);
 
+/**
+ * Whether the vault deposit flow is wired to a real Strike endpoint.
+ * The deposit-quote endpoint is not yet published, so this is `false` and the
+ * UI should render a disabled / "coming soon" state instead of attempting a
+ * quote. Flip to `true` once the endpoint and field shapes are confirmed.
+ */
+const available = ref(false);
+
+/**
+ * User-facing reason the flow is unavailable. Kept as a plain string here
+ * because i18n keys are owned by the parity stream; callers should map this to
+ * a translated "coming soon" message when surfacing it.
+ */
+const unavailableReason = 'Vault deposits are coming soon.';
+
 // ---------------------------------------------------------------------------
 // Methods
 // ---------------------------------------------------------------------------
@@ -56,23 +71,21 @@ const error = ref<string | null>(null);
  *   Response: VaultDepositQuote
  */
 async function requestVaultDepositQuote(vaultId: string, amountAda: number): Promise<void> {
-  status.value = 'quoting';
-  error.value = null;
-
-  try {
-    // TODO: Replace with actual Strike vault deposit-quote endpoint.
-    // Expected: POST /v2/vault/deposit/quote { vault_id, amount, asset: 'ADA', chain: 'cardano' }
-    // Map the response to VaultDepositQuote and assign to quote.value.
-    void vaultId;
-    void amountAda;
-    throw new Error('Vault deposit quote API not yet available — endpoint TBD');
-
-    // Unreachable until implemented; placeholder to show intended assignment:
-    // quote.value = response as VaultDepositQuote;
-  } catch (e: any) {
-    error.value = e.message;
-    status.value = 'error';
+  // The Strike vault deposit-quote endpoint is not yet published. Rather than
+  // throwing (which surfaced as an error toast and could crash callers that
+  // don't catch), enter a clean disabled state so the UI can render a
+  // "coming soon" affordance. Do NOT fabricate an endpoint.
+  void vaultId;
+  void amountAda;
+  if (!available.value) {
+    error.value = unavailableReason;
+    status.value = 'idle';
+    return;
   }
+
+  // TODO: Replace with actual Strike vault deposit-quote endpoint once published.
+  // Expected: POST /v2/vault/deposit/quote { vault_id, amount, asset: 'ADA', chain: 'cardano' }
+  // Map the response to VaultDepositQuote and assign to quote.value.
 }
 
 /**
@@ -110,6 +123,11 @@ async function requestVaultDepositQuote(vaultId: string, amountAda: number): Pro
  *     endpoint (TBD) until status becomes 'credited' or the quote expires.
  */
 async function buildAndSign(password: string): Promise<void> {
+  if (!available.value) {
+    error.value = unavailableReason;
+    status.value = 'idle';
+    return;
+  }
   if (!quote.value) {
     error.value = 'No active vault deposit quote. Call requestVaultDepositQuote() first.';
     status.value = 'error';
@@ -174,5 +192,15 @@ function reset(): void {
  * See `useStrikeDeposit.ts` for the direct (non-vault) deposit flow.
  */
 export function useStrikeVaultDeposit() {
-  return { quote, status, txHash, error, requestVaultDepositQuote, buildAndSign, reset };
+  return {
+    quote,
+    status,
+    txHash,
+    error,
+    available,
+    unavailableReason,
+    requestVaultDepositQuote,
+    buildAndSign,
+    reset,
+  };
 }

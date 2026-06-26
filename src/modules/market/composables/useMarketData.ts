@@ -1,7 +1,6 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef, type WatchStopHandle } from 'vue';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
 import { dexHunterStore } from '@/stores/dexHunterStore';
-import { xerberusStore } from '@/stores/xerberusStore';
 import { walletStore } from '@/stores/walletStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
@@ -20,12 +19,17 @@ export interface MarketToken {
   change1h: number;
   change24h: number;
   change7d: number;
+  change30d?: number;
   volume24h: number;
-  mcap: number;
+  volume7d?: number;
+  txnCount24h?: number | null;
+  makerCount24h?: number | null;
+  totalSupply?: number | null;
+  sparkline?: number[];
+  mcap: number | null;
   tvl: number | null;
   liquidity: number;
-  holders: number;
-  riskRating: string | null;
+  holders: number | null;
   isNew: boolean;
   policyLocked: boolean;
   fingerprint: string;
@@ -43,6 +47,7 @@ export interface MarketToken {
   realizedPnl?: number | null;
   unrealizedPnl?: number | null;
   isNative?: boolean;
+  isSnekFun?: boolean;
 }
 
 export interface CandlestickDataPoint {
@@ -65,6 +70,7 @@ export interface AdaMarketData {
 // --- Singleton state (shared across all component instances) ---
 
 const allTokens: Ref<MarketToken[]> = ref([]);
+const snekTokens: Ref<MarketToken[]> = ref([]);
 const adaData: Ref<AdaMarketData | null> = ref(null);
 const loading = ref(false);
 const error: Ref<string | null> = ref(null);
@@ -79,7 +85,7 @@ let consumerCount = 0;
 
 // --- Helper: enrich API data with store data (DexHunter as fallback) ---
 
-function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
+function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<string, number[]>): MarketToken {
   const assetId = apiToken.assetId;
 
   // DexHunter data as fallback for fields the backend doesn't yet provide
@@ -88,10 +94,10 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
   // Fingerprint: prefer API, fallback to DexHunter
   const fingerprint = apiToken.fingerprint || dhToken?.fingerprint || '';
 
-  // Xerberus risk by fingerprint
-  const xerberusRisk = fingerprint
-    ? (xerberusStore.risks as Record<string, any>)[fingerprint]
-    : null;
+  // Market cap: trust the backend value. The backend already suppresses implausible /
+  // placeholder-supply market caps (isPlausibleMarketCapAda) and returns null for them, so
+  // we surface that null as-is ('—'). DexHunter is metadata-only — no numeric mcap fallback.
+  const mcap = apiToken.marketCap ?? null;
 
   return {
     unit: assetId,
@@ -105,18 +111,32 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
     change1h: apiToken.priceChange1h ?? 0,
     change24h: apiToken.priceChange24h ?? 0,
     change7d: apiToken.priceChange7d ?? 0,
+    change30d: apiToken.priceChange30d ?? 0,
     volume24h: apiToken.volume24h ?? 0,
-    mcap: apiToken.marketCap ?? dhToken?.mcap ?? 0,
+    volume7d: apiToken.volume7d ?? 0,
+    txnCount24h: apiToken.txnCount24h ?? null,
+    makerCount24h: apiToken.makerCount24h ?? null,
+    totalSupply: apiToken.totalSupply ?? null,
+    sparkline: sparklineMap?.[assetId] ?? [],
+    mcap,
     tvl: apiToken.tvl ?? null,
     liquidity: apiToken.liquidity ?? 0,
-    holders: apiToken.holders ?? dhToken?.holders ?? 0,
-    riskRating: xerberusRisk?.risk || null,
+    // The bulk /api/market/prices endpoint does not return a holders count, so
+    // this is null (renders "—") unless DexHunter happens to have it. Showing 0
+    // would be misleading. (A real count needs the backend to add holders to the
+    // bulk endpoint, or proxy /api/dex/tokens/{p}/{n}/holders.)
+    holders: apiToken.holders ?? dhToken?.holders ?? null,
     isNew: apiToken.isNew ?? false,
     policyLocked: false, // TODO: get from API — default false until backend provides minting policy status
     fingerprint,
     decimals: apiToken.decimals ?? dhToken?.decimals ?? 0,
     organicVolume24h: apiToken.organicVolume24h ?? 0,
     dex: apiToken.dex ?? undefined,
+    // Match both the pre-graduation feed (source 'SNEKFUN') and graduated tokens
+    // that have moved to the bulk /prices feed (source 'SNEKFUN_GRADUATE'). Without
+    // the prefix match, graduated snek tokens (which are unverified) get stripped by
+    // the verified/scam filter and only their stale bonding-curve snapshot survives.
+    isSnekFun: String(apiToken.source ?? '').startsWith('SNEKFUN') || apiToken.dex === 'SNEKFUN',
   };
 }
 
@@ -156,8 +176,19 @@ async function fetchAllTokens(silent = false): Promise<void> {
     // Apex wallets don't have market API token listings — only show native token
     const allPrices = isApex ? [] : await marketApi.getAllPrices();
 
+    // 7D sparklines (best-effort — failure must not block the table)
+    let sparklineMap: Record<string, number[]> = {};
+    if (!isApex) {
+      try {
+        const resp = await marketApi.getSparklines('7d');
+        sparklineMap = resp?.data ?? {};
+      } catch (e) {
+        console.debug('Market: sparklines unavailable', e);
+      }
+    }
+
     // Map API tokens through enrichment (backend already aggregates per token)
-    const tokens: MarketToken[] = allPrices.map(tp => enrichWithStores(tp));
+    const tokens: MarketToken[] = allPrices.map(tp => enrichWithStores(tp, sparklineMap));
 
     // Build native token (ADA / AP3X) at position 0
     const nativeName = networks.resolveCurrencyName(chain, walletStore.loggedWallet?.network) || 'Cardano';
@@ -175,12 +206,17 @@ async function fetchAllTokens(silent = false): Promise<void> {
       change1h: 0,
       change24h: nativePrice.priceChange24h,
       change7d: 0,
+      change30d: 0,
       volume24h: nativePrice.volume24h,
+      volume7d: 0,
+      txnCount24h: null,
+      makerCount24h: null,
+      totalSupply: null,
+      sparkline: [],
       mcap: nativePrice.marketCap,
       tvl: null,
       liquidity: 0,
-      holders: 0,
-      riskRating: 'AAA',
+      holders: null,
       isNew: false,
       policyLocked: true,
       fingerprint: '',
@@ -191,6 +227,25 @@ async function fetchAllTokens(silent = false): Promise<void> {
     // Remove any existing lovelace entry, then prepend native token
     const filtered = tokens.filter(t => t.unit !== 'lovelace');
     allTokens.value = [nativeToken, ...filtered];
+
+    // snek.fun bonding-curve tokens (separate list, shown under the snek.fun
+    // filter). Fire-and-forget so it never blocks the main table.
+    if (!isApex) {
+      marketApi.getSnekFunTokens()
+        .then(snekRaw => {
+          // Graduated snek tokens (source SNEKFUN_GRADUATE) already appear in the
+          // bulk /prices feed above with RICHER data (real price, changes, volume,
+          // txns). Keep only the snek-feed tokens NOT already in the bulk feed
+          // (pre-graduation bonding-curve tokens) so we never surface the partial
+          // snek snapshot in place of the rich one. Pass sparklineMap so these get
+          // mini-charts too.
+          const existing = new Set(allTokens.value.map(t => t.unit));
+          snekTokens.value = (snekRaw || [])
+            .map(tp => enrichWithStores(tp, sparklineMap))
+            .filter(t => !existing.has(t.unit));
+        })
+        .catch(() => { /* snek feed is optional — ignore failures */ });
+    }
 
     // Set adaData ref (used for native currency price display)
     adaData.value = {
@@ -464,6 +519,7 @@ export function useMarketData() {
 
   return {
     allTokens,
+    snekTokens,
     adaData,
     trendingTokens,
     topGainers,

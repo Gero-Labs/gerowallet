@@ -387,6 +387,19 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       market: (c, n) => networks.resolveSwapSupport(c, n),
       transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
       card: (c, n) => networks.resolveGeroCardSupport(c, n),
+      // Bitcoin-dependent routes — all return false after the chain-registry
+      // master gate (networks.ts) removes the Bitcoin entries. Closes the
+      // direct-URL gap so #/thorchain etc. redirect to '/'.
+      gomining: (c, n) => networks.resolveGoMiningSupport(c, n),
+      babylon: (c, n) => networks.resolveBabylonSupport(c, n),
+      ordinals: (c, n) => networks.resolveOrdinalsSupport(c, n),
+      thorchain: (c, n) => networks.resolveThorchainSupport(c, n),
+      mempool: (c, n) => networks.resolveMempoolSupport(c, n),
+      lightning: (c, n) => networks.resolveLightningSupport(c, n),
+      // Pool Operator — hard-gated off for 2.7. Unconditional guard closes the
+      // cold-refresh window before feature flags initialize (maintenance check
+      // at the bottom only fires once flags are initialized).
+      poolOperator: () => false,
     };
     const guard = routeNetworkGuards[to.name];
     if (guard && !guard(chain, network)) {
