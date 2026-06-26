@@ -27,6 +27,14 @@
         <span class="swap-card__label">{{ $t('copilot.swap.minReceived') }}</span>
         <span class="swap-card__value">{{ minReceivedDisplay }}</span>
       </div>
+      <div v-if="routeDisplay" class="swap-card__row">
+        <span class="swap-card__label">{{ $t('copilot.swap.route') }}</span>
+        <span class="swap-card__value">{{ routeDisplay }}</span>
+      </div>
+      <div v-if="feeDisplay" class="swap-card__row">
+        <span class="swap-card__label">{{ $t('copilot.swap.fee') }}</span>
+        <span class="swap-card__value">{{ feeDisplay }}</span>
+      </div>
 
       <!-- Guardrail block reasons -->
       <div v-if="proposal.status === 'blocked'" class="swap-card__blocked">
@@ -81,6 +89,8 @@ import { Messaging, type BackgroundResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
 import { DappScore } from '@/models/cardano-shield-types';
+import type { Keys } from '@/models/types';
+import type { SwapRoute } from '@/api/nexus-swap.api';
 
 export default defineComponent({
   name: 'SwapCard',
@@ -100,6 +110,9 @@ export default defineComponent({
     const riskHigh = ref(false);
     const submitResult = ref<'submitted' | 'failed' | null>(null);
     const submitError = ref('');
+    // The chosen route is captured in buildFn (the proposal does not carry it) so the
+    // card can render the dex/route and the aggregator/batcher fee.
+    const selectedRoute = ref<SwapRoute | null>(null);
 
     // -------------------------------------------------------------------
     // Dep: resolveSymbol
@@ -152,8 +165,10 @@ export default defineComponent({
 
     async function buildFn(route: unknown) {
       const senderAddress = walletStore.loggedWallet?.baseAddress ?? '';
+      // Capture the chosen route so the card can show its dex + fee.
+      selectedRoute.value = route as SwapRoute;
       return nexusSwapApi.buildTx({
-        route: route as Parameters<typeof nexusSwapApi.buildTx>[0]['route'],
+        route: route as SwapRoute,
         senderAddress,
         changeAddress: senderAddress,
         utxos: [],
@@ -176,14 +191,21 @@ export default defineComponent({
     ) {
       const tx = deserializeCardanoJsSdkTx(cbor);
       const decoded = toDecodedTx(tx);
-      // ownAddresses: keys from walletStore contain the wallet's used addresses
+      // ownAddresses: the wallet's full payment + change address list, exactly like
+      // SignTx.vue (`[...keys.payment, ...keys.change].map(el => el.address)`). The buy
+      // token can be delivered to ANY own address (a change address included), so the
+      // Guardrail's own-address set must cover both. Falls back to baseAddress only when
+      // keys are unavailable.
+      const keys = walletStore.keys as Keys | null;
       const ownAddresses: string[] = [];
-      const keys = walletStore.keys as Record<string, unknown> | null;
-      if (keys) {
-        // walletStore.keys contains baseAddress and other address fields
-        const wallet = walletStore.loggedWallet;
-        if (wallet?.baseAddress) ownAddresses.push(wallet.baseAddress);
-        if (wallet?.enterpriseAddress) ownAddresses.push(wallet.enterpriseAddress);
+      if (keys && (keys.payment?.length || keys.change?.length)) {
+        for (const k of [...(keys.payment ?? []), ...(keys.change ?? [])]) {
+          if (k.address) ownAddresses.push(k.address);
+        }
+      }
+      if (ownAddresses.length === 0) {
+        const baseAddress = walletStore.loggedWallet?.baseAddress;
+        if (baseAddress) ownAddresses.push(baseAddress);
       }
       return verifySwapTx(decoded, {
         ownAddresses,
@@ -229,8 +251,11 @@ export default defineComponent({
     // -------------------------------------------------------------------
     const sellDisplay = computed(() => {
       if (!proposal.value) return '';
-      // amountIn is in smallest units (string); for display we show the symbol
-      return `${proposal.value.amountIn} ${proposal.value.sellSymbol} (smallest unit)`;
+      // Show the human number the user typed, not the smallest-unit amount.
+      if (props.intent.mode === 'percent') {
+        return `${props.intent.percent ?? 0}% of ${proposal.value.sellSymbol}`;
+      }
+      return `${props.intent.amount ?? proposal.value.amountIn} ${proposal.value.sellSymbol}`;
     });
 
     const receiveDisplay = computed(() => {
@@ -241,6 +266,21 @@ export default defineComponent({
     const minReceivedDisplay = computed(() => {
       if (!proposal.value) return '';
       return `${proposal.value.minOutput.toString()} ${proposal.value.buySymbol}`;
+    });
+
+    const routeDisplay = computed(() => selectedRoute.value?.dex ?? '');
+
+    const feeDisplay = computed(() => {
+      const route = selectedRoute.value;
+      if (!route) return '';
+      // Surface whichever fee the route carries, formatted as ADA (lovelace -> ADA).
+      const feeLovelace =
+        route.aggregatorFeeLovelace ??
+        route.batcherFeeLovelace ??
+        route.estimatedTxFeeLovelace;
+      if (!feeLovelace) return '';
+      const ada = Number(BigInt(feeLovelace)) / 1_000_000;
+      return `${ada} ADA`;
     });
 
     // -------------------------------------------------------------------
@@ -324,6 +364,8 @@ export default defineComponent({
       sellDisplay,
       receiveDisplay,
       minReceivedDisplay,
+      routeDisplay,
+      feeDisplay,
       onSign,
     };
   },
