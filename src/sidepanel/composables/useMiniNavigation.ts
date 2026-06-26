@@ -16,6 +16,7 @@ const CARDANO_TABS: NavTab[] = [
   { name: 'card', icon: 'mdi-credit-card-outline', activeIcon: 'mdi-credit-card', route: '/card', center: true },
   { name: 'market', icon: 'mdi-chart-line', activeIcon: 'mdi-chart-line', route: '/market' },
   { name: 'activity', icon: 'mdi-history', activeIcon: 'mdi-history', route: '/activity' },
+  { name: 'feed', icon: 'mdi-bell-outline', activeIcon: 'mdi-bell', route: '/feed' },
 ];
 
 const APEX_TABS: NavTab[] = [
