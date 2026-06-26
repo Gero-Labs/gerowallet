@@ -5,12 +5,12 @@ import { defaultAgentProvider } from '@/services/agent/agentProvider';
 import type { AgentProvider } from '@/services/agent/types';
 import { parseIntent } from '@/services/agent/intentRouter';
 import { resolveSymbolToAssetId } from '@/services/agent/tokenResolver';
+import { parseSwapIntent } from '@/services/agent/swapIntent';
+import type { SwapIntent } from '@/services/agent/swapIntent';
 
-export interface DockMessageIntent {
-  type: 'chart-token';
-  symbol: string;
-  assetId: string | null;
-}
+export type DockMessageIntent =
+  | { type: 'chart-token'; symbol: string; assetId: string | null }
+  | { type: 'swap'; swap: SwapIntent };
 
 export interface DockMessage {
   id: number;
@@ -52,6 +52,11 @@ export function createAgentDock(
       let intent: DockMessageIntent | undefined;
       if (parsed.type === 'chart-token') {
         intent = { type: 'chart-token', symbol: parsed.symbol, assetId: await resolver(parsed.symbol) };
+      } else {
+        const swapParsed = parseSwapIntent(trimmed);
+        if (swapParsed) {
+          intent = { type: 'swap', swap: swapParsed };
+        }
       }
       messages.value.push({ id: nextId++, role: 'assistant', text: res.reply, intent });
     } catch {
