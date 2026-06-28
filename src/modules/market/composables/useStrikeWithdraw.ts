@@ -1,10 +1,7 @@
 import { ref, computed } from 'vue';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { hasStrikeApiKeys } from '@/api/strike-v2.client';
-import type {
-  WithdrawQuoteResponse,
-  TransactionStatusResponse,
-} from '@/api/strike-v2.types';
+import type { WithdrawQuoteResponse } from '@/api/strike-v2.types';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { Messaging } from '@/chrome/messaging';
@@ -40,24 +37,6 @@ const quote = ref<WithdrawQuote | null>(null);
 const status = ref<WithdrawStatus>('idle');
 const error = ref<string | null>(null);
 const requestId = ref<string | null>(null);
-
-/**
- * Generation counter — bumped by `reset()` so any in-flight polling loop
- * exits the next time it wakes up. Without this, closing the WithdrawSheet
- * mid-withdrawal would leave `pollSettlement` firing API calls for up to
- * 5 minutes.
- */
-let flowGeneration = 0;
-
-// ── Polling config ──────────────────────────────────────────────────────────
-// Strike treats withdrawals as off-chain quote → on-chain settlement.
-// We poll status every 3 s for the first 30 s (rapid pickup), then back off
-// to 8 s up to a 5-minute hard cap. This matches the cadence used by the
-// deposit flow once it's wired and avoids hammering the validator endpoint.
-const POLL_FAST_MS = 3000;
-const POLL_SLOW_MS = 8000;
-const POLL_FAST_PHASE_MS = 30_000;
-const POLL_TIMEOUT_MS = 5 * 60_000;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -135,38 +114,6 @@ async function signCip8(message: string, password: string, pkBytes?: Uint8Array)
   // colon: `${coseSign1Hex}:${coseKeyHex}` (per the Strike builder reference —
   // strike-builder-reference/src/api/withdraw.ts + strike-finance-skills).
   return `${res.data.signature}:${res.data.key}`;
-}
-
-async function pollSettlement(reqId: string, generation: number): Promise<void> {
-  const start = Date.now();
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    // Composable was reset (e.g. user closed the sheet) — abandon the loop.
-    if (generation !== flowGeneration) return;
-
-    const elapsed = Date.now() - start;
-    if (elapsed > POLL_TIMEOUT_MS) {
-      throw new Error('Withdrawal timed out — please check the transaction history.');
-    }
-
-    let res: TransactionStatusResponse | null = null;
-    try {
-      res = await strikeUserApi.getTransactionStatus(reqId, 'withdraw');
-    } catch {
-      // Transient HTTP / network error — fall through to retry. We never
-      // catch a real validator-side failure here because that surfaces as
-      // res.status === 'failed' below, which throws unconditionally.
-    }
-
-    if (res?.status === 'completed') return;
-    if (res?.status === 'failed') {
-      throw new Error('Withdrawal failed on the validator side.');
-    }
-
-    const wait = elapsed < POLL_FAST_PHASE_MS ? POLL_FAST_MS : POLL_SLOW_MS;
-    await new Promise(r => setTimeout(r, wait));
-  }
 }
 
 // ── Public composable ───────────────────────────────────────────────────────
@@ -264,9 +211,14 @@ export function useStrikeWithdraw() {
       );
       requestId.value = submitRes.request_id ?? quote.value.withdraw_id;
 
-      status.value = 'pending';
-      await pollSettlement(requestId.value, flowGeneration);
-
+      // Submitting the signed quote is the terminal step. Strike accepts the
+      // withdrawal and settles it on-chain to the account's registered address;
+      // the ADA then shows up via the wallet's own balance sync. Strike has NO
+      // status-poll endpoint — the old pollSettlement hit /v2/transaction/status
+      // (a route that doesn't exist), which 401'd and made the auth interceptor
+      // wipe the keys + show a "reconnect" prompt on a successful withdrawal.
+      // The 'settled' copy ("Funds are on their way to your wallet") is honest
+      // for this accepted-and-settling state.
       status.value = 'settled';
       return true;
     } catch (e) {
@@ -277,9 +229,6 @@ export function useStrikeWithdraw() {
   }
 
   function reset(): void {
-    // Bump the generation so any in-flight pollSettlement exits on its
-    // next wake-up instead of writing to the now-stale state.
-    flowGeneration++;
     quote.value = null;
     status.value = 'idle';
     error.value = null;

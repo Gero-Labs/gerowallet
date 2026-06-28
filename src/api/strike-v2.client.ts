@@ -168,9 +168,6 @@ strikeClient.interceptors.request.use(
     Object.assign(config.headers, authHeaders);
     (config as { __strikeSigned?: boolean }).__strikeSigned = true;
 
-    // TEMP DIAGNOSTIC [StrikeAuthDbg] — remove once the deposit-status 401 is solved.
-    console.debug('[StrikeAuthDbg] → signed', method, path, '| pk', (_publicKeyHex ?? '').slice(0, 8), '| ts', authHeaders['X-API-Wallet-Timestamp']);
-
     return config;
   },
 );
@@ -194,7 +191,6 @@ strikeClient.interceptors.response.use(
     if ((status === 401 || status === 403) && wasSigned) {
       // We DID send a signature and Strike still rejected it → the keys are dead.
       // Clear them and let subscribers wipe the stored blob (forces a reconnect).
-      console.error('[StrikeAuthDbg] ← rejected SIGNED', status, err?.config?.method?.toUpperCase(), err?.config?.url, '| body:', JSON.stringify(err?.response?.data));
       clearStrikeApiKeys();
       authFailureHandlers.forEach((h) => {
         try { h(); } catch { /* never let a handler swallow the original error */ }
@@ -203,7 +199,6 @@ strikeClient.interceptors.response.use(
       // 401 on an UNSIGNED request — the keys simply weren't loaded into this
       // context. Do NOT clear keys or wipe the stored blob; the user just needs to
       // unlock. (Wiping here caused a destructive "reconnect every time" loop.)
-      console.warn('[StrikeAuthDbg] ← 401 UNSIGNED (keys not loaded — needs unlock, blob kept)', err?.config?.url, '| body:', JSON.stringify(err?.response?.data));
     }
     return Promise.reject(err);
   },

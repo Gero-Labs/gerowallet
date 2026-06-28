@@ -142,9 +142,8 @@ export const strikeUserApi = {
     return data;
   },
 
-  // Transaction status
-  async getTransactionStatus(requestId: string, type: 'deposit' | 'withdraw'): Promise<import('./strike-v2.types').TransactionStatusResponse> {
-    const { data } = await strikeClient.get('/v2/transaction/status', { params: { request_id: requestId, type } });
-    return data;
-  },
+  // NOTE: Strike has NO transaction-status / poll endpoint. Deposit and
+  // withdraw both finish at their confirm/submit step; the previous
+  // `/v2/transaction/status` poll hit a route that doesn't exist (401 →
+  // key-wipe). Don't re-add it — verify against strike-builder-reference.
 };
