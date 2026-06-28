@@ -10,6 +10,7 @@ import type { SwapIntent } from '@/services/agent/swapIntent';
 import { parseStakingIntent } from '@/services/agent/stakingIntent';
 import type { StakingIntent } from '@/services/agent/stakingIntent';
 import { parseAllowanceIntent } from '@/services/agent/allowanceIntent';
+import { buildWalletContext } from '@/services/agent/walletContext';
 
 export type DockMessageIntent =
   | { type: 'chart-token'; symbol: string; assetId: string | null }
@@ -52,7 +53,9 @@ export function createAgentDock(
     messages.value.push({ id: nextId++, role: 'user', text: trimmed });
     busy.value = true;
     try {
-      const res = await provider.chat({ message: trimmed, history });
+      // Snapshot the connected wallet so the agent answers with real portfolio data
+      // instead of asking the user to connect (the dock only opens inside an unlocked wallet).
+      const res = await provider.chat({ message: trimmed, history, context: buildWalletContext() });
       const parsed = parseIntent(trimmed);
       let intent: DockMessageIntent | undefined;
       if (parsed.type === 'chart-token') {
