@@ -122,6 +122,39 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Pull the most useful human-readable message out of a Strike API error.
+ *
+ * Axios surfaces `"Request failed with status code 400"` as `error.message`,
+ * which hides the actual reason Strike rejected the request. Strike returns the
+ * reason in the response body as `{ error | message | detail: "..." }`
+ * (e.g. a minimum-deposit message on a too-small amount). Prefer that body text
+ * — it's authoritative — and only fall back to the opaque message / `fallback`
+ * when the body has nothing usable.
+ */
+function extractStrikeError(e: unknown, fallback: string): string {
+  const anyErr = e as
+    | { response?: { status?: number; data?: unknown }; message?: string }
+    | undefined;
+  const data = anyErr?.response?.data;
+
+  let serverMsg = '';
+  if (typeof data === 'string') {
+    serverMsg = data;
+  } else if (data && typeof data === 'object') {
+    const d = data as Record<string, unknown>;
+    serverMsg = String(d.error ?? d.message ?? d.detail ?? '');
+  }
+  serverMsg = serverMsg.trim();
+
+  if (serverMsg && serverMsg.toLowerCase() !== 'undefined') {
+    // Capitalise the first letter so it reads as a sentence in the UI.
+    return serverMsg.charAt(0).toUpperCase() + serverMsg.slice(1);
+  }
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
+}
+
+/**
  * Composable for the Strike v2 on-chain deposit flow.
  *
  * Flow:
@@ -214,9 +247,19 @@ export function useStrikeDeposit() {
         startCountdown(Number(response.quote.expiration_at));
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      debugLog('[strike-deposit] requestQuote failed:', msg);
-      error.value = msg;
+      // Surface Strike's real rejection reason (e.g. a minimum-deposit message)
+      // instead of the opaque "Request failed with status code 400". Log the raw
+      // body too so the exact server text (and any minimum threshold) is visible.
+      const anyErr = e as { response?: { status?: number; data?: unknown } };
+      debugLog(
+        '[strike-deposit] quote rejected:',
+        anyErr?.response?.status,
+        anyErr?.response?.data,
+      );
+      error.value = extractStrikeError(
+        e,
+        'Strike could not quote this deposit. Try a larger amount — there may be a minimum.',
+      );
       status.value = 'error';
     }
   }
@@ -381,9 +424,13 @@ export function useStrikeDeposit() {
       status.value = 'confirmed';
       return true;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      debugLog('[strike-deposit] buildAndSign failed:', msg);
-      error.value = msg;
+      const anyErr = e as { response?: { status?: number; data?: unknown } };
+      debugLog(
+        '[strike-deposit] buildAndSign failed:',
+        anyErr?.response?.status ?? '',
+        anyErr?.response?.data ?? (e instanceof Error ? e.message : String(e)),
+      );
+      error.value = extractStrikeError(e, 'Failed to build or submit the deposit transaction.');
       status.value = 'error';
       return false;
     }
