@@ -31,4 +31,15 @@ describe('buildFeedItems', () => {
     expect(await buildFeedItems([], { pct24h: 15 }, 'day-1', 1000, fetchSnapshots)).toEqual([]);
     expect(fetchSnapshots).not.toHaveBeenCalled();
   });
+
+  it('threads the vibe through to the narration key', async () => {
+    const fetchSnapshots = vi.fn().mockResolvedValue([
+      { unit: 'u1', ticker: 'SNEK', held: true, priceChange24h: 22, priceChange7d: -5 },
+    ]);
+    const refs: TokenRef[] = [{ unit: 'u1', ticker: 'SNEK', held: true }];
+
+    const items = await buildFeedItems(refs, { pct24h: 15 }, 'day-1', 1000, fetchSnapshots, 'spicy');
+
+    expect(items[0].textKey).toBe('copilot.feed.spicy.heldPriceUp');
+  });
 });
