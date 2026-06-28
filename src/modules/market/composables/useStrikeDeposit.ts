@@ -1,12 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import {
-  nexusTxApi,
-  cardanoUtxoToNexusInput,
-  type BuildTxRequest,
-} from '@/api/nexus-tx-api';
-import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { hasStrikeApiKeys } from '@/api/strike-v2.client';
 import type {
@@ -19,6 +13,37 @@ import { Messaging, type BackgroundResponse, type VerifyPasswordResponse } from 
 import { MessageTypes } from '@/models/MessageTypes';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { debugLog } from '@/utils/debug';
+
+/**
+ * Serialise a wallet UTxO to a CIP-30 hex TransactionUnspentOutput — the format
+ * Strike's POST /v2/deposit/build-tx `utxos` field expects. Reconstructs the asset
+ * Map first (chrome.storage round-trips Map -> plain object, which fromCore can't
+ * read). Mirrors getUtxos() in src/chrome/serialization.ts.
+ */
+function utxoToCip30Hex(utxo: Cardano.Utxo): string {
+  let value = utxo[1].value;
+  if (value?.assets && !(value.assets instanceof Map)) {
+    const assetsMap = new Map<Cardano.AssetId, bigint>();
+    Object.entries(value.assets as Record<string, unknown>).forEach(([assetId, qty]) => {
+      assetsMap.set(assetId as Cardano.AssetId, BigInt(qty as string | number | bigint));
+    });
+    value = { coins: BigInt(value.coins), assets: assetsMap };
+  } else if (value) {
+    value = { coins: BigInt(value.coins), assets: value.assets || undefined };
+  }
+  return String(
+    Serialization.TransactionUnspentOutput.fromCore([
+      { txId: utxo[0].txId, index: utxo[0].index },
+      {
+        address: utxo[1].address,
+        value,
+        datumHash: utxo[1].datumHash,
+        datum: utxo[1].datum,
+        scriptReference: utxo[1].scriptReference,
+      },
+    ]).toCbor(),
+  );
+}
 
 /**
  * Lifecycle states for the deposit flow.
@@ -247,26 +272,24 @@ export function useStrikeDeposit() {
     }
 
     try {
-      // ── 1. Build tx via Nexus (mirrors the Send flow's buildTx in SendDialog.vue) ──
+      // ── 1. Ask STRIKE to build the deposit tx (POST /v2/deposit/build-tx). ──
+      // Strike constructs the real vault deposit — correct script/datum + the
+      // builder fee — and returns an unsigned CBOR. We must NOT build our own
+      // transfer to the deposit address: a plain ADA send to the vault script is
+      // NOT a creditable Strike deposit (that's why a self-built deposit didn't
+      // credit). The wallet only signs + submits what Strike builds.
       status.value = 'building';
-      const changeAddress = keys.payment[0].address;
-      const buildRequest: BuildTxRequest = {
-        outputs: [
-          {
-            address: quote.value.deposit_address,
-            lovelace: requiredAmountLovelace.value,
-          },
-        ],
-        changeAddress,
-        utxos: utxos.map(cardanoUtxoToNexusInput),
-        network: wallet.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
-        withdrawals: currentRewardWithdrawals(),
-      };
+      const cip30Utxos = utxos.map(utxoToCip30Hex);
+      const buildResp = await strikeUserApi.buildDepositTx({
+        request_id: requestId.value,
+        user_address: wallet.baseAddress,
+        utxos: cip30Utxos,
+      });
+      if (!buildResp?.unsigned_tx) {
+        throw new Error('Strike did not return an unsigned deposit transaction.');
+      }
 
-      const { tx_cbor: txCborHex, tx_hash: builtTxHash } =
-        await nexusTxApi.buildTransferTx(buildRequest, wallet.network);
-
-      const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+      const transaction = Serialization.Transaction.fromCbor(HexBlob(buildResp.unsigned_tx));
       const txCore = transaction.toCore();
       const txCbor = serializeCardanoJsSdkTx(txCore);
 
@@ -325,9 +348,8 @@ export function useStrikeDeposit() {
         throw new Error(submitResult.data.error || 'Failed to submit deposit transaction.');
       }
 
-      // Prefer the on-chain txId returned by the submitter; fall back to
-      // Nexus's pre-build hash if for any reason it's missing.
-      const finalTxHash = submitResult.data.txId || builtTxHash;
+      // The on-chain txId returned by the submitter (validated non-empty above).
+      const finalTxHash = submitResult.data.txId;
       txHash.value = finalTxHash;
 
       // ── 4. Confirm with Strike so they associate this tx with the quote ──
