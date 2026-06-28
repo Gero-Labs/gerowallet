@@ -308,7 +308,7 @@ const {
   resetWithdraw,
 } = useStrikeWithdraw();
 
-const { account, marginRatio } = useStrikeAccount();
+const { account, marginRatio, loadAccount } = useStrikeAccount();
 
 // Gate the withdraw flow behind a Strike connection — opening this sheet while
 // disconnected shows the inline connect/unlock UI instead of the step form.
@@ -537,6 +537,12 @@ watch(() => props.value, (val) => {
     showPassword.value = false;
     showFullMessage.value = false;
     quoteError.value = null;
+    // Load this sheet's own Strike account so the Withdrawable Balance and the
+    // Get Quote gate reflect real funds. WithdrawSheet uses its own
+    // useStrikeAccount instance (separate from the trading view's), so without
+    // this it stays at $0.00 and Get Quote is disabled. Harmless if not yet
+    // connected — the call just 401s and the form shows the connect UI.
+    loadAccount().catch(() => { /* not connected / transient — stays at $0 */ });
   }
 });
 </script>
