@@ -3,6 +3,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { hasStrikeApiKeys } from '@/api/strike-v2.client';
+import { extractStrikeError } from '@/api/strike-v2.error';
 import type { DepositQuoteResponse } from '@/api/strike-v2.types';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
@@ -99,39 +100,6 @@ function startCountdown(expirationAt: number): void {
   };
   tick();
   countdownTimer = setInterval(tick, 1000);
-}
-
-/**
- * Pull the most useful human-readable message out of a Strike API error.
- *
- * Axios surfaces `"Request failed with status code 400"` as `error.message`,
- * which hides the actual reason Strike rejected the request. Strike returns the
- * reason in the response body as `{ error | message | detail: "..." }`
- * (e.g. a minimum-deposit message on a too-small amount). Prefer that body text
- * — it's authoritative — and only fall back to the opaque message / `fallback`
- * when the body has nothing usable.
- */
-function extractStrikeError(e: unknown, fallback: string): string {
-  const anyErr = e as
-    | { response?: { status?: number; data?: unknown }; message?: string }
-    | undefined;
-  const data = anyErr?.response?.data;
-
-  let serverMsg = '';
-  if (typeof data === 'string') {
-    serverMsg = data;
-  } else if (data && typeof data === 'object') {
-    const d = data as Record<string, unknown>;
-    serverMsg = String(d.error ?? d.message ?? d.detail ?? '');
-  }
-  serverMsg = serverMsg.trim();
-
-  if (serverMsg && serverMsg.toLowerCase() !== 'undefined') {
-    // Capitalise the first letter so it reads as a sentence in the UI.
-    return serverMsg.charAt(0).toUpperCase() + serverMsg.slice(1);
-  }
-  if (e instanceof Error && e.message) return e.message;
-  return fallback;
 }
 
 /**
