@@ -8,23 +8,14 @@
     <div class="vwithdraw-content">
 
       <!-- ── Amount Input ── -->
-      <div class="input-row">
-        <v-text-field
-          v-model="amount"
-          :label="$t('vaults.amountUsd')"
-          outlined
-          dense
-          dark
-          hide-details
-          class="perp-input"
-          suffix="USD"
-          type="number"
-          min="0"
-        />
-        <v-btn small depressed class="max-btn" @click="setMax()">
-          MAX
-        </v-btn>
-      </div>
+      <PerpsAmountField
+        ref="amountFieldRef"
+        v-model="amount"
+        currency="USD"
+        accent="var(--chain-primary)"
+        class="mb-3"
+        @max="setMax()"
+      />
 
       <!-- ── Preview ── -->
       <transition name="fade-slide">
@@ -106,8 +97,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
+import PerpsAmountField from './PerpsAmountField.vue';
 import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
@@ -137,6 +129,7 @@ const {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const amount = ref<string>('');
+const amountFieldRef = ref<{ focus: () => void } | null>(null);
 const password = ref<string>('');
 const showPassword = ref(false);
 
@@ -181,6 +174,8 @@ watch(() => props.value, (val) => {
     password.value = '';
     showPassword.value = false;
     resetWithdraw();
+  } else {
+    nextTick(() => { amountFieldRef.value?.focus(); });
   }
 });
 </script>
@@ -191,31 +186,6 @@ watch(() => props.value, (val) => {
   flex-direction: column;
   gap: 0;
   padding-bottom: 8px;
-}
-
-/* ── Amount Row ── */
-.input-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.input-row .perp-input { flex: 1; }
-
-.max-btn {
-  height: 40px !important;
-  padding: 0 12px !important;
-  border-radius: 8px !important;
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent) !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.06em !important;
-  text-transform: none !important;
-  flex-shrink: 0;
-  margin-top: 0 !important;
 }
 
 /* ── Inputs ── */

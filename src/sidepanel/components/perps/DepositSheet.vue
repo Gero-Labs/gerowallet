@@ -33,23 +33,14 @@
           </span>
         </div>
 
-        <div class="input-row">
-          <v-text-field
-            v-model="amount"
-            :label="$t('perpetuals.deposit.amountLabel')"
-            outlined
-            dense
-            dark
-            hide-details
-            class="perp-input"
-            suffix="ADA"
-            type="number"
-            min="0"
-          />
-          <v-btn small depressed class="max-btn" @click="setMax()">
-            MAX
-          </v-btn>
-        </div>
+        <PerpsAmountField
+          ref="amountFieldRef"
+          v-model="amount"
+          currency="ADA"
+          class="mt-2"
+          @max="setMax()"
+          @submit="canQuote && goToReview()"
+        />
 
         <div class="warning-banner mt-2">
           <v-icon size="14" color="#FFA726" class="mr-2" style="flex-shrink:0">mdi-alert-outline</v-icon>
@@ -284,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
@@ -292,6 +283,7 @@ import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import StrikeOnboarding from './StrikeOnboarding.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import PerpsAmountField from './PerpsAmountField.vue';
 import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
@@ -332,6 +324,7 @@ function onConnected() {
 type Phase = 'amount' | 'review' | 'status';
 const phase = ref<Phase>('amount');
 const amount = ref<string>('');
+const amountFieldRef = ref<{ focus: () => void } | null>(null);
 const password = ref<string>('');
 const showPassword = ref(false);
 const addressCopied = ref(false);
@@ -552,6 +545,9 @@ watch(() => props.value, (val) => {
     addressCopied.value = false;
     phase.value = 'amount';
     resetDeposit();
+  } else {
+    // Focus the amount field once the dialog has painted.
+    nextTick(() => { amountFieldRef.value?.focus(); });
   }
 });
 </script>
@@ -617,31 +613,6 @@ watch(() => props.value, (val) => {
 }
 
 .balance-value:hover { opacity: 0.85; }
-
-/* ── Amount Row ── */
-.input-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.input-row .perp-input { flex: 1; }
-
-.max-btn {
-  height: 40px !important;
-  padding: 0 12px !important;
-  border-radius: 8px !important;
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent) !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.06em !important;
-  text-transform: none !important;
-  flex-shrink: 0;
-  margin-top: 0 !important;
-}
 
 /* ── Inputs ── */
 .perp-input :deep(.v-input__slot) {

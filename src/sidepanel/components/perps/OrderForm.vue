@@ -710,6 +710,11 @@ watch(() => account.value, (acc) => {
   padding: 0 8px !important;
 }
 
+/* Hide native number-input spinner buttons (up/down arrows) */
+.perp-input :deep(input[type='number']) { -moz-appearance: textfield; appearance: textfield; }
+.perp-input :deep(input[type='number'])::-webkit-outer-spin-button,
+.perp-input :deep(input[type='number'])::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 10px !important;
   color: rgba(255, 255, 255, 0.35) !important;
