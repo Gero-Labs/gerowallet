@@ -501,9 +501,14 @@ function onSliderChange(pct: number) {
   if (!availableBalance.value) return;
   const avail = parseFloat(availableBalance.value);
   if (isNaN(avail) || avail <= 0) return;
+  // `avail` is USD margin; notional (USD) = margin × leverage × pct.
   const notional = avail * localLeverage.value * (pct / 100);
+  // Size is in the base asset (e.g. ADA): qty = notional(USD) / price(USD per
+  // base). Market orders have no price input — use the live ticker price, NOT 1
+  // (dividing by 1 treated the USD notional as a 1:1 base quantity).
   const p = parseFloat(price.value);
-  const refPrice = p > 0 ? p : 1;
+  const refPrice = p > 0 ? p : tickerLastPrice.value;
+  if (!(refPrice > 0)) return;
   const qty = notional / refPrice;
   const precision = symbolInfo.value?.quantityPrecision ?? 3;
   size.value = qty.toFixed(precision);
