@@ -58,7 +58,13 @@
             >
               <div v-if="m.role === 'assistant'" class="agent-dock__avatar">G</div>
               <div class="agent-dock__bubble">
-                <p class="agent-dock__text">{{ m.text }}</p>
+                <!-- assistant replies are markdown (escaped-first, then rendered); user text stays plain -->
+                <div
+                  v-if="m.role === 'assistant'"
+                  class="agent-dock__md"
+                  v-html="renderMarkdown(m.text)"
+                ></div>
+                <p v-else class="agent-dock__text">{{ m.text }}</p>
                 <div v-if="m.intent" class="agent-dock__card">
                   <ChartCard
                     v-if="m.intent.type === 'chart-token'"
@@ -113,6 +119,7 @@
 <script lang="ts">
 import { defineComponent, nextTick, ref, watch } from 'vue';
 import { agentDock } from '@/sidepanel/composables/useAgentDock';
+import { renderMarkdown } from '@/services/agent/renderMarkdown';
 import ChartCard from '@/sidepanel/components/agent/ChartCard.vue';
 import SwapCard from '@/sidepanel/components/agent/SwapCard.vue';
 import StakingCard from '@/sidepanel/components/agent/StakingCard.vue';
@@ -147,7 +154,7 @@ export default defineComponent({
       },
     );
 
-    return { draft, dock, submit, quickSend, scroll };
+    return { draft, dock, submit, quickSend, scroll, renderMarkdown };
   },
 });
 </script>
@@ -403,6 +410,82 @@ export default defineComponent({
   margin: 0;
   word-break: break-word;
   white-space: pre-wrap;
+}
+
+/* ── Rendered markdown (assistant replies; v-html, so children need :deep) ─ */
+.agent-dock__md {
+  margin: 0;
+  word-break: break-word;
+}
+
+.agent-dock__md :deep(p) {
+  margin: 0 0 8px;
+}
+
+.agent-dock__md :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.agent-dock__md :deep(strong) {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.agent-dock__md :deep(ul),
+.agent-dock__md :deep(ol) {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+}
+
+.agent-dock__md :deep(ul:last-child),
+.agent-dock__md :deep(ol:last-child) {
+  margin-bottom: 0;
+}
+
+.agent-dock__md :deep(li) {
+  margin: 3px 0;
+}
+
+.agent-dock__md :deep(li::marker) {
+  color: var(--accent-60);
+}
+
+.agent-dock__md :deep(code) {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--accent-12);
+  color: #7fe9f5;
+  padding: 1px 5px;
+  border-radius: 5px;
+  word-break: break-all;
+}
+
+.agent-dock__md :deep(a) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agent-dock__md :deep(.md-h) {
+  font-weight: 700;
+  color: #ffffff;
+  margin: 8px 0 4px;
+}
+
+.agent-dock__md :deep(.md-h:first-child) {
+  margin-top: 0;
+}
+
+.agent-dock__md :deep(.md-h1) {
+  font-size: 15px;
+}
+
+.agent-dock__md :deep(.md-h2) {
+  font-size: 14px;
+}
+
+.agent-dock__md :deep(.md-h3) {
+  font-size: 13.5px;
 }
 
 .agent-dock__card {
