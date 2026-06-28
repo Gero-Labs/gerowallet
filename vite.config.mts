@@ -174,6 +174,10 @@ export const sharedConfig: UserConfig = {
 export default defineConfig(({ command }) => {
   return {
     ...sharedConfig,
+    // Expose AGENT_TOKEN (not just VITE_*) to the options + sidepanel client bundles so the
+    // Copilot dock can read the Fluxpoint dev key from its single source in .env.development.
+    // DEV convenience only; production uses the Nexus proxy and must not expose this key.
+    envPrefix: ['VITE_', 'AGENT_'],
     base: command === 'serve' ? `http://localhost:${port}/` : './',
     server: {
       port,
