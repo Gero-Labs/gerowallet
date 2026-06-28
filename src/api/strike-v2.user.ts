@@ -117,6 +117,15 @@ export const strikeUserApi = {
     return data;
   },
 
+  // Step 2 of the deposit flow: ask Strike to BUILD the unsigned deposit tx.
+  // Strike constructs the real vault deposit (correct script/datum + builder fee)
+  // and returns an unsigned CBOR for the wallet to sign + submit. The client must
+  // NOT build its own transfer to the deposit address.
+  async buildDepositTx(req: import('./strike-v2.types').BuildDepositTxRequest): Promise<import('./strike-v2.types').BuildDepositTxResponse> {
+    const { data } = await strikeClient.post('/v2/deposit/build-tx', req);
+    return data;
+  },
+
   async confirmDeposit(requestId: string, txHash: string): Promise<{ request_id: string; status: string }> {
     const { data } = await strikeClient.post('/v2/deposit', { request_id: requestId, tx_hash: txHash });
     return data;

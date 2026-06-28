@@ -679,6 +679,23 @@ export interface DepositQuoteResponse {
   confirmations_required: number;
 }
 
+export interface BuildDepositTxRequest {
+  request_id: string;
+  /** The user's wallet address — Strike selects inputs from + returns change here. */
+  user_address: string;
+  /** CIP-30 hex-encoded TransactionUnspentOutputs (Cardano only). */
+  utxos?: string[];
+}
+
+export interface BuildDepositTxResponse {
+  blockchain: string;
+  /** Cardano: CBOR hex-encoded UNSIGNED transaction built by Strike. */
+  unsigned_tx: string;
+  /** e.g. "cardano_cbor". */
+  format: string;
+  expires_at?: number;
+}
+
 export interface WithdrawQuoteRequest {
   usd_value: string;
   blockchain: string;
