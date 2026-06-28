@@ -49,4 +49,21 @@ describe('useCopilotFeed', () => {
 
     expect(build).toHaveBeenCalledTimes(1);
   });
+
+  it('passes the active vibe + its thresholds to build', async () => {
+    const store = fakeStore();
+    const build = vi.fn().mockResolvedValue([]);
+    const feed = createCopilotFeed({
+      store,
+      build,
+      prefs: { vibe: 'spicy' },
+      getRefs: () => [{ unit: 'u', ticker: 'T', held: true }],
+    });
+
+    await feed.refresh();
+
+    const args = build.mock.calls[0];
+    expect(args[1]).toEqual({ pct24h: 8, pct7d: 15 }); // spicy thresholds
+    expect(args[5]).toBe('spicy'); // vibe is the last arg
+  });
 });

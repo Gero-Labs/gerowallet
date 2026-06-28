@@ -3,12 +3,14 @@ import { detectPriceMoves, type PriceThresholds, type TokenSnapshot } from './de
 import { narrate } from './narrator';
 import { fetchSnapshots as defaultFetch, type TokenRef } from './marketSnapshot';
 import type { FeedItem } from './feedReducer';
+import type { CopilotVibe } from './preferences';
 
 /**
  * Orchestrate one detection pass: fetch snapshots for the refs, run detectors,
  * narrate, and return FeedItems. `bucket` keeps dedupe keys stable within a period;
  * `now` is the caller-supplied timestamp (no Date.now here). `fetchSnapshots` is
- * injectable for tests.
+ * injectable for tests. `vibe` is the LAST param (after fetch) so existing 5-arg
+ * callers keep binding fetch correctly; it only selects the narration tone.
  */
 export async function buildFeedItems(
   refs: TokenRef[],
@@ -16,12 +18,13 @@ export async function buildFeedItems(
   bucket: string,
   now: number,
   fetchSnapshots: (refs: TokenRef[]) => Promise<TokenSnapshot[]> = defaultFetch,
+  vibe: CopilotVibe = 'normal',
 ): Promise<FeedItem[]> {
   if (refs.length === 0) return [];
   const snapshots = await fetchSnapshots(refs);
   const events = detectPriceMoves(snapshots, thresholds, bucket);
   return events.map((e) => {
-    const n = narrate(e);
+    const n = narrate(e, vibe);
     return { id: n.key, key: n.key, ts: now, textKey: n.textKey, params: n.params };
   });
 }

@@ -1,53 +1,71 @@
 <template>
   <div class="feed-page">
-    <header class="feed-page__head">
-      <h2 class="feed-page__title white--text">{{ $t('copilot.feedTitle') }}</h2>
-      <div class="feed-page__actions">
-        <v-btn
-          icon
-          small
-          :disabled="feed.busy.value"
-          @click="feed.refresh()"
-        >
-          <v-icon small color="white">mdi-refresh</v-icon>
-        </v-btn>
+    <!-- First run: the stepped wizard. Once onboarded: the feed + gear. -->
+    <FeedOnboarding v-if="!settings.onboarded" @done="onOnboardingDone" />
+
+    <template v-else>
+      <header class="feed-page__head">
+        <h2 class="feed-page__title white--text">{{ $t('copilot.feedTitle') }}</h2>
+        <div class="feed-page__actions">
+          <v-btn icon small @click="settingsOpen = true">
+            <v-icon small color="white">mdi-cog-outline</v-icon>
+          </v-btn>
+          <v-btn icon small :disabled="feed.busy.value" @click="feed.refresh()">
+            <v-icon small color="white">mdi-refresh</v-icon>
+          </v-btn>
+        </div>
+      </header>
+
+      <p class="feed-page__disclaimer grey--text">{{ $t('copilot.feed.disclaimer') }}</p>
+
+      <div v-if="items.length === 0" class="feed-page__empty grey--text">
+        {{ $t('copilot.feed.empty') }}
       </div>
-    </header>
+      <ul v-else class="feed-page__list">
+        <li v-for="item in items" :key="item.id" class="feed-page__item">
+          <span class="feed-page__time grey--text">{{ formatTime(item.ts) }}</span>
+          <p class="feed-page__text white--text">{{ $t(item.textKey, item.params) }}</p>
+        </li>
+      </ul>
+    </template>
 
-    <p class="feed-page__disclaimer grey--text">{{ $t('copilot.feed.disclaimer') }}</p>
-
-    <div v-if="items.length === 0" class="feed-page__empty grey--text">
-      {{ $t('copilot.feed.empty') }}
-    </div>
-    <ul v-else class="feed-page__list">
-      <li v-for="item in items" :key="item.id" class="feed-page__item">
-        <span class="feed-page__time grey--text">{{ formatTime(item.ts) }}</span>
-        <p class="feed-page__text white--text">{{ $t(item.textKey, item.params) }}</p>
-      </li>
-    </ul>
+    <FeedSettingsSheet v-model="settingsOpen" />
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, computed, onMounted } from 'vue';
+import { defineComponent, computed, ref, onMounted } from 'vue';
 import { copilotFeed } from '@/sidepanel/composables/useCopilotFeed';
+import { copilotFeedSettings } from '@/sidepanel/composables/useCopilotFeedSettings';
 import { copilotFeedStore } from '@/stores/copilotFeedStore';
+import FeedOnboarding from '@/sidepanel/components/copilot/FeedOnboarding.vue';
+import FeedSettingsSheet from '@/sidepanel/components/copilot/FeedSettingsSheet.vue';
 
 export default defineComponent({
   name: 'FeedPage',
+  components: { FeedOnboarding, FeedSettingsSheet },
   setup() {
     const feed = copilotFeed;
+    const settings = copilotFeedSettings;
     const items = computed(() => copilotFeedStore.items);
+    const settingsOpen = ref(false);
 
     function formatTime(ts: number): string {
       return new Date(ts).toLocaleTimeString();
     }
 
-    onMounted(() => {
+    // Onboarding completes -> mark done and run the first detection so the user
+    // sees items immediately (onMounted already ran while the wizard was showing).
+    function onOnboardingDone() {
+      settings.completeOnboarding();
       feed.refresh();
+    }
+
+    onMounted(() => {
+      if (settings.onboarded) feed.refresh();
     });
 
-    return { feed, items, formatTime };
+    return { feed, settings, items, settingsOpen, formatTime, onOnboardingDone };
   },
 });
 </script>
@@ -67,6 +85,12 @@ export default defineComponent({
   font-size: 16px;
   font-weight: 600;
   margin: 0;
+}
+
+.feed-page__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .feed-page__disclaimer {
