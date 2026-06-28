@@ -709,10 +709,6 @@ export interface WithdrawQuoteResponse {
   message_to_sign: string;
 }
 
-export interface TransactionStatusResponse {
-  status: 'pending' | 'completed' | 'failed';
-}
-
 export interface StrikeMarketsResponse {
   markets: Record<string, StrikeMarketConfig>;
 }
