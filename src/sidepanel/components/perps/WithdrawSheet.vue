@@ -465,7 +465,9 @@ function setMax() {
 async function requestQuoteClick() {
   quoteError.value = null;
   if (!canQuote.value) return;
-  await requestQuote(amountNum.value.toFixed(2), 'ADA');
+  // No asset arg: Strike defaults to the chain-native asset (ADA). Passing
+  // 'ADA' explicitly is rejected by the backend ("unsupported asset").
+  await requestQuote(amountNum.value.toFixed(2));
   if (withdrawStatus.value === 'error') {
     // Capture error and reset to step 1 so user can fix the input.
     quoteError.value = withdrawError.value;

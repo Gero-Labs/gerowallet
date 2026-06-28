@@ -135,9 +135,12 @@ export function useStrikeWithdraw() {
    * Step 1 — request a withdrawal quote.
    *
    * @param amountUsd USD amount the user wants to withdraw.
-   * @param asset     Asset to receive (defaults to 'ADA' for Cardano).
+   * @param asset     Optional asset-to-receive OVERRIDE. Leave undefined to use
+   *   Strike's chain-native default (ADA for Cardano). Do NOT pass 'ADA'
+   *   explicitly — the backend rejects it with "unsupported asset"; the native
+   *   asset is selected by omitting the field entirely.
    */
-  async function requestQuote(amountUsd: string, asset = 'ADA'): Promise<void> {
+  async function requestQuote(amountUsd: string, asset?: string): Promise<void> {
     error.value = null;
     quote.value = null;
     requestId.value = null;
@@ -164,7 +167,10 @@ export function useStrikeWithdraw() {
       const raw = await strikeUserApi.getWithdrawQuote({
         usd_value: amountUsd,
         blockchain: 'cardano',
-        asset,
+        // Omit `asset` so Strike uses the chain-native asset (ADA). An explicit
+        // asset:'ADA' is rejected as "unsupported asset". Only forward a real
+        // non-native override if a caller ever passes one.
+        ...(asset && asset.toUpperCase() !== 'ADA' ? { asset } : {}),
       }) as WithdrawQuoteResponse & {
         fee?: string;
         expires_at?: string;
