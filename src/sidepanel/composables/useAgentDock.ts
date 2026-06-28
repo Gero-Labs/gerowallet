@@ -9,11 +9,13 @@ import { parseSwapIntent } from '@/services/agent/swapIntent';
 import type { SwapIntent } from '@/services/agent/swapIntent';
 import { parseStakingIntent } from '@/services/agent/stakingIntent';
 import type { StakingIntent } from '@/services/agent/stakingIntent';
+import { parseAllowanceIntent } from '@/services/agent/allowanceIntent';
 
 export type DockMessageIntent =
   | { type: 'chart-token'; symbol: string; assetId: string | null }
   | { type: 'swap'; swap: SwapIntent }
-  | { type: 'staking'; staking: StakingIntent };
+  | { type: 'staking'; staking: StakingIntent }
+  | { type: 'allowance' };
 
 export interface DockMessage {
   id: number;
@@ -63,6 +65,11 @@ export function createAgentDock(
           const stakingParsed = parseStakingIntent(trimmed);
           if (stakingParsed) {
             intent = { type: 'staking', staking: stakingParsed };
+          } else {
+            const allowanceParsed = parseAllowanceIntent(trimmed);
+            if (allowanceParsed) {
+              intent = { type: 'allowance' };
+            }
           }
         }
       }
