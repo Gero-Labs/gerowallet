@@ -1,11 +1,13 @@
 import { ref, computed } from 'vue';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { hasStrikeApiKeys } from '@/api/strike-v2.client';
+import { extractStrikeError, strikeErrorDebugInfo } from '@/api/strike-v2.error';
 import type { WithdrawQuoteResponse } from '@/api/strike-v2.types';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { debugLog } from '@/utils/debug';
 
 /**
  * Strike v2 withdraw quote – wraps the validator response and adds local
@@ -179,7 +181,12 @@ export function useStrikeWithdraw() {
       };
       status.value = 'quoted';
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      // Surface Strike's real rejection reason (e.g. a minimum-withdrawal or an
+      // unknown-field message) instead of the opaque "Request failed with status
+      // code 400". Log the raw body too so the exact reason is visible.
+      const dbg = strikeErrorDebugInfo(e);
+      debugLog('[strike-withdraw] quote rejected:', dbg.status, dbg.body);
+      error.value = extractStrikeError(e, 'Strike could not quote this withdrawal.');
       status.value = 'error';
     }
   }
@@ -222,7 +229,9 @@ export function useStrikeWithdraw() {
       status.value = 'settled';
       return true;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const dbg = strikeErrorDebugInfo(e);
+      debugLog('[strike-withdraw] signAndSubmit failed:', dbg.status, dbg.body);
+      error.value = extractStrikeError(e, 'Failed to submit the withdrawal.');
       status.value = 'error';
       return false;
     }
