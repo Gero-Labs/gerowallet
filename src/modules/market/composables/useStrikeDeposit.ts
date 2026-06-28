@@ -234,6 +234,18 @@ export function useStrikeDeposit() {
       return false;
     }
 
+    // FUND SAFETY: a deposit is only useful if we can confirm it with Strike
+    // afterwards. If the API keys aren't loaded in this context (e.g. a prior 401
+    // cleared them, the session reloaded, or connect happened in another context)
+    // the confirm + status calls will 401 and the ADA strands at the deposit
+    // address. Re-check auth HERE — before any funds move on-chain — and abort
+    // cleanly instead of sending ADA Strike can't credit.
+    if (!hasStrikeApiKeys()) {
+      error.value = 'Strike session is not unlocked — reconnect to Strike before depositing (no funds were moved).';
+      status.value = 'error';
+      return false;
+    }
+
     try {
       // ── 1. Build tx via Nexus (mirrors the Send flow's buildTx in SendDialog.vue) ──
       status.value = 'building';
