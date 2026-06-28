@@ -40,25 +40,15 @@
         <div class="step-title">{{ $t('perps.withdraw.step1Title') }}</div>
         <div class="step-sub">{{ $t('perps.withdraw.step1Sub') }}</div>
 
-        <!-- Amount field (custom — no native number spinners) -->
-        <div class="amount-field" :class="{ 'amount-field--focus': amountFocused }">
-          <input
-            ref="amountInput"
-            :value="amount"
-            inputmode="decimal"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="0"
-            class="amount-field__input"
-            @input="onAmountInput"
-            @focus="amountFocused = true"
-            @blur="amountFocused = false"
-            @keydown.enter="canQuote && requestQuoteClick()"
-          />
-          <span class="amount-field__ccy">USD</span>
-          <button type="button" class="amount-field__max" @click="setMax()">MAX</button>
-        </div>
+        <!-- Amount field (shared component — no native number spinners) -->
+        <PerpsAmountField
+          ref="amountFieldRef"
+          v-model="amount"
+          currency="USD"
+          class="mt-4"
+          @max="setMax()"
+          @submit="canQuote && requestQuoteClick()"
+        />
 
         <!-- Withdrawable balance (click to fill max) -->
         <button type="button" class="balance-row" @click="setMax()">
@@ -286,6 +276,7 @@ import { walletStore } from '@/stores/walletStore';
 import i18n from '@/plugins/i18n';
 import StrikeOnboarding from './StrikeOnboarding.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import PerpsAmountField from './PerpsAmountField.vue';
 import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ───────────────────────────────────────────────────────────
@@ -317,8 +308,7 @@ const { isConnected } = useStrikeOnboarding();
 
 // ── Local state ─────────────────────────────────────────────────────────────
 const amount = ref('');
-const amountFocused = ref(false);
-const amountInput = ref<HTMLInputElement | null>(null);
+const amountFieldRef = ref<{ focus: () => void } | null>(null);
 const password = ref('');
 const showPassword = ref(false);
 const showFullMessage = ref(false);
@@ -465,21 +455,6 @@ function setMax() {
   }
 }
 
-/**
- * Sanitise free-text amount input to a decimal string (digits + a single dot).
- * Replaces the native number input so there are no spinner up/down controls.
- */
-function onAmountInput(e: Event): void {
-  const raw = (e.target as HTMLInputElement).value;
-  let cleaned = raw.replace(/[^0-9.]/g, '');
-  const dot = cleaned.indexOf('.');
-  if (dot !== -1) {
-    // collapse any further dots after the first
-    cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1).replace(/\./g, '');
-  }
-  amount.value = cleaned;
-}
-
 async function requestQuoteClick() {
   quoteError.value = null;
   if (!canQuote.value) return;
@@ -565,7 +540,7 @@ watch(() => props.value, (val) => {
     loadAccount().catch(() => { /* not connected / transient — stays at $0 */ });
     // Focus the amount field once the dialog has painted (avoids the native
     // `autofocus` race warning the dialog triggers).
-    nextTick(() => { amountInput.value?.focus(); });
+    nextTick(() => { amountFieldRef.value?.focus(); });
   }
 });
 </script>
@@ -659,61 +634,6 @@ watch(() => props.value, (val) => {
   margin-top: 2px;
   line-height: 1.5;
 }
-
-/* ── Amount field (custom, no spinners) ── */
-.amount-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 0 8px 0 16px;
-  height: 66px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 14px;
-  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-}
-.amount-field--focus {
-  border-color: rgba(0,199,243,0.7);
-  background: rgba(0,199,243,0.04);
-  box-shadow: 0 0 0 3px rgba(0,199,243,0.08);
-}
-.amount-field__input {
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  outline: none;
-  color: #ffffff;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  caret-color: #00c7f3;
-  padding: 0;
-}
-.amount-field__input::placeholder { color: rgba(255,255,255,0.22); }
-.amount-field__ccy {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.4);
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-.amount-field__max {
-  flex-shrink: 0;
-  padding: 7px 13px;
-  border-radius: 9px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #00c7f3;
-  background: rgba(0,199,243,0.1);
-  border: 1px solid rgba(0,199,243,0.25);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.amount-field__max:hover { background: rgba(0,199,243,0.2); }
 
 /* ── Withdrawable balance row ── */
 .balance-row {
