@@ -40,43 +40,44 @@
         <div class="step-title">{{ $t('perps.withdraw.step1Title') }}</div>
         <div class="step-sub">{{ $t('perps.withdraw.step1Sub') }}</div>
 
-        <div class="input-row mt-3">
-          <v-text-field
-            v-model="amount"
-            :label="$t('perpetuals.amount')"
-            outlined
-            dense
-            dark
-            hide-details
-            class="perp-input"
-            suffix="USD"
-            type="number"
-            min="0"
-            autofocus
+        <!-- Amount field (custom — no native number spinners) -->
+        <div class="amount-field" :class="{ 'amount-field--focus': amountFocused }">
+          <input
+            ref="amountInput"
+            :value="amount"
+            inputmode="decimal"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="0"
+            class="amount-field__input"
+            @input="onAmountInput"
+            @focus="amountFocused = true"
+            @blur="amountFocused = false"
+            @keydown.enter="canQuote && requestQuoteClick()"
           />
-          <v-btn small depressed class="max-btn" @click="setMax()">
-            MAX
-          </v-btn>
+          <span class="amount-field__ccy">USD</span>
+          <button type="button" class="amount-field__max" @click="setMax()">MAX</button>
         </div>
 
-        <!-- Withdrawable hint -->
-        <div class="hint-row mt-2">
-          <span>{{ $t('perpetuals.withdrawableBalance') }}</span>
-          <span class="hint-value">${{ formatUsd(maxWithdrawable) }}</span>
-        </div>
+        <!-- Withdrawable balance (click to fill max) -->
+        <button type="button" class="balance-row" @click="setMax()">
+          <span class="balance-row__label">{{ $t('perpetuals.withdrawableBalance') }}</span>
+          <span class="balance-row__value">${{ formatUsd(maxWithdrawable) }}</span>
+        </button>
 
-        <!-- ADA estimate preview -->
+        <!-- ADA estimate -->
         <transition name="fade-slide">
-          <div v-if="amountNum > 0" class="preview-card mt-3">
-            <div class="preview-row">
-              <span class="preview-label">{{ $t('perpetuals.estimatedReceived') }}</span>
-              <span class="preview-value highlight">
-                ~{{ formatAda(estimatedAda) }} <span class="preview-unit">ADA</span>
+          <div v-if="amountNum > 0" class="estimate-card mt-3">
+            <div class="estimate-main">
+              <span class="estimate-main__label">{{ $t('perpetuals.estimatedReceived') }}</span>
+              <span class="estimate-main__value">
+                ~{{ formatAda(estimatedAda) }}<span class="estimate-main__unit">ADA</span>
               </span>
             </div>
-            <div class="preview-row">
-              <span class="preview-label">{{ $t('perpetuals.currentAdaPrice') }}</span>
-              <span class="preview-value muted">${{ formatPrice(usdPerAda) }}</span>
+            <div class="estimate-sub">
+              <span>{{ $t('perpetuals.currentAdaPrice') }}</span>
+              <span class="estimate-sub__value">${{ formatPrice(usdPerAda) }}</span>
             </div>
           </div>
         </transition>
@@ -277,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
@@ -316,6 +317,8 @@ const { isConnected } = useStrikeOnboarding();
 
 // ── Local state ─────────────────────────────────────────────────────────────
 const amount = ref('');
+const amountFocused = ref(false);
+const amountInput = ref<HTMLInputElement | null>(null);
 const password = ref('');
 const showPassword = ref(false);
 const showFullMessage = ref(false);
@@ -462,6 +465,21 @@ function setMax() {
   }
 }
 
+/**
+ * Sanitise free-text amount input to a decimal string (digits + a single dot).
+ * Replaces the native number input so there are no spinner up/down controls.
+ */
+function onAmountInput(e: Event): void {
+  const raw = (e.target as HTMLInputElement).value;
+  let cleaned = raw.replace(/[^0-9.]/g, '');
+  const dot = cleaned.indexOf('.');
+  if (dot !== -1) {
+    // collapse any further dots after the first
+    cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1).replace(/\./g, '');
+  }
+  amount.value = cleaned;
+}
+
 async function requestQuoteClick() {
   quoteError.value = null;
   if (!canQuote.value) return;
@@ -545,6 +563,9 @@ watch(() => props.value, (val) => {
     // this it stays at $0.00 and Get Quote is disabled. Harmless if not yet
     // connected — the call just 401s and the form shows the connect UI.
     loadAccount().catch(() => { /* not connected / transient — stays at $0 */ });
+    // Focus the amount field once the dialog has painted (avoids the native
+    // `autofocus` race warning the dialog triggers).
+    nextTick(() => { amountInput.value?.focus(); });
   }
 });
 </script>
@@ -639,26 +660,129 @@ watch(() => props.value, (val) => {
   line-height: 1.5;
 }
 
-/* ── Amount row ── */
-.input-row {
+/* ── Amount field (custom, no spinners) ── */
+.amount-field {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 0 8px 0 16px;
+  height: 66px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
-.input-row .perp-input { flex: 1; }
-.max-btn {
-  height: 40px !important;
-  padding: 0 12px !important;
-  border-radius: 8px !important;
-  background: rgba(0,199,243,0.1) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0,199,243,0.25) !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.06em !important;
-  text-transform: none !important;
+.amount-field--focus {
+  border-color: rgba(0,199,243,0.7);
+  background: rgba(0,199,243,0.04);
+  box-shadow: 0 0 0 3px rgba(0,199,243,0.08);
+}
+.amount-field__input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  caret-color: #00c7f3;
+  padding: 0;
+}
+.amount-field__input::placeholder { color: rgba(255,255,255,0.22); }
+.amount-field__ccy {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.04em;
   flex-shrink: 0;
-  margin-top: 0 !important;
+}
+.amount-field__max {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #00c7f3;
+  background: rgba(0,199,243,0.1);
+  border: 1px solid rgba(0,199,243,0.25);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.amount-field__max:hover { background: rgba(0,199,243,0.2); }
+
+/* ── Withdrawable balance row ── */
+.balance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 10px;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.balance-row__label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+}
+.balance-row__value {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: rgba(255,255,255,0.75);
+  transition: color 0.15s ease;
+}
+.balance-row:hover .balance-row__value { color: #00c7f3; }
+
+/* ── Estimate card ── */
+.estimate-card {
+  background: linear-gradient(180deg, rgba(0,199,243,0.07), rgba(0,199,243,0.02));
+  border: 1px solid rgba(0,199,243,0.18);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.estimate-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.estimate-main__label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+}
+.estimate-main__value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  color: #00c7f3;
+  white-space: nowrap;
+}
+.estimate-main__unit {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(0,199,243,0.65);
+  margin-left: 5px;
+}
+.estimate-sub {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+}
+.estimate-sub__value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: rgba(255,255,255,0.6);
+  font-weight: 500;
 }
 
 /* ── Inputs ── */
