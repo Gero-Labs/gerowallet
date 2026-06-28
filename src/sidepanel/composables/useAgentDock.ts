@@ -11,6 +11,8 @@ import { parseStakingIntent } from '@/services/agent/stakingIntent';
 import type { StakingIntent } from '@/services/agent/stakingIntent';
 import { parseAllowanceIntent } from '@/services/agent/allowanceIntent';
 import { buildWalletContext } from '@/services/agent/walletContext';
+import { detectHeldTokenMention } from '@/services/agent/tokenMention';
+import { walletStore } from '@/stores/walletStore';
 
 export type DockMessageIntent =
   | { type: 'chart-token'; symbol: string; assetId: string | null }
@@ -57,9 +59,22 @@ export function createAgentDock(
       // instead of asking the user to connect (the dock only opens inside an unlocked wallet).
       const res = await provider.chat({ message: trimmed, history, context: buildWalletContext() });
       const parsed = parseIntent(trimmed);
+      // A held token mentioned anywhere in the message lets us chart it (its unit IS the
+      // market-api assetId, so no resolver round-trip needed).
+      const mention = detectHeldTokenMention(
+        trimmed,
+        (walletStore.tokens || {}) as Record<
+          string,
+          { unit: string; name?: string; metadata?: { ticker?: string; name?: string } | null }
+        >,
+      );
       let intent: DockMessageIntent | undefined;
       if (parsed.type === 'chart-token') {
-        intent = { type: 'chart-token', symbol: parsed.symbol, assetId: await resolver(parsed.symbol) };
+        const assetId =
+          mention && mention.symbol === parsed.symbol
+            ? mention.assetId
+            : await resolver(parsed.symbol);
+        intent = { type: 'chart-token', symbol: parsed.symbol, assetId };
       } else {
         const swapParsed = parseSwapIntent(trimmed);
         if (swapParsed) {
@@ -68,11 +83,11 @@ export function createAgentDock(
           const stakingParsed = parseStakingIntent(trimmed);
           if (stakingParsed) {
             intent = { type: 'staking', staking: stakingParsed };
-          } else {
-            const allowanceParsed = parseAllowanceIntent(trimmed);
-            if (allowanceParsed) {
-              intent = { type: 'allowance' };
-            }
+          } else if (parseAllowanceIntent(trimmed)) {
+            intent = { type: 'allowance' };
+          } else if (mention) {
+            // a held token was named in a general question -> show its chart under the reply
+            intent = { type: 'chart-token', symbol: mention.symbol, assetId: mention.assetId };
           }
         }
       }
