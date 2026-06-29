@@ -12,7 +12,7 @@ export interface PriceThresholds {
   pct7d?: number;
 }
 
-export interface FeedEvent {
+export interface PriceMoveEvent {
   key: string;
   kind: 'priceUp' | 'priceDown';
   unit: string;
@@ -21,6 +21,17 @@ export interface FeedEvent {
   window: '24h' | '7d';
   pct: number; // absolute magnitude, rounded
 }
+
+export interface TokenActivitySpikeEvent {
+  key: string;
+  kind: 'tokenActivitySpike';
+  unit: string;
+  ticker: string;
+  mult: number; // 24h volume as a multiple of the recent daily average, rounded
+}
+
+/** Discriminated union over `kind`. Price events keep their original shape verbatim. */
+export type FeedEvent = PriceMoveEvent | TokenActivitySpikeEvent;
 
 /**
  * Pure: for each snapshot, emit at most one price-move event - the window with the
@@ -56,4 +67,49 @@ export function detectPriceMoves(
     });
   }
   return events;
+}
+
+export interface TokenActivityRow {
+  unit: string;
+  ticker: string;
+  volume24h: number | null;
+  volume7d: number | null;
+}
+
+export interface ActivitySpikeOptions {
+  spikeMultiple: number; // 24h volume must be >= this x the recent daily average
+  minVolume24h: number; // ADA floor so illiquid noise can't post a spike
+  limit?: number; // cap the number of events (loudest spikes first)
+}
+
+/**
+ * Pure, identity-free token-level anomaly: flag tokens whose 24h volume is a large
+ * multiple of their recent daily average (volume7d / 7). This is an aggregate market
+ * signal (no wallet identity, nothing to game as a single trader) and uses only fields
+ * the bulk price list already returns. A token with no 7d baseline is skipped (can't
+ * compute a multiple). `bucket` keeps the dedupe key stable within a period.
+ */
+export function detectTokenActivitySpikes(
+  rows: TokenActivityRow[],
+  options: ActivitySpikeOptions,
+  bucket: string,
+): TokenActivitySpikeEvent[] {
+  const events: TokenActivitySpikeEvent[] = [];
+  for (const r of rows) {
+    if (r.volume24h == null || r.volume7d == null) continue;
+    if (r.volume24h < options.minVolume24h) continue;
+    const dailyAvg = r.volume7d / 7;
+    if (dailyAvg <= 0) continue;
+    const mult = r.volume24h / dailyAvg;
+    if (mult < options.spikeMultiple) continue;
+    events.push({
+      key: `tokenActivitySpike:${r.unit}:${bucket}`,
+      kind: 'tokenActivitySpike',
+      unit: r.unit,
+      ticker: r.ticker,
+      mult: Math.round(mult),
+    });
+  }
+  events.sort((a, b) => b.mult - a.mult);
+  return options.limit != null ? events.slice(0, options.limit) : events;
 }

@@ -1,10 +1,31 @@
 import marketApi from '@/api/market-api';
-import type { TokenSnapshot } from './detectors';
+import type { TokenSnapshot, TokenActivityRow } from './detectors';
 
 export interface TokenRef {
   unit: string;
   ticker: string;
   held: boolean;
+}
+
+/**
+ * One bulk call returning every token's aggregate activity (24h/7d volume) for the
+ * identity-free token-anomaly detector. Same source as fetchSnapshots; failures
+ * return [] so the feed never breaks. assetId is the unit; ticker falls back to the
+ * ascii asset name then a unit prefix.
+ */
+export async function fetchMarketActivity(): Promise<TokenActivityRow[]> {
+  let prices;
+  try {
+    prices = await marketApi.getAllPrices();
+  } catch {
+    return [];
+  }
+  return prices.map((p) => ({
+    unit: p.assetId,
+    ticker: p.ticker || p.assetNameAscii || p.assetId.slice(0, 6),
+    volume24h: p.volume24h ?? null,
+    volume7d: p.volume7d ?? null,
+  }));
 }
 
 /**
