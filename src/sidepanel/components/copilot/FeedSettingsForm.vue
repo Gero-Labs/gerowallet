@@ -58,6 +58,21 @@
         />
       </div>
 
+      <div class="cat-row">
+        <div class="cat-row__text">
+          <span class="cat-row__name">{{ $t('copilot.category.whales') }}</span>
+          <span class="cat-row__desc">{{ $t('copilot.category.whalesDesc') }}</span>
+        </div>
+        <v-switch
+          :input-value="categories.whales"
+          dense
+          hide-details
+          inset
+          class="cat-row__switch"
+          @change="(v) => $emit('update:category', 'whales', !!v)"
+        />
+      </div>
+
       <!-- Coming soon: shown so the user knows what's planned, never settable on -->
       <p class="feed-form__label feed-form__label--muted">{{ $t('copilot.category.comingSoon') }}</p>
       <div v-for="c in comingSoon" :key="c.key" class="cat-row cat-row--disabled">
@@ -103,7 +118,6 @@ const vibeOptions = computed<{ value: CopilotVibe; label: string; desc: string }
 ]);
 
 const comingSoon = computed(() => [
-  { key: 'whales', label: t('copilot.category.whales'), desc: t('copilot.category.whalesDesc') },
   { key: 'launches', label: t('copilot.category.launches'), desc: t('copilot.category.launchesDesc') },
   { key: 'governance', label: t('copilot.category.governance'), desc: t('copilot.category.governanceDesc') },
 ]);

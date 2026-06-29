@@ -37,7 +37,23 @@ describe('narrate', () => {
     );
   });
 
-  it('NARRATION_TEXT_KEYS contains exactly the 12 derivable keys', () => {
+  it('narrates a token-activity spike (vibe only, no scope/direction)', () => {
+    const spike = {
+      key: 'tokenActivitySpike:u:day-1',
+      kind: 'tokenActivitySpike' as const,
+      unit: 'u',
+      ticker: 'SNEK',
+      mult: 6,
+    };
+    expect(narrate(spike)).toEqual({
+      key: 'tokenActivitySpike:u:day-1',
+      textKey: 'copilot.feed.tokenActivitySpike',
+      params: { ticker: 'SNEK', mult: 6 },
+    });
+    expect(narrate(spike, 'spicy').textKey).toBe('copilot.feed.spicy.tokenActivitySpike');
+  });
+
+  it('NARRATION_TEXT_KEYS contains exactly the derivable keys (price x vibe x scope x dir + spike x vibe)', () => {
     const expected: string[] = [];
     for (const vibe of ['normal', 'chill', 'spicy'] as const) {
       const prefix = vibe === 'normal' ? '' : `${vibe}.`;
@@ -46,6 +62,7 @@ describe('narrate', () => {
           expected.push(`copilot.feed.${prefix}${scope}Price${dir}`);
         }
       }
+      expected.push(`copilot.feed.${prefix}tokenActivitySpike`);
     }
     expect([...NARRATION_TEXT_KEYS].sort()).toEqual(expected.sort());
   });

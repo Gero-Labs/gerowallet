@@ -66,4 +66,43 @@ describe('useCopilotFeed', () => {
     expect(args[1]).toEqual({ pct24h: 8, pct7d: 15 }); // spicy thresholds
     expect(args[5]).toBe('spicy'); // vibe is the last arg
   });
+
+  const allCats = (whales: boolean) => ({
+    bags: true, watchlist: true, whales, launches: false, governance: false,
+  });
+
+  it('runs the anomaly pass and merges its items when whales is enabled', async () => {
+    const store = fakeStore();
+    const build = vi.fn().mockResolvedValue([
+      { id: 'p1', key: 'p1', ts: 1, textKey: 'copilot.feed.heldPriceUp', params: {} },
+    ]);
+    const buildAnomalies = vi.fn().mockResolvedValue([
+      { id: 'a1', key: 'a1', ts: 1, textKey: 'copilot.feed.tokenActivitySpike', params: {} },
+    ]);
+    const feed = createCopilotFeed({
+      store, build, buildAnomalies,
+      prefs: { vibe: 'normal', categories: allCats(true) },
+      getRefs: () => [{ unit: 'u', ticker: 'T', held: true }],
+    });
+
+    await feed.refresh();
+
+    expect(buildAnomalies).toHaveBeenCalledTimes(1);
+    expect(store.items.map((i) => i.key).sort()).toEqual(['a1', 'p1']);
+  });
+
+  it('skips the anomaly pass when whales is disabled', async () => {
+    const store = fakeStore();
+    const build = vi.fn().mockResolvedValue([]);
+    const buildAnomalies = vi.fn().mockResolvedValue([]);
+    const feed = createCopilotFeed({
+      store, build, buildAnomalies,
+      prefs: { vibe: 'normal', categories: allCats(false) },
+      getRefs: () => [],
+    });
+
+    await feed.refresh();
+
+    expect(buildAnomalies).not.toHaveBeenCalled();
+  });
 });

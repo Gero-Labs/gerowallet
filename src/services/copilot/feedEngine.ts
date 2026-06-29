@@ -1,7 +1,18 @@
 // src/services/copilot/feedEngine.ts
-import { detectPriceMoves, type PriceThresholds, type TokenSnapshot } from './detectors';
+import {
+  detectPriceMoves,
+  detectTokenActivitySpikes,
+  type PriceThresholds,
+  type TokenSnapshot,
+  type TokenActivityRow,
+  type ActivitySpikeOptions,
+} from './detectors';
 import { narrate } from './narrator';
-import { fetchSnapshots as defaultFetch, type TokenRef } from './marketSnapshot';
+import {
+  fetchSnapshots as defaultFetch,
+  fetchMarketActivity as defaultActivityFetch,
+  type TokenRef,
+} from './marketSnapshot';
 import type { FeedItem } from './feedReducer';
 import type { CopilotVibe } from './preferences';
 
@@ -23,6 +34,27 @@ export async function buildFeedItems(
   if (refs.length === 0) return [];
   const snapshots = await fetchSnapshots(refs);
   const events = detectPriceMoves(snapshots, thresholds, bucket);
+  return events.map((e) => {
+    const n = narrate(e, vibe);
+    return { id: n.key, key: n.key, ts: now, textKey: n.textKey, params: n.params };
+  });
+}
+
+/**
+ * Orchestrate one identity-free token-anomaly pass: fetch the bulk market activity,
+ * detect volume spikes, narrate. Market-wide (not per-user-ref), so it takes no refs.
+ * `fetchActivity` is injectable for tests; `now`/`bucket` are caller-supplied.
+ */
+export async function buildTokenAnomalyItems(
+  options: ActivitySpikeOptions,
+  bucket: string,
+  now: number,
+  fetchActivity: () => Promise<TokenActivityRow[]> = defaultActivityFetch,
+  vibe: CopilotVibe = 'normal',
+): Promise<FeedItem[]> {
+  const rows = await fetchActivity();
+  if (rows.length === 0) return [];
+  const events = detectTokenActivitySpikes(rows, options, bucket);
   return events.map((e) => {
     const n = narrate(e, vibe);
     return { id: n.key, key: n.key, ts: now, textKey: n.textKey, params: n.params };
