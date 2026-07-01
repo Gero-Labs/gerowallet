@@ -1,14 +1,13 @@
 import { ref, computed } from 'vue';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { hasStrikeApiKeys } from '@/api/strike-v2.client';
-import type {
-  WithdrawQuoteResponse,
-  TransactionStatusResponse,
-} from '@/api/strike-v2.types';
+import { extractStrikeError, strikeErrorDebugInfo } from '@/api/strike-v2.error';
+import type { WithdrawQuoteResponse } from '@/api/strike-v2.types';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { debugLog } from '@/utils/debug';
 
 /**
  * Strike v2 withdraw quote – wraps the validator response and adds local
@@ -40,24 +39,6 @@ const quote = ref<WithdrawQuote | null>(null);
 const status = ref<WithdrawStatus>('idle');
 const error = ref<string | null>(null);
 const requestId = ref<string | null>(null);
-
-/**
- * Generation counter — bumped by `reset()` so any in-flight polling loop
- * exits the next time it wakes up. Without this, closing the WithdrawSheet
- * mid-withdrawal would leave `pollSettlement` firing API calls for up to
- * 5 minutes.
- */
-let flowGeneration = 0;
-
-// ── Polling config ──────────────────────────────────────────────────────────
-// Strike treats withdrawals as off-chain quote → on-chain settlement.
-// We poll status every 3 s for the first 30 s (rapid pickup), then back off
-// to 8 s up to a 5-minute hard cap. This matches the cadence used by the
-// deposit flow once it's wired and avoids hammering the validator endpoint.
-const POLL_FAST_MS = 3000;
-const POLL_SLOW_MS = 8000;
-const POLL_FAST_PHASE_MS = 30_000;
-const POLL_TIMEOUT_MS = 5 * 60_000;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -137,38 +118,6 @@ async function signCip8(message: string, password: string, pkBytes?: Uint8Array)
   return `${res.data.signature}:${res.data.key}`;
 }
 
-async function pollSettlement(reqId: string, generation: number): Promise<void> {
-  const start = Date.now();
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    // Composable was reset (e.g. user closed the sheet) — abandon the loop.
-    if (generation !== flowGeneration) return;
-
-    const elapsed = Date.now() - start;
-    if (elapsed > POLL_TIMEOUT_MS) {
-      throw new Error('Withdrawal timed out — please check the transaction history.');
-    }
-
-    let res: TransactionStatusResponse | null = null;
-    try {
-      res = await strikeUserApi.getTransactionStatus(reqId, 'withdraw');
-    } catch {
-      // Transient HTTP / network error — fall through to retry. We never
-      // catch a real validator-side failure here because that surfaces as
-      // res.status === 'failed' below, which throws unconditionally.
-    }
-
-    if (res?.status === 'completed') return;
-    if (res?.status === 'failed') {
-      throw new Error('Withdrawal failed on the validator side.');
-    }
-
-    const wait = elapsed < POLL_FAST_PHASE_MS ? POLL_FAST_MS : POLL_SLOW_MS;
-    await new Promise(r => setTimeout(r, wait));
-  }
-}
-
 // ── Public composable ───────────────────────────────────────────────────────
 
 export function useStrikeWithdraw() {
@@ -186,9 +135,12 @@ export function useStrikeWithdraw() {
    * Step 1 — request a withdrawal quote.
    *
    * @param amountUsd USD amount the user wants to withdraw.
-   * @param asset     Asset to receive (defaults to 'ADA' for Cardano).
+   * @param asset     Optional asset-to-receive OVERRIDE. Leave undefined to use
+   *   Strike's chain-native default (ADA for Cardano). Do NOT pass 'ADA'
+   *   explicitly — the backend rejects it with "unsupported asset"; the native
+   *   asset is selected by omitting the field entirely.
    */
-  async function requestQuote(amountUsd: string, asset = 'ADA'): Promise<void> {
+  async function requestQuote(amountUsd: string, asset?: string): Promise<void> {
     error.value = null;
     quote.value = null;
     requestId.value = null;
@@ -215,7 +167,10 @@ export function useStrikeWithdraw() {
       const raw = await strikeUserApi.getWithdrawQuote({
         usd_value: amountUsd,
         blockchain: 'cardano',
-        asset,
+        // Omit `asset` so Strike uses the chain-native asset (ADA). An explicit
+        // asset:'ADA' is rejected as "unsupported asset". Only forward a real
+        // non-native override if a caller ever passes one.
+        ...(asset && asset.toUpperCase() !== 'ADA' ? { asset } : {}),
       }) as WithdrawQuoteResponse & {
         fee?: string;
         expires_at?: string;
@@ -232,7 +187,12 @@ export function useStrikeWithdraw() {
       };
       status.value = 'quoted';
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      // Surface Strike's real rejection reason (e.g. a minimum-withdrawal or an
+      // unknown-field message) instead of the opaque "Request failed with status
+      // code 400". Log the raw body too so the exact reason is visible.
+      const dbg = strikeErrorDebugInfo(e);
+      debugLog('[strike-withdraw] quote rejected:', dbg.status, dbg.body);
+      error.value = extractStrikeError(e, 'Strike could not quote this withdrawal.');
       status.value = 'error';
     }
   }
@@ -264,22 +224,26 @@ export function useStrikeWithdraw() {
       );
       requestId.value = submitRes.request_id ?? quote.value.withdraw_id;
 
-      status.value = 'pending';
-      await pollSettlement(requestId.value, flowGeneration);
-
+      // Submitting the signed quote is the terminal step. Strike accepts the
+      // withdrawal and settles it on-chain to the account's registered address;
+      // the ADA then shows up via the wallet's own balance sync. Strike has NO
+      // status-poll endpoint — the old pollSettlement hit /v2/transaction/status
+      // (a route that doesn't exist), which 401'd and made the auth interceptor
+      // wipe the keys + show a "reconnect" prompt on a successful withdrawal.
+      // The 'settled' copy ("Funds are on their way to your wallet") is honest
+      // for this accepted-and-settling state.
       status.value = 'settled';
       return true;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const dbg = strikeErrorDebugInfo(e);
+      debugLog('[strike-withdraw] signAndSubmit failed:', dbg.status, dbg.body);
+      error.value = extractStrikeError(e, 'Failed to submit the withdrawal.');
       status.value = 'error';
       return false;
     }
   }
 
   function reset(): void {
-    // Bump the generation so any in-flight pollSettlement exits on its
-    // next wake-up instead of writing to the now-stale state.
-    flowGeneration++;
     quote.value = null;
     status.value = 'idle';
     error.value = null;

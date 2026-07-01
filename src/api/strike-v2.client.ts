@@ -121,7 +121,10 @@ strikeClient.interceptors.request.use(
       // No keys — allow public endpoints that don't require auth. NOTE: an
       // authenticated endpoint hit here WILL 401 — it means the user hasn't
       // connected/unlocked Strike (keys are stored encrypted and only loaded
-      // into the client after a successful connect or unlock).
+      // into the client after a successful connect or unlock). Tag it so the
+      // response interceptor does NOT treat that 401 as "keys dead" and wipe the
+      // stored blob — the blob is fine, it just needs unlocking.
+      (config as { __strikeSigned?: boolean }).__strikeSigned = false;
       return config;
     }
 
@@ -163,6 +166,7 @@ strikeClient.interceptors.request.use(
     // (config.headers is always defined inside a request interceptor — an
     // AxiosHeaders instance — so we assign onto it directly.)
     Object.assign(config.headers, authHeaders);
+    (config as { __strikeSigned?: boolean }).__strikeSigned = true;
 
     return config;
   },
@@ -183,11 +187,18 @@ strikeClient.interceptors.response.use(
   (res) => res,
   (err) => {
     const status = err?.response?.status;
-    if (status === 401 || status === 403) {
+    const wasSigned = !!(err?.config as { __strikeSigned?: boolean } | undefined)?.__strikeSigned;
+    if ((status === 401 || status === 403) && wasSigned) {
+      // We DID send a signature and Strike still rejected it → the keys are dead.
+      // Clear them and let subscribers wipe the stored blob (forces a reconnect).
       clearStrikeApiKeys();
       authFailureHandlers.forEach((h) => {
         try { h(); } catch { /* never let a handler swallow the original error */ }
       });
+    } else if (status === 401 || status === 403) {
+      // 401 on an UNSIGNED request — the keys simply weren't loaded into this
+      // context. Do NOT clear keys or wipe the stored blob; the user just needs to
+      // unlock. (Wiping here caused a destructive "reconnect every time" loop.)
     }
     return Promise.reject(err);
   },

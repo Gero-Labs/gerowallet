@@ -1130,7 +1130,16 @@ async function signDataNormal() {
         accountIndex: 0,
         isUsb: true,
       },
-    }) as { data: { key: string; signature: string } };
+    }) as { data: { key?: string; signature?: string; error?: string } };
+
+    // The background resolves (does not reject) on failure, returning
+    // { error }. Without this guard the error object was handed to the dApp as
+    // the "signature", surfacing downstream as an opaque verify 401. Mirror the
+    // popup path (DappSignData.vue) which only approves a real signature.
+    if (res?.data?.error) throw new Error(res.data.error);
+    if (!res?.data?.signature || !res?.data?.key) {
+      throw new Error('Wallet returned an empty signature payload');
+    }
 
     approve(res.data);
     spendingPassword.value = '';
@@ -1196,9 +1205,11 @@ async function signDataPrf() {
     const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]);
     const signingKey = accountKey.derive([role, index]).toRawKey();
 
-    // Get address bytes for COSE_Key
+    // Get address bytes for COSE_Key. Address.toBytes() returns a HexBlob
+    // (hex STRING) — decode to real bytes, else the emurgo WASM coerces the
+    // string per-character and embeds a garbage address (verify 401).
     const addressBytes = address.startsWith('addr') || address.startsWith('stake')
-      ? Cardano.Address.fromBech32(address).toBytes()
+      ? Buffer.from(Cardano.Address.fromBech32(address).toBytes(), 'hex')
       : Buffer.from(address, 'hex');
 
     const signatureData = buildSignatureAndCoseKey(addressBytes, payload, signingKey);
@@ -1228,7 +1239,12 @@ async function signDataHw() {
         accountIndex: 0,
         isUsb: true,
       },
-    }) as { data: { key: string; signature: string } };
+    }) as { data: { key?: string; signature?: string; error?: string } };
+
+    if (res?.data?.error) throw new Error(res.data.error);
+    if (!res?.data?.signature || !res?.data?.key) {
+      throw new Error('Wallet returned an empty signature payload');
+    }
 
     approve(res.data);
   } catch (e: any) {
