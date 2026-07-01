@@ -532,11 +532,13 @@ watch(() => props.value, (val) => {
     showPassword.value = false;
     showFullMessage.value = false;
     quoteError.value = null;
-    // Load this sheet's own Strike account so the Withdrawable Balance and the
-    // Get Quote gate reflect real funds. WithdrawSheet uses its own
-    // useStrikeAccount instance (separate from the trading view's), so without
-    // this it stays at $0.00 and Get Quote is disabled. Harmless if not yet
-    // connected — the call just 401s and the form shows the connect UI.
+    // Load the Strike account so the Withdrawable Balance and the Get Quote
+    // gate reflect real funds. useStrikeAccount's `account` is a module-level
+    // singleton, but the trading view populates a DIFFERENT composable
+    // (useStrikeTrading, which has its own separate account) — nothing had
+    // called useStrikeAccount.loadAccount() in the withdraw context, so it sat
+    // at $0.00 with Get Quote disabled. Harmless if not yet connected — the
+    // call just 401s and the form shows the connect UI.
     loadAccount().catch(() => { /* not connected / transient — stays at $0 */ });
     // Focus the amount field once the dialog has painted (avoids the native
     // `autofocus` race warning the dialog triggers).
