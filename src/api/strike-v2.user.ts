@@ -117,6 +117,15 @@ export const strikeUserApi = {
     return data;
   },
 
+  // Step 2 of the deposit flow: ask Strike to BUILD the unsigned deposit tx.
+  // Strike constructs the real vault deposit (correct script/datum + builder fee)
+  // and returns an unsigned CBOR for the wallet to sign + submit. The client must
+  // NOT build its own transfer to the deposit address.
+  async buildDepositTx(req: import('./strike-v2.types').BuildDepositTxRequest): Promise<import('./strike-v2.types').BuildDepositTxResponse> {
+    const { data } = await strikeClient.post('/v2/deposit/build-tx', req);
+    return data;
+  },
+
   async confirmDeposit(requestId: string, txHash: string): Promise<{ request_id: string; status: string }> {
     const { data } = await strikeClient.post('/v2/deposit', { request_id: requestId, tx_hash: txHash });
     return data;
@@ -133,9 +142,8 @@ export const strikeUserApi = {
     return data;
   },
 
-  // Transaction status
-  async getTransactionStatus(requestId: string, type: 'deposit' | 'withdraw'): Promise<import('./strike-v2.types').TransactionStatusResponse> {
-    const { data } = await strikeClient.get('/v2/transaction/status', { params: { request_id: requestId, type } });
-    return data;
-  },
+  // NOTE: Strike has NO transaction-status / poll endpoint. Deposit and
+  // withdraw both finish at their confirm/submit step; the previous
+  // `/v2/transaction/status` poll hit a route that doesn't exist (401 →
+  // key-wipe). Don't re-add it — verify against strike-builder-reference.
 };

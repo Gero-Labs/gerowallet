@@ -433,19 +433,21 @@ const tradingError = ref<string | null>(null);
 
 const maxLeverage = computed(() => props.marketConfig?.margin_tiers?.[0]?.max_leverage ?? 20);
 
-// Available ADA balance for the slider
-const availableBalanceAda = computed(() => {
-  const strikeBal = parseFloat(props.account?.available_balance ?? '0');
-  const bal = strikeBal > 0 ? strikeBal : props.walletAdaBalance;
-  return bal;
+// Strike account `available_balance` is USD-denominated (it's a USD margin
+// account). Fall back to the on-chain wallet ADA balance (converted to USD)
+// only when there's no Strike balance yet.
+const availableBalanceUsd = computed(() => {
+  const strikeUsd = parseFloat(props.account?.available_balance ?? '0');
+  if (strikeUsd > 0) return strikeUsd;
+  return (props.walletAdaBalance || 0) * (props.livePrice || 0);
 });
 
-// Convert available balance to selected asset
+// Available balance expressed in the selected size asset. USD is the native
+// unit; ADA = USD / live ADA price. (The previous code treated the USD balance
+// as ADA 1:1 — a $28 balance showed as "28 ADA" instead of ~196 ADA.)
 const availableBalanceInAsset = computed(() => {
-  if (sizeAsset.value === 'USD') {
-    return availableBalanceAda.value * props.livePrice;
-  }
-  return availableBalanceAda.value;
+  if (sizeAsset.value === 'USD') return availableBalanceUsd.value;
+  return props.livePrice > 0 ? availableBalanceUsd.value / props.livePrice : 0;
 });
 
 // Open positions for current symbol
