@@ -396,6 +396,19 @@
                   <v-icon left small>mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
+                <v-btn
+                  v-if="canSignOnAnotherDevice"
+                  block
+                  outlined
+                  :color="primaryColor"
+                  class="font-weight-bold mt-3"
+                  :disabled="submitting"
+                  :loading="submitting"
+                  @click="signOnAnotherDevice()"
+                >
+                  <v-icon left small>mdi-cellphone-link</v-icon>
+                  {{ $t('crossDevice.signOnAnotherDevice') }}
+                </v-btn>
               </template>
 
               <!-- ── PRF wallet (PassKey) ── -->
@@ -554,6 +567,8 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
+import i18n from '@/plugins/i18n';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useChainContext } from '../../composables/useChainContext';
 
 const { themeColors } = useChainContext();
@@ -633,6 +648,14 @@ const walletType = computed(() => loggedWallet.value?.type || WalletType.Normal)
 const isPrfWallet = computed(() =>
   loggedWallet.value?.encryptionMethod === 'prf' ||
   (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId)
+);
+
+// Cross-device signing: only for Cardano software (non-hardware) wallets, and
+// only when the feature flag is on. Dark by default.
+const canSignOnAnotherDevice = computed(() =>
+  featureFlagsStore.isCrossDeviceSigningEnabled() &&
+  loggedWallet.value?.chain === Blockchain.CARDANO &&
+  isNormalWallet.value
 );
 
 const contactsList = computed(() => {
@@ -1066,6 +1089,43 @@ async function signAndSubmit() {
     passwordError.value = e?.message || 'Transaction failed';
   } finally {
     spendingPassword.value = '';
+    submitting.value = false;
+  }
+}
+
+// ── Cross-device signing (this device proposes, another device signs) ──
+async function signOnAnotherDevice() {
+  if (!tx.value) return;
+  passwordError.value = '';
+  submitting.value = true;
+  try {
+    // Serialize the ORIGINAL unsigned tx and hand it to the other device.
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+    const result = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE,
+      data: {
+        unsignedCbor: txCbor.value,
+        intent: `Send ${adaAmount.value || '0'} ADA`,
+        stakeAddress: loggedWallet.value?.stakeAddress,
+        ttlMs: 180000,
+      },
+    }) as { data: { decision?: string; witnessSetCbor?: string; reason?: string } };
+
+    const decision = result.data.decision;
+    if (decision === 'approved' && result.data.witnessSetCbor) {
+      // Apply the externally-signed witness set via the existing submit path.
+      // SUBMIT_TX re-checks the body hash before submitting.
+      txWitnesses.value = result.data.witnessSetCbor;
+      await submitSignedTx();
+    } else if (result.data.reason === 'expired') {
+      passwordError.value = i18n.t('crossDevice.requestExpired') as string;
+    } else {
+      passwordError.value = i18n.t('crossDevice.requestRejected') as string;
+    }
+  } catch (e: any) {
+    console.error('Cross-device sign error:', e);
+    passwordError.value = e?.message || (i18n.t('crossDevice.requestRejected') as string);
+  } finally {
     submitting.value = false;
   }
 }

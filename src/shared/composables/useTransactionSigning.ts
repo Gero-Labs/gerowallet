@@ -3,8 +3,9 @@ import { Ref, ComputedRef, toRefs, ref, computed } from 'vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { WalletType } from '@/models/types';
+import { Blockchain, WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
@@ -33,6 +34,7 @@ export interface TransactionSigningReturn {
   privateKeyBytes: Ref<Uint8Array | null>;
   isPrfWallet: ComputedRef<boolean>;
   isBTSupported: ComputedRef<boolean>;
+  canSignOnAnotherDevice: ComputedRef<boolean>;
   // Keystone state
   overlay: Ref<boolean>;
   keystoneScan: Ref<boolean>;
@@ -43,6 +45,7 @@ export interface TransactionSigningReturn {
   signTx: () => Promise<boolean>;
   signLedgerTx: () => Promise<boolean>;
   submitTx: () => Promise<void>;
+  signOnAnotherDevice: () => Promise<void>;
   handleSign: (formRef?: { validate: () => boolean }) => Promise<void>;
   resetState: () => void;
   handlePassKeySuccess: () => void;
@@ -89,6 +92,14 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     return (loggedWallet.value?.type === WalletType.Ledger || loggedWallet.value?.type === WalletType.Trezor) &&
       !isSubmit.value &&
       loggedWallet.value?.btSupported;
+  });
+
+  // Cross-device signing: only for Cardano software (non-hardware) wallets and
+  // only when the feature flag is on. Dark by default.
+  const canSignOnAnotherDevice = computed(() => {
+    return featureFlagsStore.isCrossDeviceSigningEnabled() &&
+      loggedWallet.value?.chain === Blockchain.CARDANO &&
+      loggedWallet.value?.type === WalletType.Normal;
   });
 
   const setPasswordFieldRef = (ref: any) => {
@@ -373,6 +384,46 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     }
   };
 
+  // Cross-device signing: this device proposes an unsigned tx and another
+  // registered device approves + signs it locally. On approval the returned
+  // witness set is routed into the existing submit path (which re-checks the
+  // tx body hash before broadcasting).
+  const signOnAnotherDevice = async (): Promise<void> => {
+    loading.value = true;
+    try {
+      const tx = options.tx.value;
+      if (!tx) {
+        throw new Error(t('common.noTransactionToSign'));
+      }
+
+      // Serialize the ORIGINAL unsigned tx and hand it to the other device.
+      txCbor.value = serializeCardanoJsSdkTx(tx);
+      const result = (await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE,
+        data: {
+          unsignedCbor: txCbor.value,
+          intent: 'Sign transaction',
+          stakeAddress: loggedWallet.value?.stakeAddress,
+          ttlMs: 180000,
+        },
+      })) as { data: { decision?: string; witnessSetCbor?: string; reason?: string } };
+
+      if (result.data.decision === 'approved' && result.data.witnessSetCbor) {
+        txWitnesses.value = result.data.witnessSetCbor;
+        await submitTx();
+      } else if (result.data.reason === 'expired') {
+        snackbar.setError(t('crossDevice.requestExpired'));
+      } else {
+        snackbar.setError(t('crossDevice.requestRejected'));
+      }
+    } catch (e) {
+      console.error('Error signing on another device:', e);
+      snackbar.setError(e instanceof Error ? e.message : t('crossDevice.requestRejected'));
+    } finally {
+      loading.value = false;
+    }
+  };
+
   const handleSign = async (formRef?: { validate: () => boolean }): Promise<void> => {
     if (isSubmit.value) {
       await submitTx();
@@ -451,6 +502,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     privateKeyBytes,
     isPrfWallet,
     isBTSupported,
+    canSignOnAnotherDevice,
     // Keystone state
     overlay,
     keystoneScan,
@@ -461,6 +513,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     signTx,
     signLedgerTx,
     submitTx,
+    signOnAnotherDevice,
     handleSign,
     resetState,
     handlePassKeySuccess,
