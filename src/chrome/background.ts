@@ -874,7 +874,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
 
-  const signDataPayload = { ...request.data, website: request.origin };
+  const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignData = () => {
@@ -919,7 +919,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
 
-  const signTxPayload = { ...request.data, website: request.data?.origin || request.origin };
+  const signTxPayload = { ...request.data, website: request.data?.origin || request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
