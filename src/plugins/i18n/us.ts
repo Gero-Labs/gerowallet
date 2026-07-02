@@ -808,6 +808,8 @@ export default {
   'crossDevice.signOnAnotherDevice': 'Sign on another device',
   'crossDevice.requestExpired': 'The signing request expired. Please try again.',
   'crossDevice.requestRejected': 'The signing request was rejected.',
+  'crossDevice.intentSign': 'Sign transaction',
+  'crossDevice.intentSend': 'Send {amount} ADA',
   'dashboard.actions': 'Actions',
   'dashboard.adaOnly': 'ADA Only',
   'dashboard.adaOnlyTooltip': 'Showing ADA balance only',
