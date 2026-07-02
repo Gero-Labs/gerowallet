@@ -35,6 +35,17 @@
               </div>
               <v-spacer />
               <v-btn
+                icon
+                small
+                class="flex-shrink-0 mr-1"
+                :loading="resettingCache"
+                :disabled="resettingCache"
+                :title="$t('midnight.resetSyncCache')"
+                @click="resetMidnightCache()"
+              >
+                <v-icon small>mdi-cached</v-icon>
+              </v-btn>
+              <v-btn
                 small
                 color="primary"
                 outlined
@@ -341,6 +352,7 @@ import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
+import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
 const instance = getCurrentInstance();
@@ -403,6 +415,33 @@ const activeView = ref<ViewMode>('holdings');
 
 // DUST registration dialog state — only relevant when chain === Midnight.
 const dustRegistrationOpen = ref(false);
+
+// Midnight "reset sync cache" recovery action state. Forces a full re-sync from
+// block 0 in BG (clears WS cursor + store snapshot + persisted SDK wallet-state
+// blobs), so a stuck/stale local view can be recovered without reinstalling.
+const resettingCache = ref(false);
+
+async function resetMidnightCache() {
+  if (resettingCache.value) return;
+  resettingCache.value = true;
+  try {
+    const { Messaging } = await import('@/chrome/messaging');
+    const { MessageTypes } = await import('@/models/MessageTypes');
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.RESYNC_MIDNIGHT,
+      data: {},
+    });
+    if (response?.data?.success) {
+      snackbar.fireSuccess(t('midnight.resetSyncCacheDone'));
+    } else {
+      snackbar.setError(response?.data?.error || t('midnight.resetSyncCacheFailed'));
+    }
+  } catch (error) {
+    snackbar.setError(error instanceof Error ? error.message : t('midnight.resetSyncCacheFailed'));
+  } finally {
+    resettingCache.value = false;
+  }
+}
 
 // Compact chip mode — collapse labels to icons when space is tight
 const compactChips = ref(false);
