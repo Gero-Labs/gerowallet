@@ -1105,7 +1105,7 @@ async function signOnAnotherDevice() {
       method: MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE,
       data: {
         unsignedCbor: txCbor.value,
-        intent: `Send ${adaAmount.value || '0'} ADA`,
+        intent: i18n.t('crossDevice.intentSend', { amount: adaAmount.value || '0' }) as string,
         stakeAddress: loggedWallet.value?.stakeAddress,
         ttlMs: 180000,
       },

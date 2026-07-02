@@ -402,7 +402,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         method: MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE,
         data: {
           unsignedCbor: txCbor.value,
-          intent: 'Sign transaction',
+          intent: t('crossDevice.intentSign'),
           stakeAddress: loggedWallet.value?.stakeAddress,
           ttlMs: 180000,
         },
