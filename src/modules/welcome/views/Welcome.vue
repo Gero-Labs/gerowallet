@@ -40,12 +40,32 @@
         />
       </div>
 
-      <!-- Right column - create / import onboarding (always shown) -->
+      <!-- Right column - intro hero → onboarding (revealed on Get Started) -->
       <div class="welcome-right-column">
         <div class="right-content">
-          <div class="right-panel">
-            <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
-          </div>
+          <transition name="onboarding-reveal" mode="out-in">
+            <!-- Intro: showcase hero + Get Started CTA -->
+            <div v-if="!started" key="intro" class="right-panel">
+              <div class="welcome-intro">
+                <NoWalletsWelcomeCard />
+                <v-btn
+                  class="geroButton get-started-btn"
+                  rounded
+                  x-large
+                  depressed
+                  @click="started = true"
+                >
+                  {{ $t('welcome.getStarted') }}
+                  <v-icon right>mdi-arrow-right</v-icon>
+                </v-btn>
+              </div>
+            </div>
+
+            <!-- Onboarding flow -->
+            <div v-else key="onboarding" class="right-panel">
+              <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
+            </div>
+          </transition>
 
           <!-- Footer -->
           <LegalFooter />
@@ -62,9 +82,13 @@ import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/Wall
 import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCreation.vue';
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
+import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
 
 const DEV_NETWORKS_KEY = 'gero:devNetworks';
 
+// Onboarding is gated behind the Get Started CTA so the welcome screen opens on
+// the showcase hero rather than the full blockchain/method form.
+const started = ref<boolean>(false);
 const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
 const devMode = ref<boolean>(localStorage.getItem(DEV_NETWORKS_KEY) === 'true');
 
@@ -156,6 +180,40 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   display: flex;
   align-items: flex-start;
   justify-content: center;
+}
+
+/* Intro state: compact showcase hero with the Get Started CTA overlaid on it */
+.welcome-intro {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  align-self: center; /* vertically centered within the right column */
+  margin: 0 auto;
+}
+
+.get-started-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%); /* straddle the card's bottom edge */
+  min-width: 176px;
+  height: 44px !important;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: none;
+  z-index: 5;
+}
+
+/* Reveal transition: only the intro fades OUT. The onboarding card mounts fully
+   opaque — animating its opacity makes Chrome drop the liquid-glass
+   backdrop-filter for a few frames (card flashes transparent then snaps in). */
+.onboarding-reveal-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.onboarding-reveal-leave-to {
+  opacity: 0;
 }
 
 /* Fallback for browsers without backdrop-filter support */

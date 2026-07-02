@@ -397,15 +397,21 @@ export function resolveAsset(token: any): any {
       risk: 'AAA',
     };
   } else {
-    if (!token.policy_id && token.unit) {
-      policy_id = Cardano.AssetId.getPolicyId(token.unit);
-    } else if (token.policy_id) {
+    // A Cardano unit must be a concatenated hex string (policyId + assetName).
+    // The sync backend may occasionally send a non-hex unit (e.g. an asset1…
+    // fingerprint), which makes the SDK's AssetId helpers throw and crashes the
+    // whole transaction render. Only derive from the unit when it is valid hex.
+    const isHexUnit = typeof token.unit === 'string' && token.unit.length >= 56
+      && /^[0-9a-fA-F]+$/.test(token.unit);
+    if (token.policy_id) {
       policy_id = token.policy_id;
+    } else if (token.unit && isHexUnit) {
+      policy_id = Cardano.AssetId.getPolicyId(token.unit);
     }
-    if (!token.asset_name && token.unit) {
-      asset_name = Cardano.AssetId.getAssetName(token.unit);
-    } else {
+    if (token.asset_name) {
       asset_name = token.asset_name;
+    } else if (token.unit && isHexUnit) {
+      asset_name = Cardano.AssetId.getAssetName(token.unit);
     }
     if (policy_id) {
       isScam = DexHunterStore.state.blacklistPolicies.includes(policy_id)
@@ -503,6 +509,10 @@ export function resolveAsset(token: any): any {
         }
       }
     }
+  }
+  // Fallback name for assets we could not resolve (e.g. non-hex unit).
+  if (!name) {
+    name = typeof unit === 'string' && unit.length > 16 ? unit.slice(0, 16) + '...' : (unit || '');
   }
   // Apply token image overrides
   img = applyTokenImageOverride(name, img);

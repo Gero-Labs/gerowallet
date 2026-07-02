@@ -506,7 +506,8 @@ app.add(METHOD.enable, (request, sendResponse) => {
     return reply({ data: true });
   }
 
-  const enablePayload = { ...request.data, website: origin };
+  const favIconUrl = send.tab?.favIconUrl;
+  const enablePayload = { ...request.data, website: origin, favIconUrl };
 
   const handleMiniGeroEnable = () => {
     return sendToMiniGero('enable', enablePayload, tabId)
@@ -528,7 +529,8 @@ app.add(METHOD.enable, (request, sendResponse) => {
       .catch(() => {
         // Fallback: popup window when side panel is not supported or fails
         const popupURL = chrome.runtime.getURL(
-          `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}`
+          `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}` +
+            (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
         );
         focusOrCreatePopup(popupURL, 470, 600)
           .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
