@@ -78,7 +78,7 @@ Note the category is deliberately labeled "Big moves" (neutral), never "smart mo
 ## 7. P3 (allowance) and P1 (Nexus chat)
 
 - **P3 allowance semantics:** `src/services/agent/allowancePolicy.ts` is the source. `evaluatePayment(config, history, request)` enforces a default-deny allowlist (category + payee), a per-payment cap, a rolling-24h daily cap, a total budget, and expiry, all in exact `bigint` lovelace. Port the same verdicts. Ledger + store: `allowanceLedger.ts`, `agentAllowanceStore.ts`.
-- **P1 Nexus chat status:** the backend contract is written (`docs/plans/2026-06-29-nexus-agent-chat-rail-spec.md`): `POST /api/agent/chat`, non-streaming JSON now with SSE frames as a later opt-in, Fluxpoint (kimi-k2.6) key server-side, `max_tokens >= 800`. The **endpoint is not built yet**. We will notify you the moment it is testable so you can start P1 against a real rail.
+- **P1 Nexus chat status (UPDATED 2026-07-02):** the backend contract (`docs/plans/2026-06-29-nexus-agent-chat-rail-spec.md`, `POST /api/agent/chat`, non-streaming JSON now with SSE as a later opt-in, Fluxpoint kimi-k2.6 key server-side, `max_tokens >= 800`) is now **implemented and verified across nexus + the gero-backend proxy hop, NOT yet deployed** (see spec section 12: nexus `feat/agent-chat-rail`, gero-backend `feat/agent-chat-proxy`; facade + controller tests green). So P1 is no longer blocked on "not built" - it is pending merge + manual deploy + the `FLUXPOINT_API_KEY` secret. You can start prepping the P1 AgentProvider draft now; it becomes testable the moment the rail deploys. We will notify you when it is live.
 
 ## 8. Your section 8 FYI (CSLKit pointer-lifetime bug)
 
