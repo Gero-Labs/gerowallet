@@ -71,11 +71,11 @@ export async function signMessage<T extends { sig: string }>(
  * safely drop unverified inbound messages.
  */
 export async function verifyMessage(
-  msg: { sig: string } & Record<string, unknown>,
+  msg: { sig: string },
   pubKeyHex: string,
 ): Promise<boolean> {
   try {
-    const payload = canonicalBytes(msg);
+    const payload = canonicalBytes(msg as Record<string, unknown>);
     return await ed25519.verifyAsync(
       hexToBytes(msg.sig),
       payload,

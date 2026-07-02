@@ -18,7 +18,6 @@ import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDeviceSigning.service';
 import { createWsTransport, feedCrossDeviceMessage } from './wsTransport';
-import { signMessage } from './envelope';
 import { CROSS_DEVICE_PROTOCOL_VERSION, type DeviceRegister, type DevicePlatform } from './protocol';
 
 export interface CrossDeviceHandles {
@@ -30,25 +29,25 @@ export interface CrossDeviceHandles {
 
 /**
  * Build a DEVICE_REGISTER for this device and send it over the transport.
+ * DEVICE_REGISTER carries its own pubKey (trust-on-first-use for the registry),
+ * so per the protocol schema it is not itself signed; the pubKey it announces is
+ * what subsequently verifies this device's SIGN_REQUEST/SIGN_RESPONSE messages.
  */
-async function publishDeviceRegister(
+function publishDeviceRegister(
   send: (msg: DeviceRegister) => void,
-  identity: { deviceId: string; privKeyHex: string; pubKeyHex: string },
+  identity: { deviceId: string; pubKeyHex: string },
   opts: { label: string; platform: DevicePlatform; hasSigningKey: boolean; now: number },
-): Promise<void> {
-  const register = await signMessage<DeviceRegister>(
-    {
-      v: CROSS_DEVICE_PROTOCOL_VERSION,
-      type: 'DEVICE_REGISTER',
-      deviceId: identity.deviceId,
-      label: opts.label,
-      platform: opts.platform,
-      pubKey: identity.pubKeyHex,
-      hasSigningKey: opts.hasSigningKey,
-      createdAt: opts.now,
-    },
-    identity.privKeyHex,
-  );
+): void {
+  const register: DeviceRegister = {
+    v: CROSS_DEVICE_PROTOCOL_VERSION,
+    type: 'DEVICE_REGISTER',
+    deviceId: identity.deviceId,
+    label: opts.label,
+    platform: opts.platform,
+    pubKey: identity.pubKeyHex,
+    hasSigningKey: opts.hasSigningKey,
+    createdAt: opts.now,
+  };
   send(register);
 }
 
@@ -66,7 +65,6 @@ export function bootstrapCrossDeviceSigning(opts: {
 
   const keypair = generateDeviceKeypair();
   const deviceId = deviceIdFromPubKey(keypair.pubKeyHex);
-  const identity = { deviceId, privKeyHex: keypair.privKeyHex, pubKeyHex: keypair.pubKeyHex };
   const transport = createWsTransport();
 
   const signing = createCrossDeviceSigning({
@@ -79,12 +77,16 @@ export function bootstrapCrossDeviceSigning(opts: {
     newId: () => globalThis.crypto.randomUUID(),
   });
 
-  void publishDeviceRegister((msg) => transport.send(msg), identity, {
-    label: opts.label,
-    platform: 'extension',
-    hasSigningKey: opts.hasSigningKey,
-    now: Date.now(),
-  }).catch((e) => debugLog('cross-device DEVICE_REGISTER failed:', e));
+  try {
+    publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: keypair.pubKeyHex }, {
+      label: opts.label,
+      platform: 'extension',
+      hasSigningKey: opts.hasSigningKey,
+      now: Date.now(),
+    });
+  } catch (e) {
+    debugLog('cross-device DEVICE_REGISTER failed:', e);
+  }
 
   debugLog('🔗 Cross-device signing bridge wired (dark):', deviceId);
 

@@ -86,7 +86,7 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     // Authenticated origin (invariant 2): verify against the sender's registered pubkey.
     const pubKey = await resolvePubKey(msg.fromDeviceId);
     if (!pubKey) return;
-    const ok = await verifyMessage(msg as { sig: string } & Record<string, unknown>, pubKey);
+    const ok = await verifyMessage(msg, pubKey);
     if (!ok) return;
 
     if (isSignRequest(msg)) {
