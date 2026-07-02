@@ -804,6 +804,10 @@ export default {
   'copilot.allowance.errors.emptyAllowlist': 'The allow-list must have at least one payee or category.',
   'copilot.allowance.errors.wildcardCategory': 'Wildcard category is not permitted.',
   'copilot.allowance.errors.expiryPast': 'Expiry must be in the future.',
+  // --- Cross-device signing ---
+  'crossDevice.signOnAnotherDevice': 'Sign on another device',
+  'crossDevice.requestExpired': 'The signing request expired. Please try again.',
+  'crossDevice.requestRejected': 'The signing request was rejected.',
   'dashboard.actions': 'Actions',
   'dashboard.adaOnly': 'ADA Only',
   'dashboard.adaOnlyTooltip': 'Showing ADA balance only',
