@@ -15,7 +15,7 @@ interface WsSyncBlock {
   time?: number;
 }
 
-interface WsSyncMessage {
+export interface WsSyncMessage {
   type: string;
   block?: WsSyncBlock;
   [key: string]: unknown;
@@ -25,7 +25,16 @@ interface WsHandlers {
   onSync?: (data: WsSyncMessage) => Promise<void>;
   onRollback?: (data: WsSyncMessage) => Promise<void>;
   onForceResync?: () => Promise<void>;
+  // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
+  // Purely additive: when unset, cross-device message types fall through to the
+  // existing "unknown type" default and nothing else changes. See
+  // docs/plans/2026-06-29-cross-device-signing-bridge.md.
+  onCrossDeviceMessage?: (raw: unknown) => void;
 }
+
+// Relay message types handled by the cross-device signing bridge. Kept in sync
+// with src/services/crossDevice/protocol.ts CrossDeviceMessageType.
+const CROSS_DEVICE_MESSAGE_TYPES = ['DEVICE_REGISTER', 'SIGN_REQUEST', 'SIGN_RESPONSE'];
 
 class WebSocketService {
   private ws: WebSocket | null = null;
@@ -151,6 +160,15 @@ class WebSocketService {
       const data: WsSyncMessage = JSON.parse(raw);
       const type = data.type;
 
+      // Cross-device signing bridge: forward relay messages to the injected
+      // handler and return before the sync switch. Additive — when the handler
+      // is unset (flag off), these types are never seen on the wire and this
+      // branch is a no-op, leaving SYNC/ROLLBACK/FORCE_RESYNC handling unchanged.
+      if (this.handlers.onCrossDeviceMessage && CROSS_DEVICE_MESSAGE_TYPES.includes(type)) {
+        this.handlers.onCrossDeviceMessage(data);
+        return;
+      }
+
       switch (type) {
         case 'SYNC': {
           const txCount = Array.isArray(data['transactions']) ? data['transactions'].length : 0;
@@ -209,7 +227,7 @@ class WebSocketService {
             addresses: data['addresses'],
             account: data['account'],
           };
-          debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as any[])?.length || 0} UTxOs`);
+          debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as unknown[])?.length || 0} UTxOs`);
           this.lastSyncedBlock = block?.height || (data['blockHeight'] as number) || 0;
           this.handlers.onSync?.(combinedPayload);
           this.pendingTxBatches = [];
@@ -258,6 +276,16 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     }
+  }
+
+  /**
+   * Public passthrough for sending an arbitrary message over the existing
+   * socket. Used by the cross-device signing transport adapter (wsTransport.ts)
+   * to publish relay messages. Thin wrapper over the private `send`; obeys the
+   * same OPEN-socket guard, so it is a no-op when disconnected.
+   */
+  sendRaw(msg: object): void {
+    this.send(msg);
   }
 
   private startSyncCheck(): void {
