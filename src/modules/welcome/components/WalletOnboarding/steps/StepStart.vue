@@ -152,7 +152,6 @@ const onContinue = (): void => {
 }
 
 .method-card:hover:not(.method-card--disabled) {
-  border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.05);
 }
 
