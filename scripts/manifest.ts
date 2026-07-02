@@ -74,6 +74,8 @@ function buildCSP(dev: boolean): string {
     'wss://*.strikefinance.org',
     'https://*.gerowallet.io',
     'wss://*.gerowallet.io',
+    // Gero Copilot agent (direct-to-Fluxpoint dev fallback)
+    'https://api-v3.fluxpointstudios.com',
     // Dev-only
     ...(dev
       ? [

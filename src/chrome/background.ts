@@ -1609,12 +1609,19 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
     // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
+      // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets).
+      // Mirrors the SIGN_TX handler convention (number[] over the wire).
+      const privateKeyBytes = request.data.privateKeyBytes
+        ? new Uint8Array(request.data.privateKeyBytes)
+        : undefined;
+
       const res = await walletBg.signData(
         request.data.address,
         request.data.payload,
         request.data.password,
         request.data.accountIndex || 0,
-        WalletStore.state.keys
+        WalletStore.state.keys,
+        privateKeyBytes, // Pass pre-decrypted root key for PRF wallets
       );
       sendResponse({
         id: request.id,

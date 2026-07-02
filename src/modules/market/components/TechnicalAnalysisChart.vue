@@ -58,6 +58,67 @@ let initRetryCount = 0;
 let initRafId: number | null = null;
 const MAX_INIT_RETRIES = 10;
 
+// ── Render-time candle conditioning ───────────────────────────────────────────
+// Ported from the market-data website (cardano-market-data CandleChart.tsx) so
+// the Gero chart matches it. The backend records OHLC from the AMM post-swap
+// marginal spot, so transient single-bar spikes (e.g. NIGHT) draw long shadows
+// that a robust per-bar price never shows. Display-only — the /candles API is
+// unchanged. Also sorts ascending + dedupes by time (lightweight-charts requires
+// strictly-increasing unique time) as cheap insurance for the fallback path.
+const LOCAL_WINDOW = 20; // bars each side for the rolling reference
+const BODY_BAND = 12;    // open/close may sit within 12x of the local median
+const WICK_CAP = 0.004;  // max wick kept after smoothing, as a fraction of body
+
+function median(nums: number[]): number {
+  if (!nums.length) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+function prepareCandles(raw: CandleData[]): CandleData[] {
+  // 1. keep valid bars, sort ascending, dedupe by time (keep last per timestamp)
+  const byTime = new Map<number, CandleData>();
+  for (const c of raw) {
+    const t = Number(c.time);
+    if (!Number.isFinite(t) || t <= 0) continue;
+    if (![c.open, c.high, c.low, c.close].every(v => Number.isFinite(v) && v > 0)) continue;
+    byTime.set(t, c);
+  }
+  const base = Array.from(byTime.values()).sort((a, b) => Number(a.time) - Number(b.time));
+  if (base.length < 5) return base;
+
+  // 2. median-smooth closes + rebuild bars with a tight wick (website parity)
+  const closes = base.map(c => c.close);
+  const sClose = closes.map((_, i) =>
+    median([closes[Math.max(0, i - 1)], closes[i], closes[Math.min(closes.length - 1, i + 1)]]),
+  );
+  const out: CandleData[] = [];
+  for (let i = 0; i < base.length; i++) {
+    const c = base[i];
+    const lo = Math.max(0, i - LOCAL_WINDOW);
+    const hi = Math.min(base.length, i + LOCAL_WINDOW + 1);
+    const med = median(closes.slice(lo, hi));
+    // Drop a bar whose body is absurd vs the local price (rare, unrecoverable).
+    if (med > 0 && (c.open > med * BODY_BAND || c.open < med / BODY_BAND || c.close > med * BODY_BAND || c.close < med / BODY_BAND)) {
+      continue;
+    }
+    const open = i > 0 ? sClose[i - 1] : sClose[i];
+    const close = sClose[i];
+    const bodyHi = Math.max(open, close);
+    const bodyLo = Math.min(open, close);
+    const high = Math.min(Math.max(c.high, bodyHi), bodyHi * (1 + WICK_CAP));
+    const low = Math.max(Math.min(c.low, bodyLo), bodyLo * (1 - WICK_CAP));
+    out.push({ ...c, open, high, low, close });
+  }
+  return out;
+}
+
+/** Magnitude-adaptive price precision (website parity): clamp(5−floor(log10),2,12). */
+function pricePrecisionFor(lastClose: number): { precision: number; minMove: number } {
+  const p = Math.min(12, Math.max(2, 5 - Math.floor(Math.log10(lastClose || 1))));
+  return { precision: p, minMove: Math.pow(10, -p) };
+}
+
 function destroyChart() {
   if (initRafId != null) { cancelAnimationFrame(initRafId); initRafId = null; }
   initRetryCount = 0;
@@ -165,23 +226,28 @@ async function initChart() {
 }
 
 function setChartData() {
-  if (!candleSeries || !props.candles.length) return;
+  if (!candleSeries) return;
 
-  const validCandles = props.candles.filter(c => {
-    return !isNaN(c.time as number) && (c.time as number) > 0 && !isNaN(c.open) && !isNaN(c.close);
-  });
+  const display = prepareCandles(props.candles);
+  if (!display.length) return;
 
-  if (validCandles.length > 0) {
-    candleSeries.setData(validCandles);
-    showFallback.value = false;
-  }
+  // Magnitude-adaptive precision off the latest displayed close (website parity).
+  const { precision, minMove } = pricePrecisionFor(display[display.length - 1].close);
+  candleSeries.applyOptions({ priceFormat: { type: 'price' as const, precision, minMove } });
+
+  candleSeries.setData(display);
+  showFallback.value = false;
 }
 
 function applyIndicators() {
-  if (!chart || !props.candles.length) return;
+  if (!chart) return;
 
-  const closes = props.candles.map(c => c.close);
-  const times = props.candles.map(c => c.time);
+  // Indicators track the same sanitized series the chart renders (website parity).
+  const display = prepareCandles(props.candles);
+  if (!display.length) return;
+
+  const closes = display.map(c => c.close);
+  const times = display.map(c => c.time);
   const indicators = props.indicators;
 
   // Volume (always on main pane, semi-transparent)
@@ -195,7 +261,7 @@ function applyIndicators() {
         scaleMargins: { top: 0.8, bottom: 0 },
       });
     }
-    const volData = props.candles.map(c => ({
+    const volData = display.map(c => ({
       time: c.time,
       value: c.volume || 0,
       color: c.close >= c.open ? 'rgba(38, 250, 176, 0.2)' : 'rgba(255, 82, 82, 0.2)',

@@ -8,6 +8,8 @@ export interface FeatureFlags {
   isPhysicalCardOrderingEnabled: boolean;
   isGoMiningEnabled: boolean;
   isPoolOperatorEnabled: boolean;
+  isNexusWithdrawalEnabled: boolean;
+  isNexusUnstakeEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -24,6 +26,8 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
     isPoolOperatorEnabled: false,
+    isNexusWithdrawalEnabled: false,
+    isNexusUnstakeEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -65,6 +69,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
+    featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
+    featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
   },
 
   /**
@@ -88,6 +94,12 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isPoolOperatorEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isNexusUnstakeEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isNexusUnstakeEnabled', newValue);
     });
   },
 
@@ -123,14 +135,32 @@ export const featureFlagsStore = {
    * Check if GoMining integration is enabled
    */
   isGoMiningEnabled(): boolean {
-    return featureFlagsState.flags.isGoMiningEnabled;
+    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
+    return false;
   },
 
   /**
    * Check if Pool Operator dashboard is enabled
    */
   isPoolOperatorEnabled(): boolean {
-    return featureFlagsState.flags.isPoolOperatorEnabled;
+    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
+    return false;
+  },
+
+  /**
+   * Check if reward withdrawals should be built server-side via Nexus
+   * (`/api/tx/build/withdrawal`) instead of the client-side @cardano-sdk builder.
+   */
+  isNexusWithdrawalEnabled(): boolean {
+    return featureFlagsState.flags.isNexusWithdrawalEnabled;
+  },
+
+  /**
+   * Check if stake deregistration (unstake) should be built server-side via Nexus
+   * (`/api/tx/build/stake-registration`) instead of the client-side @cardano-sdk builder.
+   */
+  isNexusUnstakeEnabled(): boolean {
+    return featureFlagsState.flags.isNexusUnstakeEnabled;
   },
 
   /**
@@ -144,6 +174,8 @@ export const featureFlagsStore = {
       isPhysicalCardOrderingEnabled: false,
       isGoMiningEnabled: false,
       isPoolOperatorEnabled: false,
+      isNexusWithdrawalEnabled: false,
+      isNexusUnstakeEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

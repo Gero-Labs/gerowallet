@@ -89,9 +89,19 @@ export interface BuilderVerifySignatureResponse {
 export async function requestBuilderSignature(
   req: BuilderRequestSignatureRequest,
 ): Promise<BuilderRequestSignatureResponse> {
+  // Mainnet's request-signature uses a strict JSON decoder. The builder fee field
+  // is named `fee_share_bps` (REQUIRED) on mainnet — NOT `max_fee_bps` as in the
+  // testnet builder-reference. This is the Gero builder fee (revenue), in basis
+  // points, declared at connect time.
   const { data } = await builderClient.post<BuilderRequestSignatureResponse>(
     '/auth/builder/request-signature',
-    req,
+    {
+      address: req.address,
+      chain: req.chain,
+      public_key: req.public_key,
+      code: req.code,
+      fee_share_bps: req.max_fee_bps,
+    },
   );
   return data;
 }

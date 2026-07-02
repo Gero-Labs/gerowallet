@@ -224,11 +224,17 @@ export interface OpenOrdersResponse {
 // User API — Account & Balance
 // ---------------------------------------------------------------------------
 
-export interface SymbolSettings {
-  symbol: string;
-  leverage: number;
+export interface SymbolSetting {
   margin_mode: MarginMode;
+  leverage: number;
+  allow_pre_trade: boolean;
 }
+
+/**
+ * Per-symbol trading settings, keyed by symbol (e.g. "BTC-USD").
+ * Matches the spec's `symbol_settings` object map (strike-v2-user-api.yaml).
+ */
+export type SymbolSettings = Record<string, SymbolSetting>;
 
 export interface AccountResponse {
   account_id: string;
@@ -248,7 +254,8 @@ export interface AccountResponse {
   position_initial_margin: string;
   /** String-encoded decimal */
   maintenance_margin: string;
-  symbol_settings: SymbolSettings[];
+  /** Per-symbol settings, keyed by symbol (e.g. "BTC-USD"). */
+  symbol_settings: SymbolSettings;
 }
 
 export interface BalanceResponse {
@@ -672,11 +679,29 @@ export interface DepositQuoteResponse {
   confirmations_required: number;
 }
 
+export interface BuildDepositTxRequest {
+  request_id: string;
+  /** The user's wallet address — Strike selects inputs from + returns change here. */
+  user_address: string;
+  /** CIP-30 hex-encoded TransactionUnspentOutputs (Cardano only). */
+  utxos?: string[];
+}
+
+export interface BuildDepositTxResponse {
+  blockchain: string;
+  /** Cardano: CBOR hex-encoded UNSIGNED transaction built by Strike. */
+  unsigned_tx: string;
+  /** e.g. "cardano_cbor". */
+  format: string;
+  expires_at?: number;
+}
+
 export interface WithdrawQuoteRequest {
   usd_value: string;
   blockchain: string;
-  recipient_address: string;
-  asset: string;
+  // NOTE: no recipient_address — Strike uses the account's registered wallet
+  // address as the recipient (prevents API-wallet holders redirecting funds).
+  asset?: string;
 }
 
 export interface WithdrawQuoteResponse {
@@ -684,25 +709,26 @@ export interface WithdrawQuoteResponse {
   message_to_sign: string;
 }
 
-export interface TransactionStatusResponse {
-  status: 'pending' | 'completed' | 'failed';
-}
-
 export interface StrikeMarketsResponse {
   markets: Record<string, StrikeMarketConfig>;
 }
 
-export interface StrikeKline {
-  /** Open time (Unix ms) */
-  openTime: number;
-  open: string;
-  high: string;
-  low: string;
-  close: string;
-  volume: string;
-  /** Close time (Unix ms) */
-  closeTime: number;
-}
+/**
+ * Klines are returned as Binance-style array-of-arrays, not objects. Each tuple
+ * is [openTime(ms), open, high, low, close, volume, closeTime(ms), ...].
+ * Numeric timestamps; OHLCV values are string-encoded decimals.
+ * Consumer: usePerpsChart.ts maps these positionally.
+ */
+export type StrikeKline = [
+  number, // openTime (Unix ms)
+  string, // open
+  string, // high
+  string, // low
+  string, // close
+  string, // volume
+  number, // closeTime (Unix ms)
+  ...unknown[],
+];
 
 // ---------------------------------------------------------------------------
 // Vault API

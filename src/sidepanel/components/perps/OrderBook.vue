@@ -66,9 +66,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { strikeMarketApi } from '@/api/strike-v2.market';
-import { useStrikeMarketWs } from '@/modules/market/composables/useStrikeMarketWs';
+import { ref, computed, watch, toRef } from 'vue';
+import { useOrderBook } from '@/modules/market/composables/perps/useOrderBook';
 
 // ── Props & Emits ────────────────────────────────────────────────────────────
 const props = withDefaults(defineProps<{
@@ -78,51 +77,40 @@ const props = withDefaults(defineProps<{
   depth: 10,
 });
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'price-click', price: string): void;
 }>();
 
-// ── State ────────────────────────────────────────────────────────────────────
-interface OrderBookSide {
-  bids: [string, string][];
-  asks: [string, string][];
-}
+// ── Order book (mirror the dashboard) ─────────────────────────────────────────
+// Book maintenance lives in the shared composable: it owns the depth WS (a DIFF
+// stream where qty "0" removes a level), REST snapshot sync, and symbol switching.
+// obAsks are sorted lowest-first, obBids highest-first.
+const { obAsks, obBids } = useOrderBook(toRef(props, 'symbol'));
 
-const orderBook = ref<OrderBookSide>({ bids: [], asks: [] });
 const prevMidPrice = ref<number | null>(null);
 const currentMidPrice = ref<number | null>(null);
-let unsubscribe: (() => void) | null = null;
-
-// ── Composable ───────────────────────────────────────────────────────────────
-const { subscribeOrderBook } = useStrikeMarketWs();
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 
-/** Asks sorted descending (highest first) — top N */
+/** The `depth` asks nearest the spread, rendered highest→lowest (top→bottom). */
 const displayAsks = computed(() => {
-  const sorted = [...orderBook.value.asks]
-    .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]))
+  const nearest = [...obAsks.value]
+    .sort((a, b) => parseFloat(a[0]) - parseFloat(b[0])) // lowest (best) first
     .slice(0, props.depth);
-  return buildLevels(sorted, true);
+  const topDown = nearest.sort((a, b) => parseFloat(b[0]) - parseFloat(a[0])); // render highest→lowest
+  return buildLevels(topDown, true);
 });
 
-/** Bids sorted descending (highest first) */
+/** The `depth` bids nearest the spread, rendered highest→lowest. */
 const displayBids = computed(() => {
-  const sorted = [...orderBook.value.bids]
-    .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]))
+  const sorted = [...obBids.value]
+    .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0])) // highest (best) first
     .slice(0, props.depth);
   return buildLevels(sorted, false);
 });
 
-const bestAsk = computed<number | null>(() => {
-  const asks = [...orderBook.value.asks].sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
-  return asks.length ? parseFloat(asks[0][0]) : null;
-});
-
-const bestBid = computed<number | null>(() => {
-  const bids = [...orderBook.value.bids].sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]));
-  return bids.length ? parseFloat(bids[0][0]) : null;
-});
+const bestAsk = computed<number | null>(() => (obAsks.value.length ? parseFloat(obAsks.value[0][0]) : null));
+const bestBid = computed<number | null>(() => (obBids.value.length ? parseFloat(obBids.value[0][0]) : null));
 
 const midPrice = computed<string>(() => {
   if (bestAsk.value === null || bestBid.value === null) return '—';
@@ -161,10 +149,13 @@ const spread = computed<string>(() => {
 });
 
 const maxCumQty = computed<number>(() => {
-  const lastAsk = displayAsks.value[displayAsks.value.length - 1];
-  const lastBid = displayBids.value[displayBids.value.length - 1];
-  const askMax = lastAsk ? parseFloat(lastAsk.cumQty) : 0;
-  const bidMax = lastBid ? parseFloat(lastBid.cumQty) : 0;
+  // Cumulative total grows away from the spread. Asks render highest→lowest, so the
+  // largest cumulative is the TOP row [0]; bids render highest→lowest, so theirs is
+  // the LAST row. Normalise the depth bars against the larger of the two.
+  const farthestAsk = displayAsks.value[0];
+  const farthestBid = displayBids.value[displayBids.value.length - 1];
+  const askMax = farthestAsk ? parseFloat(farthestAsk.cumQty) : 0;
+  const bidMax = farthestBid ? parseFloat(farthestBid.cumQty) : 0;
   return Math.max(askMax, bidMax);
 });
 
@@ -196,69 +187,12 @@ function cumulativePct(cumQty: string, max: number): number {
   return Math.min((parseFloat(cumQty) / max) * 100, 100);
 }
 
-function applySnapshot(data: { bids?: [string, string][]; asks?: [string, string][] }) {
-  if (data.bids) orderBook.value.bids = data.bids;
-  if (data.asks) orderBook.value.asks = data.asks;
-  updateMidPrice();
-}
-
-function applyDelta(data: unknown) {
-  const d = data as { b?: [string, string][]; a?: [string, string][] };
-  if (d.b) mergeDepth(orderBook.value.bids, d.b);
-  if (d.a) mergeDepth(orderBook.value.asks, d.a);
-  updateMidPrice();
-}
-
-function mergeDepth(side: [string, string][], updates: [string, string][]) {
-  for (const [price, qty] of updates) {
-    const idx = side.findIndex((e) => e[0] === price);
-    if (parseFloat(qty) === 0) {
-      if (idx !== -1) side.splice(idx, 1);
-    } else {
-      if (idx !== -1) side[idx] = [price, qty];
-      else side.push([price, qty]);
-    }
-  }
-}
-
-function updateMidPrice() {
+// Track mid-price direction for the up/down flash, driven by book updates.
+watch([bestAsk, bestBid], () => {
   if (bestAsk.value !== null && bestBid.value !== null) {
     prevMidPrice.value = currentMidPrice.value;
     currentMidPrice.value = (bestAsk.value + bestBid.value) / 2;
   }
-}
-
-// ── Lifecycle ────────────────────────────────────────────────────────────────
-async function loadAndSubscribe(symbol: string) {
-  // Unsubscribe previous
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-  }
-  orderBook.value = { bids: [], asks: [] };
-
-  // Fetch snapshot
-  try {
-    const snapshot = await strikeMarketApi.getOrderBook(symbol, props.depth * 2);
-    applySnapshot(snapshot);
-  } catch {
-    // ignore — ws will fill in
-  }
-
-  // Subscribe to live updates
-  unsubscribe = subscribeOrderBook(symbol, applyDelta);
-}
-
-onMounted(() => {
-  loadAndSubscribe(props.symbol);
-});
-
-onUnmounted(() => {
-  if (unsubscribe) unsubscribe();
-});
-
-watch(() => props.symbol, (sym) => {
-  loadAndSubscribe(sym);
 });
 </script>
 
