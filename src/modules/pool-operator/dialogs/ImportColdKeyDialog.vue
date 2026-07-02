@@ -10,7 +10,7 @@
       </v-card-title>
 
       <v-card-text>
-        <p class="text-body-2 grey--text">{{ $t('poolOperator.importColdKeyInstructions') }}</p>
+        <p class="text-body-2 grey--text">{{ $t(instructionsKey) }}</p>
 
         <!-- File Input -->
         <v-file-input
@@ -151,6 +151,15 @@ const showPasswordFallback = ref(false);
 const isNormalWallet = computed(() => {
   const type = walletStore.loggedWallet?.type;
   return type === WalletType.Normal || type === WalletType.Google;
+});
+
+// Instruction text must match the encryption method actually used:
+// PassKey (PRF), the wallet's spending password (normal software wallet),
+// or a password the user sets (hardware / PassKey wallets falling back to password).
+const instructionsKey = computed(() => {
+  if (prfSupported.value && !showPasswordFallback.value) return 'poolOperator.importColdKeyInstructionsPasskey';
+  if (isNormalWallet.value) return 'poolOperator.importColdKeyInstructions';
+  return 'poolOperator.importColdKeyInstructionsCustom';
 });
 
 onMounted(async () => {

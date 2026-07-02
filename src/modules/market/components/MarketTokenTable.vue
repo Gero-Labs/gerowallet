@@ -283,13 +283,13 @@
             <v-avatar v-if="!hideBalances" tile size="10" class="mr-1">
               <v-img :src="changeIcon(item.totalPnl)" alt="pnl" />
             </v-avatar>
-            {{ hideBalances ? '••••••' : (item.totalPnl >= 0 ? '+' : '') + item.totalPnl.toFixed(2) + ' ' + nativeSymbol }}
+            {{ hideBalances ? '••••••' : formatPnl(item.totalPnl) + ' ' + nativeSymbol }}
           </span>
         </template>
         <div v-if="!hideBalances">
-          <div>{{ $t('market.totalPnl') }}: {{ item.totalPnl >= 0 ? '+' : '' }}{{ item.totalPnl.toFixed(4) }} {{ nativeSymbol }}</div>
-          <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? (item.unrealizedPnl >= 0 ? '+' : '') + item.unrealizedPnl.toFixed(4) + ' ' + nativeSymbol : '—' }}</div>
-          <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? (item.realizedPnl >= 0 ? '+' : '') + item.realizedPnl.toFixed(4) + ' ' + nativeSymbol : '—' }}</div>
+          <div>{{ $t('market.totalPnl') }}: {{ formatPnl(item.totalPnl, 4) }} {{ nativeSymbol }}</div>
+          <div>{{ $t('market.unrealizedPnl') }}: {{ item.unrealizedPnl != null ? formatPnl(item.unrealizedPnl, 4) + ' ' + nativeSymbol : '—' }}</div>
+          <div>{{ $t('market.realizedPnl') }}: {{ item.realizedPnl != null ? formatPnl(item.realizedPnl, 4) + ' ' + nativeSymbol : '—' }}</div>
         </div>
         <div v-else>••••••</div>
       </v-tooltip>
@@ -614,6 +614,12 @@ function sparklineColor(series: number[]): string {
 function changeIcon(change: number): string {
   if (change === 0) return assets.arrowRightSvg;
   return change > 0 ? assets.trendUpSvg : assets.trendDownSvg;
+}
+
+// Human-readable P&L: signed, with thousands separators (e.g. +13,212.45).
+function formatPnl(value: number, decimals = 2): string {
+  const sign = value >= 0 ? '+' : '';
+  return sign + value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 function pnlColor(pnl: number): string {

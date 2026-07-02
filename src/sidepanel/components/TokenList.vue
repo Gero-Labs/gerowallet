@@ -179,7 +179,10 @@ const filteredTokens = computed(() => {
 
 function getTokenImg(token: any): string {
   const name = token.metadata?.ticker || token.name || token.metadata?.name;
-  const baseImg = token.img || (token.metadata?.logo ? resolveIcon(token.metadata.logo) : '') || (token.metadata?.image ? resolveIcon(token.metadata.image) : '') || '';
+  // Prefer main-page market data logo (single source of truth, keyed by unit),
+  // then fall back to the token's own / on-chain metadata image.
+  const marketImg = marketTokens.value.find(t => t.unit === token.unit)?.img;
+  const baseImg = marketImg || token.img || (token.metadata?.logo ? resolveIcon(token.metadata.logo) : '') || (token.metadata?.image ? resolveIcon(token.metadata.image) : '') || '';
   return applyTokenImageOverride(name, baseImg);
 }
 
