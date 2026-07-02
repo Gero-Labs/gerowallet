@@ -326,7 +326,7 @@ const items = computed((): NavigationItemUnion[] => {
       enabled: true,
       underMaintenance: !isBlogEnabledByFeatureFlag.value,
     },
-    { title: t('navigation.copilotFeed'), icon: 'mdi-bell-outline', link: '/copilot-feed', enabled: true },
+    { title: t('navigation.copilotFeed'), icon: 'mdi-bell-outline', link: '/copilot-feed', enabled: featureFlagsStore.isCopilotEnabled() },
     { header: t('navigation.financialHub'), enabled: true },
     { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },

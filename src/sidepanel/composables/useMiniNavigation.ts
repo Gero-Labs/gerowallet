@@ -1,6 +1,7 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router/composables';
 import { useChainContext } from './useChainContext';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 export interface NavTab {
   name: string;
@@ -29,7 +30,11 @@ export function useMiniNavigation() {
   const route = useRoute();
   const { isApex } = useChainContext();
 
-  const navTabs = computed<NavTab[]>(() => isApex.value ? APEX_TABS : CARDANO_TABS);
+  const navTabs = computed<NavTab[]>(() => {
+    const base = isApex.value ? APEX_TABS : CARDANO_TABS;
+    // Gero Copilot feed tab gated by the master flag (ships dark)
+    return featureFlagsStore.isCopilotEnabled() ? base : base.filter((tab) => tab.name !== 'feed');
+  });
   const activeTab = computed(() => route.path);
 
   return { navTabs, activeTab };

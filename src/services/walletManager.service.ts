@@ -5,7 +5,7 @@ import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Wallet } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
 import TapToolsStore from '@/stores/tapToolsStore';
-import webSocketService, { WsSyncMessage } from '@/services/websocket.service';
+import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
@@ -13,6 +13,8 @@ import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
 import zkFoldApi from '@/api/zkFoldApi';
+import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
+import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -23,6 +25,8 @@ export class WalletManager {
   private walletBg: WalletBg | null = null;
   private currentWalletId: number | null = null;
   private pendingSyncPromise: Promise<void> | null = null;
+  // Cross-device signing bridge handles (null unless the feature flag is on).
+  private crossDevice: ReturnType<typeof bootstrapCrossDeviceSigning> = null;
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
@@ -331,7 +335,20 @@ export class WalletManager {
       const lastSyncedBlock = lastSyncInfo?.height || 0;
       const credentials = walletBg.derivePaymentCredentials();
 
+      // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
+      // Returns null and does nothing when the flag is off, so the handlers below
+      // are unchanged and no relay message crosses the wire. When on, it wires the
+      // WS transport and publishes a DEVICE_REGISTER for this device.
+      this.crossDevice?.dispose();
+      this.crossDevice = bootstrapCrossDeviceSigning({
+        label: 'Gero Extension',
+        hasSigningKey: true,
+      });
+
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
+        onCrossDeviceMessage: this.crossDevice
+          ? (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw)
+          : undefined,
         onSync: async (data: WsSyncMessage) => {
           await this.tipMutex.runExclusive(async () => {
             await walletBg.syncService.setSync(data);
@@ -433,6 +450,14 @@ export class WalletManager {
         console.log('WebSocket service closed successfully');
       } catch (wsError) {
         console.warn('Failed to cleanup WebSocket service during logout:', wsError);
+      }
+
+      // Tear down the cross-device signing bridge (no-op when the flag is off).
+      try {
+        this.crossDevice?.dispose();
+        this.crossDevice = null;
+      } catch (xdError) {
+        console.warn('Failed to cleanup cross-device signing during logout:', xdError);
       }
 
       // Clean up store messaging service
@@ -846,6 +871,15 @@ export class WalletManager {
    */
   getWallet(): WalletBg | null {
     return this.walletBg;
+  }
+
+  /**
+   * Get the cross-device signing bridge (requester side), or null when the
+   * feature is off. Used by the REQUEST_CROSS_DEVICE_SIGNATURE background
+   * handler to hand an unsigned tx to another device for signing.
+   */
+  getCrossDeviceSigning(): CrossDeviceSigning | null {
+    return this.crossDevice?.signing ?? null;
   }
 
   /**
