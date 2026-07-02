@@ -1,113 +1,141 @@
-# Cross-Device Signing Bridge - Relay Protocol Contract
+# Cross-Device Signing Bridge - Relay Protocol Contract (v1, AUTHORITATIVE)
 
-**Status:** Phase 0 shipped dark in the extension (branch `feat/copilot-agent`, flag `isCrossDeviceSigningEnabled`, default false).
-**Audience:** the gero-sync (server) and mobile app teams. This is the artifact you implement against.
-**Companion plan:** `docs/plans/2026-06-29-cross-device-signing-bridge.md` (rationale, scope, task list).
-**Extension source of truth:** `src/services/crossDevice/protocol.ts` (types + validators), `envelope.ts` (auth), `signRequestMachine.ts` (state), `crossDeviceSigning.service.ts` (orchestration).
+**Status:** Reconciled with the iOS approver (handback 2026-07-02). Extension conformance shipped on `feat/copilot-agent` (flag `isCrossDeviceSigningEnabled`, default false). This document supersedes the earlier Phase-0 draft: the signing canonicalization changed from sorted-key JSON to explicit pipe-joined subjects (see section 3).
+**Audience:** gero-sync (server), the iOS approver, and any future Android client. This is the single source of truth all three implement against.
+**Extension source of truth (must stay identical to this doc):** `src/services/crossDevice/protocol.ts` (types + validators), `envelope.ts` (canonical subjects + auth), `deviceRegistry.ts`, `signRequestMachine.ts`, `crossDeviceSigning.service.ts`.
+**No em/en dashes (standing team preference).**
 
 ## 0. One-paragraph model
 
-On Cardano (eUTxO) every spend needs a witness signature: no session keys, no account abstraction, no spending delegation. Agent autonomy is therefore achieved by making per-tx consent frictionless. A desktop copilot PROPOSES an unsigned transaction, gero-sync RELAYS it to the user's phone, the phone INDEPENDENTLY decodes and displays the real transaction, the user biometric-signs LOCALLY, and the witness comes back. Private keys never leave the signing device; gero-sync relays only the unsigned transaction and the signature.
+On Cardano (eUTxO) every spend needs a witness signature: no session keys, no account abstraction, no spending delegation. A desktop copilot PROPOSES an unsigned transaction, gero-sync RELAYS it to the user's phone, the phone INDEPENDENTLY decodes and displays the real transaction, the user biometric-signs LOCALLY, and the witness comes back. Private keys never leave the signing device; gero-sync relays only the unsigned transaction and the signature.
 
-## 1. Protocol version
+## 1. Encodings (all clients)
 
-`CROSS_DEVICE_PROTOCOL_VERSION = 1`. Every message carries `v`. Reject messages whose `v` does not match your supported version.
+- **Hex:** lowercase throughout (keys, signatures, CBOR, hashes).
+- **Signatures:** Ed25519. The device relay key is a message-auth key, distinct from any wallet spending key.
+- **Hash:** blake2b-256 (32-byte output), lowercase hex (64 chars).
+- **Time:** `expiresAt` is unix SECONDS (integer), rendered as its decimal string in signing subjects.
+- **Version:** carried in the signing-subject prefix `gero-xdev/v1`. Signed messages do NOT carry a numeric `v` field; unsigned frames carry none.
 
-## 2. Message schemas (verbatim from `src/services/crossDevice/protocol.ts`)
+## 2. Message shapes (JSON on the wire)
 
-```ts
-export const CROSS_DEVICE_PROTOCOL_VERSION = 1;
+Optional fields are marked `?`. Unknown extra fields MUST be ignored, not rejected.
 
-export type CrossDeviceMessageType =
-  | 'DEVICE_REGISTER'   // device -> server: announce this device + its pubkey
-  | 'SIGN_REQUEST'      // requester -> sibling device(s): please sign this unsigned tx
-  | 'SIGN_RESPONSE';    // approver -> requester: approved (+witness) or rejected
-
-export type DevicePlatform = 'extension' | 'ios' | 'android';
-
-export interface DeviceRegister {
-  v: number;                       // === CROSS_DEVICE_PROTOCOL_VERSION
-  type: 'DEVICE_REGISTER';
-  deviceId: string;                // derived from pubKey: first 32 hex chars of sha256(pubKey bytes)
-  label: string;                   // human label ("Adam's Chrome", "iPhone")
-  platform: DevicePlatform;
-  pubKey: string;                  // hex Ed25519 public key (for verifying this device's messages)
-  hasSigningKey: boolean;          // true if this device holds a wallet spending key
-  createdAt: number;               // ms; caller-supplied
+```jsonc
+// Outbound from a device on every (re)connect. UNSIGNED (trust-on-first-use).
+// Wallet is inferred server-side from the socket SUBSCRIBE.
+DEVICE_REGISTER = {
+  "type": "DEVICE_REGISTER",
+  "deviceId": "string",   // = deviceIdFromPubKey(pubKey), see section 5
+  "label": "string",      // human label, e.g. "iPhone", "Adam's Chrome"
+  "platform": "extension" | "ios" | "android",
+  "pubKey": "hex",        // Ed25519 public key; verifies this device's signed msgs
+  "hasSigningKey": bool   // true if this device holds a wallet spending key
 }
 
-export interface SignRequest {
-  v: number;
-  type: 'SIGN_REQUEST';
-  reqId: string;                   // unique per request (caller-supplied)
-  fromDeviceId: string;
-  toDeviceId: string | 'any';      // 'any' = any sibling device that hasSigningKey
-  stakeAddress: string;            // routing scope (server fans out on this)
-  unsignedCbor: string;            // hex CBOR of the proposed tx (NOT secret; goes on-chain anyway)
-  intent: string;                  // human hint for the notification ONLY; approver must NOT trust it
-  nonce: string;                   // anti-replay
-  createdAt: number;
-  ttlMs: number;                   // request expiry window
-  sig: string;                     // hex Ed25519 sig over canonical bytes of all fields except `sig`
+// Inbound: the server's snapshot of every device registered under this wallet.
+// REPLACES the client's registry each time. This is what lets a client resolve a
+// sender's pubKey to verify signatures. Push on registry change (join/leave).
+DEVICES = {
+  "type": "DEVICES",
+  "devices": [ { deviceId, label, platform, pubKey, hasSigningKey }, ... ]
 }
 
-export interface SignResponse {
-  v: number;
-  type: 'SIGN_RESPONSE';
-  reqId: string;
-  fromDeviceId: string;            // the approving device
-  decision: 'approved' | 'rejected';
-  witnessSetCbor?: string;         // hex CBOR witness set when approved; absent when rejected
-  reason?: string;                 // optional rejection reason (i18n key or short code)
-  nonce: string;
-  createdAt: number;
-  sig: string;
+// Inbound optional ack of a DEVICE_REGISTER. Advisory; clients may ignore.
+DEVICE_REGISTER_ACK = { "type": "DEVICE_REGISTER_ACK", "deviceId"?: "string" }
+
+// Requester -> sibling signing device(s). SIGNED (subject in section 3).
+SIGN_REQUEST = {
+  "type": "SIGN_REQUEST",
+  "reqId": "string",        // unique per request
+  "nonce": "string",        // anti-replay; request is single-use per (reqId, nonce)
+  "from": "string",         // requesting deviceId
+  "stakeAddress"?: "string",// routing scope; empty-slot in the subject when absent
+  "unsignedCbor": "hex",    // the proposed tx (NOT secret; goes on-chain anyway)
+  "intent"?: "string",      // notification hint ONLY; approver MUST NOT trust or render it
+  "expiresAt": number,      // unix SECONDS; invalid at/after this
+  "sig": "hex"              // Ed25519 over the SIGN_REQUEST subject (section 3)
 }
 
-export type CrossDeviceMessage = DeviceRegister | SignRequest | SignResponse;
+// Approver -> requester. SIGNED.
+SIGN_RESPONSE = {
+  "type": "SIGN_RESPONSE",
+  "reqId": "string",        // correlates to the request
+  "nonce": "string",        // the response's OWN nonce (independent of the request)
+  "deviceId": "string",     // the approving device
+  "decision": "approved" | "rejected",
+  "witnessSetCbor"?: "hex", // present iff approved
+  "reason"?: "string",      // optional, UNAUTHENTICATED advisory (NOT in the subject)
+  "sig": "hex"              // Ed25519 over the SIGN_RESPONSE subject (section 3)
+}
 ```
 
-## 3. Canonical signing bytes (MUST match exactly on all platforms)
+Note there is NO `toDeviceId` in `SIGN_REQUEST`: the server fans out to all sibling signing devices on the stake address; whichever the user acts on responds. One-at-a-time and busy-rejection are approver-local policies (iOS does this), not wire fields.
 
-The `sig` field is an Ed25519 signature over the canonical bytes of the message with `sig` removed. Canonical bytes are produced (in the extension, `envelope.ts::canonicalBytes`) by:
+## 3. Canonical signing subjects (THE cross-client invariant)
 
-1. Take the message object.
-2. Drop the `sig` key.
-3. Sort the remaining keys lexicographically (ascending).
-4. `JSON.stringify` the re-keyed object (no extra whitespace).
-5. UTF-8 encode the resulting string.
+The signature is over a pipe-joined UTF-8 string, NOT JSON. This is deliberate: cross-language JSON canonicalization diverges (number formatting, string escaping, whitespace), so JSON-signed messages will not verify across Swift and JS. The subject is explicit, ordered, and hashes the large CBOR.
 
-Sign with `ed25519.signAsync(canonicalBytes, privKey)`; verify with `ed25519.verifyAsync(sig, canonicalBytes, pubKey)`. The mobile app MUST reproduce steps 1-5 byte-for-byte or signatures will not verify cross-platform. Any field whose value is `undefined` is omitted by `JSON.stringify`, so an approved response and a rejected response canonicalize differently (rejected has no `witnessSetCbor`).
-
-`deviceId` derivation: `deviceId = hex(sha256(hexToBytes(pubKey))).slice(0, 32)`.
-
-## 4. Security invariants (MUST hold)
-
-1. **Independent ground truth on the approver.** The approving device MUST decode `unsignedCbor` itself and display the real amounts/recipients (reuse a `SignTx`-style decode path). `intent` is a notification hint only and must never be shown as the thing being signed.
-2. **Authenticated origin.** A `SIGN_REQUEST`/`SIGN_RESPONSE` is processed only if `sig` verifies against the sender's REGISTERED device `pubKey`. Unverified messages are dropped silently.
-3. **No key material on the wire.** Only `unsignedCbor` and `witnessSetCbor` cross the relay. Never a private key, seed, or mnemonic. There is no field for it.
-4. **Replay safety.** `(reqId, nonce)` must be single-use; a duplicate is ignored. `ttlMs` is enforced: an expired request cannot transition to approved.
-5. **Tx-body integrity on return.** When the requester receives `witnessSetCbor`, it MUST apply the witness to the ORIGINAL `unsignedCbor` it sent and re-verify the tx body hash is unchanged before submitting (defense against a malicious relay swapping the tx). The extension state machine preserves the original request so this check is possible.
-6. **Non-custody preserved.** gero-sync only relays; it is not a signer and never holds keys.
-
-## 5. Asks
-
-### gero-sync (server)
-- Persist a per-wallet **device registry**: `{ stakeAddress, deviceId, label, platform, pubKey, hasSigningKey, createdAt, lastSeen }`, written on `DEVICE_REGISTER`.
-- **Fan-out routing:** when a `SIGN_REQUEST`/`SIGN_RESPONSE` arrives on a stake-address connection, relay it to the OTHER devices registered under that stake address (respect `toDeviceId` when not `'any'`). The server does not inspect or trust payload contents beyond routing; it must not need keys.
-- **Push trigger:** on a `SIGN_REQUEST` targeting a device that is offline, trigger a native push (APNs/FCM) so the phone wakes.
-- Open questions to confirm:
-  - Q1: does gero-sync currently fan a published message to sibling devices on a stake address, or is that net-new?
-  - Q2: is there an existing per-device key we can reuse for `pubKey`, or is Phase-0 keygen the source? (The extension currently generates a fresh Ed25519 keypair per session; a persisted device store is a follow-up.)
-
-### mobile app (separate repo)
-- Handle `SIGN_REQUEST`: verify `sig` against the registry `pubKey`, **independently decode `unsignedCbor` and display real amounts/recipients** (invariant 1), biometric-sign locally, return `SIGN_RESPONSE` with the witness. Handle native push wake.
-- Symmetric `DEVICE_REGISTER` on login.
-- Reproduce the canonical signing bytes (section 3) exactly.
-
-### extension follow-ups (later)
-- Persisted per-device identity store (currently keygen is per session).
-- Approver UI reusing `SignTx.vue` decode/display when the extension is the signer.
-- Requester integration: the copilot Agent Allowance escalation path calls `requestSignature(...)` for out-of-policy/top-up actions; apply-witness-to-original + integrity re-check (invariant 5) + submit.
-- Confidentiality: Phase 0 authenticates but relays plaintext `unsignedCbor`/`witnessSetCbor`. Fast-follow adds `xchacha20poly1305` (from `@noble/ciphers`, already a dep) under a per-pair shared secret; key agreement needs an x25519 secret (add `@noble/curves` or derive from Ed25519 keys) - decide at that time.
 ```
+SIGN_REQUEST subject:
+  gero-xdev/v1|SIGN_REQUEST|<reqId>|<nonce>|<from>|<stakeAddress or empty>|<expiresAt>|<blake2b256hex(rawUnsignedCborBytes)>
+
+SIGN_RESPONSE subject:
+  gero-xdev/v1|SIGN_RESPONSE|<reqId>|<nonce>|<deviceId>|<decision>|<blake2b256hex(rawWitnessBytes) when approved, empty when rejected>
+```
+
+Rules:
+- `<stakeAddress or empty>` = the stakeAddress, or the empty string when absent.
+- `<expiresAt>` = the integer seconds as a decimal string (e.g. `1000`).
+- The hash is over the RAW CBOR BYTES, i.e. `blake2b256(hexToBytes(unsignedCbor))`, not over the hex string.
+- The response witness-hash slot is EMPTY (nothing between the last two pipes) when `decision === "rejected"`.
+- `reason` and `intent` are NOT in any subject (advisory only; treat as untrusted).
+- `sig = ed25519_sign(devicePrivKey, utf8Bytes(subject))`; verify against the sender's registered `pubKey`.
+
+### Conformance vectors (reproduce these byte-for-byte)
+
+```
+blake2b256hex(0x84a4) = 95206ecbc3a90dd4117931c4a7802e99ec301fb896734b0b721d40177602fc50
+blake2b256hex(0xa100) = a04d341ee1aea805c0a3d888b0d7135f99f067c0ed74e64de80aefefedc6ff26
+
+SIGN_REQUEST { reqId:"req-1", nonce:"n1", from:"dev1", stakeAddress:"stake1xyz", expiresAt:1000, unsignedCbor:"84a4" }
+  subject = gero-xdev/v1|SIGN_REQUEST|req-1|n1|dev1|stake1xyz|1000|95206ecbc3a90dd4117931c4a7802e99ec301fb896734b0b721d40177602fc50
+
+same with stakeAddress absent:
+  subject = gero-xdev/v1|SIGN_REQUEST|req-1|n1|dev1||1000|95206ecbc3a90dd4117931c4a7802e99ec301fb896734b0b721d40177602fc50
+
+SIGN_RESPONSE approved { reqId:"req-1", nonce:"n2", deviceId:"dev2", witnessSetCbor:"a100" }
+  subject = gero-xdev/v1|SIGN_RESPONSE|req-1|n2|dev2|approved|a04d341ee1aea805c0a3d888b0d7135f99f067c0ed74e64de80aefefedc6ff26
+
+SIGN_RESPONSE rejected { reqId:"req-1", nonce:"n2", deviceId:"dev2" }
+  subject = gero-xdev/v1|SIGN_RESPONSE|req-1|n2|dev2|rejected|
+```
+
+The extension pins these exact strings in `src/services/crossDevice/envelope.spec.ts`. Any client that produces a different subject for the same input has a bug that will silently break verification.
+
+## 4. deviceId derivation
+
+`deviceId = firstNHex(sha256(hexToBytes(pubKey)), 32)` i.e. hex of the first 16 bytes of the SHA-256 of the raw public-key bytes (32 hex chars). Extension: `deviceIdFromPubKey` in `deviceIdentity.ts`. Both clients must derive it identically so `from`/`deviceId` match the registry key.
+
+## 5. gero-sync (server) responsibilities
+
+1. **Device registry:** persist per wallet `{ stakeAddress, deviceId, label, platform, pubKey, hasSigningKey, lastSeen }`, written on `DEVICE_REGISTER`. Authenticate registration against the wallet (see open Q below) so a rogue device cannot register.
+2. **Registry fan-out:** push a `DEVICES` snapshot to all of a wallet's connected devices on any registry change, and once on connect. This is what makes signature verification possible (clients resolve pubKeys from it).
+3. **Relay fan-out:** relay `SIGN_REQUEST` / `SIGN_RESPONSE` to the OTHER devices on the same stake address. Do not inspect or trust payload contents beyond routing; you never need keys.
+4. **Offline push:** on a `SIGN_REQUEST` targeting an offline device, trigger a native push (APNs/FCM) to wake it.
+5. **Pruning:** age out stale registry entries (a reinstalled device registers a fresh deviceId; the old one should expire). See open Q on label-dedupe.
+
+## 6. Security invariants (all clients)
+
+1. **Independent ground truth:** the approver decodes `unsignedCbor` itself and shows wallet-computed amounts/recipients. `intent` is never rendered as the thing being signed.
+2. **Authenticated origin:** process a `SIGN_REQUEST`/`SIGN_RESPONSE` only if `sig` verifies against the sender's registered `pubKey` (from `DEVICES`). Drop unverified messages silently.
+3. **No key material on the wire:** only `unsignedCbor` and `witnessSetCbor` cross the relay.
+4. **Replay + ttl:** `(reqId, nonce)` is single-use; an expired request (`now >= expiresAt`) cannot be approved. Keep replay entries a while past expiry to catch late duplicates.
+5. **Tx-body integrity on return:** the requester applies the witness to the ORIGINAL `unsignedCbor` it sent and re-verifies the tx body before submitting.
+6. **Outflow honesty:** the approver computes "you pay" only from inputs it resolved in its own UTxO set; foreign/unresolved inputs are surfaced as a caution, never folded in (prevents an attacker deflating the amount with foreign inputs).
+
+## 7. Open questions (server + registration)
+
+- **Wallet-control proof at DEVICE_REGISTER:** define the challenge (e.g. sign a server nonce with the wallet key) so registration is authenticated, not pure TOFU. Both clients are ready to add it.
+- **Registry pruning / label dedupe:** confirm the server prunes stale entries or lets clients dedupe by label when a device reinstalls with a new key.
+- **Cancel frame:** not in v1. If we want requester-initiated cancellation, add a `SIGN_CANCEL { type, reqId, from, sig }` in v2 (subject `gero-xdev/v1|SIGN_CANCEL|<reqId>|<from>`); iOS and the extension will add handling when defined.
