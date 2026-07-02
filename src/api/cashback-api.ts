@@ -43,7 +43,9 @@ export default {
   },
   async portal(walletAddress: string | null, theme: 'dark' | 'light' = 'dark'): Promise<CashbackPortalBootstrap> {
     try {
-      const { data, status } = await axiosInstance.post('/api/bring/portal', { walletAddress, theme });
+      // Bring's portal bootstrap requires the Chrome extension id.
+      const extensionId = (typeof chrome !== 'undefined' && chrome.runtime?.id) ? chrome.runtime.id : undefined;
+      const { data, status } = await axiosInstance.post('/api/bring/portal', { walletAddress, theme, extensionId });
       if (status === 200 && data?.portalUrl) return { portalUrl: data.portalUrl, token: data.token };
       throw parseHttpError(data);
     } catch (error) {
