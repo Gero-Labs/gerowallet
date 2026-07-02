@@ -514,6 +514,10 @@ export function resolveAsset(token: any): any {
       }
     }
   }
+  // Fallback name for assets we could not resolve (e.g. non-hex unit).
+  if (!name) {
+    name = typeof unit === 'string' && unit.length > 16 ? unit.slice(0, 16) + '...' : (unit || '');
+  }
   // Apply token image overrides
   img = applyTokenImageOverride(name, img);
 

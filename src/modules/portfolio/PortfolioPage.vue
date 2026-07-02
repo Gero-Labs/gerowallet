@@ -569,7 +569,7 @@ const myHoldings = computed<MarketToken[]>(() => {
       unit,
       name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
       ticker: marketToken?.ticker || token.metadata?.ticker || (isNativeToken ? nativeCurrencyTicker.value : ''),
-      img: marketToken?.img || dhToken?.img || '',
+      img: marketToken?.img || (token as { img?: string }).img || '',
       verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
       price: priceUsd,
       priceAda,

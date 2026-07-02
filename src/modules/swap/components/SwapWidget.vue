@@ -314,8 +314,6 @@ const swapType = ref<string>('swap');
 let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
-  img: cardanoSvg,
-  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
@@ -326,8 +324,6 @@ let selectedTokenA = ref({
 let selectedTokenB = ref({
   name: 'GERO',
   ticker: 'GERO',
-  img: 'https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp',
-  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
