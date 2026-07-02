@@ -329,7 +329,7 @@
           <div class="d-flex align-center" style="gap: 8px">
             <div class="token-select-btn" @click="openTokenSelect('A')">
               <v-avatar size="28" class="mr-2">
-                <img :src="selectedTokenA.img" :alt="selectedTokenA.ticker" @error="onTokenImgError($event, selectedTokenA)" />
+                <img :src="getTokenImg(selectedTokenA)" :alt="selectedTokenA.ticker" @error="onTokenImgError($event, selectedTokenA)" />
               </v-avatar>
               <span class="white--text text-body-2 font-weight-bold">{{ selectedTokenA.ticker }}</span>
               <v-icon x-small color="#888" class="ml-1">mdi-chevron-down</v-icon>
@@ -367,7 +367,7 @@
           <div class="d-flex align-center" style="gap: 8px">
             <div class="token-select-btn" @click="openTokenSelect('B')">
               <v-avatar size="28" class="mr-2">
-                <img :src="selectedTokenB.img" :alt="selectedTokenB.ticker" @error="onTokenImgError($event, selectedTokenB)" />
+                <img :src="getTokenImg(selectedTokenB)" :alt="selectedTokenB.ticker" @error="onTokenImgError($event, selectedTokenB)" />
               </v-avatar>
               <span class="white--text text-body-2 font-weight-bold">{{ selectedTokenB.ticker }}</span>
               <v-icon x-small color="#888" class="ml-1">mdi-chevron-down</v-icon>
@@ -481,7 +481,6 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Messaging, BackgroundResponse, VerifyPasswordResponse, SignTxResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -499,6 +498,7 @@ import snackbar from '@/plugins/snackbar';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import { debugLog } from '@/utils/debug';
 import { useChainContext } from '../../composables/useChainContext';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -512,6 +512,14 @@ const { t } = useTranslation();
 const { loggedWallet, tokens: resolvedAssets, utxos, keys } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
+
+// Token images/metadata come from main-page market data (keyed by unit), not DexHunter.
+const { getTokenByUnit, getTokenImage } = useMarketData();
+
+// Fallback image when market data has no logo for a token (mirrors main-page behaviour).
+const chainLogo = computed(
+  () => networks.resolveCurrencyImage(loggedWallet.value?.chain, loggedWallet.value?.network) || cardanoSvg,
+);
 
 // ── Steps ──
 const step = ref<Step>('swap');
@@ -581,8 +589,6 @@ const tokenAInput = ref('');
 const selectedTokenA = ref<any>({
   name: 'Cardano',
   ticker: 'ADA',
-  img: cardanoSvg,
-  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
@@ -593,8 +599,6 @@ const selectedTokenA = ref<any>({
 const selectedTokenB = ref<any>({
   name: 'GERO',
   ticker: 'GERO',
-  img: 'https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp',
-  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
@@ -659,8 +663,13 @@ const availableTokens = computed(() => {
   const tokens = Object.values(dexHunterTokens.value)
     .map((token: any) => {
       const found: any = resolvedAssets.value?.[token.unit];
+      // Prefer main-page market data for display fields; DexHunter only defines swappability.
+      const market = getTokenByUnit(token.unit);
       const res = {
         ...token,
+        name: market?.name || token.name,
+        ticker: market?.ticker || token.ticker,
+        verified: market?.verified ?? token.verified,
         balance: found ? found.quantity : 0,
         decimals: token.metadata?.decimals ?? token.decimals ?? 6,
       };
@@ -1389,12 +1398,13 @@ function copyTxId() {
 }
 
 function getTokenImg(token: any): string {
-  return applyTokenImageOverride(token.ticker || token.name, token.img || '');
+  return getTokenImage(token);
 }
 
-function onTokenImgError(event: Event, token: any) {
+function onTokenImgError(event: Event, _token: any) {
   const img = event.target as HTMLImageElement;
-  if (token.fallback_img) img.src = token.fallback_img;
+  // Market-data logo URL failed to load → fall back to the chain logo.
+  if (chainLogo.value && img.src !== chainLogo.value) img.src = chainLogo.value;
 }
 
 function onDone() {
@@ -1418,14 +1428,11 @@ function resetAll() {
   swapType.value = 'swap';
   tokenAInput.value = '';
   selectedTokenA.value = {
-    name: 'Cardano', ticker: 'ADA', img: cardanoSvg,
-    fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
+    name: 'Cardano', ticker: 'ADA',
     balance: 0, quantity: '0', decimals: 6, unit: '', verified: true,
   };
   selectedTokenB.value = {
     name: 'GERO', ticker: 'GERO',
-    img: 'https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp',
-    fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
     balance: 0, quantity: '0', decimals: 6,
     unit: '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f', verified: true,
   };

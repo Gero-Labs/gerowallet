@@ -23,7 +23,7 @@
             <img
               :src="faviconUrl"
               class="favicon-img"
-              @error="faviconFailed = true"
+              @error="onFaviconError"
               v-if="!faviconFailed"
             />
             <v-icon v-else size="32" :color="primaryColor">mdi-web</v-icon>
@@ -78,7 +78,7 @@
             <img
               :src="faviconUrl"
               class="favicon-img"
-              @error="faviconFailed = true"
+              @error="onFaviconError"
               v-if="!faviconFailed"
             />
             <v-icon v-else size="32" color="#FFF59E">mdi-file-document-edit-outline</v-icon>
@@ -219,7 +219,7 @@
             <img
               :src="faviconUrl"
               class="favicon-img"
-              @error="faviconFailed = true"
+              @error="onFaviconError"
               v-if="!faviconFailed"
             />
             <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
@@ -375,11 +375,31 @@ const enableDomain = computed(() => {
   }
 });
 
-const faviconUrl = computed(() => {
+// Index of the favicon source currently being tried (advanced via @error).
+const faviconAttempt = ref(0);
+
+// Ordered favicon sources, best first.
+const faviconSources = computed(() => {
   const domain = enableDomain.value;
-  if (!domain) return '';
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  if (!domain) return [];
+  const tabFavicon = currentRequest.value?.payload?.favIconUrl;
+  return [
+    // Source 1: the real favicon Chrome already loaded for the dApp tab.
+    ...(tabFavicon ? [tabFavicon] : []),
+    // Source 2: Google favicon service by domain.
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+  ];
 });
+
+const faviconUrl = computed(() => faviconSources.value[faviconAttempt.value] || '');
+
+function onFaviconError() {
+  if (faviconAttempt.value < faviconSources.value.length - 1) {
+    faviconAttempt.value += 1; // try next source
+  } else {
+    faviconFailed.value = true; // exhausted → globe fallback
+  }
+}
 
 // Sign Data — domain + decoded message
 const signDataDomain = computed(() => {
@@ -912,6 +932,7 @@ watch(currentRequest, () => {
   signError.value = '';
   enableConsent.value = false;
   faviconFailed.value = false;
+  faviconAttempt.value = 0;
 });
 
 function rejectSign() {
@@ -1291,7 +1312,7 @@ async function signDataHw() {
 
 .url-warning {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   padding: 8px 10px;
   background: rgba(255, 167, 38, 0.08);
   border: 1px solid rgba(255, 167, 38, 0.15);

@@ -7,6 +7,7 @@ import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { applyTokenImageOverride } from '@/shared/utils/resolver';
 
 export interface MarketToken {
   unit: string;
@@ -97,7 +98,7 @@ function enrichWithStores(apiToken: TokenPriceResponse): MarketToken {
     unit: assetId,
     name: apiToken.name || dhToken?.name || apiToken.assetNameAscii || assetId,
     ticker: apiToken.ticker || dhToken?.ticker || apiToken.assetNameAscii || '',
-    img: apiToken.logo || dhToken?.img || '',
+    img: apiToken.logo || '',
     verified: apiToken.verified ?? dhToken?.verified ?? false,
     price: apiToken.priceUsd,
     priceAda: apiToken.priceAda,
@@ -365,6 +366,26 @@ function getTokenByUnit(unit: string): MarketToken | undefined {
   return allTokens.value.find(t => t.unit === unit);
 }
 
+/**
+ * Resolve a token's logo image from market data (single source of truth), keyed by unit.
+ * Falls back to the wallet's chain logo when market data has no logo for the token.
+ * Reactive on `allTokens`, so images appear as soon as market data loads.
+ * @param token - anything carrying `unit` (and optionally `ticker`/`name` for overrides)
+ */
+function getTokenImage(token: { unit?: string; ticker?: string; name?: string; img?: string } | null | undefined): string {
+  const chainLogo = networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || '';
+  const name = token?.ticker || token?.name;
+  // Hard overrides win (e.g. NIGHT ships a bundled logo).
+  const override = applyTokenImageOverride(name, '');
+  if (override) return override;
+  const unit = token?.unit;
+  // Native token (ADA / AP3X) always uses the bundled chain logo.
+  if (!unit || unit === 'lovelace') return chainLogo;
+  // Prefer market-data logo; then any image the token already carries
+  // (e.g. on-chain metadata resolved for wallet assets in the Send flow); then chain logo.
+  return getTokenByUnit(unit)?.img || token?.img || chainLogo;
+}
+
 // --- Price polling state ---
 
 // Kept for the portfolio "live data" indicator. The live WebSocket was removed
@@ -473,6 +494,7 @@ export function useMarketData() {
     error,
     searchTokens,
     getTokenByUnit,
+    getTokenImage,
     getTokenCandles,
     wsConnected,
     fetchAllTokens,
