@@ -14,6 +14,7 @@
       :src="portalUrl"
       class="portal-frame"
       title="Bring Cashback"
+      @load="onFrameLoad"
     />
   </div>
 </template>
@@ -86,6 +87,17 @@ async function signForPortal(messageToSign: string) {
   } catch {
     post(abortSignMessage());
   }
+}
+
+// The portal's initial token (embedded in portalUrl) has a very short TTL and can
+// expire before the iframe finishes cold-loading, making the portal's own
+// /portal/verify 401. Once the frame has loaded, immediately push a fresh
+// SESSION_UPDATE token so it re-verifies within a full lifetime.
+let didRefreshOnLoad = false;
+async function onFrameLoad() {
+  if (didRefreshOnLoad || !portalUrl.value) return;
+  didRefreshOnLoad = true;
+  await bootstrap('resync');
 }
 
 async function onMessage(event: MessageEvent) {
