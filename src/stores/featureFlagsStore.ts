@@ -11,6 +11,7 @@ export interface FeatureFlags {
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
+  isCopilotEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -30,6 +31,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
     isCrossDeviceSigningEnabled: false,
+    isCopilotEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -74,6 +76,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
+    featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
   },
 
   /**
@@ -106,6 +109,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCrossDeviceSigningEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCrossDeviceSigningEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isCopilotEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isCopilotEnabled', newValue);
     });
   },
 
@@ -180,6 +186,16 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the Gero Copilot agent (chat dock + proactive feed) is enabled.
+   * Ships DARK (default false): when off, the AgentDock is not mounted and the
+   * feed routes / nav entries are hidden on both the dashboard and mini-gero, so
+   * gero-sync can hold or kill the whole agent without a client release.
+   */
+  isCopilotEnabled(): boolean {
+    return featureFlagsState.flags.isCopilotEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -193,6 +209,7 @@ export const featureFlagsStore = {
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
       isCrossDeviceSigningEnabled: false,
+      isCopilotEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

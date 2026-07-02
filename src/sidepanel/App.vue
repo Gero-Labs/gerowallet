@@ -21,7 +21,7 @@
         @settings="openDashboardSettings"
       />
       <DAppOverlay />
-      <AgentDock />
+      <AgentDock v-if="isCopilotEnabled" />
     </template>
 
     <!-- Wallet switcher bottom sheet (available from header) -->
@@ -44,6 +44,7 @@ import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
 import BottomSheet from './components/BottomSheet.vue';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Wallet } from '@/models/types';
 import { useChainContext } from './composables/useChainContext';
@@ -59,6 +60,7 @@ const showWalletSwitcher = ref(false);
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
 const isLocked = computed(() => walletStore.isLocked);
+const isCopilotEnabled = computed(() => featureFlagsStore.isCopilotEnabled());
 
 // Watch locale changes from geroStore
 const vmProxy = getCurrentInstance()!.proxy;

@@ -333,6 +333,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
       // Pool Operator dashboard gated by feature flag
       return !featureFlagsStore.isPoolOperatorEnabled();
 
+    case 'copilotFeed':
+      // Gero Copilot feed gated by the master feature flag (ships dark)
+      return !featureFlagsStore.isCopilotEnabled();
+
     case 'multisig':
       // MultiSig is currently under maintenance (route is commented out)
       return true;
@@ -409,6 +413,10 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       // cold-refresh window before feature flags initialize (maintenance check
       // at the bottom only fires once flags are initialized).
       poolOperator: () => false,
+      // Copilot feed — closes the cold-refresh window before flags init. Returns
+      // the live flag (not a hard false) so the maintenance case can turn it ON
+      // once gero-sync enables it. Falsy => redirect to '/'.
+      copilotFeed: () => featureFlagsStore.isCopilotEnabled(),
     };
     const guard = routeNetworkGuards[to.name];
     if (guard && !guard(chain, network)) {

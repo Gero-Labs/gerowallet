@@ -48,6 +48,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 const { loading, isRestoring, text, progress } = toRefs(loadingState);
 const geroConfig = toRefs(geroStore).config;
@@ -61,7 +62,7 @@ const isLoading = computed(() => {
 });
 
 const isAgentVisible = computed(() => {
-  return !!walletStore.loggedWallet && !walletStore.isLocked;
+  return featureFlagsStore.isCopilotEnabled() && !!walletStore.loggedWallet && !walletStore.isLocked;
 });
 
 // Check auto-lock immediately when page loads/becomes visible
