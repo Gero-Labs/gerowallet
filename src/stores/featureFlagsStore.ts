@@ -10,6 +10,7 @@ export interface FeatureFlags {
   isPoolOperatorEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
+  isCrossDeviceSigningEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -28,6 +29,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isPoolOperatorEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
+    isCrossDeviceSigningEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -71,6 +73,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
+    featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
   },
 
   /**
@@ -100,6 +103,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isNexusUnstakeEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusUnstakeEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isCrossDeviceSigningEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isCrossDeviceSigningEnabled', newValue);
     });
   },
 
@@ -164,6 +170,16 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the cross-device signing bridge is enabled.
+   * Ships DARK (default false): when off, no cross-device relay message is sent
+   * and the WebSocket service behaves exactly as before. See
+   * docs/plans/2026-06-29-cross-device-signing-bridge.md.
+   */
+  isCrossDeviceSigningEnabled(): boolean {
+    return featureFlagsState.flags.isCrossDeviceSigningEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -176,6 +192,7 @@ export const featureFlagsStore = {
       isPoolOperatorEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
+      isCrossDeviceSigningEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
