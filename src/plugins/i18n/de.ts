@@ -912,6 +912,12 @@ export default {
   'copilot.allowance.errors.emptyAllowlist': 'Die Erlaubnisliste muss mindestens einen Empfaenger oder eine Kategorie enthalten.',
   'copilot.allowance.errors.wildcardCategory': 'Wildcard-Kategorie ist nicht erlaubt.',
   'copilot.allowance.errors.expiryPast': 'Ablaufdatum muss in der Zukunft liegen.',
+  // --- Cross-Device-Signierung ---
+  'crossDevice.signOnAnotherDevice': 'Auf einem anderen Gerät signieren',
+  'crossDevice.requestExpired': 'Die Signieranfrage ist abgelaufen. Bitte versuchen Sie es erneut.',
+  'crossDevice.requestRejected': 'Die Signieranfrage wurde abgelehnt.',
+  'crossDevice.intentSign': 'Transaktion signieren',
+  'crossDevice.intentSend': '{amount} ADA senden',
   'dashboard.actions': 'Aktionen',
   'dashboard.adaOnly': 'Nur ADA',
   'dashboard.adaOnlyTooltip': 'Zeigt nur das ADA-Guthaben an',

@@ -1759,6 +1759,43 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   }
 });
 
+// Cross-device signing (requester side). Hands an UNSIGNED tx CBOR to the
+// cross-device bridge, which relays it to another registered device for
+// approval + local signing, and returns a SignDecision. Dark unless the
+// isCrossDeviceSigningEnabled flag is on (getCrossDeviceSigning() returns null).
+app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, sendResponse) => {
+  try {
+    const signing = walletManager.getCrossDeviceSigning();
+    if (!signing) {
+      sendResponse({
+        id: request.id,
+        data: { decision: 'rejected', reason: 'Cross-device signing is not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
+    const decision = await signing.requestSignature({ unsignedCbor, intent, stakeAddress, ttlMs });
+
+    sendResponse({
+      id: request.id,
+      data: decision,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error requesting cross-device signature:', error);
+    sendResponse({
+      id: request.id,
+      data: { decision: 'rejected', reason: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 // Pool operator transaction signing handler (cold key + wallet keys)
 app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendResponse) => {
   try {
@@ -2131,6 +2168,11 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
         console.log('original Cbor', request.data.txCbor)
         console.log('witnessHex', request.data.witnessHex)
         const serializableTx: Serialization.Transaction = Serialization.Transaction.fromCbor(HexBlob(request.data.txCbor));
+        // Integrity guard: capture the tx body hash BEFORE merging the external
+        // witness set. Merging a VKey witness set must never alter body bytes;
+        // this defends the cross-device signing path (and any external cosigner)
+        // against a swapped body sneaking in with the returned witnesses.
+        const bodyHashBefore = serializableTx.body().hash();
         const existingWitness = serializableTx.witnessSet();
         const existingWitnessCore = existingWitness.toCore();
         const newWitnesses: Cardano.Witness = Serialization.TransactionWitnessSet.fromCbor(request.data.witnessHex).toCore();
@@ -2148,6 +2190,13 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
           ),
         );
         serializableTx.setWitnessSet(existingWitness);
+        // Re-check the body hash after applying witnesses. If it changed, the
+        // merge touched body bytes: refuse to submit rather than sign something
+        // the user never confirmed.
+        const bodyHashAfter = serializableTx.body().hash();
+        if (bodyHashBefore !== bodyHashAfter) {
+          throw new Error('Transaction body changed while applying witness set; refusing to submit');
+        }
         txCbor = serializableTx.toCbor();
         console.log('Submitting transaction with witnesses:', txCbor);
       } else if (request.data.txCbor) {
