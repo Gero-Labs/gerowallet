@@ -340,15 +340,26 @@ export class WalletManager {
       // into midnightStore actions. Skip if the address derivation failed.
       if (addresses.unshielded) {
         const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
-        // Opt into shielded sync if the wallet record carries a viewing key
-        // (post-Step-4 wallets). Legacy wallets without the field stay
-        // unshielded-only — they need a re-derivation to enable shielded.
-        // Privacy: log only the boolean, never the key itself.
-        const shielded = addresses.zswapViewingKey
-          ? { viewingKey: addresses.zswapViewingKey, lastIndex: null }
+        // Opt into shielded sync only if the wallet record carries a viewing
+        // key in the form the indexer's connect(viewingKey) mutation accepts:
+        // bech32m with HRP `mn_shield-esk_` (see the a3f76f1f fix). Wallets
+        // created before that fix stored the raw-hex or `mn_shield-epk_` form,
+        // which the indexer rejects with "cannot bech32m-decode viewing key" —
+        // enabling shielded sync for those just spams the indexer with failing
+        // connect() calls every reconcile. Gate on the correct prefix so legacy
+        // wallets fall back to unshielded-only cleanly. They regain shielded
+        // sync once their viewing key is re-derived (recreate the wallet, or
+        // the future in-place viewing-key heal).
+        // Privacy: log only the boolean/validity, never the key itself.
+        const vk = addresses.zswapViewingKey;
+        const vkIsValid = typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
+        const shielded = vkIsValid
+          ? { viewingKey: vk, lastIndex: null }
           : undefined;
         if (shielded) {
           debugLog('🌙 Midnight sync: starting with shielded subscription enabled');
+        } else if (vk) {
+          debugLog('🌙 Midnight sync: viewing key is legacy form (not mn_shield-esk_) — shielded sync disabled until re-derivation; unshielded-only for now');
         }
         midnightSyncService.start(walletBg.network, addresses, 0, shielded);
       } else {
