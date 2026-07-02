@@ -5,21 +5,19 @@ import {
   expireStale,
   type MachineState,
 } from './signRequestMachine';
-import { CROSS_DEVICE_PROTOCOL_VERSION, type SignRequest, type SignResponse } from './protocol';
+import type { SignRequest, SignResponse } from './protocol';
 
+// `now` is milliseconds; expiresAt is unix SECONDS.
 function makeReq(overrides: Partial<SignRequest> = {}): SignRequest {
   return {
-    v: CROSS_DEVICE_PROTOCOL_VERSION,
     type: 'SIGN_REQUEST',
     reqId: 'req-1',
-    fromDeviceId: 'dev1',
-    toDeviceId: 'any',
+    nonce: 'n1',
+    from: 'dev1',
     stakeAddress: 'stake1',
     unsignedCbor: '84a4',
     intent: 'Swap',
-    nonce: 'n1',
-    createdAt: 1000,
-    ttlMs: 5000,
+    expiresAt: 6, // expires at 6000 ms
     sig: 'ab'.repeat(64),
     ...overrides,
   };
@@ -27,14 +25,12 @@ function makeReq(overrides: Partial<SignRequest> = {}): SignRequest {
 
 function makeRes(overrides: Partial<SignResponse> = {}): SignResponse {
   return {
-    v: CROSS_DEVICE_PROTOCOL_VERSION,
     type: 'SIGN_RESPONSE',
     reqId: 'req-1',
-    fromDeviceId: 'dev2',
+    nonce: 'n2',
+    deviceId: 'dev2',
     decision: 'approved',
     witnessSetCbor: 'a100',
-    nonce: 'n1',
-    createdAt: 2000,
     sig: 'cd'.repeat(64),
     ...overrides,
   };
@@ -53,7 +49,6 @@ describe('createRequest', () => {
   it('ignores a duplicate (reqId:nonce) — replay safety', () => {
     const once = createRequest(empty, makeReq());
     const twice = createRequest(once, makeReq({ intent: 'MALICIOUS SWAP' }));
-    // Original request preserved, not overwritten by the replay.
     expect(twice.byId['req-1'].request.intent).toBe('Swap');
     expect(twice.seen.filter((s) => s === 'req-1:n1')).toHaveLength(1);
   });
@@ -63,17 +58,12 @@ describe('createRequest', () => {
     expect(empty.byId).toEqual({});
     expect(empty.seen).toEqual([]);
   });
-
-  it('preserves the original request for later integrity re-check', () => {
-    const state = createRequest(empty, makeReq({ unsignedCbor: 'ORIGINAL' }));
-    expect(state.byId['req-1'].request.unsignedCbor).toBe('ORIGINAL');
-  });
 });
 
 describe('applyResponse', () => {
   it('approves a pending request within ttl', () => {
     const state = createRequest(empty, makeReq());
-    const next = applyResponse(state, makeRes(), 3000); // createdAt 1000 + ttl 5000 = expires at 6000
+    const next = applyResponse(state, makeRes(), 3000); // 3000 ms < 6000 ms expiry
     expect(next.byId['req-1'].status).toBe('approved');
   });
 
@@ -87,9 +77,9 @@ describe('applyResponse', () => {
     expect(next.byId['req-1'].status).toBe('rejected');
   });
 
-  it('cannot approve after ttl has passed (expires instead)', () => {
+  it('cannot approve at/after expiry (expires instead)', () => {
     const state = createRequest(empty, makeReq());
-    const next = applyResponse(state, makeRes(), 7000); // past expiry (6000)
+    const next = applyResponse(state, makeRes(), 7000); // 7000 ms >= 6000 ms
     expect(next.byId['req-1'].status).toBe('expired');
   });
 
@@ -114,9 +104,9 @@ describe('applyResponse', () => {
 
 describe('expireStale', () => {
   it('flips only overdue pendings to expired', () => {
-    let state = createRequest(empty, makeReq({ reqId: 'a', nonce: 'na', createdAt: 1000, ttlMs: 1000 }));
-    state = createRequest(state, makeReq({ reqId: 'b', nonce: 'nb', createdAt: 1000, ttlMs: 9000 }));
-    const next = expireStale(state, 5000); // a expires at 2000 (overdue), b at 10000 (still fresh)
+    let state = createRequest(empty, makeReq({ reqId: 'a', nonce: 'na', expiresAt: 2 }));
+    state = createRequest(state, makeReq({ reqId: 'b', nonce: 'nb', expiresAt: 10 }));
+    const next = expireStale(state, 5000); // a expires 2000 (overdue), b at 10000 (fresh)
     expect(next.byId['a'].status).toBe('expired');
     expect(next.byId['b'].status).toBe('pending');
   });

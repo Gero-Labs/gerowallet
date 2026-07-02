@@ -12,7 +12,7 @@
 // The pure modules stay free of chrome/WebSocket/Date.now; this service is the
 // only place timing (ttl reject timer) lives.
 
-import { parseCrossDeviceMessage, type CrossDeviceMessage, type SignRequest, type SignResponse, isSignRequest, isSignResponse } from './protocol';
+import { parseCrossDeviceMessage, type CrossDeviceMessage, type SignRequest, type SignResponse } from './protocol';
 import { signMessage, verifyMessage } from './envelope';
 import { createRequest, applyResponse, type MachineState } from './signRequestMachine';
 
@@ -45,14 +45,15 @@ export type SignRequestHandler = (
   respond: (r: SignDecision) => Promise<void>,
 ) => void;
 
+export interface RequestSignatureInput {
+  unsignedCbor: string;
+  intent?: string;
+  stakeAddress?: string;
+  ttlMs?: number;
+}
+
 export interface CrossDeviceSigning {
-  requestSignature(input: {
-    unsignedCbor: string;
-    intent: string;
-    stakeAddress: string;
-    toDeviceId?: string;
-    ttlMs?: number;
-  }): Promise<SignDecision>;
+  requestSignature(input: RequestSignatureInput): Promise<SignDecision>;
   onSignRequest(handler: SignRequestHandler): () => void;
   dispose(): void;
 }
@@ -81,39 +82,37 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
   async function handleInbound(raw: unknown): Promise<void> {
     const msg = parseCrossDeviceMessage(raw);
     if (!msg) return;
-    if (msg.type === 'DEVICE_REGISTER') return; // registry announcements are server-side concerns
+    // Only SIGN_REQUEST/SIGN_RESPONSE are authenticated here. Registry frames
+    // (DEVICES / DEVICE_REGISTER / DEVICE_REGISTER_ACK) are handled elsewhere.
+    if (msg.type !== 'SIGN_REQUEST' && msg.type !== 'SIGN_RESPONSE') return;
 
     // Authenticated origin (invariant 2): verify against the sender's registered pubkey.
-    const pubKey = await resolvePubKey(msg.fromDeviceId);
+    const senderId = msg.type === 'SIGN_REQUEST' ? msg.from : msg.deviceId;
+    const pubKey = await resolvePubKey(senderId);
     if (!pubKey) return;
     const ok = await verifyMessage(msg, pubKey);
     if (!ok) return;
 
-    if (isSignRequest(msg)) {
+    if (msg.type === 'SIGN_REQUEST') {
       // Ignore requests this device itself originated.
-      if (msg.fromDeviceId === identity.deviceId) return;
+      if (msg.from === identity.deviceId) return;
       dispatchSignRequest(msg);
       return;
     }
-
-    if (isSignResponse(msg)) {
-      handleSignResponse(msg);
-    }
+    handleSignResponse(msg);
   }
 
   function dispatchSignRequest(req: SignRequest): void {
     const respond = async (r: SignDecision): Promise<void> => {
       const res = await signMessage<SignResponse>(
         {
-          v: req.v,
           type: 'SIGN_RESPONSE',
           reqId: req.reqId,
-          fromDeviceId: identity.deviceId,
+          nonce: newId(),
+          deviceId: identity.deviceId,
           decision: r.decision,
           witnessSetCbor: r.witnessSetCbor,
           reason: r.reason,
-          nonce: newId(),
-          createdAt: now(),
         },
         identity.privKeyHex,
       );
@@ -142,29 +141,21 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     void handleInbound(raw);
   });
 
-  async function requestSignature(input: {
-    unsignedCbor: string;
-    intent: string;
-    stakeAddress: string;
-    toDeviceId?: string;
-    ttlMs?: number;
-  }): Promise<SignDecision> {
+  async function requestSignature(input: RequestSignatureInput): Promise<SignDecision> {
     const reqId = newId();
     const nonce = newId();
     const ttlMs = input.ttlMs ?? DEFAULT_TTL_MS;
+    const expiresAt = Math.floor(now() / 1000) + Math.ceil(ttlMs / 1000);
     const req = await signMessage<SignRequest>(
       {
-        v: 1,
         type: 'SIGN_REQUEST',
         reqId,
-        fromDeviceId: identity.deviceId,
-        toDeviceId: input.toDeviceId ?? 'any',
+        nonce,
+        from: identity.deviceId,
         stakeAddress: input.stakeAddress,
         unsignedCbor: input.unsignedCbor,
         intent: input.intent,
-        nonce,
-        createdAt: now(),
-        ttlMs,
+        expiresAt,
       },
       identity.privKeyHex,
     );
