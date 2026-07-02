@@ -34,7 +34,6 @@ import {
 
 const frame = ref<HTMLIFrameElement | null>(null);
 const portalUrl = ref('');
-const token = ref('');
 const loading = ref(false);
 const errorState = ref(false);
 
@@ -60,7 +59,6 @@ async function bootstrap(reason: 'initial' | 'resync' = 'initial') {
   errorState.value = false;
   try {
     const res = await cashbackApi.portal(baseAddress(), theme);
-    token.value = res.token;
     if (reason === 'initial' || !portalUrl.value) {
       portalUrl.value = res.portalUrl;
     } else {
@@ -91,6 +89,9 @@ async function signForPortal(messageToSign: string) {
 }
 
 async function onMessage(event: MessageEvent) {
+  // Defence-in-depth: only accept messages from our own portal iframe window,
+  // on top of the origin + `from:'bringweb3'` trust check.
+  if (event.source !== frame.value?.contentWindow) return;
   if (!isTrustedPortalMessage(event, portalOrigin())) return;
   const action = (event.data as { action: string }).action;
   if (action === 'LOGIN') {
