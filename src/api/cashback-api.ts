@@ -1,6 +1,16 @@
 import axios from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 
+export interface CashbackPortalBootstrap {
+  portalUrl: string;
+  token: string;
+}
+
+export interface CashbackResponse {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
   timeout: 120000,
@@ -20,7 +30,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async categories(): Promise<any> {
+  async categories(): Promise<CashbackResponse> {
     try {
       const { data, status } = await axiosInstance.get("/api/bring/categories");
       if (status === 200) return data;
@@ -29,7 +39,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async categoriesSearch(): Promise<any> {
+  async categoriesSearch(): Promise<CashbackResponse> {
     try {
       const { data, status } = await axiosInstance.get("/api/bring/categories-search");
       if (status === 200) return data;
@@ -38,7 +48,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async searchTerms(): Promise<any> {
+  async searchTerms(): Promise<CashbackResponse> {
     try {
       const { data, status } = await axiosInstance.get("/api/bring/search-terms");
       if (status === 200) return data;
@@ -47,7 +57,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async retailers(category: string, search?: string, page?: number): Promise<any> {
+  async retailers(category: string, search?: string, page?: number): Promise<CashbackResponse> {
     try {
       const requestBody = {
         type: 'all',
@@ -67,7 +77,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async cache(walletAddress: string): Promise<any> {
+  async cache(walletAddress: string): Promise<CashbackResponse> {
     try {
       const requestBody = {
         walletAddress,
@@ -79,7 +89,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async activate(itemId: string, walletAddress: string, tokenSymbol: string, search: string): Promise<any> {
+  async activate(itemId: string, walletAddress: string, tokenSymbol: string, search: string): Promise<CashbackResponse> {
     try {
       const requestBody = {
         itemId,
@@ -94,7 +104,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async claimInit(walletAddress: string, targetWalletAddress: string, tokenSymbol: string, tokenAmount: number): Promise<any> {
+  async claimInit(walletAddress: string, targetWalletAddress: string, tokenSymbol: string, tokenAmount: number): Promise<CashbackResponse> {
     try {
       const requestBody = {
         walletAddress,
@@ -109,7 +119,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async claimSubmit(walletAddress: string, targetWalletAddress: string, tokenSymbol: string, tokenAmount: number, message: string, signature: string, key: string): Promise<any> {
+  async claimSubmit(walletAddress: string, targetWalletAddress: string, tokenSymbol: string, tokenAmount: number, message: string, signature: string, key: string): Promise<CashbackResponse | number> {
     try {
       const requestBody = {
         walletAddress,
@@ -127,7 +137,7 @@ export default {
       throw parseHttpError(error);
     }
   },
-  async analytics(itemId: string, itemName: string, walletAddress: string, tokenSymbol: string, search: string): Promise<any> {
+  async analytics(itemId: string, itemName: string, walletAddress: string, tokenSymbol: string, search: string): Promise<CashbackResponse> {
     try {
       const requestBody = {
         type: 'retailer_shop',
@@ -139,6 +149,15 @@ export default {
       }
       const { data, status } = await axiosInstance.post(`/api/bring/analytics`, requestBody);
       if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  },
+  async portal(walletAddress: string | null, theme: 'dark' | 'light' = 'dark'): Promise<CashbackPortalBootstrap> {
+    try {
+      const { data, status } = await axiosInstance.post('/api/bring/portal', { walletAddress, theme });
+      if (status === 200 && data?.portalUrl) return { portalUrl: data.portalUrl, token: data.token };
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
