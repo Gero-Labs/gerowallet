@@ -23,6 +23,11 @@
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
       />
+      <img
+        :src="assets.midnightBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Midnight') }"
+      />
     </div>
 
     <!-- Language Selector - Floating top-right -->
@@ -129,9 +134,10 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   filter: none;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
-  transform: translateY(20%);
   opacity: 0;
-  transition: all 0.3s ease;
+  /* Pure cross-fade between chains — no vertical slide (a translateY here both
+     left a black gap at the top and made the image jump on hover). */
+  transition: opacity 0.3s ease;
 }
 
 .welcome-background-image.background-active {

@@ -330,6 +330,11 @@ async function submit(): Promise<void> {
   min-height: 36px !important;
 }
 
+/* Hide native number-input spinner buttons (up/down arrows) */
+.td-input :deep(input[type='number']) { -moz-appearance: textfield; appearance: textfield; }
+.td-input :deep(input[type='number'])::-webkit-outer-spin-button,
+.td-input :deep(input[type='number'])::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
 .td-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

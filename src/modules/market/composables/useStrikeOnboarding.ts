@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { ref, computed, watch } from 'vue';
 import { generateStrikeKeyPair } from '@/api/strike-v2.auth';
 import {
@@ -10,10 +11,76 @@ import {
   verifyBuilderSignature,
 } from '@/api/strike-v2.builder-connect';
 import { encryptWithPassword, decryptWithPassword } from '@/shared/utils/crypto';
+import {
+  encryptPrivateKeyWithPrf,
+  decryptPrivateKeyWithPrf,
+} from '@/shared/utils/webauthn-prf';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { useStrikeTrading } from './useStrikeTrading';
+
+/**
+ * True when the active wallet is a pure-PRF (passkey) wallet that has no
+ * spending password. Detection mirrors useTransactionSigning.isPrfWallet —
+ * accept either the explicit method flag OR the presence of both PRF fields.
+ */
+function isActiveWalletPrf(): boolean {
+  const w = walletStore.loggedWallet;
+  return (
+    w?.encryptionMethod === 'prf' ||
+    (!!w?.prfEncryptedPrivateKey && !!w?.webAuthnCredentialId)
+  );
+}
+
+/**
+ * Encrypt the Strike API-wallet private key for storage.
+ *
+ * - Password wallets: ChaCha20 via encryptWithPassword (existing behaviour).
+ * - PRF wallets: hardware-bound AES-GCM via the wallet's PRF credential
+ *   (mirrors how mnemonic / root-key blobs are persisted for PRF wallets).
+ *   This prompts the authenticator a second time; the Strike key bytes are
+ *   short-lived hex, so we round-trip through Uint8Array for PRF encryption.
+ */
+async function encryptStrikePrivateKey(
+  privateKeyHex: string,
+  password: string,
+): Promise<string> {
+  if (isActiveWalletPrf()) {
+    const w = walletStore.loggedWallet!;
+    const keyBytes = Uint8Array.from(Buffer.from(privateKeyHex, 'hex'));
+    return encryptPrivateKeyWithPrf(
+      keyBytes,
+      w.webAuthnCredentialId!,
+      w.id.toString(),
+    );
+  }
+  return encryptWithPassword(password, privateKeyHex);
+}
+
+/**
+ * Decrypt the stored Strike API-wallet private key.
+ *
+ * - Password wallets: decryptWithPassword (existing behaviour) → hex.
+ * - PRF wallets: decryptPrivateKeyWithPrf prompts the passkey and returns the
+ *   raw key bytes, which we re-encode to hex for setStrikeApiKeys().
+ */
+async function decryptStrikePrivateKey(
+  privateKeyEncrypted: string,
+  password: string,
+): Promise<string> {
+  if (isActiveWalletPrf()) {
+    const w = walletStore.loggedWallet!;
+    const keyBytes = await decryptPrivateKeyWithPrf(
+      privateKeyEncrypted,
+      w.webAuthnCredentialId!,
+      w.id.toString(),
+    );
+    return Buffer.from(keyBytes).toString('hex');
+  }
+  const decrypted = decryptWithPassword(password, privateKeyEncrypted);
+  return decrypted.toString('hex');
+}
 
 // ---------------------------------------------------------------------------
 // Builder-connect configuration
@@ -47,6 +114,19 @@ const connectStep = ref<ConnectStep>('idle');
 
 /** True when an encrypted key blob exists for this wallet but isn't unlocked. */
 const needsUnlock = computed(() => hasStoredKeys.value && !isConnected.value);
+
+/**
+ * Reactive PRF-wallet flag for the UI. Tracks the active wallet so the
+ * onboarding card can render the passkey button instead of a password field.
+ * Detection mirrors useTransactionSigning.isPrfWallet.
+ */
+const isPrfWallet = computed(() => {
+  const w = walletStore.loggedWallet;
+  return (
+    w?.encryptionMethod === 'prf' ||
+    (!!w?.prfEncryptedPrivateKey && !!w?.webAuthnCredentialId)
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Storage helpers — private to this module
@@ -153,7 +233,11 @@ async function unlock(password: string): Promise<boolean> {
     error.value = 'No wallet logged in';
     return false;
   }
-  if (!password) {
+  const isPrf = isActiveWalletPrf();
+  // Password wallets require the spending password to decrypt the stored blob.
+  // PRF wallets authenticate via the passkey inside decryptStrikePrivateKey,
+  // so no password is needed (and none exists for a pure-PRF wallet).
+  if (!isPrf && !password) {
     error.value = 'Spending password is required';
     return false;
   }
@@ -171,12 +255,10 @@ async function unlock(password: string): Promise<boolean> {
 
     let privateKeyHex: string;
     try {
-      const decrypted = decryptWithPassword(password, stored.privateKeyEncrypted);
-      // encryptWithPassword stored the raw 32 private-key bytes (input was a
-      // hex string, parsed via Buffer.from(..., 'hex')). Round-trip back to hex.
-      privateKeyHex = decrypted.toString('hex');
+      // Decrypts via password (ChaCha20) or passkey (PRF AES-GCM) per wallet type.
+      privateKeyHex = await decryptStrikePrivateKey(stored.privateKeyEncrypted, password);
     } catch {
-      error.value = 'Incorrect password';
+      error.value = isPrf ? 'PassKey authentication failed' : 'Incorrect password';
       return false;
     }
 
@@ -202,7 +284,7 @@ async function generateAndConnect(password: string): Promise<boolean> {
     error.value = 'No wallet logged in';
     return false;
   }
-  if (!password) {
+  if (!isActiveWalletPrf() && !password) {
     error.value = 'Spending password is required';
     return false;
   }
@@ -212,7 +294,7 @@ async function generateAndConnect(password: string): Promise<boolean> {
     error.value = null;
 
     const keyPair = await generateStrikeKeyPair();
-    const privateKeyEncrypted = encryptWithPassword(password, keyPair.privateKeyHex);
+    const privateKeyEncrypted = await encryptStrikePrivateKey(keyPair.privateKeyHex, password);
 
     await saveKeysForWallet(walletId, {
       publicKey: keyPair.publicKeyHex,
@@ -259,7 +341,7 @@ function utf8ToHex(input: string): string {
  * Failures at any step leave storage untouched and surface a human-readable
  * error message via `error.value`.
  */
-async function connectWithWallet(password: string): Promise<boolean> {
+async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promise<boolean> {
   if (isLoading.value) return false;
   const wallet = walletStore.loggedWallet;
   const walletId = wallet?.id;
@@ -272,7 +354,16 @@ async function connectWithWallet(password: string): Promise<boolean> {
     error.value = 'Active wallet has no payment address';
     return false;
   }
-  if (!password) {
+  const isPrf = isActiveWalletPrf();
+  // PRF wallets sign the builder message with the pre-decrypted root key bytes
+  // (obtained via PassKeyAuthButton in the UI). Password wallets require the
+  // spending password.
+  if (isPrf) {
+    if (!pkBytes) {
+      error.value = 'PassKey authentication is required';
+      return false;
+    }
+  } else if (!password) {
     error.value = 'Spending password is required';
     return false;
   }
@@ -310,7 +401,10 @@ async function connectWithWallet(password: string): Promise<boolean> {
       data: {
         address,
         payload: utf8ToHex(reqResp.message_to_sign),
-        password,
+        // PRF wallets: pass the pre-decrypted root key bytes (no password).
+        // Password wallets: pass the spending password.
+        password: isPrf ? '' : password,
+        ...(isPrf && pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
         accountIndex: 0,
       },
     })) as { data: { signature?: string; key?: string; error?: string } };
@@ -322,13 +416,10 @@ async function connectWithWallet(password: string): Promise<boolean> {
       throw new Error('Wallet returned an invalid signature payload');
     }
 
-    // The CIP-30 DataSignature has two halves; Strike needs both to verify.
-    // We send them as a JSON envelope so the backend can extract `signature`
-    // (COSE_Sign1) and `key` (COSE_Key) without ambiguity.
-    const walletSignature = JSON.stringify({
-      signature: signResp.data.signature,
-      key: signResp.data.key,
-    });
+    // Strike expects the Cardano signature as the CIP-30 COSE pair joined by a
+    // colon: `${coseSign1Hex}:${coseKeyHex}` (per the Strike builder reference —
+    // strike-builder-reference/src/api/withdraw.ts + strike-finance-skills).
+    const walletSignature = `${signResp.data.signature}:${signResp.data.key}`;
 
     // 4. Verify with Strike — receive account_id + API-wallet metadata
     connectStep.value = 'verifying';
@@ -343,9 +434,10 @@ async function connectWithWallet(password: string): Promise<boolean> {
       throw new Error('Strike did not return an account id');
     }
 
-    // 5. Persist + load keys
+    // 5. Persist + load keys. PRF wallets encrypt the Strike key with the
+    // passkey (a second authenticator prompt); password wallets use ChaCha20.
     connectStep.value = 'finalizing';
-    const privateKeyEncrypted = encryptWithPassword(password, keyPair.privateKeyHex);
+    const privateKeyEncrypted = await encryptStrikePrivateKey(keyPair.privateKeyHex, password);
     await saveKeysForWallet(walletId, {
       publicKey: keyPair.publicKeyHex,
       privateKeyEncrypted,
@@ -446,6 +538,7 @@ export function useStrikeOnboarding() {
     isConnected,
     hasStoredKeys,
     needsUnlock,
+    isPrfWallet,
     isLoading,
     publicKey,
     error,

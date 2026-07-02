@@ -8,7 +8,7 @@
         {{ $t('welcome.chooseAWallet') }}
       </v-card-subtitle>
     </template>
-    <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
+    <v-card-text class="px-2 pa-0 mt-4" style="max-height: 600px; overflow-y: auto; background: transparent!important;">
       <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
         <v-list-item-group v-model="selectedWallet" color="primary">
           <v-list-item

@@ -36,6 +36,13 @@ updates:
     ignore:
       - dependency-name: "@zxing/browser"
       - dependency-name: "@zxing/library"
+      # Suppress all npm major-version bumps. We never auto-adopt them — every
+      # major (vue-router, @vueuse, vitest, cbor/cborg, eslint, etc.) is closed
+      # on sight because the Vue 2 / Cardano-serialization stack needs a manual,
+      # tested upgrade. Minor/patch (the grouped PR) and security updates still
+      # flow. Bump a major deliberately when doing the upgrade work.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     # Security updates should be created immediately
     commit-message:
       prefix: "chore"

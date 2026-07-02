@@ -82,7 +82,6 @@ export const walletStore = Vue.observable<WalletStore>({
       desc: true
     },
     hideScamTokens: false,
-    hideUnratedTokens: false,
     hideUnverifiedTokens: false,
     hideBalances: false,
     stakingProView: false,
@@ -368,14 +367,6 @@ export default {
       walletStore.config.hideUnverifiedTokens = value;
       broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'hideUnverifiedTokens', value);
-    }
-  },
-
-  setHideUnratedTokens(value: boolean) {
-    if (walletStore.config && walletStore.loggedWallet) {
-      walletStore.config.hideUnratedTokens = value;
-      broadcastFromBackground({ config: walletStore.config });
-      setWalletConfiguration(walletStore.loggedWallet.id, 'hideUnratedTokens', value);
     }
   },
 

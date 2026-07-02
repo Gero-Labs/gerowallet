@@ -1,23 +1,47 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import {
-  nexusTxApi,
-  cardanoUtxoToNexusInput,
-  type BuildTxRequest,
-} from '@/api/nexus-tx-api';
-import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 import { strikeUserApi } from '@/api/strike-v2.user';
-import type {
-  DepositQuoteResponse,
-  TransactionStatusResponse,
-} from '@/api/strike-v2.types';
+import { hasStrikeApiKeys } from '@/api/strike-v2.client';
+import { extractStrikeError } from '@/api/strike-v2.error';
+import type { DepositQuoteResponse } from '@/api/strike-v2.types';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { Messaging, type BackgroundResponse, type VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { debugLog } from '@/utils/debug';
+
+/**
+ * Serialise a wallet UTxO to a CIP-30 hex TransactionUnspentOutput — the format
+ * Strike's POST /v2/deposit/build-tx `utxos` field expects. Reconstructs the asset
+ * Map first (chrome.storage round-trips Map -> plain object, which fromCore can't
+ * read). Mirrors getUtxos() in src/chrome/serialization.ts.
+ */
+function utxoToCip30Hex(utxo: Cardano.Utxo): string {
+  let value = utxo[1].value;
+  if (value?.assets && !(value.assets instanceof Map)) {
+    const assetsMap = new Map<Cardano.AssetId, bigint>();
+    Object.entries(value.assets as Record<string, unknown>).forEach(([assetId, qty]) => {
+      assetsMap.set(assetId as Cardano.AssetId, BigInt(qty as string | number | bigint));
+    });
+    value = { coins: BigInt(value.coins), assets: assetsMap };
+  } else if (value) {
+    value = { coins: BigInt(value.coins), assets: value.assets || undefined };
+  }
+  return String(
+    Serialization.TransactionUnspentOutput.fromCore([
+      { txId: utxo[0].txId, index: utxo[0].index },
+      {
+        address: utxo[1].address,
+        value,
+        datumHash: utxo[1].datumHash,
+        datum: utxo[1].datum,
+        scriptReference: utxo[1].scriptReference,
+      },
+    ]).toCbor(),
+  );
+}
 
 /**
  * Lifecycle states for the deposit flow.
@@ -28,7 +52,7 @@ import { debugLog } from '@/utils/debug';
  * building   → constructing the Cardano transaction to the deposit address
  * signing    → awaiting spending-password / hardware-wallet / PassKey signature
  * submitting → broadcasting the signed transaction to the blockchain
- * confirming → tx submitted, polling Strike for credit confirmation
+ * confirming → tx submitted, calling Strike's confirm endpoint
  * credited   → deposit confirmed and Strike balance updated
  * confirmed  → alias of `credited` retained for legacy UIs
  * error      → unrecoverable error; see `error` ref for the message
@@ -56,19 +80,6 @@ const requestId = ref<string | null>(null);
 const quoteCountdown = ref<number>(0);
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
-// Polling configuration. We poll Strike's transaction-status endpoint every
-// 7s for up to ~3 minutes after submission. 7s strikes a balance between
-// snappy feedback when Strike credits quickly and not hammering the API for
-// slow on-chain confirmations.
-const POLL_INTERVAL_MS = 7_000;
-const POLL_MAX_ATTEMPTS = 26; // 26 × 7s ≈ 3min2s
-
-/**
- * Generation counter — bumped by `reset()` so any in-flight polling loop
- * exits the next time it wakes up. Without this, closing the DepositSheet
- * mid-deposit would leave `pollForCredit` firing API calls for ~3 minutes.
- */
-let flowGeneration = 0;
 
 function clearCountdown(): void {
   if (countdownTimer) {
@@ -91,22 +102,19 @@ function startCountdown(expirationAt: number): void {
   countdownTimer = setInterval(tick, 1000);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * Composable for the Strike v2 on-chain deposit flow.
  *
- * Flow:
+ * Flow (Strike's deposit API is exactly these 3 steps — there is no
+ * status-poll endpoint):
  *   1. `requestQuote(amountAda)` → `POST /v2/deposit/quote` returns
  *      `{ request_id, quote, deposit_address, confirmations_required }`.
- *   2. `buildAndSign(password)` builds an ADA send tx via Nexus to the
- *      `deposit_address`, signs it (password / Ledger / Trezor / Keystone /
- *      PassKey), submits it on-chain, and finally calls `POST /v2/deposit`
- *      with `{ request_id, tx_hash }` so Strike credits the user's balance.
- *   3. After confirmation we poll `/v2/transaction/status` until the deposit
- *      shows `completed` or the timeout elapses.
+ *   2. `buildAndSign(password)` asks Strike to BUILD the deposit tx
+ *      (`POST /v2/deposit/build-tx`), signs it (password / Ledger / Trezor /
+ *      Keystone / PassKey), submits it on-chain, then calls `POST /v2/deposit`
+ *      with `{ request_id, tx_hash }` to confirm.
+ *   3. Strike's backend monitors the chain and credits the balance after the
+ *      required confirmations. The wallet's job ends at step 2's confirm.
  */
 export function useStrikeDeposit() {
   // ── ADA balance & rate (used by the UI for max + USD preview) ────────────
@@ -150,6 +158,14 @@ export function useStrikeDeposit() {
     requestId.value = null;
     status.value = 'quoting';
 
+    // Authenticated endpoint — without a loaded API-wallet key this would be sent
+    // unauthenticated and 401. Surface a clear prompt instead of a silent failure.
+    if (!hasStrikeApiKeys()) {
+      error.value = 'Connect to Strike first — open the Vaults tab and tap "Connect to Strike".';
+      status.value = 'error';
+      return;
+    }
+
     const numeric = typeof amountAda === 'string' ? parseFloat(amountAda) : amountAda;
     if (!numeric || isNaN(numeric) || numeric <= 0) {
       error.value = 'Invalid deposit amount.';
@@ -180,21 +196,31 @@ export function useStrikeDeposit() {
         startCountdown(Number(response.quote.expiration_at));
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      debugLog('[strike-deposit] requestQuote failed:', msg);
-      error.value = msg;
+      // Surface Strike's real rejection reason (e.g. a minimum-deposit message)
+      // instead of the opaque "Request failed with status code 400". Log the raw
+      // body too so the exact server text (and any minimum threshold) is visible.
+      const anyErr = e as { response?: { status?: number; data?: unknown } };
+      debugLog(
+        '[strike-deposit] quote rejected:',
+        anyErr?.response?.status,
+        anyErr?.response?.data,
+      );
+      error.value = extractStrikeError(
+        e,
+        'Strike could not quote this deposit. Try a larger amount — there may be a minimum.',
+      );
       status.value = 'error';
     }
   }
 
   /**
-   * Steps 2–4 — build the on-chain tx, sign it with the wallet, submit it,
-   * confirm with Strike, and poll until credited.
+   * Steps 2–4 — ask Strike to build the deposit tx, sign it with the wallet,
+   * submit it on-chain, then confirm with Strike.
    *
-   * Returns `true` once the deposit shows `completed` on Strike (or the
-   * tx is confirmed locally and Strike's polling times out gracefully —
-   * the snackbar surfaces the txid in either case). Returns `false` on
-   * unrecoverable error.
+   * Returns `true` once the tx is submitted on-chain and Strike's confirm
+   * endpoint has been called (the snackbar surfaces the txid). Strike credits
+   * the balance after the required on-chain confirmations — there is no status
+   * to poll. Returns `false` on unrecoverable error.
    *
    * @param password - The wallet's spending password. Pass an empty string
    *   for hardware wallets (currently unsupported here — see comment below).
@@ -205,6 +231,10 @@ export function useStrikeDeposit() {
     password: string,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _vaultId?: string,
+    // Pre-decrypted root key bytes for PRF (passkey) wallets, obtained from
+    // PassKeyAuthButton. When present we skip password verification and pass
+    // these as privateKeyBytes to SIGN_TX (mirrors useTransactionSigning).
+    pkBytes?: Uint8Array,
   ): Promise<boolean> {
     if (!quote.value || !requestId.value) {
       error.value = 'No active deposit quote. Call requestQuote() first.';
@@ -221,45 +251,60 @@ export function useStrikeDeposit() {
       return false;
     }
 
+    // FUND SAFETY: a deposit is only useful if we can confirm it with Strike
+    // afterwards. If the API keys aren't loaded in this context (e.g. a prior 401
+    // cleared them, the session reloaded, or connect happened in another context)
+    // the confirm + status calls will 401 and the ADA strands at the deposit
+    // address. Re-check auth HERE — before any funds move on-chain — and abort
+    // cleanly instead of sending ADA Strike can't credit.
+    if (!hasStrikeApiKeys()) {
+      error.value = 'Strike session is not unlocked — reconnect to Strike before depositing (no funds were moved).';
+      status.value = 'error';
+      return false;
+    }
+
     try {
-      // ── 1. Build tx via Nexus (mirrors the Send flow's buildTx in SendDialog.vue) ──
+      // ── 1. Ask STRIKE to build the deposit tx (POST /v2/deposit/build-tx). ──
+      // Strike constructs the real vault deposit — correct script/datum + the
+      // builder fee — and returns an unsigned CBOR. We must NOT build our own
+      // transfer to the deposit address: a plain ADA send to the vault script is
+      // NOT a creditable Strike deposit (that's why a self-built deposit didn't
+      // credit). The wallet only signs + submits what Strike builds.
       status.value = 'building';
-      const changeAddress = keys.payment[0].address;
-      const buildRequest: BuildTxRequest = {
-        outputs: [
-          {
-            address: quote.value.deposit_address,
-            lovelace: requiredAmountLovelace.value,
-          },
-        ],
-        changeAddress,
-        utxos: utxos.map(cardanoUtxoToNexusInput),
-        network: wallet.network === 'Mainnet' ? 'MAINNET' : 'PREPROD',
-        withdrawals: currentRewardWithdrawals(),
-      };
+      const cip30Utxos = utxos.map(utxoToCip30Hex);
+      const buildResp = await strikeUserApi.buildDepositTx({
+        request_id: requestId.value,
+        user_address: wallet.baseAddress,
+        utxos: cip30Utxos,
+      });
+      if (!buildResp?.unsigned_tx) {
+        throw new Error('Strike did not return an unsigned deposit transaction.');
+      }
 
-      const { tx_cbor: txCborHex, tx_hash: builtTxHash } =
-        await nexusTxApi.buildTransferTx(buildRequest, wallet.network);
-
-      const transaction = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+      const transaction = Serialization.Transaction.fromCbor(HexBlob(buildResp.unsigned_tx));
       const txCore = transaction.toCore();
       const txCbor = serializeCardanoJsSdkTx(txCore);
 
-      // ── 2. Sign via background. Password-only for now — hardware wallets
-      // and Keystone require an interactive UI flow that's out of scope for
-      // this composable; the Send dialog handles those paths. ──
+      // ── 2. Sign via background. Hardware wallets and Keystone require an
+      // interactive UI flow that's out of scope for this composable; the Send
+      // dialog handles those paths. PRF (passkey) wallets pass pre-decrypted
+      // root key bytes and skip password verification (mirrors
+      // useTransactionSigning); password wallets verify then sign. ──
       status.value = 'signing';
-      if (!password) {
-        throw new Error(
-          'Spending password is required for Strike deposits from this flow.',
-        );
-      }
-      const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password },
-      })) as BackgroundResponse<VerifyPasswordResponse>;
-      if (!passwordVerification.data.success) {
-        throw new Error('Incorrect spending password.');
+      const isPrf = !!pkBytes;
+      if (!isPrf) {
+        if (!password) {
+          throw new Error(
+            'Spending password is required for Strike deposits from this flow.',
+          );
+        }
+        const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+          data: { password },
+        })) as BackgroundResponse<VerifyPasswordResponse>;
+        if (!passwordVerification.data.success) {
+          throw new Error('Incorrect spending password.');
+        }
       }
 
       const signResult = (await Messaging.sendToBackgroundFromOptions({
@@ -267,7 +312,8 @@ export function useStrikeDeposit() {
         data: {
           txCbor,
           partialSign: false,
-          password,
+          password: isPrf ? '' : password,
+          ...(isPrf && pkBytes ? { privateKeyBytes: Array.from(pkBytes) } : {}),
           accountIndex: 0,
           utxos,
           addresses: keys,
@@ -294,83 +340,51 @@ export function useStrikeDeposit() {
         throw new Error(submitResult.data.error || 'Failed to submit deposit transaction.');
       }
 
-      // Prefer the on-chain txId returned by the submitter; fall back to
-      // Nexus's pre-build hash if for any reason it's missing.
-      const finalTxHash = submitResult.data.txId || builtTxHash;
+      // The on-chain txId returned by the submitter (validated non-empty above).
+      const finalTxHash = submitResult.data.txId;
       txHash.value = finalTxHash;
 
       // ── 4. Confirm with Strike so they associate this tx with the quote ──
+      // This is the FINAL step. Strike's deposit API is quote → build-tx →
+      // confirm; `POST /v2/deposit` returns `{ status: "pending" }` and "the
+      // backend monitors the blockchain for confirmations" (per Strike's
+      // builder reference). There is NO status-poll endpoint — the previous
+      // `/v2/transaction/status` poll hit a route that doesn't exist, so every
+      // tick 401'd, which tripped the auth interceptor into wiping the keys and
+      // showing a "reconnect" prompt on an otherwise-successful deposit.
       status.value = 'confirming';
       try {
         await strikeUserApi.confirmDeposit(requestId.value, finalTxHash);
       } catch (confirmErr) {
-        // Even if /v2/deposit fails we keep going — Strike sometimes credits
-        // by detecting the address on-chain regardless. Surface it as a soft
-        // warning via the error ref but don't trip the error state yet; the
-        // poll loop below is the source of truth.
+        // Soft-fail: the unsigned tx Strike built carries the request_id in its
+        // vault datum, so Strike credits the deposit from the on-chain tx even
+        // if this confirm call doesn't land. The funds are safe on-chain; don't
+        // trip the error state.
         debugLog('[strike-deposit] confirmDeposit warn:', confirmErr);
       }
 
-      // ── 5. Poll until Strike marks the deposit completed (or timeout) ──
-      // We emit 'confirmed' as the terminal status because legacy consumers
-      // (the dashboard PerpsAccountSection / VaultDepositSheet) listen for
-      // 'confirmed'; the new side-panel sheet treats 'credited' and
-      // 'confirmed' as equivalent.
-      const credited = await pollForCredit(requestId.value, flowGeneration);
-      if (credited) {
-        status.value = 'confirmed';
-        return true;
-      }
-
-      // Tx is on-chain but Strike hasn't shown `completed` yet — we still
-      // call this a soft success because the funds ARE at the deposit
-      // address and Strike will catch up. UIs can offer a "view txid" link.
+      // Deposit complete from the wallet's side. We emit 'confirmed' as the
+      // terminal status because legacy consumers (the dashboard
+      // PerpsAccountSection / VaultDepositSheet) listen for 'confirmed'; the
+      // side-panel sheet treats 'credited' and 'confirmed' as equivalent. The
+      // balance updates on Strike once on-chain confirmations land.
       status.value = 'confirmed';
       return true;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      debugLog('[strike-deposit] buildAndSign failed:', msg);
-      error.value = msg;
+      const anyErr = e as { response?: { status?: number; data?: unknown } };
+      debugLog(
+        '[strike-deposit] buildAndSign failed:',
+        anyErr?.response?.status ?? '',
+        anyErr?.response?.data ?? (e instanceof Error ? e.message : String(e)),
+      );
+      error.value = extractStrikeError(e, 'Failed to build or submit the deposit transaction.');
       status.value = 'error';
       return false;
     }
   }
 
-  /**
-   * Polls Strike's transaction-status endpoint until the deposit completes,
-   * fails, or we exhaust the attempt budget. Returns `true` only on
-   * confirmed `completed`. A `failed` response throws so the caller's catch
-   * block can surface the error to the UI.
-   */
-  async function pollForCredit(reqId: string, generation: number): Promise<boolean> {
-    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
-      // Composable was reset (e.g. user closed the sheet) — abandon the loop.
-      if (generation !== flowGeneration) return false;
-
-      let resp: TransactionStatusResponse | null = null;
-      try {
-        resp = await strikeUserApi.getTransactionStatus(reqId, 'deposit');
-      } catch (e) {
-        // Transient HTTP errors shouldn't kill the loop — Strike's API
-        // occasionally returns 5xx during heavy block-tip activity.
-        debugLog('[strike-deposit] poll attempt', attempt, 'transient error:', e);
-      }
-
-      if (resp?.status === 'completed') return true;
-      if (resp?.status === 'failed') {
-        throw new Error('Strike rejected the deposit transaction.');
-      }
-
-      await sleep(POLL_INTERVAL_MS);
-    }
-    return false;
-  }
-
   /** Reset all state back to idle. Safe to call at any point. */
   function reset(): void {
-    // Bump the generation so any in-flight pollForCredit exits on its
-    // next wake-up instead of writing to the now-stale state.
-    flowGeneration++;
     quote.value = null;
     status.value = 'idle';
     txHash.value = null;
