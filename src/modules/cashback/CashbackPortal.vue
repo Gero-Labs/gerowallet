@@ -112,10 +112,12 @@ onMounted(() => {
 onBeforeUnmount(() => window.removeEventListener('message', onMessage));
 </script>
 <style scoped>
-.cashback-portal { width: 100%; height: 100%; position: relative; }
-.portal-frame { width: 100%; height: 100%; border: 0; display: block; }
+.cashback-portal { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.portal-frame { flex: 1; width: 100%; min-height: 0; border: 0; display: block; }
+/* Normal flex-flow (not absolute) so the loading/error state stays inside the
+   portal's own box and never overlaps sibling chrome (e.g. quick actions). */
 .portal-state {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; text-align: center; padding: 24px;
 }
 </style>
