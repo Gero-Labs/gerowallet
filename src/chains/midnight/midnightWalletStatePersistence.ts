@@ -168,3 +168,45 @@ export async function clearWalletState(
     }
   });
 }
+
+/**
+ * Drop ALL persisted Midnight wallet-state blobs (every network / kind /
+ * wallet), or just those for one network when `network` is given. This is the
+ * "reset wallet cache / force full re-sync" escape hatch — modelled after
+ * Dynamic.xyz's `resetWalletCache()`, which they document as a last resort
+ * that "clears the wallet's persisted state and forces a full cold re-sync".
+ *
+ * We can't derive a specific wallet's storage key without its secret seed
+ * (the key is a hash of it), so a user-facing reset must clear by prefix.
+ * Callable from any context since it only touches chrome.storage.local
+ * (shared across BG + browser). Pairs with the gero-sync cursor reset in
+ * midnight-sync.service's forceResync so one action clears both halves of the
+ * warm state.
+ */
+export async function clearAllWalletState(network?: string): Promise<void> {
+  if (!hasChromeStorage()) return;
+  const wantPrefix = network ? `${KEY_PREFIX}_${network}_` : `${KEY_PREFIX}_`;
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(null, (all) => {
+        if (chrome.runtime?.lastError) {
+          debugLog('🌙 wallet-state clear-all: get failed', chrome.runtime.lastError);
+          resolve();
+          return;
+        }
+        const toRemove = Object.keys(all ?? {}).filter((k) => k.startsWith(wantPrefix));
+        if (toRemove.length === 0) {
+          resolve();
+          return;
+        }
+        chrome.storage.local.remove(toRemove, () => {
+          debugLog(`🌙 wallet-state clear-all: removed ${toRemove.length} blob(s)${network ? ` for ${network}` : ''}`);
+          resolve();
+        });
+      });
+    } catch (e) {
+      debugLog('🌙 wallet-state clear-all threw (non-fatal)', e);
+      resolve();
+    }
+  });
+}

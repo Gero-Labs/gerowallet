@@ -28,7 +28,6 @@ import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
   SubmitMidnightTxResponse,
-  SubmitNightDustRegistrationResponse,
 } from '@/api/midnight-api';
 
 export interface SignedSegment {
@@ -243,6 +242,37 @@ export async function sendShieldedNight(
 //   4. submitNightDustRegistrationTx → Nexus splices the signature + submits
 //      to substrate
 
+/**
+ * Discriminated outcome of a DUST-registration attempt. Modelled after the
+ * Dynamic.xyz Midnight SDK's `registerDust()` status enum
+ * (`registered | already_registered | already_has_dust | no_utxos`), which
+ * turns the raw "No NIGHT UTxOs available" 400 into a state the UI can render
+ * as a helpful next-step instead of a scary error toast. We surface the two
+ * states our nexus registration call can distinguish cleanly:
+ *   - `registered`     — the tx was built, signed, and submitted
+ *   - `no_night_utxos` — the wallet holds no unshielded NIGHT; it must be
+ *                        funded before DUST can be generated (this is the
+ *                        exact 400 we hit on a freshly-created preprod wallet)
+ *   - `failed`         — any other error; `message` carries the detail
+ *
+ * "already registered" / "already has dust" aren't distinguished here because
+ * nexus doesn't return a distinct code for them on the build call; the dialog
+ * already knows the on-chain registration status separately (its status pill)
+ * and gates the CTA on it, so a re-register attempt is prevented upstream.
+ */
+export type DustRegistrationStatus = 'registered' | 'no_night_utxos' | 'failed';
+
+export interface DustRegistrationOutcome {
+  status: DustRegistrationStatus;
+  /** Present on `registered`. */
+  txHash?: string;
+  /** Human-readable detail for `no_night_utxos` / `failed`. */
+  message?: string;
+}
+
+/** Nexus/sidecar phrasing for the "wallet holds no NIGHT" case. */
+const NO_NIGHT_UTXOS_PATTERN = /no night utxos available/i;
+
 export async function registerNightForDust(
   network: string,
   args: {
@@ -252,32 +282,43 @@ export async function registerNightForDust(
     ttlMs?: number;
   },
   credentials: MidnightSendCredentials,
-): Promise<SubmitNightDustRegistrationResponse> {
-  const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
+): Promise<DustRegistrationOutcome> {
+  try {
+    const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
 
-  const api = getMidnightApi(network);
-  const built = await api.buildNightDustRegistrationTx({
-    fromAddress: args.fromAddress,
-    publicKeyHex,
-    addressHex,
-    dustReceiverAddressBech32: args.dustReceiverAddressBech32,
-    ttlMs: args.ttlMs ?? (Date.now() + 24 * 60 * 60 * 1000),
-  });
+    const api = getMidnightApi(network);
+    const built = await api.buildNightDustRegistrationTx({
+      fromAddress: args.fromAddress,
+      publicKeyHex,
+      addressHex,
+      dustReceiverAddressBech32: args.dustReceiverAddressBech32,
+      ttlMs: args.ttlMs ?? (Date.now() + 24 * 60 * 60 * 1000),
+    });
 
-  // Sign the single payload with the existing NightExternal segment-signing
-  // BG handler. Wrap the single payload as a one-element segments array;
-  // role is always NightExternal for DUST registration (per Lace's
-  // `signDustRegistration` callback in `dependencies.ts:425`).
-  const signed = await signSegments(
-    [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
-    credentials,
-  );
-  if (signed.length !== 1) {
-    throw new Error('Expected exactly one signature for DUST registration');
+    // Sign the single payload with the existing NightExternal segment-signing
+    // BG handler. Wrap the single payload as a one-element segments array;
+    // role is always NightExternal for DUST registration (per Lace's
+    // `signDustRegistration` callback in `dependencies.ts:425`).
+    const signed = await signSegments(
+      [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
+      credentials,
+    );
+    if (signed.length !== 1) {
+      throw new Error('Expected exactly one signature for DUST registration');
+    }
+
+    const res = await api.submitNightDustRegistrationTx({
+      unprovenTxHex: built.unprovenTxHex,
+      signatureHex: signed[0].signatureHex,
+    });
+    return { status: 'registered', txHash: res.txHash };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    // The "no NIGHT" case is a normal business state (fund the wallet first),
+    // not a failure — classify it so the dialog can show the right guidance.
+    if (NO_NIGHT_UTXOS_PATTERN.test(message)) {
+      return { status: 'no_night_utxos', message };
+    }
+    return { status: 'failed', message };
   }
-
-  return api.submitNightDustRegistrationTx({
-    unprovenTxHex: built.unprovenTxHex,
-    signatureHex: signed[0].signatureHex,
-  });
 }

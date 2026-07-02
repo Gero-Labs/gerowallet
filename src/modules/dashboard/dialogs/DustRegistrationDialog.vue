@@ -519,11 +519,26 @@ async function confirmRegistration() {
       },
     );
 
-    snackbar.fireSuccess(t('midnight.dustRegistrationSubmitted'));
-    void result; // result.txHash available for future "view tx" link
-    resetRegistrationState();
-    emit('close');
+    // Branch on the typed outcome (Dynamic.xyz-style status enum) so the user
+    // sees the right next step instead of a raw HTTP error.
+    if (result.status === 'registered') {
+      snackbar.fireSuccess(t('midnight.dustRegistrationSubmitted'));
+      // result.txHash available for a future "view tx" link.
+      resetRegistrationState();
+      emit('close');
+    } else if (result.status === 'no_night_utxos') {
+      // Not a failure — the wallet just needs funding first. Keep the dialog
+      // open with actionable guidance rather than a scary error toast.
+      submitError.value = t('midnight.dustNeedsNightFirst');
+      snackbar.setError(submitError.value);
+    } else {
+      submitError.value = result.message || t('midnight.dustRegistrationFailed');
+      snackbar.setError(submitError.value);
+    }
   } catch (e) {
+    // registerNightForDust only throws for truly unexpected errors now
+    // (credential decrypt, PRF ceremony) — expected states come back as a
+    // typed outcome above.
     submitError.value = e instanceof Error ? e.message : String(e);
     snackbar.setError(submitError.value);
   } finally {
