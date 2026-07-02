@@ -4,9 +4,8 @@ import WalletStore, { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Wallet } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
-import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
-import webSocketService from '@/services/websocket.service';
+import webSocketService, { WsSyncMessage } from '@/services/websocket.service';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
@@ -333,15 +332,16 @@ export class WalletManager {
       const credentials = walletBg.derivePaymentCredentials();
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
-        onSync: async (data: any) => {
+        onSync: async (data: WsSyncMessage) => {
           await this.tipMutex.runExclusive(async () => {
             await walletBg.syncService.setSync(data);
           });
         },
-        onRollback: async (data: any) => {
+        onRollback: async (data: WsSyncMessage) => {
           debugLog('Rollback received:', data);
-          if (data.rollbackToSlot !== undefined) {
-            await walletBg.syncService.handleRollback(data.rollbackToSlot);
+          const rollbackToSlot = data['rollbackToSlot'];
+          if (typeof rollbackToSlot === 'number') {
+            await walletBg.syncService.handleRollback(rollbackToSlot);
           }
         },
         onForceResync: async () => {
@@ -404,9 +404,6 @@ export class WalletManager {
         }
 
         DexHunterStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
-      }
-      if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {
-        BringStore.loadBringCache(walletBg.baseAddress).catch(err => console.warn('Failed to load Bring cache:', err));
       }
     }, 100); // Small delay to ensure wallet is fully initialized
   }

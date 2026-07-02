@@ -15,7 +15,7 @@ interface WsSyncBlock {
   time?: number;
 }
 
-interface WsSyncMessage {
+export interface WsSyncMessage {
   type: string;
   block?: WsSyncBlock;
   [key: string]: unknown;
@@ -209,7 +209,7 @@ class WebSocketService {
             addresses: data['addresses'],
             account: data['account'],
           };
-          debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as any[])?.length || 0} UTxOs`);
+          debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as unknown[])?.length || 0} UTxOs`);
           this.lastSyncedBlock = block?.height || (data['blockHeight'] as number) || 0;
           this.handlers.onSync?.(combinedPayload);
           this.pendingTxBatches = [];
