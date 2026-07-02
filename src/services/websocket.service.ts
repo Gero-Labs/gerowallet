@@ -34,7 +34,13 @@ interface WsHandlers {
 
 // Relay message types handled by the cross-device signing bridge. Kept in sync
 // with src/services/crossDevice/protocol.ts CrossDeviceMessageType.
-const CROSS_DEVICE_MESSAGE_TYPES = ['DEVICE_REGISTER', 'SIGN_REQUEST', 'SIGN_RESPONSE'];
+const CROSS_DEVICE_MESSAGE_TYPES = [
+  'DEVICE_REGISTER',
+  'DEVICES',
+  'DEVICE_REGISTER_ACK',
+  'SIGN_REQUEST',
+  'SIGN_RESPONSE',
+];
 
 class WebSocketService {
   private ws: WebSocket | null = null;

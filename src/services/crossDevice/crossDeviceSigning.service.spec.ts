@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createCrossDeviceSigning } from './crossDeviceSigning.service';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { signMessage } from './envelope';
-import { CROSS_DEVICE_PROTOCOL_VERSION, type CrossDeviceMessage, type SignRequest } from './protocol';
+import { type CrossDeviceMessage, type SignRequest, type SignResponse } from './protocol';
 
 // A shared in-memory bus that fans every published message out to all
 // subscribed listeners (simulating gero-sync's fan-out to sibling devices).
@@ -10,13 +10,11 @@ function makeBus() {
   const listeners = new Set<(raw: unknown) => void>();
   return {
     publish(msg: CrossDeviceMessage) {
-      // Deliver to everyone (each device ignores messages meant for others / its own).
       for (const l of [...listeners]) l(msg);
     },
     makeTransport() {
       return {
         send: (msg: CrossDeviceMessage) => {
-          // Async delivery to mimic real network hop.
           queueMicrotask(() => {
             for (const l of [...listeners]) l(msg);
           });
@@ -30,12 +28,12 @@ function makeBus() {
   };
 }
 
-// Deterministic device identities for the two simulated devices.
 const requesterKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(11));
 const approverKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(22));
 const requesterId = deviceIdFromPubKey(requesterKp.pubKeyHex);
 const approverId = deviceIdFromPubKey(approverKp.pubKeyHex);
 
+// Stand-in for the DEVICES-backed registry (in prod, populated from the server snapshot).
 const pubKeyRegistry: Record<string, string> = {
   [requesterId]: requesterKp.pubKeyHex,
   [approverId]: approverKp.pubKeyHex,
@@ -70,17 +68,17 @@ describe('crossDeviceSigning happy path', () => {
     const { requester, approver } = await makePair();
 
     approver.onSignRequest((_req, respond) => {
-      void respond({ decision: 'approved', witnessSetCbor: 'WITNESS_A100' });
+      void respond({ decision: 'approved', witnessSetCbor: 'a100' });
     });
 
     const result = await requester.requestSignature({
-      unsignedCbor: '84a4CBOR',
+      unsignedCbor: '84a4',
       intent: 'Swap 10 ADA',
       stakeAddress: 'stake1',
     });
 
     expect(result.decision).toBe('approved');
-    expect(result.witnessSetCbor).toBe('WITNESS_A100');
+    expect(result.witnessSetCbor).toBe('a100');
 
     requester.dispose();
     approver.dispose();
@@ -92,17 +90,17 @@ describe('crossDeviceSigning happy path', () => {
 
     approver.onSignRequest((req, respond) => {
       seen = req;
-      void respond({ decision: 'approved', witnessSetCbor: 'W' });
+      void respond({ decision: 'approved', witnessSetCbor: 'ab' });
     });
 
     await requester.requestSignature({
-      unsignedCbor: 'GROUND_TRUTH_CBOR',
+      unsignedCbor: 'deadbeef',
       intent: 'lying intent',
       stakeAddress: 'stake1',
     });
 
     expect(seen).not.toBeNull();
-    expect(seen!.unsignedCbor).toBe('GROUND_TRUTH_CBOR');
+    expect(seen!.unsignedCbor).toBe('deadbeef');
     requester.dispose();
     approver.dispose();
   });
@@ -117,7 +115,7 @@ describe('crossDeviceSigning rejection', () => {
     });
 
     const result = await requester.requestSignature({
-      unsignedCbor: 'cbor',
+      unsignedCbor: 'cb00',
       intent: 'Swap',
       stakeAddress: 'stake1',
     });
@@ -136,19 +134,15 @@ describe('crossDeviceSigning security', () => {
     const handler = vi.fn();
     approver.onSignRequest(handler);
 
-    // A structurally valid SIGN_REQUEST with a bogus signature.
     const forged: SignRequest = {
-      v: CROSS_DEVICE_PROTOCOL_VERSION,
       type: 'SIGN_REQUEST',
       reqId: 'forged',
-      fromDeviceId: requesterId,
-      toDeviceId: 'any',
-      stakeAddress: 'stake1',
-      unsignedCbor: 'evil',
-      intent: 'evil',
       nonce: 'nf',
-      createdAt: 1000,
-      ttlMs: 5000,
+      from: requesterId,
+      stakeAddress: 'stake1',
+      unsignedCbor: 'ev11',
+      intent: 'evil',
+      expiresAt: 9999999999,
       sig: '00'.repeat(64),
     };
     bus.publish(forged);
@@ -161,21 +155,17 @@ describe('crossDeviceSigning security', () => {
     const handler = vi.fn();
     approver.onSignRequest(handler);
 
-    // Signed by a device with no registry entry.
     const strangerKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(99));
     const signed = await signMessage<SignRequest>(
       {
-        v: CROSS_DEVICE_PROTOCOL_VERSION,
         type: 'SIGN_REQUEST',
         reqId: 'stranger',
-        fromDeviceId: 'unknown-device',
-        toDeviceId: 'any',
-        stakeAddress: 'stake1',
-        unsignedCbor: 'cbor',
-        intent: 'Swap',
         nonce: 'ns',
-        createdAt: 1000,
-        ttlMs: 5000,
+        from: 'unknown-device',
+        stakeAddress: 'stake1',
+        unsignedCbor: 'cb00',
+        intent: 'Swap',
+        expiresAt: 9999999999,
       },
       strangerKp.privKeyHex,
     );
@@ -184,30 +174,28 @@ describe('crossDeviceSigning security', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('ignores a response for an unknown reqId (requester stays pending)', async () => {
+  it('ignores a response for an unknown reqId (requester stays pending, ttl decides)', async () => {
     const { bus, requester } = await makePair();
 
-    // Publish a well-signed response for a reqId the requester never issued.
-    const ghost = await signMessage({
-      v: CROSS_DEVICE_PROTOCOL_VERSION,
-      type: 'SIGN_RESPONSE',
-      reqId: 'never-issued',
-      fromDeviceId: approverId,
-      decision: 'approved',
-      witnessSetCbor: 'w',
-      nonce: 'ng',
-      createdAt: 1000,
-    }, approverKp.privKeyHex);
-    bus.publish(ghost as CrossDeviceMessage);
+    const ghost = await signMessage<SignResponse>(
+      {
+        type: 'SIGN_RESPONSE',
+        reqId: 'never-issued',
+        nonce: 'ng',
+        deviceId: approverId,
+        decision: 'approved',
+        witnessSetCbor: 'ab',
+      },
+      approverKp.privKeyHex,
+    );
+    bus.publish(ghost);
 
-    const pending = requester.requestSignature({
-      unsignedCbor: 'cbor',
+    const result = await requester.requestSignature({
+      unsignedCbor: 'cb00',
       intent: 'Swap',
       stakeAddress: 'stake1',
       ttlMs: 50,
     });
-    // The ghost must not resolve our real request; only ttl expiry (below) does.
-    const result = await pending; // will reject via ttl since no valid response arrives
     expect(result.decision).toBe('rejected');
     requester.dispose();
   });
@@ -215,20 +203,16 @@ describe('crossDeviceSigning security', () => {
 
 describe('crossDeviceSigning ttl', () => {
   it('rejects the requester promise when the ttl elapses with no response', async () => {
-    let clock = 1000;
-    const { requester } = await makePair(() => clock);
+    const { requester } = await makePair();
 
-    const p = requester.requestSignature({
-      unsignedCbor: 'cbor',
+    const result = await requester.requestSignature({
+      unsignedCbor: 'cb00',
       intent: 'Swap',
       stakeAddress: 'stake1',
       ttlMs: 30,
     });
-    // No approver handler wired, so nothing responds; ttl timer fires.
-    const result = await p;
     expect(result.decision).toBe('rejected');
     expect(result.reason).toBeDefined();
-    clock = 999999;
     requester.dispose();
   });
 });

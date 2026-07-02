@@ -32,8 +32,9 @@ function seenKey(reqId: string, nonce: string): string {
   return `${reqId}:${nonce}`;
 }
 
+// `now` is caller-supplied milliseconds (Date.now()); expiresAt is unix seconds.
 function isExpired(req: SignRequest, now: number): boolean {
-  return now > req.createdAt + req.ttlMs;
+  return now >= req.expiresAt * 1000;
 }
 
 /**

@@ -1,19 +1,31 @@
 // Cross-device signing bridge — Ed25519 message authentication envelope (pure).
 //
-// This is the security-critical primitive: every relay message carries a `sig`
-// field which is an Ed25519 signature over the CANONICAL bytes of the message
-// (all fields except `sig` itself). A message is trusted only if its `sig`
-// verifies against the sender's registered device public key.
+// This is the security-critical primitive. Every SIGN_REQUEST / SIGN_RESPONSE
+// carries a `sig` field: an Ed25519 signature over a CANONICAL SIGNING SUBJECT.
 //
-// Canonicalization must be identical on the signer and the verifier, so it is
-// defined once here and used by both. We use deterministic JSON with sorted
-// keys and the `sig` field stripped.
+// The subject is a pipe-joined string of explicit fields (NOT sorted-key JSON).
+// This is deliberate: cross-language JSON canonicalization (Swift JSONEncoder vs
+// JS JSON.stringify) diverges on number formatting, string escaping and
+// whitespace, so a JSON-signed message will not verify across clients. An
+// explicit, ordered, pipe-delimited subject with a hash of the large CBOR is
+// reproducible byte-for-byte in Swift and TS. This matches the iOS approver.
+//
+// Subjects (utf8 bytes, signed with the device relay Ed25519 key):
+//   SIGN_REQUEST:  gero-xdev/v1|SIGN_REQUEST|<reqId>|<nonce>|<from>|<stakeAddress or empty>|<expiresAt>|<blake2b256hex(rawUnsignedCborBytes)>
+//   SIGN_RESPONSE: gero-xdev/v1|SIGN_RESPONSE|<reqId>|<nonce>|<deviceId>|<decision>|<blake2b256hex(rawWitnessBytes) or empty when rejected>
+//
+// Encodings: lowercase hex throughout, Ed25519, blake2b-256 (32-byte), expiresAt
+// is unix SECONDS rendered as its decimal string.
 //
 // Pure module: no chrome, no WebSocket, no Date.now. Uses the async
-// @noble/ed25519 API (signAsync/verifyAsync), which hashes internally with an
-// async SHA-512 and therefore needs no shim.
+// @noble/ed25519 API (signAsync/verifyAsync), which hashes internally.
 
 import * as ed25519 from '@noble/ed25519';
+import { blake2bHex } from 'blakejs';
+import type { SignRequest, SignResponse } from './protocol';
+
+/** Domain-separation + version tag that prefixes every signing subject. */
+export const CROSS_DEVICE_SUBJECT_VERSION = 'gero-xdev/v1';
 
 function bytesToHex(bytes: Uint8Array): string {
   let hex = '';
@@ -34,51 +46,75 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes;
 }
 
+/** blake2b-256 of raw bytes, lowercase hex (64 chars). Shared with all clients. */
+export function blake2b256Hex(bytes: Uint8Array): string {
+  return blake2bHex(bytes, undefined, 32);
+}
+
+/** Hash a hex-CBOR string's RAW bytes; empty string in -> empty string out. */
+function cborHash(hexCbor: string): string {
+  return hexCbor ? blake2b256Hex(hexToBytes(hexCbor)) : '';
+}
+
+type UnsignedRequest = Omit<SignRequest, 'sig'>;
+type UnsignedResponse = Omit<SignResponse, 'sig'>;
+
 /**
- * Deterministically serialize a message (minus its `sig` field) to bytes.
- * Keys are sorted so insertion order never affects the signed payload. Both the
- * signer and verifier MUST call this so their byte views agree.
+ * Build the canonical pipe-joined signing subject for a message. This exact
+ * string (utf8) is what gets signed and verified, byte-for-byte identical across
+ * the extension and the iOS approver.
  */
-export function canonicalBytes(msgWithoutSig: Record<string, unknown>): Uint8Array {
-  const sortedKeys = Object.keys(msgWithoutSig)
-    .filter((k) => k !== 'sig')
-    .sort();
-  const canonical: Record<string, unknown> = {};
-  for (const k of sortedKeys) {
-    canonical[k] = msgWithoutSig[k];
+export function buildSubject(msg: UnsignedRequest | UnsignedResponse): string {
+  if (msg.type === 'SIGN_REQUEST') {
+    return [
+      CROSS_DEVICE_SUBJECT_VERSION,
+      'SIGN_REQUEST',
+      msg.reqId,
+      msg.nonce,
+      msg.from,
+      msg.stakeAddress ?? '',
+      String(msg.expiresAt),
+      cborHash(msg.unsignedCbor),
+    ].join('|');
   }
-  const json = JSON.stringify(canonical);
-  return new TextEncoder().encode(json);
+  return [
+    CROSS_DEVICE_SUBJECT_VERSION,
+    'SIGN_RESPONSE',
+    msg.reqId,
+    msg.nonce,
+    msg.deviceId,
+    msg.decision,
+    msg.decision === 'approved' ? cborHash(msg.witnessSetCbor ?? '') : '',
+  ].join('|');
 }
 
 /**
- * Sign a message with an Ed25519 private key, returning the message with its
- * `sig` field populated. The signature covers the canonical bytes of every
- * field except `sig`.
+ * Sign a SIGN_REQUEST / SIGN_RESPONSE (minus its `sig`), returning it with `sig`
+ * populated. The signature is over the canonical subject (buildSubject).
  */
 export async function signMessage<T extends { sig: string }>(
   msg: Omit<T, 'sig'>,
   privKeyHex: string,
 ): Promise<T> {
-  const payload = canonicalBytes(msg as Record<string, unknown>);
-  const sigBytes = await ed25519.signAsync(payload, hexToBytes(privKeyHex));
+  const subject = buildSubject(msg as unknown as UnsignedRequest | UnsignedResponse);
+  const sigBytes = await ed25519.signAsync(new TextEncoder().encode(subject), hexToBytes(privKeyHex));
   return { ...(msg as object), sig: bytesToHex(sigBytes) } as T;
 }
 
 /**
  * Verify a message's `sig` against a public key. Returns false (never throws)
- * for a wrong key, tampered field, or malformed signature, so callers can
- * safely drop unverified inbound messages.
+ * for a wrong key, tampered field, or malformed signature, so callers can safely
+ * drop unverified inbound messages.
  */
 export async function verifyMessage(
-  msg: { sig: string },
+  msg: { sig: string } & (UnsignedRequest | UnsignedResponse),
   pubKeyHex: string,
 ): Promise<boolean> {
   try {
-    const payload = canonicalBytes(msg as Record<string, unknown>);
+    const subject = buildSubject(msg);
     return await ed25519.verifyAsync(
       hexToBytes(msg.sig),
-      payload,
+      new TextEncoder().encode(subject),
       hexToBytes(pubKeyHex),
     );
   } catch {
