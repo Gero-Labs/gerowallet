@@ -15,6 +15,7 @@ import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
 import zkFoldApi from '@/api/zkFoldApi';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
+import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -873,6 +874,15 @@ export class WalletManager {
    */
   getWallet(): WalletBg | null {
     return this.walletBg;
+  }
+
+  /**
+   * Get the cross-device signing bridge (requester side), or null when the
+   * feature is off. Used by the REQUEST_CROSS_DEVICE_SIGNATURE background
+   * handler to hand an unsigned tx to another device for signing.
+   */
+  getCrossDeviceSigning(): CrossDeviceSigning | null {
+    return this.crossDevice?.signing ?? null;
   }
 
   /**

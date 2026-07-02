@@ -201,6 +201,18 @@
             :loading="txSignLoading"
           >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
           </v-btn>
+          <!-- Step 2: Sign on another device (flag-gated, dark by default) -->
+          <v-btn
+            v-if="currentStep === 2 && canSignOnAnotherDevice"
+            text
+            class="ml-2"
+            @click="signOnAnotherDevice()"
+            :disabled="txSignLoading"
+            :loading="txSignLoading"
+          >
+            <v-icon small class="mr-1">mdi-cellphone-link</v-icon>
+            {{ $t('crossDevice.signOnAnotherDevice') }}
+          </v-btn>
         </div>
       </v-card-actions>
     </template>
@@ -298,8 +310,10 @@ const {
   isBT,
   isPrfWallet,
   isBTSupported,
+  canSignOnAnotherDevice,
   passwordRules,
   handleSign,
+  signOnAnotherDevice,
   resetState,
   handlePassKeySuccess,
   handlePassKeyError,
