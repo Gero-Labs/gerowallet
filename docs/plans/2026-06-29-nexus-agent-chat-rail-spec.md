@@ -55,12 +55,14 @@ The current client sends **no auth header** to Nexus. The `agentAxiosInstance` c
 ### 3.1 Baseline (ship-now, matches current client)
 - Nexus treats the gero-backend proxy as the trust boundary. gero-backend holds the Nexus API key and injects it Nexus-side; the extension reaches Nexus only through that proxy origin (`VITE_NEXUS_URL` maps to `<backend>/api/nexus`, per `src/api/market-api.ts:3-4`).
 - Rate limiting and abuse control therefore key off the proxy-forwarded client fingerprint (see section 9), not a per-user token, in the baseline.
+- **Deployment prerequisite (gero-backend, not Nexus):** the wire path the extension actually hits is `<VITE_NEXUS_URL>/api/agent/chat`, i.e. `<backend>/api/nexus/api/agent/chat`. The gero-backend Nexus proxy MUST forward (and, if it allowlists paths, allowlist) `/api/agent/*` the same way it already forwards the market and swap paths (the pattern in `src/api/market-api.ts:1-14` / `src/api/nexus-swap.api.ts:1-10`). If the proxy rejects the prefix, the rail 404s at the proxy hop and Nexus never sees the request.
 
 ### 3.2 Optional device-token upgrade (recommended, no UI change)
 The wallet already ships a per-device Ed25519 identity used by the cross-device bridge (`src/services/crossDevice/deviceIdentity.ts`): `generateDeviceKeypair()` (`:61-70`) and a stable `deviceIdFromPubKey()` (`:80-83`). When Nexus is ready to meter per device, it can accept an optional header without any UI change:
 
-- **Header:** `X-Gero-Device: <deviceId>` and `X-Gero-Device-Sig: <ed25519 sig over canonical request digest>`, where `deviceId = deviceIdFromPubKey(pubKeyHex)` (`deviceIdentity.ts:80-83`).
-- Adding this is a one-line change to the `agentAxiosInstance` default headers (`src/api/agent.client.ts:8-12`) or a request interceptor. It does not touch `agentApi.chat` body shape, the provider, or any component.
+- **Headers:** `X-Gero-Device: <deviceId>`, `X-Gero-Device-Ts: <unix millis>`, `X-Gero-Device-Sig: <hex ed25519 signature>`, where `deviceId = deviceIdFromPubKey(pubKeyHex)` (`deviceIdentity.ts:80-83`).
+- **Canonical digest (binding, so client and Nexus produce identical bytes):** `sig = ed25519.sign(privKey, sha256(utf8(deviceId + "\n" + ts + "\n" + sha256_hex(rawBodyBytes))))`. The timestamp bounds replay: Nexus rejects skew beyond +/- 5 minutes with `401 unauthorized`. The body hash binds the signature to this exact request, so a captured header set cannot be replayed onto a different prompt. Verification requires the device's public key, so ENFORCING this mode presupposes a device enrollment path on Nexus (out of scope for this spec); until one exists, Nexus can log the headers but MUST NOT reject on them.
+- Client-side this is a request interceptor on the `agentAxiosInstance` (`src/api/agent.client.ts:8-12`) that computes the timestamp, body hash, and signature per request. It does not touch `agentApi.chat` body shape, the provider, or any component.
 - Until then, the endpoint MUST accept requests with no such header (baseline).
 
 **Do NOT** require `Authorization: Bearer` from the extension for auth. In Fluxpoint terms, `Authorization: Bearer` selects **metered mode** upstream; that is a Nexus-to-Fluxpoint concern (section 7), never a client-to-Nexus one. The client never sends `Authorization`.
@@ -121,6 +123,8 @@ If `context` or `context.summary` is absent, Nexus uses the persona alone (mirro
 
 `AgentTurn` (`agent.client.ts:37-40`): `{ role: 'user' | 'assistant'; text: string }`. Nexus maps these to upstream turns. Fluxpoint is **STATELESS** (no `reply_json`, no server-side thread), so Nexus MUST reconstruct the full conversation from `history` on every call. The client is the only conversation store; the dock keeps `messages` in memory (`useAgentDock.ts:37`, `:94`).
 
+**History truncation is Nexus's job.** The dock sends the full conversation every turn and never prunes (`useAgentDock.ts:54` maps ALL of `messages`), so `history` grows without bound within a session while the upstream context window does not. When the assembled prompt would exceed that window, Nexus MUST drop oldest `history` turns first, keeping the persona, the `context.summary` fold, and the most recent turns, and MUST NOT drop or trim the current `message`. Truncation is invisible to the client: the call still returns a normal `200`.
+
 ### 4.3 System / persona ownership
 
 Nexus owns the persona. The reference persona is the dev constant `FLUXPOINT_PERSONA` (`agent.client.ts:23-25`):
@@ -130,6 +134,10 @@ You are Gero Copilot, a concise, friendly Cardano wallet assistant. Keep replies
 ```
 
 Nexus SHOULD use this (or a superset) as the base system prompt, then append the wallet-data fold from section 4.1. The client sends no `system` on the Nexus path, so Nexus is the sole authority.
+
+### 4.4 Payload limits
+
+The client imposes no size caps of its own, so Nexus MUST enforce transport caps and reject oversized bodies with `413` / `payload_too_large` (section 8.2) rather than forwarding them upstream. Recommended starting caps (Nexus-tunable; generous vs. real dock turns, which are a few KB): `message` 8 KB, `context` 16 KB, `history` 100 turns or 128 KB, total body 256 KB. These caps bound abuse at the transport layer and are distinct from section 4.2 window-fitting truncation, which applies to accepted requests.
 
 ---
 
@@ -193,8 +201,9 @@ Rules:
 - **`done` MUST carry the final assembled `reply`, `model`, `used_tools`** in the **exact same shape** as section 5.1. This is the invariant that lets the streaming reader reduce to the non-stream contract: the SSE reader assembles frames and produces the identical `AgentChatResult { reply, model, usedTools }` the non-stream path returns. A stream that emits `token` deltas but never a terminal `done` (or ends with an empty assembled reply) MUST be treated by the client as the empty-reply error (section 8.2), landing in the same graceful-degrade `catch`.
 - `error` frames use the section 8 codes and terminate the stream.
 - Nexus MUST flush frames as they arrive from Fluxpoint (no buffering the whole turn), and SHOULD emit an early `token` or a heartbeat comment (`: ping\n\n`) within the client's 60 s window to keep the connection alive.
+- **The gero-backend proxy hop must not buffer.** The stream traverses gero-backend (section 3.1) before it reaches the extension. That proxy MUST pass `text/event-stream` responses through unbuffered on `/api/agent/*` (disable response buffering and compression for this content type), or streaming silently collapses into a single flush at end-of-turn.
 
-**Zero-UI-change guarantee:** because `done.data` equals the section 5.1 body, adding streaming is purely an `agentApi.chat` internals change (branch on `Accept`, read SSE, return the same `AgentChatResult`). `agentProvider.ts`, `types.ts`, `useAgentDock.ts`, and every component stay byte-identical.
+**Zero-UI-change guarantee:** because `done.data` equals the section 5.1 body, adding streaming is purely an `agentApi.chat` internals change: switch that one call from axios to `fetch` + `ReadableStream` (axios XHR cannot consume a response incrementally), read frames, return the same `AgentChatResult`. `agentProvider.ts`, `types.ts`, `useAgentDock.ts`, and every component stay byte-identical.
 
 ---
 
@@ -282,6 +291,7 @@ Return non-2xx JSON (and, in SSE mode, an `error` frame with the same `code`). T
 | Nexus/Fluxpoint quota exhausted (metered) | `429` | `quota_exhausted` | false | generic bubble |
 | Rate limited (section 9) | `429` | `rate_limited` | true (after `Retry-After`) | generic bubble |
 | Malformed request (missing `message`) | `400` | `bad_request` | false | generic bubble |
+| Oversized payload (section 4.4 caps) | `413` | `payload_too_large` | false | generic bubble |
 | Unauthenticated device (only if section 3.2 enforced) | `401` | `unauthorized` | false | generic bubble |
 
 Error body shape (non-SSE):
@@ -358,6 +368,9 @@ interface AgentChatResult { reply: string; model?: string; usedTools: unknown; }
 8. Error taxonomy with correct HTTP codes; keeps upstream timeout under the client's 60 s (section 8).
 9. Optional additive `usage` / `balance_after`; never required (section 7).
 10. Rate limiting with `429` plus `Retry-After`; never leaks the Fluxpoint key in any response or log (section 9, section 6).
+11. Truncates oldest `history` turns server-side to fit the upstream window, never the current `message` (section 4.2); enforces payload caps with `413` / `payload_too_large` (section 4.4).
+
+**gero-backend prerequisite (one item, outside Nexus):** route/allowlist `/api/agent/*` through the Nexus proxy (section 3.1) and pass SSE through unbuffered (section 5.2). Without it the rail fails at the proxy hop regardless of Nexus conformance.
 
 ---
 
