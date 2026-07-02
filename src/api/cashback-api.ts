@@ -43,9 +43,8 @@ export default {
   },
   async portal(walletAddress: string | null, theme: 'dark' | 'light' = 'dark'): Promise<CashbackPortalBootstrap> {
     try {
-      // Bring's portal bootstrap keys on our registered Bring identifier (the same
-      // value the popup kit uses), NOT the browser's chrome.runtime.id.
-      const extensionId = import.meta.env['VITE_CASHBACK_IDENTIFIER'];
+      // Bring's portal bootstrap expects the Chrome extension id.
+      const extensionId = (typeof chrome !== 'undefined' && chrome.runtime?.id) ? chrome.runtime.id : undefined;
       const { data, status } = await axiosInstance.post('/api/bring/portal', { walletAddress, theme, extensionId });
       if (status === 200 && data?.portalUrl) return { portalUrl: data.portalUrl, token: data.token };
       throw parseHttpError(data);
