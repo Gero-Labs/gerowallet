@@ -77,11 +77,11 @@
                         </v-avatar>
                       </template>
                       <v-avatar size="30">
-                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
+                        <img :src="getTokenImage(selectedToken)" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="30" v-else class="mr-1">
-                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
+                      <img :src="getTokenImage(selectedToken)" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
                     </v-avatar>
                     {{ selectedToken.ticker }}
                   </span>
@@ -109,11 +109,11 @@
                         </v-avatar>
                       </template>
                       <v-avatar size="30">
-                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
+                        <img :src="getTokenImage(selectedToken)" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="30" v-else class="mr-1">
-                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
+                      <img :src="getTokenImage(selectedToken)" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
                     </v-avatar>
                     {{ selectedToken.ticker }}
                     <v-icon v-if="!tokenLock" class="toggleUpDown" :class="{ rotate: selectTokenDialog }" small
@@ -219,6 +219,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 
 const { t } = useTranslation();
 
@@ -296,6 +297,12 @@ const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
 const { loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+
+// Token images come from main-page market data (keyed by unit), not DexHunter.
+const { getTokenImage } = useMarketData();
+const chainLogo = computed(
+  () => networks.resolveCurrencyImage(loggedWallet.value?.chain, loggedWallet.value?.network) || '',
+);
 
 // Get token price in USD (same logic as AssetsToSendStep)
 function getTokenPriceInUsd(token: any): number {
@@ -439,7 +446,8 @@ function removeTokenSelector() {
 
 function handleImageError(event) {
   event.target.onerror = null;
-  event.target.src = selectedToken.value.fallback_img;
+  // Market-data logo failed to load → fall back to the chain logo.
+  event.target.src = chainLogo.value;
 }
 </script>
 <style scoped>

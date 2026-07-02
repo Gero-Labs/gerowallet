@@ -32,11 +32,11 @@
                   </v-avatar>
                 </template>
                 <v-avatar size="40">
-                  <img :src="item['img']" :alt="`${item['ticker']} Logo`" @error="e => handleImageError(e, item)" />
+                  <img :src="getTokenImage(item)" :alt="`${item['ticker']} Logo`" @error="e => handleImageError(e, item)" />
                 </v-avatar>
               </v-badge>
               <v-avatar size="40" v-else>
-                <img :src="item['img']" :alt="`${item['ticker']} Logo`" @error="e => handleImageError(e, item)" />
+                <img :src="getTokenImage(item)" :alt="`${item['ticker']} Logo`" @error="e => handleImageError(e, item)" />
               </v-avatar>
             </v-list-item-action>
             <v-list-item-content>
@@ -87,6 +87,7 @@ import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 
 const { t } = useTranslation();
 
@@ -107,6 +108,12 @@ const emit = defineEmits(['close', 'input']);
 const { price } = toRefs(networkStore);
 const { loggedWallet } = toRefs(walletStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+
+// Token images come from main-page market data (keyed by unit), not DexHunter.
+const { getTokenImage } = useMarketData();
+const chainLogo = computed(
+  () => networks.resolveCurrencyImage(loggedWallet.value?.chain, loggedWallet.value?.network) || '',
+);
 
 const search = ref('');
 const additional = ref<any[]>([]);
@@ -189,10 +196,11 @@ onUnmounted(() => {
   debouncedSearch.cancel();
 });
 
-const handleImageError = (event: Event, item: any) => {
+const handleImageError = (event: Event, _item: any) => {
   const target = event.target as HTMLImageElement;
   target.onerror = null;
-  target.src = item.fallback_img;
+  // Market-data logo failed to load → fall back to the chain logo.
+  target.src = chainLogo.value;
 };
 
 // Format token balance: convert from smallest unit to display balance

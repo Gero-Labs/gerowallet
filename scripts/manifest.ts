@@ -104,7 +104,7 @@ function buildCSP(dev: boolean): string {
   const styleSrc = ['*', "'unsafe-inline'", "'self'", 'blob:'];
 
   const imgSrc = dev
-    ? ["'self'", 'http:', 'data:']
+    ? ["'self'", 'http:', 'https:', 'data:']
     : ["'self'", 'https:', 'data:'];
 
   const frameSrc = [
