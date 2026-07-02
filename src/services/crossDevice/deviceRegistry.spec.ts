@@ -32,4 +32,17 @@ describe('deviceRegistry', () => {
     expect(pubKeyOf(second, 'dev1')).toBeNull(); // removed
     expect(pubKeyOf(second, 'dev3')).toBe('cc'.repeat(32));
   });
+
+  it('tolerates a duplicate deviceId in a snapshot (last wins, no throw) - parity with iOS', () => {
+    // iOS Dictionary(uniqueKeysWithValues:) would trap on a dup; the extension
+    // is last-wins by construction. Both clients must agree: never crash.
+    const reg = applyDevicesSnapshot(emptyRegistry(), {
+      type: 'DEVICES',
+      devices: [
+        { deviceId: 'dev1', label: 'old', platform: 'extension', pubKey: 'aa'.repeat(32), hasSigningKey: false },
+        { deviceId: 'dev1', label: 'new', platform: 'ios', pubKey: 'dd'.repeat(32), hasSigningKey: true },
+      ],
+    });
+    expect(pubKeyOf(reg, 'dev1')).toBe('dd'.repeat(32)); // last wins
+  });
 });
