@@ -3,7 +3,7 @@
 **Rail:** Production Gero Copilot chat endpoint
 **Replaces:** the dev direct-to-Fluxpoint path in `src/api/agent.client.ts` (gated on the `FLUXPOINT_API_KEY` constant)
 **Consumer:** `agentApi.chat()` (`src/api/agent.client.ts:55-87`), reached via `NexusAgentProvider.chat` (`src/services/agent/agentProvider.ts:5-9`)
-**Status:** Contract only. Nexus implementation is a backend task; this document is the binding interface so the client swaps the `FLUXPOINT_API_KEY` dev path for Nexus with zero UI change.
+**Status:** Implemented across all three repos; see section 12 for branches, commits, and verification. This document remains the binding interface: the client swaps the `FLUXPOINT_API_KEY` dev path for Nexus with zero UI change.
 
 ---
 
@@ -55,7 +55,7 @@ The current client sends **no auth header** to Nexus. The `agentAxiosInstance` c
 ### 3.1 Baseline (ship-now, matches current client)
 - Nexus treats the gero-backend proxy as the trust boundary. gero-backend holds the Nexus API key and injects it Nexus-side; the extension reaches Nexus only through that proxy origin (`VITE_NEXUS_URL` maps to `<backend>/api/nexus`, per `src/api/market-api.ts:3-4`).
 - Rate limiting and abuse control therefore key off the proxy-forwarded client fingerprint (see section 9), not a per-user token, in the baseline.
-- **Deployment prerequisite (gero-backend, not Nexus):** the wire path the extension actually hits is `<VITE_NEXUS_URL>/api/agent/chat`, i.e. `<backend>/api/nexus/api/agent/chat`. The gero-backend Nexus proxy MUST forward (and, if it allowlists paths, allowlist) `/api/agent/*` the same way it already forwards the market and swap paths (the pattern in `src/api/market-api.ts:1-14` / `src/api/nexus-swap.api.ts:1-10`). If the proxy rejects the prefix, the rail 404s at the proxy hop and Nexus never sees the request.
+- **Deployment prerequisite (gero-backend, not Nexus):** the wire path the extension actually hits is `<VITE_NEXUS_URL>/api/agent/chat`, i.e. `<backend>/api/nexus/api/agent/chat`. The hop is gero-backend's `NexusController` (`@RequestMapping("/api/nexus")`, `production` branch): an EXPLICIT per-path allowlist with 1:1 method mappings and no catch-all. Market paths forward today, but `/api/agent/chat` 404s inside gero-backend until its mapping ships (verified live 2026-07-02), and note `/api/aggregator/*` (the swap cutoff, `src/api/nexus-swap.api.ts:1-10`) is likewise NOT yet mapped there. gero-backend branch `feat/agent-chat-proxy` adds the `/api/agent/chat` mapping (buffered JSON relay for the shipping client, SSE-ready streaming branch for the future opt-in).
 
 ### 3.2 Optional device-token upgrade (recommended, no UI change)
 The wallet already ships a per-device Ed25519 identity used by the cross-device bridge (`src/services/crossDevice/deviceIdentity.ts`): `generateDeviceKeypair()` (`:61-70`) and a stable `deviceIdFromPubKey()` (`:80-83`). When Nexus is ready to meter per device, it can accept an optional header without any UI change:
@@ -371,6 +371,26 @@ interface AgentChatResult { reply: string; model?: string; usedTools: unknown; }
 11. Truncates oldest `history` turns server-side to fit the upstream window, never the current `message` (section 4.2); enforces payload caps with `413` / `payload_too_large` (section 4.4).
 
 **gero-backend prerequisite (one item, outside Nexus):** route/allowlist `/api/agent/*` through the Nexus proxy (section 3.1) and pass SSE through unbuffered (section 5.2). Without it the rail fails at the proxy hop regardless of Nexus conformance.
+
+---
+
+## 12. Implementation status (2026-07-02)
+
+All three domains are implemented and verified; nothing is deployed.
+
+| Domain | Repo / branch | Commit | Verification |
+|---|---|---|---|
+| Endpoint (sections 2-9) | nexus `feat/agent-chat-rail` | `e5bc973f` | `mvn test -Dtest='AgentChat*'`: `AgentChatFacadeTest` 25/25, `AgentChatControllerIntegrationTest` 9/9 (surefire reports on disk) |
+| Proxy hop (sections 3.1, 5.2) | gero-backend `feat/agent-chat-proxy`, worktree `.worktrees/agent-chat-proxy`, forked from `production` @ `f3e43dd` | `7e2a8c9` | `mvn -q -DskipTests compile` exit 0; prior 404 at the hop proven by live probe |
+| Client (section 10) | gerowallet `feat/copilot-agent` | no code change needed | `agent.client.spec.ts` 3/3 green; `copilot.error.agentUnavailable` present in `us.ts` and `de.ts`; local `.env.production` / `.env.beta` gained `VITE_NEXUS_URL`, `VITE_SYNC_WS_URL`, `VITE_FLAGS_BASE_URL` (gitignored, not committed) |
+
+Notes that bind future work:
+
+- **SSE (section 5.2) is NOT implemented Nexus-side.** Fluxpoint's SSE frame vocabulary is undocumented in-repo, so re-framing it would be guesswork. The gero-backend proxy already carries an SSE-ready streaming relay (unbuffered flush-per-chunk, `X-Accel-Buffering: no`); ingress-nginx runs default `proxy-buffering off` and gero-backend's compression config excludes `text/event-stream`, so no cluster change is needed when Nexus adds SSE later.
+- **History mapping deviation from section 4.2's "maps these to upstream turns":** Fluxpoint `/chat`'s only grounded wire surface is `{message, system, context, max_tokens}` (no turns array), so Nexus rebuilds `history` as a labeled `User:` / `Assistant:` transcript appended to the system prompt after the persona and context fold. Isolated in `AgentChatFacade.buildSystemPrompt` should a native multi-turn field surface.
+- **Rate limiting is layered:** gero-backend's `NexusRateLimitFilter` puts `/api/agent/*` in its write bucket (1 rps / 20 per min per IP); Nexus enforces the spec section 9 limits per forwarded fingerprint (burst 5/10 s, sustained 30/5 min).
+- **Deploy order (per repo rules, never from feature branches):** merge gero-backend `feat/agent-chat-proxy` into `production` and nexus `feat/agent-chat-rail` into its main branch first, then the normal manual build/push + `kubectl set image`. Nexus needs the k8s secret `FLUXPOINT_API_KEY` (empty default boots fine and returns a clean 502 `upstream_unavailable`).
+- **Release blocker outside these repos:** gerowallet's CI env-injection step exists only on `development` (commit `a20291cd`, never yet executed) and the GitHub Actions variables it reads (`vars.VITE_NEXUS_URL` and friends) are unset. Configure them (org/repo admin) before the next CI-built release, or production ships empty base URLs for the entire Nexus rail.
 
 ---
 
