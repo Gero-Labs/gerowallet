@@ -37,6 +37,19 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
   isLoading: false,
 });
 
+/**
+ * Mirror flags into chrome.storage.local so the background service worker can read
+ * them. featureFlagService is EventSource-based and cannot run in an MV3 service
+ * worker, and featureFlagsStore is only initialized in UI contexts, so the
+ * background (e.g. walletManager's cross-device bootstrap at login) reads
+ * flag-gated decisions from here instead of the in-memory store.
+ */
+function persistFlagsForBackground(): void {
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    void chrome.storage.local.set({ featureFlags: { ...featureFlagsState.flags } });
+  }
+}
+
 export const featureFlagsStore = {
   state: featureFlagsState,
 
@@ -77,6 +90,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
+    persistFlagsForBackground();
   },
 
   /**
@@ -109,6 +123,8 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCrossDeviceSigningEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCrossDeviceSigningEnabled', newValue);
+      // Mirror the live flip so the background picks it up on next login.
+      persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('isCopilotEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCopilotEnabled', newValue);
