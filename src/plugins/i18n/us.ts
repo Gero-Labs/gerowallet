@@ -3648,6 +3648,8 @@ export default {
   'midnight.openRedemptionPortal': 'Open Redemption Portal',
   'midnight.signAndRegister': 'Sign & Register',
   'midnight.dustRegistrationSubmitted': 'DUST registration submitted',
+  'midnight.dustNeedsNightFirst': 'This wallet holds no NIGHT yet. Receive NIGHT to this wallet first — DUST is generated from your NIGHT.',
+  'midnight.dustRegistrationFailed': 'DUST registration failed. Please try again.',
   'midnight.statusUnregistered': 'Not registered for DUST',
   'midnight.statusUnregisteredHelp': 'Register your Cardano-side NIGHT to start generating DUST.',
   'midnight.statusPending': 'Registration pending',

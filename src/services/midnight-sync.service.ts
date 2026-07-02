@@ -280,11 +280,28 @@ class MidnightSyncService {
    * Force a full re-sync from block 0. Triggered when the dashboard's
    * "force resync" admin action fires, OR when the wallet detects local
    * state drift.
+   *
+   * Clears BOTH halves of the warm state so the resync is genuinely full:
+   *   1. the gero-sync WS cursor + store UTxO/tx snapshot (resubscribe(0))
+   *   2. the persisted SDK wallet-state blobs (dust/shielded serializeState
+   *      snapshots) — otherwise the next send would `restore()` a stale
+   *      cursor and the "resync" wouldn't actually re-walk from genesis.
+   * Modelled after Dynamic.xyz's `resetWalletCache()` semantics.
    */
   forceResync(): void {
     if (!this.active) return;
     midnightActions.setTransactions([]);
     midnightActions.setUtxos([]);
+    // Fire-and-forget: clearing the SDK state blobs is best-effort and must
+    // not block the WS resubscribe. Clear ALL of them (no network scope) —
+    // the persistence keys are namespaced by the SDK network id ('preprod'),
+    // not the gero-sync slug ('midnight-preprod') we hold here, so scoping by
+    // the wrong string would silently match nothing. A full resync clearing
+    // every network's SDK cache is safe: the worst case is one extra cold
+    // sync on another network's next send.
+    void import('@/chains/midnight/midnightWalletStatePersistence')
+      .then(({ clearAllWalletState }) => clearAllWalletState())
+      .catch(() => { /* non-fatal */ });
     webSocketService.resubscribe(0);
   }
 
