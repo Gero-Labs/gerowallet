@@ -340,16 +340,23 @@ export class WalletManager {
       // Returns null and does nothing when the flag is off, so the handlers below
       // are unchanged and no relay message crosses the wire. When on, it wires the
       // WS transport and publishes a DEVICE_REGISTER for this device.
+      // The flag is read from chrome.storage.local (mirrored by the UI's
+      // featureFlagsStore) because the EventSource-based flag service cannot run in
+      // this background service worker.
       this.crossDevice?.dispose();
       this.crossDevice = bootstrapCrossDeviceSigning({
         label: 'Gero Extension',
         hasSigningKey: true,
+        enabled: await this.isCrossDeviceSigningEnabled(),
       });
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
         onCrossDeviceMessage: this.crossDevice
           ? (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw)
           : undefined,
+        // Publish DEVICE_REGISTER after the socket opens + SUBSCRIBE, on every
+        // (re)connect. No-op when the feature is off (crossDevice is null).
+        onSocketOpen: () => this.crossDevice?.register(),
         onSync: async (data: WsSyncMessage) => {
           await this.tipMutex.runExclusive(async () => {
             await walletBg.syncService.setSync(data);
@@ -883,6 +890,28 @@ export class WalletManager {
    */
   getCrossDeviceSigning(): CrossDeviceSigning | null {
     return this.crossDevice?.signing ?? null;
+  }
+
+  /**
+   * Read isCrossDeviceSigningEnabled from chrome.storage.local. The UI's
+   * featureFlagsStore mirrors flags there because the EventSource-based flag
+   * service cannot initialize in this background service worker. Defaults to
+   * false (feature dark) if storage is empty or unreadable.
+   */
+  private async isCrossDeviceSigningEnabled(): Promise<boolean> {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        return false;
+      }
+      const flags = await new Promise<Record<string, unknown>>((resolve) => {
+        chrome.storage.local.get('featureFlags', (result) => {
+          resolve((result?.['featureFlags'] as Record<string, unknown>) ?? {});
+        });
+      });
+      return flags['isCrossDeviceSigningEnabled'] === true;
+    } catch {
+      return false;
+    }
   }
 
   /**
