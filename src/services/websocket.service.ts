@@ -178,9 +178,11 @@ class WebSocketService {
       const type = data.type;
 
       // Cross-device signing bridge: forward relay messages to the injected
-      // handler and return before the sync switch. Additive — when the handler
-      // is unset (flag off), these types are never seen on the wire and this
-      // branch is a no-op, leaving SYNC/ROLLBACK/FORCE_RESYNC handling unchanged.
+      // handler and return before the sync switch. The relay sends DEVICES to
+      // every subscriber (broadcast on SUBSCRIBE), so these types appear on the
+      // wire even with the feature off; walletManager wires a live closure that
+      // no-ops when no bridge exists, keeping them out of the "unknown type"
+      // branch. SYNC/ROLLBACK/FORCE_RESYNC handling is unchanged.
       if (this.handlers.onCrossDeviceMessage && CROSS_DEVICE_MESSAGE_TYPES.includes(type)) {
         this.handlers.onCrossDeviceMessage(data);
         return;
