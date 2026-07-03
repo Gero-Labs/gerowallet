@@ -23,12 +23,14 @@ export type SigningPolicy = 'ask' | 'require_remote';
  * to SAS-only pairing. true = require a valid proof to pair (a MISSING proof is
  * also rejected).
  *
- * Flipped true 2026-07-03: the feature is single-user (only the developer has
- * access, no in-the-wild pairings) and both clients emit + verify valid proofs,
- * so the coordinated-release concern (one client bricking pairing against the
- * other) does not apply. New pairings now REQUIRE a valid wallet-control proof;
- * already-trusted devices are unaffected (this gates trustCrossDevice, not
- * existing pins). Revert to false if a peer build stops emitting a proof. See
+ * true = fail-closed pairing: a device MUST present a valid wallet-control proof to
+ * pair (a missing proof is rejected, not just an invalid one). This is the shipped
+ * end state — the authenticated-register security boundary. Safe without a coordinated
+ * release because the feature is single-user (only the developer has access, zero
+ * in-the-wild pairings) and both clients emit + verify valid proofs, so there is no
+ * peer to brick pairing against. Gates trustCrossDevice (new pairings) only; existing
+ * pins are unaffected. One-line reversible to false if a peer build stops emitting a
+ * proof. iOS mirror: `CrossDeviceRegisterProofVerifier.requireProofToPair`. See
  * docs/plans/2026-07-03-authenticated-device-register-contract.md (Rollout step 4).
  */
 export const REQUIRE_PROOF_TO_PAIR = true;
@@ -40,6 +42,13 @@ export interface TrustedDevice {
   label: string;
   platform: string;
   trustedAt: number; // unix seconds
+  /**
+   * True if the pairing verified a wallet-control proof (this device proved it
+   * holds the wallet stake key); false = SAS-only pairing (no proof was present).
+   * Drives the "wallet-verified" vs "SAS only" badge. Optional for back-compat
+   * with pins made before this field existed (treated as SAS-only / unknown).
+   */
+  verified?: boolean;
 }
 
 export interface RemoteSigningSettings {
@@ -99,7 +108,7 @@ export function setPolicy(
 /** Pin (or re-pin) a device, capturing the pubKey observed now. */
 export function trustDevice(
   settings: RemoteSigningSettings,
-  device: { deviceId: string; pubKey: string; label: string; platform: string },
+  device: { deviceId: string; pubKey: string; label: string; platform: string; verified?: boolean },
   now: number,
 ): RemoteSigningSettings {
   const entry: TrustedDevice = {
@@ -108,6 +117,7 @@ export function trustDevice(
     label: device.label,
     platform: device.platform,
     trustedAt: now,
+    verified: !!device.verified,
   };
   return {
     ...settings,
