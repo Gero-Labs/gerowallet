@@ -104,10 +104,48 @@ function markUtxosSeen() {
 // the enriched record, so the list row and future opens are fixed too.
 const enrichingTxHashes = new Set<string>();
 
+const txHashOf = (t: Record<string, unknown> | null | undefined): string | undefined =>
+  (t?.tx_hash || t?.id) as string | undefined;
+
+// Wait (bounded) for the background-enriched record to arrive in the store with a
+// body, then swap it into the open detail. We deliberately re-read from the store
+// rather than from the message response: the background persists the enriched tx
+// and the TransactionsLoader broadcasts it with a serialization-safe body, whereas
+// the raw Cardano.Tx body/witness carry BigInt/Map/Set and can't cross messaging.
+function swapEnrichedFromStore(txHash: string): Promise<void> {
+  return new Promise((resolve) => {
+    const trySwap = (): boolean => {
+      const updated = walletStore.transactions?.find(
+        (t) => txHashOf(t as Record<string, unknown>) === txHash
+      ) as Record<string, unknown> | undefined;
+      if (updated?.body && txHashOf(transactionInfo.value) === txHash) {
+        transactionInfo.value = updated;
+        return true;
+      }
+      return false;
+    };
+    if (trySwap()) return resolve();
+    const stop = watch(
+      () => walletStore.transactions,
+      () => {
+        if (trySwap()) {
+          stop();
+          clearTimeout(timer);
+          resolve();
+        }
+      }
+    );
+    const timer = setTimeout(() => {
+      stop();
+      resolve();
+    }, 8000);
+  });
+}
+
 async function enrichSelectedTransaction(tx: Record<string, unknown> | null) {
   if (!tx || tx.body || tx.pending) return; // already enriched or not yet confirmed
   if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return; // CBOR backfill is Cardano-only
-  const txHash = (tx.tx_hash || tx.id) as string | undefined;
+  const txHash = txHashOf(tx);
   if (!txHash || enrichingTxHashes.has(txHash)) return;
 
   enrichingTxHashes.add(txHash);
@@ -115,24 +153,9 @@ async function enrichSelectedTransaction(tx: Record<string, unknown> | null) {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.ENRICH_TRANSACTIONS,
       data: { txHashes: [txHash] },
-    }) as { data?: { transactions?: Array<Record<string, unknown>> } };
-    const enriched = response?.data?.transactions?.find(
-      (t: Record<string, unknown>) => (t.tx_hash || t.id) === txHash
-    );
-    // Only swap if the same tx is still selected and we actually got a body back.
-    const selectedHash = transactionInfo.value?.tx_hash || transactionInfo.value?.id;
-    if (enriched?.body && selectedHash === txHash) {
-      transactionInfo.value = {
-        ...transactionInfo.value,
-        cbor: enriched.cbor,
-        body: enriched.body,
-        witness: enriched.witness,
-        auxiliaryData: enriched.auxiliaryData,
-        isValid: enriched.isValid,
-        // Backend utxo carries native-token amounts the thin (WS-synced) record may
-        // lack; keep the live view consistent with the persisted DB record.
-        utxo: enriched.utxo,
-      };
+    }) as { data?: { success?: boolean } };
+    if (response?.data?.success) {
+      await swapEnrichedFromStore(txHash);
     }
   } catch (e) {
     console.warn('[Transactions] transaction enrichment failed:', e);

@@ -2538,17 +2538,23 @@ app.addToOptions(MessageTypes.ENRICH_TRANSACTIONS, async (request, sendResponse)
     const currentWallet = walletManager.getWallet();
     const txHashes: string[] = request?.data?.txHashes || [];
     if (currentWallet && txHashes.length > 0) {
-      const transactions = await currentWallet.syncService.enrichTransactions(txHashes);
+      // enrichTransactions persists the enriched records; the TransactionsLoader
+      // then broadcasts them (with a serialization-safe body) into the store.
+      // Return only a lightweight count — never the deserialized tx objects,
+      // whose Cardano.Tx body/witness carry BigInt/Map/Set and cannot be
+      // structured-cloned across chrome.runtime messaging ("Could not serialize
+      // message"). The caller reads the enriched tx from the store instead.
+      const enriched = await currentWallet.syncService.enrichTransactions(txHashes);
       sendResponse({
         id: request.id,
-        data: { success: true, transactions },
+        data: { success: true, count: enriched.length },
         target: TARGET,
         sender: SENDER.extension,
       });
     } else {
       sendResponse({
         id: request.id,
-        data: { success: false, error: 'No wallet loaded or no tx hashes', transactions: [] },
+        data: { success: false, error: 'No wallet loaded or no tx hashes', count: 0 },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -2557,7 +2563,7 @@ app.addToOptions(MessageTypes.ENRICH_TRANSACTIONS, async (request, sendResponse)
     console.error('ENRICH_TRANSACTIONS error:', err);
     sendResponse({
       id: request.id,
-      data: { success: false, transactions: [] },
+      data: { success: false, count: 0 },
       target: TARGET,
       sender: SENDER.extension,
     });
