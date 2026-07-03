@@ -70,7 +70,7 @@ import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
 import { walletStore } from '@/stores/walletStore';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
-import Messaging from '@/chrome/messaging';
+import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain } from '@/models/types';
 
