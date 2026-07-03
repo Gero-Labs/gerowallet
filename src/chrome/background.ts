@@ -1854,6 +1854,22 @@ app.addToOptions(MessageTypes.UNTRUST_CROSS_DEVICE, async (request, sendResponse
   }
 });
 
+// Sign the one-time wallet-control proof endorsing this device's relay-auth key.
+// Requires spending auth (the wallet stake key COSE-signs), so the UI collects the
+// password / passkey at enable-time and passes it here; the proof is then cached and
+// rides every DEVICE_REGISTER. See docs/plans/2026-07-03-authenticated-device-register-contract.md.
+app.addToOptions(MessageTypes.PRODUCE_DEVICE_REGISTER_PROOF, async (request, sendResponse) => {
+  try {
+    const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
+    const pkBytes = request.data?.privateKeyBytes;
+    const privateKeyBytes = Array.isArray(pkBytes) ? Uint8Array.from(pkBytes) : undefined;
+    const ok = await walletManager.produceDeviceRegisterProof({ password, privateKeyBytes });
+    sendResponse(crossDeviceReply(request.id, { success: ok }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
 // Pool operator transaction signing handler (cold key + wallet keys)
 app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendResponse) => {
   try {

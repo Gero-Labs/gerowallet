@@ -67,7 +67,14 @@ class WebSocketService {
   private pendingTxBatches: WsSyncMessage[] = [];
 
   private readonly RECONNECT_DELAYS = [3000, 5000, 10000, 30000];
-  private readonly SYNC_CHECK_INTERVAL = 120_000; // 2 minutes
+  // SYNC_CHECK doubles as the MV3 keep-alive. The service worker is torn down
+  // after 30s idle; a WebSocket send/receive resets that idle timer (Chrome 116+),
+  // so pinging every 25s keeps the worker AND the socket alive. Without it the
+  // worker recycled every ~30-42s, re-running login and, for cross-device,
+  // evicting + re-registering this device on the relay so siblings saw it flap in
+  // and out. SYNC_CHECK is idempotent + relay-handled, so this needs no relay
+  // change; it also keeps sync fresher. Must stay < 30s.
+  private readonly SYNC_CHECK_INTERVAL = 25_000;
   private readonly WS_BASE_URL = import.meta.env['VITE_SYNC_WS_URL'] || 'wss://sync.gerowallet.io';
 
   connect(
@@ -178,9 +185,11 @@ class WebSocketService {
       const type = data.type;
 
       // Cross-device signing bridge: forward relay messages to the injected
-      // handler and return before the sync switch. Additive — when the handler
-      // is unset (flag off), these types are never seen on the wire and this
-      // branch is a no-op, leaving SYNC/ROLLBACK/FORCE_RESYNC handling unchanged.
+      // handler and return before the sync switch. The relay sends DEVICES to
+      // every subscriber (broadcast on SUBSCRIBE), so these types appear on the
+      // wire even with the feature off; walletManager wires a live closure that
+      // no-ops when no bridge exists, keeping them out of the "unknown type"
+      // branch. SYNC/ROLLBACK/FORCE_RESYNC handling is unchanged.
       if (this.handlers.onCrossDeviceMessage && CROSS_DEVICE_MESSAGE_TYPES.includes(type)) {
         this.handlers.onCrossDeviceMessage(data);
         return;

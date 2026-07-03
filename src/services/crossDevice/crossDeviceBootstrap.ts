@@ -17,7 +17,7 @@ import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDeviceSigning.service';
 import { createWsTransport, feedCrossDeviceMessage } from './wsTransport';
-import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo } from './protocol';
+import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo, type DeviceRegisterProof } from './protocol';
 import { emptyRegistry, applyDevicesSnapshot, pubKeyOf, type DeviceRegistryState } from './deviceRegistry';
 
 export interface CrossDeviceHandles {
@@ -49,7 +49,7 @@ export interface CrossDeviceHandles {
 function publishDeviceRegister(
   send: (msg: DeviceRegister) => void,
   identity: { deviceId: string; pubKeyHex: string },
-  opts: { label: string; platform: DevicePlatform; hasSigningKey: boolean },
+  opts: { label: string; platform: DevicePlatform; hasSigningKey: boolean; proof?: DeviceRegisterProof },
 ): void {
   const register: DeviceRegister = {
     type: 'DEVICE_REGISTER',
@@ -58,6 +58,7 @@ function publishDeviceRegister(
     platform: opts.platform,
     pubKey: identity.pubKeyHex,
     hasSigningKey: opts.hasSigningKey,
+    ...(opts.proof ? { proof: opts.proof } : {}),
   };
   send(register);
 }
@@ -83,6 +84,9 @@ export function bootstrapCrossDeviceSigning(opts: {
   // caller's closures so trust/untrust take effect without a re-bootstrap.
   isRequesterTrusted?: (deviceId: string, pubKey: string) => boolean;
   isResponderTrusted?: (deviceId: string, pubKey: string) => boolean;
+  // Latest cached wallet-control proof, read at each register() so a proof
+  // produced AFTER bootstrap (on enable) rides the next DEVICE_REGISTER.
+  getProof?: () => DeviceRegisterProof | undefined;
 }): CrossDeviceHandles | null {
   if (!opts.enabled) {
     return null;
@@ -100,7 +104,14 @@ export function bootstrapCrossDeviceSigning(opts: {
   const unsubRegistry = transport.onMessage((raw) => {
     if (isDevicesSnapshot(raw)) {
       registry = applyDevicesSnapshot(registry, raw);
-      debugLog('🔗 cross-device registry updated:', Object.keys(registry.byId).length, 'devices');
+      // Diagnostic: show WHO is in the snapshot so an empty "other devices" list
+      // can be told apart from a UI-filtering bug. platform:id8(self?) per device.
+      const ids = Object.values(registry.byId).map((d) =>
+        `${d.platform}:${(d.deviceId || '').slice(0, 8)}${d.deviceId === deviceId ? '(self)' : ''}${d.hasSigningKey ? '+sig' : ''}`);
+      debugLog('🔗 cross-device registry updated:', Object.keys(registry.byId).length, '→', ids.join(', ') || '(none)');
+    } else if ((raw as { type?: string })?.type === 'DEVICES') {
+      // Arrived but failed the shape guard — would otherwise be silently ignored.
+      debugLog('⚠️ DEVICES snapshot failed shape guard:', JSON.stringify(raw).slice(0, 400));
     }
   });
 
@@ -120,11 +131,14 @@ export function bootstrapCrossDeviceSigning(opts: {
   // out. It is published from the WS onopen path via register() below instead.
   const register = (): void => {
     try {
+      const proof = opts.getProof?.();
       publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: identity.pubKeyHex }, {
         label: opts.label,
         platform: 'extension',
         hasSigningKey: opts.hasSigningKey,
+        proof,
       });
+      debugLog('📇 DEVICE_REGISTER sent:', deviceId, 'proof=' + (proof ? 'yes' : 'no'));
     } catch (e) {
       debugLog('cross-device DEVICE_REGISTER failed:', e);
     }

@@ -25,7 +25,9 @@ import {
   type StoredDeviceIdentity,
 } from '@/services/crossDevice/deviceIdentityStore';
 import { isDeviceIdConsistent } from '@/services/crossDevice/deviceIdentity';
-import { verifyDeviceRegisterProof } from '@/services/crossDevice/registerProof';
+import { verifyDeviceRegisterProof, buildDeviceRegisterSubject } from '@/services/crossDevice/registerProof';
+import { loadDeviceRegisterProof, saveDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore';
+import type { DeviceRegisterProof } from '@/services/crossDevice/protocol';
 import {
   defaultRemoteSigningSettings,
   isDeviceTrusted,
@@ -33,6 +35,7 @@ import {
   setPolicy as trustSetPolicy,
   trustDevice as trustAddDevice,
   untrustDevice as trustRemoveDevice,
+  REQUIRE_PROOF_TO_PAIR,
   type RemoteSigningSettings,
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
@@ -56,6 +59,9 @@ export class WalletManager {
   // Stable relay-auth identity for this browser install (persisted), so pins made
   // by a sibling device survive a re-login instead of churning every session.
   private crossDeviceIdentity: StoredDeviceIdentity | null = null;
+  // Cached wallet-control proof for the CURRENT wallet, produced once at enable
+  // time (needs auth) and re-sent on every DEVICE_REGISTER via getProof.
+  private crossDeviceProof: DeviceRegisterProof | null = null;
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
@@ -378,6 +384,11 @@ export class WalletManager {
       if (!this.crossDeviceIdentity) {
         this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
       }
+      // Load this device's cached wallet-control proof for this wallet (if produced).
+      this.crossDeviceProof = await loadDeviceRegisterProof(
+        this.crossDeviceIdentity.deviceId,
+        walletBg.stakeAddress,
+      );
       const serverFlagOn = await this.isCrossDeviceSigningEnabled();
       this.crossDevice?.dispose();
       this.crossDevice = bootstrapCrossDeviceSigning({
@@ -389,12 +400,19 @@ export class WalletManager {
         // Live trust gates: only paired devices may approve/answer.
         isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
         isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+        // Cached proof, re-sent on every register (produced once at enable-time).
+        getProof: () => this.crossDeviceProof ?? undefined,
       });
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
-        onCrossDeviceMessage: this.crossDevice
-          ? (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw)
-          : undefined,
+        // Always a LIVE closure, never a static `undefined`. The socket outlives
+        // the bridge, which is rebuilt when remote signing is toggled on/off after
+        // login (reconfigureCrossDevice) WITHOUT a reconnect. Reading this.crossDevice
+        // at call time routes inbound DEVICES/SIGN_* frames to whatever bridge exists
+        // now (or a no-op when null). A conditional `undefined` here froze the handler
+        // to the connect-time state, so enabling post-login left inbound frames
+        // falling through to the "unknown type" branch (empty device registry).
+        onCrossDeviceMessage: (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw),
         // Publish DEVICE_REGISTER after the socket opens + SUBSCRIBE, on every
         // (re)connect. No-op when the feature is off (crossDevice is null).
         onSocketOpen: () => this.crossDevice?.register(),
@@ -987,8 +1005,10 @@ export class WalletManager {
       return this.remoteSigning;
     }
     // If the device supplied a wallet-control proof, it MUST verify against this
-    // wallet's reward address (a present-but-invalid proof is a rejection). Absent
-    // proof falls back to SAS + pin until the coordinated fail-closed flip.
+    // wallet's reward address (a present-but-invalid proof is always a rejection).
+    // When REQUIRE_PROOF_TO_PAIR is off (current rollout state) an ABSENT proof
+    // falls back to SAS + pin; when it flips on (coordinated with iOS) a missing
+    // proof is also rejected. See crossDeviceTrust.ts REQUIRE_PROOF_TO_PAIR.
     if (found.proof) {
       const ownStake = this.walletBg?.stakeAddress ?? '';
       const ok = await verifyDeviceRegisterProof(
@@ -1000,6 +1020,9 @@ export class WalletManager {
         debugLog('cross-device: refusing to pin — wallet-control proof invalid for', found.deviceId);
         return this.remoteSigning;
       }
+    } else if (REQUIRE_PROOF_TO_PAIR) {
+      debugLog('cross-device: refusing to pin — no wallet-control proof (fail-closed)', found.deviceId);
+      return this.remoteSigning;
     }
     this.remoteSigning = trustAddDevice(
       this.remoteSigning,
@@ -1036,9 +1059,58 @@ export class WalletManager {
       enabled: serverFlagOn && this.remoteSigning.enabled,
       isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
       isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+      getProof: () => this.crossDeviceProof ?? undefined,
     });
     if (this.crossDevice && webSocketService.isConnected()) {
       this.crossDevice.register();
+    }
+  }
+
+  /**
+   * Produce this device's wallet-control proof: sign the DEVICE_REGISTER subject
+   * with the wallet's STAKE key (CIP-8 signData over the reward address), cache it
+   * for this (identity, wallet), and re-register so it rides immediately. Called
+   * from the enable flow where the user has just authenticated (password / PRF
+   * privateKeyBytes). Returns true on success; a wrong password / cancelled
+   * biometric throws inside signData and yields false (the caller leaves the
+   * wallet not enabled). Only for Cardano software wallets with a stake address.
+   */
+  async produceDeviceRegisterProof(auth: { password?: string; privateKeyBytes?: Uint8Array }): Promise<boolean> {
+    try {
+      const walletBg = this.walletBg;
+      if (!walletBg || walletBg.chain !== Blockchain.CARDANO) return false;
+      const stakeAddress = walletBg.stakeAddress;
+      if (!stakeAddress || !stakeAddress.startsWith('stake1')) return false; // no reward addr (enterprise/BTC)
+      if (!this.crossDeviceIdentity) {
+        this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
+      }
+      const subject = buildDeviceRegisterSubject(
+        this.crossDeviceIdentity.deviceId,
+        this.crossDeviceIdentity.pubKeyHex,
+        stakeAddress,
+      );
+      const subjectBytes = new TextEncoder().encode(subject);
+      let payloadHex = '';
+      for (let i = 0; i < subjectBytes.length; i++) payloadHex += subjectBytes[i].toString(16).padStart(2, '0');
+      const { signature, key } = await walletBg.signData(
+        stakeAddress,
+        payloadHex,
+        auth.password ?? '',
+        0,
+        WalletStore.state.keys,
+        auth.privateKeyBytes,
+      );
+      const proof: DeviceRegisterProof = { coseSign1: signature, coseKey: String(key), stakeAddress };
+      await saveDeviceRegisterProof(this.crossDeviceIdentity.deviceId, stakeAddress, proof);
+      this.crossDeviceProof = proof;
+      // Re-send now so the relay + siblings get the proof without a reconnect.
+      if (this.crossDevice && webSocketService.isConnected()) {
+        this.crossDevice.register();
+      }
+      return true;
+    } catch (e) {
+      debugLog('produceDeviceRegisterProof failed:', e);
+      return false;
     }
   }
 

@@ -15,6 +15,24 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 export type SigningPolicy = 'ask' | 'require_remote';
 
+/**
+ * Fail-closed flip (coordinated with iOS `CrossDeviceRegisterProofVerifier.requireProofToPair`).
+ *
+ * false = verify-if-present (current rollout state): a device that presents a
+ * wallet-control proof MUST verify it to pair; a device with NO proof falls back
+ * to SAS-only pairing. true = require a valid proof to pair (a MISSING proof is
+ * also rejected).
+ *
+ * Flipped true 2026-07-03: the feature is single-user (only the developer has
+ * access, no in-the-wild pairings) and both clients emit + verify valid proofs,
+ * so the coordinated-release concern (one client bricking pairing against the
+ * other) does not apply. New pairings now REQUIRE a valid wallet-control proof;
+ * already-trusted devices are unaffected (this gates trustCrossDevice, not
+ * existing pins). Revert to false if a peer build stops emitting a proof. See
+ * docs/plans/2026-07-03-authenticated-device-register-contract.md (Rollout step 4).
+ */
+export const REQUIRE_PROOF_TO_PAIR = true;
+
 /** A device the user has explicitly paired. Pinned by (deviceId, pubKey). */
 export interface TrustedDevice {
   deviceId: string;
