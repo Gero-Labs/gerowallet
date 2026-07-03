@@ -937,6 +937,7 @@ export default {
   'crossDevice.settings.fingerprint': 'Kopplungscode',
   'crossDevice.settings.pairHint': 'Vergleichen Sie den Kopplungscode auf beiden Geräten, bevor Sie koppeln.',
   'crossDevice.settings.pair': 'Koppeln',
+  'crossDevice.settings.pairFailed': 'Kopplung fehlgeschlagen. Das Gerät ist möglicherweise offline. Aktualisieren und erneut versuchen.',
   'crossDevice.settings.untrust': 'Vertrauen entziehen',
   'crossDevice.settings.trustedOn': 'Gekoppelt am {date}',
   'crossDevice.settings.unnamed': 'Unbenanntes Gerät',

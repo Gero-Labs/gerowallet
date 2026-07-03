@@ -146,8 +146,13 @@
 
       <!-- Actions -->
       <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <!-- Under a "require remote" policy, local signing (password AND passkey)
+             is disabled; only "Sign on another device" remains. -->
+        <div v-if="currentStep === 2 && requiresRemoteForSend" class="text-caption grey--text text-center mb-2">
+          {{ $t('crossDevice.settings.policyRequireHint') }}
+        </div>
         <!-- Transaction Authentication Section (step 2 only) -->
-        <div v-if="currentStep === 2">
+        <div v-else-if="currentStep === 2">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
