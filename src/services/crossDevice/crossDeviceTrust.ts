@@ -23,15 +23,16 @@ export type SigningPolicy = 'ask' | 'require_remote';
  * to SAS-only pairing. true = require a valid proof to pair (a MISSING proof is
  * also rejected).
  *
- * Flipped true 2026-07-03: the feature is single-user (only the developer has
- * access, no in-the-wild pairings) and both clients emit + verify valid proofs,
- * so the coordinated-release concern (one client bricking pairing against the
- * other) does not apply. New pairings now REQUIRE a valid wallet-control proof;
- * already-trusted devices are unaffected (this gates trustCrossDevice, not
- * existing pins). Revert to false if a peer build stops emitting a proof. See
- * docs/plans/2026-07-03-authenticated-device-register-contract.md (Rollout step 4).
+ * Held at false for the on-device interop test (2026-07-03): verify-if-present
+ * lets pairing degrade to SAS + surface a "SAS only" readout when a proof does not
+ * arrive/verify, which is exactly the diagnostic the interop test needs BEFORE the
+ * flip (after the flip a proof-path bug becomes an undiagnosable hard failure). Flip
+ * to true once the interop shows "wallet-verified" on both devices, coordinated with
+ * iOS `CrossDeviceRegisterProofVerifier.requireProofToPair`. Feature is single-user
+ * (no in-the-wild pairings), so the flip needs no migration and gates trustCrossDevice
+ * (new pairings) only. See docs/plans/2026-07-03-authenticated-device-register-contract.md.
  */
-export const REQUIRE_PROOF_TO_PAIR = true;
+export const REQUIRE_PROOF_TO_PAIR = false;
 
 /** A device the user has explicitly paired. Pinned by (deviceId, pubKey). */
 export interface TrustedDevice {
@@ -40,6 +41,13 @@ export interface TrustedDevice {
   label: string;
   platform: string;
   trustedAt: number; // unix seconds
+  /**
+   * True if the pairing verified a wallet-control proof (this device proved it
+   * holds the wallet stake key); false = SAS-only pairing (no proof was present).
+   * Drives the "wallet-verified" vs "SAS only" badge. Optional for back-compat
+   * with pins made before this field existed (treated as SAS-only / unknown).
+   */
+  verified?: boolean;
 }
 
 export interface RemoteSigningSettings {
@@ -99,7 +107,7 @@ export function setPolicy(
 /** Pin (or re-pin) a device, capturing the pubKey observed now. */
 export function trustDevice(
   settings: RemoteSigningSettings,
-  device: { deviceId: string; pubKey: string; label: string; platform: string },
+  device: { deviceId: string; pubKey: string; label: string; platform: string; verified?: boolean },
   now: number,
 ): RemoteSigningSettings {
   const entry: TrustedDevice = {
@@ -108,6 +116,7 @@ export function trustDevice(
     label: device.label,
     platform: device.platform,
     trustedAt: now,
+    verified: !!device.verified,
   };
   return {
     ...settings,

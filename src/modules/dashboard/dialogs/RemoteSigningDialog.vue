@@ -93,7 +93,16 @@
             <div class="flex-grow-1">
               <div class="rs-device-label">
                 {{ entry.device.label || $t('crossDevice.settings.unnamed') }}
-                <v-icon v-if="entry.trusted" x-small color="#00DFF3" class="ml-1">mdi-shield-check</v-icon>
+                <span
+                  v-if="entry.trusted"
+                  class="rs-badge"
+                  :class="pairVerified(entry.device.deviceId) ? 'rs-verified' : 'rs-sas'"
+                >
+                  <v-icon x-small :color="pairVerified(entry.device.deviceId) ? '#37d67a' : '#8a94a6'">
+                    {{ pairVerified(entry.device.deviceId) ? 'mdi-shield-check' : 'mdi-shield-account-outline' }}
+                  </v-icon>
+                  {{ pairVerified(entry.device.deviceId) ? $t('crossDevice.settings.walletVerified') : $t('crossDevice.settings.sasOnly') }}
+                </span>
                 <span class="rs-status" :class="entry.online ? 'rs-online' : 'rs-off'">
                   {{ entry.online ? $t('crossDevice.settings.online') : $t('crossDevice.settings.offline') }}
                 </span>
@@ -254,6 +263,11 @@ const platformIcon = (platform: string) => {
   if (platform === 'extension') return 'mdi-google-chrome';
   return 'mdi-devices';
 };
+
+// True if the pairing verified a wallet-control proof (vs SAS-only). Drives the
+// "wallet-verified" / "SAS only" badge — the log-free readout for the interop test.
+const pairVerified = (deviceId: string): boolean =>
+  !!state.settings.trustedDevices[deviceId]?.verified;
 
 const trustedAt = (deviceId: string): string => {
   const d = state.settings.trustedDevices[deviceId];
@@ -427,6 +441,9 @@ onBeforeUnmount(stopDevicePoll);
 .rs-status { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; }
 .rs-status.rs-online { color: #37d67a; }
 .rs-status.rs-off { color: #8a94a6; }
+.rs-badge { font-size: 10px; letter-spacing: 0.3px; margin-left: 6px; white-space: nowrap; }
+.rs-badge.rs-verified { color: #37d67a; }
+.rs-badge.rs-sas { color: #8a94a6; }
 .rs-self { opacity: 0.85; }
 .rs-device-label { font-size: 14px; color: #fff; }
 .rs-fingerprint { font-size: 12px; color: #9aa5b5; font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
