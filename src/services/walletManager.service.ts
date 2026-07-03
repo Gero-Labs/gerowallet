@@ -16,6 +16,21 @@ import { Cardano } from '@cardano-sdk/core';
 import zkFoldApi from '@/api/zkFoldApi';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
+import {
+  loadRemoteSigningSettings,
+  saveRemoteSigningSettings,
+} from '@/services/crossDevice/crossDeviceSettings';
+import {
+  defaultRemoteSigningSettings,
+  isDeviceTrusted,
+  setEnabled as trustSetEnabled,
+  setPolicy as trustSetPolicy,
+  trustDevice as trustAddDevice,
+  untrustDevice as trustRemoveDevice,
+  type RemoteSigningSettings,
+  type SigningPolicy,
+} from '@/services/crossDevice/crossDeviceTrust';
+import type { DeviceInfo } from '@/services/crossDevice/protocol';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -28,6 +43,10 @@ export class WalletManager {
   private pendingSyncPromise: Promise<void> | null = null;
   // Cross-device signing bridge handles (null unless the feature flag is on).
   private crossDevice: ReturnType<typeof bootstrapCrossDeviceSigning> = null;
+  // Per-wallet remote-signing settings (trust list + policy), loaded on login.
+  // The bootstrap's trust predicates read this live, so trust/untrust/policy
+  // changes take effect without a re-bootstrap.
+  private remoteSigning: RemoteSigningSettings = defaultRemoteSigningSettings();
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
@@ -343,11 +362,20 @@ export class WalletManager {
       // The flag is read from chrome.storage.local (mirrored by the UI's
       // featureFlagsStore) because the EventSource-based flag service cannot run in
       // this background service worker.
+      // Per-wallet remote-signing settings (opt-in + trusted devices + policy).
+      if (this.currentWalletId != null) {
+        this.remoteSigning = await loadRemoteSigningSettings(this.currentWalletId);
+      }
+      const serverFlagOn = await this.isCrossDeviceSigningEnabled();
       this.crossDevice?.dispose();
       this.crossDevice = bootstrapCrossDeviceSigning({
         label: 'Gero Extension',
         hasSigningKey: true,
-        enabled: await this.isCrossDeviceSigningEnabled(),
+        // Both the server flag AND this wallet's opt-in must be on.
+        enabled: serverFlagOn && this.remoteSigning.enabled,
+        // Live trust gates: only paired devices may approve/answer.
+        isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+        isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
       });
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
@@ -890,6 +918,90 @@ export class WalletManager {
    */
   getCrossDeviceSigning(): CrossDeviceSigning | null {
     return this.crossDevice?.signing ?? null;
+  }
+
+  // ---- Remote-signing settings API (backing the Security settings UI) -------
+
+  /** Current per-wallet remote-signing settings (enable, policy, trusted devices). */
+  getRemoteSigningSettings(): RemoteSigningSettings {
+    return this.remoteSigning;
+  }
+
+  /**
+   * Devices currently visible in the relay registry, each tagged with whether it
+   * is this device and whether it is trusted. Empty when the bridge is off.
+   */
+  getCrossDeviceDevices(): Array<{ device: DeviceInfo; trusted: boolean; isSelf: boolean }> {
+    const selfId = this.crossDevice?.selfDeviceId ?? null;
+    const devices = this.crossDevice?.getDevices() ?? [];
+    return devices.map((device) => ({
+      device,
+      trusted: isDeviceTrusted(this.remoteSigning, device.deviceId, device.pubKey),
+      isSelf: device.deviceId === selfId,
+    }));
+  }
+
+  /** Persist the current settings mirror to this wallet's db. */
+  private async persistRemoteSigning(): Promise<void> {
+    if (this.currentWalletId != null) {
+      await saveRemoteSigningSettings(this.currentWalletId, this.remoteSigning);
+    }
+  }
+
+  /** Turn remote signing on/off for this wallet, restarting the bridge accordingly. */
+  async setRemoteSigningEnabled(enabled: boolean): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustSetEnabled(this.remoteSigning, enabled);
+    await this.persistRemoteSigning();
+    await this.reconfigureCrossDevice();
+    return this.remoteSigning;
+  }
+
+  /** Set the signing policy (ask | require_remote). No re-bootstrap needed. */
+  async setCrossDevicePolicy(policy: SigningPolicy): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustSetPolicy(this.remoteSigning, policy);
+    await this.persistRemoteSigning();
+    return this.remoteSigning;
+  }
+
+  /** Pair (trust) a device currently visible in the registry, pinning its pubKey. */
+  async trustCrossDevice(deviceId: string): Promise<RemoteSigningSettings> {
+    const found = this.crossDevice?.getDevices().find((d) => d.deviceId === deviceId);
+    if (!found) return this.remoteSigning; // not visible; nothing to pin
+    this.remoteSigning = trustAddDevice(
+      this.remoteSigning,
+      { deviceId: found.deviceId, pubKey: found.pubKey, label: found.label, platform: found.platform },
+      Math.floor(Date.now() / 1000),
+    );
+    await this.persistRemoteSigning();
+    return this.remoteSigning;
+  }
+
+  /** Untrust a device. Its future requests/responses are dropped again. */
+  async untrustCrossDevice(deviceId: string): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustRemoveDevice(this.remoteSigning, deviceId);
+    await this.persistRemoteSigning();
+    return this.remoteSigning;
+  }
+
+  /**
+   * Rebuild the cross-device bridge from the current server flag + per-wallet
+   * settings without a full re-login. Used when the user toggles remote signing
+   * on/off. If the socket is already open, re-register immediately (onSocketOpen
+   * won't fire again for an existing connection).
+   */
+  private async reconfigureCrossDevice(): Promise<void> {
+    const serverFlagOn = await this.isCrossDeviceSigningEnabled();
+    this.crossDevice?.dispose();
+    this.crossDevice = bootstrapCrossDeviceSigning({
+      label: 'Gero Extension',
+      hasSigningKey: true,
+      enabled: serverFlagOn && this.remoteSigning.enabled,
+      isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+      isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+    });
+    if (this.crossDevice && webSocketService.isConnected()) {
+      this.crossDevice.register();
+    }
   }
 
   /**

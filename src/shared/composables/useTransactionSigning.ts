@@ -6,6 +6,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
@@ -35,6 +36,7 @@ export interface TransactionSigningReturn {
   isPrfWallet: ComputedRef<boolean>;
   isBTSupported: ComputedRef<boolean>;
   canSignOnAnotherDevice: ComputedRef<boolean>;
+  requiresRemoteForSend: ComputedRef<boolean>;
   // Keystone state
   overlay: Ref<boolean>;
   keystoneScan: Ref<boolean>;
@@ -94,12 +96,29 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       loggedWallet.value?.btSupported;
   });
 
-  // Cross-device signing: only for Cardano software (non-hardware) wallets and
-  // only when the feature flag is on. Dark by default.
+  // Keep the per-wallet remote-signing settings warm so the gates below are live.
+  void remoteSigningStore.ensureLoaded();
+
+  const isCardanoSoftwareWallet = computed(() =>
+    loggedWallet.value?.chain === Blockchain.CARDANO &&
+    loggedWallet.value?.type === WalletType.Normal,
+  );
+
+  // Cross-device signing button: server flag + this wallet's opt-in + at least one
+  // trusted, signing-capable device to actually answer. Dark by default.
   const canSignOnAnotherDevice = computed(() => {
     return featureFlagsStore.isCrossDeviceSigningEnabled() &&
-      loggedWallet.value?.chain === Blockchain.CARDANO &&
-      loggedWallet.value?.type === WalletType.Normal;
+      isCardanoSoftwareWallet.value &&
+      remoteSigningStore.isEnabled() &&
+      remoteSigningStore.hasTrustedSigner();
+  });
+
+  // When the policy is "require remote", local signing for a Send is disabled and
+  // the user must approve on a trusted device (a genuine second factor).
+  const requiresRemoteForSend = computed(() => {
+    return featureFlagsStore.isCrossDeviceSigningEnabled() &&
+      isCardanoSoftwareWallet.value &&
+      remoteSigningStore.requiresRemoteForSend();
   });
 
   const setPasswordFieldRef = (ref: any) => {
@@ -503,6 +522,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     isPrfWallet,
     isBTSupported,
     canSignOnAnotherDevice,
+    requiresRemoteForSend,
     // Keystone state
     overlay,
     keystoneScan,

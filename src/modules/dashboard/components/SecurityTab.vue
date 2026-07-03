@@ -137,6 +137,24 @@
         </v-list-item-icon>
       </v-list-item>
 
+      <!-- Remote signing (cross-device) - flag-gated, Cardano software wallets -->
+      <v-list-item v-if="canRemoteSigning" class="px-2 py-1" @click="handleRemoteSigningClick">
+        <v-list-item-avatar class="my-0">
+          <v-icon>mdi-cellphone-link</v-icon>
+        </v-list-item-avatar>
+        <v-list-item-content class="py-0">
+          <v-list-item-title class="text-left">
+            <h3 style="color: white; font-size: 16px;">{{ $t('crossDevice.settings.title') }}</h3>
+          </v-list-item-title>
+          <v-list-item-subtitle class="text-left">
+            {{ remoteSigningSubtitle }}
+          </v-list-item-subtitle>
+        </v-list-item-content>
+        <v-list-item-icon class="my-0" style="align-self: center">
+          <v-icon large>mdi-chevron-right</v-icon>
+        </v-list-item-icon>
+      </v-list-item>
+
       <!-- Verify Address on Device (Hardware Wallets Only) -->
       <v-list-item
         v-if="isHardwareWallet && canVerifyAddress"
@@ -357,6 +375,7 @@
 
     <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
     <ChangePasswordDialog :is-open="changePasswordDialog" @close="changePasswordDialog = false" />
+    <RemoteSigningDialog :is-open="remoteSigningDialog" @close="remoteSigningDialog = false" />
 
     <!-- Lock Settings Dialog (Unlock Method + Auto-Lock) -->
     <LockSettingsDialog
@@ -378,6 +397,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, nextTick, toRefs, watch } from 'vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import ChangePasswordDialog from '@/modules/dashboard/dialogs/ChangePasswordDialog.vue';
+import RemoteSigningDialog from '@/modules/dashboard/dialogs/RemoteSigningDialog.vue';
 import LockSettingsDialog from '@/modules/dashboard/dialogs/LockSettingsDialog.vue';
 import PinSetupDialog from '@/modules/dashboard/dialogs/PinSetupDialog.vue';
 import PatternSetupDialog from '@/modules/dashboard/dialogs/PatternSetupDialog.vue';
@@ -392,6 +412,8 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import filters from '@/shared/utils/filters';
 import WalletStore, { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import rules from '@/utils/rules';
@@ -401,6 +423,9 @@ import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
 const { t } = useTranslation();
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
+const remoteSigningDialog = ref<boolean>(false);
+// After the verification overlay succeeds, which dialog to open.
+const verificationTarget = ref<'lockSettings' | 'remoteSigning'>('lockSettings');
 const securitySettingsDialog = ref<boolean>(false);
 const pinSetupDialog = ref<boolean>(false);
 const patternSetupDialog = ref<boolean>(false);
@@ -460,6 +485,23 @@ const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf
 
 const canBackup = computed(() => {
   return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
+});
+
+// Remote signing: shown for Cardano software wallets when the server flag is on.
+const canRemoteSigning = computed(() =>
+  featureFlagsStore.isCrossDeviceSigningEnabled() &&
+  loggedWallet.value?.chain === Blockchain.CARDANO &&
+  loggedWallet.value?.type === WalletType.Normal,
+);
+
+const remoteSigningSubtitle = computed(() => {
+  const s = remoteSigningStore.state.settings;
+  if (!s.enabled) return t('crossDevice.settings.subtitleOff');
+  const count = Object.keys(s.trustedDevices).length;
+  const policyText = s.policy === 'require_remote'
+    ? t('crossDevice.settings.policyRequire')
+    : t('crossDevice.settings.policyAsk');
+  return t('crossDevice.settings.subtitleOn', { count, policy: policyText });
 });
 
 // Computed properties for security settings display
@@ -625,11 +667,20 @@ function handleSecuritySetupComplete() {
   lockSettingsReloadTrigger.value++;
 }
 
-// Handle Lock Settings button click
-async function handleLockSettingsClick() {
-  // If no unlock method is set (none), open dialog directly
-  if (!unlockMethod.value) {
+// Open the dialog the verification was requested for.
+function openVerifiedTarget() {
+  if (verificationTarget.value === 'remoteSigning') {
+    remoteSigningDialog.value = true;
+  } else {
     securitySettingsDialog.value = true;
+  }
+}
+
+// Shared "verify current unlock method, then open the target dialog" flow. When no
+// unlock method is configured, opens directly (nothing to verify against).
+async function startVerifiedOpen() {
+  if (!unlockMethod.value) {
+    openVerifiedTarget();
     return;
   }
 
@@ -652,6 +703,18 @@ async function handleLockSettingsClick() {
   showVerificationOverlay.value = true;
   verificationInput.value = '';
   verificationPattern.value = [];
+}
+
+// Handle Lock Settings button click
+async function handleLockSettingsClick() {
+  verificationTarget.value = 'lockSettings';
+  await startVerifiedOpen();
+}
+
+// Handle Remote Signing button click (auth-gated like Lock Settings)
+async function handleRemoteSigningClick() {
+  verificationTarget.value = 'remoteSigning';
+  await startVerifiedOpen();
 }
 
 // Verification handlers
@@ -741,11 +804,11 @@ async function verifyCurrentMethod() {
       }
     }
     if (isValid) {
-      // Verification successful, open lock settings dialog
+      // Verification successful, open the requested settings dialog
       showVerificationOverlay.value = false;
       verificationInput.value = '';
       verificationPattern.value = [];
-      securitySettingsDialog.value = true;
+      openVerifiedTarget();
     } else {
       verificationInput.value = '';
       verificationPattern.value = [];
@@ -784,12 +847,12 @@ async function handleVerificationPassKeyAuth() {
     const authenticated = await authenticateWebAuthn(webAuthnCredentialId.value);
 
     if (authenticated) {
-      console.log('✅ PassKey verification successful - opening lock settings');
-      // Verification successful, open lock settings dialog
+      console.log('✅ PassKey verification successful - opening settings');
+      // Verification successful, open the requested settings dialog
       showVerificationOverlay.value = false;
       verificationInput.value = '';
       verificationPattern.value = [];
-      securitySettingsDialog.value = true;
+      openVerifiedTarget();
     } else {
       console.error('❌ PassKey verification failed');
       tooltip.value.text = t('security.passKeyAuthFailed');
@@ -856,6 +919,11 @@ onMounted(async () => {
 
   // Load security config
   await loadSecurityConfig();
+
+  // Warm the remote-signing settings so the row subtitle is accurate.
+  if (canRemoteSigning.value) {
+    void remoteSigningStore.ensureLoaded();
+  }
 })
 
 // Watch for overlay visibility and auto-focus the appropriate input
