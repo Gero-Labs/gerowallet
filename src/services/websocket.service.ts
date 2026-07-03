@@ -54,6 +54,10 @@ class WebSocketService {
   private handlers: WsHandlers = {};
   private stakeAddress: string | null = null;
   private credentials: string[] | null = null;
+  // BTC-only: explicit watched address set sent in place of Cardano `credentials`
+  // (CONTRACT-btc-wire.md). Null for Cardano, so the Cardano SUBSCRIBE payload is
+  // unaffected. See openConnection() for the chain-branched SUBSCRIBE.
+  private addresses: string[] | null = null;
   private chain: string | null = null;
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
@@ -83,7 +87,11 @@ class WebSocketService {
     stakeAddress: string,
     lastSyncedBlock: number,
     handlers: WsHandlers,
-    credentials?: string[]
+    credentials?: string[],
+    // BTC subscription identity: the derived watched address set. Cardano leaves
+    // this unset and keeps sending `credentials`. Only the BITCOIN branch of the
+    // SUBSCRIBE payload reads it (CONTRACT-btc-wire.md).
+    addresses?: string[]
   ): void {
     this.close();
     this.chain = chain;
@@ -92,6 +100,7 @@ class WebSocketService {
     this.lastSyncedBlock = lastSyncedBlock;
     this.handlers = handlers;
     this.credentials = credentials || null;
+    this.addresses = addresses || null;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
     this.openConnection();
@@ -120,15 +129,30 @@ class WebSocketService {
       this.reconnectAttempt = 0;
 
       debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock}`);
-      this.send({
-        type: 'SUBSCRIBE',
-        chain: this.chain,
-        network: this.network,
-        address: this.stakeAddress,
-        lastSyncedBlock: this.lastSyncedBlock,
-        credentials: this.credentials,
-        platform: 'extension',
-      });
+      if (this.chain === 'BITCOIN') {
+        // BTC subscribes with the explicit derived address set + snake_case
+        // progress unit (block height). No `credentials` (no stake fan-out).
+        // Kept in a separate branch so the Cardano payload below is byte-identical.
+        this.send({
+          type: 'SUBSCRIBE',
+          chain: this.chain,
+          network: this.network,
+          address: this.stakeAddress, // anchor = segwit external idx 0
+          addresses: this.addresses,
+          last_synced_block: this.lastSyncedBlock,
+          platform: 'extension',
+        });
+      } else {
+        this.send({
+          type: 'SUBSCRIBE',
+          chain: this.chain,
+          network: this.network,
+          address: this.stakeAddress,
+          lastSyncedBlock: this.lastSyncedBlock,
+          credentials: this.credentials,
+          platform: 'extension',
+        });
+      }
 
       // Socket is OPEN and SUBSCRIBE has been queued on this ordered stream. Let
       // subscribers (e.g. cross-device DEVICE_REGISTER) send now, after SUBSCRIBE.
@@ -317,11 +341,21 @@ class WebSocketService {
   private startSyncCheck(): void {
     this.stopSyncCheck();
     this.syncCheckTimer = setInterval(() => {
-      this.send({
-        type: 'SYNC_CHECK',
-        address: this.stakeAddress,
-        lastSyncedBlock: this.lastSyncedBlock,
-      });
+      if (this.chain === 'BITCOIN') {
+        // BTC keep-alive carries chain + snake_case height (CONTRACT-btc-wire.md).
+        this.send({
+          type: 'SYNC_CHECK',
+          chain: this.chain,
+          address: this.stakeAddress,
+          last_synced_block: this.lastSyncedBlock,
+        });
+      } else {
+        this.send({
+          type: 'SYNC_CHECK',
+          address: this.stakeAddress,
+          lastSyncedBlock: this.lastSyncedBlock,
+        });
+      }
     }, this.SYNC_CHECK_INTERVAL);
   }
 

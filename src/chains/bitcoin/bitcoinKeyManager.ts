@@ -225,3 +225,114 @@ export function deriveAddressRange(
   }
   return addresses;
 }
+
+// ---------------------------------------------------------------------------
+// gero-sync subscription identity (BTC ⇄ gero-sync WS — CONTRACT-btc-wire.md)
+//
+// Cardano subscribes with a single stake address that the server fans out to
+// all payment addresses. Bitcoin has no stake grouping, so the wallet instead
+// subscribes with the EXPLICIT derived address set: the union of all three
+// address trees × {external, change} × gap-limit. The helpers below build that
+// set (and a reverse derivation map so server-seen addresses can later be
+// mapped back to their path for gap-limit expansion). They only compose the
+// existing derivation primitives above — no new BIP32 walking.
+// ---------------------------------------------------------------------------
+
+export type BitcoinAddressTypeName = 'legacy' | 'segwit' | 'taproot';
+
+/** Derivation chain: 0 = external (receive), 1 = internal (change). */
+export type BitcoinChainIndex = 0 | 1;
+
+/** Reverse lookup entry: where a watched address sits in the HD tree. */
+export interface BitcoinDerivationInfo {
+  addressType: BitcoinAddressTypeName;
+  chain: BitcoinChainIndex;
+  index: number;
+}
+
+export interface BitcoinAddressSet {
+  /**
+   * Segwit (BIP84) external index 0 — the SUBSCRIBE `address` anchor and the
+   * SYNC_CHECK session key. Stable per wallet (mirrors the Cardano stake addr).
+   */
+  anchor: string;
+  /** Union of every watched address (anchor included), de-duplicated. */
+  addresses: string[];
+  /** address -> {addressType, chain, index} for later path mapping / expansion. */
+  derivationMap: Record<string, BitcoinDerivationInfo>;
+}
+
+/** Default BIP44 gap limit used for the initial watched set. */
+export const DEFAULT_BITCOIN_GAP_LIMIT = 20;
+
+/** All three address trees a Bitcoin wallet watches (CONTRACT-btc-wire.md). */
+export const BITCOIN_ADDRESS_TYPES: BitcoinAddressTypeName[] = ['legacy', 'segwit', 'taproot'];
+
+/**
+ * Build the gero-sync watched address set from a map of account xpubs.
+ *
+ * Derives external (chain 0) + change (chain 1) up to `gapLimit` for every
+ * address type whose account xpub is supplied. Types with no xpub are skipped,
+ * so this works both with the full three-type map (contract-complete union) and
+ * with the single stored xpub the wallet has without decrypting the mnemonic.
+ *
+ * @param accountXpubs Partial map of `m/purpose'/coin'/account'` xpubs by type.
+ * @param network      'Mainnet' | 'Testnet'.
+ * @param gapLimit     Addresses per chain (default 20).
+ */
+export function deriveBitcoinAddressSetFromXpubs(
+  accountXpubs: Partial<Record<BitcoinAddressTypeName, string>>,
+  network: string,
+  gapLimit: number = DEFAULT_BITCOIN_GAP_LIMIT
+): BitcoinAddressSet {
+  const addresses: string[] = [];
+  const derivationMap: Record<string, BitcoinDerivationInfo> = {};
+
+  const add = (addr: string, info: BitcoinDerivationInfo): void => {
+    if (!(addr in derivationMap)) {
+      derivationMap[addr] = info;
+      addresses.push(addr);
+    }
+  };
+
+  for (const addressType of BITCOIN_ADDRESS_TYPES) {
+    const xpub = accountXpubs[addressType];
+    if (!xpub) continue;
+    for (const chain of [0, 1] as BitcoinChainIndex[]) {
+      const range = deriveAddressRange(xpub, network, addressType, chain, gapLimit, 0);
+      range.forEach((addr, index) => add(addr, { addressType, chain, index }));
+    }
+  }
+
+  // Anchor is always segwit external idx 0 (already in `addresses` when the
+  // segwit xpub was supplied). Fall back to the first derived address only when
+  // no segwit xpub is available (e.g. a legacy-only wallet).
+  const segwitXpub = accountXpubs.segwit;
+  const anchor = segwitXpub
+    ? deriveBitcoinAddress(segwitXpub, network, 'segwit', 0, 0)
+    : (addresses[0] ?? '');
+
+  return { anchor, addresses, derivationMap };
+}
+
+/**
+ * Build the contract-complete watched address set (all three types) straight
+ * from a mnemonic. Derives the legacy/segwit/taproot account xpubs via the
+ * existing {@link deriveBitcoinAccountXpub} primitive, then unions them.
+ *
+ * @param mnemonic BIP39 mnemonic phrase.
+ * @param network  'Mainnet' | 'Testnet'.
+ * @param gapLimit Addresses per chain (default 20 → 3×2×20 = 120 addresses).
+ */
+export function deriveBitcoinAddressSet(
+  mnemonic: string,
+  network: string,
+  gapLimit: number = DEFAULT_BITCOIN_GAP_LIMIT
+): BitcoinAddressSet {
+  const accountXpubs: Record<BitcoinAddressTypeName, string> = {
+    legacy: deriveBitcoinAccountXpub(mnemonic, network, 'legacy'),
+    segwit: deriveBitcoinAccountXpub(mnemonic, network, 'segwit'),
+    taproot: deriveBitcoinAccountXpub(mnemonic, network, 'taproot'),
+  };
+  return deriveBitcoinAddressSetFromXpubs(accountXpubs, network, gapLimit);
+}
