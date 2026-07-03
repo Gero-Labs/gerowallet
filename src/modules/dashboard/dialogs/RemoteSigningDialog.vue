@@ -147,6 +147,50 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Enable-time auth: sign the one-time wallet-control proof before turning on -->
+    <v-dialog :value="enableAuthOpen" max-width="380" persistent @input="(v) => { if (!v) cancelEnableAuth(); }">
+      <v-card class="liquid-glass rs-confirm-card" rounded="lg">
+        <v-card-title class="rs-title px-4 pt-4 pb-1">{{ $t('crossDevice.settings.enableAuthTitle') }}</v-card-title>
+        <v-card-text class="px-4 pb-2">
+          <p class="rs-hint mb-3">{{ $t('crossDevice.settings.enableAuthBody') }}</p>
+
+          <PassKeyAuthButton
+            v-if="isPrfWallet"
+            :disabled="enableBusy"
+            @success="onEnablePasskeySuccess"
+            @error="onEnablePasskeyError"
+          />
+          <v-text-field
+            v-else
+            v-model="enablePassword"
+            type="password"
+            outlined
+            dense
+            autofocus
+            hide-details
+            :label="$t('wallet.spendingPassword')"
+            :disabled="enableBusy"
+            @keyup.enter="confirmEnableWithPassword"
+          />
+
+          <div v-if="enableError" class="rs-error mt-2">{{ enableError }}</div>
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4 pt-0">
+          <v-btn text small :disabled="enableBusy" @click="cancelEnableAuth">{{ $t('common.cancel') }}</v-btn>
+          <v-spacer />
+          <v-btn
+            v-if="!isPrfWallet"
+            small
+            color="#00DFF3"
+            class="black--text font-weight-bold"
+            :loading="enableBusy"
+            :disabled="!enablePassword"
+            @click="confirmEnableWithPassword"
+          >{{ $t('crossDevice.settings.enableConfirm') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-dialog>
 </template>
 
@@ -156,6 +200,9 @@ import { remoteSigningStore, type CrossDeviceListEntry } from '@/stores/remoteSi
 import { pairingFingerprint, type SigningPolicy } from '@/services/crossDevice/crossDeviceTrust';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import { walletStore } from '@/stores/walletStore';
+import { WalletType } from '@/models/types';
 
 const props = defineProps<{ isOpen: boolean }>();
 // Template emits via $emit('close'); declared here for type-checking.
@@ -191,8 +238,79 @@ const trustedAt = (deviceId: string): string => {
   }
 };
 
+// Wallet-type detection drives the enable-time auth: software wallets sign the
+// one-time wallet-control proof (password or passkey), hardware wallets cannot
+// COSE-sign in the background (v1 exclusion) so they enable without one.
+const loggedWallet = computed(() => walletStore.loggedWallet as {
+  type?: string; encryptionMethod?: string; prfEncryptedPrivateKey?: string; webAuthnCredentialId?: string;
+} | null);
+const isPrfWallet = computed(() =>
+  loggedWallet.value?.encryptionMethod === 'prf'
+  || (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId),
+);
+const isHardwareWallet = computed(() => {
+  const type = loggedWallet.value?.type;
+  return type === WalletType.Ledger || type === WalletType.Trezor || type === WalletType.Keystone;
+});
+
+const enableAuthOpen = ref(false);
+const enablePassword = ref('');
+const enableBusy = ref(false);
+const enableError = ref('');
+
 async function onToggleEnabled(value: boolean) {
-  await remoteSigningStore.setEnabled(!!value);
+  if (!value) {
+    await remoteSigningStore.setEnabled(false);
+    return;
+  }
+  // Turning ON. Hardware wallets enable directly (no background COSE proof in v1).
+  if (isHardwareWallet.value) {
+    await remoteSigningStore.setEnabled(true);
+    return;
+  }
+  enableError.value = '';
+  enablePassword.value = '';
+  enableAuthOpen.value = true;
+}
+
+async function runEnableProof(auth: { password?: string; privateKeyBytes?: number[] }) {
+  if (enableBusy.value) return;
+  enableBusy.value = true;
+  enableError.value = '';
+  try {
+    const res = await remoteSigningStore.produceProof(auth);
+    if (!res.success) {
+      enableError.value = t('crossDevice.settings.enableProofFailed');
+      return;
+    }
+    await remoteSigningStore.setEnabled(true);
+    enableAuthOpen.value = false;
+    enablePassword.value = '';
+  } catch (e) {
+    enableError.value = (e as Error)?.message || t('crossDevice.settings.enableProofFailed');
+  } finally {
+    enableBusy.value = false;
+  }
+}
+
+function confirmEnableWithPassword() {
+  if (!enablePassword.value) return;
+  void runEnableProof({ password: enablePassword.value });
+}
+
+function onEnablePasskeySuccess(bytes: Uint8Array) {
+  void runEnableProof({ privateKeyBytes: Array.from(bytes) });
+}
+
+function onEnablePasskeyError(e: Error) {
+  enableError.value = e?.message || t('crossDevice.settings.enableProofFailed');
+}
+
+function cancelEnableAuth() {
+  enableAuthOpen.value = false;
+  enablePassword.value = '';
+  enableError.value = '';
+  enableBusy.value = false;
 }
 
 async function onPolicyChange(value: SigningPolicy) {
@@ -231,7 +349,7 @@ watch(
   () => props.isOpen,
   (open) => {
     if (open) void remoteSigningStore.refresh();
-    else pairingCandidate.value = null;
+    else { pairingCandidate.value = null; cancelEnableAuth(); }
   },
   { immediate: true },
 );
@@ -265,6 +383,7 @@ watch(
 .rs-note { border: 1px solid rgba(255,255,255,0.06) !important; }
 .rs-note-text { font-size: 11.5px; color: #9aa5b5; line-height: 1.4; }
 .rs-confirm-card { background: rgba(18, 20, 26, 0.96) !important; color: #fff; }
+.rs-error { font-size: 12px; color: #ff6b6b; line-height: 1.35; }
 .rs-confirm-code {
   font-family: 'Courier New', monospace;
   font-size: 26px;
