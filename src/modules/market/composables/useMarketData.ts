@@ -1,6 +1,6 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef, type WatchStopHandle } from 'vue';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { walletStore } from '@/stores/walletStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
@@ -90,7 +90,7 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
   const assetId = apiToken.assetId;
 
   // DexHunter data as fallback for fields the backend doesn't yet provide
-  const dhToken = (dexHunterStore.dexHunterTokens as Record<string, any>)[assetId];
+  const dhToken = (tokenMetadataStore.tokens as Record<string, any>)[assetId];
 
   // Fingerprint: prefer API, fallback to DexHunter
   const fingerprint = apiToken.fingerprint || dhToken?.fingerprint || '';

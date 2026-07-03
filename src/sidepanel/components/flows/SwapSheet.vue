@@ -485,7 +485,7 @@ import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
+import TokenMetadataStore, { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import dexHunterApi from '@/api/dexhunter-api';
@@ -511,7 +511,7 @@ const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
 const { t } = useTranslation();
 const { loggedWallet, tokens: resolvedAssets, utxos, keys } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { dexHunterTokens } = toRefs(dexHunterStore);
+const { tokens: dexHunterTokens } = toRefs(tokenMetadataStore);
 
 // Token images/metadata come from main-page market data (keyed by unit), not DexHunter.
 const { getTokenByUnit, getTokenImage } = useMarketData();
@@ -1058,7 +1058,7 @@ async function executeSwap() {
     }
 
     // 2. Register address
-    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+    await TokenMetadataStore.registerAddress(loggedWallet.value?.baseAddress);
 
     // 3. Build swap tx
     const amount = Number(selectedTokenA.value.quantity.toString().replaceAll(',', ''));
@@ -1119,7 +1119,7 @@ async function onPassKeySuccess(pkBytes: Uint8Array) {
   passwordError.value = '';
 
   try {
-    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+    await TokenMetadataStore.registerAddress(loggedWallet.value?.baseAddress);
 
     const amount = Number(selectedTokenA.value.quantity.toString().replaceAll(',', ''));
     let swapRes: any;
@@ -1178,7 +1178,7 @@ async function signLedger() {
   passwordError.value = '';
 
   try {
-    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+    await TokenMetadataStore.registerAddress(loggedWallet.value?.baseAddress);
 
     const amount = Number(selectedTokenA.value.quantity.toString().replaceAll(',', ''));
     let swapRes: any;
@@ -1232,7 +1232,7 @@ async function signTrezor() {
   passwordError.value = '';
 
   try {
-    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+    await TokenMetadataStore.registerAddress(loggedWallet.value?.baseAddress);
 
     const amount = Number(selectedTokenA.value.quantity.toString().replaceAll(',', ''));
     let swapRes: any;
@@ -1286,7 +1286,7 @@ async function signKeystone() {
   passwordError.value = '';
 
   try {
-    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+    await TokenMetadataStore.registerAddress(loggedWallet.value?.baseAddress);
 
     const amount = Number(selectedTokenA.value.quantity.toString().replaceAll(',', ''));
     let swapRes: any;

@@ -257,7 +257,7 @@ import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
-import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
+import TokenMetadataStore, { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import filters from '@/shared/utils/filters';
 import cardanoSvg from '@/assets/svg/cardano.svg';
@@ -271,7 +271,7 @@ const { t } = useTranslation();
 
 // Store refs
 const { loggedWallet, tokens } = toRefs(walletStore);
-const { dexHunterTokens } = toRefs(dexHunterStore);
+const { tokens: dexHunterTokens } = toRefs(tokenMetadataStore);
 
 // Token images come from main-page market data (keyed by unit), not DexHunter.
 const { getTokenImage } = useMarketData();
@@ -326,7 +326,7 @@ const lastFunctionCalled = ref<string>('estimate');
 const intervalId = ref<any>(0);
 const loading = ref<boolean>(false);
 const blacklisted_dexes = ref<any[]>([]);
-const search = ref(DexHunterStore.searchTokens);
+const search = ref(TokenMetadataStore.searchTokens);
 const poolError = ref<boolean>(false);
 const limit = ref<string>('0.0000000');
 const limitType = ref<string>('one');

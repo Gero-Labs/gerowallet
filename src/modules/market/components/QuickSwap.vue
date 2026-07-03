@@ -100,7 +100,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import dexHunterApi from '@/api/dexhunter-api';
-import DexHunterStore from '@/stores/dexHunterStore';
+import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -248,7 +248,7 @@ async function executeSwap() {
     if (!loggedWallet?.baseAddress) throw new Error('No wallet connected');
 
     // Register address with DexHunter
-    await DexHunterStore.registerAddress(loggedWallet.baseAddress);
+    await TokenMetadataStore.registerAddress(loggedWallet.baseAddress);
 
     // Build swap transaction — amount in main units (same as SwapWidget)
     const swapRes = await dexHunterApi.swap(

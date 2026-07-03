@@ -274,7 +274,7 @@ import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrenc
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { priceStore } from '@/stores/priceStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain, Network } from '@/models/types';
@@ -533,7 +533,7 @@ const myHoldings = computed<MarketToken[]>(() => {
   const adaPriceUsd = isApex.value
     ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
     : (priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0);
-  const dhTokens = dexHunterStore.dexHunterTokens || {};
+  const dhTokens = tokenMetadataStore.tokens || {};
   const holdings: MarketToken[] = [];
 
   Object.entries(tokens).forEach(([unit, token]: [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }]) => {

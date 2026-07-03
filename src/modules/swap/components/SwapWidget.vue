@@ -275,7 +275,7 @@ import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
-import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
+import TokenMetadataStore, { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
@@ -302,7 +302,7 @@ const isSwapEnabled = computed(() => {
 
 const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { dexHunterTokens } = toRefs(dexHunterStore);
+const { tokens: dexHunterTokens } = toRefs(tokenMetadataStore);
 const { utxos } = toRefs(walletStore);
 
 const isUpdating = ref<boolean>(false);
@@ -349,7 +349,7 @@ const loading = ref<boolean>(false);
 const swapOverviewToggle = ref<boolean>(false);
 const pairPriceToggle = ref<boolean>(false);
 const blacklisted_dexes = ref([]);
-const search = ref(DexHunterStore.searchTokens);
+const search = ref(TokenMetadataStore.searchTokens);
 const poolError = ref<boolean>(false);
 const limit = ref<string>('0.0000000');
 const limitType = ref<string>('one');
@@ -786,7 +786,7 @@ const prepareSwap = async () => {
   const amount = Number(selectedTokenA.value['quantity'].replaceAll(',', ''));
   try {
     // Register address with DexHunter before swapping (if not already registered)
-    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+    await TokenMetadataStore.registerAddress(loggedWallet.value?.baseAddress);
 
     if (swapType.value === 'swap') {
       const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
