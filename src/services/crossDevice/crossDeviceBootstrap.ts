@@ -13,7 +13,6 @@
 // pubkeys resolve, so inbound messages are dropped, the safe default for a dark
 // feature. See docs/plans/2026-06-29-cross-device-signing-contract.md.
 
-import featureFlagsStore from '@/stores/featureFlagsStore';
 import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDeviceSigning.service';
@@ -25,6 +24,15 @@ export interface CrossDeviceHandles {
   signing: CrossDeviceSigning;
   /** Feed an inbound raw relay message (wired into WsHandlers.onCrossDeviceMessage). */
   onCrossDeviceMessage: (raw: unknown) => void;
+  /**
+   * Publish this device's DEVICE_REGISTER over the transport. MUST be called only
+   * once the socket is OPEN and has already SUBSCRIBE'd on the same ordered stream:
+   * the relay rejects a DEVICE_REGISTER from a session that has not SUBSCRIBE'd, and
+   * an unopened socket silently drops the send. Wire this to the WS onopen path so it
+   * fires on the initial connect and on every reconnect (the relay upserts by
+   * deviceId, so repeat registers are idempotent).
+   */
+  register(): void;
   dispose(): void;
 }
 
@@ -52,13 +60,20 @@ function publishDeviceRegister(
 
 /**
  * Gated bootstrap for the cross-device signing bridge. Returns null (and does
- * nothing) when the feature flag is off.
+ * nothing) when the feature is off.
+ *
+ * The flag decision is passed in by the caller rather than read here, because
+ * this runs in the background service worker where the EventSource-based flag
+ * service cannot run and featureFlagsStore is never initialized. walletManager
+ * reads the flag from chrome.storage.local (mirrored there by the UI) and passes
+ * it as `enabled`.
  */
 export function bootstrapCrossDeviceSigning(opts: {
   label: string;
   hasSigningKey: boolean;
+  enabled: boolean;
 }): CrossDeviceHandles | null {
-  if (!featureFlagsStore.isCrossDeviceSigningEnabled()) {
+  if (!opts.enabled) {
     return null;
   }
 
@@ -83,21 +98,28 @@ export function bootstrapCrossDeviceSigning(opts: {
     newId: () => globalThis.crypto.randomUUID(),
   });
 
-  try {
-    publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: keypair.pubKeyHex }, {
-      label: opts.label,
-      platform: 'extension',
-      hasSigningKey: opts.hasSigningKey,
-    });
-  } catch (e) {
-    debugLog('cross-device DEVICE_REGISTER failed:', e);
-  }
+  // NOTE: DEVICE_REGISTER is NOT sent here. At bootstrap time the socket is not yet
+  // open (walletManager builds this before webSocketService.connect), so a send would
+  // be dropped, and the relay would reject it anyway because SUBSCRIBE has not gone
+  // out. It is published from the WS onopen path via register() below instead.
+  const register = (): void => {
+    try {
+      publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: keypair.pubKeyHex }, {
+        label: opts.label,
+        platform: 'extension',
+        hasSigningKey: opts.hasSigningKey,
+      });
+    } catch (e) {
+      debugLog('cross-device DEVICE_REGISTER failed:', e);
+    }
+  };
 
   debugLog('🔗 Cross-device signing bridge wired (dark):', deviceId);
 
   return {
     signing,
     onCrossDeviceMessage: feedCrossDeviceMessage,
+    register,
     dispose: () => {
       unsubRegistry();
       signing.dispose();
