@@ -97,6 +97,7 @@ Client can't meaningfully dual-run until gero-sync BTC is real:
 1. **Types:** widen tip (C) — unblocks everything, no behavior change.
 2. **Subscribe:** BTC `SUBSCRIBE` identity + credential analog (D), behind a flag; connect BTC WS without removing the poller yet (dual-run to compare).
 3. **Apply:** `convertBtcUtxos` + BTC branch in `setSync`; feed `WalletStore` from server payload.
+   - Phase-1 follow-up: `networkStore.getCurrentBlockHeight()` currently returns `null` for a BTC tip (guarded to preserve no-behavior-change). BTC has a height — make it return `tip.height` when `isBitcoinTip(tip)`.
 4. **Rollback:** BTC reorg branch in `handleRollback`.
 5. **Cutover:** remove BTC gates (A), delete poller (B), verify dApp consumers unchanged.
 6. **Verify:** parity vs old poll (balance/utxos/tx history), reorg, gap-limit growth, catch-up, MV3 keep-alive (<30s), lock/unlock.
