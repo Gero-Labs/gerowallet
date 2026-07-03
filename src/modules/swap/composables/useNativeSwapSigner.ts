@@ -123,6 +123,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
       cardanoUtxos(),
       !(opts.getIsBT?.() ?? false),
       networks.resolveNetwork(w?.chain, w?.network),
+      cbor,
     );
     const transactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
     return transactionWitnessSet.toCbor() as unknown as string;
