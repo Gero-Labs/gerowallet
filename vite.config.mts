@@ -279,6 +279,7 @@ export default defineConfig(({ command }) => {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
                 dest: 'extension/assets'
               },
+              { src: 'src/vendor/gero-swap/*', dest: 'extension/vendor/gero-swap', flatten: true },
             ],
             hook: 'writeBundle',
             copySync: false, // Async copying

@@ -13,6 +13,11 @@
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Quicksand:wght@300;400;500;600;700&family=Geologica:wght@100;300;400;500;700;900&family=Baloo+2:wght@400;500;600;700;800&family=Noto+Sans+Hebrew:wght@100;300;400;500;700;900&display=swap"
         rel="stylesheet">
+  <!-- media="all" (Vite's own no-op-passthrough attribute, see rollup-vite#6748) stops Vite's HTML
+       transform from converting this into a JS import (which fails at build time since the vendor
+       copy target only runs at writeBundle) and keeps the literal href intact for runtime loading. -->
+  <link rel="stylesheet" href="/vendor/gero-swap/gero-swap.css" media="all" />
+  <script src="/vendor/gero-swap/gero-swap.js"></script>
 </head>
 <body>
 <div id="app"></div>
