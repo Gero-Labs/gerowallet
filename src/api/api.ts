@@ -259,4 +259,29 @@ export class Api {
       },
     },
   };
+
+  mpc = {
+    /** Store the login share after backend verifies the Google idToken (Plan B /enroll). */
+    enroll: async (idToken: string, chain: string, network: string, loginShare: string): Promise<{ stored: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/enroll',
+          { idToken, chain, network, loginShare });
+        if (status === 200) return data as { stored: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Retrieve the login share; backend verifies the Google idToken (Plan B /login-share). */
+    getLoginShare: async (idToken: string, chain: string, network: string): Promise<string> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/login-share',
+          { idToken, chain, network });
+        if (status === 200) return (data as { loginShare: string }).loginShare;
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+  };
 }
