@@ -841,6 +841,8 @@ export default {
   'crossDevice.settings.enableAuthBody': 'Sign a one-time proof that links this device to your wallet. It is stored locally and lets your trusted devices confirm that signing requests really come from you.',
   'crossDevice.settings.enableConfirm': 'Confirm and enable',
   'crossDevice.settings.enableProofFailed': 'Could not create the device proof. Check your password and try again.',
+  'crossDevice.settings.online': 'Online',
+  'crossDevice.settings.offline': 'Offline',
   'dashboard.actions': 'Actions',
   'dashboard.adaOnly': 'ADA Only',
   'dashboard.adaOnlyTooltip': 'Showing ADA balance only',

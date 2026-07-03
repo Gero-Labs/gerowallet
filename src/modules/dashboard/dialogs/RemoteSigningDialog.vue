@@ -47,12 +47,12 @@
                 </div>
               </template>
             </v-radio>
-            <v-radio value="require_remote" color="#00DFF3" :disabled="!hasTrustedSigner">
+            <v-radio value="require_remote" color="#00DFF3" :disabled="!hasPairedDevice">
               <template #label>
                 <div>
                   <div class="rs-radio-title">{{ $t('crossDevice.settings.policyRequire') }}</div>
                   <div class="rs-hint">
-                    {{ hasTrustedSigner ? $t('crossDevice.settings.policyRequireHint') : $t('crossDevice.settings.needTrustedForPolicy') }}
+                    {{ hasPairedDevice ? $t('crossDevice.settings.policyRequireHint') : $t('crossDevice.settings.needTrustedForPolicy') }}
                   </div>
                 </div>
               </template>
@@ -75,17 +75,17 @@
           <div class="rs-label mb-2 mt-3">{{ $t('crossDevice.settings.detected') }}</div>
           <p class="rs-pair-hint">{{ $t('crossDevice.settings.pairHint') }}</p>
 
-          <div v-if="otherDevices.length === 0" class="rs-empty">
+          <div v-if="deviceList.length === 0" class="rs-empty">
             <v-icon color="#5a6472" class="mb-1">mdi-cellphone-off</v-icon>
             <div class="rs-hint">{{ $t('crossDevice.settings.noDevices') }}</div>
             <div class="rs-hint">{{ $t('crossDevice.settings.noDevicesHint') }}</div>
           </div>
 
           <div
-            v-for="entry in otherDevices"
+            v-for="entry in deviceList"
             :key="entry.device.deviceId"
             class="rs-device d-flex align-center"
-            :class="{ 'rs-trusted': entry.trusted }"
+            :class="{ 'rs-trusted': entry.trusted, 'rs-offline': !entry.online }"
           >
             <v-icon class="mr-3" :color="entry.trusted ? '#00DFF3' : '#8a94a6'">
               {{ platformIcon(entry.device.platform) }}
@@ -94,6 +94,9 @@
               <div class="rs-device-label">
                 {{ entry.device.label || $t('crossDevice.settings.unnamed') }}
                 <v-icon v-if="entry.trusted" x-small color="#00DFF3" class="ml-1">mdi-shield-check</v-icon>
+                <span class="rs-status" :class="entry.online ? 'rs-online' : 'rs-off'">
+                  {{ entry.online ? $t('crossDevice.settings.online') : $t('crossDevice.settings.offline') }}
+                </span>
               </div>
               <div class="rs-fingerprint">{{ $t('crossDevice.settings.fingerprint') }}: {{ fingerprint(entry.device.pubKey) }}</div>
               <div v-if="entry.trusted && trustedAt(entry.device.deviceId)" class="rs-hint">
@@ -105,6 +108,7 @@
               small
               outlined
               color="#00DFF3"
+              :disabled="!entry.online"
               :loading="busy"
               @click="startPairing(entry)"
             >{{ $t('crossDevice.settings.pair') }}</v-btn>
@@ -214,10 +218,33 @@ const state = remoteSigningStore.state;
 const busy = computed(() => state.loading);
 const enabled = computed(() => state.settings.enabled);
 const policy = computed(() => state.settings.policy);
-const hasTrustedSigner = computed(() => remoteSigningStore.hasTrustedSigner());
+// Persistent pairing gates the policy toggle (survives the phone going offline).
+const hasPairedDevice = computed(() => remoteSigningStore.hasPairedDevice());
 
 const selfEntry = computed(() => state.devices.find((e) => e.isSelf) || null);
-const otherDevices = computed(() => state.devices.filter((e) => !e.isSelf));
+
+// Merge the live registry with persisted paired devices, so a paired phone still
+// appears (as "offline") when it briefly drops instead of vanishing from the list.
+// Live entries win; a paired device not currently live is synthesized from
+// settings so the user can still see and untrust it. Pairing is only offered for
+// ONLINE untrusted devices (an offline device isn't in the registry to verify).
+type DeviceRow = CrossDeviceListEntry & { online: boolean };
+const deviceList = computed<DeviceRow[]>(() => {
+  const live: DeviceRow[] = state.devices.filter((e) => !e.isSelf).map((e) => ({ ...e, online: true }));
+  const liveIds = new Set(live.map((e) => e.device.deviceId));
+  const offline: DeviceRow[] = Object.values(state.settings.trustedDevices)
+    .filter((td) => !liveIds.has(td.deviceId))
+    .map((td) => ({
+      device: {
+        deviceId: td.deviceId, pubKey: td.pubKey, label: td.label,
+        platform: td.platform, hasSigningKey: true,
+      } as CrossDeviceListEntry['device'],
+      trusted: true,
+      isSelf: false,
+      online: false,
+    }));
+  return [...live, ...offline];
+});
 
 const fingerprint = (pubKey: string) => pairingFingerprint(pubKey);
 
@@ -314,7 +341,7 @@ function cancelEnableAuth() {
 }
 
 async function onPolicyChange(value: SigningPolicy) {
-  if (value === 'require_remote' && !hasTrustedSigner.value) return; // guarded in UI
+  if (value === 'require_remote' && !hasPairedDevice.value) return; // guarded in UI
   await remoteSigningStore.setPolicy(value);
 }
 
@@ -336,8 +363,8 @@ async function confirmPairing() {
 
 async function onUntrust(deviceId: string) {
   await remoteSigningStore.untrust(deviceId);
-  // If untrusting removed the last signer, drop back to "ask" so the policy is coherent.
-  if (!hasTrustedSigner.value && policy.value === 'require_remote') {
+  // If untrusting removed the last paired device, drop back to "ask" so the policy is coherent.
+  if (!hasPairedDevice.value && policy.value === 'require_remote') {
     await remoteSigningStore.setPolicy('ask');
   }
 }
@@ -396,6 +423,10 @@ onBeforeUnmount(stopDevicePoll);
   margin-bottom: 8px;
 }
 .rs-device.rs-trusted { border-color: rgba(0, 223, 243, 0.4); background: rgba(0, 223, 243, 0.05); }
+.rs-device.rs-offline { opacity: 0.6; }
+.rs-status { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; }
+.rs-status.rs-online { color: #37d67a; }
+.rs-status.rs-off { color: #8a94a6; }
 .rs-self { opacity: 0.85; }
 .rs-device-label { font-size: 14px; color: #fff; }
 .rs-fingerprint { font-size: 12px; color: #9aa5b5; font-family: 'Courier New', monospace; letter-spacing: 0.5px; }

@@ -121,9 +121,19 @@ export const remoteSigningStore = {
   policy(): SigningPolicy {
     return state.settings.policy;
   },
-  /** A trusted, signing-capable sibling exists -> remote signing can actually complete. */
+  /** A trusted, signing-capable sibling is ONLINE now -> remote signing can complete right now. */
   hasTrustedSigner(): boolean {
     return state.devices.some((e) => e.trusted && !e.isSelf && e.device.hasSigningKey);
+  },
+  /**
+   * A device is PAIRED (persistent), regardless of whether it is online right now.
+   * Gates the "require a trusted device" option: presence flaps (phone sleeps, MV3
+   * worker recycles), so keying the policy toggle to live presence made it grey out
+   * constantly. The send flow stays fail-closed at approval time (an offline device
+   * simply cannot approve), so arming the policy while paired-but-offline is safe.
+   */
+  hasPairedDevice(): boolean {
+    return Object.keys(state.settings.trustedDevices).length > 0;
   },
   /** Send must be approved remotely (policy on + enabled). */
   requiresRemoteForSend(): boolean {

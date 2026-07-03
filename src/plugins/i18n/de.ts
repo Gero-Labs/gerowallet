@@ -949,6 +949,8 @@ export default {
   'crossDevice.settings.enableAuthBody': 'Signieren Sie einen einmaligen Nachweis, der dieses Gerät mit Ihrer Wallet verknüpft. Er wird lokal gespeichert und ermöglicht es Ihren vertrauenswürdigen Geräten zu bestätigen, dass Signieranfragen wirklich von Ihnen stammen.',
   'crossDevice.settings.enableConfirm': 'Bestätigen und aktivieren',
   'crossDevice.settings.enableProofFailed': 'Der Gerätenachweis konnte nicht erstellt werden. Überprüfen Sie Ihr Passwort und versuchen Sie es erneut.',
+  'crossDevice.settings.online': 'Online',
+  'crossDevice.settings.offline': 'Offline',
   'dashboard.actions': 'Aktionen',
   'dashboard.adaOnly': 'Nur ADA',
   'dashboard.adaOnlyTooltip': 'Zeigt nur das ADA-Guthaben an',
