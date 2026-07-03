@@ -15,6 +15,22 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 export type SigningPolicy = 'ask' | 'require_remote';
 
+/**
+ * Fail-closed flip (coordinated with iOS `CrossDeviceRegisterProofVerifier.requireProofToPair`).
+ *
+ * false = verify-if-present (current rollout state): a device that presents a
+ * wallet-control proof MUST verify it to pair; a device with NO proof falls back
+ * to SAS-only pairing. true = require a valid proof to pair (a MISSING proof is
+ * also rejected).
+ *
+ * Keep false until BOTH clients flip in the SAME coordinated release, or one
+ * client bricks pairing against the other. The feature is dark
+ * (isCrossDeviceSigningEnabled default false, no in-the-wild TOFU pairings), so
+ * the flip needs no migration. See
+ * docs/plans/2026-07-03-authenticated-device-register-contract.md (Rollout step 4).
+ */
+export const REQUIRE_PROOF_TO_PAIR = false;
+
 /** A device the user has explicitly paired. Pinned by (deviceId, pubKey). */
 export interface TrustedDevice {
   deviceId: string;
