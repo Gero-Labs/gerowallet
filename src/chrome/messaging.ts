@@ -1,5 +1,6 @@
 import { APIError, BITCOIN_METHOD, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
+import { EXTENSION_PAGE_ONLY_METHODS, isOwnExtensionPageSender } from './senderTrust';
 
 interface Message {
   method?: string;
@@ -28,37 +29,6 @@ interface PortMessage {
   error?: unknown;
 }
 
-/**
- * Sensitive options-context handlers that must originate from an OWN extension
- * page (the wallet UI), never a content script that put `sender:'options'` in the
- * message body. Scoped to the cross-device settings/signing mutators to keep this
- * router-level trust check's blast radius small. Defense-in-depth: there is no
- * page delivery path to these today (no externally_connectable, and content.ts
- * only relays WC_PAIR), but the router otherwise dispatches purely on the body
- * `sender` string, so this stops a future generic content-script relay.
- */
-const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
-  'SET_REMOTE_SIGNING_ENABLED',
-  'SET_CROSS_DEVICE_POLICY',
-  'TRUST_CROSS_DEVICE',
-  'UNTRUST_CROSS_DEVICE',
-  'REQUEST_CROSS_DEVICE_SIGNATURE',
-]);
-
-/**
- * True only for a message from one of this extension's own pages (popup, options,
- * side panel, in a tab or not). The reliable distinguisher from a content script
- * is the URL scheme: an extension page reports a chrome-extension:// URL, whereas
- * a content script reports the http(s) page URL even though sender.id is the
- * extension id. (sender.tab is NOT a distinguisher — an extension page opened in
- * a tab also carries one.)
- */
-function isOwnExtensionPageSender(sender?: chrome.runtime.MessageSender): boolean {
-  if (!sender || sender.id !== chrome.runtime?.id) return false;
-  const url = sender.url ?? '';
-  const origin = (sender as { origin?: string }).origin ?? '';
-  return url.startsWith('chrome-extension://') || origin.startsWith('chrome-extension://');
-}
 
 /**
  * Per-tab registry of side-panel onConnect listeners, so we can clean up
@@ -290,9 +260,11 @@ class BackgroundController {
           } else if (request.sender === SENDER.options && request.method && this.optionsMethodList[request.method]) {
             // Trust boundary: sensitive cross-device handlers must come from an
             // own extension page, not a content script forging sender:'options'.
-            if (EXTENSION_PAGE_ONLY_METHODS.has(request.method) && !isOwnExtensionPageSender(sender)) {
+            if (EXTENSION_PAGE_ONLY_METHODS.has(request.method) && !isOwnExtensionPageSender(sender, chrome.runtime?.id)) {
               console.warn('Rejected sensitive options-context message from untrusted sender:', request.method);
-              sendResponse({ error: 'Unauthorized sender' });
+              // Match the envelope callers unwrap (res.data.success) so a rejection
+              // is a clean failure, not a TypeError on undefined data.
+              sendResponse({ id: request.id, data: { success: false, error: 'Unauthorized sender' }, target: TARGET, sender: SENDER.extension });
               return true;
             }
             this.optionsMethodList[request.method](request, sendResponse);
