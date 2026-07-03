@@ -24,3 +24,10 @@ export class RecoveryDecryptError extends MpcError {
     this.name = 'RecoveryDecryptError';
   }
 }
+
+export class MpcValidationError extends MpcError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MpcValidationError';
+  }
+}
