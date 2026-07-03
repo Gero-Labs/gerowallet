@@ -8,7 +8,7 @@
       large
       @click="googleLogin"
       :loading="loadingGoogleLogin"
-      :disabled="!props.selectedNetwork?.zkFoldSupport"
+      :disabled="!props.selectedNetwork?.zkSmartWalletSupport"
     >
       <v-avatar size="24" class="mr-2">
         <v-img :src="google" />
@@ -19,7 +19,7 @@
         outlined
         x-small
         class="px-1 ml-2"
-        v-if="!props.selectedNetwork?.zkFoldSupport"
+        v-if="!props.selectedNetwork?.zkSmartWalletSupport"
       >Soon</v-chip>
     </GButton>
 

@@ -23,27 +23,28 @@
 
 ---
 
-### Task 1: Establish the green baseline
+### Task 1: Record the baseline (NOT required green)
 
-**Files:** none (verification only)
+> **Correction (2026-07-04):** this repo is NOT green on typecheck/lint even on `development` — ~141 pre-existing `vue-tsc` errors, ~1123 pre-existing `no-explicit-any` lint errors, and 1 unrelated failing test (`crossDeviceTrust.spec.ts`), all branch-independent. The gate is therefore **baseline-relative: the rename must introduce NO NEW failures**, not achieve green. Lint scope is touched-files-only per CLAUDE.md. The hard functional gate is **`npm run build` succeeds** + **test results unchanged** + **grep-gate zero**.
+
+**Files:** none (verification only). Note: `npm run typecheck`/`vue-tsc` needs the generated `src/auto-imports.d.ts` (gitignored) — run `npm run build` once first if it is missing.
 
 **Interfaces:**
-- Produces: a known-good baseline (typecheck + tests + build all pass) so any post-rename failure is attributable to the rename.
+- Produces: recorded baseline counts so any post-rename delta is attributable to the rename.
 
-- [ ] **Step 1: Confirm typecheck passes**
+- [ ] **Step 1: Record typecheck baseline**
 
-Run: `npm run typecheck`
-Expected: exit 0, no errors.
+Run: `npm run typecheck 2>&1 | grep -c "error TS"` (record the count, e.g. ~141). Do NOT attempt to fix pre-existing errors.
 
-- [ ] **Step 2: Confirm the existing test suite passes**
+- [ ] **Step 2: Record test baseline**
 
-Run: `npx vitest run`
-Expected: all suites pass (record the pass count).
+Run: `npx vitest run 2>&1 | tail -5` (record e.g. `326 passed, 1 failed` and the failing file name — expected `crossDeviceTrust.spec.ts`, unrelated).
 
-- [ ] **Step 3: Record current zkFold footprint**
+- [ ] **Step 3: Record lint + build + zkFold baselines**
 
-Run: `grep -rniI "zkfold" src/ | wc -l`
-Expected: `142` (record actual number as the baseline to drive to the exempted set).
+Run: `npm run lint 2>&1 | tail -2` (record the problem count).
+Run: `npm run build 2>&1 | tail -3` (record: must succeed — this is the hard baseline gate).
+Run: `grep -rniI "zkfold" src/ | wc -l` (record, e.g. `142`).
 
 ---
 
@@ -128,32 +129,39 @@ Expected end state: `npm run typecheck` exit 0.
 
 ---
 
-### Task 4: Verify, lint, build, and gate on the grep
+### Task 4: Verify (baseline-relative), build, and gate on the grep
 
-**Files:** none (verification) + any lint fixes.
+**Files:** none (verification) + any lint fixes in touched files.
 
-- [ ] **Step 1: Lint the touched files**
+- [ ] **Step 1: Lint — no NEW errors in touched files**
 
-Run: `npm run lint`
-Expected: no errors. Fix any lint issue introduced (repo rule: fix lint in every touched file).
+Run: `npm run lint 2>&1 | tail -2`
+Expected: problem count **not greater** than the Task 1 baseline. Any increase must be in a file the rename touched → fix it (CLAUDE.md: fix lint in files you touch). Do NOT fix pre-existing errors in untouched files.
 
-- [ ] **Step 2: Run the full test suite**
+- [ ] **Step 2: Test results unchanged**
 
-Run: `npx vitest run`
-Expected: same pass count as Task 1 Step 2 (no behavioral change).
+Run: `npx vitest run 2>&1 | tail -5`
+Expected: **identical** to the Task 1 baseline (same passed count, same single pre-existing `crossDeviceTrust.spec.ts` failure, no NEW failures).
 
-- [ ] **Step 3: Production build**
+- [ ] **Step 3: Production build succeeds (HARD GATE)**
 
 Run: `npm run build`
-Expected: build succeeds for all 4 configs.
+Expected: exit 0, build succeeds for all 4 configs (matches the pre-rename baseline — build was green before the rename).
 
-- [ ] **Step 4: Grep gate — only exempt URL literals may remain**
+- [ ] **Step 3b: Typecheck introduced no new errors**
 
-Run: `grep -rniI "zkfold" src/ | grep -viI "zkfold.io"`
-Expected: **zero** lines. (Every remaining `zkfold` must be inside a `*.zkfold.io` URL literal that is commented as legacy/unused.)
+Run: `npm run typecheck 2>&1 | grep -c "error TS"`
+Expected: **≤** the Task 1 baseline count, and no new error referencing a renamed symbol/path (`zkSmartWallet*`, `zk-smart-wallet-db`, `services/zkSmartWallet`). A broken import from the rename would show here.
 
-Run: `grep -rniI "zkfold" src/ | grep -iI "zkfold.io" | wc -l`
-Expected: a small non-zero count (the retained endpoint literals), each with the legacy comment.
+- [ ] **Step 4: Grep gate — only commented legacy literals may remain**
+
+Retained legacy literals that MUST keep their real value — both the `*.zkfold.io` hosts AND the `/zkfold/...` HTTP wire paths (`prover.ts`, `backend.ts`) that are endpoint contracts — each carry a same-line marker comment `// legacy zkFold hosted endpoint — unused, retained for reference`. Renaming a wire path or host is a behavior change and is forbidden. The gate excludes lines carrying that marker:
+
+Run: `grep -rniI "zkfold" src/ | grep -viI "legacy zkFold hosted endpoint"`
+Expected: **zero** lines.
+
+Run: `grep -rniI "zkfold" src/ | grep -iI "legacy zkFold hosted endpoint" | wc -l`
+Expected: small non-zero (the retained host + path literals, each commented).
 
 - [ ] **Step 5: Commit**
 
