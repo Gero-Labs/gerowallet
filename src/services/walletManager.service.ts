@@ -951,6 +951,21 @@ export class WalletManager {
     return this.crossDevice?.signing ?? null;
   }
 
+  /**
+   * The deviceId to route a SIGN_REQUEST to (the `to` field), or null to broadcast.
+   * Conservative: returns a target only when there is EXACTLY ONE trusted,
+   * signing-capable device currently ONLINE — so pre-APNs it is never worse than
+   * broadcast (we never target an offline device that would silently drop). With
+   * >1 online trusted signer we broadcast (a device picker is a later refinement);
+   * with 0 we broadcast (nothing to target). Once APNs lands this can extend to a
+   * trusted-but-offline target plus a wake.
+   */
+  getDefaultCrossDeviceTarget(): string | null {
+    const signers = this.getCrossDeviceDevices()
+      .filter((e) => e.trusted && !e.isSelf && e.device.hasSigningKey);
+    return signers.length === 1 ? signers[0].device.deviceId : null;
+  }
+
   // ---- Remote-signing settings API (backing the Security settings UI) -------
 
   /** Current per-wallet remote-signing settings (enable, policy, trusted devices). */
