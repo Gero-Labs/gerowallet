@@ -100,26 +100,48 @@ const signer: Signer = {
     return walletStore.utxos.map(utxoToCip30Hex);   // reuse useStrikeDeposit.ts:utxoToCip30Hex
   },
   async signTx(unsignedTxCbor) {
-    const res = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: { txCbor: unsignedTxCbor, partialSign: true, accountIndex: 0,
-              utxos: walletStore.utxos, addresses: walletStore.keys, mergeWitnesses: false },
-    });
-    if (!res?.data?.witnesses) throw new Error(res?.data?.error || 'Signing failed');
-    return res.data.witnesses;                      // witness-set hex only
+    return signSwapWitness(unsignedTxCbor);         // per-type dispatch, witness-set hex only
   },
   meta: { name: 'Gero' },
 };
 ```
 
-- All HW-wallet / PRF / password branches are handled inside the existing `SIGN_TX` background
-  handler (`background.ts:1678`) — the signer does not need to know; it just calls `SIGN_TX`.
-- The opaque `unsignedTxCbor` is passed through untouched; only the witness set returns. Submit is
-  the widget's job (`nexusSwapApi.submit` via the aggregator `/submit`), not `SUBMIT_TX`.
-- Guard: if the wallet is a PassKey/PRF wallet requiring a popup for signing, `signTx` must route
-  through the same popup path the current SwapSheet HW flows use — reuse the existing
-  `useTransactionSigning`/SwapSheet signing entry rather than reimplementing. (Plan verifies the
-  exact reused helper.)
+**CRITICAL (verified in the codebase): `SIGN_TX` alone covers only 2 of the 5 wallet types.**
+`SIGN_TX` (`background.ts:1678` → `walletBg.signTx` `walletBg.ts:1547`) signs only **password**
+(decrypt root key) and **PRF** (`privateKeyBytes`). **Ledger / Trezor / Keystone are signed
+client-side** in the sidepanel/options context (the background has no HW private key). The agent
+`SwapCard.vue` is **password-only** and explicitly notes PRF/HW are unwired — **a known gap this
+design must NOT replicate**, or HW/PRF users can't swap.
+
+`signSwapWitness(unsignedTxCbor)` therefore dispatches per active wallet type, mirroring the 5
+current `SwapSheet.vue` branches, each producing a **witness-set CBOR hex** from the opaque
+`unsignedTxCbor` — WITHOUT re-serializing the tx body:
+
+- **Password** (`walletStore.loggedWallet.type === Normal`, not PRF): `VERIFY_SPENDING_PASSWORD`
+  then `SIGN_TX {txCbor, partialSign:true, password, accountIndex:0, utxos, addresses,
+  mergeWitnesses:false}` → `{witnesses}` (SwapSheet.vue:1043-1102).
+- **PRF/PassKey** (`encryptionMethod==='prf'` / `prfEncryptedPrivateKey`+`webAuthnCredentialId`):
+  PassKey popup → `SIGN_TX` with `privateKeyBytes` instead of password (SwapSheet.vue:1117-1160).
+- **Ledger** (`type === Ledger`): `ledgerUtils.txToLedger(...)` → `Cardano.Signatures` →
+  `Serialization.TransactionWitnessSet.fromCore({signatures}).toCbor()` (SwapSheet.vue:1176-1219).
+- **Trezor** (`type === Trezor`): `MessageTypes.TREZOR {method:'signTx', txCbor}` → `.signatures` →
+  `TransactionWitnessSet.fromCore({signatures}).toCbor()` (SwapSheet.vue:1230-1270).
+- **Keystone** (`type === Keystone`): `createKeystoneSignRequest(...)` → QR dialog →
+  `onKeystoneScan(ur)` → `parseSignature(ur).witnessSet` (SwapSheet.vue:1284-1335).
+
+All five yield a witness-set hex; the widget's `submit` (aggregator `/submit`) finalizes. The
+opaque cbor is never parsed to a Tx object in gerowallet (the HW paths that DO need a Tx object
+must derive it from the SAME cbor the widget will submit, never a re-encoded one — the plan pins
+the exact reused serialization).
+
+**Reuse vs replicate:** `useTransactionSigning.handleSign()`
+(`src/shared/composables/useTransactionSigning.ts:427`) already dispatches all 5 types, but is
+NOT drop-in: it hardcodes `partialSign:false` (swaps need `true`), it auto-submits via `SUBMIT_TX`
+(swaps need the aggregator co-sign between witness and submit), and it takes a `Cardano.Tx`
+**object** not the opaque cbor. The plan's first task decides between (A) extracting/parametrizing
+its per-type witness producers into a swap-friendly `signSwapWitness(cbor)` (preferred — one code
+path, all wallet types, no duplication) vs (B) a new composable replicating the 5 SwapSheet
+branches. Either way, HW/PRF MUST work — this is a correctness gate, not a nice-to-have.
 
 ### 3.4 Token resolver (`resolveToken`)
 
@@ -234,10 +256,13 @@ GeroSwapEmbed mounts <gero-swap mode=native>, sets signer + resolveToken
 
 ## 7. Risks / open questions
 
-- **HW-wallet / PRF signing:** the native `signTx` must reach the same popup/hardware flows the
-  current SwapSheet uses (Ledger/Trezor/Keystone/PassKey). The plan must identify the exact
-  existing signing entry to reuse (likely `useTransactionSigning` or the SwapSheet handlers) rather
-  than only `SIGN_TX` with a password — confirm before wiring.
+- **HW-wallet / PRF signing (RESOLVED — see §3.3):** confirmed `SIGN_TX` covers only
+  password+PRF; Ledger/Trezor/Keystone sign client-side. `signSwapWitness(cbor)` dispatches all 5
+  types (extract from `useTransactionSigning` per §3.3 fork A, or replicate SwapSheet's 5
+  branches). Correctness gate: HW/PRF swaps MUST work. Because the widget owns the swap UI, the
+  signer runs when the widget calls `el.signer.signTx(cbor)` — the Keystone QR dialog + PassKey
+  popup are host-rendered by `GeroSwapEmbed` (the widget's `signTx` promise stays pending until the
+  host resolves the scan/popup). The plan pins how `GeroSwapEmbed` surfaces those host dialogs.
 - **Sidepanel vs options context:** `SIGN_TX` is registered via `addToOptions` (options + sidepanel).
   Confirm `sendToBackgroundFromOptions` works from both the sidepanel sheet and the options dialog
   mount of `GeroSwapEmbed`.
