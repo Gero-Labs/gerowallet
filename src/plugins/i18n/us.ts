@@ -820,7 +820,7 @@ export default {
   'crossDevice.settings.policyAsk': 'Ask each time',
   'crossDevice.settings.policyAskHint': 'Sign on this device, or optionally approve on another one.',
   'crossDevice.settings.policyRequire': 'Require a trusted device',
-  'crossDevice.settings.policyRequireHint': 'Sends must be approved on a trusted device, a second factor on top of your password.',
+  'crossDevice.settings.policyRequireHint': 'Sends must be approved on a trusted device, a second factor beyond signing on this one.',
   'crossDevice.settings.needTrustedForPolicy': 'Pair a device first to require remote approval.',
   'crossDevice.settings.thisDevice': 'This device',
   'crossDevice.settings.detected': 'Devices',

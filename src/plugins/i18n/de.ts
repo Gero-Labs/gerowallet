@@ -928,7 +928,7 @@ export default {
   'crossDevice.settings.policyAsk': 'Jedes Mal fragen',
   'crossDevice.settings.policyAskHint': 'Auf diesem Gerät signieren oder optional auf einem anderen bestätigen.',
   'crossDevice.settings.policyRequire': 'Vertrauenswürdiges Gerät verlangen',
-  'crossDevice.settings.policyRequireHint': 'Sendungen müssen auf einem vertrauenswürdigen Gerät bestätigt werden, ein zweiter Faktor zusätzlich zu Ihrem Passwort.',
+  'crossDevice.settings.policyRequireHint': 'Sendungen müssen auf einem vertrauenswürdigen Gerät bestätigt werden, ein zweiter Faktor über das Signieren auf diesem Gerät hinaus.',
   'crossDevice.settings.needTrustedForPolicy': 'Koppeln Sie zuerst ein Gerät, um eine Remote-Bestätigung zu verlangen.',
   'crossDevice.settings.thisDevice': 'Dieses Gerät',
   'crossDevice.settings.detected': 'Geräte',
