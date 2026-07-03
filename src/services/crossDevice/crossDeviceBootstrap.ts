@@ -104,7 +104,14 @@ export function bootstrapCrossDeviceSigning(opts: {
   const unsubRegistry = transport.onMessage((raw) => {
     if (isDevicesSnapshot(raw)) {
       registry = applyDevicesSnapshot(registry, raw);
-      debugLog('🔗 cross-device registry updated:', Object.keys(registry.byId).length, 'devices');
+      // Diagnostic: show WHO is in the snapshot so an empty "other devices" list
+      // can be told apart from a UI-filtering bug. platform:id8(self?) per device.
+      const ids = Object.values(registry.byId).map((d) =>
+        `${d.platform}:${(d.deviceId || '').slice(0, 8)}${d.deviceId === deviceId ? '(self)' : ''}${d.hasSigningKey ? '+sig' : ''}`);
+      debugLog('🔗 cross-device registry updated:', Object.keys(registry.byId).length, '→', ids.join(', ') || '(none)');
+    } else if ((raw as { type?: string })?.type === 'DEVICES') {
+      // Arrived but failed the shape guard — would otherwise be silently ignored.
+      debugLog('⚠️ DEVICES snapshot failed shape guard:', JSON.stringify(raw).slice(0, 400));
     }
   });
 
@@ -124,12 +131,14 @@ export function bootstrapCrossDeviceSigning(opts: {
   // out. It is published from the WS onopen path via register() below instead.
   const register = (): void => {
     try {
+      const proof = opts.getProof?.();
       publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: identity.pubKeyHex }, {
         label: opts.label,
         platform: 'extension',
         hasSigningKey: opts.hasSigningKey,
-        proof: opts.getProof?.(),
+        proof,
       });
+      debugLog('📇 DEVICE_REGISTER sent:', deviceId, 'proof=' + (proof ? 'yes' : 'no'));
     } catch (e) {
       debugLog('cross-device DEVICE_REGISTER failed:', e);
     }
