@@ -58,6 +58,10 @@ export interface RequestSignatureInput {
   intent?: string;
   stakeAddress?: string;
   ttlMs?: number;
+  /** Optional target deviceId. When set, the relay routes only to that device
+   *  (with an APNs wake if it is offline); absent => relay broadcasts. Routing
+   *  hint only, not signed. */
+  to?: string;
 }
 
 export interface CrossDeviceSigning {
@@ -80,6 +84,26 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     { resolve: (d: SignDecision) => void; timer: ReturnType<typeof setTimeout> }
   >();
   const requestHandlers = new Set<SignRequestHandler>();
+
+  // Approver-side replay + expiry guard. The requester machine's dedup/expiry
+  // only protects the REQUESTER; the approver path had neither, so an untrusted
+  // relay could re-deliver a captured (still-valid-signature) SIGN_REQUEST and
+  // re-surface the approval sheet, or deliver an already-expired request. APNs
+  // would make replay a reliable primitive. Keyed by reqId:nonce; pruned by
+  // expiry so it stays bounded by the in-flight window.
+  const approverSeen = new Map<string, number>(); // reqId:nonce -> expiresAt (unix seconds)
+
+  function approverAccepts(req: SignRequest): boolean {
+    const nowSec = Math.floor(now() / 1000);
+    for (const [k, exp] of approverSeen) {
+      if (exp <= nowSec) approverSeen.delete(k);
+    }
+    if (req.expiresAt <= nowSec) return false; // already expired: never surface it
+    const key = `${req.reqId}:${req.nonce}`;
+    if (approverSeen.has(key)) return false; // replay of a request we already surfaced
+    approverSeen.set(key, req.expiresAt);
+    return true;
+  }
 
   function settle(reqId: string, decision: SignDecision): void {
     const entry = waiting.get(reqId);
@@ -108,6 +132,8 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
       if (msg.from === identity.deviceId) return;
       // Approver show-gate: only surface requests from a trusted device.
       if (!isRequesterTrusted(senderId, pubKey)) return;
+      // Drop replays of an already-surfaced request and already-expired requests.
+      if (!approverAccepts(msg)) return;
       dispatchSignRequest(msg);
       return;
     }
@@ -123,6 +149,8 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
           type: 'SIGN_RESPONSE',
           reqId: req.reqId,
           nonce: newId(),
+          // Route the response back to the original requester (hint, not signed).
+          to: req.from,
           deviceId: identity.deviceId,
           decision: r.decision,
           witnessSetCbor: r.witnessSetCbor,
@@ -166,6 +194,9 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
         reqId,
         nonce,
         from: identity.deviceId,
+        // Routing hint (not in the signed subject); omit when absent so the relay
+        // falls back to broadcast for callers that do not target a device.
+        ...(input.to ? { to: input.to } : {}),
         stakeAddress: input.stakeAddress,
         unsignedCbor: input.unsignedCbor,
         intent: input.intent,

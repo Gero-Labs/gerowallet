@@ -217,6 +217,60 @@ describe('crossDeviceSigning ttl', () => {
   });
 });
 
+describe('crossDeviceSigning approver replay + expiry', () => {
+  it('drops a replayed SIGN_REQUEST (approver surfaces it only once)', async () => {
+    const { bus, approver } = await makePair(() => 1000);
+    const handler = vi.fn();
+    approver.onSignRequest(handler);
+
+    const req = await signMessage<SignRequest>(
+      {
+        type: 'SIGN_REQUEST',
+        reqId: 'r1',
+        nonce: 'n1',
+        from: requesterId,
+        stakeAddress: 'stake1',
+        unsignedCbor: '84a4',
+        intent: 'Swap',
+        expiresAt: 9999999999,
+      },
+      requesterKp.privKeyHex,
+    );
+    bus.publish(req);
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish(req); // exact-bytes replay (relay re-delivery)
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    approver.dispose();
+  });
+
+  it('drops an already-expired SIGN_REQUEST (never surfaces it)', async () => {
+    const { bus, approver } = await makePair(() => 1000); // nowSec = 1
+    const handler = vi.fn();
+    approver.onSignRequest(handler);
+
+    const expired = await signMessage<SignRequest>(
+      {
+        type: 'SIGN_REQUEST',
+        reqId: 'r-exp',
+        nonce: 'n-exp',
+        from: requesterId,
+        stakeAddress: 'stake1',
+        unsignedCbor: '84a4',
+        intent: 'Swap',
+        expiresAt: 0, // already past nowSec=1
+      },
+      requesterKp.privKeyHex,
+    );
+    bus.publish(expired);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(handler).not.toHaveBeenCalled();
+    approver.dispose();
+  });
+});
+
 describe('crossDeviceSigning trusted-device gates', () => {
   const mkRequester = (bus: ReturnType<typeof makeBus>, extra = {}) =>
     createCrossDeviceSigning({
