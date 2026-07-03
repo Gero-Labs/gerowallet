@@ -6,6 +6,9 @@ import networks from '@/utils/networks';
 import Loading from '@/stores/loading';
 import { StoredTransaction } from '@/models/transaction.types';
 
+/** Loose UTxO shape used for input token-amount resolution (see resolveInputAmounts). */
+type ResolvableUtxo = { tx_hash?: string; output_index?: number; address?: string; amount?: unknown[] };
+
 /**
  * Loader for wallet account information
  */
@@ -201,16 +204,11 @@ export class TransactionsLoader extends BaseLoader {
               const sentAssets = new Map<string, any>();
               const receivedAssets = new Map<string, any>();
 
-              // Resolve inputs in place so the tx detail dialog renders the same
-              // address/amount the loader uses for sentAmount accounting.
-              if (tx.utxo?.inputs?.length) {
-                tx.utxo.inputs = tx.utxo.inputs.map((inp: any) => {
-                  if (inp.address && inp.amount?.length) return inp;
-                  const ref = `${inp.tx_hash}#${inp.output_index}`;
-                  const hit = outputIndex.get(ref);
-                  return hit ? { ...inp, address: hit.address, amount: hit.amount } : inp;
-                });
-              }
+              // Resolve each input's amount from its producing output so sentAsset
+              // accounting sees the input's FULL value, incl. native tokens (see
+              // resolveInputAmounts). Returns a NEW array — the Dexie-sourced record
+              // is not mutated; the resolved inputs are carried on the returned utxo.
+              const resolvedInputs = this.resolveInputAmounts(tx.utxo?.inputs, outputIndex);
 
               // gero-sync's live-block path doesn't emit tx_size — derive it from
               // the cbor byte count (hex string length / 2). humanFileSize handles 0.
@@ -218,7 +216,7 @@ export class TransactionsLoader extends BaseLoader {
                 tx.tx_size = Math.floor(tx.cbor.length / 2);
               }
 
-              this.processUtxos(tx.utxo?.inputs, currentAddress, currentStake, networkId, true, sentAssets, (amount) => {
+              this.processUtxos(resolvedInputs, currentAddress, currentStake, networkId, true, sentAssets, (amount) => {
                 sentAmount += amount;
               });
 
@@ -238,8 +236,13 @@ export class TransactionsLoader extends BaseLoader {
                 metadata: nativeAssetMetadata
               };
 
+              // Carry the resolved inputs on a fresh utxo object so the detail view
+              // renders input tokens too, without mutating the source record.
+              const utxo = tx.utxo ? { ...tx.utxo, inputs: resolvedInputs ?? tx.utxo.inputs } : tx.utxo;
+
               return {
                 ...tx,
+                utxo,
                 sentAmount,
                 receivedAmount,
                 sentAssets: Array.from(sentAssets.values()),
@@ -268,6 +271,32 @@ export class TransactionsLoader extends BaseLoader {
         console.error('Failed to fetch transactions:', error);
       }
     );
+  }
+
+  /**
+   * Resolve each input's amount from its producing output (outputIndex) so sent-asset
+   * accounting sees the input's FULL value, including native tokens. Returns a NEW
+   * array (the Dexie-sourced record is never mutated).
+   *
+   * gero-sync/nexus history stores spent inputs lovelace-only. The old guard
+   * `inp.address && inp.amount?.length` treated a lovelace-only input as
+   * already-resolved and kept it token-less, so a spent multi-asset UTxO's tokens
+   * never offset the change output's tokens and a small send rendered as many tokens
+   * moved. The producing output IS the input's real value, so prefer its richer amount
+   * whenever available; fall back to the input unchanged when the producer isn't
+   * locally synced.
+   */
+  private resolveInputAmounts<T extends ResolvableUtxo>(
+    inputs: T[] | undefined,
+    outputIndex: Map<string, { address?: string; amount?: unknown[] }>
+  ): T[] | undefined {
+    if (!inputs?.length) return inputs;
+    return inputs.map((inp) => {
+      const hit = outputIndex.get(`${inp.tx_hash}#${inp.output_index}`);
+      if (!hit) return inp;
+      const amount = (hit.amount?.length ?? 0) > (inp.amount?.length ?? 0) ? hit.amount : inp.amount;
+      return { ...inp, address: inp.address || hit.address, amount } as T;
+    });
   }
 
   private processUtxos(
