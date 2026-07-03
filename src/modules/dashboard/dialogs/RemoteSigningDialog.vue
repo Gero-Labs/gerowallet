@@ -195,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { remoteSigningStore, type CrossDeviceListEntry } from '@/stores/remoteSigningStore';
 import { pairingFingerprint, type SigningPolicy } from '@/services/crossDevice/crossDeviceTrust';
 import snackbar from '@/plugins/snackbar';
@@ -342,17 +342,38 @@ async function onUntrust(deviceId: string) {
   }
 }
 
-// Refresh whenever the dialog opens; drop any in-flight SAS confirm on close so a
-// stale confirm screen can never resurface on reopen (the component stays mounted
-// via :is-open, so this state would otherwise persist).
+// While the dialog is open, poll the live device list. The background device
+// registry populates ASYNCHRONOUSLY: a DEVICES snapshot arrives only after the
+// relay round-trip, a sibling may connect after the dialog opens, and the MV3
+// service worker recycles roughly every 42s (each cold start re-registers and
+// re-fetches a fresh snapshot). A one-shot fetch on open therefore races the
+// registry and often shows an empty list even when a phone is connected. Polling
+// makes the list eventually-consistent for as long as the user is looking at it.
+let devicePoll: ReturnType<typeof setInterval> | null = null;
+function stopDevicePoll() {
+  if (devicePoll) { clearInterval(devicePoll); devicePoll = null; }
+}
+
+// Refresh whenever the dialog opens; drop any in-flight SAS confirm + enable-auth
+// on close so a stale screen can never resurface on reopen (the component stays
+// mounted via :is-open, so this state would otherwise persist).
 watch(
   () => props.isOpen,
   (open) => {
-    if (open) void remoteSigningStore.refresh();
-    else { pairingCandidate.value = null; cancelEnableAuth(); }
+    if (open) {
+      void remoteSigningStore.refresh();
+      stopDevicePoll();
+      devicePoll = setInterval(() => { void remoteSigningStore.refreshDevices(); }, 3000);
+    } else {
+      stopDevicePoll();
+      pairingCandidate.value = null;
+      cancelEnableAuth();
+    }
   },
   { immediate: true },
 );
+
+onBeforeUnmount(stopDevicePoll);
 </script>
 
 <style scoped>
