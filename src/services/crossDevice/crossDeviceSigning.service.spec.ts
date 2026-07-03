@@ -216,3 +216,74 @@ describe('crossDeviceSigning ttl', () => {
     requester.dispose();
   });
 });
+
+describe('crossDeviceSigning trusted-device gates', () => {
+  const mkRequester = (bus: ReturnType<typeof makeBus>, extra = {}) =>
+    createCrossDeviceSigning({
+      transport: bus.makeTransport(),
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async (id) => pubKeyRegistry[id] ?? null,
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `q-${c++}`; })(),
+      ...extra,
+    });
+  const mkApprover = (bus: ReturnType<typeof makeBus>, extra = {}) =>
+    createCrossDeviceSigning({
+      transport: bus.makeTransport(),
+      identity: { deviceId: approverId, privKeyHex: approverKp.privKeyHex },
+      resolvePubKey: async (id) => pubKeyRegistry[id] ?? null,
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `r-${c++}`; })(),
+      ...extra,
+    });
+
+  it('approver show-gate: an untrusted requester never surfaces the request', async () => {
+    const bus = makeBus();
+    const requester = mkRequester(bus);
+    const handler = vi.fn();
+    const approver = mkApprover(bus, { isRequesterTrusted: () => false });
+    approver.onSignRequest(handler);
+
+    void requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', ttlMs: 40 });
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(handler).not.toHaveBeenCalled();
+    requester.dispose();
+    approver.dispose();
+  });
+
+  it('requester accept-gate: an approval from an untrusted responder is ignored (ttl decides)', async () => {
+    const bus = makeBus();
+    const requester = mkRequester(bus, { isResponderTrusted: () => false });
+    const approver = mkApprover(bus);
+    approver.onSignRequest((_req, respond) => {
+      void respond({ decision: 'approved', witnessSetCbor: 'a100' });
+    });
+
+    const result = await requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', ttlMs: 30 });
+
+    expect(result.decision).toBe('rejected');
+    expect(result.reason).toBe('expired');
+    expect(result.witnessSetCbor).toBeUndefined();
+    requester.dispose();
+    approver.dispose();
+  });
+
+  it('a trusted responder resolves normally', async () => {
+    const bus = makeBus();
+    const requester = mkRequester(bus, {
+      isResponderTrusted: (id: string, pk: string) => id === approverId && pk === approverKp.pubKeyHex,
+    });
+    const approver = mkApprover(bus, { isRequesterTrusted: () => true });
+    approver.onSignRequest((_req, respond) => {
+      void respond({ decision: 'approved', witnessSetCbor: 'a100' });
+    });
+
+    const result = await requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', ttlMs: 200 });
+
+    expect(result.decision).toBe('approved');
+    expect(result.witnessSetCbor).toBe('a100');
+    requester.dispose();
+    approver.dispose();
+  });
+});

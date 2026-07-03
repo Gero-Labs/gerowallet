@@ -146,8 +146,13 @@
 
       <!-- Actions -->
       <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <!-- Under a "require remote" policy, local signing (password AND passkey)
+             is disabled; only "Sign on another device" remains. -->
+        <div v-if="currentStep === 2 && requiresRemoteForSend" class="text-caption grey--text text-center mb-2">
+          {{ $t('crossDevice.settings.policyRequireHint') }}
+        </div>
         <!-- Transaction Authentication Section (step 2 only) -->
-        <div v-if="currentStep === 2">
+        <div v-else-if="currentStep === 2">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
@@ -192,12 +197,14 @@
           >{{ $t('common.continue') + ' ' }}
             <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
-          <!-- Step 2: Sign/Confirm button for non-PRF wallets -->
+          <!-- Step 2: Sign/Confirm button for non-PRF wallets. Local signing is
+               disabled while a "require remote" policy is active (unless already
+               at the submit step with a remote witness in hand). -->
           <v-btn
             v-else-if="!isPrfWallet"
             class="continue-button"
             @click="nextStep"
-            :disabled="!isValid || txSignLoading"
+            :disabled="!isValid || txSignLoading || (requiresRemoteForSend && !isSubmit)"
             :loading="txSignLoading"
           >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
           </v-btn>
@@ -311,6 +318,7 @@ const {
   isPrfWallet,
   isBTSupported,
   canSignOnAnotherDevice,
+  requiresRemoteForSend,
   passwordRules,
   handleSign,
   signOnAnotherDevice,

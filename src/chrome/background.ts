@@ -1796,6 +1796,64 @@ app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, se
   }
 });
 
+// ---- Remote-signing settings (Security tab) --------------------------------
+// Read + mutate per-wallet trusted devices + policy. Mutations are auth-gated in
+// the UI (the Security verification overlay). Each responds with the fresh
+// settings so the UI store stays in sync.
+function crossDeviceReply(id: string, data: unknown) {
+  return { id, data, target: TARGET, sender: SENDER.extension };
+}
+
+app.addToOptions(MessageTypes.GET_CROSS_DEVICE_SETTINGS, async (request, sendResponse) => {
+  sendResponse(crossDeviceReply(request.id, { success: true, settings: walletManager.getRemoteSigningSettings() }));
+});
+
+app.addToOptions(MessageTypes.GET_CROSS_DEVICE_DEVICES, async (request, sendResponse) => {
+  sendResponse(crossDeviceReply(request.id, { success: true, devices: walletManager.getCrossDeviceDevices() }));
+});
+
+app.addToOptions(MessageTypes.SET_REMOTE_SIGNING_ENABLED, async (request, sendResponse) => {
+  try {
+    const settings = await walletManager.setRemoteSigningEnabled(!!request.data?.enabled);
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.SET_CROSS_DEVICE_POLICY, async (request, sendResponse) => {
+  try {
+    const policy = request.data?.policy === 'require_remote' ? 'require_remote' : 'ask';
+    const settings = await walletManager.setCrossDevicePolicy(policy);
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.TRUST_CROSS_DEVICE, async (request, sendResponse) => {
+  try {
+    const deviceId = String(request.data?.deviceId ?? '');
+    const settings = await walletManager.trustCrossDevice(deviceId);
+    // Pairing no-ops if the device left the registry between listing and click.
+    const pinned = !!settings.trustedDevices[deviceId];
+    sendResponse(crossDeviceReply(request.id, pinned
+      ? { success: true, settings }
+      : { success: false, error: 'device_unavailable', settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.UNTRUST_CROSS_DEVICE, async (request, sendResponse) => {
+  try {
+    const settings = await walletManager.untrustCrossDevice(String(request.data?.deviceId ?? ''));
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
 // Pool operator transaction signing handler (cold key + wallet keys)
 app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendResponse) => {
   try {
