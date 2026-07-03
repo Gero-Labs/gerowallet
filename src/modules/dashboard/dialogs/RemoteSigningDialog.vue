@@ -106,7 +106,7 @@
               outlined
               color="#00DFF3"
               :loading="busy"
-              @click="onTrust(entry.device.deviceId)"
+              @click="startPairing(entry)"
             >{{ $t('crossDevice.settings.pair') }}</v-btn>
             <v-btn
               v-else
@@ -127,12 +127,32 @@
         </v-alert>
       </v-card-text>
     </v-card>
+
+    <!-- SAS pairing confirmation: the code must be compared on both devices -->
+    <v-dialog :value="!!pairingCandidate" max-width="360" @input="(v) => { if (!v) pairingCandidate = null; }">
+      <v-card class="liquid-glass rs-confirm-card" rounded="lg" v-if="pairingCandidate">
+        <v-card-title class="rs-title px-4 pt-4 pb-1">{{ $t('crossDevice.settings.pairConfirmTitle') }}</v-card-title>
+        <v-card-text class="px-4 pb-2">
+          <p class="rs-hint mb-3">
+            {{ $t('crossDevice.settings.pairConfirmBody', { device: pairingCandidate.device.label || $t('crossDevice.settings.unnamed') }) }}
+          </p>
+          <div class="rs-confirm-code">{{ fingerprint(pairingCandidate.device.pubKey) }}</div>
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4 pt-0">
+          <v-btn text small @click="pairingCandidate = null">{{ $t('common.cancel') }}</v-btn>
+          <v-spacer />
+          <v-btn small color="#00DFF3" class="black--text font-weight-bold" :loading="busy" @click="confirmPairing">
+            {{ $t('crossDevice.settings.pairConfirmMatch') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
-import { remoteSigningStore } from '@/stores/remoteSigningStore';
+import { computed, ref, watch } from 'vue';
+import { remoteSigningStore, type CrossDeviceListEntry } from '@/stores/remoteSigningStore';
 import { pairingFingerprint, type SigningPolicy } from '@/services/crossDevice/crossDeviceTrust';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -180,8 +200,19 @@ async function onPolicyChange(value: SigningPolicy) {
   await remoteSigningStore.setPolicy(value);
 }
 
-async function onTrust(deviceId: string) {
-  const ok = await remoteSigningStore.trust(deviceId);
+// SAS pairing: never trust straight from the list. Open a confirm step so the
+// user actively asserts the pairing code matches on both devices first.
+const pairingCandidate = ref<CrossDeviceListEntry | null>(null);
+
+function startPairing(entry: CrossDeviceListEntry) {
+  pairingCandidate.value = entry;
+}
+
+async function confirmPairing() {
+  const entry = pairingCandidate.value;
+  if (!entry) return;
+  const ok = await remoteSigningStore.trust(entry.device.deviceId);
+  pairingCandidate.value = null;
   if (!ok) snackbar.setError(t('crossDevice.settings.pairFailed'));
 }
 
@@ -228,4 +259,17 @@ watch(
 .rs-empty { text-align: center; padding: 20px 8px; }
 .rs-note { border: 1px solid rgba(255,255,255,0.06) !important; }
 .rs-note-text { font-size: 11.5px; color: #9aa5b5; line-height: 1.4; }
+.rs-confirm-card { background: rgba(18, 20, 26, 0.96) !important; color: #fff; }
+.rs-confirm-code {
+  font-family: 'Courier New', monospace;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-align: center;
+  color: #00DFF3;
+  padding: 12px;
+  border: 1px solid rgba(0, 223, 243, 0.35);
+  border-radius: 10px;
+  background: rgba(0, 223, 243, 0.06);
+}
 </style>
