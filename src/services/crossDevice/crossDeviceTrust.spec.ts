@@ -65,7 +65,7 @@ describe('reducers are pure and correct', () => {
     const next = trustDevice(base, DEV, 4242);
     expect(base.trustedDevices).toEqual({}); // unchanged
     expect(next.trustedDevices['aa11']).toEqual({
-      deviceId: 'aa11', pubKey: 'beef', label: 'iPhone', platform: 'ios', trustedAt: 4242,
+      deviceId: 'aa11', pubKey: 'beef', label: 'iPhone', platform: 'ios', trustedAt: 4242, verified: false,
     });
     expect(hasTrustedDevice(next)).toBe(true);
   });

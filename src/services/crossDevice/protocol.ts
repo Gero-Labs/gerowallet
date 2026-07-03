@@ -64,6 +64,11 @@ export interface SignRequest {
   reqId: string; // unique per request (caller-supplied)
   nonce: string; // anti-replay; the request is single-use per (reqId, nonce)
   from: string; // requesting deviceId
+  to?: string; // OPTIONAL target deviceId. A relay ROUTING hint only, deliberately
+  //             NOT in the signed subject: it affects delivery, not authenticity
+  //             (siblings still verify via the pinned pubKey, so a relay that
+  //             rewrites `to` can only misdeliver/drop, never forge). Absent =>
+  //             relay broadcasts to all siblings (backward-compatible).
   stakeAddress?: string; // routing scope; empty-slot in the subject when absent
   unsignedCbor: string; // hex CBOR of the proposed tx (NOT secret; goes on-chain anyway)
   intent?: string; // human hint for the notification ONLY; approver MUST NOT trust or render it
@@ -75,6 +80,8 @@ export interface SignResponse {
   type: 'SIGN_RESPONSE';
   reqId: string;
   nonce: string; // the response's own nonce (independent of the request nonce)
+  to?: string; // OPTIONAL target deviceId (the original requester). Relay routing
+  //             hint only, NOT in the signed subject; absent => broadcast.
   deviceId: string; // the approving device
   decision: 'approved' | 'rejected';
   witnessSetCbor?: string; // hex CBOR witness set when approved; absent when rejected
@@ -146,6 +153,7 @@ export function isSignRequest(x: unknown): x is SignRequest {
     isString(x['reqId']) &&
     isString(x['nonce']) &&
     isString(x['from']) &&
+    isOptString(x['to']) &&
     isOptString(x['stakeAddress']) &&
     isString(x['unsignedCbor']) &&
     isOptString(x['intent']) &&
@@ -160,6 +168,7 @@ export function isSignResponse(x: unknown): x is SignResponse {
   return (
     isString(x['reqId']) &&
     isString(x['nonce']) &&
+    isOptString(x['to']) &&
     isString(x['deviceId']) &&
     (decision === 'approved' || decision === 'rejected') &&
     isOptString(x['witnessSetCbor']) &&
