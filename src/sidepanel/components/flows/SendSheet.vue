@@ -389,13 +389,16 @@
                   block
                   :color="primaryColor"
                   class="black--text font-weight-bold mt-4"
-                  :disabled="!spendingPassword || submitting"
+                  :disabled="!spendingPassword || submitting || requiresRemoteForSend"
                   :loading="submitting"
                   @click="signAndSubmit"
                 >
                   <v-icon left small>mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
+                <div v-if="requiresRemoteForSend" class="text-caption grey--text text-center mt-2">
+                  {{ $t('crossDevice.settings.policyRequireHint') }}
+                </div>
                 <v-btn
                   v-if="canSignOnAnotherDevice"
                   block
@@ -569,6 +572,7 @@ import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import i18n from '@/plugins/i18n';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { useChainContext } from '../../composables/useChainContext';
 
 const { themeColors } = useChainContext();
@@ -650,10 +654,21 @@ const isPrfWallet = computed(() =>
   (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId)
 );
 
-// Cross-device signing: only for Cardano software (non-hardware) wallets, and
-// only when the feature flag is on. Dark by default.
+// Cross-device signing: server flag + this wallet's opt-in + a trusted signer.
+// Cardano software wallets only. Dark by default.
+void remoteSigningStore.ensureLoaded();
 const canSignOnAnotherDevice = computed(() =>
   featureFlagsStore.isCrossDeviceSigningEnabled() &&
+  remoteSigningStore.isEnabled() &&
+  remoteSigningStore.hasTrustedSigner() &&
+  loggedWallet.value?.chain === Blockchain.CARDANO &&
+  isNormalWallet.value
+);
+
+// When the policy requires remote approval, disable local signing for a Send.
+const requiresRemoteForSend = computed(() =>
+  featureFlagsStore.isCrossDeviceSigningEnabled() &&
+  remoteSigningStore.requiresRemoteForSend() &&
   loggedWallet.value?.chain === Blockchain.CARDANO &&
   isNormalWallet.value
 );

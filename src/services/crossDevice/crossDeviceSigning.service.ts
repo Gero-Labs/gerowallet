@@ -32,6 +32,14 @@ export interface CrossDeviceDeps {
   resolvePubKey: (deviceId: string) => Promise<string | null>; // registry lookup (gero-sync-backed later)
   now: () => number;
   newId: () => string; // reqId/nonce generator (injected for tests)
+  // Trusted-device gates, checked AFTER signature verification. Default allow-all
+  // (Phase-0 behaviour); the bootstrap injects the real per-wallet trust check.
+  //   isRequesterTrusted: approver show-gate — only surface SIGN_REQUESTs from a
+  //     trusted device (drops rogue requests + their tx CBOR).
+  //   isResponderTrusted: requester accept-gate — only act on SIGN_RESPONSEs from
+  //     a trusted device (closes DoS-by-rejection, ignores rogue approvals).
+  isRequesterTrusted?: (deviceId: string, pubKey: string) => boolean;
+  isResponderTrusted?: (deviceId: string, pubKey: string) => boolean;
 }
 
 export interface SignDecision {
@@ -62,6 +70,8 @@ const DEFAULT_TTL_MS = 60_000;
 
 export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSigning {
   const { transport, identity, resolvePubKey, now, newId } = deps;
+  const isRequesterTrusted = deps.isRequesterTrusted ?? (() => true);
+  const isResponderTrusted = deps.isResponderTrusted ?? (() => true);
 
   let machine: MachineState = { byId: {}, seen: [] };
   // Pending requester promises awaiting their SIGN_RESPONSE, keyed by reqId.
@@ -96,9 +106,13 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     if (msg.type === 'SIGN_REQUEST') {
       // Ignore requests this device itself originated.
       if (msg.from === identity.deviceId) return;
+      // Approver show-gate: only surface requests from a trusted device.
+      if (!isRequesterTrusted(senderId, pubKey)) return;
       dispatchSignRequest(msg);
       return;
     }
+    // Requester accept-gate: only act on responses from a trusted device.
+    if (!isResponderTrusted(senderId, pubKey)) return;
     handleSignResponse(msg);
   }
 

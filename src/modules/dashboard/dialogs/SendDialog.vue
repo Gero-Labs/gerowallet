@@ -192,12 +192,14 @@
           >{{ $t('common.continue') + ' ' }}
             <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
-          <!-- Step 2: Sign/Confirm button for non-PRF wallets -->
+          <!-- Step 2: Sign/Confirm button for non-PRF wallets. Local signing is
+               disabled while a "require remote" policy is active (unless already
+               at the submit step with a remote witness in hand). -->
           <v-btn
             v-else-if="!isPrfWallet"
             class="continue-button"
             @click="nextStep"
-            :disabled="!isValid || txSignLoading"
+            :disabled="!isValid || txSignLoading || (requiresRemoteForSend && !isSubmit)"
             :loading="txSignLoading"
           >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
           </v-btn>
@@ -311,6 +313,7 @@ const {
   isPrfWallet,
   isBTSupported,
   canSignOnAnotherDevice,
+  requiresRemoteForSend,
   passwordRules,
   handleSign,
   signOnAnotherDevice,
