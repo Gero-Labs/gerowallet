@@ -35,6 +35,7 @@ import {
   setPolicy as trustSetPolicy,
   trustDevice as trustAddDevice,
   untrustDevice as trustRemoveDevice,
+  REQUIRE_PROOF_TO_PAIR,
   type RemoteSigningSettings,
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
@@ -1004,8 +1005,10 @@ export class WalletManager {
       return this.remoteSigning;
     }
     // If the device supplied a wallet-control proof, it MUST verify against this
-    // wallet's reward address (a present-but-invalid proof is a rejection). Absent
-    // proof falls back to SAS + pin until the coordinated fail-closed flip.
+    // wallet's reward address (a present-but-invalid proof is always a rejection).
+    // When REQUIRE_PROOF_TO_PAIR is off (current rollout state) an ABSENT proof
+    // falls back to SAS + pin; when it flips on (coordinated with iOS) a missing
+    // proof is also rejected. See crossDeviceTrust.ts REQUIRE_PROOF_TO_PAIR.
     if (found.proof) {
       const ownStake = this.walletBg?.stakeAddress ?? '';
       const ok = await verifyDeviceRegisterProof(
@@ -1017,6 +1020,9 @@ export class WalletManager {
         debugLog('cross-device: refusing to pin — wallet-control proof invalid for', found.deviceId);
         return this.remoteSigning;
       }
+    } else if (REQUIRE_PROOF_TO_PAIR) {
+      debugLog('cross-device: refusing to pin — no wallet-control proof (fail-closed)', found.deviceId);
+      return this.remoteSigning;
     }
     this.remoteSigning = trustAddDevice(
       this.remoteSigning,
