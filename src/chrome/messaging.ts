@@ -1,5 +1,6 @@
 import { APIError, BITCOIN_METHOD, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
+import { EXTENSION_PAGE_ONLY_METHODS, isOwnExtensionPageSender } from './senderTrust';
 
 interface Message {
   method?: string;
@@ -27,6 +28,7 @@ interface PortMessage {
   data?: unknown;
   error?: unknown;
 }
+
 
 /**
  * Per-tab registry of side-panel onConnect listeners, so we can clean up
@@ -256,6 +258,15 @@ class BackgroundController {
             this.methodList[request.method](request, sendResponse);
             return true;
           } else if (request.sender === SENDER.options && request.method && this.optionsMethodList[request.method]) {
+            // Trust boundary: sensitive cross-device handlers must come from an
+            // own extension page, not a content script forging sender:'options'.
+            if (EXTENSION_PAGE_ONLY_METHODS.has(request.method) && !isOwnExtensionPageSender(sender, chrome.runtime?.id)) {
+              console.warn('Rejected sensitive options-context message from untrusted sender:', request.method);
+              // Match the envelope callers unwrap (res.data.success) so a rejection
+              // is a clean failure, not a TypeError on undefined data.
+              sendResponse({ id: request.id, data: { success: false, error: 'Unauthorized sender' }, target: TARGET, sender: SENDER.extension });
+              return true;
+            }
             this.optionsMethodList[request.method](request, sendResponse);
             return true;
           }
