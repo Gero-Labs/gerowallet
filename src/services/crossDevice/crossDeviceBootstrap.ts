@@ -17,13 +17,17 @@ import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDeviceSigning.service';
 import { createWsTransport, feedCrossDeviceMessage } from './wsTransport';
-import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform } from './protocol';
+import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo } from './protocol';
 import { emptyRegistry, applyDevicesSnapshot, pubKeyOf, type DeviceRegistryState } from './deviceRegistry';
 
 export interface CrossDeviceHandles {
   signing: CrossDeviceSigning;
+  /** This device's own id (to mark "this device" and skip it in the pairing list). */
+  selfDeviceId: string;
   /** Feed an inbound raw relay message (wired into WsHandlers.onCrossDeviceMessage). */
   onCrossDeviceMessage: (raw: unknown) => void;
+  /** Current sibling devices from the server-pushed DEVICES snapshot (for the settings UI). */
+  getDevices(): DeviceInfo[];
   /**
    * Publish this device's DEVICE_REGISTER over the transport. MUST be called only
    * once the socket is OPEN and has already SUBSCRIBE'd on the same ordered stream:
@@ -72,6 +76,10 @@ export function bootstrapCrossDeviceSigning(opts: {
   label: string;
   hasSigningKey: boolean;
   enabled: boolean;
+  // Per-wallet trust gates (see crossDeviceSigning.service). Read live by the
+  // caller's closures so trust/untrust take effect without a re-bootstrap.
+  isRequesterTrusted?: (deviceId: string, pubKey: string) => boolean;
+  isResponderTrusted?: (deviceId: string, pubKey: string) => boolean;
 }): CrossDeviceHandles | null {
   if (!opts.enabled) {
     return null;
@@ -96,6 +104,8 @@ export function bootstrapCrossDeviceSigning(opts: {
     resolvePubKey: async (id) => pubKeyOf(registry, id),
     now: () => Date.now(),
     newId: () => globalThis.crypto.randomUUID(),
+    isRequesterTrusted: opts.isRequesterTrusted,
+    isResponderTrusted: opts.isResponderTrusted,
   });
 
   // NOTE: DEVICE_REGISTER is NOT sent here. At bootstrap time the socket is not yet
@@ -118,7 +128,9 @@ export function bootstrapCrossDeviceSigning(opts: {
 
   return {
     signing,
+    selfDeviceId: deviceId,
     onCrossDeviceMessage: feedCrossDeviceMessage,
+    getDevices: () => Object.values(registry.byId),
     register,
     dispose: () => {
       unsubRegistry();

@@ -389,13 +389,16 @@
                   block
                   :color="primaryColor"
                   class="black--text font-weight-bold mt-4"
-                  :disabled="!spendingPassword || submitting"
+                  :disabled="!spendingPassword || submitting || requiresRemoteForSend"
                   :loading="submitting"
                   @click="signAndSubmit"
                 >
                   <v-icon left small>mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
+                <div v-if="requiresRemoteForSend" class="text-caption grey--text text-center mt-2">
+                  {{ $t('crossDevice.settings.policyRequireHint') }}
+                </div>
                 <v-btn
                   v-if="canSignOnAnotherDevice"
                   block
@@ -419,7 +422,7 @@
                 </div>
                 <PassKeyAuthButton
                   v-if="!txWitnesses"
-                  :disabled="submitting"
+                  :disabled="submitting || requiresRemoteForSend"
                   @success="onPassKeySuccess"
                   @error="onPassKeyError"
                   class="mb-2"
@@ -436,6 +439,9 @@
                   <v-icon left small>mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
+                <div v-if="requiresRemoteForSend" class="text-caption grey--text text-center mt-2">
+                  {{ $t('crossDevice.settings.policyRequireHint') }}
+                </div>
               </template>
 
               <!-- ── Ledger wallet ── -->
@@ -569,6 +575,7 @@ import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import i18n from '@/plugins/i18n';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { useChainContext } from '../../composables/useChainContext';
 
 const { themeColors } = useChainContext();
@@ -650,10 +657,21 @@ const isPrfWallet = computed(() =>
   (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId)
 );
 
-// Cross-device signing: only for Cardano software (non-hardware) wallets, and
-// only when the feature flag is on. Dark by default.
+// Cross-device signing: server flag + this wallet's opt-in + a trusted signer.
+// Cardano software wallets only. Dark by default.
+void remoteSigningStore.ensureLoaded();
 const canSignOnAnotherDevice = computed(() =>
   featureFlagsStore.isCrossDeviceSigningEnabled() &&
+  remoteSigningStore.isEnabled() &&
+  remoteSigningStore.hasTrustedSigner() &&
+  loggedWallet.value?.chain === Blockchain.CARDANO &&
+  isNormalWallet.value
+);
+
+// When the policy requires remote approval, disable local signing for a Send.
+const requiresRemoteForSend = computed(() =>
+  featureFlagsStore.isCrossDeviceSigningEnabled() &&
+  remoteSigningStore.requiresRemoteForSend() &&
   loggedWallet.value?.chain === Blockchain.CARDANO &&
   isNormalWallet.value
 );
@@ -1037,6 +1055,11 @@ function recalcMinAda() {
 // ── Step 4: Sign & Submit ──
 async function signAndSubmit() {
   if (!tx.value) return;
+  // Policy gate: local signing disabled, Send must be approved on a trusted device.
+  if (requiresRemoteForSend.value) {
+    passwordError.value = i18n.t('crossDevice.settings.policyRequireHint') as string;
+    return;
+  }
   passwordError.value = '';
   submitting.value = true;
 
@@ -1135,6 +1158,11 @@ async function onPassKeySuccess(pkBytes: Uint8Array) {
   privateKeyBytes.value = pkBytes;
   // Sign and submit using the private key bytes
   if (!tx.value) return;
+  // Policy gate: local signing disabled, Send must be approved on a trusted device.
+  if (requiresRemoteForSend.value) {
+    passwordError.value = i18n.t('crossDevice.settings.policyRequireHint') as string;
+    return;
+  }
   passwordError.value = '';
   submitting.value = true;
   try {
