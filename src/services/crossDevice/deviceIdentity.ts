@@ -81,3 +81,17 @@ export function deviceIdFromPubKey(pubKeyHex: string): string {
   const digest = sha256(hexToBytes(pubKeyHex));
   return bytesToHex(digest).slice(0, DEVICE_ID_HEX_LEN);
 }
+
+/**
+ * Fail-closed check that a (deviceId, pubKey) pair is self-consistent: the id
+ * must be the one derived from that public key. Pairing MUST refuse a device
+ * whose relay-advertised id does not match its key, which is how a malicious
+ * relay would try to get an attacker key pinned under a plausible id/label.
+ */
+export function isDeviceIdConsistent(deviceId: string, pubKeyHex: string): boolean {
+  try {
+    return deviceIdFromPubKey(pubKeyHex) === deviceId;
+  } catch {
+    return false;
+  }
+}
