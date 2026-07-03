@@ -129,6 +129,9 @@ async function enrichSelectedTransaction(tx: Record<string, unknown> | null) {
         witness: enriched.witness,
         auxiliaryData: enriched.auxiliaryData,
         isValid: enriched.isValid,
+        // Backend utxo carries native-token amounts the thin (WS-synced) record may
+        // lack; keep the live view consistent with the persisted DB record.
+        utxo: enriched.utxo,
       };
     }
   } catch (e) {
