@@ -21,12 +21,25 @@ export type CrossDeviceMessageType =
 
 export type DevicePlatform = 'extension' | 'ios' | 'android';
 
+/**
+ * Wallet-control proof: a CIP-8 COSE_Sign1 in which the device's WALLET stake key
+ * endorses its relay-auth pubkey (see registerProof.ts). Optional on the wire
+ * (absent for legacy / trust-on-first-use devices) until the coordinated
+ * fail-closed flip. The relay carries it through verbatim; siblings verify it.
+ */
+export interface DeviceRegisterProof {
+  coseSign1: string; // hex CBOR of COSE_Sign1
+  coseKey: string; // hex CBOR of COSE_Key
+  stakeAddress: string; // bech32 reward address the wallet key signed with
+}
+
 export interface DeviceInfo {
   deviceId: string;
   label: string;
   platform: DevicePlatform;
   pubKey: string; // hex Ed25519 public key (verifies this device's signed messages)
   hasSigningKey: boolean; // true if this device holds a wallet spending key
+  proof?: DeviceRegisterProof; // optional wallet-control proof
 }
 
 /** Outbound, unsigned (trust-on-first-use); wallet inferred server-side from SUBSCRIBE. */

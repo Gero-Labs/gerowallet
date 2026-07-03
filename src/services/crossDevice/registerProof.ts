@@ -19,12 +19,9 @@ import { Cardano } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { keyHashFromAddress } from '@/chrome/serialization';
 import { CoseLabel, safeFreeCSLObject } from '@/shared/utils/converter';
+import type { DeviceRegisterProof } from './protocol';
 
-export interface DeviceRegisterProof {
-  coseSign1: string; // hex CBOR of COSE_Sign1
-  coseKey: string; // hex CBOR of COSE_Key
-  stakeAddress: string; // bech32 reward address the wallet key signed with
-}
+export type { DeviceRegisterProof };
 
 export const DEVICE_REGISTER_DOMAIN = 'gero-xdev/v1|DEVICE_REGISTER';
 
