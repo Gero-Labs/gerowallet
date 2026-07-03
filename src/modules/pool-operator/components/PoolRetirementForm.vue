@@ -67,7 +67,7 @@
 
 <script setup lang="ts">
 import { ref, computed, toRefs } from 'vue';
-import { networkStore } from '@/stores/networkStore';
+import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { usePoolRetirement } from '@/shared/composables/usePoolRetirement';
 import PoolConfirmDialog from '../dialogs/PoolConfirmDialog.vue';
@@ -81,7 +81,11 @@ const requiredRule = (v: string) => !!v || 'Required';
 const minValue = (min: number) => (v: string) => !v || Number(v) >= min || `Min ${min}`;
 const maxValue = (max: number) => (v: string) => !v || Number(v) <= max || `Max ${max}`;
 
-const currentEpoch = computed(() => tip.value?.epoch || 0);
+// epoch is Cardano-only; pool retirement never runs against a BTC tip.
+const currentEpoch = computed(() => {
+  const t = tip.value;
+  return t && !isBitcoinTip(t) ? (t.epoch || 0) : 0;
+});
 const minEpoch = computed(() => currentEpoch.value + 1);
 const maxEpoch = computed(() => currentEpoch.value + (epochParams.value?.poolRetirementEpochBound || 18));
 

@@ -286,7 +286,7 @@ import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { networkStore } from '@/stores/networkStore';
+import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -377,7 +377,9 @@ const kesWarningVisible = computed(() => {
 });
 
 const epochSlotPercentage = computed(() => {
-  return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;
+  // epoch_slot is Cardano-only; a height-only BTC tip has no epoch progress bar.
+  const t = tip.value;
+  return t && !isBitcoinTip(t) ? (t.epoch_slot / 432000) * 100 : 0;
 });
 
 // Format last sync as timestamp (e.g., "2:45:32 PM")
