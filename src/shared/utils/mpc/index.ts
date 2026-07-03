@@ -5,3 +5,9 @@ export { encryptRecoveryShare, decryptRecoveryShare } from './recoveryShare';
 export { createMpcShareSet, reconstructEntropy } from './mpcShares';
 export type { MpcShareSet } from './mpcShares';
 export { entropyToMnemonic, mnemonicToEntropyBytes, deriveExpectedXpub, reconstructAndValidateEntropy } from './mpcKeys';
+export {
+  prepareMpcWalletCreation,
+  encryptDeviceShare,
+  decryptDeviceShare,
+  reconstructRootKeyBytes,
+} from './mpcWalletService';
