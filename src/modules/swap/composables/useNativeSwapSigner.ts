@@ -187,6 +187,13 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
     keystoneReject = null;
   }
 
+  function failKeystone(msg: string) {
+    keystoneShow.value = false;
+    keystoneReject?.(new Error(msg || 'Keystone signing failed'));
+    keystoneResolve = null;
+    keystoneReject = null;
+  }
+
   async function signTx(unsignedTxCbor: string): Promise<string> {
     const type = walletStore.loggedWallet?.type;
     if (type === WalletType.Ledger) return signLedger(unsignedTxCbor);
@@ -199,6 +206,6 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
 
   return {
     signer,
-    keystone: { keystoneType, keystoneCbor, keystoneShow, onKeystoneScan, cancelKeystone },
+    keystone: { keystoneType, keystoneCbor, keystoneShow, onKeystoneScan, cancelKeystone, failKeystone },
   };
 }

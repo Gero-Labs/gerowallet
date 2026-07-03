@@ -9,7 +9,7 @@ Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'
 vi.mock('../../composables/useNativeSwapSigner', () => ({
   useNativeSwapSigner: () => ({
     signer: { meta: { name: 'Gero' } },
-    keystone: { keystoneShow: { value: false }, keystoneType: { value: '' }, keystoneCbor: { value: '' }, onKeystoneScan: vi.fn(), cancelKeystone: vi.fn() },
+    keystone: { keystoneShow: { value: false }, keystoneType: { value: '' }, keystoneCbor: { value: '' }, onKeystoneScan: vi.fn(), cancelKeystone: vi.fn(), failKeystone: vi.fn() },
   }),
 }));
 vi.mock('../../composables/useSwapTokenResolver', () => ({ useSwapTokenResolver: () => ({ resolveToken: vi.fn() }) }));

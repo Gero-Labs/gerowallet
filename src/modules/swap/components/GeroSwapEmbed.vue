@@ -24,7 +24,7 @@
         :keystoneType="keystone.keystoneType.value"
         :keystoneCbor="keystone.keystoneCbor.value"
         @scan="keystone.onKeystoneScan"
-        @error="keystone.cancelKeystone"
+        @error="keystone.failKeystone"
         @close="keystone.cancelKeystone"
       />
 

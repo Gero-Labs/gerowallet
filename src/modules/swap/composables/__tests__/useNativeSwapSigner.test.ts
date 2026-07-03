@@ -121,4 +121,15 @@ describe('useNativeSwapSigner', () => {
     expect(await pending).toBe('KEYSTONE_WIT');
     expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
   });
+
+  it('failKeystone rejects signTx with the provided error message (not "cancelled")', async () => {
+    walletState.loggedWallet = { type: 'Keystone', baseAddress: 'addr_base' };
+    const { signer, keystone } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
+    const pending = signer.signTx('CBOR');
+    await Promise.resolve();
+    expect(keystone.keystoneShow.value).toBe(true);
+    keystone.failKeystone('bad QR code');
+    await expect(pending).rejects.toThrow('bad QR code');
+    expect(keystone.keystoneShow.value).toBe(false);
+  });
 });
