@@ -75,6 +75,20 @@ export const remoteSigningStore = {
     await this.refreshDevices();
   },
 
+  /**
+   * Sign (once) the wallet-control proof that endorses this device's relay-auth
+   * key, under the user's spending auth. Cached in the background and attached to
+   * every DEVICE_REGISTER so siblings can verify this device really controls the
+   * wallet. Call at enable-time BEFORE setEnabled(true).
+   */
+  async produceProof(auth: { password?: string; privateKeyBytes?: number[] }): Promise<{ success: boolean; error?: string }> {
+    const r = await send<{ success: boolean; error?: string }>(
+      MessageTypes.PRODUCE_DEVICE_REGISTER_PROOF,
+      auth as Record<string, unknown>,
+    );
+    return { success: !!r.success, error: r.error };
+  },
+
   async setPolicy(policy: SigningPolicy): Promise<void> {
     const r = await send<SettingsReply>(MessageTypes.SET_CROSS_DEVICE_POLICY, { policy });
     if (r.success && r.settings) state.settings = r.settings;

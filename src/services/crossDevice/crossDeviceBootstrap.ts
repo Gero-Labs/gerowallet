@@ -17,7 +17,7 @@ import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDeviceSigning.service';
 import { createWsTransport, feedCrossDeviceMessage } from './wsTransport';
-import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo } from './protocol';
+import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo, type DeviceRegisterProof } from './protocol';
 import { emptyRegistry, applyDevicesSnapshot, pubKeyOf, type DeviceRegistryState } from './deviceRegistry';
 
 export interface CrossDeviceHandles {
@@ -49,7 +49,7 @@ export interface CrossDeviceHandles {
 function publishDeviceRegister(
   send: (msg: DeviceRegister) => void,
   identity: { deviceId: string; pubKeyHex: string },
-  opts: { label: string; platform: DevicePlatform; hasSigningKey: boolean },
+  opts: { label: string; platform: DevicePlatform; hasSigningKey: boolean; proof?: DeviceRegisterProof },
 ): void {
   const register: DeviceRegister = {
     type: 'DEVICE_REGISTER',
@@ -58,6 +58,7 @@ function publishDeviceRegister(
     platform: opts.platform,
     pubKey: identity.pubKeyHex,
     hasSigningKey: opts.hasSigningKey,
+    ...(opts.proof ? { proof: opts.proof } : {}),
   };
   send(register);
 }
@@ -83,6 +84,9 @@ export function bootstrapCrossDeviceSigning(opts: {
   // caller's closures so trust/untrust take effect without a re-bootstrap.
   isRequesterTrusted?: (deviceId: string, pubKey: string) => boolean;
   isResponderTrusted?: (deviceId: string, pubKey: string) => boolean;
+  // Latest cached wallet-control proof, read at each register() so a proof
+  // produced AFTER bootstrap (on enable) rides the next DEVICE_REGISTER.
+  getProof?: () => DeviceRegisterProof | undefined;
 }): CrossDeviceHandles | null {
   if (!opts.enabled) {
     return null;
@@ -124,6 +128,7 @@ export function bootstrapCrossDeviceSigning(opts: {
         label: opts.label,
         platform: 'extension',
         hasSigningKey: opts.hasSigningKey,
+        proof: opts.getProof?.(),
       });
     } catch (e) {
       debugLog('cross-device DEVICE_REGISTER failed:', e);
