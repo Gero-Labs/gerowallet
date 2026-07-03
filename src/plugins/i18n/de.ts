@@ -951,6 +951,8 @@ export default {
   'crossDevice.settings.enableProofFailed': 'Der Gerätenachweis konnte nicht erstellt werden. Überprüfen Sie Ihr Passwort und versuchen Sie es erneut.',
   'crossDevice.settings.online': 'Online',
   'crossDevice.settings.offline': 'Offline',
+  'crossDevice.settings.walletVerified': 'Wallet-verifiziert',
+  'crossDevice.settings.sasOnly': 'Nur SAS',
   'dashboard.actions': 'Aktionen',
   'dashboard.adaOnly': 'Nur ADA',
   'dashboard.adaOnlyTooltip': 'Zeigt nur das ADA-Guthaben an',
