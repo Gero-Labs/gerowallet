@@ -41,7 +41,7 @@ import {
 import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
 import { deriveBitcoinAddress } from '@/chains/bitcoin/bitcoinKeyManager';
 import WalletStore from '@/stores/walletStore';
-import NetworkStore from '@/stores/networkStore';
+import NetworkStore, { isBitcoinTip } from '@/stores/networkStore';
 import {
   analyzeTransactionForSignatures,
   findCollectionDescription,
@@ -208,7 +208,8 @@ export class WalletBg {
   }
 
   public async getEpochProtocolIfNotExists(epoch: number) {
-    if (NetworkStore.state.tip?.epoch == epoch) {
+    const tip = NetworkStore.state.tip;
+    if (tip && !isBitcoinTip(tip) && tip.epoch == epoch) {
       return null
     }
     return epoch;
