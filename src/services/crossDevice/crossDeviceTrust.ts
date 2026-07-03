@@ -23,16 +23,17 @@ export type SigningPolicy = 'ask' | 'require_remote';
  * to SAS-only pairing. true = require a valid proof to pair (a MISSING proof is
  * also rejected).
  *
- * Held at false for the on-device interop test (2026-07-03): verify-if-present
- * lets pairing degrade to SAS + surface a "SAS only" readout when a proof does not
- * arrive/verify, which is exactly the diagnostic the interop test needs BEFORE the
- * flip (after the flip a proof-path bug becomes an undiagnosable hard failure). Flip
- * to true once the interop shows "wallet-verified" on both devices, coordinated with
- * iOS `CrossDeviceRegisterProofVerifier.requireProofToPair`. Feature is single-user
- * (no in-the-wild pairings), so the flip needs no migration and gates trustCrossDevice
- * (new pairings) only. See docs/plans/2026-07-03-authenticated-device-register-contract.md.
+ * true = fail-closed pairing: a device MUST present a valid wallet-control proof to
+ * pair (a missing proof is rejected, not just an invalid one). This is the shipped
+ * end state — the authenticated-register security boundary. Safe without a coordinated
+ * release because the feature is single-user (only the developer has access, zero
+ * in-the-wild pairings) and both clients emit + verify valid proofs, so there is no
+ * peer to brick pairing against. Gates trustCrossDevice (new pairings) only; existing
+ * pins are unaffected. One-line reversible to false if a peer build stops emitting a
+ * proof. iOS mirror: `CrossDeviceRegisterProofVerifier.requireProofToPair`. See
+ * docs/plans/2026-07-03-authenticated-device-register-contract.md (Rollout step 4).
  */
-export const REQUIRE_PROOF_TO_PAIR = false;
+export const REQUIRE_PROOF_TO_PAIR = true;
 
 /** A device the user has explicitly paired. Pinned by (deviceId, pubKey). */
 export interface TrustedDevice {
