@@ -30,6 +30,9 @@ export default defineConfig({
       '@noble/ciphers/chacha': '@noble/ciphers/chacha.js',
       '@noble/hashes/pbkdf2': '@noble/hashes/pbkdf2.js',
       '@noble/hashes/sha2': '@noble/hashes/sha2.js',
+      // Test-only: the browser emurgo message-signing WASM can't load in the node
+      // test runner; the nodejs variant has an identical API + a Node-loadable WASM.
+      '@emurgo/cardano-message-signing-browser': '@emurgo/cardano-message-signing-nodejs',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
     mainFields: ['module', 'main'],
