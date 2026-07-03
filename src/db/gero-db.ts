@@ -535,6 +535,52 @@ export async function createNewGoogleWallet(
   });
 }
 
+/**
+ * Persist a Google "Sign in with Google" MPC wallet: type Google,
+ * encryptionMethod 'mpc', keyed by the Google `sub` (userId) with the
+ * account xpub (publicKey) and the AES-encrypted device share
+ * (mpcDeviceShare, non-indexed). Mirrors createNewWallet's record shape.
+ */
+export async function createMpcGoogleWallet(params: {
+  name: string;
+  icon: string;
+  theme: string;
+  chain: string;
+  network: string;
+  userId: string;
+  publicKey: string;
+  encryptedDeviceShare: string;
+  addressType?: string;
+}): Promise<number> {
+  const db: Dexie = await getDb();
+  let order = await getLatestWalletByOrder();
+  if (order == null) {
+    order = 1;
+  } else {
+    order++;
+  }
+
+  const walletData = {
+    name: params.name,
+    icon: params.icon,
+    type: WalletType.Google,
+    theme: params.theme,
+    order,
+    publicKey: params.publicKey,
+    passwordLastUpdate: new Date(),
+    chain: params.chain,
+    network: params.network,
+    addressType: params.addressType ?? getDefaultAddressType(params.chain),
+    encryptionMethod: 'mpc' as const,
+    userId: params.userId,
+    mpcDeviceShare: params.encryptedDeviceShare,
+  };
+
+  const walletId = await db['wallets'].add(walletData);
+  await createNewWalletDb(walletId, false, false);
+  return walletId as number;
+}
+
 export async function deleteWallet(walletId: number|string) {
   const db: Dexie = await getDb();
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
