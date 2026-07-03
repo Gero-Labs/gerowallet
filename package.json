@@ -97,6 +97,7 @@
     "psl": "^1.9.0",
     "qr-code-styling": "^1.6.0-rc.1",
     "qrcode": "^1.5.4",
+    "shamir-secret-sharing": "0.0.4",
     "sockjs-client": "^1.6.1",
     "tiny-fifo-cache": "^1.0.1",
     "tiny-secp256k1": "^2.2.4",
