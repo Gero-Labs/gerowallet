@@ -21,6 +21,11 @@ import {
   saveRemoteSigningSettings,
 } from '@/services/crossDevice/crossDeviceSettings';
 import {
+  loadOrCreateDeviceIdentity,
+  type StoredDeviceIdentity,
+} from '@/services/crossDevice/deviceIdentityStore';
+import { isDeviceIdConsistent } from '@/services/crossDevice/deviceIdentity';
+import {
   defaultRemoteSigningSettings,
   isDeviceTrusted,
   setEnabled as trustSetEnabled,
@@ -47,6 +52,9 @@ export class WalletManager {
   // The bootstrap's trust predicates read this live, so trust/untrust/policy
   // changes take effect without a re-bootstrap.
   private remoteSigning: RemoteSigningSettings = defaultRemoteSigningSettings();
+  // Stable relay-auth identity for this browser install (persisted), so pins made
+  // by a sibling device survive a re-login instead of churning every session.
+  private crossDeviceIdentity: StoredDeviceIdentity | null = null;
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
@@ -366,11 +374,15 @@ export class WalletManager {
       if (this.currentWalletId != null) {
         this.remoteSigning = await loadRemoteSigningSettings(this.currentWalletId);
       }
+      if (!this.crossDeviceIdentity) {
+        this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
+      }
       const serverFlagOn = await this.isCrossDeviceSigningEnabled();
       this.crossDevice?.dispose();
       this.crossDevice = bootstrapCrossDeviceSigning({
         label: 'Gero Extension',
         hasSigningKey: true,
+        identity: this.crossDeviceIdentity,
         // Both the server flag AND this wallet's opt-in must be on.
         enabled: serverFlagOn && this.remoteSigning.enabled,
         // Live trust gates: only paired devices may approve/answer.
@@ -967,6 +979,12 @@ export class WalletManager {
   async trustCrossDevice(deviceId: string): Promise<RemoteSigningSettings> {
     const found = this.crossDevice?.getDevices().find((d) => d.deviceId === deviceId);
     if (!found) return this.remoteSigning; // not visible; nothing to pin
+    // Fail closed: refuse to pin a device whose id does not derive from its key
+    // (a relay listing an attacker key under a plausible id/label).
+    if (!isDeviceIdConsistent(found.deviceId, found.pubKey)) {
+      debugLog('cross-device: refusing to pin id/key mismatch for', found.deviceId);
+      return this.remoteSigning;
+    }
     this.remoteSigning = trustAddDevice(
       this.remoteSigning,
       { deviceId: found.deviceId, pubKey: found.pubKey, label: found.label, platform: found.platform },
@@ -991,10 +1009,14 @@ export class WalletManager {
    */
   private async reconfigureCrossDevice(): Promise<void> {
     const serverFlagOn = await this.isCrossDeviceSigningEnabled();
+    if (!this.crossDeviceIdentity) {
+      this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
+    }
     this.crossDevice?.dispose();
     this.crossDevice = bootstrapCrossDeviceSigning({
       label: 'Gero Extension',
       hasSigningKey: true,
+      identity: this.crossDeviceIdentity,
       enabled: serverFlagOn && this.remoteSigning.enabled,
       isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
       isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),

@@ -76,6 +76,9 @@ export function bootstrapCrossDeviceSigning(opts: {
   label: string;
   hasSigningKey: boolean;
   enabled: boolean;
+  // Stable, persisted relay-auth identity (so pins survive logins). Falls back to
+  // a fresh ephemeral keypair when omitted (tests / no storage).
+  identity?: { deviceId: string; privKeyHex: string; pubKeyHex: string };
   // Per-wallet trust gates (see crossDeviceSigning.service). Read live by the
   // caller's closures so trust/untrust take effect without a re-bootstrap.
   isRequesterTrusted?: (deviceId: string, pubKey: string) => boolean;
@@ -85,8 +88,11 @@ export function bootstrapCrossDeviceSigning(opts: {
     return null;
   }
 
-  const keypair = generateDeviceKeypair();
-  const deviceId = deviceIdFromPubKey(keypair.pubKeyHex);
+  const identity = opts.identity ?? (() => {
+    const kp = generateDeviceKeypair();
+    return { deviceId: deviceIdFromPubKey(kp.pubKeyHex), privKeyHex: kp.privKeyHex, pubKeyHex: kp.pubKeyHex };
+  })();
+  const deviceId = identity.deviceId;
   const transport = createWsTransport();
 
   // Server-pushed device registry backs sender-pubkey resolution.
@@ -100,7 +106,7 @@ export function bootstrapCrossDeviceSigning(opts: {
 
   const signing = createCrossDeviceSigning({
     transport,
-    identity: { deviceId, privKeyHex: keypair.privKeyHex },
+    identity: { deviceId, privKeyHex: identity.privKeyHex },
     resolvePubKey: async (id) => pubKeyOf(registry, id),
     now: () => Date.now(),
     newId: () => globalThis.crypto.randomUUID(),
@@ -114,7 +120,7 @@ export function bootstrapCrossDeviceSigning(opts: {
   // out. It is published from the WS onopen path via register() below instead.
   const register = (): void => {
     try {
-      publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: keypair.pubKeyHex }, {
+      publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: identity.pubKeyHex }, {
         label: opts.label,
         platform: 'extension',
         hasSigningKey: opts.hasSigningKey,
