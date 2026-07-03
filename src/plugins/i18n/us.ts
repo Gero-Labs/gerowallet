@@ -829,6 +829,7 @@ export default {
   'crossDevice.settings.fingerprint': 'Pairing code',
   'crossDevice.settings.pairHint': 'Compare the pairing code on both devices before you pair.',
   'crossDevice.settings.pair': 'Pair',
+  'crossDevice.settings.pairFailed': 'Could not pair. The device may have gone offline. Refresh and try again.',
   'crossDevice.settings.untrust': 'Untrust',
   'crossDevice.settings.trustedOn': 'Paired {date}',
   'crossDevice.settings.unnamed': 'Unnamed device',

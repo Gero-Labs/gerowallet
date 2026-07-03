@@ -80,10 +80,12 @@ export const remoteSigningStore = {
     if (r.success && r.settings) state.settings = r.settings;
   },
 
-  async trust(deviceId: string): Promise<void> {
+  /** Returns false when the device could not be pinned (e.g. it went offline). */
+  async trust(deviceId: string): Promise<boolean> {
     const r = await send<SettingsReply>(MessageTypes.TRUST_CROSS_DEVICE, { deviceId });
-    if (r.success && r.settings) state.settings = r.settings;
+    if (r.settings) state.settings = r.settings;
     await this.refreshDevices();
+    return r.success;
   },
 
   async untrust(deviceId: string): Promise<void> {

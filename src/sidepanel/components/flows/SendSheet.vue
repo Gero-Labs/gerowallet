@@ -422,7 +422,7 @@
                 </div>
                 <PassKeyAuthButton
                   v-if="!txWitnesses"
-                  :disabled="submitting"
+                  :disabled="submitting || requiresRemoteForSend"
                   @success="onPassKeySuccess"
                   @error="onPassKeyError"
                   class="mb-2"
@@ -439,6 +439,9 @@
                   <v-icon left small>mdi-send</v-icon>
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
+                <div v-if="requiresRemoteForSend" class="text-caption grey--text text-center mt-2">
+                  {{ $t('crossDevice.settings.policyRequireHint') }}
+                </div>
               </template>
 
               <!-- ── Ledger wallet ── -->
@@ -1052,6 +1055,11 @@ function recalcMinAda() {
 // ── Step 4: Sign & Submit ──
 async function signAndSubmit() {
   if (!tx.value) return;
+  // Policy gate: local signing disabled, Send must be approved on a trusted device.
+  if (requiresRemoteForSend.value) {
+    passwordError.value = i18n.t('crossDevice.settings.policyRequireHint') as string;
+    return;
+  }
   passwordError.value = '';
   submitting.value = true;
 
@@ -1150,6 +1158,11 @@ async function onPassKeySuccess(pkBytes: Uint8Array) {
   privateKeyBytes.value = pkBytes;
   // Sign and submit using the private key bytes
   if (!tx.value) return;
+  // Policy gate: local signing disabled, Send must be approved on a trusted device.
+  if (requiresRemoteForSend.value) {
+    passwordError.value = i18n.t('crossDevice.settings.policyRequireHint') as string;
+    return;
+  }
   passwordError.value = '';
   submitting.value = true;
   try {

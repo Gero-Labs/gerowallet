@@ -1833,8 +1833,13 @@ app.addToOptions(MessageTypes.SET_CROSS_DEVICE_POLICY, async (request, sendRespo
 
 app.addToOptions(MessageTypes.TRUST_CROSS_DEVICE, async (request, sendResponse) => {
   try {
-    const settings = await walletManager.trustCrossDevice(String(request.data?.deviceId ?? ''));
-    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+    const deviceId = String(request.data?.deviceId ?? '');
+    const settings = await walletManager.trustCrossDevice(deviceId);
+    // Pairing no-ops if the device left the registry between listing and click.
+    const pinned = !!settings.trustedDevices[deviceId];
+    sendResponse(crossDeviceReply(request.id, pinned
+      ? { success: true, settings }
+      : { success: false, error: 'device_unavailable', settings }));
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
   }

@@ -446,6 +446,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   const handleSign = async (formRef?: { validate: () => boolean }): Promise<void> => {
     if (isSubmit.value) {
       await submitTx();
+    } else if (requiresRemoteForSend.value) {
+      // Policy gate: local signing is disabled; the Send must be approved on a
+      // trusted device. Covers every local path (password, PassKey/PRF, autofill)
+      // since they all funnel through handleSign.
+      snackbar.setError(t('crossDevice.settings.policyRequireHint'));
     } else {
       if (loggedWallet.value?.type === WalletType.Normal) {
         if (!formRef || formRef.validate()) {

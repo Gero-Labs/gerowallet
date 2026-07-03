@@ -134,10 +134,13 @@
 import { computed, watch } from 'vue';
 import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { pairingFingerprint, type SigningPolicy } from '@/services/crossDevice/crossDeviceTrust';
+import snackbar from '@/plugins/snackbar';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
 const props = defineProps<{ isOpen: boolean }>();
 // Template emits via $emit('close'); declared here for type-checking.
 defineEmits<{ (e: 'close'): void }>();
+const { t } = useTranslation();
 
 const state = remoteSigningStore.state;
 
@@ -178,7 +181,8 @@ async function onPolicyChange(value: SigningPolicy) {
 }
 
 async function onTrust(deviceId: string) {
-  await remoteSigningStore.trust(deviceId);
+  const ok = await remoteSigningStore.trust(deviceId);
+  if (!ok) snackbar.setError(t('crossDevice.settings.pairFailed'));
 }
 
 async function onUntrust(deviceId: string) {
