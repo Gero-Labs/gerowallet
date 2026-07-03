@@ -1777,7 +1777,12 @@ app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, se
     }
 
     const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
-    const decision = await signing.requestSignature({ unsignedCbor, intent, stakeAddress, ttlMs });
+    // Route to a specific device when the caller named one, else to the sole
+    // online trusted signer; null => broadcast (backward-compatible).
+    const to = (typeof request.data?.to === 'string' && request.data.to)
+      || walletManager.getDefaultCrossDeviceTarget()
+      || undefined;
+    const decision = await signing.requestSignature({ unsignedCbor, intent, stakeAddress, ttlMs, to });
 
     sendResponse({
       id: request.id,
