@@ -12,6 +12,9 @@ export interface FeatureFlags {
   isNexusUnstakeEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
+  // Phase-2 gate for routing Bitcoin sync through gero-sync (dual-run with the
+  // Esplora poller). Dark by default; see walletManager.isBitcoinGeroSyncEnabled.
+  isBitcoinGeroSyncEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -32,6 +35,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isNexusUnstakeEnabled: false,
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
+    isBitcoinGeroSyncEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -90,6 +94,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
+    featureFlagsState.flags.isBitcoinGeroSyncEnabled = featureFlagService.getFlag('isBitcoinGeroSyncEnabled', false);
     persistFlagsForBackground();
   },
 
@@ -128,6 +133,11 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCopilotEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCopilotEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isBitcoinGeroSyncEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isBitcoinGeroSyncEnabled', newValue);
+      // Mirror the live flip so the background picks it up on next login.
+      persistFlagsForBackground();
     });
   },
 

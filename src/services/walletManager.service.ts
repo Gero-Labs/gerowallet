@@ -456,6 +456,59 @@ export class WalletManager {
           debugLog('Force resync complete');
         },
       }, credentials);
+    } else if (await this.isBitcoinGeroSyncEnabled()) {
+      // ── Bitcoin via gero-sync (Phase 2, dual-run behind a flag) ──────────────
+      // INERT BY DEFAULT: isBitcoinGeroSyncEnabled() reads the flag from
+      // chrome.storage.local and returns false unless explicitly turned on, so
+      // production BTC users are unaffected and keep the Esplora poller below.
+      // When on, this connects the SAME WS state machine Cardano uses, subscribing
+      // with the derived address set instead of a stake address. The poller is NOT
+      // removed yet (that is the Phase 5 cutover) — this runs alongside it so the
+      // two paths can be compared. setSync apply logic is Phase 3, so the handlers
+      // here only log (no store writes, cannot crash).
+      const btcAddressSet = walletBg.deriveBitcoinAddressSet();
+      let btcLastSyncedHeight = 0;
+      try {
+        const lastSyncInfo = await walletBg.getLastSyncInfo();
+        if (lastSyncInfo && !Array.isArray(lastSyncInfo)) {
+          btcLastSyncedHeight = (lastSyncInfo as { height?: number }).height || 0;
+        }
+      } catch {
+        btcLastSyncedHeight = 0;
+      }
+      debugLog(
+        `🔶 [BTC gero-sync] connecting dual-run: anchor=${btcAddressSet.anchor} ` +
+        `addresses=${btcAddressSet.addresses.length} lastSyncedHeight=${btcLastSyncedHeight}`
+      );
+      webSocketService.connect(
+        chain,
+        network,
+        btcAddressSet.anchor,
+        btcLastSyncedHeight,
+        {
+          onSync: async (data: WsSyncMessage) => {
+            // Phase 3 will apply transactions/utxos/account/tip via a BTC branch
+            // in setSync (convertBtcUtxos). Stubbed to a log so the plumbing is
+            // exercised without touching WalletStore.
+            debugLog('🔶 [BTC gero-sync] SYNC received (apply not yet implemented):', {
+              block: data.block?.height,
+              txs: Array.isArray(data['transactions']) ? data['transactions'].length : 0,
+              utxos: Array.isArray(data['utxos']) ? data['utxos'].length : 0,
+            });
+          },
+          onRollback: async (data: WsSyncMessage) => {
+            // Phase 4: height-based BTC rollback branch (rollback_to_height).
+            debugLog('🔶 [BTC gero-sync] ROLLBACK received (not yet implemented):', {
+              height: data['rollback_to_height'],
+            });
+          },
+          onForceResync: async () => {
+            debugLog('🔶 [BTC gero-sync] FORCE_RESYNC received (not yet implemented)');
+          },
+        },
+        undefined, // no Cardano credentials for BTC
+        btcAddressSet.addresses
+      );
     } else {
       debugLog('Skipping WebSocket connection for Bitcoin wallet');
     }
@@ -1133,6 +1186,28 @@ export class WalletManager {
         });
       });
       return flags['isCrossDeviceSigningEnabled'] === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Read isBitcoinGeroSyncEnabled from chrome.storage.local (same mirror path as
+   * isCrossDeviceSigningEnabled). Gates the Phase-2 BTC → gero-sync WS dual-run.
+   * Defaults to false (feature dark) if storage is empty or unreadable, so BTC
+   * wallets keep the existing Esplora poller and nothing changes in production.
+   */
+  private async isBitcoinGeroSyncEnabled(): Promise<boolean> {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        return false;
+      }
+      const flags = await new Promise<Record<string, unknown>>((resolve) => {
+        chrome.storage.local.get('featureFlags', (result) => {
+          resolve((result?.['featureFlags'] as Record<string, unknown>) ?? {});
+        });
+      });
+      return flags['isBitcoinGeroSyncEnabled'] === true;
     } catch {
       return false;
     }
