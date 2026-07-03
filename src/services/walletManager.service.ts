@@ -25,6 +25,7 @@ import {
   type StoredDeviceIdentity,
 } from '@/services/crossDevice/deviceIdentityStore';
 import { isDeviceIdConsistent } from '@/services/crossDevice/deviceIdentity';
+import { verifyDeviceRegisterProof } from '@/services/crossDevice/registerProof';
 import {
   defaultRemoteSigningSettings,
   isDeviceTrusted,
@@ -984,6 +985,21 @@ export class WalletManager {
     if (!isDeviceIdConsistent(found.deviceId, found.pubKey)) {
       debugLog('cross-device: refusing to pin id/key mismatch for', found.deviceId);
       return this.remoteSigning;
+    }
+    // If the device supplied a wallet-control proof, it MUST verify against this
+    // wallet's reward address (a present-but-invalid proof is a rejection). Absent
+    // proof falls back to SAS + pin until the coordinated fail-closed flip.
+    if (found.proof) {
+      const ownStake = this.walletBg?.stakeAddress ?? '';
+      const ok = await verifyDeviceRegisterProof(
+        found.proof,
+        { deviceId: found.deviceId, pubKey: found.pubKey },
+        ownStake,
+      );
+      if (!ok) {
+        debugLog('cross-device: refusing to pin — wallet-control proof invalid for', found.deviceId);
+        return this.remoteSigning;
+      }
     }
     this.remoteSigning = trustAddDevice(
       this.remoteSigning,
