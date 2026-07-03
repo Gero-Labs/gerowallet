@@ -70,6 +70,9 @@ import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
 import { walletStore } from '@/stores/walletStore';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
+import Messaging from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import { Blockchain } from '@/models/types';
 
 const vmProxy = getCurrentInstance()!.proxy;
 const route = vmProxy.$route;
@@ -94,8 +97,53 @@ function markUtxosSeen() {
   markFeatureAsSeen('transactions.utxos');
 }
 
+// Cardano txs stored UTxO-only (no deserialized body) can't render certificates,
+// datum, redeemers or metadata — only the UTxOs panel. When such a tx is selected,
+// backfill its body on demand (fetch + deserialize CBOR in the background), then
+// swap the enriched copy into the open detail view. The background also persists
+// the enriched record, so the list row and future opens are fixed too.
+const enrichingTxHashes = new Set<string>();
+
+async function enrichSelectedTransaction(tx: Record<string, unknown> | null) {
+  if (!tx || tx.body || tx.pending) return; // already enriched or not yet confirmed
+  if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return; // CBOR backfill is Cardano-only
+  const txHash = (tx.tx_hash || tx.id) as string | undefined;
+  if (!txHash || enrichingTxHashes.has(txHash)) return;
+
+  enrichingTxHashes.add(txHash);
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.ENRICH_TRANSACTIONS,
+      data: { txHashes: [txHash] },
+    }) as { data?: { transactions?: Array<Record<string, unknown>> } };
+    const enriched = response?.data?.transactions?.find(
+      (t: Record<string, unknown>) => (t.tx_hash || t.id) === txHash
+    );
+    // Only swap if the same tx is still selected and we actually got a body back.
+    const selectedHash = transactionInfo.value?.tx_hash || transactionInfo.value?.id;
+    if (enriched?.body && selectedHash === txHash) {
+      transactionInfo.value = {
+        ...transactionInfo.value,
+        cbor: enriched.cbor,
+        body: enriched.body,
+        witness: enriched.witness,
+        auxiliaryData: enriched.auxiliaryData,
+        isValid: enriched.isValid,
+        // Backend utxo carries native-token amounts the thin (WS-synced) record may
+        // lack; keep the live view consistent with the persisted DB record.
+        utxo: enriched.utxo,
+      };
+    }
+  } catch (e) {
+    console.warn('[Transactions] transaction enrichment failed:', e);
+  } finally {
+    enrichingTxHashes.delete(txHash);
+  }
+}
+
 const handleOnTransactionsRowClick = (row: any) => {
   transactionInfo.value = row;
+  enrichSelectedTransaction(row);
 };
 
 const handleOnUtxoRowClick = (row: any) => {
@@ -113,6 +161,7 @@ const selectTransactionFromQuery = () => {
   const found = transactions.find((tx: any) => tx.id === txId);
   if (found) {
     transactionInfo.value = found;
+    enrichSelectedTransaction(found);
     nextTick(() => {
       setTimeout(() => {
         const el = document.querySelector('.selected-transaction');
@@ -132,6 +181,7 @@ watch(() => walletStore.transactions, (transactions) => {
     transactionInfo.value = transactions.reduce((latest, current) => {
       return current.tx_timestamp > latest.tx_timestamp ? current : latest;
     });
+    enrichSelectedTransaction(transactionInfo.value);
   }
 }, { immediate: true });
 
