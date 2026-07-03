@@ -87,12 +87,18 @@ export async function verifyDeviceRegisterProof(
     const x = xCbor ? xCbor.as_bytes() : undefined;
     if (!x || x.length !== 32) return false;
 
-    // 2. Protected header: the signer address bytes (key_id must equal the 'address' label).
+    // 2. Signer address from the protected header's "address" label. This is the
+    //    standard CIP-30 signData layout that every Cardano wallet emits (Lace,
+    //    iOS, and our own walletBg.signData). key_id is OPTIONAL in that layout:
+    //    if present it must match, but we do not require it, so any wallet's
+    //    canonical signData interoperates. The signature (step 5) is verified over
+    //    the message's OWN reconstructed Sig_structure, so header layout is generic.
     const protectedHdr = sign1.headers().protected().deserialized_headers();
-    const keyId = protectedHdr.key_id();
     const addrLabel = protectedHdr.header(CoseLabel.address);
     const addrBytes = addrLabel ? addrLabel.as_bytes() : undefined;
-    if (!keyId || !addrBytes || !bytesEqual(keyId, addrBytes)) return false;
+    if (!addrBytes) return false;
+    const keyId = protectedHdr.key_id();
+    if (keyId && !bytesEqual(keyId, addrBytes)) return false;
 
     // 3. The signer address must be THIS wallet's reward address.
     const signerAddr = Cardano.Address.fromBytes(HexBlob(bytesToHex(addrBytes))).toBech32();
@@ -107,7 +113,9 @@ export async function verifyDeviceRegisterProof(
 
     // 5. Ed25519-verify the COSE signature over the reconstructed Sig_structure
     //    (never the raw payload). This also pins the algorithm to Ed25519.
-    const sigStruct = sign1.signed_data().to_bytes();
+    const sigStructObj = sign1.signed_data();
+    const sigStruct = sigStructObj.to_bytes();
+    safeFreeCSLObject(sigStructObj);
     const sig = sign1.signature();
     const okSig = await ed25519.verifyAsync(sig, sigStruct, x);
     if (!okSig) return false;
