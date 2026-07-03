@@ -13,7 +13,7 @@ import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
-import zkFoldApi from '@/api/zkFoldApi';
+import zkSmartWalletApi from '@/api/zkSmartWalletApi';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 import {
@@ -189,7 +189,7 @@ export class WalletManager {
         TapToolsStore.clear();
         let walletBg: WalletBg
         if (wallet.type === WalletType.Google) {
-          const smartBaseAddress: Cardano.Address = await zkFoldApi.walletAddress(wallet.userId)
+          const smartBaseAddress: Cardano.Address = await zkSmartWalletApi.walletAddress(wallet.userId)
           walletBg = new WalletBg(wallet, smartBaseAddress.toBech32())
         } else {
           walletBg = new WalletBg(wallet);
@@ -295,7 +295,7 @@ export class WalletManager {
     console.log('walletBg', walletBg)
     if (walletBg.type === WalletType.Google) {
       // promises.push(
-      //   zkFoldApi.walletAddress(walletBg.userId).then(res => {
+      //   zkSmartWalletApi.walletAddress(walletBg.userId).then(res => {
       //     if (res['status'] !== 200) {
       //       throw new Error('Failed to get address');
       //     }

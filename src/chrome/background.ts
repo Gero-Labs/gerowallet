@@ -1381,8 +1381,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
 
     // Import database helpers
     const { getGoogleWalletWithEmail } = await import('../db/gero-db');
-    const { upsertZkFoldWallet, isWalletActivated: checkActivated } = await import('../db/zkfold-db');
-    const { default: ZkFoldStore } = await import('../stores/zkFoldStore');
+    const { upsertZkSmartWalletWallet, isWalletActivated: checkActivated } = await import('../db/zk-smart-wallet-db');
+    const { default: ZkSmartWalletStore } = await import('../stores/zkSmartWalletStore');
 
     // Check if wallet already exists in main database
     const existingWallet = await getGoogleWalletWithEmail(userId);
@@ -1414,11 +1414,11 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     const { Bip32PrivateKey, SodiumBip32Ed25519 } = await import('@cardano-sdk/crypto');
     const { WalletTypePurpose, CoinTypes, HARDENED, WalletType } = await import('../models/types');
     const { encryptPrivateKey } = await import('../shared/utils/crypto');
-    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkFold/google.api');
-    const { BigIntWrap } = await import('@/services/zkFold/types');
-    const { b64ToBn } = await import('@/services/zkFold/utils/json.utils');
-    const { Prover } = await import('@/services/zkFold/prover');
-    const { Backend } = await import('@/services/zkFold/backend');
+    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkSmartWallet/google.api');
+    const { BigIntWrap } = await import('@/services/zkSmartWallet/types');
+    const { b64ToBn } = await import('@/services/zkSmartWallet/utils/json.utils');
+    const { Prover } = await import('@/services/zkSmartWallet/prover');
+    const { Backend } = await import('@/services/zkSmartWallet/backend');
 
     // Generate random 96 bytes for BIP32 Ed25519 key
     const randomBytes = new Uint8Array(96);
@@ -1500,8 +1500,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     await createNewWalletDb(walletId, false);
     console.log('✅ Wallet database created');
 
-    // Store proofId in zkFold database and store
-    await upsertZkFoldWallet({
+    // Store proofId in zkSmartWallet database and store
+    await upsertZkSmartWalletWallet({
       email: userId,
       userId,
       proofId,
@@ -1509,8 +1509,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
       walletId,
       createdAt: new Date()
     });
-    ZkFoldStore.setProofId(userId, proofId);
-    console.log('✅ ProofId stored in zkFold DB and store');
+    ZkSmartWalletStore.setProofId(userId, proofId);
+    console.log('✅ ProofId stored in zkSmartWallet DB and store');
 
     // Update geroStore
     const { default: GeroStore } = await import('../stores/geroStore');
@@ -1538,18 +1538,18 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
         const proof = await prover.prove(empi);
         console.log('✅ Proof generated successfully for wallet:', walletId);
 
-        const zkFoldUrl = import.meta.env['VITE_ZKFOLD_API_URL'] || 'https://wallet-api.zkfold.io';
-        const zkFoldApiKey = import.meta.env['VITE_ZKFOLD_API_KEY'] || null;
-        const backend = new Backend(zkFoldUrl, zkFoldApiKey);
+        const zkSmartWalletUrl = import.meta.env['VITE_ZK_SMART_WALLET_API_URL'] || 'https://wallet-api.zkfold.io'; // legacy zkFold hosted endpoint — unused, retained for reference
+        const zkSmartWalletApiKey = import.meta.env['VITE_ZK_SMART_WALLET_API_KEY'] || null;
+        const backend = new Backend(zkSmartWalletUrl, zkSmartWalletApiKey);
 
         console.log('🔐 Activating wallet on blockchain...');
         const createWalletResponse = await backend.activateWallet(strippedJwt, paymentKey.toPublic().hash(), proof);
         console.log('✅ Wallet activated successfully on blockchain!', createWalletResponse);
 
-        // Mark as activated in zkFold database and store
-        const { markWalletAsActivated } = await import('../db/zkfold-db');
+        // Mark as activated in zkSmartWallet database and store
+        const { markWalletAsActivated } = await import('../db/zk-smart-wallet-db');
         await markWalletAsActivated(userId, walletId);
-        ZkFoldStore.markAsActivated(userId, walletId);
+        ZkSmartWalletStore.markAsActivated(userId, walletId);
 
         console.log('✅ Background activation completed for wallet:', walletId);
       } catch (error) {

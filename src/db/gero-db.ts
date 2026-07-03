@@ -500,7 +500,7 @@ export async function createNewGoogleWallet(
   crypto.getRandomValues(randomBytes);
   const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(Buffer.from(randomBytes));
 
-  // Encrypt the root key with password (more secure than zkFold's plaintext storage)
+  // Encrypt the root key with password (more secure than zkSmartWallet's plaintext storage)
   const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
 
   // Get the public key for account #0
