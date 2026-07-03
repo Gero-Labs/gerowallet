@@ -23,13 +23,15 @@ export type SigningPolicy = 'ask' | 'require_remote';
  * to SAS-only pairing. true = require a valid proof to pair (a MISSING proof is
  * also rejected).
  *
- * Keep false until BOTH clients flip in the SAME coordinated release, or one
- * client bricks pairing against the other. The feature is dark
- * (isCrossDeviceSigningEnabled default false, no in-the-wild TOFU pairings), so
- * the flip needs no migration. See
+ * Flipped true 2026-07-03: the feature is single-user (only the developer has
+ * access, no in-the-wild pairings) and both clients emit + verify valid proofs,
+ * so the coordinated-release concern (one client bricking pairing against the
+ * other) does not apply. New pairings now REQUIRE a valid wallet-control proof;
+ * already-trusted devices are unaffected (this gates trustCrossDevice, not
+ * existing pins). Revert to false if a peer build stops emitting a proof. See
  * docs/plans/2026-07-03-authenticated-device-register-contract.md (Rollout step 4).
  */
-export const REQUIRE_PROOF_TO_PAIR = false;
+export const REQUIRE_PROOF_TO_PAIR = true;
 
 /** A device the user has explicitly paired. Pinned by (deviceId, pubKey). */
 export interface TrustedDevice {
