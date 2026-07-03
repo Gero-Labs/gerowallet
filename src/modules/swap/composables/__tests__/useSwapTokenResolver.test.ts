@@ -1,17 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { tokens, state, resolveAsset } = vi.hoisted(() => {
+const { tokens, state, resolveAsset, loadTokens } = vi.hoisted(() => {
   const tokens: Record<string, unknown> = {};
   return {
     tokens,
     state: { heldByWallet: false },
     resolveAsset: vi.fn(),
+    loadTokens: vi.fn(),
   };
 });
 
 vi.mock('@/stores/tokenMetadataStore', () => ({
   default: {
     state: { tokens },
+    loadTokens: (...args: unknown[]) => loadTokens(...args),
   },
 }));
 
@@ -32,6 +34,8 @@ describe('useSwapTokenResolver', () => {
     for (const key of Object.keys(tokens)) delete tokens[key];
     state.heldByWallet = false;
     resolveAsset.mockReset();
+    loadTokens.mockReset();
+    loadTokens.mockImplementation(async () => {});
   });
 
   it('returns null for lovelace (widget seeds ADA itself)', async () => {
@@ -74,5 +78,49 @@ describe('useSwapTokenResolver', () => {
     const { resolveToken } = useSwapTokenResolver();
     expect(await resolveToken('mystery')).toBeNull();
     expect(resolveAsset).not.toHaveBeenCalled();
+  });
+
+  it('hydrates the empty registry once and resolves a token that only appears after loadTokens (hydration race fix)', async () => {
+    state.heldByWallet = false;
+    loadTokens.mockImplementation(async () => {
+      tokens['lazy'] = { name: 'Lazy', ticker: 'LAZY', decimals: 6, unit: 'lazy', verified: true, price: 1 };
+    });
+    const { resolveToken } = useSwapTokenResolver();
+    const m = await resolveToken('lazy');
+    expect(loadTokens).toHaveBeenCalledTimes(1);
+    expect(m).toMatchObject({ unit: 'lazy', decimals: 6, ticker: 'LAZY', verified: true });
+  });
+
+  it('returns null when still unknown after the hydration attempt (registry stays empty)', async () => {
+    state.heldByWallet = false;
+    const { resolveToken } = useSwapTokenResolver();
+    const m = await resolveToken('still-mystery');
+    expect(loadTokens).toHaveBeenCalledTimes(1);
+    expect(m).toBeNull();
+  });
+
+  it('does not re-hydrate when the registry is already populated (avoids a redundant fetch)', async () => {
+    tokens['known'] = { name: 'Snek', ticker: 'SNEK', decimals: 0, unit: 'known' };
+    state.heldByWallet = false;
+    const { resolveToken } = useSwapTokenResolver();
+    const m = await resolveToken('mystery-with-populated-registry');
+    expect(loadTokens).not.toHaveBeenCalled();
+    expect(m).toBeNull();
+  });
+
+  it('resolves to graceful defaults (decimals 0, verified false), not a crash or null, when resolveAsset rejects for a held-but-unregistered token', async () => {
+    state.heldByWallet = true;
+    resolveAsset.mockRejectedValue(new Error('network error'));
+    const { resolveToken } = useSwapTokenResolver();
+    const m = await resolveToken('held-resolve-fails');
+    expect(m).not.toBeNull();
+    expect(m).toMatchObject({ unit: 'held-resolve-fails', decimals: 0, verified: false });
+  });
+
+  it('guards against NaN decimals from the store (Number(token_decimals) can be NaN)', async () => {
+    tokens['nan-decimals'] = { name: 'Broken', ticker: 'BRK', decimals: NaN, unit: 'nan-decimals' };
+    const { resolveToken } = useSwapTokenResolver();
+    const m = await resolveToken('nan-decimals');
+    expect(m).toMatchObject({ unit: 'nan-decimals', decimals: 0 });
   });
 });
