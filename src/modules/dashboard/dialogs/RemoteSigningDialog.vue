@@ -224,10 +224,15 @@ async function onUntrust(deviceId: string) {
   }
 }
 
-// Refresh whenever the dialog opens.
+// Refresh whenever the dialog opens; drop any in-flight SAS confirm on close so a
+// stale confirm screen can never resurface on reopen (the component stays mounted
+// via :is-open, so this state would otherwise persist).
 watch(
   () => props.isOpen,
-  (open) => { if (open) void remoteSigningStore.refresh(); },
+  (open) => {
+    if (open) void remoteSigningStore.refresh();
+    else pairingCandidate.value = null;
+  },
   { immediate: true },
 );
 </script>
