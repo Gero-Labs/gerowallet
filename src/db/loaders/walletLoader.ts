@@ -201,14 +201,24 @@ export class TransactionsLoader extends BaseLoader {
               const sentAssets = new Map<string, any>();
               const receivedAssets = new Map<string, any>();
 
-              // Resolve inputs in place so the tx detail dialog renders the same
-              // address/amount the loader uses for sentAmount accounting.
+              // Resolve inputs in place from the producing output (outputIndex) so the
+              // loader's sentAsset accounting sees each input's FULL value, including
+              // native tokens. gero-sync/nexus history returns spent inputs with lovelace
+              // only; the old `inp.amount?.length` short-circuit treated a lovelace-only
+              // input as already-resolved and kept it token-less. The change output then
+              // had 103 tokens with nothing to offset against, so every token showed as
+              // sent/received (e.g. a 10-USDM send rendered as ~100 tokens moved).
+              // The producing output IS this input's real value, so prefer its richer
+              // amount whenever we have it.
               if (tx.utxo?.inputs?.length) {
                 tx.utxo.inputs = tx.utxo.inputs.map((inp: any) => {
-                  if (inp.address && inp.amount?.length) return inp;
                   const ref = `${inp.tx_hash}#${inp.output_index}`;
                   const hit = outputIndex.get(ref);
-                  return hit ? { ...inp, address: hit.address, amount: hit.amount } : inp;
+                  if (!hit) return inp;
+                  const amount = (hit.amount?.length ?? 0) > (inp.amount?.length ?? 0)
+                    ? hit.amount
+                    : inp.amount;
+                  return { ...inp, address: inp.address || hit.address, amount };
                 });
               }
 
