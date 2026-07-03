@@ -959,6 +959,15 @@ export class WalletManager {
    * >1 online trusted signer we broadcast (a device picker is a later refinement);
    * with 0 we broadcast (nothing to target). Once APNs lands this can extend to a
    * trusted-but-offline target plus a wake.
+   *
+   * "ONLINE" = present in the DEVICES registry (getCrossDeviceDevices reads the
+   * relay-pushed snapshot). This repo does no independent liveness check; it relies
+   * on gero-sync keeping the snapshot to currently-connected devices via owner-aware
+   * eviction on disconnect (evictDeviceIfRegistered). A brief close-race window can
+   * momentarily list a just-dropped device — acceptable here because a stale target
+   * only falls back to a dropped SIGN_REQUEST (the requester ttl then rejects), never
+   * a misdelivery; the APNs offline path (durable store, NOT this snapshot) is what
+   * makes offline targeting reliable later.
    */
   getDefaultCrossDeviceTarget(): string | null {
     const signers = this.getCrossDeviceDevices()
