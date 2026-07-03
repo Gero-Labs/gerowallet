@@ -2528,6 +2528,38 @@ app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {
   return true;
 });
 
+app.addToOptions(MessageTypes.ENRICH_TRANSACTIONS, async (request, sendResponse) => {
+  try {
+    const currentWallet = walletManager.getWallet();
+    const txHashes: string[] = request?.data?.txHashes || [];
+    if (currentWallet && txHashes.length > 0) {
+      const transactions = await currentWallet.syncService.enrichTransactions(txHashes);
+      sendResponse({
+        id: request.id,
+        data: { success: true, transactions },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'No wallet loaded or no tx hashes', transactions: [] },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (err) {
+    console.error('ENRICH_TRANSACTIONS error:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false, transactions: [] },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   try {
     const currentWallet = walletManager.getWallet();

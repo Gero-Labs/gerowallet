@@ -13,6 +13,19 @@ import blockchainApi from '@/api/blockchain-api';
 import webSocketService from '@/services/websocket.service';
 import WalletStore from '@/stores/walletStore';
 
+/** Row shape returned by the `/api/transactions/cbor` backend endpoint. */
+interface TxCborRow {
+  tx_hash: string;
+  cbor?: string;
+  utxo?: unknown;
+  block_hash?: string;
+  block_height?: number;
+  epoch_no?: number;
+  absolute_slot?: number;
+  tx_timestamp?: number;
+  tx_size?: number;
+}
+
 /**
  * SyncService handles all wallet synchronization operations
  * Manages blockchain sync, account info, transactions, assets, and rewards
@@ -452,6 +465,67 @@ export class SyncService {
       }
     } catch (e) {
       debugLog(e);
+    }
+  }
+
+  /**
+   * Backfill missing CBOR/body for already-stored transactions.
+   *
+   * The push-based (gero-sync WS) path stores whatever the sync payload carries.
+   * A tx synced before CBOR support existed — or during a transient cbor-fetch
+   * miss — lands in the DB UTxO-only (no `body`/`witness`), so the detail view
+   * can render only UTxOs. This fetches the CBOR on demand, deserializes it, and
+   * re-stores the enriched record (walletBg's update guard overwrites the thin
+   * one because it now has a `body`). The enriched objects are also returned so
+   * the caller can update its in-memory selection immediately.
+   *
+   * @param txHashes - Transaction hashes to enrich
+   * @returns Enriched tx objects (tx_hash + deserialized body/witness/auxiliaryData + cbor)
+   */
+  async enrichTransactions(txHashes: string[]): Promise<unknown[]> {
+    if (!txHashes || txHashes.length === 0) {
+      return [];
+    }
+    try {
+      const smallerArrays: string[][] = chunkArray({ input: txHashes, bytesSize: 4000 });
+      const promises = smallerArrays.map(smallerArray =>
+        this.api.getTransactionsCbor(smallerArray)
+          .then(txCborsResult => {
+            if (txCborsResult.status !== 200 || !Array.isArray(txCborsResult.data)) {
+              return [];
+            }
+            return (txCborsResult.data as TxCborRow[])
+              .filter((txCbor: TxCborRow) => txCbor.cbor)
+              .map((txCbor: TxCborRow) => {
+                const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(
+                  Serialization.TxCBOR(txCbor.cbor)
+                );
+                return {
+                  tx_hash: txCbor.tx_hash,
+                  utxo: txCbor.utxo,
+                  block_hash: txCbor.block_hash,
+                  block_height: txCbor.block_height,
+                  epoch_no: txCbor.epoch_no,
+                  absolute_slot: txCbor.absolute_slot,
+                  tx_timestamp: txCbor.tx_timestamp,
+                  tx_size: txCbor.tx_size,
+                  cbor: txCbor.cbor,
+                  pending: false,
+                  ...txDeserialized, // Spreads body, witness, auxiliaryData, isValid
+                };
+              });
+          })
+          .catch(e => { debugLog(e); return []; })
+      );
+      const enriched = (await Promise.all(promises)).flat();
+      if (enriched.length > 0) {
+        // Persist so the fix sticks and the transactions list row updates too.
+        await this.walletBg.setAccountTransactions(enriched);
+      }
+      return enriched;
+    } catch (e) {
+      debugLog(e);
+      return [];
     }
   }
 
