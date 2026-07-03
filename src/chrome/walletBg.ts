@@ -649,16 +649,8 @@ export class WalletBg {
             if (!existingTx) {
               // Transaction doesn't exist - it's new, add it
               txsToUpdate.push(newTx);
-            } else if (
-              existingTx.pending !== newTx.pending ||
-              existingTx.tx_timestamp !== newTx.tx_timestamp ||
-              // Re-enrich thin records: a tx previously stored UTxO-only (no deserialized
-              // body/witness — e.g. synced before CBOR support or during a cbor-fetch miss)
-              // must be overwritten once we now have a body, so the detail view can render
-              // certificates/datum/redeemers/metadata instead of only UTxOs.
-              (!existingTx.body && !!newTx.body)
-            ) {
-              // Transaction exists but pending status, timestamp, or body enrichment changed - update it
+            } else if (existingTx.pending !== newTx.pending || existingTx.tx_timestamp !== newTx.tx_timestamp) {
+              // Transaction exists but pending status or timestamp changed - update it
               txsToUpdate.push(newTx);
             }
           });
