@@ -404,9 +404,14 @@ export class WalletManager {
       });
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
-        onCrossDeviceMessage: this.crossDevice
-          ? (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw)
-          : undefined,
+        // Always a LIVE closure, never a static `undefined`. The socket outlives
+        // the bridge, which is rebuilt when remote signing is toggled on/off after
+        // login (reconfigureCrossDevice) WITHOUT a reconnect. Reading this.crossDevice
+        // at call time routes inbound DEVICES/SIGN_* frames to whatever bridge exists
+        // now (or a no-op when null). A conditional `undefined` here froze the handler
+        // to the connect-time state, so enabling post-login left inbound frames
+        // falling through to the "unknown type" branch (empty device registry).
+        onCrossDeviceMessage: (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw),
         // Publish DEVICE_REGISTER after the socket opens + SUBSCRIBE, on every
         // (re)connect. No-op when the feature is off (crossDevice is null).
         onSocketOpen: () => this.crossDevice?.register(),
