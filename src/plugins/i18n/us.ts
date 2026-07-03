@@ -843,6 +843,8 @@ export default {
   'crossDevice.settings.enableProofFailed': 'Could not create the device proof. Check your password and try again.',
   'crossDevice.settings.online': 'Online',
   'crossDevice.settings.offline': 'Offline',
+  'crossDevice.settings.walletVerified': 'Wallet-verified',
+  'crossDevice.settings.sasOnly': 'SAS only',
   'dashboard.actions': 'Actions',
   'dashboard.adaOnly': 'ADA Only',
   'dashboard.adaOnlyTooltip': 'Showing ADA balance only',
