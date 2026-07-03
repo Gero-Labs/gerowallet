@@ -30,6 +30,13 @@ interface WsHandlers {
   // existing "unknown type" default and nothing else changes. See
   // docs/plans/2026-06-29-cross-device-signing-bridge.md.
   onCrossDeviceMessage?: (raw: unknown) => void;
+  /**
+   * Fired inside onopen, immediately after SUBSCRIBE is sent, on the initial connect
+   * and every reconnect. The socket is guaranteed OPEN and SUBSCRIBE precedes anything
+   * sent from here on the same ordered stream. Used to publish the cross-device
+   * DEVICE_REGISTER (which the relay rejects if it arrives before SUBSCRIBE).
+   */
+  onSocketOpen?: () => void;
 }
 
 // Relay message types handled by the cross-device signing bridge. Kept in sync
@@ -115,6 +122,10 @@ class WebSocketService {
         credentials: this.credentials,
         platform: 'extension',
       });
+
+      // Socket is OPEN and SUBSCRIBE has been queued on this ordered stream. Let
+      // subscribers (e.g. cross-device DEVICE_REGISTER) send now, after SUBSCRIBE.
+      this.handlers.onSocketOpen?.();
 
       this.startSyncCheck();
     };
