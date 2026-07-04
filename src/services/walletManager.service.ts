@@ -1266,7 +1266,17 @@ export class WalletManager {
       } catch {
         height = 0;
       }
-      webSocketService.resubscribe(height);
+      // Await the catch-up the resubscribe triggers (mirrors the onForceResync
+      // handlers) so the caller's refresh spinner reflects real completion and a
+      // server error/timeout surfaces. waitForSync has its own safety timeout.
+      webSocketService.pauseSyncCheck();
+      try {
+        const syncPromise = webSocketService.waitForSync();
+        webSocketService.resubscribe(height);
+        await syncPromise;
+      } finally {
+        webSocketService.resumeSyncCheck();
+      }
     } else {
       await this.walletBg.syncBitcoinWalletComplete();
     }

@@ -238,10 +238,12 @@ export default {
     return tip.slot || null;
   },
 
-  // Utility method to get current block height (Cardano-only; null for a BTC tip)
+  // Utility method to get current block height (chain-neutral: `height` for a BTC
+  // tip, `blockNo` for a Cardano tip).
   getCurrentBlockHeight(): number | null {
     const tip = networkStore.tip;
-    if (!tip || isBitcoinTip(tip)) return null;
+    if (!tip) return null;
+    if (isBitcoinTip(tip)) return tip.height ?? null;
     return tip.blockNo || null;
   },
 
