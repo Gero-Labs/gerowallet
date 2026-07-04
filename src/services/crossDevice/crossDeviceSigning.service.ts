@@ -80,6 +80,9 @@ const DEFAULT_TTL_MS = 60_000;
 // once it's back — the interactive TTL is too short to survive a cold wake.
 const WAKE_WINDOW_MS = 120_000;
 const WAKE_POLL_MS = 2_000;
+// Cap re-issues so a relay that keeps reporting the target offline can't loop the
+// desktop forever (each online-detection re-issues; this bounds it).
+const MAX_WAKE_REISSUES = 3;
 
 export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSigning {
   const { transport, identity, resolvePubKey, now, newId } = deps;
@@ -96,6 +99,10 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     { resolve: (d: SignDecision) => void; timer: ReturnType<typeof setTimeout> | null; onWake?: () => void }
   >();
   const requestHandlers = new Set<SignRequestHandler>();
+  // Cancel callbacks for in-flight requestSignature calls (incl. their wake-poll
+  // timers, which live in the promise closure). dispose() invokes these so a logout
+  // / wallet-switch mid-wake can't leave a poll (and a stray re-issue) running.
+  const activeRequests = new Set<() => void>();
 
   // Approver-side replay + expiry guard. The requester machine's dedup/expiry
   // only protects the REQUESTER; the approver path had neither, so an untrusted
@@ -213,22 +220,27 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     return new Promise<SignDecision>((resolve) => {
       let done = false;
       let currentReqId = '';
+      let reissues = 0;
       let wakeTimer: ReturnType<typeof setTimeout> | null = null;
       let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let checking = false;
 
       function stopWake(): void {
         if (wakeTimer) { clearTimeout(wakeTimer); wakeTimer = null; }
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       }
+      const cancel = (): void => finish({ decision: 'rejected', reason: 'disposed' });
       function finish(d: SignDecision): void {
         if (done) return;
         done = true;
+        activeRequests.delete(cancel);
         stopWake();
         const e = currentReqId ? waiting.get(currentReqId) : undefined;
         if (e?.timer) clearTimeout(e.timer);
         if (currentReqId) waiting.delete(currentReqId);
         resolve(d);
       }
+      activeRequests.add(cancel);
 
       // Send a fresh SIGN_REQUEST (new reqId/nonce/expiresAt), (re)registering the
       // pending entry under it. Used for the initial send and each re-issue on wake.
@@ -286,9 +298,19 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
         }
         wakeTimer = setTimeout(() => finish({ decision: 'rejected', reason: 'wake_timeout' }), wakeWindowMs);
         const check = async (): Promise<void> => {
-          if (done) return;
-          const pk = await resolvePubKey(to);
-          if (pk && !done) { stopWake(); void issue(); }
+          if (done || checking) return; // in-flight guard: no overlapping re-issue
+          checking = true;
+          try {
+            const pk = await resolvePubKey(to);
+            if (pk && !done) {
+              stopWake();
+              if (reissues >= MAX_WAKE_REISSUES) { finish({ decision: 'rejected', reason: 'wake_exhausted' }); return; }
+              reissues += 1;
+              void issue();
+            }
+          } finally {
+            checking = false;
+          }
         };
         void check(); // in case it is already back online
         pollTimer = setInterval(() => { void check(); }, wakePollMs);
@@ -305,6 +327,10 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
 
   function dispose(): void {
     unsubscribe();
+    // Cancel in-flight requests first: this stops any wake-poll timers (closure-local,
+    // not on the waiting entries) and resolves their promises as 'disposed'.
+    for (const cancel of [...activeRequests]) cancel();
+    activeRequests.clear();
     for (const { timer } of waiting.values()) if (timer) clearTimeout(timer);
     waiting.clear();
     requestHandlers.clear();

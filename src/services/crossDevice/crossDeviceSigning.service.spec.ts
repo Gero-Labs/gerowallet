@@ -356,6 +356,62 @@ describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
     expect(result.reason).toBe('wake_timeout');
     requester.dispose();
   });
+
+  it('dispose() during a wake-wait stops the poll and resolves disposed', async () => {
+    const bus = makeManualBus();
+    let online = false;
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async (id) => (id === approverId && online ? approverKp.pubKeyHex : null),
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `d-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 1000,
+    });
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 10)); // now in the wake-wait, polling
+    const before = bus.sent.length;
+
+    requester.dispose();
+    const result = await resultP;
+    expect(result.reason).toBe('disposed');
+
+    // Target coming online AFTER dispose must not trigger a stray re-issue.
+    online = true;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(bus.sent.length).toBe(before);
+  });
+
+  it('does not double-issue when the registry lookup is slow (in-flight guard)', async () => {
+    const bus = makeManualBus();
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      // Slow lookup that returns online: many poll ticks fire during one await.
+      resolvePubKey: async (id) => { await new Promise((r) => setTimeout(r, 25)); return id === approverId ? approverKp.pubKeyHex : null; },
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `g-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 1000,
+    });
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 500 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 90)); // several poll ticks overlap the slow resolve
+
+    expect(bus.sent.length).toBe(2); // exactly one re-issue, not several
+
+    const res = await signMessage<SignResponse>(
+      { type: 'SIGN_RESPONSE', reqId: bus.sent[1].reqId, nonce: 'n', to: requesterId, deviceId: approverId, decision: 'approved', witnessSetCbor: 'a1' },
+      approverKp.privKeyHex,
+    );
+    bus.publish(res);
+    await resultP;
+    requester.dispose();
+  });
 });
 
 describe('crossDeviceSigning trusted-device gates', () => {
