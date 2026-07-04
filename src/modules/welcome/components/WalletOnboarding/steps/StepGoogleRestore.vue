@@ -212,7 +212,23 @@ const restore = async (): Promise<void> => {
   restoring.value = true;
   errorMessage.value = '';
   try {
-    const recoveryBlob = await readFileAsText(recoveryFile.value);
+    const fileContent = await readFileAsText(recoveryFile.value);
+
+    // Parse the recovery-file envelope: { v, publicKey, recovery }. The publicKey
+    // (xpub) is the anchor the background validates the reconstructed key against.
+    let publicKey: string;
+    let recoveryBlob: string;
+    try {
+      const envelope = JSON.parse(fileContent) as { v?: number; publicKey?: string; recovery?: string };
+      if (!envelope || typeof envelope.publicKey !== 'string' || typeof envelope.recovery !== 'string') {
+        throw new Error('missing fields');
+      }
+      publicKey = envelope.publicKey;
+      recoveryBlob = envelope.recovery;
+    } catch {
+      throw new Error(vmProxy.$t('welcome.invalidRecoveryFile') as string);
+    }
+
     const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
 
     // Note: never log request payload — contains idToken/recoveryPassword/newSpendingPassword
@@ -228,6 +244,7 @@ const restore = async (): Promise<void> => {
         recoveryBlob,
         recoveryPassword: recoveryPassword.value,
         newSpendingPassword: spendingPassword.value,
+        publicKey,
       },
     }) as GoogleWalletBgResponse;
 

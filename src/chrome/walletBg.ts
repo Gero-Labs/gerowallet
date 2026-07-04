@@ -94,8 +94,8 @@ export class WalletBg {
   baseAddress: string;
   stakeAddress?: string;
   token?: string;
-  // PRF Encryption Support (Version 14+)
-  encryptionMethod?: 'password' | 'prf';
+  // PRF Encryption Support (Version 14+); 'mpc' = Sign-in-with-Google MPC wallet
+  encryptionMethod?: 'password' | 'prf' | 'mpc';
   prfEncryptedPrivateKey?: string;
   prfEncryptedMnemonic?: string;
   webAuthnCredentialId?: string;
@@ -139,12 +139,15 @@ export class WalletBg {
       );
       this.stakeAddress = '';  // Bitcoin has no staking address
       console.log('✅ Bitcoin address initialized:', this.baseAddress);
-    } else if (wallet.type === WalletType.Google) {
-      // Google wallet (Cardano)
+    } else if (wallet.type === WalletType.Google && this.encryptionMethod !== 'mpc' && googleBaseAddress) {
+      // Legacy zkFold smart-contract Google wallet: address comes from the
+      // contract, not HD derivation. MPC Sign-in-with-Google wallets are also
+      // type===Google but hold a real CIP-1852 xpub, so they fall through to
+      // the normal HD-derivation branch below.
       this.baseAddress = googleBaseAddress
       this.stakeAddress = toStakeAddress(googleBaseAddress, networks.resolveNetworkId(wallet.chain, wallet.network) as Cardano.NetworkId)
     } else {
-      // Normal Cardano wallet
+      // Normal Cardano wallet (and MPC Google wallets — HD-derived from xpub)
       this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
       this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
     }

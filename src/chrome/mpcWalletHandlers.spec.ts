@@ -100,7 +100,7 @@ describe('createMpcGoogleWalletFlow', () => {
 
     const result = await createMpcGoogleWalletFlow(baseInput, deps);
 
-    expect(result).toEqual({ walletId: 42, recoveryShare: shareSet.recoveryShare });
+    expect(result).toEqual({ walletId: 42, recoveryShare: shareSet.recoveryShare, publicKey: expectedXpub });
 
     for (const spy of [logSpy, errSpy, warnSpy]) {
       for (const call of spy.mock.calls) {
@@ -178,8 +178,8 @@ describe('recoverMpcGoogleWalletFlow', () => {
     return {
       decryptRecoveryShare: vi.fn(async () => 'gmpc1.03.recovery'),
       getLoginShare: vi.fn(async () => 'gmpc1.02.login'),
-      reconstructEntropy: vi.fn(async () => new Uint8Array(32)),
-      deriveExpectedXpub: vi.fn(async () => 'xpub-restored'),
+      // Validates internally; returns entropy on success, throws MpcValidationError on mismatch.
+      reconstructAndValidateEntropy: vi.fn(async () => new Uint8Array(32)),
       encryptDeviceShare: vi.fn((share: string, password: string) => `enc(${share},${password})`),
       createMpcGoogleWallet: vi.fn(async () => 99),
       subFromIdToken: vi.fn(() => 'google-sub-123'),
@@ -197,18 +197,19 @@ describe('recoverMpcGoogleWalletFlow', () => {
     recoveryBlob: 'gmpc-recovery1.blob',
     recoveryPassword: 'recovery-pw',
     newSpendingPassword: 'new-pw',
+    expectedXpub: 'xpub-anchor',
   };
 
-  it('decrypts the recovery blob, fetches the login share, and reconstructs entropy from both', async () => {
+  it('decrypts the recovery blob, fetches the login share, and validates against the xpub anchor', async () => {
     const deps = makeDeps();
     await recoverMpcGoogleWalletFlow(baseInput, deps);
 
     expect(deps.decryptRecoveryShare).toHaveBeenCalledWith(baseInput.recoveryBlob, baseInput.recoveryPassword);
     expect(deps.getLoginShare).toHaveBeenCalledWith(baseInput.idToken, baseInput.chain, baseInput.network);
-    expect(deps.reconstructEntropy).toHaveBeenCalledWith('gmpc1.03.recovery', 'gmpc1.02.login');
+    expect(deps.reconstructAndValidateEntropy).toHaveBeenCalledWith('gmpc1.03.recovery', 'gmpc1.02.login', 'xpub-anchor');
   });
 
-  it('persists the wallet using the derived xpub and the recovery share re-encrypted as the device factor', async () => {
+  it('persists the wallet using the validated anchor xpub and the recovery share re-encrypted as the device factor', async () => {
     const deps = makeDeps();
     const result = await recoverMpcGoogleWalletFlow(baseInput, deps);
 
@@ -220,10 +221,19 @@ describe('recoverMpcGoogleWalletFlow', () => {
       chain: baseInput.chain,
       network: baseInput.network,
       userId: 'google-sub-123',
-      publicKey: 'xpub-restored',
+      publicKey: 'xpub-anchor',
       encryptedDeviceShare: `enc(gmpc1.03.recovery,${baseInput.newSpendingPassword})`,
     });
-    expect(result).toEqual({ walletId: 99, publicKey: 'xpub-restored' });
+    expect(result).toEqual({ walletId: 99, publicKey: 'xpub-anchor' });
+  });
+
+  it('rejects and does NOT persist when the anchor validation fails (wrong recovery file / Google account)', async () => {
+    const deps = makeDeps({
+      reconstructAndValidateEntropy: vi.fn(async () => { throw new MpcValidationError('xpub mismatch'); }),
+    });
+    await expect(recoverMpcGoogleWalletFlow(baseInput, deps)).rejects.toBeInstanceOf(MpcValidationError);
+    expect(deps.encryptDeviceShare).not.toHaveBeenCalled();
+    expect(deps.createMpcGoogleWallet).not.toHaveBeenCalled();
   });
 
   it('does not persist a wallet if the recovery password is wrong (decrypt throws)', async () => {

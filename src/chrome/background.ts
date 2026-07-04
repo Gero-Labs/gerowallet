@@ -1603,7 +1603,7 @@ app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResp
     const { Api } = await import('@/api/api');
     const api = new Api(undefined, undefined);
 
-    const { walletId, recoveryShare } = await createMpcGoogleWalletFlow(
+    const { walletId, recoveryShare, publicKey } = await createMpcGoogleWalletFlow(
       { name, icon, theme, chain, network, idToken, spendingPassword },
       {
         prepareMpcWalletCreation,
@@ -1617,8 +1617,9 @@ app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResp
     sendResponse({
       id: request.id,
       // recoveryShare is returned to the caller for the encrypted-download backup step —
-      // it is never logged or persisted by this handler.
-      data: { success: true, walletId, recoveryShare },
+      // it is never logged or persisted by this handler. publicKey (xpub, not secret)
+      // is embedded in the recovery-file envelope as the restore-time anchor.
+      data: { success: true, walletId, recoveryShare, publicKey },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1686,24 +1687,23 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
     // Note: Never log request.data — contains idToken/recoveryPassword/newSpendingPassword
     const {
       name, icon, theme, chain, network, idToken,
-      recoveryBlob, recoveryPassword, newSpendingPassword,
+      recoveryBlob, recoveryPassword, newSpendingPassword, publicKey: expectedXpub,
     } = request.data || {};
-    if (!idToken || !recoveryBlob || !recoveryPassword || !newSpendingPassword) {
-      throw new Error('idToken, recoveryBlob, recoveryPassword and newSpendingPassword are required');
+    if (!idToken || !recoveryBlob || !recoveryPassword || !newSpendingPassword || !expectedXpub) {
+      throw new Error('idToken, recoveryBlob, recoveryPassword, newSpendingPassword and publicKey are required');
     }
 
-    const { decryptRecoveryShare, reconstructEntropy, deriveExpectedXpub, encryptDeviceShare } = await import('@/shared/utils/mpc');
+    const { decryptRecoveryShare, reconstructAndValidateEntropy, encryptDeviceShare } = await import('@/shared/utils/mpc');
     const { createMpcGoogleWallet } = await import('@/db/gero-db');
     const { Api } = await import('@/api/api');
     const api = new Api(undefined, undefined);
 
     const { walletId, publicKey } = await recoverMpcGoogleWalletFlow(
-      { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSpendingPassword },
+      { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSpendingPassword, expectedXpub },
       {
         decryptRecoveryShare,
         getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
-        reconstructEntropy,
-        deriveExpectedXpub,
+        reconstructAndValidateEntropy,
         encryptDeviceShare,
         createMpcGoogleWallet,
         subFromIdToken,
@@ -1717,10 +1717,16 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
       sender: SENDER.extension,
     });
   } catch (error) {
-    console.error('Error recovering MPC Google wallet:', getErrorMessage(error, 'recovery failed'));
+    // Anchor mismatch (wrong recovery file / wrong Google account) surfaces as a
+    // clean message; the raw MpcValidationError is not leaked.
+    const { MpcValidationError } = await import('@/shared/utils/mpc');
+    const message = error instanceof MpcValidationError
+      ? "This recovery file doesn't match this Google account."
+      : getErrorMessage(error, 'Failed to recover MPC wallet');
+    console.error('Error recovering MPC Google wallet:', message);
     sendResponse({
       id: request.id,
-      data: { success: false, error: getErrorMessage(error, 'Failed to recover MPC wallet') },
+      data: { success: false, error: message },
       target: TARGET,
       sender: SENDER.extension,
     });

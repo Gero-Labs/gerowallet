@@ -137,6 +137,7 @@ const emit = defineEmits<{
   (e: 'created', payload: {
     walletId: number;
     recoveryShare: string;
+    publicKey: string;
     spendingPassword: string;
     recoveryPassword: string;
     name: string;
@@ -181,13 +182,14 @@ const createWallet = async (): Promise<void> => {
       },
     }) as GoogleWalletBgResponse;
 
-    if (!response?.data?.success || response.data.walletId == null || response.data.recoveryShare == null) {
+    if (!response?.data?.success || response.data.walletId == null || response.data.recoveryShare == null || response.data.publicKey == null) {
       throw new Error(response?.data?.error || (vmProxy.$t('errors.unknownError') as string));
     }
 
     emit('created', {
       walletId: response.data.walletId,
       recoveryShare: response.data.recoveryShare,
+      publicKey: response.data.publicKey,
       spendingPassword: spendingPassword.value,
       recoveryPassword: recoveryPassword.value,
       name: name.value,

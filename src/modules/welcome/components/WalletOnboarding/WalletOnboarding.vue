@@ -97,6 +97,7 @@
           v-else-if="currentStep.key === 'googleBackup'"
           :wallet-id="googleWalletId"
           :recovery-share="googleRecoveryShare"
+          :public-key="googlePublicKey"
           :recovery-password="googleRecoveryPassword"
           @next="step++"
         />
@@ -178,6 +179,7 @@ const googleIdToken = ref<string>('');
 const googleEmail = ref<string>('');
 const googleWalletId = ref<number>(0);
 const googleRecoveryShare = ref<string>('');
+const googlePublicKey = ref<string>('');
 const googleSpendingPassword = ref<string>('');
 const googleRecoveryPassword = ref<string>('');
 
@@ -241,6 +243,7 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair' | 'google' | 'googleRes
   googleEmail.value = '';
   googleWalletId.value = 0;
   googleRecoveryShare.value = '';
+  googlePublicKey.value = '';
   googleSpendingPassword.value = '';
   googleRecoveryPassword.value = '';
   // Network + Method share step 1 — method-specific steps start at 2.
@@ -256,12 +259,14 @@ const onGoogleSignedIn = (payload: { idToken: string; email: string }): void => 
 const onGoogleCreated = (payload: {
   walletId: number;
   recoveryShare: string;
+  publicKey: string;
   spendingPassword: string;
   recoveryPassword: string;
   name: string;
 }): void => {
   googleWalletId.value = payload.walletId;
   googleRecoveryShare.value = payload.recoveryShare;
+  googlePublicKey.value = payload.publicKey;
   googleSpendingPassword.value = payload.spendingPassword;
   googleRecoveryPassword.value = payload.recoveryPassword;
   walletName.value = payload.name;
