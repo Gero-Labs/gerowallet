@@ -12,6 +12,7 @@ export interface FeatureFlags {
   isNexusUnstakeEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
+  isGoogleWalletEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -32,6 +33,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isNexusUnstakeEnabled: false,
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
+    isGoogleWalletEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -90,6 +92,9 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
+    // MPC "Sign in with Google" wallet — ships DARK (default false) until the
+    // recovery/sign flows have been through a security audit (see Plan D).
+    featureFlagsState.flags.isGoogleWalletEnabled = featureFlagService.getFlag('isGoogleWalletEnabled', false);
     persistFlagsForBackground();
   },
 
@@ -128,6 +133,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCopilotEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCopilotEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isGoogleWalletEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isGoogleWalletEnabled', newValue);
     });
   },
 
@@ -212,6 +220,15 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the MPC "Sign in with Google" wallet (no seed phrase) is enabled.
+   * Ships DARK (default false): the onboarding method card and its routes stay
+   * hidden until this is flipped, and stays testnet-only until audited.
+   */
+  isGoogleWalletEnabled(): boolean {
+    return featureFlagsState.flags.isGoogleWalletEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -226,6 +243,7 @@ export const featureFlagsStore = {
       isNexusUnstakeEnabled: false,
       isCrossDeviceSigningEnabled: false,
       isCopilotEnabled: false,
+      isGoogleWalletEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
