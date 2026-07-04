@@ -40,6 +40,9 @@ export interface CrossDeviceDeps {
   //     a trusted device (closes DoS-by-rejection, ignores rogue approvals).
   isRequesterTrusted?: (deviceId: string, pubKey: string) => boolean;
   isResponderTrusted?: (deviceId: string, pubKey: string) => boolean;
+  // Wake tuning (defaults below). Injected mainly so tests can run the poll fast.
+  wakePollMs?: number;
+  wakeWindowMs?: number;
 }
 
 export interface SignDecision {
@@ -71,17 +74,26 @@ export interface CrossDeviceSigning {
 }
 
 const DEFAULT_TTL_MS = 60_000;
+// When the target device is offline, the relay wakes it (APNs) and returns
+// WAKE_PENDING instead of delivering. We then wait up to WAKE_WINDOW_MS for it to
+// reconnect (polling the registry every WAKE_POLL_MS) and re-issue a FRESH request
+// once it's back — the interactive TTL is too short to survive a cold wake.
+const WAKE_WINDOW_MS = 120_000;
+const WAKE_POLL_MS = 2_000;
 
 export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSigning {
   const { transport, identity, resolvePubKey, now, newId } = deps;
   const isRequesterTrusted = deps.isRequesterTrusted ?? (() => true);
   const isResponderTrusted = deps.isResponderTrusted ?? (() => true);
+  const wakePollMs = deps.wakePollMs ?? WAKE_POLL_MS;
+  const wakeWindowMs = deps.wakeWindowMs ?? WAKE_WINDOW_MS;
 
   let machine: MachineState = { byId: {}, seen: [] };
-  // Pending requester promises awaiting their SIGN_RESPONSE, keyed by reqId.
+  // Pending requester promises awaiting their SIGN_RESPONSE, keyed by the CURRENT
+  // reqId. onWake fires when the relay reports the target offline (WAKE_PENDING).
   const waiting = new Map<
     string,
-    { resolve: (d: SignDecision) => void; timer: ReturnType<typeof setTimeout> }
+    { resolve: (d: SignDecision) => void; timer: ReturnType<typeof setTimeout> | null; onWake?: () => void }
   >();
   const requestHandlers = new Set<SignRequestHandler>();
 
@@ -108,12 +120,23 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
   function settle(reqId: string, decision: SignDecision): void {
     const entry = waiting.get(reqId);
     if (!entry) return;
-    clearTimeout(entry.timer);
+    if (entry.timer) clearTimeout(entry.timer);
     waiting.delete(reqId);
     entry.resolve(decision);
   }
 
   async function handleInbound(raw: unknown): Promise<void> {
+    // Relay control frame (unsigned): the target device is offline and a wake was
+    // sent. Acted on ONLY for a reqId we are actively awaiting; a spurious one from
+    // the relay merely extends our own wait and never affects authenticity (signing
+    // still needs the phone's verified SIGN_RESPONSE). Handled before parsing since
+    // WAKE_PENDING is not a signed CrossDeviceMessage.
+    if (raw && typeof raw === 'object' && (raw as { type?: unknown }).type === 'WAKE_PENDING') {
+      const reqId = (raw as { reqId?: unknown }).reqId;
+      if (typeof reqId === 'string') waiting.get(reqId)?.onWake?.();
+      return;
+    }
+
     const msg = parseCrossDeviceMessage(raw);
     if (!msg) return;
     // Only SIGN_REQUEST/SIGN_RESPONSE are authenticated here. Registry frames
@@ -184,36 +207,94 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
   });
 
   async function requestSignature(input: RequestSignatureInput): Promise<SignDecision> {
-    const reqId = newId();
-    const nonce = newId();
     const ttlMs = input.ttlMs ?? DEFAULT_TTL_MS;
-    const expiresAt = Math.floor(now() / 1000) + Math.ceil(ttlMs / 1000);
-    const req = await signMessage<SignRequest>(
-      {
-        type: 'SIGN_REQUEST',
-        reqId,
-        nonce,
-        from: identity.deviceId,
-        // Routing hint (not in the signed subject); omit when absent so the relay
-        // falls back to broadcast for callers that do not target a device.
-        ...(input.to ? { to: input.to } : {}),
-        stakeAddress: input.stakeAddress,
-        unsignedCbor: input.unsignedCbor,
-        intent: input.intent,
-        expiresAt,
-      },
-      identity.privKeyHex,
-    );
-    machine = createRequest(machine, req);
+    const to = input.to;
 
     return new Promise<SignDecision>((resolve) => {
-      const timer = setTimeout(() => {
-        // ttl elapsed with no verified response: reject the requester promise.
-        waiting.delete(reqId);
-        resolve({ decision: 'rejected', reason: 'expired' });
-      }, ttlMs);
-      waiting.set(reqId, { resolve, timer });
-      transport.send(req);
+      let done = false;
+      let currentReqId = '';
+      let wakeTimer: ReturnType<typeof setTimeout> | null = null;
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+      function stopWake(): void {
+        if (wakeTimer) { clearTimeout(wakeTimer); wakeTimer = null; }
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      }
+      function finish(d: SignDecision): void {
+        if (done) return;
+        done = true;
+        stopWake();
+        const e = currentReqId ? waiting.get(currentReqId) : undefined;
+        if (e?.timer) clearTimeout(e.timer);
+        if (currentReqId) waiting.delete(currentReqId);
+        resolve(d);
+      }
+
+      // Send a fresh SIGN_REQUEST (new reqId/nonce/expiresAt), (re)registering the
+      // pending entry under it. Used for the initial send and each re-issue on wake.
+      async function issue(): Promise<void> {
+        if (done) return;
+        const reqId = newId();
+        const nonce = newId();
+        const expiresAt = Math.floor(now() / 1000) + Math.ceil(ttlMs / 1000);
+        let req: SignRequest;
+        try {
+          req = await signMessage<SignRequest>(
+            {
+              type: 'SIGN_REQUEST',
+              reqId,
+              nonce,
+              from: identity.deviceId,
+              // Routing hint (not in the signed subject); omit when absent so the
+              // relay falls back to broadcast for callers that do not target a device.
+              ...(to ? { to } : {}),
+              stakeAddress: input.stakeAddress,
+              unsignedCbor: input.unsignedCbor,
+              intent: input.intent,
+              expiresAt,
+            },
+            identity.privKeyHex,
+          );
+        } catch {
+          finish({ decision: 'rejected', reason: 'sign_failed' });
+          return;
+        }
+        if (done) return;
+        machine = createRequest(machine, req);
+        // Move the pending entry to the new reqId (drop any prior one).
+        if (currentReqId) {
+          const prev = waiting.get(currentReqId);
+          if (prev?.timer) clearTimeout(prev.timer);
+          waiting.delete(currentReqId);
+        }
+        currentReqId = reqId;
+        const timer = setTimeout(() => finish({ decision: 'rejected', reason: 'expired' }), ttlMs);
+        waiting.set(reqId, { resolve: finish, timer, onWake });
+        transport.send(req);
+      }
+
+      // Relay reported the target offline (a wake was sent). Pause the short
+      // interactive ttl and wait (bounded) for the device to reconnect, polling the
+      // registry; re-issue a FRESH request once it is back (the relay never queued
+      // the stale one). No target => nothing to wake, let the ttl reject.
+      function onWake(): void {
+        if (done || !to || wakeTimer) return;
+        const e = currentReqId ? waiting.get(currentReqId) : undefined;
+        if (e) {
+          if (e.timer) clearTimeout(e.timer);
+          waiting.set(currentReqId, { ...e, timer: null });
+        }
+        wakeTimer = setTimeout(() => finish({ decision: 'rejected', reason: 'wake_timeout' }), wakeWindowMs);
+        const check = async (): Promise<void> => {
+          if (done) return;
+          const pk = await resolvePubKey(to);
+          if (pk && !done) { stopWake(); void issue(); }
+        };
+        void check(); // in case it is already back online
+        pollTimer = setInterval(() => { void check(); }, wakePollMs);
+      }
+
+      void issue();
     });
   }
 
@@ -224,7 +305,7 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
 
   function dispose(): void {
     unsubscribe();
-    for (const { timer } of waiting.values()) clearTimeout(timer);
+    for (const { timer } of waiting.values()) if (timer) clearTimeout(timer);
     waiting.clear();
     requestHandlers.clear();
   }
