@@ -49,6 +49,15 @@ export interface TrustedDevice {
    * with pins made before this field existed (treated as SAS-only / unknown).
    */
   verified?: boolean;
+  /**
+   * True if the pinned device holds a wallet spending key (can actually approve a
+   * Send). Captured from the live DeviceInfo at pair time. Persisted so the Send
+   * gate + offline-target selection can identify a signer WITHOUT the device being
+   * online (the live DEVICES snapshot drops a locked phone). Optional for back-compat
+   * with pins made before this field existed (undefined => treat as capable, since a
+   * device was pinned precisely to enable remote signing).
+   */
+  hasSigningKey?: boolean;
 }
 
 export interface RemoteSigningSettings {
@@ -89,6 +98,40 @@ export function hasTrustedDevice(settings: RemoteSigningSettings): boolean {
   return Object.keys(settings.trustedDevices).length > 0;
 }
 
+/**
+ * Pinned devices that can actually approve a Send (hold a wallet spending key).
+ * PERSISTENT: unlike the live DEVICES snapshot, this survives the signer being
+ * offline — which is exactly the case the APNs wake exists for. A legacy pin with
+ * no captured `hasSigningKey` (undefined) counts as capable: it was pinned to
+ * enable remote signing in the first place.
+ */
+export function pairedSigners(settings: RemoteSigningSettings): TrustedDevice[] {
+  return Object.values(settings.trustedDevices).filter((d) => d.hasSigningKey !== false);
+}
+
+/**
+ * Whether a signing-capable device is paired (regardless of live presence). This
+ * is the Send gate: it must NOT key on live presence, or the "sign on another
+ * device" button hides whenever the phone is locked — the very moment the wake is
+ * meant to cover. The flow stays fail-closed at approval time (an offline device
+ * cannot return a verified SIGN_RESPONSE).
+ */
+export function hasPairedSigner(settings: RemoteSigningSettings): boolean {
+  return pairedSigners(settings).length > 0;
+}
+
+/**
+ * The single pinned signer's deviceId, else null (0 or >1 both broadcast; a device
+ * picker is a later refinement). Used as the SIGN_REQUEST `to` so the relay routes
+ * to exactly that device and APNs-wakes it when offline. Resolving from the pinned
+ * list (not the live snapshot) is what lets us target a locked phone at all; it also
+ * avoids the stale-duplicate-session inflation that made live targeting return null.
+ */
+export function soleSignerDeviceId(settings: RemoteSigningSettings): string | null {
+  const signers = pairedSigners(settings);
+  return signers.length === 1 ? signers[0].deviceId : null;
+}
+
 // ---- reducers (pure) -------------------------------------------------------
 
 export function setEnabled(
@@ -108,7 +151,14 @@ export function setPolicy(
 /** Pin (or re-pin) a device, capturing the pubKey observed now. */
 export function trustDevice(
   settings: RemoteSigningSettings,
-  device: { deviceId: string; pubKey: string; label: string; platform: string; verified?: boolean },
+  device: {
+    deviceId: string;
+    pubKey: string;
+    label: string;
+    platform: string;
+    verified?: boolean;
+    hasSigningKey?: boolean;
+  },
   now: number,
 ): RemoteSigningSettings {
   const entry: TrustedDevice = {
@@ -118,6 +168,7 @@ export function trustDevice(
     platform: device.platform,
     trustedAt: now,
     verified: !!device.verified,
+    hasSigningKey: device.hasSigningKey,
   };
   return {
     ...settings,
