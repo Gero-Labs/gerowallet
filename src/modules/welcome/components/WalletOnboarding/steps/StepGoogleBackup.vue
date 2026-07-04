@@ -70,6 +70,8 @@ interface Props {
   walletId: number;
   /** Encrypted download only — never rendered, logged, or persisted by this component. */
   recoveryShare: string;
+  /** The wallet's xpub (not secret) — embedded in the file as the restore-time anchor. */
+  publicKey: string;
   recoveryPassword: string;
 }
 
@@ -102,8 +104,12 @@ const download = async (): Promise<void> => {
   errorMessage.value = '';
   try {
     const { encryptRecoveryShare } = await import('@/shared/utils/mpc');
-    const blob = await encryptRecoveryShare(props.recoveryShare, props.recoveryPassword);
-    triggerDownload(fileName.value, blob);
+    const recovery = await encryptRecoveryShare(props.recoveryShare, props.recoveryPassword);
+    // Envelope: the encrypted recovery share PLUS the wallet's xpub anchor
+    // (publicKey is not secret; the recovery share stays encrypted). The anchor
+    // lets restore reject a mismatched recovery-file / Google-account pairing.
+    const envelope = JSON.stringify({ v: 1, publicKey: props.publicKey, recovery });
+    triggerDownload(fileName.value, envelope);
     downloaded.value = true;
   } catch (error: unknown) {
     console.error('Failed to prepare recovery file:', error instanceof Error ? error.message : 'unknown error');

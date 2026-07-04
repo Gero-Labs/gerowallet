@@ -2807,6 +2807,7 @@ export default {
   'welcome.googleWalletSummaryTitle': 'Google Wallet',
   'welcome.uploadRecoveryFile': 'Upload Recovery File',
   'welcome.chooseRecoveryFile': 'Choose .gmpc file',
+  'welcome.invalidRecoveryFile': 'This file is not a valid Gero recovery file.',
   'welcome.noRecoveryFileChosen': 'No file chosen',
   'welcome.newSpendingPassword': 'New Spending Password',
   'welcome.confirmNewSpendingPassword': 'Confirm New Spending Password',

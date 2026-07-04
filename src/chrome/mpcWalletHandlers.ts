@@ -121,6 +121,14 @@ export interface CreateMpcGoogleWalletResult {
   walletId: number;
   /** Return to the caller for encrypted-download backup. Never log or persist server-side. */
   recoveryShare: string;
+  /**
+   * The wallet's CIP-1852 xpub. Written (unencrypted — it is not secret) into
+   * the recovery-file envelope as an anchor so a restore on a fresh device can
+   * validate the reconstructed key actually belongs to this wallet+Google
+   * account, rather than silently minting a phantom wallet from a mismatched
+   * recovery-file / Google-account pairing.
+   */
+  publicKey: string;
 }
 
 /**
@@ -154,7 +162,7 @@ export async function createMpcGoogleWalletFlow(
     encryptedDeviceShare,
   });
 
-  return { walletId, recoveryShare: shareSet.recoveryShare };
+  return { walletId, recoveryShare: shareSet.recoveryShare, publicKey: expectedXpub };
 }
 
 // ---------------------------------------------------------------------------
@@ -238,13 +246,24 @@ export interface RecoverMpcGoogleWalletInput {
   recoveryBlob: string;
   recoveryPassword: string;
   newSpendingPassword: string;
+  /**
+   * The wallet's xpub, read from the recovery-file envelope. Used as the anchor
+   * to validate the reconstructed key: if the uploaded recovery file belongs to
+   * a different wallet, or the user signed into the wrong Google account, the
+   * reconstructed entropy derives a different xpub and recovery is rejected.
+   */
+  expectedXpub: string;
 }
 
 export interface RecoverMpcGoogleWalletDeps {
   decryptRecoveryShare: (blob: string, password: string) => Promise<string>;
   getLoginShare: (idToken: string, chain: string, network: string) => Promise<string>;
-  reconstructEntropy: (encodedA: string, encodedB: string) => Promise<Uint8Array>;
-  deriveExpectedXpub: (entropy: Uint8Array) => Promise<string>;
+  /** Reconstruct entropy from the two shares AND validate its xpub === expectedXpub (throws MpcValidationError on mismatch). */
+  reconstructAndValidateEntropy: (
+    recoveryShare: string,
+    loginShare: string,
+    expectedXpub: string,
+  ) => Promise<Uint8Array>;
   encryptDeviceShare: (deviceShare: string, password: string) => string;
   createMpcGoogleWallet: (params: {
     name: string;
@@ -272,20 +291,25 @@ export interface RecoverMpcGoogleWalletResult {
  * recovery share as the local device factor on the new device instead of
  * re-splitting entropy into a brand-new 3-share set. The login share stays
  * enrolled and unchanged on the backend — no re-enroll/replace endpoint is
- * needed. There is no locally-stored xpub to validate against on a fresh
- * device, so the xpub is *derived* from the reconstructed entropy and
- * persisted as this wallet's `publicKey` going forward.
+ * needed.
+ *
+ * A fresh device has no locally-stored xpub, so the reconstructed key can't be
+ * trusted blindly: pairing wallet A's recovery file with Google account B would
+ * combine A-recovery + B-login into garbage entropy whose per-share checksums
+ * still pass, silently cementing a phantom wallet. To prevent that, the
+ * recovery-file envelope carries the original wallet's xpub (`expectedXpub`),
+ * and we validate the reconstructed key against it — a mismatch throws
+ * MpcValidationError and NO wallet is persisted.
  */
 export async function recoverMpcGoogleWalletFlow(
   input: RecoverMpcGoogleWalletInput,
   deps: RecoverMpcGoogleWalletDeps,
 ): Promise<RecoverMpcGoogleWalletResult> {
-  const { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSpendingPassword } = input;
+  const { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSpendingPassword, expectedXpub } = input;
   const {
     decryptRecoveryShare,
     getLoginShare,
-    reconstructEntropy,
-    deriveExpectedXpub,
+    reconstructAndValidateEntropy,
     encryptDeviceShare,
     createMpcGoogleWallet,
     subFromIdToken: getSub,
@@ -293,8 +317,10 @@ export async function recoverMpcGoogleWalletFlow(
 
   const recoveryShare = await decryptRecoveryShare(recoveryBlob, recoveryPassword);
   const loginShare = await getLoginShare(idToken, chain, network);
-  const entropy = await reconstructEntropy(recoveryShare, loginShare);
-  const publicKey = await deriveExpectedXpub(entropy);
+  // Anchor check: reconstruct AND validate the derived xpub === expectedXpub.
+  // Throws MpcValidationError on mismatch (before anything is persisted).
+  await reconstructAndValidateEntropy(recoveryShare, loginShare, expectedXpub);
+  const publicKey = expectedXpub;
 
   // Reuse the recovery share as the new device's local device factor (see decision above).
   const encryptedDeviceShare = encryptDeviceShare(recoveryShare, newSpendingPassword);

@@ -194,7 +194,11 @@ export class WalletManager {
         mpcSessionCache.clearAll();
         TapToolsStore.clear();
         let walletBg: WalletBg
-        if (wallet.type === WalletType.Google) {
+        if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
+          // Legacy zkFold smart-contract Google wallet: address is fetched from
+          // the contract. MPC Sign-in-with-Google wallets are also type===Google
+          // but are normal HD wallets (real CIP-1852 xpub) — construct them the
+          // same way as Normal wallets (no smart-contract address).
           const smartBaseAddress: Cardano.Address = await zkSmartWalletApi.walletAddress(wallet.userId)
           walletBg = new WalletBg(wallet, smartBaseAddress.toBech32())
         } else {
@@ -364,7 +368,9 @@ export class WalletManager {
     const chain: string = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network: string = Object.keys(Network).find(key => Network[key] === walletBg.network);
     let address: string;
-    if (walletBg.isEnterpriseAddress() || walletBg.type === WalletType.Google) {
+    // MPC Google wallets are normal HD wallets — sync on the stake address like
+    // any other wallet. Only legacy zkFold Google wallets sync on baseAddress.
+    if (walletBg.isEnterpriseAddress() || (walletBg.type === WalletType.Google && walletBg.encryptionMethod !== 'mpc')) {
       address = walletBg.baseAddress;
     } else {
       address = walletBg.stakeAddress;
