@@ -107,6 +107,26 @@ export async function mintPairingNonce(
 }
 
 /**
+ * Cheap, NON-CONSUMING check: is there a matching unused, unexpired nonce for this
+ * wallet? A single storage read — no crypto, no write, no burn. Used as an early
+ * reject at the top of the pairing handler so an untrusted relay flooding
+ * PAIR_CONFIRM frames (when no QR / no live nonce is outstanding) is dropped BEFORE
+ * the expensive wallet-control-proof verify — without touching the nonce, so the
+ * proof-first anti-nonce-burn property is preserved. This is a DoS gate only, NOT a
+ * security gate: {@link consumePairingNonce} remains the authoritative single-use
+ * check (this peek can race a concurrent consume; the consume settles it).
+ */
+export async function peekPairingNonce(
+  nonce: string,
+  ownStake: string,
+  now: number,
+  storage: NonceStorage = chromeStorage(),
+): Promise<boolean> {
+  const entry = (await readAll(storage))[nonce];
+  return isStoredNonce(entry) && !entry.used && entry.exp > now && entry.stake === ownStake;
+}
+
+/**
  * Atomically consume a nonce. Succeeds iff it is present, not yet used, not
  * expired, and was minted under `ownStake`; on success it is marked used and
  * persisted BEFORE returning, so a replay within the TTL sees used:true. Returns
