@@ -1,11 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import Vue from 'vue';
+import Vue, { ref } from 'vue';
 
 // useMarketData.ts uses module-level auto-imported `ref` (undefined under vitest);
-// the catalog builder only needs getTokenByUnit/getTokenImage for token logos.
+// the catalog builder needs getTokenByUnit/getTokenImage for token logos, and
+// GeroSwapEmbed.vue also watch()es `allTokens` directly (to rebuild the catalog once
+// market data hydrates), so it must be a real ref — not undefined — or Vue's watch()
+// throws an "Invalid watch source" warning.
 vi.mock('@/modules/market/composables/useMarketData', () => ({
-  useMarketData: () => ({ getTokenByUnit: () => undefined, getTokenImage: () => '' }),
+  useMarketData: () => ({ getTokenByUnit: () => undefined, getTokenImage: () => '', allTokens: ref([]) }),
 }));
 
 // Mirrors sidepanel/options main.ts: <gero-swap> self-registers as a real custom

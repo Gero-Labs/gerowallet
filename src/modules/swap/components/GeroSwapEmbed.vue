@@ -96,7 +96,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
-import { resolveAsset } from '@/shared/utils/resolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
@@ -213,6 +212,12 @@ const { signer, keystone } = useNativeSwapSigner({
 });
 const { resolveToken } = useSwapTokenResolver();
 
+// Single top-level call to the singleton composable (matches useSwapTokenResolver.ts's
+// own usage) so we can hold a reference to its reactive `allTokens` list — needed below
+// to re-run buildTokenCatalog() once market data actually arrives (it hydrates
+// asynchronously, well after this component's initial mount/wireProps() call).
+const { getTokenByUnit, allTokens } = useMarketData();
+
 // ── MAX button: no host wiring needed ──
 // Investigated src/vendor/gero-swap/gero-swap.js: the widget's internal
 // TokenSelector emits a local `setMax` event that the top-level widget
@@ -240,6 +245,17 @@ interface StoredCatalogToken {
 }
 
 /**
+ * Shape of a `node.tokens` catalog entry. `img` is deliberately optional/nullable
+ * (not a required `string`): the lovelace/ADA entry omits it on purpose (see
+ * `buildTokenCatalog()` below) so the widget falls back to its own bundled ADA
+ * icon instead of a transiently-empty host-supplied chain logo.
+ */
+interface CatalogToken extends StoredCatalogToken {
+  img?: string | null;
+  balance?: string;
+}
+
+/**
  * Builds the widget's optional token-search catalog (`node.tokens`), enriching
  * each swap-tradable entry with `img` (from `resolveAsset`'s local-cache
  * lookup — same sourcing as `useSwapTokenResolver.ts`'s `resolveToken`) and
@@ -248,16 +264,19 @@ interface StoredCatalogToken {
  * ADA/lovelace appears as a catalog entry — it's swap's native currency but
  * isn't part of DexHunter's tradable-token registry.
  */
-function buildTokenCatalog(): Record<string, unknown>[] {
+function buildTokenCatalog(): CatalogToken[] {
   const heldBalances = buildHeldBalanceMap();
-  const { getTokenByUnit, getTokenImage } = useMarketData();
   const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
 
   // Token logos come from market-data (market.gerowallet.io via Nexus) — the
   // app's single source of truth. Use getTokenByUnit(unit)?.img (market logo
   // only, no chainLogo fallback) so an unlisted token shows a letter avatar
-  // rather than the ADA logo.
-  const catalog = stored.map(token => ({
+  // rather than the ADA logo. `unit` here is the same key `TokenMetadataStore`
+  // is keyed by (DexHunter's token_id) and the same string useSwapTokenResolver.ts's
+  // resolveToken() already passes to this same getTokenByUnit() — i.e. the plain
+  // Cardano "unit" (policyId + assetNameHex, no separator) used consistently
+  // everywhere in this codebase, so no key-format normalization is needed here.
+  const catalog: CatalogToken[] = stored.map(token => ({
     ...token,
     img: getTokenByUnit(token.unit)?.img ?? null,
     balance: heldBalances.get(token.unit),
@@ -269,7 +288,11 @@ function buildTokenCatalog(): Record<string, unknown>[] {
       decimals: 6,
       ticker: 'ADA',
       verified: true,
-      img: getTokenImage({ unit: 'lovelace' }) || null, // chainLogo (ADA icon)
+      // Deliberately NO `img` here (not even chainLogo). `getTokenImage({unit:'lovelace'})`
+      // resolves to `networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)`,
+      // which can be transiently empty before the wallet's chain/network is set, causing the
+      // ADA icon to flicker/disappear. Omitting `img` entirely defers to the widget's own
+      // self-contained ADA icon (a bundled data-URI, always present regardless of host state).
       balance: heldBalances.get('lovelace'),
     });
   }
@@ -320,6 +343,10 @@ function attach() {
 }
 
 function detach() {
+  if (catalogRebuildTimer) {
+    clearTimeout(catalogRebuildTimer);
+    catalogRebuildTimer = null;
+  }
   const node = geroSwapEl.value;
   if (!node) return;
   node.removeEventListener('swap-submitted', onSwapSubmitted);
@@ -334,9 +361,41 @@ onBeforeUnmount(detach);
 // automatically via the template binding; properties need an explicit re-wire).
 watch(() => [props.tokenIn, props.tokenOut], wireProps);
 
+// ── Reactive catalog rebuild ──
+// buildTokenCatalog() reads both TokenMetadataStore.state.tokens (the swap-tradable
+// registry) and useMarketData()'s allTokens (icons/prices) — both hydrate
+// asynchronously AFTER this component's initial mount/wireProps() call. Without this,
+// node.tokens is assigned once, before either source has data, and icons stay
+// permanently undefined even after the data arrives. Re-run wireProps() (which
+// rebuilds the whole catalog and reassigns node.tokens, reusing the same geroSwapEl
+// ref) whenever either source changes.
+//
+// Debounced (not immediate) because allTokens is replaced wholesale on every 15s
+// price-poll tick (see useMarketData.ts's pollPrices) — coalesce those plus any
+// near-simultaneous TokenMetadataStore update into a single rebuild rather than
+// rebuilding the full catalog twice in the same tick.
+let catalogRebuildTimer: ReturnType<typeof setTimeout> | null = null;
+const CATALOG_REBUILD_DEBOUNCE_MS = 200;
+
+function scheduleCatalogRebuild() {
+  if (catalogRebuildTimer) clearTimeout(catalogRebuildTimer);
+  catalogRebuildTimer = setTimeout(() => {
+    catalogRebuildTimer = null;
+    wireProps();
+  }, CATALOG_REBUILD_DEBOUNCE_MS);
+}
+
 // Token catalog hydrates asynchronously post-login (see useSwapTokenResolver.ts) —
-// re-wire once it lands.
-watch(() => TokenMetadataStore.state.tokens, wireProps);
+// rebuild once it lands. `state.tokens` is always reassigned wholesale (never
+// mutated in place — see tokenMetadataStore.ts's setTokens()/broadcastTokenPatch()),
+// so a shallow (non-deep) watch already fires correctly on every real update.
+watch(() => TokenMetadataStore.state.tokens, scheduleCatalogRebuild);
+
+// Market-data (icons/prices) also hydrates asynchronously — same reasoning as above.
+// `allTokens.value` is always reassigned wholesale in fetchAllTokens() (never mutated
+// in place), so a shallow watch is sufficient and far cheaper than a deep watch over
+// what can be a large array of MarketToken objects (each carrying a sparkline array).
+watch(allTokens, scheduleCatalogRebuild);
 
 // isSwapEnabled can flip the maintenance overlay in/out while mounted, which
 // destroys/recreates the <gero-swap> element (v-if/v-else) — re-attach on re-entry.
