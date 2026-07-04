@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createCrossDeviceSigning, type SignDecision } from './crossDeviceSigning.service';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { signMessage } from './envelope';
-import { type CrossDeviceMessage, type SignRequest, type SignResponse } from './protocol';
+import { type CrossDeviceMessage, type SignRequest, type SignResponse, type PairConfirm } from './protocol';
 
 // A shared in-memory bus that fans every published message out to all
 // subscribed listeners (simulating gero-sync's fan-out to sibling devices).
@@ -62,6 +62,97 @@ async function makePair(now = () => 1000) {
 
   return { bus, requester, approver };
 }
+
+// QR pairing inbound (PAIR_CONFIRM) — the auth boundary before the wallet-proof check.
+const phoneKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(44));
+const desktopKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(55));
+const phoneId = 'ios-phone-uuid';
+const desktopId = deviceIdFromPubKey(desktopKp.pubKeyHex);
+const flush = () => new Promise((r) => setTimeout(r, 30)); // let ed25519 verifyAsync settle
+
+function makeDesktop() {
+  const bus = makeBus();
+  const onPairConfirm = vi.fn();
+  const desktop = createCrossDeviceSigning({
+    transport: bus.makeTransport(),
+    identity: { deviceId: desktopId, privKeyHex: desktopKp.privKeyHex },
+    resolvePubKey: async () => null, // the phone is NOT in the registry (pairing establishes trust)
+    now: () => 1000,
+    newId: () => 'x',
+    isRequesterTrusted: () => false, // even fully UNtrusted...
+    isResponderTrusted: () => false,
+    onPairConfirm,
+  });
+  return { bus, onPairConfirm, desktop };
+}
+
+async function signedConfirm(overrides: Partial<Omit<PairConfirm, 'sig'>> = {}): Promise<PairConfirm> {
+  const frame: Omit<PairConfirm, 'sig'> = {
+    type: 'PAIR_CONFIRM',
+    from: phoneId,
+    pubKey: phoneKp.pubKeyHex,
+    to: desktopId,
+    nonce: 'n1',
+    stakeAddress: 'stake1uxyz',
+    proof: { coseSign1: 'a0', coseKey: 'a1', stakeAddress: 'stake1uxyz' },
+    label: 'iPhone',
+    platform: 'ios',
+    hasSigningKey: true,
+    ...overrides,
+  };
+  return signMessage<PairConfirm>(frame, phoneKp.privKeyHex);
+}
+
+describe('PAIR_CONFIRM inbound (QR pairing auth boundary)', () => {
+  it('delivers a valid confirm to onPairConfirm — verified via frame.pubKey, UNGATED by trust', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    bus.publish(await signedConfirm());
+    await flush();
+    expect(onPairConfirm).toHaveBeenCalledTimes(1);
+    expect(onPairConfirm.mock.calls[0][0]).toMatchObject({ from: phoneId, to: desktopId, nonce: 'n1' });
+    desktop.dispose();
+  });
+
+  it('drops a confirm whose claimed pubKey did not sign it (frame.pubKey swap)', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    const frame = await signedConfirm();
+    bus.publish({ ...frame, pubKey: approverKp.pubKeyHex }); // claim a different key than what signed
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('drops a confirm with a tampered subject field (nonce) — sig no longer matches', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    const frame = await signedConfirm();
+    bus.publish({ ...frame, nonce: 'n2' });
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('drops a confirm addressed to a DIFFERENT desktop (to != self)', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    bus.publish(await signedConfirm({ to: 'some-other-desktop' }));
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('ignores our own echoed confirm (from == self)', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    // A confirm whose `from` is the desktop itself, correctly signed by the desktop key.
+    const selfFrame: Omit<PairConfirm, 'sig'> = {
+      type: 'PAIR_CONFIRM', from: desktopId, pubKey: desktopKp.pubKeyHex, to: desktopId,
+      nonce: 'n1', stakeAddress: 'stake1uxyz',
+      proof: { coseSign1: 'a0', coseKey: 'a1', stakeAddress: 'stake1uxyz' },
+    };
+    bus.publish(await signMessage<PairConfirm>(selfFrame, desktopKp.privKeyHex));
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+});
 
 describe('crossDeviceSigning happy path', () => {
   it('approver receives a verified request; requester resolves with the witness', async () => {
