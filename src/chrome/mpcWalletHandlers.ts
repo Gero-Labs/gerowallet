@@ -13,6 +13,59 @@
  */
 import { MpcValidationError } from '@/shared/utils/mpc';
 import type { MpcShareSet } from '@/shared/utils/mpc';
+import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+
+/** Minimal wallet shape the sign-path helpers need. */
+export interface SignableWallet {
+  id?: number;
+  encryptionMethod?: string;
+}
+
+/**
+ * Resolve the pre-decrypted root-key bytes to pass to walletBg.signTx/signData.
+ *
+ * - Explicit bytes (PRF wallets, unlocked via WebAuthn in the UI) always win —
+ *   PRF/hardware behavior is unchanged.
+ * - Non-MPC wallets with no explicit bytes get `undefined` — the password
+ *   decrypt path is unchanged.
+ * - MPC ('mpc') wallets never send key bytes over the wire; the validated
+ *   root-key bytes live only in the background session cache (populated once
+ *   per session by UNLOCK_MPC_WALLET). If the cache is empty, throw a clean
+ *   "unlock with Google" error instead of letting signTx decrypt(undefined).
+ *
+ * Routing every Cardano sign call-site through this is safe for ALL wallet
+ * types: it only changes behavior for `encryptionMethod === 'mpc'`.
+ */
+export function resolveSignPrivateKeyBytes(
+  wallet: SignableWallet | null | undefined,
+  explicitBytes: Uint8Array | undefined,
+  sessionCache: Pick<typeof mpcSessionCache, 'get'> = mpcSessionCache,
+): Uint8Array | undefined {
+  if (explicitBytes) return explicitBytes;
+  if (wallet?.encryptionMethod === 'mpc') {
+    const cached = wallet.id != null ? sessionCache.get(wallet.id) : undefined;
+    if (!cached) {
+      throw new Error('This wallet needs to be unlocked with Google before signing.');
+    }
+    return cached;
+  }
+  return explicitBytes;
+}
+
+/**
+ * Guard for sign paths where MPC key material is NOT applicable yet (e.g.
+ * Bitcoin-specific signers — an MPC Google wallet reconstructs a Cardano
+ * root key only). Throws a clean error for `mpc` wallets so they never fall
+ * through to a raw decrypt(undefined); a no-op for every other wallet type.
+ */
+export function assertMpcActionSupported(
+  wallet: SignableWallet | null | undefined,
+  action: string,
+): void {
+  if (wallet?.encryptionMethod === 'mpc') {
+    throw new Error(`Sign in with Google (MPC) is not yet supported for ${action}.`);
+  }
+}
 
 /** Decode the JWT PAYLOAD only (base64url middle segment) and return its `sub` claim.
  *  Does NOT verify the signature — the backend already verifies it on enroll/login-share.
