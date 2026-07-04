@@ -18,8 +18,66 @@
 
       <!-- Unlock method content -->
       <div class="unlock-method-wrapper">
+        <!-- MPC "Sign in with Google" wallet -->
+        <div v-if="isMpcWallet" class="text-center unlock-method-content">
+          <template v-if="!googleEmail">
+            <v-btn
+              class="mpc-google-btn"
+              depressed
+              outlined
+              :loading="signingInGoogle"
+              @click="signInWithGoogle()"
+            >
+              <v-avatar size="18" class="mr-2">
+                <v-img :src="assets.google" contain />
+              </v-avatar>
+              {{ $t('welcome.googleSignInButton') }}
+            </v-btn>
+          </template>
+          <template v-else>
+            <div class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
+            <v-tooltip
+              v-model="tooltip.enabled"
+              top
+              color="red"
+            >
+              <template v-slot:activator="{ }">
+                <v-text-field
+                  v-model="password"
+                  :label="$t('security.spendingPassword')"
+                  :type="show ? 'text' : 'password'"
+                  :error="passwordError"
+                  outlined
+                  dense
+                  hide-details
+                  :append-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append="show = !show"
+                  @keydown.enter.stop="handleMpcUnlock()"
+                >
+                  <template v-slot:append-outer>
+                    <v-btn
+                      block
+                      outlined
+                      small
+                      color="primary"
+                      class="ml-2 px-1"
+                      style="height: 40px;"
+                      @click="handleMpcUnlock()"
+                      :loading="unlocking"
+                      :disabled="!canUnlock"
+                    >
+                      <v-icon>mdi-arrow-right</v-icon>
+                    </v-btn>
+                  </template>
+                </v-text-field>
+              </template>
+              <span>{{ tooltip.text }}</span>
+            </v-tooltip>
+          </template>
+        </div>
+
         <!-- PIN Input -->
-        <div v-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
+        <div v-else-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
             <numeric-otp-input
               ref="pinInputRef"
               v-model="pinCode"
@@ -205,6 +263,18 @@ import { verifyPattern } from '@/shared/utils/security';
 import assets from '@/utils/assets';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { getAllWallets } from '@/db/gero-db';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+import type { Wallet } from '@/models/types';
+
+/** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
+interface BackgroundMessageResponse {
+  data?: {
+    success?: boolean;
+    error?: string;
+    tokens?: { idToken: string; accessToken: string };
+  };
+  error?: string;
+}
 
 const { t } = useTranslation();
 // Define props and emits
@@ -247,6 +317,11 @@ const password = ref('');
 const passwordError = ref(false);
 const totpCode = ref('');
 
+// MPC "Sign in with Google" unlock state — never logged (idToken).
+const googleIdToken = ref('');
+const googleEmail = ref('');
+const signingInGoogle = ref(false);
+
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
 const configLoaded = ref(false);
@@ -273,10 +348,21 @@ const isPrfWallet = computed(() => {
   return preLoginEncryptionMethod.value === 'prf';
 });
 
+// MPC "Sign in with Google" wallet (Plan D) — reconstruct-at-unlock: Google
+// login share + spending password, no PIN/pattern/PassKey fallback.
+const isMpcWallet = computed(() => {
+  if (walletStore.loggedWallet) {
+    return walletStore.loggedWallet.encryptionMethod === 'mpc';
+  }
+  return preLoginEncryptionMethod.value === 'mpc';
+});
+
 const canUnlock = computed(() => {
   if (unlocking.value || !configLoaded.value) return false;
 
-  if (unlockMethod.value === 'pin') {
+  if (isMpcWallet.value) {
+    return !!googleIdToken.value && password.value.length > 0;
+  } else if (unlockMethod.value === 'pin') {
     return pinCode.value.length >= 4;
   } else if (unlockMethod.value === 'pattern') {
     return pattern.value.length >= 4;
@@ -287,7 +373,9 @@ const canUnlock = computed(() => {
 });
 
 const unlockDescription = computed(() => {
-  if (unlockMethod.value === 'pin') {
+  if (isMpcWallet.value) {
+    return t('welcome.unlockGoogleWalletDescription');
+  } else if (unlockMethod.value === 'pin') {
     return t('security.enterPinToUnlock');
   } else if (unlockMethod.value === 'pattern') {
     return t('security.drawPatternToUnlock');
@@ -334,10 +422,10 @@ async function loadSecurityConfig() {
     }
 
     // Resolve wallet record for pre-login PRF detection and credential retrieval
-    let preLoginWalletRecord: any = null;
+    let preLoginWalletRecord: Wallet | null = null;
     if (props.preLoginWalletId) {
       const walletsMap = await getAllWallets();
-      preLoginWalletRecord = walletsMap[walletId] || null;
+      preLoginWalletRecord = (walletsMap[walletId] as Wallet) || null;
       preLoginEncryptionMethod.value = preLoginWalletRecord?.encryptionMethod || null;
     }
 
@@ -453,7 +541,7 @@ async function handlePassKeyAuth() {
 
       // Reset password field validation so it doesn't show red during PassKey unlock
       if (passwordInputRef.value) {
-        (passwordInputRef.value as any).resetValidation();
+        (passwordInputRef.value as { resetValidation: () => void }).resetValidation();
       }
 
       if (twoFactorEnabled.value) {
@@ -464,11 +552,81 @@ async function handlePassKeyAuth() {
     } else {
       showError(t('security.passKeyFailed'));
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('PassKey authentication error:', error);
-    showError(error.message || t('security.passKeyFailed'));
+    showError(getErrorMessage(error, t('security.passKeyFailed')));
   } finally {
     passKeyLoading.value = false;
+  }
+}
+
+async function signInWithGoogle() {
+  signingInGoogle.value = true;
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_WITH_GOOGLE,
+      data: {},
+    }) as BackgroundMessageResponse;
+    if (!response?.data?.success || !response.data.tokens?.idToken || !response.data.tokens?.accessToken) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    const { accessToken, idToken } = response.data.tokens;
+    const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!profileResp.ok) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    const profile = await profileResp.json();
+    if (!profile?.email_verified || !profile?.email) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    googleIdToken.value = idToken;
+    googleEmail.value = profile.email;
+  } catch (error: unknown) {
+    console.error('Google sign-in failed:', getErrorMessage(error, 'unknown error'));
+    showError(getErrorMessage(error, t('welcome.googleSignInFailed')));
+  } finally {
+    signingInGoogle.value = false;
+  }
+}
+
+async function handleMpcUnlock() {
+  if (!canUnlock.value) return;
+
+  unlocking.value = true;
+  errorMessage.value = '';
+
+  try {
+    const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
+    if (!walletId) {
+      showError(t('security.unlockFailed'));
+      return;
+    }
+
+    // Note: never log request.data — contains idToken/spendingPassword
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.UNLOCK_MPC_WALLET,
+      data: {
+        walletId,
+        idToken: googleIdToken.value,
+        spendingPassword: password.value,
+      },
+    }) as BackgroundMessageResponse;
+
+    if (response?.data?.success) {
+      emit('input', false);
+      emit('unlocked');
+    } else {
+      showError(response?.data?.error || t('security.unlockFailed'));
+      password.value = '';
+      passwordError.value = true;
+    }
+  } catch (error: unknown) {
+    console.error('MPC unlock error:', error);
+    showError(getErrorMessage(error, t('security.unlockFailed')));
+  } finally {
+    unlocking.value = false;
   }
 }
 
@@ -519,7 +677,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
     const isPreLoginUnlock = !!props.preLoginWalletId;
     const messageType = isPreLoginUnlock ? MessageTypes.VERIFY_PRE_LOGIN_UNLOCK : MessageTypes.UNLOCK;
 
-    const response: any = await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: messageType,
       data: {
         walletId: props.preLoginWalletId, // Only used for pre-login unlock
@@ -528,9 +686,9 @@ async function handleUnlock(passKeyAuthenticated = false) {
         totpCode: twoFactorEnabled.value ? totpCode.value : undefined,
         password: password.value || undefined
       }
-    });
+    }) as BackgroundMessageResponse;
     debugLog('Unlock response:', response);
-    if (response.data.success) {
+    if (response.data?.success) {
       emit('input', false);
       emit('unlocked');
     } else {
@@ -551,13 +709,13 @@ async function handleUnlock(passKeyAuthenticated = false) {
         passwordError.value = true;
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Unlock error:', error);
     // Show tooltip for unlock errors
     if (unlockMethod.value === 'pin') {
-      pinError.value = error.message || vmProxy.$t('security.unlockFailed');
+      pinError.value = getErrorMessage(error, vmProxy.$t('security.unlockFailed') as string);
     } else {
-      showError(error.message || vmProxy.$t('security.unlockFailed'));
+      showError(getErrorMessage(error, vmProxy.$t('security.unlockFailed') as string));
     }
   } finally {
     unlocking.value = false;
@@ -598,6 +756,9 @@ function resetForm() {
   cachedLockPasswordHash.value = null;
   cachedPatternHash.value = null;
   preLoginEncryptionMethod.value = null;
+  googleIdToken.value = '';
+  googleEmail.value = '';
+  signingInGoogle.value = false;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 
@@ -660,6 +821,11 @@ watch(() => props.value, async (newVal) => {
 <style scoped>
 .unlock-dialog {
   border-radius: 16px;
+}
+
+.mpc-google-btn {
+  text-transform: none;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 /* Loading overlay during unlock */
