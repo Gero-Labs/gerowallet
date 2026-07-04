@@ -11,8 +11,63 @@
       </div>
 
       <template v-else>
+        <!-- MPC "Sign in with Google" unlock (takes precedence — MPC wallets
+             have no unlockMethod config row, so they'd otherwise fall to the
+             password default and be stranded here). -->
+        <template v-if="isMpcWallet">
+          <p class="text-caption grey--text mb-3 text-center">{{ $t('welcome.unlockGoogleWalletDescription') }}</p>
+
+          <template v-if="!googleEmail">
+            <v-btn
+              block
+              outlined
+              class="mb-1 mpc-google-btn"
+              :loading="signingInGoogle"
+              @click="signInWithGoogle"
+            >
+              <v-avatar size="18" class="mr-2">
+                <v-img :src="assets.google" contain />
+              </v-avatar>
+              {{ $t('welcome.googleSignInButton') }}
+            </v-btn>
+            <p v-if="error" class="red--text text-caption mt-2 mb-0">{{ error }}</p>
+          </template>
+
+          <template v-else>
+            <p class="text-caption grey--text mb-3 text-center">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</p>
+            <v-text-field
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              :placeholder="$t('miniGero.enterPassword')"
+              outlined
+              dense
+              dark
+              hide-details
+              class="mb-3"
+              :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              @click:append="showPassword = !showPassword"
+              @keydown.enter="handleMpcUnlock"
+              :error="!!error"
+            />
+
+            <p v-if="error" class="red--text text-caption mb-2">{{ error }}</p>
+
+            <v-btn
+              class="geroButton"
+              block
+              rounded
+              depressed
+              :loading="loading"
+              :disabled="!password"
+              @click="handleMpcUnlock"
+            >
+              {{ $t('miniGero.unlock') }}
+            </v-btn>
+          </template>
+        </template>
+
         <!-- PIN unlock -->
-        <template v-if="unlockMethod === 'pin'">
+        <template v-else-if="unlockMethod === 'pin'">
           <p class="text-caption grey--text mb-3 text-center">{{ $t('security.enterPinToUnlock') }}</p>
           <NumericOtpInput
             ref="pinInputRef"
@@ -85,6 +140,21 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
 import { useChainContext } from '../composables/useChainContext';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+import assets from '@/utils/assets';
+
+/** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
+interface BackgroundMessageResponse {
+  data?: {
+    success?: boolean;
+    error?: string;
+    tokens?: { idToken: string; accessToken: string };
+  };
+  error?: string;
+}
+
+const { t } = useTranslation();
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -95,10 +165,16 @@ const loading = ref(false);
 const loggingOut = ref(false);
 const error = ref('');
 
+// MPC "Sign in with Google" unlock state — never logged (idToken).
+const isMpcWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'mpc');
+const googleIdToken = ref('');
+const googleEmail = ref('');
+const signingInGoogle = ref(false);
+
 const pinCode = ref('');
 const pinLength = ref(6);
 const pinError = ref('');
-const pinInputRef = ref<any>(null);
+const pinInputRef = ref<{ resetValidation?: () => void } | null>(null);
 
 const unlockMethod = ref<string | null>(null);
 const configLoaded = ref(false);
@@ -149,8 +225,8 @@ async function handlePinFinish(pin: string) {
       pinError.value = response.data.error || 'Incorrect PIN';
       pinCode.value = '';
     }
-  } catch (e: any) {
-    pinError.value = e.message || 'Unlock failed';
+  } catch (e: unknown) {
+    pinError.value = getErrorMessage(e, 'Unlock failed');
     pinCode.value = '';
   } finally {
     loading.value = false;
@@ -175,8 +251,70 @@ async function handlePasswordUnlock() {
     if (!response.data.success) {
       error.value = response.data.error || 'Invalid password';
     }
-  } catch (e: any) {
-    error.value = e.message || 'Unlock failed';
+  } catch (e: unknown) {
+    error.value = getErrorMessage(e, 'Unlock failed');
+  } finally {
+    password.value = '';
+    loading.value = false;
+  }
+}
+
+async function signInWithGoogle() {
+  signingInGoogle.value = true;
+  error.value = '';
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_WITH_GOOGLE,
+      data: {},
+    }) as BackgroundMessageResponse;
+    if (!response?.data?.success || !response.data.tokens?.idToken || !response.data.tokens?.accessToken) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    const { accessToken, idToken } = response.data.tokens;
+    const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!profileResp.ok) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    const profile = await profileResp.json();
+    if (!profile?.email_verified || !profile?.email) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    googleIdToken.value = idToken;
+    googleEmail.value = profile.email;
+  } catch (e: unknown) {
+    console.error('Google sign-in failed:', getErrorMessage(e, 'unknown error'));
+    error.value = getErrorMessage(e, t('welcome.googleSignInFailed'));
+  } finally {
+    signingInGoogle.value = false;
+  }
+}
+
+async function handleMpcUnlock() {
+  if (!password.value) return;
+  const walletId = walletStore.loggedWallet?.id;
+  if (!walletId) return;
+
+  loading.value = true;
+  error.value = '';
+
+  try {
+    // Note: never log request.data — contains idToken/spendingPassword
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.UNLOCK_MPC_WALLET,
+      data: {
+        walletId,
+        idToken: googleIdToken.value,
+        spendingPassword: password.value,
+      },
+    }) as BackgroundMessageResponse;
+
+    if (!response?.data?.success) {
+      error.value = response?.data?.error || t('security.unlockFailed');
+    }
+  } catch (e: unknown) {
+    error.value = getErrorMessage(e, t('security.unlockFailed'));
   } finally {
     password.value = '';
     loading.value = false;
@@ -223,6 +361,17 @@ function openDashboard() {
 .dashboard-btn {
   border-color: #333 !important;
   color: var(--chain-primary) !important;
+  text-transform: none !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  letter-spacing: 0 !important;
+  border-radius: 10px !important;
+  height: 40px !important;
+}
+
+.mpc-google-btn {
+  border-color: #333 !important;
+  color: #fff !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 13px !important;
