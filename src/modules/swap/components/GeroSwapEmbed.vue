@@ -98,6 +98,7 @@ import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { getTokenByUnit, marketTokensRef } from '@/modules/market/composables/useMarketData';
+import { resolveAsset } from '@/shared/utils/resolver';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
@@ -284,6 +285,10 @@ interface StoredCatalogToken {
 interface CatalogToken extends StoredCatalogToken {
   img?: string | null;
   balance?: string;
+  /** ADA-denominated price (market-data), for the dialog's ADA price sub-line. */
+  priceAda?: number;
+  /** 24h price change %, drives the dialog's coloured ChangeBadge. */
+  change24h?: number;
 }
 
 /**
@@ -321,11 +326,22 @@ function buildTokenCatalog(): CatalogToken[] {
   // everywhere in this codebase, so no key-format normalization is needed here.
   const catalog: CatalogToken[] = stored
     .filter(token => !isAdaLike(token))
-    .map(token => ({
-      ...token,
-      img: getTokenByUnit(token.unit)?.img ?? null,
-      balance: heldBalances.get(token.unit),
-    }));
+    .map(token => {
+      // Enrich each entry from market-data (single lookup). Price/priceAda/change
+      // drive the dialog's price + 24h-change columns (the DexHunter store's own
+      // `price` is often 0/stale, so prefer the market value). Logo falls back to
+      // the on-chain asset cache (resolveAsset — a synchronous local lookup) when
+      // market-data has no image, so more tokens show a real icon.
+      const mkt = getTokenByUnit(token.unit);
+      return {
+        ...token,
+        img: mkt?.img || resolveAsset({ unit: token.unit } as never)?.img || null,
+        price: mkt?.price ?? token.price,
+        priceAda: mkt?.priceAda,
+        change24h: mkt?.change24h,
+        balance: heldBalances.get(token.unit),
+      };
+    });
 
   // Single canonical ADA/lovelace entry, always added (any registry duplicate was
   // already filtered out above), carrying the actual held balance.
