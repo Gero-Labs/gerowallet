@@ -100,7 +100,7 @@ Client can't meaningfully dual-run until gero-sync BTC is real:
    - Phase-2 follow-up B (backend dep): client now SENDS `addresses[]` in SUBSCRIBE, but gero-sync `SubscribeMessage` has no `addresses` field yet — that's backend #3 (multi-address subscription). Client is ahead; harmless while flag OFF.
 3. **Apply:** ✅ DONE (82365cb5) `convertBtcUtxos` + BTC branch in `setSync`; feed `WalletStore` from server payload.
    - Phase-1 follow-up: `networkStore.getCurrentBlockHeight()` currently returns `null` for a BTC tip (guarded to preserve no-behavior-change). BTC has a height — make it return `tip.height` when `isBitcoinTip(tip)`.
-4. **Rollback:** BTC reorg branch in `handleRollback`.
+4. **Rollback:** ✅ DONE (275fca0a) BTC reorg branch in `handleRollback`.
 5. **Cutover:** remove BTC gates (A), delete poller (B), verify dApp consumers unchanged.
 6. **Verify:** parity vs old poll (balance/utxos/tx history), reorg, gap-limit growth, catch-up, MV3 keep-alive (<30s), lock/unlock.
 
