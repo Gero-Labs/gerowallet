@@ -231,9 +231,17 @@ export class WalletManager {
         });
         LoadingState.setText('Initializing wallet...');
 
-        // Check if this is a first-time restore (no cached data)
-        const lastSyncInfo = walletBg.chain !== Blockchain.BITCOIN
-            ? await walletBg.getLastSyncInfo() : {};
+        // Check if this is a first-time restore (no cached data). getLastSyncInfo() is
+        // chain-agnostic (reads the wallet's own sync table). BTC needs it too when it
+        // syncs via gero-sync (Phase-5 default): connect() returns before data arrives,
+        // so we must block login on the WS catch-up like Cardano — otherwise the
+        // dashboard flashes a zero balance until the async onSync lands. BTC on the
+        // poller fallback (kill-switch off) seeds synchronously in initializeWallet and
+        // has no WS catch-up to await, so keep it out of the waitForSync path.
+        const btcWsForRestore =
+          walletBg.chain === Blockchain.BITCOIN && (await this.isBitcoinGeroSyncEnabled());
+        const useSyncInfo = walletBg.chain !== Blockchain.BITCOIN || btcWsForRestore;
+        const lastSyncInfo = useSyncInfo ? await walletBg.getLastSyncInfo() : {};
         const isFirstRestore = !lastSyncInfo;
 
         // If first restore, prepare sync promise BEFORE connecting WebSocket (avoids race)
@@ -1234,6 +1242,33 @@ export class WalletManager {
       return flags['isBitcoinGeroSyncEnabled'] !== false; // default ON; only explicit false = poller
     } catch {
       return true;
+    }
+  }
+
+  /**
+   * Manual Bitcoin refresh (pull-to-refresh). Routes through the SAME path the wallet
+   * is syncing on, so a refresh can't race the WS apply or leak a direct 3rd-party call:
+   * - WS on (default): resubscribe from the current height. The server replies with a
+   *   catch-up delta + current UTxOs/account/tip, applied via onSync under tipMutex.
+   * - Kill-switch off: the Esplora one-shot fetch (poller fallback).
+   */
+  async refreshBitcoin(): Promise<void> {
+    if (!this.walletBg || this.walletBg.chain !== Blockchain.BITCOIN) {
+      return;
+    }
+    if (await this.isBitcoinGeroSyncEnabled()) {
+      let height = 0;
+      try {
+        const info = await this.walletBg.getLastSyncInfo();
+        if (info && typeof (info as { height?: number }).height === 'number') {
+          height = (info as { height: number }).height;
+        }
+      } catch {
+        height = 0;
+      }
+      webSocketService.resubscribe(height);
+    } else {
+      await this.walletBg.syncBitcoinWalletComplete();
     }
   }
 

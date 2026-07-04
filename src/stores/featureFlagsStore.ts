@@ -237,6 +237,7 @@ export const featureFlagsStore = {
       isNexusUnstakeEnabled: false,
       isCrossDeviceSigningEnabled: false,
       isCopilotEnabled: false,
+      isBitcoinGeroSyncEnabled: true, // matches the documented default (WS on); kill-switch is explicit false
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
