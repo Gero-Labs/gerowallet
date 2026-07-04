@@ -58,6 +58,13 @@ interface StoredTokenMeta {
  * genuinely unknown, we hydrate the registry once (only if it's still empty,
  * to avoid a redundant fetch on every resolve) and re-check.
  *
+ * One-shot guard: if that hydration attempt fails (or otherwise leaves the map
+ * empty), `hydrationAttempted` stops every subsequent unknown-token resolve in
+ * this composable's lifetime from re-triggering `loadTokens()` — a single
+ * failed fetch shouldn't turn into a full network round-trip per resolve. A
+ * later successful populate (e.g. a background retry elsewhere) is still
+ * picked up normally, since the `stored` lookup above always runs first.
+ *
  * img for the common (store) path: store entries never carry an image field
  * (see `loadTokens()` above — DexHunter tokens don't include one; icons come
  * from `useMarketData` elsewhere). Resolving an image here would mean an
@@ -67,6 +74,10 @@ interface StoredTokenMeta {
  * the decimals/null contract.
  */
 export function useSwapTokenResolver() {
+  // One-shot guard (per composable lifetime): once a hydration attempt has been
+  // made for an empty map, don't attempt it again — see the doc comment above.
+  let hydrationAttempted = false;
+
   async function resolveToken(unit: string): Promise<TokenMetaLike | null> {
     if (unit === 'lovelace') return null; // widget seeds ADA (decimals 6) itself
 
@@ -80,7 +91,8 @@ export function useSwapTokenResolver() {
       // still empty, then re-check. `loadTokens()` already swallows its own
       // errors, but we guard the await anyway so a failure here can never
       // crash resolution; it just falls through to the unknown/null path.
-      if (Object.keys(TokenMetadataStore.state.tokens).length === 0) {
+      if (!hydrationAttempted && Object.keys(TokenMetadataStore.state.tokens).length === 0) {
+        hydrationAttempted = true;
         try {
           await TokenMetadataStore.loadTokens();
         } catch {

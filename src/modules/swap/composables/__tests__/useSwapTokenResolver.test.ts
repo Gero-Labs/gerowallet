@@ -99,6 +99,21 @@ describe('useSwapTokenResolver', () => {
     expect(m).toBeNull();
   });
 
+  it('does not re-attempt hydration on a second unknown-resolve after a failed hydration (one-shot guard)', async () => {
+    state.heldByWallet = false;
+    // loadTokens resolves but leaves the map empty — simulates a "failed" hydration
+    // (an actual thrown error is already covered by the try/catch and behaves the same).
+    const { resolveToken } = useSwapTokenResolver();
+
+    const first = await resolveToken('unknown-a');
+    expect(first).toBeNull();
+    expect(loadTokens).toHaveBeenCalledTimes(1);
+
+    const second = await resolveToken('unknown-b');
+    expect(second).toBeNull();
+    expect(loadTokens).toHaveBeenCalledTimes(1); // NOT re-triggered
+  });
+
   it('does not re-hydrate when the registry is already populated (avoids a redundant fetch)', async () => {
     tokens['known'] = { name: 'Snek', ticker: 'SNEK', decimals: 0, unit: 'known' };
     state.heldByWallet = false;
