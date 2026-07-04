@@ -13,6 +13,9 @@
 // Subjects (utf8 bytes, signed with the device relay Ed25519 key):
 //   SIGN_REQUEST:  gero-xdev/v1|SIGN_REQUEST|<reqId>|<nonce>|<from>|<stakeAddress or empty>|<expiresAt>|<blake2b256hex(rawUnsignedCborBytes)>
 //   SIGN_RESPONSE: gero-xdev/v1|SIGN_RESPONSE|<reqId>|<nonce>|<deviceId>|<decision>|<blake2b256hex(rawWitnessBytes) or empty when rejected>
+//   PAIR_CONFIRM:  gero-xdev/v1|PAIR_CONFIRM|<from>|<pubKey>|<to>|<nonce>|<stakeAddress>
+//     (QR pairing. Unlike SIGN_*, `to` is INSIDE the subject: it binds the scanned
+//      desktop so a captured confirm cannot be replayed to another desktop.)
 //
 // Encodings: lowercase hex throughout, Ed25519, blake2b-256 (32-byte), expiresAt
 // is unix SECONDS rendered as its decimal string.
@@ -22,7 +25,7 @@
 
 import * as ed25519 from '@noble/ed25519';
 import { blake2bHex } from 'blakejs';
-import type { SignRequest, SignResponse } from './protocol';
+import type { SignRequest, SignResponse, PairConfirm } from './protocol';
 
 /** Domain-separation + version tag that prefixes every signing subject. */
 export const CROSS_DEVICE_SUBJECT_VERSION = 'gero-xdev/v1';
@@ -58,13 +61,15 @@ function cborHash(hexCbor: string): string {
 
 type UnsignedRequest = Omit<SignRequest, 'sig'>;
 type UnsignedResponse = Omit<SignResponse, 'sig'>;
+type UnsignedPairConfirm = Omit<PairConfirm, 'sig'>;
+type UnsignedMessage = UnsignedRequest | UnsignedResponse | UnsignedPairConfirm;
 
 /**
  * Build the canonical pipe-joined signing subject for a message. This exact
  * string (utf8) is what gets signed and verified, byte-for-byte identical across
  * the extension and the iOS approver.
  */
-export function buildSubject(msg: UnsignedRequest | UnsignedResponse): string {
+export function buildSubject(msg: UnsignedMessage): string {
   if (msg.type === 'SIGN_REQUEST') {
     return [
       CROSS_DEVICE_SUBJECT_VERSION,
@@ -75,6 +80,18 @@ export function buildSubject(msg: UnsignedRequest | UnsignedResponse): string {
       msg.stakeAddress ?? '',
       String(msg.expiresAt),
       cborHash(msg.unsignedCbor),
+    ].join('|');
+  }
+  if (msg.type === 'PAIR_CONFIRM') {
+    // `to` is signed here (binds the scanned desktop); see the header note.
+    return [
+      CROSS_DEVICE_SUBJECT_VERSION,
+      'PAIR_CONFIRM',
+      msg.from,
+      msg.pubKey,
+      msg.to,
+      msg.nonce,
+      msg.stakeAddress,
     ].join('|');
   }
   return [
@@ -107,7 +124,7 @@ export async function signMessage<T extends { sig: string }>(
  * drop unverified inbound messages.
  */
 export async function verifyMessage(
-  msg: { sig: string } & (UnsignedRequest | UnsignedResponse),
+  msg: { sig: string } & UnsignedMessage,
   pubKeyHex: string,
 ): Promise<boolean> {
   try {

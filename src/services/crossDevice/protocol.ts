@@ -17,7 +17,8 @@ export type CrossDeviceMessageType =
   | 'DEVICES' // server -> device: the current per-wallet device registry snapshot
   | 'DEVICE_REGISTER_ACK' // server -> device: optional ack of a DEVICE_REGISTER
   | 'SIGN_REQUEST' // requester -> sibling device(s): please sign this unsigned tx
-  | 'SIGN_RESPONSE'; // approver -> requester: approved (+witness) or rejected
+  | 'SIGN_RESPONSE' // approver -> requester: approved (+witness) or rejected
+  | 'PAIR_CONFIRM'; // scanner (phone) -> scanned device (desktop): QR-pair handshake, signed
 
 export type DevicePlatform = 'extension' | 'ios' | 'android';
 
@@ -89,12 +90,41 @@ export interface SignResponse {
   sig: string; // hex Ed25519 sig over the canonical SIGN_RESPONSE subject
 }
 
+/**
+ * QR pairing handshake, phone -> desktop over the relay. The phone scans a QR the
+ * desktop rendered (carrying the desktop's deviceId/pubKey/proof + a single-use
+ * nonce), verifies the desktop's wallet-control proof out-of-band, pins it, then
+ * emits this frame to make the pairing mutual. Carries the PHONE's own proof so
+ * the desktop can verify + pin the phone with the same `verifyDeviceRegisterProof`
+ * used at DEVICE_REGISTER.
+ *
+ * Signed subject (envelope.ts) — DELIBERATELY binds `to` (the scanned desktop) so a
+ * captured confirm can't be replayed to a different desktop; this is why PAIR_CONFIRM
+ * signs `to` while SIGN_* leave it an unsigned routing hint:
+ *   gero-xdev/v1|PAIR_CONFIRM|<from>|<pubKey>|<to>|<nonce>|<stakeAddress>
+ * The top-level `to` (== the signed `to`) is also the relay routing hint.
+ */
+export interface PairConfirm {
+  type: 'PAIR_CONFIRM';
+  from: string; // the phone's deviceId (iOS UUID)
+  pubKey: string; // the phone's relay-auth Ed25519 pubkey (hex) — same key that signs SIGN_RESPONSE
+  to: string; // the scanned desktop's deviceId (from the QR) — bound in the subject + relay hint
+  nonce: string; // echoed single-use nonce minted by the desktop for this QR
+  stakeAddress: string; // the phone's own wallet reward address (must equal the desktop's)
+  proof: DeviceRegisterProof; // the phone's wallet-control proof (verified + pinned by the desktop)
+  label?: string; // human device label (e.g. "Adam's iPhone"); advisory
+  platform?: DevicePlatform; // "ios"; advisory
+  hasSigningKey?: boolean; // the phone holds a wallet spending key; advisory
+  sig: string; // hex Ed25519 over the canonical PAIR_CONFIRM subject (phone relay-auth key)
+}
+
 export type CrossDeviceMessage =
   | DeviceRegister
   | DevicesSnapshot
   | DeviceRegisterAck
   | SignRequest
-  | SignResponse;
+  | SignResponse
+  | PairConfirm;
 
 // ---------------------------------------------------------------------------
 // Primitive field checks
@@ -117,6 +147,15 @@ function isOptString(x: unknown): boolean {
 }
 
 const PLATFORMS: readonly DevicePlatform[] = ['extension', 'ios', 'android'];
+
+function isDeviceRegisterProof(x: unknown): x is DeviceRegisterProof {
+  return (
+    isObject(x) &&
+    isString(x['coseSign1']) &&
+    isString(x['coseKey']) &&
+    isString(x['stakeAddress'])
+  );
+}
 
 function isDeviceInfo(x: unknown): x is DeviceInfo {
   if (!isObject(x)) return false;
@@ -177,6 +216,22 @@ export function isSignResponse(x: unknown): x is SignResponse {
   );
 }
 
+export function isPairConfirm(x: unknown): x is PairConfirm {
+  if (!isObject(x) || x['type'] !== 'PAIR_CONFIRM') return false;
+  return (
+    isString(x['from']) &&
+    isString(x['pubKey']) &&
+    isString(x['to']) &&
+    isString(x['nonce']) &&
+    isString(x['stakeAddress']) &&
+    isDeviceRegisterProof(x['proof']) &&
+    isOptString(x['label']) &&
+    isOptString(x['platform']) &&
+    (x['hasSigningKey'] === undefined || typeof x['hasSigningKey'] === 'boolean') &&
+    isString(x['sig'])
+  );
+}
+
 /**
  * Parse an untrusted raw value into a typed cross-device message. Returns null
  * on missing/mistyped required fields, unknown type, or a non-object.
@@ -188,5 +243,6 @@ export function parseCrossDeviceMessage(raw: unknown): CrossDeviceMessage | null
   if (isDeviceRegisterAck(raw)) return raw;
   if (isSignRequest(raw)) return raw;
   if (isSignResponse(raw)) return raw;
+  if (isPairConfirm(raw)) return raw;
   return null;
 }

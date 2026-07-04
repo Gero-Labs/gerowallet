@@ -4,11 +4,13 @@ import {
   isDevicesSnapshot,
   isSignRequest,
   isSignResponse,
+  isPairConfirm,
   parseCrossDeviceMessage,
   type DeviceRegister,
   type DevicesSnapshot,
   type SignRequest,
   type SignResponse,
+  type PairConfirm,
 } from './protocol';
 
 const validRegister: DeviceRegister = {
@@ -50,6 +52,20 @@ const validResponse: SignResponse = {
   sig: 'cc'.repeat(64),
 };
 
+const validPairConfirm: PairConfirm = {
+  type: 'PAIR_CONFIRM',
+  from: 'ios-uuid',
+  pubKey: 'bb'.repeat(32),
+  to: 'ext-abc',
+  nonce: 'n3',
+  stakeAddress: 'stake1uxyz',
+  proof: { coseSign1: 'a0', coseKey: 'a1', stakeAddress: 'stake1uxyz' },
+  label: "Adam's iPhone",
+  platform: 'ios',
+  hasSigningKey: true,
+  sig: 'dd'.repeat(64),
+};
+
 describe('type guards', () => {
   it('isDeviceRegister narrows only DEVICE_REGISTER', () => {
     expect(isDeviceRegister(validRegister)).toBe(true);
@@ -79,6 +95,24 @@ describe('type guards', () => {
     expect(isSignResponse(validResponse)).toBe(true);
     expect(isSignResponse(validRequest)).toBe(false);
   });
+
+  it('isPairConfirm narrows only PAIR_CONFIRM with a well-formed proof', () => {
+    expect(isPairConfirm(validPairConfirm)).toBe(true);
+    expect(isPairConfirm(validResponse)).toBe(false);
+    // proof is required and must be a {coseSign1, coseKey, stakeAddress} object
+    const { proof: _p, ...noProof } = validPairConfirm;
+    void _p;
+    expect(isPairConfirm(noProof)).toBe(false);
+    expect(isPairConfirm({ ...validPairConfirm, proof: { coseSign1: 'a0' } })).toBe(false);
+  });
+
+  it('isPairConfirm requires the signed fields (from/pubKey/to/nonce/stakeAddress)', () => {
+    for (const field of ['from', 'pubKey', 'to', 'nonce', 'stakeAddress'] as const) {
+      const { [field]: _omit, ...rest } = validPairConfirm;
+      void _omit;
+      expect(isPairConfirm(rest)).toBe(false);
+    }
+  });
 });
 
 describe('parseCrossDeviceMessage', () => {
@@ -87,6 +121,7 @@ describe('parseCrossDeviceMessage', () => {
     expect(parseCrossDeviceMessage(validDevices)).toEqual(validDevices);
     expect(parseCrossDeviceMessage(validRequest)).toEqual(validRequest);
     expect(parseCrossDeviceMessage(validResponse)).toEqual(validResponse);
+    expect(parseCrossDeviceMessage(validPairConfirm)).toEqual(validPairConfirm);
     expect(parseCrossDeviceMessage({ type: 'DEVICE_REGISTER_ACK', deviceId: 'dev1' })).not.toBeNull();
   });
 
