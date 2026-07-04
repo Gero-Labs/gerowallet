@@ -6,6 +6,14 @@
       <div class="text-h6 mt-3">{{ $t('miniGero.swapMaintenance') }}</div>
     </div>
 
+    <!-- ═══════ NETWORK GUARD: never mount the widget with network=undefined (e.g. Bitcoin,
+         Apex, preview wallets — toNexusNetwork only resolves mainnet/preprod) ═══════ -->
+    <div v-else-if="!network" class="gero-swap-embed__maintenance">
+      <v-alert type="info" color="primary" text border="left" dense class="ma-0">
+        {{ $t('miniGero.swapNetworkNotSupported') }}
+      </v-alert>
+    </div>
+
     <template v-else>
       <gero-swap
         ref="geroSwapEl"
@@ -95,6 +103,8 @@ import { toNexusNetwork } from '@/api/nexus-tx-api';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import snackbar from '@/plugins/snackbar';
+import i18n from '@/plugins/i18n';
 
 interface Props {
   tokenIn?: string;
@@ -192,7 +202,13 @@ function onPassKeyCancel() {
   prfReject = null;
 }
 
-const { signer, keystone } = useNativeSwapSigner({ getPassword, getPrfBytes });
+const { signer, keystone } = useNativeSwapSigner({
+  getPassword,
+  getPrfBytes,
+  // Wire the wallet's actual Bluetooth-Ledger support so BT users aren't forced onto
+  // USB (see useTransactionSigning.ts's isBTSupported for the same field usage).
+  getIsBT: () => walletStore.loggedWallet?.btSupported ?? false,
+});
 const { resolveToken } = useSwapTokenResolver();
 
 function wireProps() {
@@ -206,8 +222,23 @@ function wireProps() {
 function onSwapSubmitted(e: Event) {
   emit('swap-submitted', (e as CustomEvent).detail);
 }
+
+// Widget error codes observed in src/vendor/gero-swap/gero-swap.js — mapped to existing
+// i18n keys where one already fits, so all 5 mount sites get a friendly, translated
+// message even though only SwapDialog.vue listens for @swap-error itself.
+const SWAP_ERROR_CODE_TO_I18N_KEY: Record<string, string> = {
+  NO_ROUTE: 'swap.poolNotFound',
+  UNKNOWN_TOKEN_DECIMALS: 'swap.unknownTokenDecimals',
+  UNKNOWN: 'errors.unknownError',
+};
+
 function onSwapError(e: Event) {
-  emit('swap-error', (e as CustomEvent).detail);
+  const detail = (e as CustomEvent).detail as { code?: string; message?: string } | undefined;
+  emit('swap-error', detail);
+
+  const key = detail?.code ? SWAP_ERROR_CODE_TO_I18N_KEY[detail.code] : undefined;
+  const text = key ? (i18n.t(key) as string) : detail?.message || (i18n.t('errors.unknownError') as string);
+  snackbar.setError(text);
 }
 function onTokenChange(e: Event) {
   emit('token-change', (e as CustomEvent).detail);
@@ -245,6 +276,15 @@ watch(() => TokenMetadataStore.state.tokens, wireProps);
 // destroys/recreates the <gero-swap> element (v-if/v-else) — re-attach on re-entry.
 watch(isSwapEnabled, async (enabled) => {
   if (!enabled) return;
+  await nextTick();
+  attach();
+});
+
+// network can flip from unsupported (undefined) to supported while mounted (e.g. the
+// user switches wallets) — the network-guard branch also destroys/recreates
+// <gero-swap>, so re-attach the same way.
+watch(network, async (value) => {
+  if (!value) return;
   await nextTick();
   attach();
 });
