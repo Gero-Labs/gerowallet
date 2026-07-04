@@ -29,10 +29,4 @@ export default {
   async mCap(unit: string) {
     return axiosInstance.get(`/api/v2/mcap/${unit}`);
   },
-  async walletBalance(addresses: string[]) {
-    const requestBody = {
-      addresses
-    };
-    return axiosInstance.post(`/api/v2/swap/wallet`, requestBody);
-  }
 }
