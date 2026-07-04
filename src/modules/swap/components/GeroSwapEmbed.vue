@@ -289,6 +289,8 @@ interface CatalogToken extends StoredCatalogToken {
   priceAda?: number;
   /** 24h price change %, drives the dialog's coloured ChangeBadge. */
   change24h?: number;
+  /** Market cap (market-data), used to rank the picker's non-ADA/non-held tokens. */
+  mcap?: number | null;
 }
 
 /**
@@ -339,6 +341,7 @@ function buildTokenCatalog(): CatalogToken[] {
         price: mkt?.price ?? token.price,
         priceAda: mkt?.priceAda,
         change24h: mkt?.change24h,
+        mcap: mkt?.mcap ?? null,
         balance: heldBalances.get(token.unit),
       };
     });
