@@ -41,10 +41,10 @@ The first locked-phone wake test failed because of three now-fixed causes (relay
 | Step 2 — QR dialog (`GET_PAIRING_QR` + `RemoteSigningDialog` + poll) | ⏭️ next |
 | Step 2 — **`PAIR_ACK` send** | ⏭️ blocked on your exact shape (see §5) |
 
-## 5. What I need from iOS
-1. **The exact `PAIR_ACK` frame + signed-subject shape you listen for.** You said iOS matches on **nonce or sender**, 2.4s-bounded. I'll build the desktop to emit `PAIR_ACK` carrying `from` (desktop deviceId), `to` (phone), and the echoed `nonce`, and I'll **sign it** (Ed25519 over a subject, so the phone can verify it against the desktop's pinned pubkey) — *unless your listener expects it unsigned*. Please paste the precise frame JSON + subject bytes so it's byte-perfect.
-2. **Confirm your `PAIR_CONFIRM.to`** is set to the **scanned desktop's deviceId** (from the QR), not left blank — our service drops any confirm whose `to` != our deviceId (defense-in-depth; the relay also routes on it).
-3. **Push `7eb8a92`** when you're ready for the flip (holding per Adam's rule until then).
+## 5. Cross-repo items (resolved 2026-07-05)
+1. **`PAIR_ACK` — RESOLVED + BUILT.** iOS confirmed the shape; the desktop now signs + emits it. Frame `{type:"PAIR_ACK", from:<desktop deviceId>, to:<phone deviceId>, nonce:<echoed>, sig}`, signed subject `gero-xdev/v1|PAIR_ACK|<from>|<to>|<nonce>` (plain fields, no blake2b), signed with the desktop relay-auth key; the phone verifies against the pubkey it pinned from the QR and reconstructs the subject from what it pinned (so a relay can at most force an unsigned best-effort tick — cosmetic, no trust rests on it). Golden vector `gero-xdev/v1|PAIR_ACK|ext-123|ios-abc|nonce1` pinned in our `envelope.spec.ts` + iOS `CrossDevicePairingTests`.
+2. **`PAIR_CONFIRM.to` — CONFIRMED** = the scanned desktop's deviceId (never blank), matching our `to == self` drop + the relay's routing.
+3. **Push — iOS commit is now `9b74370`** (was `7eb8a92`; amended in the signed `PAIR_ACK` contract + tests). iOS holds the push (branch `claude/compassionate-spence-2658f3`) until the flip is greenlit.
 
 ## 6. Interop flip sequence (when both sides + deploy are ready)
 1. Deploy `development` on both repos (wake fix + relay forwarding).

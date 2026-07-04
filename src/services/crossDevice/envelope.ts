@@ -16,6 +16,8 @@
 //   PAIR_CONFIRM:  gero-xdev/v1|PAIR_CONFIRM|<from>|<pubKey>|<to>|<nonce>|<stakeAddress>
 //     (QR pairing. Unlike SIGN_*, `to` is INSIDE the subject: it binds the scanned
 //      desktop so a captured confirm cannot be replayed to another desktop.)
+//   PAIR_ACK:      gero-xdev/v1|PAIR_ACK|<from>|<to>|<nonce>
+//     (desktop -> phone cosmetic ack; the phone reconstructs this from what it pinned.)
 //
 // Encodings: lowercase hex throughout, Ed25519, blake2b-256 (32-byte), expiresAt
 // is unix SECONDS rendered as its decimal string.
@@ -25,7 +27,7 @@
 
 import * as ed25519 from '@noble/ed25519';
 import { blake2bHex } from 'blakejs';
-import type { SignRequest, SignResponse, PairConfirm } from './protocol';
+import type { SignRequest, SignResponse, PairConfirm, PairAck } from './protocol';
 
 /** Domain-separation + version tag that prefixes every signing subject. */
 export const CROSS_DEVICE_SUBJECT_VERSION = 'gero-xdev/v1';
@@ -62,7 +64,8 @@ function cborHash(hexCbor: string): string {
 type UnsignedRequest = Omit<SignRequest, 'sig'>;
 type UnsignedResponse = Omit<SignResponse, 'sig'>;
 type UnsignedPairConfirm = Omit<PairConfirm, 'sig'>;
-type UnsignedMessage = UnsignedRequest | UnsignedResponse | UnsignedPairConfirm;
+type UnsignedPairAck = Omit<PairAck, 'sig'>;
+type UnsignedMessage = UnsignedRequest | UnsignedResponse | UnsignedPairConfirm | UnsignedPairAck;
 
 /**
  * Build the canonical pipe-joined signing subject for a message. This exact
@@ -80,6 +83,17 @@ export function buildSubject(msg: UnsignedMessage): string {
       msg.stakeAddress ?? '',
       String(msg.expiresAt),
       cborHash(msg.unsignedCbor),
+    ].join('|');
+  }
+  if (msg.type === 'PAIR_ACK') {
+    // Cosmetic ack; the phone re-derives this from what it pinned (qr.deviceId, its
+    // own id, the nonce), not from the ack's self-declared fields.
+    return [
+      CROSS_DEVICE_SUBJECT_VERSION,
+      'PAIR_ACK',
+      msg.from,
+      msg.to,
+      msg.nonce,
     ].join('|');
   }
   if (msg.type === 'PAIR_CONFIRM') {
