@@ -32,7 +32,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in tokenMetadataStore) {
-        (tokenMetadataStore as any)[key] = updates[key as keyof TokenMetadataStore];
+        (tokenMetadataStore as unknown as Record<string, unknown>)[key] = updates[key as keyof TokenMetadataStore];
       }
     });
   });
@@ -101,7 +101,7 @@ async function broadcastTokenPatch(unit: string, patch: { price: number; mcap: n
 }
 
 export default {
-  setTokens(tokens: any) {
+  setTokens(tokens: Record<string, unknown>) {
     tokenMetadataStore.tokens = tokens;
 
     // Broadcast from a background context
@@ -223,11 +223,7 @@ export default {
   /**
    * Register address with DexHunter backend (for wallet balance tracking)
    * This should be called before performing swaps to enable DexHunter to track wallet state
-   * Called from browser context (SwapWidget), so we update store directly
-   *
-   * NOTE: only swap UI callers (SwapWidget, SwapSheet, QuickSwap) invoke this today.
-   * Those components are slated for removal in a later task; kept here so they still
-   * compile in the meantime. Safe to delete once the swap UIs are removed.
+   * Called from browser context, so we update store directly
    */
   async registerAddress(address: string): Promise<void> {
     // Check if already registered
