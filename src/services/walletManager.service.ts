@@ -497,16 +497,29 @@ export class WalletManager {
             });
           },
           onRollback: async (data: WsSyncMessage) => {
-            // TODO(Phase 4): height-based BTC rollback branch. Read
-            // `data['rollback_to_height']` (snake_case, BTC-specific) and delete/
-            // unconfirm txs above it + reset the checkpoint. Left minimal here so
-            // Phase 3 stays scoped to the forward apply path.
-            debugLog('🔶 [BTC gero-sync] ROLLBACK received (Phase 4 — not yet applied):', {
-              height: data['rollback_to_height'],
-            });
+            // Phase 4: height-based BTC rollback. Serialized under tipMutex so it can't
+            // race a concurrent SYNC apply. `rollback_to_height` is snake_case (BTC-specific).
+            debugLog('🔶 [BTC gero-sync] ROLLBACK received:', { height: data['rollback_to_height'] });
+            if (data['rollback_to_height'] !== undefined) {
+              await this.tipMutex.runExclusive(async () => {
+                await walletBg.syncService.handleBitcoinRollback(data['rollback_to_height'] as number);
+              });
+            }
           },
           onForceResync: async () => {
-            debugLog('🔶 [BTC gero-sync] FORCE_RESYNC received (not yet implemented)');
+            // Phase 4: deep reorg (beyond the server's window). Clear in-memory state,
+            // reset the checkpoint to 0, and resubscribe from scratch (BTC branch of
+            // resubscribe re-sends the address set).
+            debugLog('🔶 [BTC gero-sync] FORCE_RESYNC — clearing and resubscribing');
+            webSocketService.pauseSyncCheck();
+            try {
+              await walletBg.syncService.handleBitcoinForceResync();
+              const syncPromise = webSocketService.waitForSync();
+              webSocketService.resubscribe(0);
+              await syncPromise;
+            } finally {
+              webSocketService.resumeSyncCheck();
+            }
           },
         },
         undefined, // no Cardano credentials for BTC

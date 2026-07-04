@@ -446,6 +446,54 @@ export class SyncService {
   }
 
   /**
+   * Handle a Bitcoin reorg (Phase 4). BTC transactions live in-memory only (no DB
+   * `transactions` table), so drop confirmed txs above the rollback height and keep
+   * pending (mempool) txs. Reset the persisted height checkpoint so a later reconnect
+   * resumes from the fork point; gero-sync re-pushes the new canonical chain via SYNC.
+   */
+  async handleBitcoinRollback(rollbackToHeight: number): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.BITCOIN) return;
+    if (typeof rollbackToHeight !== 'number') return;
+    debugLog(`🔶 [BTC gero-sync] rollback to height ${rollbackToHeight}`);
+
+    const current = (walletStore.transactions as UnifiedTransaction[]) || [];
+    const kept = current.filter((tx) => {
+      if (!tx) return false; // drop malformed
+      if (tx.pending || tx.block_height == null) return true; // keep mempool/pending
+      return tx.block_height <= rollbackToHeight; // keep at/below the rollback point
+    });
+    if (kept.length !== current.length) {
+      WalletStore.setTransactions(kept);
+      debugLog(`🔶 [BTC gero-sync] dropped ${current.length - kept.length} tx(s) above height ${rollbackToHeight}`);
+    }
+
+    // Reset the persisted checkpoint (mirror Cardano handleRollback's direct sync-table write).
+    const syncInfo = await this.walletBg.getLastSyncInfo();
+    if (syncInfo && typeof syncInfo.height === 'number' && syncInfo.height > rollbackToHeight) {
+      const db = await this.walletBg.getDb();
+      await db.table('sync').put({ ...syncInfo, id: 1, height: rollbackToHeight });
+      debugLog(`🔶 [BTC gero-sync] reset checkpoint to height ${rollbackToHeight}`);
+    }
+  }
+
+  /**
+   * Full BTC re-sync (Phase 4), triggered by FORCE_RESYNC (a reorg deeper than the
+   * server's window). Clear in-memory transactions and reset the checkpoint to 0; the
+   * caller resubscribes from 0 so gero-sync replays the wallet. UTxOs are replaced
+   * wholesale by the ensuing catch-up, so they need no explicit clear.
+   */
+  async handleBitcoinForceResync(): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.BITCOIN) return;
+    debugLog('🔶 [BTC gero-sync] force resync — clearing in-memory transactions');
+    WalletStore.setTransactions([]);
+    const syncInfo = await this.walletBg.getLastSyncInfo();
+    if (syncInfo) {
+      const db = await this.walletBg.getDb();
+      await db.table('sync').put({ ...syncInfo, id: 1, height: 0 });
+    }
+  }
+
+  /**
    * Sync genesis block information
    */
   async syncGenesis(): Promise<void> {
