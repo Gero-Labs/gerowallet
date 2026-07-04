@@ -71,6 +71,18 @@
             </div>
           </div>
 
+          <!-- QR scan-to-pair: the fast path — the phone's camera does the pairing -->
+          <v-btn
+            v-if="!isHardwareWallet"
+            block
+            color="#00DFF3"
+            class="black--text font-weight-bold rs-pair-btn"
+            @click="openPairingQr"
+          >
+            <v-icon left small>mdi-qrcode-scan</v-icon>
+            {{ $t('crossDevice.pair.button') }}
+          </v-btn>
+
           <!-- Other devices -->
           <div class="rs-label mb-2 mt-3">{{ $t('crossDevice.settings.detected') }}</div>
           <p class="rs-pair-hint">{{ $t('crossDevice.settings.pairHint') }}</p>
@@ -161,6 +173,59 @@
       </v-card>
     </v-dialog>
 
+    <!-- QR scan-to-pair: the phone scans this code; we poll for the pinned result -->
+    <v-dialog :value="qrDialogOpen" max-width="360" @input="(v) => { if (!v) closePairingQr(); }">
+      <v-card class="liquid-glass rs-confirm-card" rounded="lg">
+        <v-card-title class="rs-title px-4 pt-4 pb-1">
+          <span>{{ qrState === 'paired' ? $t('crossDevice.pair.pairedTitle') : $t('crossDevice.pair.title') }}</span>
+          <v-spacer />
+          <v-btn icon small @click="closePairingQr"><v-icon>mdi-close</v-icon></v-btn>
+        </v-card-title>
+        <v-card-text class="px-4 pb-4 text-center">
+          <!-- minting the payload -->
+          <div v-if="qrState === 'loading'" class="rs-qr-loading">
+            <v-progress-circular indeterminate color="#00DFF3" />
+          </div>
+
+          <!-- no cached proof: prompt to re-enable -->
+          <div v-else-if="qrState === 'error'">
+            <v-icon color="#ff6b6b" size="40">mdi-alert-circle-outline</v-icon>
+            <p class="rs-hint mt-3">{{ $t('crossDevice.pair.noProof') }}</p>
+          </div>
+
+          <!-- waiting: show the QR + a live "waiting for your phone" state -->
+          <template v-else-if="qrState === 'waiting'">
+            <p class="rs-hint mb-3">{{ $t('crossDevice.pair.scanHint') }}</p>
+            <div class="rs-qr-frame">
+              <div ref="qrContainer" class="rs-qr"></div>
+              <span class="rs-qr-scanline"></span>
+            </div>
+            <div class="rs-waiting mt-3">
+              <v-progress-circular indeterminate size="16" width="2" color="#00DFF3" class="mr-2" />
+              {{ $t('crossDevice.pair.waiting') }}
+            </div>
+          </template>
+
+          <!-- paired: success morph -->
+          <div v-else-if="qrState === 'paired'" class="rs-qr-success">
+            <v-icon color="#37d67a" size="60">mdi-shield-check</v-icon>
+            <p class="rs-paired-title mt-3">
+              {{ $t('crossDevice.pair.pairedWith', { device: pairedResult && pairedResult.label ? pairedResult.label : $t('crossDevice.settings.unnamed') }) }}
+            </p>
+          </div>
+
+          <!-- expired: single-use nonce timed out -->
+          <div v-else-if="qrState === 'expired'">
+            <v-icon color="#ffb020" size="40">mdi-clock-alert-outline</v-icon>
+            <p class="rs-hint mt-3 mb-3">{{ $t('crossDevice.pair.expired') }}</p>
+            <v-btn small color="#00DFF3" class="black--text font-weight-bold" @click="openPairingQr">
+              {{ $t('crossDevice.pair.newCode') }}
+            </v-btn>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- Enable-time auth: sign the one-time wallet-control proof before turning on -->
     <v-dialog :value="enableAuthOpen" max-width="380" persistent @input="(v) => { if (!v) cancelEnableAuth(); }">
       <v-card class="liquid-glass rs-confirm-card" rounded="lg">
@@ -208,9 +273,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { remoteSigningStore, type CrossDeviceListEntry } from '@/stores/remoteSigningStore';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import QRCodeStyling from 'qr-code-styling';
+import { remoteSigningStore, type CrossDeviceListEntry, type PairedResult } from '@/stores/remoteSigningStore';
 import { pairingFingerprint, type SigningPolicy } from '@/services/crossDevice/crossDeviceTrust';
+import { encodePairingQr, type PairingQrPayload } from '@/services/crossDevice/pairingQr';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -383,6 +450,94 @@ async function onUntrust(deviceId: string) {
   }
 }
 
+// ---- QR scan-to-pair -------------------------------------------------------
+// The phone's camera does the pairing: we render a QR carrying this device's
+// identity + wallet-control proof + a single-use nonce, then poll the background
+// for the pinned result while the code is on screen.
+type QrState = 'loading' | 'waiting' | 'paired' | 'expired' | 'error';
+const qrDialogOpen = ref(false);
+const qrState = ref<QrState>('loading');
+const qrPayload = ref<PairingQrPayload | null>(null);
+const pairedResult = ref<PairedResult | null>(null);
+const qrContainer = ref<HTMLElement | null>(null);
+let qrCode: QRCodeStyling | null = null;
+let qrPoll: ReturnType<typeof setInterval> | null = null;
+let qrAutoDismiss: ReturnType<typeof setTimeout> | null = null;
+
+function stopQrPoll() {
+  if (qrPoll) { clearInterval(qrPoll); qrPoll = null; }
+}
+
+async function renderQr(payload: PairingQrPayload) {
+  await nextTick(); // wait for the waiting-state container to mount
+  const el = qrContainer.value;
+  if (!el) return;
+  // Recreate each time: the container remounts with the dialog / "show new code".
+  qrCode = new QRCodeStyling({
+    width: 260,
+    height: 260,
+    type: 'svg',
+    data: encodePairingQr(payload),
+    margin: 2,
+    // Level M (not Q): the payload embeds the wallet-control proof (~1-1.5 KB), so
+    // trade some redundancy for capacity. No center logo, for the same reason.
+    qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'M' },
+    backgroundOptions: { color: '#ffffff' },
+    dotsOptions: { color: '#0a0c10' },
+    cornersSquareOptions: { type: 'extra-rounded', color: '#0a0c10' },
+    cornersDotOptions: { type: 'dot', color: '#00b6d4' },
+  });
+  el.innerHTML = '';
+  qrCode.append(el);
+}
+
+async function tickQr() {
+  const payload = qrPayload.value;
+  if (!payload || qrState.value !== 'waiting') return;
+  // Single-use nonce expiry (local check; the background enforces it authoritatively).
+  if (Math.floor(Date.now() / 1000) >= payload.exp) {
+    qrState.value = 'expired';
+    stopQrPoll();
+    return;
+  }
+  const paired = await remoteSigningStore.getPairingStatus();
+  if (paired && qrState.value === 'waiting') {
+    qrState.value = 'paired';
+    pairedResult.value = paired;
+    stopQrPoll();
+    void remoteSigningStore.refreshDevices(); // the new phone appears with the verified badge
+    if (qrAutoDismiss) clearTimeout(qrAutoDismiss);
+    qrAutoDismiss = setTimeout(closePairingQr, 2200);
+  }
+}
+
+async function openPairingQr() {
+  qrState.value = 'loading';
+  pairedResult.value = null;
+  qrDialogOpen.value = true;
+  const payload = await remoteSigningStore.getPairingQr();
+  if (!payload) {
+    // No cached wallet-control proof (or no stake): can't render a QR.
+    qrState.value = 'error';
+    return;
+  }
+  qrPayload.value = payload;
+  qrState.value = 'waiting';
+  await renderQr(payload);
+  stopQrPoll();
+  qrPoll = setInterval(() => { void tickQr(); }, 1000);
+}
+
+function closePairingQr() {
+  qrDialogOpen.value = false;
+  stopQrPoll();
+  if (qrAutoDismiss) { clearTimeout(qrAutoDismiss); qrAutoDismiss = null; }
+  qrPayload.value = null;
+  pairedResult.value = null;
+  qrCode = null;
+  qrState.value = 'loading';
+}
+
 // While the dialog is open, poll the live device list. The background device
 // registry populates ASYNCHRONOUSLY: a DEVICES snapshot arrives only after the
 // relay round-trip, a sibling may connect after the dialog opens, and the MV3
@@ -409,12 +564,17 @@ watch(
       stopDevicePoll();
       pairingCandidate.value = null;
       cancelEnableAuth();
+      closePairingQr();
     }
   },
   { immediate: true },
 );
 
-onBeforeUnmount(stopDevicePoll);
+onBeforeUnmount(() => {
+  stopDevicePoll();
+  stopQrPoll();
+  if (qrAutoDismiss) clearTimeout(qrAutoDismiss);
+});
 </script>
 
 <style scoped>
@@ -464,5 +624,47 @@ onBeforeUnmount(stopDevicePoll);
   border: 1px solid rgba(0, 223, 243, 0.35);
   border-radius: 10px;
   background: rgba(0, 223, 243, 0.06);
+}
+
+/* QR scan-to-pair */
+.rs-pair-btn { margin: 4px 0 14px; }
+.rs-qr-loading { padding: 40px 0; }
+.rs-qr-frame {
+  position: relative;
+  width: 260px;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+}
+.rs-qr { display: block; line-height: 0; }
+.rs-qr :deep(svg) { display: block; width: 100%; height: auto; }
+/* A cyan scanline sweeping the code to signal "waiting / scanning". */
+.rs-qr-scanline {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00DFF3, transparent);
+  box-shadow: 0 0 10px #00DFF3;
+  animation: rs-scan 2.2s ease-in-out infinite;
+}
+@keyframes rs-scan {
+  0% { top: 6%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: 94%; opacity: 0; }
+}
+.rs-waiting { font-size: 13px; color: #b3bccb; display: flex; align-items: center; justify-content: center; }
+.rs-qr-success { padding: 20px 0 8px; animation: rs-pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.rs-paired-title { font-size: 16px; font-weight: 600; color: #fff; }
+@keyframes rs-pop {
+  0% { transform: scale(0.7); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rs-qr-scanline, .rs-qr-success { animation: none; }
 }
 </style>

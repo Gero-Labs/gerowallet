@@ -1875,6 +1875,24 @@ app.addToOptions(MessageTypes.PRODUCE_DEVICE_REGISTER_PROOF, async (request, sen
   }
 });
 
+// QR scan-to-pair: mint the payload the desktop renders as a QR (identity + proof +
+// a fresh single-use nonce). Returns success:false when the wallet can't be paired
+// (no cached proof / no stake) so the UI can prompt to re-enable.
+app.addToOptions(MessageTypes.GET_PAIRING_QR, async (request, sendResponse) => {
+  try {
+    const payload = await walletManager.buildPairingQrPayload();
+    sendResponse(crossDeviceReply(request.id, { success: !!payload, payload }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// QR scan-to-pair: the last device paired via a scan (consumed on read), for the
+// settings dialog's success poll.
+app.addToOptions(MessageTypes.GET_PAIRING_STATUS, async (request, sendResponse) => {
+  sendResponse(crossDeviceReply(request.id, { success: true, paired: walletManager.getPairingStatus() }));
+});
+
 // Pool operator transaction signing handler (cold key + wallet keys)
 app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendResponse) => {
   try {
