@@ -25,7 +25,7 @@ Signed subject (byte-for-byte with Swift, **canonical — matches the iOS handof
 1. Guard: feature+enabled, Cardano, `stakeAddress` present.
 2. **Nonce:** `pairingNonceStore.consume(frame.nonce)` — present && `!used` && `exp>now` && `boundStake==ownStake`; mark used. Else reject.
 3. **Proof:** `verifyDeviceRegisterProof(frame.proof, {deviceId:frame.from, pubKey:frame.pubKey}, this.walletBg.stakeAddress)` — **unchanged verifier**. This one call enforces same-wallet (proof.stake==ownStake, signer addr==ownStake, subject re-derived with **ownStake**), binds `frame.pubKey` ↔ wallet key-hash, and binds `frame.from`. **Pass `ownStake`, never `frame.proof.stakeAddress`** (that would make the wallet-binding a tautology — the one implementation slip the review says would break it).
-4. **Pin:** `trustAddDevice({deviceId:frame.from, pubKey:frame.pubKey, label, platform, verified:true})` + persist. `verified:true` lights the green badge. **Skip `isDeviceIdConsistent`** (iOS deviceId is a UUID; the proof already authenticates the triple).
+4. **Pin:** `trustAddDevice({deviceId:frame.from, pubKey:frame.pubKey, label, platform, verified:true})` + persist. `verified:true` lights the green badge. **Keep `isDeviceIdConsistent`** as defense-in-depth: iOS confirmed (2026-07-05) its deviceId is `lowercaseHex(SHA256(relayPubKeyBytes)[0..16])` — the *same* derivation as the extension's `sha256(pubKey)[0:16]`, **not a UUID** as earlier drafts assumed — so the check holds for iOS and should not be skipped. (The embedded proof already authenticates the triple; the id/key check is a cheap extra guard against a relay listing an attacker key under a plausible id.)
 5. Set `lastPairedDevice` for the UI poll.
 
 ### 🔒 The QR path must hard-require the proof

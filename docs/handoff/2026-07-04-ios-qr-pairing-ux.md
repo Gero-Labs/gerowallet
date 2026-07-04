@@ -88,7 +88,7 @@ Structurally gate the flag behind the *presence* of both, so it's impossible to 
 
 ### Other must-honor invariants
 - **Success only after real verify** — never render "Paired" optimistically. Show it after the proof verifies + the local pin commits (and ideally after `PAIR_ACK`); show "confirming on your other device…" until then, bounded ~4s, then degrade silently (the phone is already paired + usable).
-- **Bind to pubKey, not deviceId** — the desktop's `deviceId` is `sha256(pubKey)[0:16]`; the phone's is a UUID. All trust binds to `pubKey` + proof; skip any `deviceId==sha256(pubKey)` check on the frame path.
+- **Trust binds to pubKey + proof** — both sides derive `deviceId` identically: iOS confirmed (2026-07-05) it uses `lowercaseHex(SHA256(relayPubKeyBytes)[0..16])`, the *same* rule as the extension's `sha256(pubKey)[0:16]` (earlier drafts wrongly said the phone uses a UUID). So a `deviceId==sha256(pubKey)[0:16]` consistency check is valid on **both** ends and is kept as cheap defense-in-depth; the authoritative binding is still the pinned `pubKey` + the wallet-control proof.
 - Add `'PAIR_CONFIRM'` to iOS `relayFrameTypes`; set top-level `to` always (a blank `to` broadcasts the phone's proof to all siblings).
 - Order: SUBSCRIBE → DEVICE_REGISTER → PAIR_CONFIRM, so the phone is a live sibling for later `SIGN_REQUEST` to-targeting.
 
