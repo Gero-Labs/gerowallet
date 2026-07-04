@@ -98,7 +98,7 @@ Client can't meaningfully dual-run until gero-sync BTC is real:
 2. **Subscribe:** BTC `SUBSCRIBE` identity + credential analog (D), behind a flag; connect BTC WS without removing the poller yet (dual-run to compare). ✅ DONE (b366bb84, flag `isBitcoinGeroSyncEnabled` default OFF).
    - Phase-2 follow-up A: the inert connect subscribes with only the wallet's **stored xpub** (segwit default) — the full 3-type union (legacy `44'` + taproot `86'`) needs their own account xpubs, which require the mnemonic at unlock. `deriveBitcoinAddressSet(mnemonic,…)` (full union) exists; wire it by capturing/storing all 3 account xpubs at unlock. Until then subscription misses legacy/taproot funds.
    - Phase-2 follow-up B (backend dep): client now SENDS `addresses[]` in SUBSCRIBE, but gero-sync `SubscribeMessage` has no `addresses` field yet — that's backend #3 (multi-address subscription). Client is ahead; harmless while flag OFF.
-3. **Apply:** `convertBtcUtxos` + BTC branch in `setSync`; feed `WalletStore` from server payload.
+3. **Apply:** ✅ DONE (82365cb5) `convertBtcUtxos` + BTC branch in `setSync`; feed `WalletStore` from server payload.
    - Phase-1 follow-up: `networkStore.getCurrentBlockHeight()` currently returns `null` for a BTC tip (guarded to preserve no-behavior-change). BTC has a height — make it return `tip.height` when `isBitcoinTip(tip)`.
 4. **Rollback:** BTC reorg branch in `handleRollback`.
 5. **Cutover:** remove BTC gates (A), delete poller (B), verify dApp consumers unchanged.
