@@ -21,7 +21,7 @@
         :network="network"
         :base-url="baseUrl"
         :token-in="tokenIn"
-        :token-out="tokenOut"
+        :token-out="resolvedTokenOut"
       />
 
       <!-- Keystone QR sign dialog — the SAME component + wiring SwapSheet.vue uses
@@ -123,6 +123,35 @@ const emit = defineEmits<{
 const geroSwapEl = ref<HTMLElement | null>(null);
 
 const isSwapEnabled = computed(() => featureFlagsStore.isSwapEnabled());
+
+// ── Default Buying token = GERO (only when the host didn't configure one) ──
+// Resolved lazily from TokenMetadataStore once the swap-tradable registry has hydrated
+// (it's `{}` right after login/reload — see useSwapTokenResolver.ts's hydration-race
+// doc comment). Left unset (widget shows 'Select') until then.
+const defaultGeroTokenOut = ref<string | undefined>(undefined);
+// Set true the first time the user interacts with either token selector inside the
+// widget (see onTokenChange below), so a later GERO resolution / catalog rebuild never
+// stomps the user's own choice with the default.
+const userPickedTokenOut = ref(false);
+
+// Explicit host config (props.tokenOut) always wins; otherwise fall back to the
+// resolved GERO default (undefined/'' until resolved or once the user has picked).
+const resolvedTokenOut = computed(() => {
+  if (props.tokenOut !== undefined) return props.tokenOut;
+  if (userPickedTokenOut.value) return undefined;
+  return defaultGeroTokenOut.value;
+});
+
+function resolveGeroUnit(): string | undefined {
+  const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
+  return stored.find(t => (t.ticker ?? '').toUpperCase() === 'GERO')?.unit;
+}
+
+function tryResolveDefaultGeroTokenOut() {
+  if (props.tokenOut !== undefined || userPickedTokenOut.value || defaultGeroTokenOut.value) return;
+  const unit = resolveGeroUnit();
+  if (unit) defaultGeroTokenOut.value = unit;
+}
 
 // gero-backend's Nexus proxy — same base URL every other Nexus-facing client in this
 // codebase uses (nexus-tx-api.ts, nexus-swap.api.ts).
@@ -264,6 +293,18 @@ interface CatalogToken extends StoredCatalogToken {
  * ADA/lovelace appears as a catalog entry — it's swap's native currency but
  * isn't part of DexHunter's tradable-token registry.
  */
+// DexHunter's swap-tradable registry (TokenMetadataStore) represents native ADA with
+// its own entry — seen with an empty/`'ada'` unit and/or ticker 'ADA' — distinct from
+// the `'lovelace'` unit this app uses everywhere else. Every such entry must be
+// filtered out before the catalog is built so exactly ONE ADA/lovelace row survives
+// (see buildTokenCatalog() below); otherwise the token list shows two ADA rows: the
+// registry's own (no wallet balance attached) and the one this code adds (which does
+// carry the real held balance).
+function isAdaLike(token: { unit: string; ticker?: string }): boolean {
+  return token.unit === 'lovelace' || token.unit === '' || token.unit === 'ada' ||
+    (token.ticker ?? '').toUpperCase() === 'ADA';
+}
+
 function buildTokenCatalog(): CatalogToken[] {
   const heldBalances = buildHeldBalanceMap();
   const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
@@ -276,26 +317,28 @@ function buildTokenCatalog(): CatalogToken[] {
   // resolveToken() already passes to this same getTokenByUnit() — i.e. the plain
   // Cardano "unit" (policyId + assetNameHex, no separator) used consistently
   // everywhere in this codebase, so no key-format normalization is needed here.
-  const catalog: CatalogToken[] = stored.map(token => ({
-    ...token,
-    img: getTokenByUnit(token.unit)?.img ?? null,
-    balance: heldBalances.get(token.unit),
-  }));
+  const catalog: CatalogToken[] = stored
+    .filter(token => !isAdaLike(token))
+    .map(token => ({
+      ...token,
+      img: getTokenByUnit(token.unit)?.img ?? null,
+      balance: heldBalances.get(token.unit),
+    }));
 
-  if (!catalog.some(token => token.unit === 'lovelace')) {
-    catalog.push({
-      unit: 'lovelace',
-      decimals: 6,
-      ticker: 'ADA',
-      verified: true,
-      // Deliberately NO `img` here (not even chainLogo). `getTokenImage({unit:'lovelace'})`
-      // resolves to `networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)`,
-      // which can be transiently empty before the wallet's chain/network is set, causing the
-      // ADA icon to flicker/disappear. Omitting `img` entirely defers to the widget's own
-      // self-contained ADA icon (a bundled data-URI, always present regardless of host state).
-      balance: heldBalances.get('lovelace'),
-    });
-  }
+  // Single canonical ADA/lovelace entry, always added (any registry duplicate was
+  // already filtered out above), carrying the actual held balance.
+  catalog.push({
+    unit: 'lovelace',
+    decimals: 6,
+    ticker: 'ADA',
+    verified: true,
+    // Deliberately NO `img` here (not even chainLogo). `getTokenImage({unit:'lovelace'})`
+    // resolves to `networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)`,
+    // which can be transiently empty before the wallet's chain/network is set, causing the
+    // ADA icon to flicker/disappear. Omitting `img` entirely defers to the widget's own
+    // self-contained ADA icon (a bundled data-URI, always present regardless of host state).
+    balance: heldBalances.get('lovelace'),
+  });
 
   return catalog;
 }
@@ -330,6 +373,11 @@ function onSwapError(e: Event) {
   snackbar.setError(text);
 }
 function onTokenChange(e: Event) {
+  // Any token-change event only ever originates from a genuine user interaction inside
+  // the widget (inbound host->prop syncing is silent — see GeroSwap.ce.vue's "no echo
+  // emit" comment), so from here on the default-GERO logic above must never override
+  // whatever the user has chosen.
+  userPickedTokenOut.value = true;
   emit('token-change', (e as CustomEvent).detail);
 }
 
@@ -337,6 +385,7 @@ function attach() {
   const node = geroSwapEl.value;
   if (!node) return;
   wireProps();
+  tryResolveDefaultGeroTokenOut();
   node.addEventListener('swap-submitted', onSwapSubmitted);
   node.addEventListener('swap-error', onSwapError);
   node.addEventListener('token-change', onTokenChange);
@@ -377,10 +426,31 @@ watch(() => [props.tokenIn, props.tokenOut], wireProps);
 let catalogRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 const CATALOG_REBUILD_DEBOUNCE_MS = 200;
 
+// Only the TOKEN SET (which units exist) needs a full node.tokens rebuild — a price
+// tick on allTokens replaces the whole array wholesale but essentially never changes
+// which units exist, so without this guard every 15s poll would still rebuild+reassign
+// the entire catalog (churning every TokenSelector/SelectTokenDialog row) for nothing.
+// Sorted-units string is cheap to compute and cheap to compare.
+let lastCatalogUnitsKey = '';
+function computeCatalogUnitsKey(): string {
+  const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
+  const units = stored.filter(token => !isAdaLike(token)).map(token => token.unit);
+  units.push('lovelace');
+  return units.sort().join(',');
+}
+
 function scheduleCatalogRebuild() {
   if (catalogRebuildTimer) clearTimeout(catalogRebuildTimer);
   catalogRebuildTimer = setTimeout(() => {
     catalogRebuildTimer = null;
+
+    // Independent of whether the token SET changed below: pick up GERO as soon as
+    // the registry has it (see the default-GERO block near the top of this file).
+    tryResolveDefaultGeroTokenOut();
+
+    const key = computeCatalogUnitsKey();
+    if (key === lastCatalogUnitsKey) return; // token SET unchanged — skip the rebuild
+    lastCatalogUnitsKey = key;
     wireProps();
   }, CATALOG_REBUILD_DEBOUNCE_MS);
 }
