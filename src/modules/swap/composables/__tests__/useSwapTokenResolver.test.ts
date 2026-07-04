@@ -44,12 +44,23 @@ describe('useSwapTokenResolver', () => {
     expect(resolveAsset).not.toHaveBeenCalled();
   });
 
-  it('maps a token in the swap token registry to TokenMeta with real decimals (primary source)', async () => {
+  it('maps a token in the swap token registry to TokenMeta with real decimals (primary source), and supplies img via resolveAsset\'s local-cache lookup', async () => {
     tokens['known'] = { name: 'Snek', ticker: 'SNEK', decimals: 0, unit: 'known', verified: true, price: 0.001 };
+    resolveAsset.mockReturnValue({ img: 'snek.png' });
     const { resolveToken } = useSwapTokenResolver();
     const m = await resolveToken('known');
-    expect(m).toMatchObject({ unit: 'known', decimals: 0, ticker: 'SNEK', name: 'Snek', verified: true, price: 0.001 });
-    expect(resolveAsset).not.toHaveBeenCalled();
+    expect(m).toMatchObject({ unit: 'known', decimals: 0, ticker: 'SNEK', name: 'Snek', verified: true, price: 0.001, img: 'snek.png' });
+    // resolveAsset is a synchronous local-cache lookup (not a network call), so it's
+    // safe (and now expected) to call it on the registry-hit path too, purely for img.
+    expect(resolveAsset).toHaveBeenCalledWith({ unit: 'known' });
+  });
+
+  it('normalizes a missing img to null (not undefined) for a registry-known token absent from the local asset cache', async () => {
+    tokens['no-img'] = { name: 'NoImg', ticker: 'NI', decimals: 0, unit: 'no-img' };
+    resolveAsset.mockReturnValue(undefined);
+    const { resolveToken } = useSwapTokenResolver();
+    const m = await resolveToken('no-img');
+    expect(m).toMatchObject({ unit: 'no-img', img: null });
   });
 
   it('resolves best-known decimals from resolveAsset for a token the wallet holds but is absent from the swap registry', async () => {

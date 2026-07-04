@@ -1,6 +1,7 @@
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import NetworkStore from '@/stores/networkStore';
 import { resolveAsset } from '@/shared/utils/resolver';
+import { walletStore } from '@/stores/walletStore';
 
 /**
  * Minimal token-metadata shape consumed by the embedded <gero-swap> widget's
@@ -11,9 +12,11 @@ export interface TokenMetaLike {
   decimals: number;
   ticker?: string;
   name?: string;
-  img?: string;
+  img?: string | null;
   verified?: boolean;
   price?: number;
+  /** Base-units integer string (e.g. lovelace amount). Omitted (undefined) when unheld. */
+  balance?: string;
 }
 
 /** Shape of an entry in `tokenMetadataStore.state.tokens`, as set by `loadTokens()`. */
@@ -23,6 +26,49 @@ interface StoredTokenMeta {
   decimals?: number | string;
   verified?: boolean;
   price?: number;
+}
+
+/** Shape of an entry in `walletStore.tokens`, as set by `walletBg.ts`'s `setAssets()`. */
+interface HeldToken {
+  quantity?: bigint | string;
+}
+
+/**
+ * Base-units balance for a single unit, read directly off the wallet's current
+ * holdings. `'lovelace'` reads `walletStore.account.controlled_amount` (the
+ * same field `SwapCard.vue`'s `getHeldAmount` uses); every other unit reads
+ * `walletStore.tokens[unit].quantity`. Returns `undefined` (never `'0'`) when
+ * the wallet doesn't hold the unit.
+ */
+function getHeldBalance(unit: string): string | undefined {
+  if (unit === 'lovelace') {
+    const amt = walletStore.account?.controlled_amount;
+    return amt ? String(amt) : undefined;
+  }
+  const tokens = walletStore.tokens as Record<string, HeldToken> | undefined;
+  const q = tokens?.[unit]?.quantity;
+  if (q === undefined || q === null) return undefined;
+  return typeof q === 'bigint' ? q.toString() : String(q);
+}
+
+/**
+ * Builds a unit → base-units-balance lookup from the wallet's full current
+ * holdings in one pass. Exported for `GeroSwapEmbed.vue`'s token-catalog
+ * enrichment, which needs to annotate every catalog entry with `balance` and
+ * should build this once rather than re-deriving it per token.
+ */
+export function buildHeldBalanceMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  const lovelace = getHeldBalance('lovelace');
+  if (lovelace) map.set('lovelace', lovelace);
+  const tokens = (walletStore.tokens as Record<string, HeldToken>) || {};
+  for (const [unit, token] of Object.entries(tokens)) {
+    if (unit === 'lovelace') continue; // covered by controlled_amount above
+    const q = token?.quantity;
+    if (q === undefined || q === null) continue;
+    map.set(unit, typeof q === 'bigint' ? q.toString() : String(q));
+  }
+  return map;
 }
 
 /**
@@ -65,13 +111,23 @@ interface StoredTokenMeta {
  * later successful populate (e.g. a background retry elsewhere) is still
  * picked up normally, since the `stored` lookup above always runs first.
  *
- * img for the common (store) path: store entries never carry an image field
- * (see `loadTokens()` above — DexHunter tokens don't include one; icons come
- * from `useMarketData` elsewhere). Resolving an image here would mean an
- * extra `resolveAsset` call on every store-hit, which is the hot/common path.
- * We deliberately leave `img` undefined for store-resolved tokens — the
- * widget tolerates a missing icon — rather than pay that cost or complicate
- * the decimals/null contract.
+ * img: store entries (see `loadTokens()` above) never carry an image field
+ * themselves — DexHunter's swap-tradable registry only has name/ticker/
+ * decimals/verified/price. `resolveAsset({unit})` is synchronous and reads
+ * from the already-in-memory `NetworkStore.state.assets` cache (populated by
+ * `AssetsLoader` from the local blockchain DB), so calling it for `.img` on
+ * every resolve is a local cache lookup, not a network round trip — safe to
+ * do unconditionally for both the store and held-only paths. When the asset
+ * isn't cached (e.g. not held, not previously seen), `resolveAsset` simply
+ * returns `img: undefined`, which we normalize to `null` per the widget's
+ * `TokenMeta` contract.
+ *
+ * balance: sourced from the wallet's own holdings (`walletStore.tokens` /
+ * `walletStore.account.controlled_amount`, the same fields
+ * `SwapCard.vue`'s `getHeldAmount` already reads for this exact purpose) via
+ * `getHeldBalance()` below, always as a base-units integer string. Left
+ * `undefined` (not `'0'`) when the wallet doesn't hold the unit at all — the
+ * widget hides the balance row gracefully in that case.
  */
 export function useSwapTokenResolver() {
   // One-shot guard (per composable lifetime): once a hydration attempt has been
@@ -110,6 +166,9 @@ export function useSwapTokenResolver() {
 
     if (stored) {
       const decimals = Number(stored.decimals);
+      // Synchronous local-cache lookup (see doc comment above) — safe to call
+      // unconditionally, even on this hot/common path.
+      const cached = resolveAsset({ unit } as never);
       return {
         unit,
         decimals: Number.isFinite(decimals) ? decimals : 0,
@@ -117,6 +176,8 @@ export function useSwapTokenResolver() {
         name: stored.name,
         verified: stored.verified ?? false,
         price: stored.price,
+        img: cached?.img ?? null,
+        balance: getHeldBalance(unit),
       };
     }
 
@@ -130,14 +191,17 @@ export function useSwapTokenResolver() {
         decimals: Number(asset?.metadata?.decimals ?? 0),
         ticker: asset?.metadata?.ticker,
         name: asset?.metadata?.name ?? asset?.name,
-        img: asset?.img,
+        img: asset?.img ?? null,
         verified: asset?.verified ?? false,
+        balance: getHeldBalance(unit),
       };
     } catch {
       return {
         unit,
         decimals: 0,
         verified: false,
+        img: null,
+        balance: getHeldBalance(unit),
       };
     }
   }

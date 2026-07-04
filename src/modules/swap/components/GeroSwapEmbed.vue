@@ -95,7 +95,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
-import { useSwapTokenResolver } from '../composables/useSwapTokenResolver';
+import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
+import { resolveAsset } from '@/shared/utils/resolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
@@ -211,12 +212,72 @@ const { signer, keystone } = useNativeSwapSigner({
 });
 const { resolveToken } = useSwapTokenResolver();
 
+// ── MAX button: no host wiring needed ──
+// Investigated src/vendor/gero-swap/gero-swap.js: the widget's internal
+// TokenSelector emits a local `setMax` event that the top-level widget
+// component already handles itself (never dispatched as a CustomEvent on the
+// <gero-swap> host element, so there's nothing for GeroSwapEmbed.vue to
+// listen for). Its handler reads `token.balance` directly off the resolved
+// TokenMeta we now supply, subtracts a fixed 3,000,000-lovelace (3 ADA)
+// reserve when the From side is lovelace, and writes the result straight into
+// the amount field. So supplying `balance` via resolveToken()/buildTokenCatalog()
+// above is the ONLY host-side requirement — MAX is fully functional end-to-end
+// with no further wiring here.
+
+/**
+ * Shape of an entry in `tokenMetadataStore.state.tokens` (see
+ * `useSwapTokenResolver.ts`'s `StoredTokenMeta` for the source-of-truth
+ * definition — duplicated minimally here since that type isn't exported).
+ */
+interface StoredCatalogToken {
+  unit: string;
+  name?: string;
+  ticker?: string;
+  decimals?: number | string;
+  verified?: boolean;
+  price?: number;
+}
+
+/**
+ * Builds the widget's optional token-search catalog (`node.tokens`), enriching
+ * each swap-tradable entry with `img` (from `resolveAsset`'s local-cache
+ * lookup — same sourcing as `useSwapTokenResolver.ts`'s `resolveToken`) and
+ * `balance` (base-units string, from a single held-balance lookup built once
+ * via `buildHeldBalanceMap()` rather than re-derived per token). Also ensures
+ * ADA/lovelace appears as a catalog entry — it's swap's native currency but
+ * isn't part of DexHunter's tradable-token registry.
+ */
+function buildTokenCatalog(): Record<string, unknown>[] {
+  const heldBalances = buildHeldBalanceMap();
+  const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
+
+  const catalog = stored.map(token => ({
+    ...token,
+    img: resolveAsset({ unit: token.unit } as never)?.img ?? null,
+    balance: heldBalances.get(token.unit),
+  }));
+
+  if (!catalog.some(token => token.unit === 'lovelace')) {
+    catalog.push({
+      unit: 'lovelace',
+      decimals: 6,
+      ticker: 'ADA',
+      verified: true,
+      // Widget seeds ADA's own icon — deliberately no img here (see
+      // useSwapTokenResolver.ts's lovelace/img contract).
+      balance: heldBalances.get('lovelace'),
+    });
+  }
+
+  return catalog;
+}
+
 function wireProps() {
   const node = geroSwapEl.value as (HTMLElement & Record<string, unknown>) | null;
   if (!node) return;
   node.signer = signer;
   node.resolveToken = resolveToken;
-  node.tokens = Object.values(TokenMetadataStore.state.tokens || {}); // optional catalog
+  node.tokens = buildTokenCatalog(); // optional catalog
 }
 
 function onSwapSubmitted(e: Event) {

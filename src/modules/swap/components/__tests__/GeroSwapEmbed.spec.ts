@@ -12,7 +12,10 @@ vi.mock('../../composables/useNativeSwapSigner', () => ({
     keystone: { keystoneShow: { value: false }, keystoneType: { value: '' }, keystoneCbor: { value: '' }, onKeystoneScan: vi.fn(), cancelKeystone: vi.fn(), failKeystone: vi.fn() },
   }),
 }));
-vi.mock('../../composables/useSwapTokenResolver', () => ({ useSwapTokenResolver: () => ({ resolveToken: vi.fn() }) }));
+vi.mock('../../composables/useSwapTokenResolver', () => ({
+  useSwapTokenResolver: () => ({ resolveToken: vi.fn() }),
+  buildHeldBalanceMap: () => new Map(),
+}));
 vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { isSwapEnabled: () => true } }));
 vi.mock('@/stores/tokenMetadataStore', () => ({ default: { state: { tokens: {} } }, tokenMetadataStore: { tokens: {} } }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: { loggedWallet: { network: 'Mainnet', type: 'Normal' } } }));
