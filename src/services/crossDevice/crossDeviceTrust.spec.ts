@@ -4,6 +4,9 @@ import {
   isDeviceTrusted,
   requiresRemoteForSend,
   hasTrustedDevice,
+  hasPairedSigner,
+  pairedSigners,
+  soleSignerDeviceId,
   setEnabled,
   setPolicy,
   trustDevice,
@@ -83,6 +86,63 @@ describe('reducers are pure and correct', () => {
     expect(trusted.trustedDevices['aa11']).toBeDefined(); // unchanged
     expect(removed.trustedDevices['aa11']).toBeUndefined();
     expect(untrustDevice(removed, 'aa11')).toBe(removed); // idempotent, same ref
+  });
+});
+
+describe('trustDevice captures signing-capability', () => {
+  it('persists hasSigningKey when supplied', () => {
+    const s = trustDevice(defaultRemoteSigningSettings(), { ...DEV, hasSigningKey: true }, 1000);
+    expect(s.trustedDevices['aa11'].hasSigningKey).toBe(true);
+  });
+
+  it('leaves hasSigningKey undefined for a legacy-style pin (no flag supplied)', () => {
+    const s = trustDevice(defaultRemoteSigningSettings(), DEV, 1000);
+    expect(s.trustedDevices['aa11'].hasSigningKey).toBeUndefined();
+  });
+});
+
+describe('persistent signer selection (offline-capable, for the wake path)', () => {
+  const signer = { deviceId: 'aa11', pubKey: 'beef', label: 'iPhone', platform: 'ios', hasSigningKey: true };
+  const signer2 = { deviceId: 'bb22', pubKey: 'f00d', label: 'iPad', platform: 'ios', hasSigningKey: true };
+  const nonSigner = { deviceId: 'cc33', pubKey: 'cafe', label: 'Watchtower', platform: 'extension', hasSigningKey: false };
+
+  it('hasPairedSigner is false with no devices', () => {
+    expect(hasPairedSigner(defaultRemoteSigningSettings())).toBe(false);
+  });
+
+  it('hasPairedSigner is true for a pinned signing-capable device (even if offline)', () => {
+    const s = trustDevice(defaultRemoteSigningSettings(), signer, 1000);
+    expect(hasPairedSigner(s)).toBe(true);
+  });
+
+  it('treats a legacy pin (hasSigningKey undefined) as capable', () => {
+    const s = trustDevice(defaultRemoteSigningSettings(), DEV, 1000); // no hasSigningKey
+    expect(hasPairedSigner(s)).toBe(true);
+    expect(pairedSigners(s)).toHaveLength(1);
+  });
+
+  it('excludes a device explicitly flagged hasSigningKey:false', () => {
+    const s = trustDevice(defaultRemoteSigningSettings(), nonSigner, 1000);
+    expect(hasPairedSigner(s)).toBe(false);
+    expect(soleSignerDeviceId(s)).toBeNull();
+  });
+
+  it('soleSignerDeviceId returns the single pinned signer, online or not', () => {
+    const s = trustDevice(defaultRemoteSigningSettings(), signer, 1000);
+    expect(soleSignerDeviceId(s)).toBe('aa11');
+  });
+
+  it('soleSignerDeviceId is null with >1 signer (broadcast; picker is later)', () => {
+    let s = trustDevice(defaultRemoteSigningSettings(), signer, 1000);
+    s = trustDevice(s, signer2, 1001);
+    expect(soleSignerDeviceId(s)).toBeNull();
+    expect(hasPairedSigner(s)).toBe(true);
+  });
+
+  it('a lone signer alongside a non-signer still resolves to the signer', () => {
+    let s = trustDevice(defaultRemoteSigningSettings(), signer, 1000);
+    s = trustDevice(s, nonSigner, 1001);
+    expect(soleSignerDeviceId(s)).toBe('aa11');
   });
 });
 
