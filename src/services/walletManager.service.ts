@@ -40,6 +40,7 @@ import {
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
+import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -500,6 +501,9 @@ export class WalletManager {
   async logout(): Promise<void> {
 
     try {
+      // Clear all cached MPC root-key bytes — never survive a logout.
+      mpcSessionCache.clearAll();
+
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
         debugLog('Clearing database cache for wallet:', this.currentWalletId);
@@ -604,6 +608,7 @@ export class WalletManager {
     } catch (error) {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
+      mpcSessionCache.clearAll();
       if (this.currentWalletId !== null) {
         clearDbCache(this.currentWalletId);
       }
@@ -623,6 +628,10 @@ export class WalletManager {
    */
   async lock(): Promise<void> {
     try {
+      // Clear cached MPC root-key bytes — signing an MPC wallet after a lock
+      // requires a fresh Google unlock (UNLOCK_MPC_WALLET), same as PRF wallets
+      // require a fresh WebAuthn prompt.
+      mpcSessionCache.clearAll();
       // Set locked state
       WalletStore.setLocked(true);
       // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again
