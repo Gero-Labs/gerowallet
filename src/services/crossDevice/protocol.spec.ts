@@ -5,12 +5,14 @@ import {
   isSignRequest,
   isSignResponse,
   isPairConfirm,
+  isPairAck,
   parseCrossDeviceMessage,
   type DeviceRegister,
   type DevicesSnapshot,
   type SignRequest,
   type SignResponse,
   type PairConfirm,
+  type PairAck,
 } from './protocol';
 
 const validRegister: DeviceRegister = {
@@ -66,6 +68,14 @@ const validPairConfirm: PairConfirm = {
   sig: 'dd'.repeat(64),
 };
 
+const validPairAck: PairAck = {
+  type: 'PAIR_ACK',
+  from: 'ext-abc',
+  to: 'ios-uuid',
+  nonce: 'n3',
+  sig: 'ee'.repeat(64),
+};
+
 describe('type guards', () => {
   it('isDeviceRegister narrows only DEVICE_REGISTER', () => {
     expect(isDeviceRegister(validRegister)).toBe(true);
@@ -113,6 +123,16 @@ describe('type guards', () => {
       expect(isPairConfirm(rest)).toBe(false);
     }
   });
+
+  it('isPairAck narrows only PAIR_ACK and requires from/to/nonce/sig', () => {
+    expect(isPairAck(validPairAck)).toBe(true);
+    expect(isPairAck(validPairConfirm)).toBe(false);
+    for (const field of ['from', 'to', 'nonce', 'sig'] as const) {
+      const { [field]: _omit, ...rest } = validPairAck;
+      void _omit;
+      expect(isPairAck(rest)).toBe(false);
+    }
+  });
 });
 
 describe('parseCrossDeviceMessage', () => {
@@ -122,6 +142,7 @@ describe('parseCrossDeviceMessage', () => {
     expect(parseCrossDeviceMessage(validRequest)).toEqual(validRequest);
     expect(parseCrossDeviceMessage(validResponse)).toEqual(validResponse);
     expect(parseCrossDeviceMessage(validPairConfirm)).toEqual(validPairConfirm);
+    expect(parseCrossDeviceMessage(validPairAck)).toEqual(validPairAck);
     expect(parseCrossDeviceMessage({ type: 'DEVICE_REGISTER_ACK', deviceId: 'dev1' })).not.toBeNull();
   });
 

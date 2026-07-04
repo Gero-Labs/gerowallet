@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createCrossDeviceSigning, type SignDecision } from './crossDeviceSigning.service';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
-import { signMessage } from './envelope';
-import { type CrossDeviceMessage, type SignRequest, type SignResponse, type PairConfirm } from './protocol';
+import { signMessage, verifyMessage } from './envelope';
+import { isPairAck, type CrossDeviceMessage, type SignRequest, type SignResponse, type PairConfirm, type PairAck } from './protocol';
 
 // A shared in-memory bus that fans every published message out to all
 // subscribed listeners (simulating gero-sync's fan-out to sibling devices).
@@ -150,6 +150,19 @@ describe('PAIR_CONFIRM inbound (QR pairing auth boundary)', () => {
     bus.publish(await signMessage<PairConfirm>(selfFrame, desktopKp.privKeyHex));
     await flush();
     expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('sendPairAck emits a PAIR_ACK signed by the desktop over from|to|nonce', async () => {
+    const { bus, desktop } = makeDesktop();
+    const captured: PairAck[] = [];
+    bus.makeTransport().onMessage((raw) => { if (isPairAck(raw)) captured.push(raw); });
+    await desktop.sendPairAck(phoneId, 'nonce1');
+    await flush();
+    expect(captured).toHaveLength(1);
+    // from = desktop's own id (the QR deviceId); phone verifies vs the pinned desktop key.
+    expect(captured[0]).toMatchObject({ type: 'PAIR_ACK', from: desktopId, to: phoneId, nonce: 'nonce1' });
+    expect(await verifyMessage(captured[0], desktopKp.pubKeyHex)).toBe(true);
     desktop.dispose();
   });
 });

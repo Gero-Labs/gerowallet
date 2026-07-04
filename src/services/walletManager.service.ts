@@ -534,6 +534,9 @@ export class WalletManager {
       try {
         this.crossDevice?.dispose();
         this.crossDevice = null;
+        // Clear the QR-pair success marker so a pairing from the previous wallet can't
+        // surface in the next wallet's settings dialog (singleton in-memory state).
+        this.lastPairedDevice = null;
       } catch (xdError) {
         console.warn('Failed to cleanup cross-device signing during logout:', xdError);
       }
@@ -1081,6 +1084,12 @@ export class WalletManager {
       await this.persistRemoteSigning();
       this.lastPairedDevice = { deviceId: frame.from, label, at: Date.now() };
       debugLog('QR pair: pinned', frame.from, `(${label})`);
+
+      // Cosmetic: tell the phone we pinned it too, so it shows its own confirmed tick
+      // instead of degrading after ~2.4s. Best-effort — trust is already committed; a
+      // dropped ack never un-pairs. Signed with our relay-auth key; the phone verifies
+      // it against the desktop pubKey it pinned from the QR.
+      await this.crossDevice?.signing.sendPairAck(frame.from, frame.nonce);
     } catch (e) {
       debugLog('QR pair: handlePairConfirm error', e);
     }

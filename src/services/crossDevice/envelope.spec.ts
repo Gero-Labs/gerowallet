@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSubject, blake2b256Hex, signMessage, verifyMessage } from './envelope';
 import { generateDeviceKeypair } from './deviceIdentity';
-import type { SignRequest, SignResponse, PairConfirm } from './protocol';
+import type { SignRequest, SignResponse, PairConfirm, PairAck } from './protocol';
 
 const kp = generateDeviceKeypair((n) => new Uint8Array(n).fill(3));
 const otherKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(4));
@@ -117,6 +117,31 @@ describe('signMessage / verifyMessage PAIR_CONFIRM', () => {
   it('tampering with pubKey or nonce breaks verify', async () => {
     const signed = await signMessage<PairConfirm>(pair, kp.privKeyHex);
     expect(await verifyMessage({ ...signed, pubKey: 'cafe' }, kp.pubKeyHex)).toBe(false);
+    expect(await verifyMessage({ ...signed, nonce: 'nonce2' }, kp.pubKeyHex)).toBe(false);
+  });
+});
+
+// PAIR_ACK (desktop -> phone cosmetic tick). Subject binds from|to|nonce only. The iOS
+// listener must reproduce this exact string (goldenPairAckSubjectVector).
+const ack: Omit<PairAck, 'sig'> = { type: 'PAIR_ACK', from: 'ext-123', to: 'ios-abc', nonce: 'nonce1' };
+
+describe('buildSubject PAIR_ACK (cross-client conformance vector)', () => {
+  it('joins from|to|nonce in that exact order', () => {
+    expect(buildSubject(ack)).toBe('gero-xdev/v1|PAIR_ACK|ext-123|ios-abc|nonce1');
+  });
+});
+
+describe('signMessage / verifyMessage PAIR_ACK', () => {
+  it('round-trips with the matching key', async () => {
+    const signed = await signMessage<PairAck>(ack, kp.privKeyHex);
+    expect(signed.sig).toMatch(/^[0-9a-f]{128}$/);
+    expect(await verifyMessage(signed, kp.pubKeyHex)).toBe(true);
+  });
+
+  it('tampering with any subject field breaks verify', async () => {
+    const signed = await signMessage<PairAck>(ack, kp.privKeyHex);
+    expect(await verifyMessage({ ...signed, from: 'ext-999' }, kp.pubKeyHex)).toBe(false);
+    expect(await verifyMessage({ ...signed, to: 'ios-999' }, kp.pubKeyHex)).toBe(false);
     expect(await verifyMessage({ ...signed, nonce: 'nonce2' }, kp.pubKeyHex)).toBe(false);
   });
 });

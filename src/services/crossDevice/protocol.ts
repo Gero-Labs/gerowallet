@@ -18,7 +18,8 @@ export type CrossDeviceMessageType =
   | 'DEVICE_REGISTER_ACK' // server -> device: optional ack of a DEVICE_REGISTER
   | 'SIGN_REQUEST' // requester -> sibling device(s): please sign this unsigned tx
   | 'SIGN_RESPONSE' // approver -> requester: approved (+witness) or rejected
-  | 'PAIR_CONFIRM'; // scanner (phone) -> scanned device (desktop): QR-pair handshake, signed
+  | 'PAIR_CONFIRM' // scanner (phone) -> scanned device (desktop): QR-pair handshake, signed
+  | 'PAIR_ACK'; // scanned device (desktop) -> scanner (phone): "I pinned you too", signed (cosmetic tick)
 
 export type DevicePlatform = 'extension' | 'ios' | 'android';
 
@@ -106,7 +107,7 @@ export interface SignResponse {
  */
 export interface PairConfirm {
   type: 'PAIR_CONFIRM';
-  from: string; // the phone's deviceId (iOS UUID)
+  from: string; // the phone's deviceId (sha256(pubKey)[0:16], same rule as the desktop)
   pubKey: string; // the phone's relay-auth Ed25519 pubkey (hex) — same key that signs SIGN_RESPONSE
   to: string; // the scanned desktop's deviceId (from the QR) — bound in the subject + relay hint
   nonce: string; // echoed single-use nonce minted by the desktop for this QR
@@ -118,13 +119,34 @@ export interface PairConfirm {
   sig: string; // hex Ed25519 over the canonical PAIR_CONFIRM subject (phone relay-auth key)
 }
 
+/**
+ * QR pairing ack, desktop -> phone over the relay. After the desktop verifies the
+ * phone's PAIR_CONFIRM and pins it, it sends this so the phone can show its own
+ * confirmed "Paired" tick instead of degrading after its ~2.4s timeout. Purely
+ * COSMETIC: trust was already committed on both sides at proof-verify time, so a
+ * dropped/forged ack only affects the checkmark, never the pinning.
+ *
+ * Signed subject (envelope.ts): `gero-xdev/v1|PAIR_ACK|<from>|<to>|<nonce>`. The phone
+ * verifies the sig against the desktop pubKey IT PINNED (from the QR) and reconstructs
+ * the subject from what it pinned (qr.deviceId, its own id, the nonce) — not from the
+ * ack's self-declared fields — so a relay can at most force an unsigned best-effort tick.
+ */
+export interface PairAck {
+  type: 'PAIR_ACK';
+  from: string; // the desktop's deviceId (== the deviceId in the QR the phone scanned)
+  to: string; // the phone's deviceId (== the PAIR_CONFIRM.from the desktop received) + relay hint
+  nonce: string; // echoed pairing nonce
+  sig: string; // hex Ed25519 over the canonical PAIR_ACK subject (desktop relay-auth key)
+}
+
 export type CrossDeviceMessage =
   | DeviceRegister
   | DevicesSnapshot
   | DeviceRegisterAck
   | SignRequest
   | SignResponse
-  | PairConfirm;
+  | PairConfirm
+  | PairAck;
 
 // ---------------------------------------------------------------------------
 // Primitive field checks
@@ -232,6 +254,16 @@ export function isPairConfirm(x: unknown): x is PairConfirm {
   );
 }
 
+export function isPairAck(x: unknown): x is PairAck {
+  if (!isObject(x) || x['type'] !== 'PAIR_ACK') return false;
+  return (
+    isString(x['from']) &&
+    isString(x['to']) &&
+    isString(x['nonce']) &&
+    isString(x['sig'])
+  );
+}
+
 /**
  * Parse an untrusted raw value into a typed cross-device message. Returns null
  * on missing/mistyped required fields, unknown type, or a non-object.
@@ -244,5 +276,6 @@ export function parseCrossDeviceMessage(raw: unknown): CrossDeviceMessage | null
   if (isSignRequest(raw)) return raw;
   if (isSignResponse(raw)) return raw;
   if (isPairConfirm(raw)) return raw;
+  if (isPairAck(raw)) return raw;
   return null;
 }

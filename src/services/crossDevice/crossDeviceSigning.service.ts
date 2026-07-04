@@ -12,7 +12,7 @@
 // The pure modules stay free of chrome/WebSocket/Date.now; this service is the
 // only place timing (ttl reject timer) lives.
 
-import { parseCrossDeviceMessage, type CrossDeviceMessage, type SignRequest, type SignResponse, type PairConfirm } from './protocol';
+import { parseCrossDeviceMessage, type CrossDeviceMessage, type SignRequest, type SignResponse, type PairConfirm, type PairAck } from './protocol';
 import { signMessage, verifyMessage } from './envelope';
 import { createRequest, applyResponse, type MachineState } from './signRequestMachine';
 
@@ -75,6 +75,9 @@ export interface RequestSignatureInput {
 export interface CrossDeviceSigning {
   requestSignature(input: RequestSignatureInput): Promise<SignDecision>;
   onSignRequest(handler: SignRequestHandler): () => void;
+  /** Send a signed PAIR_ACK to a just-paired phone (cosmetic confirm tick). `to` is
+   *  the phone's deviceId (the PAIR_CONFIRM.from), `nonce` the echoed pairing nonce. */
+  sendPairAck(to: string, nonce: string): Promise<void>;
   dispose(): void;
 }
 
@@ -348,6 +351,16 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     return () => requestHandlers.delete(handler);
   }
 
+  async function sendPairAck(to: string, nonce: string): Promise<void> {
+    // from = THIS device's deviceId (== the deviceId in the QR the phone scanned);
+    // the phone verifies the sig against the pubKey it pinned from that QR.
+    const ack = await signMessage<PairAck>(
+      { type: 'PAIR_ACK', from: identity.deviceId, to, nonce },
+      identity.privKeyHex,
+    );
+    transport.send(ack);
+  }
+
   function dispose(): void {
     unsubscribe();
     // Cancel in-flight requests first: this stops any wake-poll timers (closure-local,
@@ -359,5 +372,5 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     requestHandlers.clear();
   }
 
-  return { requestSignature, onSignRequest, dispose };
+  return { requestSignature, onSignRequest, sendPairAck, dispose };
 }
