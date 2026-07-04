@@ -47,6 +47,7 @@ const CROSS_DEVICE_MESSAGE_TYPES = [
   'DEVICE_REGISTER_ACK',
   'SIGN_REQUEST',
   'SIGN_RESPONSE',
+  'PAIR_CONFIRM',
 ];
 
 class WebSocketService {

@@ -12,7 +12,7 @@
 // The pure modules stay free of chrome/WebSocket/Date.now; this service is the
 // only place timing (ttl reject timer) lives.
 
-import { parseCrossDeviceMessage, type CrossDeviceMessage, type SignRequest, type SignResponse } from './protocol';
+import { parseCrossDeviceMessage, type CrossDeviceMessage, type SignRequest, type SignResponse, type PairConfirm, type PairAck } from './protocol';
 import { signMessage, verifyMessage } from './envelope';
 import { createRequest, applyResponse, type MachineState } from './signRequestMachine';
 
@@ -40,6 +40,11 @@ export interface CrossDeviceDeps {
   //     a trusted device (closes DoS-by-rejection, ignores rogue approvals).
   isRequesterTrusted?: (deviceId: string, pubKey: string) => boolean;
   isResponderTrusted?: (deviceId: string, pubKey: string) => boolean;
+  // QR pairing: a verified inbound PAIR_CONFIRM (phone -> this desktop). Verified
+  // here against the pubKey CARRIED IN THE FRAME (the phone is not a trusted sibling
+  // yet), then handed off for the wallet-control-proof check + pin. Absent => QR
+  // pairing inbound is ignored (dark default).
+  onPairConfirm?: (frame: PairConfirm) => void;
   // Wake tuning (defaults below). Injected mainly so tests can run the poll fast.
   wakePollMs?: number;
   wakeWindowMs?: number;
@@ -70,6 +75,9 @@ export interface RequestSignatureInput {
 export interface CrossDeviceSigning {
   requestSignature(input: RequestSignatureInput): Promise<SignDecision>;
   onSignRequest(handler: SignRequestHandler): () => void;
+  /** Send a signed PAIR_ACK to a just-paired phone (cosmetic confirm tick). `to` is
+   *  the phone's deviceId (the PAIR_CONFIRM.from), `nonce` the echoed pairing nonce. */
+  sendPairAck(to: string, nonce: string): Promise<void>;
   dispose(): void;
 }
 
@@ -86,6 +94,7 @@ const MAX_WAKE_REISSUES = 3;
 
 export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSigning {
   const { transport, identity, resolvePubKey, now, newId } = deps;
+  const onPairConfirm = deps.onPairConfirm;
   const isRequesterTrusted = deps.isRequesterTrusted ?? (() => true);
   const isResponderTrusted = deps.isResponderTrusted ?? (() => true);
   const wakePollMs = deps.wakePollMs ?? WAKE_POLL_MS;
@@ -146,6 +155,23 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
 
     const msg = parseCrossDeviceMessage(raw);
     if (!msg) return;
+
+    // QR pairing confirm (phone -> this desktop). Authenticated against the pubKey
+    // IN THE FRAME, not resolvePubKey: the phone is not in the DEVICES snapshot yet
+    // (pairing is precisely how it becomes trusted), so there is no pinned key to
+    // resolve. Deliberately UNGATED by isRequesterTrusted for the same reason. The
+    // signed subject binds `to`, so we accept only confirms addressed to THIS device.
+    // A valid frame signature alone NEVER pins — the WALLET binding is enforced
+    // downstream (walletManager.handlePairConfirm) via the embedded wallet-control
+    // proof against our OWN stake.
+    if (msg.type === 'PAIR_CONFIRM') {
+      if (msg.from === identity.deviceId) return; // never our own echo
+      if (msg.to !== identity.deviceId) return; // only confirms addressed to us
+      if (!(await verifyMessage(msg, msg.pubKey))) return;
+      onPairConfirm?.(msg);
+      return;
+    }
+
     // Only SIGN_REQUEST/SIGN_RESPONSE are authenticated here. Registry frames
     // (DEVICES / DEVICE_REGISTER / DEVICE_REGISTER_ACK) are handled elsewhere.
     if (msg.type !== 'SIGN_REQUEST' && msg.type !== 'SIGN_RESPONSE') return;
@@ -325,6 +351,16 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     return () => requestHandlers.delete(handler);
   }
 
+  async function sendPairAck(to: string, nonce: string): Promise<void> {
+    // from = THIS device's deviceId (== the deviceId in the QR the phone scanned);
+    // the phone verifies the sig against the pubKey it pinned from that QR.
+    const ack = await signMessage<PairAck>(
+      { type: 'PAIR_ACK', from: identity.deviceId, to, nonce },
+      identity.privKeyHex,
+    );
+    transport.send(ack);
+  }
+
   function dispose(): void {
     unsubscribe();
     // Cancel in-flight requests first: this stops any wake-poll timers (closure-local,
@@ -336,5 +372,5 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     requestHandlers.clear();
   }
 
-  return { requestSignature, onSignRequest, dispose };
+  return { requestSignature, onSignRequest, sendPairAck, dispose };
 }
