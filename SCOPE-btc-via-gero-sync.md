@@ -101,7 +101,7 @@ Client can't meaningfully dual-run until gero-sync BTC is real:
 3. **Apply:** ✅ DONE (82365cb5) `convertBtcUtxos` + BTC branch in `setSync`; feed `WalletStore` from server payload.
    - Phase-1 follow-up: `networkStore.getCurrentBlockHeight()` currently returns `null` for a BTC tip (guarded to preserve no-behavior-change). BTC has a height — make it return `tip.height` when `isBitcoinTip(tip)`.
 4. **Rollback:** ✅ DONE (275fca0a) BTC reorg branch in `handleRollback`.
-5. **Cutover:** remove BTC gates (A), delete poller (B), verify dApp consumers unchanged.
+5. **Cutover:** ✅ DONE (a6582cdc, kill-switch) remove BTC gates (A), delete poller (B), verify dApp consumers unchanged.
 6. **Verify:** parity vs old poll (balance/utxos/tx history), reorg, gap-limit growth, catch-up, MV3 keep-alive (<30s), lock/unlock.
 
 ## Risks
