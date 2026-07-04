@@ -98,6 +98,7 @@ import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import { resolveAsset } from '@/shared/utils/resolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
@@ -249,11 +250,16 @@ interface StoredCatalogToken {
  */
 function buildTokenCatalog(): Record<string, unknown>[] {
   const heldBalances = buildHeldBalanceMap();
+  const { getTokenByUnit, getTokenImage } = useMarketData();
   const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
 
+  // Token logos come from market-data (market.gerowallet.io via Nexus) — the
+  // app's single source of truth. Use getTokenByUnit(unit)?.img (market logo
+  // only, no chainLogo fallback) so an unlisted token shows a letter avatar
+  // rather than the ADA logo.
   const catalog = stored.map(token => ({
     ...token,
-    img: resolveAsset({ unit: token.unit } as never)?.img ?? null,
+    img: getTokenByUnit(token.unit)?.img ?? null,
     balance: heldBalances.get(token.unit),
   }));
 
@@ -263,8 +269,7 @@ function buildTokenCatalog(): Record<string, unknown>[] {
       decimals: 6,
       ticker: 'ADA',
       verified: true,
-      // Widget seeds ADA's own icon — deliberately no img here (see
-      // useSwapTokenResolver.ts's lovelace/img contract).
+      img: getTokenImage({ unit: 'lovelace' }) || null, // chainLogo (ADA icon)
       balance: heldBalances.get('lovelace'),
     });
   }

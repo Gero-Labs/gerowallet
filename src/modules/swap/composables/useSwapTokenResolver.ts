@@ -1,6 +1,7 @@
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import NetworkStore from '@/stores/networkStore';
 import { resolveAsset } from '@/shared/utils/resolver';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
 
 /**
@@ -134,6 +135,12 @@ export function useSwapTokenResolver() {
   // made for an empty map, don't attempt it again — see the doc comment above.
   let hydrationAttempted = false;
 
+  // Token logos come from market-data (market.gerowallet.io via Nexus), the app's
+  // single source of truth for token images. `getTokenByUnit(unit)?.img` returns
+  // the market logo (or undefined); we deliberately avoid getTokenImage()'s
+  // chainLogo fallback so an unknown token doesn't render the ADA logo.
+  const { getTokenByUnit } = useMarketData();
+
   async function resolveToken(unit: string): Promise<TokenMetaLike | null> {
     if (unit === 'lovelace') return null; // widget seeds ADA (decimals 6) itself
 
@@ -176,7 +183,7 @@ export function useSwapTokenResolver() {
         name: stored.name,
         verified: stored.verified ?? false,
         price: stored.price,
-        img: cached?.img ?? null,
+        img: getTokenByUnit(unit)?.img || cached?.img || null,
         balance: getHeldBalance(unit),
       };
     }
@@ -191,7 +198,7 @@ export function useSwapTokenResolver() {
         decimals: Number(asset?.metadata?.decimals ?? 0),
         ticker: asset?.metadata?.ticker,
         name: asset?.metadata?.name ?? asset?.name,
-        img: asset?.img ?? null,
+        img: getTokenByUnit(unit)?.img || asset?.img || null,
         verified: asset?.verified ?? false,
         balance: getHeldBalance(unit),
       };

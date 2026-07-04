@@ -2,6 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import Vue from 'vue';
 
+// useMarketData.ts uses module-level auto-imported `ref` (undefined under vitest);
+// the catalog builder only needs getTokenByUnit/getTokenImage for token logos.
+vi.mock('@/modules/market/composables/useMarketData', () => ({
+  useMarketData: () => ({ getTokenByUnit: () => undefined, getTokenImage: () => '' }),
+}));
+
 // Mirrors sidepanel/options main.ts: <gero-swap> self-registers as a real custom
 // element, so Vue must not try to resolve it as a component (avoids dev-mode noise).
 Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
