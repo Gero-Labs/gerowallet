@@ -27,7 +27,7 @@ import {
 import { isDeviceIdConsistent } from '@/services/crossDevice/deviceIdentity';
 import { verifyDeviceRegisterProof, buildDeviceRegisterSubject } from '@/services/crossDevice/registerProof';
 import { loadDeviceRegisterProof, saveDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore';
-import { mintPairingNonce, consumePairingNonce } from '@/services/crossDevice/pairingNonceStore';
+import { mintPairingNonce, consumePairingNonce, peekPairingNonce } from '@/services/crossDevice/pairingNonceStore';
 import { buildPairingQrPayload, type PairingQrPayload } from '@/services/crossDevice/pairingQr';
 import type { DeviceRegisterProof, PairConfirm } from '@/services/crossDevice/protocol';
 import {
@@ -1037,6 +1037,18 @@ export class WalletManager {
       const ownStake = this.walletBg?.stakeAddress;
       if (!ownStake || this.walletBg?.chain !== Blockchain.CARDANO) return;
       if (!this.remoteSigning.enabled) return; // feature must be on for this wallet
+      const now = Math.floor(Date.now() / 1000);
+
+      // 0. Cheap, NON-CONSUMING early reject: no live matching nonce (e.g. no QR is
+      //    displayed) => drop before the expensive proof verify. The desktop deviceId
+      //    is public, so an untrusted relay could otherwise flood self-signed frames to
+      //    force unbounded COSE/blake2b/Ed25519 work. Non-consuming, so it does NOT
+      //    reintroduce the photographed-QR nonce-burn DoS; the consume in step 2 is the
+      //    authoritative single-use gate.
+      if (!(await peekPairingNonce(frame.nonce, ownStake, now))) {
+        debugLog('QR pair rejected: no live nonce (flood/early reject)');
+        return;
+      }
 
       // 1. Wallet-control proof — the authoritative binding (verify vs OUR stake).
       const proofOk = await verifyDeviceRegisterProof(
@@ -1046,8 +1058,8 @@ export class WalletManager {
       );
       if (!proofOk) { debugLog('QR pair rejected: wallet-control proof invalid'); return; }
 
-      // 2. Single-use nonce (bound to our wallet, MV3-durable). Burned here on success.
-      const now = Math.floor(Date.now() / 1000);
+      // 2. Single-use nonce (bound to our wallet, MV3-durable). Burned here on success;
+      //    proof-first so a photographed-QR bad-proof frame can't burn it. Authoritative.
       const nonceOk = await consumePairingNonce(frame.nonce, ownStake, now);
       if (!nonceOk) { debugLog('QR pair rejected: nonce invalid/used/expired'); return; }
 
