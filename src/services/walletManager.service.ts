@@ -487,18 +487,21 @@ export class WalletManager {
         btcLastSyncedHeight,
         {
           onSync: async (data: WsSyncMessage) => {
-            // Phase 3 will apply transactions/utxos/account/tip via a BTC branch
-            // in setSync (convertBtcUtxos). Stubbed to a log so the plumbing is
-            // exercised without touching WalletStore.
-            debugLog('🔶 [BTC gero-sync] SYNC received (apply not yet implemented):', {
-              block: data.block?.height,
-              txs: Array.isArray(data['transactions']) ? data['transactions'].length : 0,
-              utxos: Array.isArray(data['utxos']) ? data['utxos'].length : 0,
+            // Phase 3: apply transactions/utxos/tip to WalletStore via the BTC
+            // analog of setSync. Serialized under tipMutex (same as Cardano) so
+            // concurrent SYNC/SYNC_CHECK_OK applies don't race on setUtxos.
+            // websocket.service already re-tags CATCH_UP_COMPLETE / SYNC_CHECK_OK
+            // to type:'SYNC' and combines catch-up batches upstream.
+            await this.tipMutex.runExclusive(async () => {
+              await walletBg.syncService.applyBitcoinSync(data);
             });
           },
           onRollback: async (data: WsSyncMessage) => {
-            // Phase 4: height-based BTC rollback branch (rollback_to_height).
-            debugLog('🔶 [BTC gero-sync] ROLLBACK received (not yet implemented):', {
+            // TODO(Phase 4): height-based BTC rollback branch. Read
+            // `data['rollback_to_height']` (snake_case, BTC-specific) and delete/
+            // unconfirm txs above it + reset the checkpoint. Left minimal here so
+            // Phase 3 stays scoped to the forward apply path.
+            debugLog('🔶 [BTC gero-sync] ROLLBACK received (Phase 4 — not yet applied):', {
               height: data['rollback_to_height'],
             });
           },
