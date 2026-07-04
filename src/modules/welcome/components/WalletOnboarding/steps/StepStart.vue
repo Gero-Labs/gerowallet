@@ -49,6 +49,30 @@
           </span>
         </span>
       </button>
+
+      <button
+        v-if="googleWalletVisible"
+        type="button"
+        class="method-card"
+        :class="{ 'method-card--active': selectedMethod === 'google', 'method-card--disabled': !googleWalletSupported }"
+        :disabled="!googleWalletSupported"
+        @click="selectedMethod = 'google'"
+      >
+        <span class="method-card__icon"><v-img :src="googlePng" contain width="24" height="24" /></span>
+        <span class="method-card__text">
+          <span class="method-card__title">{{ $t('welcome.googleWalletMethod') }}</span>
+          <span class="method-card__desc">
+            {{ googleWalletSupported ? $t('welcome.googleWalletMethodDescription') : $t('welcome.googleWalletNotSupportedOnNetwork') }}
+          </span>
+        </span>
+      </button>
+    </div>
+
+    <!-- Google wallet: restore-from-backup entry point -->
+    <div v-if="googleWalletVisible && googleWalletSupported" class="google-restore-link">
+      <button type="button" class="link-btn" @click="selectedMethod = 'googleRestore'">
+        {{ $t('welcome.restoreGoogleWalletLink') }}
+      </button>
     </div>
 
     <!-- Navigation -->
@@ -62,10 +86,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import assets from '@/utils/assets';
+import { google as googlePng } from '@/utils/assets';
 import { NetworkInfo } from '@/utils/networks';
+import { Blockchain } from '@/models/types';
 import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
-type Method = 'create' | 'restore' | 'pair';
+type Method = 'create' | 'restore' | 'pair' | 'google' | 'googleRestore';
 
 const props = defineProps<{ network: NetworkInfo; devMode?: boolean }>();
 const emit = defineEmits<{
@@ -80,6 +107,11 @@ watch(() => props.network, (n) => { localNetwork.value = n; });
 
 const selectedMethod = ref<Method | null>(null);
 const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
+
+// Google wallet (MPC "Sign in with Google") — ships DARK behind a feature flag
+// until audited, and only reconstructs a Cardano root key today (Plan D).
+const googleWalletVisible = computed(() => featureFlagsStore.isGoogleWalletEnabled());
+const googleWalletSupported = computed(() => localNetwork.value?.blockchain === Blockchain.CARDANO);
 
 // Base icon shapes (recolored per network via CSS mask).
 const walletSvg = assets.walletGeroSvg;
@@ -110,6 +142,10 @@ const onNetworkChange = (n: NetworkInfo): void => {
   if (selectedMethod.value === 'pair' && !n.supportedHardware) {
     selectedMethod.value = null;
   }
+  // Drop a stale Google wallet choice if the new network isn't Cardano.
+  if ((selectedMethod.value === 'google' || selectedMethod.value === 'googleRestore') && n.blockchain !== Blockchain.CARDANO) {
+    selectedMethod.value = null;
+  }
 };
 
 const onContinue = (): void => {
@@ -124,6 +160,27 @@ const onContinue = (): void => {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.google-restore-link {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-btn:hover {
+  color: var(--v-primary-base);
 }
 
 .onb-btn {

@@ -81,6 +81,39 @@
           @update:name="walletName = $event"
           @back="step--"
         />
+        <StepGoogleSignIn class="onboarding-step"
+          v-else-if="currentStep.key === 'googleSignin'"
+          @signed-in="onGoogleSignedIn"
+          @back="step--"
+        />
+        <StepGoogleSecure class="onboarding-step"
+          v-else-if="currentStep.key === 'googleSecure'"
+          :network="network"
+          :id-token="googleIdToken"
+          @created="onGoogleCreated"
+          @back="step--"
+        />
+        <StepGoogleBackup class="onboarding-step"
+          v-else-if="currentStep.key === 'googleBackup'"
+          :wallet-id="googleWalletId"
+          :recovery-share="googleRecoveryShare"
+          :recovery-password="googleRecoveryPassword"
+          @next="step++"
+        />
+        <StepGoogleConfirm class="onboarding-step"
+          v-else-if="currentStep.key === 'googleConfirm'"
+          :network="network"
+          :name="walletName"
+          :email="googleEmail"
+          :wallet-id="googleWalletId"
+          :id-token="googleIdToken"
+          :spending-password="googleSpendingPassword"
+        />
+        <StepGoogleRestore class="onboarding-step"
+          v-else-if="currentStep.key === 'googleRestore'"
+          :network="network"
+          @back="step--"
+        />
       </div>
     </v-card>
   </div>
@@ -90,7 +123,7 @@ import { ref, computed, onUnmounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
-import type { WalletTypeValue } from '@/models/types';
+import { Blockchain, type WalletTypeValue } from '@/models/types';
 import StepStart from './steps/StepStart.vue';
 import StepSecurity from './steps/StepSecurity.vue';
 import StepCreateConfirm from './steps/StepCreateConfirm.vue';
@@ -99,6 +132,11 @@ import StepRestoreConfirm from './steps/StepRestoreConfirm.vue';
 import StepDevice from './steps/StepDevice.vue';
 import StepConnect from './steps/StepConnect.vue';
 import StepReview from './steps/StepReview.vue';
+import StepGoogleSignIn from './steps/StepGoogleSignIn.vue';
+import StepGoogleSecure from './steps/StepGoogleSecure.vue';
+import StepGoogleBackup from './steps/StepGoogleBackup.vue';
+import StepGoogleConfirm from './steps/StepGoogleConfirm.vue';
+import StepGoogleRestore from './steps/StepGoogleRestore.vue';
 
 interface ConnectionPayload {
   publicKey: string;
@@ -128,12 +166,20 @@ const onDevToggle = (val: boolean | null): void => {
 };
 
 const step = ref<number>(1);
-const selectedMethod = ref<'create' | 'restore' | 'pair' | null>(null);
+const selectedMethod = ref<'create' | 'restore' | 'pair' | 'google' | 'googleRestore' | null>(null);
 const securityMethod = ref<'prf' | 'password'>('prf');
 const walletName = ref<string>(generateWalletName());
 const mnemonic = ref<string[]>([]);
 const walletType = ref<WalletTypeValue | undefined>(undefined);
 const connection = ref<ConnectionPayload | null>(null);
+
+// Google wallet (MPC "Sign in with Google") flow state — never logged.
+const googleIdToken = ref<string>('');
+const googleEmail = ref<string>('');
+const googleWalletId = ref<number>(0);
+const googleRecoveryShare = ref<string>('');
+const googleSpendingPassword = ref<string>('');
+const googleRecoveryPassword = ref<string>('');
 
 const steps = computed<StepDef[]>(() => {
   const base: StepDef[] = [
@@ -162,6 +208,21 @@ const steps = computed<StepDef[]>(() => {
       { key: 'review', titleKey: 'welcome.onboardingStepReview', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescCreateConfirm' },
     ];
   }
+  if (selectedMethod.value === 'google') {
+    return [
+      ...base,
+      { key: 'googleSignin', titleKey: 'welcome.onboardingStepGoogleSignIn', subtitleKey: 'welcome.onboardingSubGoogleSignIn', descKey: 'welcome.onboardingDescGoogleSignIn' },
+      { key: 'googleSecure', titleKey: 'welcome.onboardingStepGoogleSecure', subtitleKey: 'welcome.onboardingSubGoogleSecure', descKey: 'welcome.onboardingDescGoogleSecure' },
+      { key: 'googleBackup', titleKey: 'welcome.onboardingStepGoogleBackup', subtitleKey: 'welcome.onboardingSubGoogleBackup', descKey: 'welcome.onboardingDescGoogleBackup' },
+      { key: 'googleConfirm', titleKey: 'welcome.onboardingStepConfirm', subtitleKey: 'welcome.onboardingSubConfirm', descKey: 'welcome.onboardingDescCreateConfirm' },
+    ];
+  }
+  if (selectedMethod.value === 'googleRestore') {
+    return [
+      ...base,
+      { key: 'googleRestore', titleKey: 'welcome.onboardingStepGoogleRestore', subtitleKey: 'welcome.onboardingSubGoogleRestore', descKey: 'welcome.onboardingDescGoogleRestore' },
+    ];
+  }
   return base;
 });
 
@@ -169,19 +230,53 @@ const steps = computed<StepDef[]>(() => {
 // list (the list shrinks/grows when the method changes).
 const currentStep = computed<StepDef>(() => steps.value[Math.min(step.value, steps.value.length) - 1]);
 
-const onMethodSelect = (m: 'create' | 'restore' | 'pair'): void => {
+const onMethodSelect = (m: 'create' | 'restore' | 'pair' | 'google' | 'googleRestore'): void => {
   selectedMethod.value = m;
   mnemonic.value = [];
   connection.value = null;
   walletType.value = undefined;
+  // Reset Google flow state on (re)entry so a previous attempt never leaks
+  // into a new one (idToken/passwords/recoveryShare are session-scoped only).
+  googleIdToken.value = '';
+  googleEmail.value = '';
+  googleWalletId.value = 0;
+  googleRecoveryShare.value = '';
+  googleSpendingPassword.value = '';
+  googleRecoveryPassword.value = '';
   // Network + Method share step 1 — method-specific steps start at 2.
   step.value = 2;
+};
+
+const onGoogleSignedIn = (payload: { idToken: string; email: string }): void => {
+  googleIdToken.value = payload.idToken;
+  googleEmail.value = payload.email;
+  step.value++;
+};
+
+const onGoogleCreated = (payload: {
+  walletId: number;
+  recoveryShare: string;
+  spendingPassword: string;
+  recoveryPassword: string;
+  name: string;
+}): void => {
+  googleWalletId.value = payload.walletId;
+  googleRecoveryShare.value = payload.recoveryShare;
+  googleSpendingPassword.value = payload.spendingPassword;
+  googleRecoveryPassword.value = payload.recoveryPassword;
+  walletName.value = payload.name;
+  step.value++;
 };
 const onNetworkChange = (n: NetworkInfo): void => {
   emit('network-change', n);
   // If the new network can't pair hardware, drop a stale Pair selection so the
   // user is forced to re-pick a supported method at the Method step.
   if (selectedMethod.value === 'pair' && !n.supportedHardware) {
+    selectedMethod.value = null;
+  }
+  // Google wallet only reconstructs a Cardano root key today — drop a stale
+  // selection if the new network isn't Cardano.
+  if ((selectedMethod.value === 'google' || selectedMethod.value === 'googleRestore') && n.blockchain !== Blockchain.CARDANO) {
     selectedMethod.value = null;
   }
 };

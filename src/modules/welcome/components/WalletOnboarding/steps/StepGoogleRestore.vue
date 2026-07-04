@@ -1,0 +1,306 @@
+<template>
+  <div class="step-google-restore">
+    <!-- Google sign-in -->
+    <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepGoogleSignIn') }}</div>
+    <template v-if="!email">
+      <v-btn class="onb-btn google-signin-btn" depressed outlined :loading="signingIn" @click="signIn()">
+        <v-avatar size="18" class="mr-2">
+          <v-img :src="google" contain />
+        </v-avatar>
+        {{ $t('welcome.googleSignInButton') }}
+      </v-btn>
+    </template>
+    <template v-else>
+      <div class="signed-in-row">
+        <v-icon color="success" size="18" class="mr-1">mdi-check-circle</v-icon>
+        <span class="text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email }) }}</span>
+        <v-btn text x-small color="primary" class="ml-2" @click="changeAccount()">
+          {{ $t('welcome.googleChangeAccount') }}
+        </v-btn>
+      </div>
+    </template>
+
+    <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+
+    <v-form ref="restoreForm" v-model="formValid" style="width: 100%;">
+      <!-- Wallet name -->
+      <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
+      <v-text-field
+        v-model="name"
+        dense
+        filled
+        :label="$t('welcome.walletName')"
+        :placeholder="$t('welcome.walletNamePlaceholder')"
+        :rules="[rules.required(), rules.minCharacters(1), rules.maxCharacters(50)]"
+        class="mb-2"
+      ></v-text-field>
+
+      <!-- Recovery file upload -->
+      <div class="step-section-label mb-2">{{ $t('welcome.uploadRecoveryFile') }}</div>
+      <v-file-input
+        v-model="recoveryFile"
+        dense
+        filled
+        accept=".gmpc"
+        :placeholder="$t('welcome.chooseRecoveryFile')"
+        :label="$t('welcome.chooseRecoveryFile')"
+        prepend-icon=""
+        prepend-inner-icon="mdi-file-upload-outline"
+        :rules="[rules.required()]"
+        class="mb-2"
+      ></v-file-input>
+
+      <!-- Recovery password -->
+      <v-text-field
+        v-model="recoveryPassword"
+        dense
+        filled
+        :label="$t('welcome.recoveryPassword')"
+        :type="showRecovery ? 'text' : 'password'"
+        :append-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
+        @click:append="showRecovery = !showRecovery"
+        :rules="[rules.required()]"
+        class="mb-2"
+      ></v-text-field>
+
+      <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+
+      <!-- New spending password -->
+      <div class="step-section-label mb-2">{{ $t('welcome.newSpendingPassword') }}</div>
+      <v-text-field
+        v-model="spendingPassword"
+        dense
+        filled
+        :label="$t('welcome.newSpendingPassword')"
+        :type="showSpending ? 'text' : 'password'"
+        :append-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
+        @click:append="showSpending = !showSpending"
+        :rules="[
+          rules.required(),
+          rules.minCharacters(10),
+          rules.oneOrMoreNumbers,
+          rules.containCapital,
+          rules.containLowerCase,
+          rules.containSpecialCharacter,
+          rules.spaceNotAllowed
+        ]"
+      ></v-text-field>
+      <v-text-field
+        v-model="confirmSpendingPassword"
+        dense
+        filled
+        :label="$t('welcome.confirmNewSpendingPassword')"
+        :type="showSpending ? 'text' : 'password'"
+        :rules="[
+          rules.required(),
+          (v) => v === spendingPassword || $t('welcome.passwordsMustMatch')
+        ]"
+      ></v-text-field>
+
+      <v-alert
+        v-if="errorMessage"
+        color="error"
+        icon="mdi-alert-outline"
+        outlined
+        dense
+        border="left"
+        class="mt-3 mb-0"
+      >
+        <span class="text-body-2">{{ errorMessage }}</span>
+      </v-alert>
+    </v-form>
+
+    <!-- Navigation buttons -->
+    <div class="onboarding-actions d-flex" style="gap: 12px;">
+      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-spacer />
+      <v-btn
+        color="primary"
+        :disabled="!canRestore"
+        :loading="restoring"
+        @click="restore()"
+      >
+        {{ $t('welcome.restoreGoogleWallet') }}
+      </v-btn>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, getCurrentInstance } from 'vue';
+import rules from '@/utils/rules';
+import { Theme } from '@/models/types';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import { generateWalletName } from '@/shared/utils/walletNameGenerator';
+import networks, { NetworkInfo } from '@/utils/networks';
+import { google } from '@/utils/assets';
+import type { GoogleWalletBgResponse } from './googleWalletMessages';
+
+const props = defineProps<{ network: NetworkInfo }>();
+defineEmits<{ (e: 'back'): void }>();
+
+const vmProxy = getCurrentInstance()!.proxy;
+const router = vmProxy?.$router;
+
+const restoreForm = ref<{ resetValidation: () => void } | null>(null);
+const formValid = ref(false);
+
+const signingIn = ref(false);
+const idToken = ref('');
+const email = ref('');
+
+const name = ref(generateWalletName());
+const recoveryFile = ref<File | null>(null);
+const recoveryPassword = ref('');
+const spendingPassword = ref('');
+const confirmSpendingPassword = ref('');
+const showRecovery = ref(false);
+const showSpending = ref(false);
+
+const restoring = ref(false);
+const errorMessage = ref('');
+
+const canRestore = computed(() => formValid.value && !!email.value && !!recoveryFile.value && !restoring.value);
+
+const signIn = async (): Promise<void> => {
+  signingIn.value = true;
+  errorMessage.value = '';
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_WITH_GOOGLE,
+      data: {},
+    }) as GoogleWalletBgResponse;
+    if (!response?.data?.success || !response.data.tokens?.idToken || !response.data.tokens?.accessToken) {
+      throw new Error(vmProxy.$t('welcome.googleSignInFailed') as string);
+    }
+    const { accessToken, idToken: token } = response.data.tokens;
+    const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!profileResp.ok) {
+      throw new Error(vmProxy.$t('welcome.googleSignInFailed') as string);
+    }
+    const profile = await profileResp.json();
+    if (!profile?.email_verified || !profile?.email) {
+      throw new Error(vmProxy.$t('welcome.googleSignInFailed') as string);
+    }
+    idToken.value = token;
+    email.value = profile.email;
+  } catch (error: unknown) {
+    console.error('Google sign-in failed:', error instanceof Error ? error.message : 'unknown error');
+    errorMessage.value = error instanceof Error ? error.message : (vmProxy.$t('welcome.googleSignInFailed') as string);
+  } finally {
+    signingIn.value = false;
+  }
+};
+
+const changeAccount = (): void => {
+  idToken.value = '';
+  email.value = '';
+};
+
+const readFileAsText = (file: File): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result || ''));
+  reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+  reader.readAsText(file);
+});
+
+const restore = async (): Promise<void> => {
+  if (!canRestore.value || !recoveryFile.value) return;
+  restoring.value = true;
+  errorMessage.value = '';
+  try {
+    const recoveryBlob = await readFileAsText(recoveryFile.value);
+    const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
+
+    // Note: never log request payload — contains idToken/recoveryPassword/newSpendingPassword
+    const recoverResponse = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.RECOVER_MPC_GOOGLE_WALLET,
+      data: {
+        name: name.value,
+        icon: walletIcon,
+        theme: Theme.GERO,
+        chain: props.network?.blockchain,
+        network: props.network?.network,
+        idToken: idToken.value,
+        recoveryBlob,
+        recoveryPassword: recoveryPassword.value,
+        newSpendingPassword: spendingPassword.value,
+      },
+    }) as GoogleWalletBgResponse;
+
+    if (!recoverResponse?.data?.success || recoverResponse.data.walletId == null) {
+      throw new Error(recoverResponse?.data?.error || (vmProxy.$t('errors.unknownError') as string));
+    }
+
+    const walletId = recoverResponse.data.walletId;
+
+    const unlockResponse = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.UNLOCK_MPC_WALLET,
+      data: {
+        walletId,
+        idToken: idToken.value,
+        spendingPassword: spendingPassword.value,
+      },
+    }) as GoogleWalletBgResponse;
+    if (!unlockResponse?.data?.success) {
+      throw new Error(unlockResponse?.data?.error || (vmProxy.$t('errors.unknownError') as string));
+    }
+
+    const { getAllWallets } = await import('@/db/gero-db');
+    const wallets = await getAllWallets();
+    const wallet = wallets[walletId];
+
+    const loginResponse = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    });
+
+    const hasError = loginResponse && typeof loginResponse === 'object' && 'error' in loginResponse;
+    if (loginResponse && !hasError) {
+      vmProxy.$nextTick(() => {
+        router.push('/').catch((err: Error) => {
+          if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+            console.warn('Navigation error:', err);
+          }
+        });
+      });
+    } else {
+      vmProxy.$nextTick(() => {
+        router.push('/').catch(() => {});
+      });
+    }
+  } catch (error: unknown) {
+    errorMessage.value = error instanceof Error ? error.message : (vmProxy.$t('errors.unknownError') as string);
+  } finally {
+    restoring.value = false;
+  }
+};
+</script>
+
+<style scoped lang="scss">
+.step-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: white;
+}
+
+.google-signin-btn {
+  text-transform: none;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.signed-in-row {
+  display: flex;
+  align-items: center;
+}
+
+.onb-btn {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+</style>
