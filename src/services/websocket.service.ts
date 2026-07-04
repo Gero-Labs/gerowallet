@@ -392,8 +392,26 @@ class WebSocketService {
     if (expandedCredentials) {
       this.credentials = expandedCredentials;
     }
-    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock} credentials=${this.credentials?.length || 0}`);
     this.lastSyncedBlock = lastSyncedBlock;
+
+    if (this.chain === 'BITCOIN') {
+      // BTC re-subscribe must mirror the BITCOIN branch of the initial SUBSCRIBE
+      // (snake_case, address-set, no credentials) — the Cardano payload below
+      // would be rejected. Used by FORCE_RESYNC and (future) gap-limit growth.
+      debugLog(`🔄 Resubscribing BTC lastSyncedBlock=${lastSyncedBlock} addresses=${this.addresses?.length || 0}`);
+      this.send({
+        type: 'SUBSCRIBE',
+        chain: this.chain,
+        network: this.network,
+        address: this.stakeAddress, // anchor = segwit external idx 0
+        addresses: this.addresses,
+        last_synced_block: lastSyncedBlock,
+        platform: 'extension',
+      });
+      return;
+    }
+
+    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock} credentials=${this.credentials?.length || 0}`);
     this.send({
       type: 'SUBSCRIBE',
       chain: this.chain,
