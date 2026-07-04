@@ -187,6 +187,11 @@ export class WalletManager {
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
+        // Defense-in-depth: drop any cached MPC root-key bytes on a wallet switch
+        // so one wallet's session key can never carry over to another. (A switch
+        // to a different wallet already routes through logout() above, which also
+        // clears the cache; this covers the fresh-login path too.)
+        mpcSessionCache.clearAll();
         TapToolsStore.clear();
         let walletBg: WalletBg
         if (wallet.type === WalletType.Google) {

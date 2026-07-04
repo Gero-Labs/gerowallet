@@ -5,6 +5,8 @@ import {
   unlockMpcWalletFlow,
   recoverMpcGoogleWalletFlow,
   subFromIdToken,
+  resolveSignPrivateKeyBytes,
+  assertMpcActionSupported,
   type CreateMpcGoogleWalletDeps,
   type UnlockMpcWalletDeps,
   type RecoverMpcGoogleWalletDeps,
@@ -228,5 +230,52 @@ describe('recoverMpcGoogleWalletFlow', () => {
     const deps = makeDeps({ decryptRecoveryShare: vi.fn(async () => { throw new Error('wrong password'); }) });
     await expect(recoverMpcGoogleWalletFlow(baseInput, deps)).rejects.toThrow('wrong password');
     expect(deps.createMpcGoogleWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveSignPrivateKeyBytes', () => {
+  const cacheWith = (entries: Record<number, Uint8Array>) => ({
+    get: (id: number) => entries[id],
+  });
+
+  it('(a) passes explicit bytes straight through regardless of wallet type', () => {
+    const explicit = new Uint8Array([1, 2, 3]);
+    // PRF wallet with explicit bytes → unchanged
+    expect(resolveSignPrivateKeyBytes({ id: 1, encryptionMethod: 'prf' }, explicit, cacheWith({}))).toBe(explicit);
+    // even an mpc wallet: explicit bytes win, cache is not consulted
+    expect(resolveSignPrivateKeyBytes({ id: 1, encryptionMethod: 'mpc' }, explicit, cacheWith({}))).toBe(explicit);
+  });
+
+  it('(b) mpc wallet with no explicit bytes returns the cached bytes', () => {
+    const cached = new Uint8Array([9, 9, 9]);
+    const out = resolveSignPrivateKeyBytes({ id: 7, encryptionMethod: 'mpc' }, undefined, cacheWith({ 7: cached }));
+    expect(out).toBe(cached);
+  });
+
+  it('(c) mpc wallet with an empty cache throws a clean unlock error', () => {
+    expect(() =>
+      resolveSignPrivateKeyBytes({ id: 7, encryptionMethod: 'mpc' }, undefined, cacheWith({})),
+    ).toThrow(/unlocked with Google/);
+  });
+
+  it('(d) non-mpc wallet with no explicit bytes returns undefined (password path unchanged)', () => {
+    expect(resolveSignPrivateKeyBytes({ id: 1, encryptionMethod: 'password' }, undefined, cacheWith({}))).toBeUndefined();
+    expect(resolveSignPrivateKeyBytes({ id: 1, encryptionMethod: 'prf' }, undefined, cacheWith({}))).toBeUndefined();
+    expect(resolveSignPrivateKeyBytes(null, undefined, cacheWith({}))).toBeUndefined();
+    expect(resolveSignPrivateKeyBytes(undefined, undefined, cacheWith({}))).toBeUndefined();
+  });
+});
+
+describe('assertMpcActionSupported', () => {
+  it('throws a clean error for mpc wallets', () => {
+    expect(() => assertMpcActionSupported({ encryptionMethod: 'mpc' }, 'Bitcoin signing'))
+      .toThrow(/not yet supported for Bitcoin signing/);
+  });
+
+  it('is a no-op for non-mpc wallets and undefined', () => {
+    expect(() => assertMpcActionSupported({ encryptionMethod: 'password' }, 'Bitcoin signing')).not.toThrow();
+    expect(() => assertMpcActionSupported({ encryptionMethod: 'prf' }, 'Bitcoin signing')).not.toThrow();
+    expect(() => assertMpcActionSupported(null, 'Bitcoin signing')).not.toThrow();
+    expect(() => assertMpcActionSupported(undefined, 'Bitcoin signing')).not.toThrow();
   });
 });

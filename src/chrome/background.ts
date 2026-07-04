@@ -39,6 +39,8 @@ import {
   unlockMpcWalletFlow,
   recoverMpcGoogleWalletFlow,
   subFromIdToken,
+  resolveSignPrivateKeyBytes,
+  assertMpcActionSupported,
 } from '@/chrome/mpcWalletHandlers';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
@@ -1759,29 +1761,6 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
   return true; // Required for async Chrome message handlers
 });
 
-/**
- * Resolve the pre-decrypted root-key bytes to pass to walletBg.sign*.
- *
- * PRF wallets pass privateKeyBytes explicitly over the wire (the UI already
- * did the WebAuthn PRF unlock). MPC wallets never send key bytes over the
- * wire — they're read from this background-only session cache, populated
- * once per unlocked session by UNLOCK_MPC_WALLET (Google login share fetch +
- * reconstruct + validate). Throws a clean error if an MPC wallet's session
- * cache is empty (needs a Google unlock first).
- */
-function resolveSignPrivateKeyBytes(explicitBytes: Uint8Array | undefined): Uint8Array | undefined {
-  if (explicitBytes) return explicitBytes;
-  const loggedWallet = WalletStore.state.loggedWallet;
-  if (loggedWallet?.encryptionMethod === 'mpc') {
-    const cached = mpcSessionCache.get(loggedWallet.id);
-    if (!cached) {
-      throw new Error('This wallet needs to be unlocked with Google before signing.');
-    }
-    return cached;
-  }
-  return explicitBytes;
-}
-
 app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
   try {
     // Note: Never log request - contains password
@@ -1790,6 +1769,7 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
       // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets).
       // Mirrors the SIGN_TX handler convention (number[] over the wire).
       const privateKeyBytes = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
         request.data.privateKeyBytes ? new Uint8Array(request.data.privateKeyBytes) : undefined
       );
 
@@ -1874,6 +1854,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
 
       // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
       const privateKeyBytes = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
         request.data.privateKeyBytes ? new Uint8Array(request.data.privateKeyBytes) : undefined
       );
 
@@ -2067,7 +2048,14 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       throw new Error('No transaction data provided');
     }
 
-    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+    // Route through resolveSignPrivateKeyBytes so an MPC Google wallet (SPO
+    // cold-key import permits WalletType.Google) signs with its cached
+    // root-key bytes instead of hitting decrypt(undefined). PRF/password
+    // wallets are unaffected (explicit bytes / undefined pass straight through).
+    const prfSecret = resolveSignPrivateKeyBytes(
+      WalletStore.state.loggedWallet,
+      privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
+    );
     const walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
 
     // Step 2: Decrypt cold key from wallet DB and sign with it
@@ -2183,6 +2171,9 @@ app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => 
   try {
     const walletBg = walletManager.getWallet();
     if (walletBg && walletBg.chain === Blockchain.BITCOIN) {
+      // Defense-in-depth: MPC wallets are Cardano-only, so chain-gating above
+      // already excludes them, but guard the Bitcoin-specific signer explicitly.
+      assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
       const { psbtHex, password, prfSecret } = request.data;
 
       // Sign Bitcoin transaction
@@ -2294,6 +2285,10 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
       return;
     }
 
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above);
+    // guard the Bitcoin send path explicitly so MPC never hits decrypt(undefined).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
+
     const { recipientAddress, amount, feeRate, password, privateKeyBytes } = request.data;
 
     // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
@@ -2372,6 +2367,9 @@ app.addToOptions(MessageTypes.BABYLON_STAKE, async (request, sendResponse) => {
       });
       return;
     }
+
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
 
     const { psbtHex, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
@@ -3259,6 +3257,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_PSBT, async (request, sendRespon
       sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
       return;
     }
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { psbtHex, options, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
     const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret);
@@ -3275,6 +3275,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, async (request, sendRes
       sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
       return;
     }
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { message, type, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
     const signature = await walletBg.signBitcoinDappMessage(message, type, password, prfSecret);
