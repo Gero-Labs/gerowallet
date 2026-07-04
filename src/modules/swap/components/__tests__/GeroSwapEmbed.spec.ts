@@ -8,7 +8,10 @@ import Vue, { ref } from 'vue';
 // market data hydrates), so it must be a real ref — not undefined — or Vue's watch()
 // throws an "Invalid watch source" warning.
 vi.mock('@/modules/market/composables/useMarketData', () => ({
-  useMarketData: () => ({ getTokenByUnit: () => undefined, getTokenImage: () => '', allTokens: ref([]) }),
+  // Passive module-level readers the swap imports directly (no useMarketData() call).
+  getTokenByUnit: () => undefined,
+  getTokenImage: () => '',
+  marketTokensRef: ref([]),
 }));
 
 // Mirrors sidepanel/options main.ts: <gero-swap> self-registers as a real custom

@@ -97,7 +97,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
-import { useMarketData } from '@/modules/market/composables/useMarketData';
+import { getTokenByUnit, marketTokensRef } from '@/modules/market/composables/useMarketData';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
@@ -241,11 +241,13 @@ const { signer, keystone } = useNativeSwapSigner({
 });
 const { resolveToken } = useSwapTokenResolver();
 
-// Single top-level call to the singleton composable (matches useSwapTokenResolver.ts's
-// own usage) so we can hold a reference to its reactive `allTokens` list — needed below
-// to re-run buildTokenCatalog() once market data actually arrives (it hydrates
-// asynchronously, well after this component's initial mount/wireProps() call).
-const { getTokenByUnit, allTokens } = useMarketData();
+// PASSIVE market-cache access: `getTokenByUnit` (token logos) and `marketTokensRef`
+// (the reactive cache, to re-run buildTokenCatalog() once data arrives) are imported
+// as module-level readers — we deliberately do NOT call useMarketData() here, so the
+// swap never registers a poll consumer or starts the 15s price interval. It reads
+// whatever the shared cache already holds (populated by the dashboard/market page)
+// and reacts when that updates. Icons stay empty only if nothing else ever polled.
+const allTokens = marketTokensRef;
 
 // ── MAX button: no host wiring needed ──
 // Investigated src/vendor/gero-swap/gero-swap.js: the widget's internal

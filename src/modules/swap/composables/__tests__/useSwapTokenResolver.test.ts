@@ -3,7 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // useMarketData.ts uses module-level auto-imported `ref` (undefined under vitest);
 // the resolver only needs its getTokenByUnit for token logos — stub it.
 vi.mock('@/modules/market/composables/useMarketData', () => ({
-  useMarketData: () => ({ getTokenByUnit: () => undefined, getTokenImage: () => '' }),
+  // Passive module-level readers the swap imports directly (no useMarketData() call).
+  getTokenByUnit: () => undefined,
+  getTokenImage: () => '',
 }));
 
 const { tokens, state, resolveAsset, loadTokens } = vi.hoisted(() => {

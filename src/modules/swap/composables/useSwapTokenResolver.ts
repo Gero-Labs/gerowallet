@@ -1,7 +1,7 @@
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import NetworkStore from '@/stores/networkStore';
 import { resolveAsset } from '@/shared/utils/resolver';
-import { useMarketData } from '@/modules/market/composables/useMarketData';
+import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
 
 /**
@@ -139,7 +139,9 @@ export function useSwapTokenResolver() {
   // single source of truth for token images. `getTokenByUnit(unit)?.img` returns
   // the market logo (or undefined); we deliberately avoid getTokenImage()'s
   // chainLogo fallback so an unknown token doesn't render the ADA logo.
-  const { getTokenByUnit } = useMarketData();
+  // `getTokenByUnit` is imported as a module-level PASSIVE reader — it does NOT
+  // call useMarketData(), so the swap never starts/sustains the 15s price poll;
+  // it just reads whatever the shared cache already holds.
 
   async function resolveToken(unit: string): Promise<TokenMetaLike | null> {
     if (unit === 'lovelace') return null; // widget seeds ADA (decimals 6) itself
