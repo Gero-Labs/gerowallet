@@ -126,14 +126,17 @@ export const remoteSigningStore = {
    * yet / no stake) so the dialog can prompt to re-enable.
    */
   async getPairingQr(): Promise<PairingQrPayload | null> {
-    const r = await send<PairingQrReply>(MessageTypes.GET_PAIRING_QR);
-    return r.success && r.payload ? r.payload : null;
+    // `send` can resolve to undefined on a messaging failure (e.g. an MV3 worker
+    // recycle mid-round-trip), so guard with optional chaining rather than throw —
+    // the caller maps null to the dialog's error state.
+    const r = await send<PairingQrReply | undefined>(MessageTypes.GET_PAIRING_QR);
+    return r?.success && r.payload ? r.payload : null;
   },
 
   /** The last device paired via QR scan (background clears it on read). */
   async getPairingStatus(): Promise<PairedResult | null> {
-    const r = await send<PairingStatusReply>(MessageTypes.GET_PAIRING_STATUS);
-    return r.success && r.paired ? r.paired : null;
+    const r = await send<PairingStatusReply | undefined>(MessageTypes.GET_PAIRING_STATUS);
+    return r?.success && r.paired ? r.paired : null;
   },
 
   // ---- getters -------------------------------------------------------------
