@@ -515,7 +515,15 @@ async function openPairingQr() {
   qrState.value = 'loading';
   pairedResult.value = null;
   qrDialogOpen.value = true;
-  const payload = await remoteSigningStore.getPairingQr();
+  let payload: PairingQrPayload | null = null;
+  try {
+    payload = await remoteSigningStore.getPairingQr();
+  } catch {
+    payload = null;
+  }
+  // Bail if the user closed the dialog while the mint was in flight, so we don't
+  // resurrect state or start an orphaned poll that closePairingQr() already tore down.
+  if (!qrDialogOpen.value) return;
   if (!payload) {
     // No cached wallet-control proof (or no stake): can't render a QR.
     qrState.value = 'error';
@@ -524,6 +532,7 @@ async function openPairingQr() {
   qrPayload.value = payload;
   qrState.value = 'waiting';
   await renderQr(payload);
+  if (!qrDialogOpen.value) return; // closed during render
   stopQrPoll();
   qrPoll = setInterval(() => { void tickQr(); }, 1000);
 }
