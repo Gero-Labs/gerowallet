@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createCrossDeviceSigning } from './crossDeviceSigning.service';
+import { createCrossDeviceSigning, type SignDecision } from './crossDeviceSigning.service';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { signMessage } from './envelope';
 import { type CrossDeviceMessage, type SignRequest, type SignResponse } from './protocol';
@@ -268,6 +268,149 @@ describe('crossDeviceSigning approver replay + expiry', () => {
 
     expect(handler).not.toHaveBeenCalled();
     approver.dispose();
+  });
+});
+
+describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
+  // A transport that captures outgoing SIGN_REQUESTs and does NOT auto-deliver them
+  // (simulating an offline target: the relay would return WAKE_PENDING, not deliver).
+  // Responses/WAKE_PENDING are injected manually via publish().
+  function makeManualBus() {
+    const listeners = new Set<(raw: unknown) => void>();
+    const sent: SignRequest[] = [];
+    return {
+      sent,
+      publish: (m: unknown) => { for (const l of [...listeners]) l(m); },
+      transport: {
+        send: (msg: CrossDeviceMessage) => { if (msg.type === 'SIGN_REQUEST') sent.push(msg as SignRequest); },
+        onMessage: (cb: (raw: unknown) => void) => { listeners.add(cb); return () => listeners.delete(cb); },
+      },
+    };
+  }
+
+  it('pauses the ttl on WAKE_PENDING, re-issues a fresh request when the target reconnects', async () => {
+    const bus = makeManualBus();
+    let approverOnline = false;
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async (id) => (id === approverId ? (approverOnline ? approverKp.pubKeyHex : null) : null),
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `w-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 500,
+    });
+
+    let settled: SignDecision | null = null;
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    void resultP.then((d) => { settled = d; });
+
+    await new Promise((r) => setTimeout(r, 15));
+    expect(bus.sent.length).toBe(1);
+    expect(bus.sent[0].to).toBe(approverId);
+    const firstReqId = bus.sent[0].reqId;
+
+    // Relay: target offline -> WAKE_PENDING must PAUSE the 60ms ttl.
+    bus.publish({ type: 'WAKE_PENDING', reqId: firstReqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 90)); // past the original ttl
+    expect(settled).toBeNull();            // not rejected: ttl was paused
+    expect(bus.sent.length).toBe(1);       // not re-issued: still offline
+
+    // Target reconnects -> poll re-issues a FRESH request.
+    approverOnline = true;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(bus.sent.length).toBe(2);
+    const secondReqId = bus.sent[1].reqId;
+    expect(secondReqId).not.toBe(firstReqId);
+
+    // Approve the fresh request -> requester resolves.
+    const res = await signMessage<SignResponse>(
+      { type: 'SIGN_RESPONSE', reqId: secondReqId, nonce: 'rn', to: requesterId, deviceId: approverId, decision: 'approved', witnessSetCbor: 'a100' },
+      approverKp.privKeyHex,
+    );
+    bus.publish(res);
+    const result = await resultP;
+    expect(result.decision).toBe('approved');
+    expect(result.witnessSetCbor).toBe('a100');
+    requester.dispose();
+  });
+
+  it('rejects with wake_timeout if the target never reconnects', async () => {
+    const bus = makeManualBus();
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async () => null, // never comes online
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `t-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 40,
+    });
+
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+
+    const result = await resultP;
+    expect(result.decision).toBe('rejected');
+    expect(result.reason).toBe('wake_timeout');
+    requester.dispose();
+  });
+
+  it('dispose() during a wake-wait stops the poll and resolves disposed', async () => {
+    const bus = makeManualBus();
+    let online = false;
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async (id) => (id === approverId && online ? approverKp.pubKeyHex : null),
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `d-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 1000,
+    });
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 10)); // now in the wake-wait, polling
+    const before = bus.sent.length;
+
+    requester.dispose();
+    const result = await resultP;
+    expect(result.reason).toBe('disposed');
+
+    // Target coming online AFTER dispose must not trigger a stray re-issue.
+    online = true;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(bus.sent.length).toBe(before);
+  });
+
+  it('does not double-issue when the registry lookup is slow (in-flight guard)', async () => {
+    const bus = makeManualBus();
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      // Slow lookup that returns online: many poll ticks fire during one await.
+      resolvePubKey: async (id) => { await new Promise((r) => setTimeout(r, 25)); return id === approverId ? approverKp.pubKeyHex : null; },
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `g-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 1000,
+    });
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 500 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 90)); // several poll ticks overlap the slow resolve
+
+    expect(bus.sent.length).toBe(2); // exactly one re-issue, not several
+
+    const res = await signMessage<SignResponse>(
+      { type: 'SIGN_RESPONSE', reqId: bus.sent[1].reqId, nonce: 'n', to: requesterId, deviceId: approverId, decision: 'approved', witnessSetCbor: 'a1' },
+      approverKp.privKeyHex,
+    );
+    bus.publish(res);
+    await resultP;
+    requester.dispose();
   });
 });
 
