@@ -148,7 +148,23 @@ export default {
     broadcastFromBackground({ epochParams });
   },
 
-  setTip(tip: CardanoTip) {
+  setTip(tip: CardanoTip | BitcoinTip) {
+    // Bitcoin path (Phase 3): height-only monotonic guard, kept in a SEPARATE
+    // branch so the Cardano path below stays byte-identical. A BTC tip never
+    // overwrites a newer BTC tip (by block height); the two chains never share a
+    // wallet, so a BTC tip is only ever compared against another BTC tip.
+    if (isBitcoinTip(tip)) {
+      const current = networkStore.tip;
+      if (current && isBitcoinTip(current) && tip.height <= current.height) {
+        debugLog(`⚠️ Ignoring older/duplicate BTC tip - current: ${current.height}, new: ${tip.height}`);
+        return;
+      }
+      debugLog(`✅ Setting new BTC tip - height: ${tip.height}`);
+      networkStore.tip = tip;
+      broadcastFromBackground({ tip });
+      return;
+    }
+
     // RACE CONDITION FIX: Only update tip if it's newer than the current one
     // Prevents old Ably messages from overwriting fresh data
     if (networkStore.tip && !isBitcoinTip(networkStore.tip)) {

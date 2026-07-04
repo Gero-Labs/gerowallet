@@ -10,8 +10,18 @@ import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
 import blockchainApi from '@/api/blockchain-api';
-import webSocketService from '@/services/websocket.service';
-import WalletStore from '@/stores/walletStore';
+import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
+import WalletStore, { walletStore } from '@/stores/walletStore';
+import type { BitcoinTip } from '@/stores/networkStore';
+import {
+  convertBtcUtxos,
+  convertBtcTransactions,
+  mergeBtcTransactions,
+  type BtcTx,
+  type BtcUtxo,
+  type BtcAccount,
+} from '@/chains/bitcoin/bitcoinWireSync';
+import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
 
 /** Row shape returned by the `/api/transactions/cbor` backend endpoint. */
 interface TxCborRow {
@@ -350,6 +360,89 @@ export class SyncService {
         });
       }
     }
+  }
+
+  /**
+   * Apply a gero-sync Bitcoin WS payload to the wallet stores (Phase 3).
+   *
+   * BTC analog of {@link setSync} — a SEPARATE method so the Cardano path stays
+   * byte-identical. Runs ONLY for BTC wallets (guarded) and is wired from the
+   * flag-gated (`isBitcoinGeroSyncEnabled`, default OFF) BTC onSync handler in
+   * walletManager, so it is inert in production. When on, it runs alongside the
+   * Esplora poller (dual-run) and produces the SAME internal shapes the poller
+   * feeds `WalletStore`, so the UI renders WS-fed data identically:
+   *   - transactions → convertBtcTransactions + mergeBtcTransactions → setTransactions
+   *   - utxos        → convertBtcUtxos → setUtxos (recomputes bitcoinBalance, poller path)
+   *   - tip          → NetworkStore.setTip({ chain:'BITCOIN', height, hash, time })
+   *
+   * Catch-up batching is handled upstream by websocket.service (it accumulates
+   * SYNC batches during catch-up and delivers ONE combined payload on
+   * CATCH_UP_COMPLETE, re-tagged `type:'SYNC'`); SYNC_CHECK_OK is likewise
+   * re-tagged. So this method always sees a single already-combined payload and
+   * merges it into the in-memory set — pending→confirmed upgrades by txid, and
+   * existing txs are never dropped on a partial real-time batch.
+   *
+   * Note on balance/account: the confirmed/total balance is derived from the full
+   * UTxO set via setUtxos (identical to the poller). The raw `BtcAccount` is NOT
+   * written to `walletStore.account` — that slot is the Cardano AccountInfo shape,
+   * and writing a BtcAccount there would corrupt Cardano-shared consumers. It is
+   * only logged here; the contract guarantees `utxos` is the full current set, so
+   * the UTxO-derived balance already matches `account.balance`.
+   *
+   * @param payload - WS SYNC-family message (SYNC / CATCH_UP_COMPLETE / SYNC_CHECK_OK).
+   */
+  async applyBitcoinSync(payload: WsSyncMessage): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.BITCOIN) {
+      return;
+    }
+    if (!payload || (payload.type !== 'SYNC' && payload['success'] !== true)) {
+      return;
+    }
+
+    const tipHeight = typeof payload.block?.height === 'number' ? payload.block.height : undefined;
+    const account = payload['account'] as BtcAccount | undefined;
+
+    // 1) Transactions — convert + merge (pending→confirmed by txid; keep history).
+    if (Array.isArray(payload['transactions'])) {
+      const converted = convertBtcTransactions(payload['transactions'] as BtcTx[], tipHeight);
+      const merged = mergeBtcTransactions(
+        walletStore.transactions as UnifiedTransaction[],
+        converted,
+      );
+      WalletStore.setTransactions(merged);
+    }
+
+    // 2) UTxOs — full current set per contract; replace + recompute bitcoinBalance
+    //    through the same setUtxos path the poller uses (calculateBitcoinBalance).
+    if (Array.isArray(payload['utxos'])) {
+      const convertedUtxos = convertBtcUtxos(payload['utxos'] as BtcUtxo[]);
+      await WalletStore.setUtxos(convertedUtxos);
+    }
+
+    // 3) Tip — height-only BitcoinTip. `time` stored in ms for consistency with the
+    //    Cardano tip.time convention (no BTC consumer reads it yet).
+    if (payload.block && typeof payload.block.height === 'number') {
+      const tip: BitcoinTip = {
+        chain: 'BITCOIN',
+        height: payload.block.height,
+        hash: payload.block.hash || '',
+        time: payload.block.time ? payload.block.time * 1000 : 0,
+      };
+      NetworkStore.setTip(tip);
+    }
+
+    debugLog('🔶 [BTC gero-sync] applyBitcoinSync applied', {
+      txs: Array.isArray(payload['transactions']) ? (payload['transactions'] as unknown[]).length : 0,
+      utxos: Array.isArray(payload['utxos']) ? (payload['utxos'] as unknown[]).length : 0,
+      block: payload.block?.height,
+      account: account
+        ? {
+            balance: account.balance,
+            unconfirmed: account.unconfirmed_balance,
+            tx_count: account.tx_count,
+          }
+        : undefined,
+    });
   }
 
   /**
