@@ -35,6 +35,7 @@ import {
   setPolicy as trustSetPolicy,
   trustDevice as trustAddDevice,
   untrustDevice as trustRemoveDevice,
+  soleSignerDeviceId,
   REQUIRE_PROOF_TO_PAIR,
   type RemoteSigningSettings,
   type SigningPolicy,
@@ -953,26 +954,25 @@ export class WalletManager {
 
   /**
    * The deviceId to route a SIGN_REQUEST to (the `to` field), or null to broadcast.
-   * Conservative: returns a target only when there is EXACTLY ONE trusted,
-   * signing-capable device currently ONLINE — so pre-APNs it is never worse than
-   * broadcast (we never target an offline device that would silently drop). With
-   * >1 online trusted signer we broadcast (a device picker is a later refinement);
-   * with 0 we broadcast (nothing to target). Once APNs lands this can extend to a
-   * trusted-but-offline target plus a wake.
+   * Resolves from the PERSISTED trusted-device list (not the live DEVICES snapshot),
+   * returning the single signing-capable pinned device whether it is online OR
+   * offline. Targeting the offline case is what lets the relay APNs-wake a locked
+   * phone (a broadcast never triggers the wake, which is gated on a `to`); an offline
+   * target with no push token just times out fail-closed, never misdelivers. With >1
+   * pinned signer we broadcast (a device picker is a later refinement); with 0 there
+   * is nothing to target.
    *
-   * "ONLINE" = present in the DEVICES registry (getCrossDeviceDevices reads the
-   * relay-pushed snapshot). This repo does no independent liveness check; it relies
-   * on gero-sync keeping the snapshot to currently-connected devices via owner-aware
-   * eviction on disconnect (evictDeviceIfRegistered). A brief close-race window can
-   * momentarily list a just-dropped device — acceptable here because a stale target
-   * only falls back to a dropped SIGN_REQUEST (the requester ttl then rejects), never
-   * a misdelivery; the APNs offline path (durable store, NOT this snapshot) is what
-   * makes offline targeting reliable later.
+   * Resolving from the pinned list (vs the live snapshot) also fixes a latent bug:
+   * stale-duplicate relay sessions inflated the online signer count past 1, so the
+   * old live-snapshot logic returned null (broadcast) even when the phone was the
+   * only real signer — which is why the first locked-phone wake test broadcast
+   * instead of targeting. The pinned list holds one entry per deviceId regardless of
+   * how many sockets the relay reports. The pinned deviceId MUST equal the id iOS
+   * uses in DEVICE_REGISTER (the relay PushTargetStore key) for the wake lookup to
+   * hit — see the cross-repo key contract (commit f5cae184).
    */
   getDefaultCrossDeviceTarget(): string | null {
-    const signers = this.getCrossDeviceDevices()
-      .filter((e) => e.trusted && !e.isSelf && e.device.hasSigningKey);
-    return signers.length === 1 ? signers[0].device.deviceId : null;
+    return soleSignerDeviceId(this.remoteSigning);
   }
 
   // ---- Remote-signing settings API (backing the Security settings UI) -------
@@ -1052,7 +1052,16 @@ export class WalletManager {
     }
     this.remoteSigning = trustAddDevice(
       this.remoteSigning,
-      { deviceId: found.deviceId, pubKey: found.pubKey, label: found.label, platform: found.platform, verified: proofVerified },
+      {
+        deviceId: found.deviceId,
+        pubKey: found.pubKey,
+        label: found.label,
+        platform: found.platform,
+        verified: proofVerified,
+        // Persist signing-capability so the Send gate + offline to-targeting can
+        // recognise this device as a signer without it being online.
+        hasSigningKey: found.hasSigningKey,
+      },
       Math.floor(Date.now() / 1000),
     );
     await this.persistRemoteSigning();
