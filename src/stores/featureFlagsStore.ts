@@ -12,8 +12,9 @@ export interface FeatureFlags {
   isNexusUnstakeEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
-  // Phase-2 gate for routing Bitcoin sync through gero-sync (dual-run with the
-  // Esplora poller). Dark by default; see walletManager.isBitcoinGeroSyncEnabled.
+  // Routes Bitcoin sync through gero-sync (WS push). Default ON as of the Phase-5
+  // cutover; acts as a remote KILL-SWITCH — set false to fall back to the Esplora
+  // poller if the WS path misbehaves in prod. See walletManager.isBitcoinGeroSyncEnabled.
   isBitcoinGeroSyncEnabled: boolean;
 }
 
@@ -35,7 +36,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isNexusUnstakeEnabled: false,
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
-    isBitcoinGeroSyncEnabled: false,
+    isBitcoinGeroSyncEnabled: true, // Phase-5 cutover: WS default; kill-switch to false = poller
   },
   isInitialized: false,
   isLoading: false,
@@ -94,7 +95,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
-    featureFlagsState.flags.isBitcoinGeroSyncEnabled = featureFlagService.getFlag('isBitcoinGeroSyncEnabled', false);
+    featureFlagsState.flags.isBitcoinGeroSyncEnabled = featureFlagService.getFlag('isBitcoinGeroSyncEnabled', true);
     persistFlagsForBackground();
   },
 
