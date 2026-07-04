@@ -217,7 +217,7 @@
           <NoTokensCard v-else></NoTokensCard>
         </v-col>
         <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
-          <SwapWidget class="fill-height" />
+          <GeroSwapEmbed class="fill-height" context="page" />
         </v-col>
       </v-row>
 
@@ -260,7 +260,7 @@ import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import { useDelegation } from '@/shared/composables/useDelegation';
 import assets from '@/utils/assets';
-import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
+import GeroSwapEmbed from '@/modules/swap/components/GeroSwapEmbed.vue';
 import networks from '@/utils/networks';
 import { getBalance } from '@/chrome/serialization';
 import { debugLog } from '@/utils/debug';
