@@ -344,17 +344,21 @@ function buildTokenCatalog(): CatalogToken[] {
     });
 
   // Single canonical ADA/lovelace entry, always added (any registry duplicate was
-  // already filtered out above), carrying the actual held balance.
+  // already filtered out above), carrying the actual held balance + market price/change.
+  // market-data keys the native token by 'lovelace' (see useMarketData nativeToken),
+  // so getTokenByUnit('lovelace') gives ADA's USD price + 24h change for the dialog.
+  const adaMkt = getTokenByUnit('lovelace');
   catalog.push({
     unit: 'lovelace',
     decimals: 6,
     ticker: 'ADA',
+    name: 'Cardano', // dialog name line — show "Cardano", not the raw "lovelace" unit
     verified: true,
-    // Deliberately NO `img` here (not even chainLogo). `getTokenImage({unit:'lovelace'})`
-    // resolves to `networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)`,
-    // which can be transiently empty before the wallet's chain/network is set, causing the
-    // ADA icon to flicker/disappear. Omitting `img` entirely defers to the widget's own
-    // self-contained ADA icon (a bundled data-URI, always present regardless of host state).
+    price: adaMkt?.price,
+    priceAda: 1,
+    change24h: adaMkt?.change24h,
+    // Deliberately NO `img` here — the widget seeds ADA's own bundled data-URI icon
+    // (self-contained, no flicker), used in both the token trigger and the dialog.
     balance: heldBalances.get('lovelace'),
   });
 
