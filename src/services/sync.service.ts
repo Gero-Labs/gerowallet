@@ -366,11 +366,11 @@ export class SyncService {
    * Apply a gero-sync Bitcoin WS payload to the wallet stores (Phase 3).
    *
    * BTC analog of {@link setSync} — a SEPARATE method so the Cardano path stays
-   * byte-identical. Runs ONLY for BTC wallets (guarded) and is wired from the
-   * flag-gated (`isBitcoinGeroSyncEnabled`, default OFF) BTC onSync handler in
-   * walletManager, so it is inert in production. When on, it runs alongside the
-   * Esplora poller (dual-run) and produces the SAME internal shapes the poller
-   * feeds `WalletStore`, so the UI renders WS-fed data identically:
+   * byte-identical. Runs ONLY for BTC wallets (guarded) and is wired from the BTC
+   * onSync handler in walletManager. Post Phase-5 cutover this is the DEFAULT BTC
+   * sync path (kill-switch `isBitcoinGeroSyncEnabled`=false falls back to the
+   * poller). Produces the SAME internal shapes the poller feeds `WalletStore`, so
+   * the UI renders WS-fed data identically:
    *   - transactions → convertBtcTransactions + mergeBtcTransactions → setTransactions
    *   - utxos        → convertBtcUtxos → setUtxos (recomputes bitcoinBalance, poller path)
    *   - tip          → NetworkStore.setTip({ chain:'BITCOIN', height, hash, time })
@@ -429,6 +429,17 @@ export class SyncService {
         time: payload.block.time ? payload.block.time * 1000 : 0,
       };
       NetworkStore.setTip(tip);
+
+      // Persist the height checkpoint so reconnects resume from here and rollbacks
+      // can rewind it. Post Phase-5 cutover the Esplora poller no longer runs when
+      // WS is on, so the WS apply owns this write. Only advance (never regress) —
+      // a rollback lowers it via handleBitcoinRollback, not here.
+      const syncInfo = await this.walletBg.getLastSyncInfo();
+      const currentHeight = syncInfo && typeof syncInfo.height === 'number' ? syncInfo.height : 0;
+      if (payload.block.height > currentHeight) {
+        const db = await this.walletBg.getDb();
+        await db.table('sync').put({ ...(syncInfo || {}), id: 1, height: payload.block.height, hash: tip.hash });
+      }
     }
 
     debugLog('🔶 [BTC gero-sync] applyBitcoinSync applied', {

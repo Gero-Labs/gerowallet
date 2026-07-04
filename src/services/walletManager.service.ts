@@ -306,18 +306,25 @@ export class WalletManager {
 
     LoadingState.setText('Loading blockchain data...');
 
+    // Phase-5 cutover: BTC syncs via gero-sync WS by default. The Esplora poller is
+    // the kill-switch fallback (flag explicitly false). Resolve once and reuse for
+    // init seeding, the WS connect, and the periodic-sync guard below.
+    const btcWsEnabled =
+      walletBg.chain === Blockchain.BITCOIN && (await this.isBitcoinGeroSyncEnabled());
+
     // Chain-specific initialization
     if (walletBg.chain === Blockchain.BITCOIN) {
       // Bitcoin wallet initialization
-      debugLog('🔶 Initializing Bitcoin wallet');
+      debugLog(`🔶 Initializing Bitcoin wallet (gero-sync WS: ${btcWsEnabled ? 'on' : 'off — poller fallback'})`);
       LoadingState.setText('Loading Bitcoin wallet...');
 
-      // Fetch Bitcoin UTXOs and update store
-      await walletBg.syncBitcoinWallet();
-
-      // Fetch Bitcoin transaction history
-      LoadingState.setText('Loading Bitcoin transactions...');
-      await walletBg.syncBitcoinTransactions();
+      if (!btcWsEnabled) {
+        // Fallback only: seed the store from the Esplora poller. When WS is enabled
+        // (default) the gero-sync catch-up loads UTxOs/txs after connect() below.
+        await walletBg.syncBitcoinWallet();
+        LoadingState.setText('Loading Bitcoin transactions...');
+        await walletBg.syncBitcoinTransactions();
+      }
 
       // Load wallet-specific data
       promises.push(
@@ -456,16 +463,13 @@ export class WalletManager {
           debugLog('Force resync complete');
         },
       }, credentials);
-    } else if (await this.isBitcoinGeroSyncEnabled()) {
-      // ── Bitcoin via gero-sync (Phase 2, dual-run behind a flag) ──────────────
-      // INERT BY DEFAULT: isBitcoinGeroSyncEnabled() reads the flag from
-      // chrome.storage.local and returns false unless explicitly turned on, so
-      // production BTC users are unaffected and keep the Esplora poller below.
-      // When on, this connects the SAME WS state machine Cardano uses, subscribing
-      // with the derived address set instead of a stake address. The poller is NOT
-      // removed yet (that is the Phase 5 cutover) — this runs alongside it so the
-      // two paths can be compared. setSync apply logic is Phase 3, so the handlers
-      // here only log (no store writes, cannot crash).
+    } else if (btcWsEnabled) {
+      // ── Bitcoin via gero-sync (Phase 5: default path) ────────────────────────
+      // BTC rides the SAME WS state machine Cardano uses, subscribing with the
+      // derived address set instead of a stake address. Catch-up loads UTxOs/txs
+      // (applyBitcoinSync), reorgs are handled by handleBitcoinRollback, and the
+      // Esplora poller does NOT run in this mode. Flip the kill-switch
+      // (isBitcoinGeroSyncEnabled=false) to fall back to the poller.
       const btcAddressSet = walletBg.deriveBitcoinAddressSet();
       let btcLastSyncedHeight = 0;
       try {
@@ -526,7 +530,9 @@ export class WalletManager {
         btcAddressSet.addresses
       );
     } else {
-      debugLog('Skipping WebSocket connection for Bitcoin wallet');
+      // BTC with the kill-switch off: no WS, the Esplora poller (seeded above +
+      // periodic sync below) is the sync source.
+      debugLog('🔶 [BTC] gero-sync kill-switch off — using Esplora poller');
     }
 
     // Wait for all initialization promises to complete
@@ -535,9 +541,10 @@ export class WalletManager {
 
     LoadingState.setText('Wallet initialization complete');
 
-    // Start periodic sync for Bitcoin wallets
-    if (walletBg.chain === Blockchain.BITCOIN) {
-      debugLog('🔄 Starting Bitcoin periodic sync...');
+    // Start the Esplora periodic poll ONLY in kill-switch mode. With WS enabled
+    // (default) gero-sync pushes updates, so the poller stays off.
+    if (walletBg.chain === Blockchain.BITCOIN && !btcWsEnabled) {
+      debugLog('🔄 Starting Bitcoin periodic sync (poller fallback)...');
       walletBg.startBitcoinPeriodicSync();
     }
 
@@ -1209,23 +1216,24 @@ export class WalletManager {
 
   /**
    * Read isBitcoinGeroSyncEnabled from chrome.storage.local (same mirror path as
-   * isCrossDeviceSigningEnabled). Gates the Phase-2 BTC → gero-sync WS dual-run.
-   * Defaults to false (feature dark) if storage is empty or unreadable, so BTC
-   * wallets keep the existing Esplora poller and nothing changes in production.
+   * isCrossDeviceSigningEnabled). Phase-5 cutover: BTC uses the gero-sync WS path
+   * by DEFAULT — this returns true unless the flag is explicitly set to false
+   * (the remote kill-switch that falls back to the Esplora poller). Also returns
+   * true when storage is empty/unreadable, so a fresh wallet uses WS immediately.
    */
   private async isBitcoinGeroSyncEnabled(): Promise<boolean> {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage?.local) {
-        return false;
+        return true;
       }
       const flags = await new Promise<Record<string, unknown>>((resolve) => {
         chrome.storage.local.get('featureFlags', (result) => {
           resolve((result?.['featureFlags'] as Record<string, unknown>) ?? {});
         });
       });
-      return flags['isBitcoinGeroSyncEnabled'] === true;
+      return flags['isBitcoinGeroSyncEnabled'] !== false; // default ON; only explicit false = poller
     } catch {
-      return false;
+      return true;
     }
   }
 
