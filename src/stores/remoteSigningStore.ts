@@ -3,10 +3,15 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import {
   defaultRemoteSigningSettings,
+  hasPairedSigner,
   type RemoteSigningSettings,
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
+import type { PairingQrPayload } from '@/services/crossDevice/pairingQr';
+
+/** A device paired via QR scan (background-consumed on read). */
+export interface PairedResult { deviceId: string; label: string; at: number }
 
 /**
  * UI-side mirror of the per-wallet remote-signing settings that live in the
@@ -36,6 +41,8 @@ const state = Vue.observable<RemoteSigningState>({
 
 interface SettingsReply { success: boolean; settings?: RemoteSigningSettings; error?: string }
 interface DevicesReply { success: boolean; devices?: CrossDeviceListEntry[]; error?: string }
+interface PairingQrReply { success: boolean; payload?: PairingQrPayload; error?: string }
+interface PairingStatusReply { success: boolean; paired?: PairedResult | null }
 
 async function send<T>(method: MessageTypes, data?: Record<string, unknown>): Promise<T> {
   const res = (await Messaging.sendToBackgroundFromOptions({ method, data })) as { data: T };
@@ -113,6 +120,25 @@ export const remoteSigningStore = {
     state.devices = d.success && d.devices ? d.devices : [];
   },
 
+  /**
+   * Mint the QR payload the phone scans (identity + wallet-control proof + a fresh
+   * single-use nonce). Returns null when the wallet can't be paired (no cached proof
+   * yet / no stake) so the dialog can prompt to re-enable.
+   */
+  async getPairingQr(): Promise<PairingQrPayload | null> {
+    // `send` can resolve to undefined on a messaging failure (e.g. an MV3 worker
+    // recycle mid-round-trip), so guard with optional chaining rather than throw —
+    // the caller maps null to the dialog's error state.
+    const r = await send<PairingQrReply | undefined>(MessageTypes.GET_PAIRING_QR);
+    return r?.success && r.payload ? r.payload : null;
+  },
+
+  /** The last device paired via QR scan (background clears it on read). */
+  async getPairingStatus(): Promise<PairedResult | null> {
+    const r = await send<PairingStatusReply | undefined>(MessageTypes.GET_PAIRING_STATUS);
+    return r?.success && r.paired ? r.paired : null;
+  },
+
   // ---- getters -------------------------------------------------------------
 
   isEnabled(): boolean {
@@ -121,9 +147,17 @@ export const remoteSigningStore = {
   policy(): SigningPolicy {
     return state.settings.policy;
   },
-  /** A trusted, signing-capable sibling is ONLINE now -> remote signing can complete right now. */
+  /**
+   * A signing-capable device is PAIRED (persistent), online or not. Gates the "sign
+   * on another device" button. Keyed on PAIRING, not live presence: keying it to the
+   * live DEVICES snapshot hid the button whenever the phone was locked — the exact
+   * moment the APNs wake exists for (a locked phone is evicted from the snapshot). The
+   * flow stays fail-closed at approval time: an offline device cannot return a
+   * verified SIGN_RESPONSE, so offering the button while paired-but-offline is safe.
+   * (Previously required an ONLINE signer; widened to paired when APNs wake landed.)
+   */
   hasTrustedSigner(): boolean {
-    return state.devices.some((e) => e.trusted && !e.isSelf && e.device.hasSigningKey);
+    return hasPairedSigner(state.settings);
   },
   /**
    * A device is PAIRED (persistent), regardless of whether it is online right now.
