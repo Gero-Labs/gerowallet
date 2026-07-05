@@ -45,6 +45,10 @@ export interface CrossDeviceDeps {
   // yet), then handed off for the wallet-control-proof check + pin. Absent => QR
   // pairing inbound is ignored (dark default).
   onPairConfirm?: (frame: PairConfirm) => void;
+  // Optional diagnostic sink (injected debugLog in prod, absent in tests). The wake
+  // path is otherwise silent, which is exactly what hid the WAKE_PENDING allow-list
+  // bug — a mismatched relay frame or a stuck poll leaves no breadcrumb without this.
+  log?: (msg: string) => void;
   // Wake tuning (defaults below). Injected mainly so tests can run the poll fast.
   wakePollMs?: number;
   wakeWindowMs?: number;
@@ -95,6 +99,7 @@ const MAX_WAKE_REISSUES = 3;
 export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSigning {
   const { transport, identity, resolvePubKey, now, newId } = deps;
   const onPairConfirm = deps.onPairConfirm;
+  const log = deps.log ?? (() => { /* no-op sink */ });
   const isRequesterTrusted = deps.isRequesterTrusted ?? (() => true);
   const isResponderTrusted = deps.isResponderTrusted ?? (() => true);
   const wakePollMs = deps.wakePollMs ?? WAKE_POLL_MS;
@@ -149,6 +154,11 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
     // WAKE_PENDING is not a signed CrossDeviceMessage.
     if (raw && typeof raw === 'object' && (raw as { type?: unknown }).type === 'WAKE_PENDING') {
       const reqId = (raw as { reqId?: unknown }).reqId;
+      const matched = typeof reqId === 'string' && waiting.has(reqId);
+      // Observability: a WAKE_PENDING whose reqId doesn't match a pending request
+      // (relay shape mismatch, or arrived after ttl) is otherwise a silent no-op —
+      // the desktop would just sit on its ttl and reject 'expired' with no breadcrumb.
+      log(`WAKE_PENDING reqId=${String(reqId)} matched=${matched} awaiting=[${[...waiting.keys()].join(',')}]`);
       if (typeof reqId === 'string') waiting.get(reqId)?.onWake?.();
       return;
     }
@@ -322,7 +332,11 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
           if (e.timer) clearTimeout(e.timer);
           waiting.set(currentReqId, { ...e, timer: null });
         }
-        wakeTimer = setTimeout(() => finish({ decision: 'rejected', reason: 'wake_timeout' }), wakeWindowMs);
+        log(`onWake: target ${to} offline; ttl paused, polling for reconnect (window ${wakeWindowMs}ms)`);
+        wakeTimer = setTimeout(() => {
+          log(`wake_timeout: ${to} did not reconnect within ${wakeWindowMs}ms`);
+          finish({ decision: 'rejected', reason: 'wake_timeout' });
+        }, wakeWindowMs);
         const check = async (): Promise<void> => {
           if (done || checking) return; // in-flight guard: no overlapping re-issue
           checking = true;
@@ -330,8 +344,9 @@ export function createCrossDeviceSigning(deps: CrossDeviceDeps): CrossDeviceSign
             const pk = await resolvePubKey(to);
             if (pk && !done) {
               stopWake();
-              if (reissues >= MAX_WAKE_REISSUES) { finish({ decision: 'rejected', reason: 'wake_exhausted' }); return; }
+              if (reissues >= MAX_WAKE_REISSUES) { log(`wake_exhausted: ${to} (${reissues} re-issues)`); finish({ decision: 'rejected', reason: 'wake_exhausted' }); return; }
               reissues += 1;
+              log(`target ${to} back online; re-issuing SIGN_REQUEST (${reissues}/${MAX_WAKE_REISSUES})`);
               void issue();
             }
           } finally {
