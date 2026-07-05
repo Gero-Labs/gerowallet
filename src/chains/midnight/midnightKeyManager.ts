@@ -29,6 +29,9 @@ import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import {
   DustAddress,
   MidnightBech32m,
+  ShieldedAddress,
+  ShieldedCoinPublicKey,
+  ShieldedEncryptionPublicKey,
   ShieldedEncryptionSecretKey,
 } from '@midnightntwrk/wallet-sdk-address-format';
 import { bech32, bech32m } from 'bech32';
@@ -268,6 +271,22 @@ export async function deriveMidnightKeys(
   const zswapViewingKey = ShieldedEncryptionSecretKey.codec
     .encode(networkId, zswapEsk)
     .toString();
+
+  // Shielded receive address (mn_shield-addr_<network>1…): the bech32m encoding
+  // of the Zswap coin public key + encryption public key. Construction mirrors
+  // the SDK's own `wallet-sdk-shielded/Keys.js` (ShieldedAddress from the two
+  // hex public keys). Unlike the viewing key this is PUBLIC — safe to display
+  // and share; it's what a sender needs to route a shielded note to us.
+  const shieldedCoinPublicKey = new ShieldedCoinPublicKey(
+    Buffer.from(zswapKeys.coinPublicKey, 'hex'),
+  );
+  const shieldedEncryptionPublicKey = new ShieldedEncryptionPublicKey(
+    Buffer.from(zswapKeys.encryptionPublicKey, 'hex'),
+  );
+  const shieldedAddress = ShieldedAddress.codec
+    .encode(networkId, new ShieldedAddress(shieldedCoinPublicKey, shieldedEncryptionPublicKey))
+    .toString();
+
   zswapKeys.clear();
 
   // Wipe HD private material once the addresses are derived.
@@ -281,14 +300,9 @@ export async function deriveMidnightKeys(
     ? { cardanoXpub: '', cardanoBaseAddress: '', cardanoStakeAddress: '', cardanoPaymentKeyHashHex: '' }
     : await deriveCardanoMaterial(mnemonic, network, account);
 
-  // Shielded address (mn_shield-addr_…) requires the bech32m encoding of the
-  // combined coin+encryption public keys. Deferred to a follow-up: today the
-  // dashboard still doesn't render a shielded balance, so the bech32 form
-  // isn't load-bearing. The viewing key is what unlocks gero-sync shielded
-  // subscription, and that's what we ship here.
   const addresses: MidnightAddresses = {
     unshielded: unshieldedAddress,
-    shielded: '',
+    shielded: shieldedAddress,
     dust: dustAddress,
     publicKeyHex,
     addressHex,
