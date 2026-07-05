@@ -12,7 +12,7 @@
  *   shape, matching what the indexer and Lace's `getDustTankStatus` use.
  *
  * Three address types (shielded / unshielded / dust), each derived from a different
- * HD role: Zswap (3), NightExternal (0), Dust (4). Path: `m/44'/2400'/account'/role/index`.
+ * HD role: Zswap (3), NightExternal (0), Dust (2). (Role 4 is Metadata in wallet-sdk-hd 3.x.) Path: `m/44'/2400'/account'/role/index`.
  */
 
 /**

@@ -387,22 +387,10 @@ export class MidnightApi {
     }
   }
 
-  /**
-   * Submit a signed Midnight (Substrate) transaction.
-   * Backed by Nexus's substrate-RPC proxy → `author_submitExtrinsic`.
-   */
-  async submitTransaction(signedTxHex: string): Promise<{ txHash: string }> {
-    try {
-      const url = nexusMidnightPathFor(this.network, 'transactions/submit');
-      const { data, status } = await this.axiosInstance.post<{ txHash: string }>(url, {
-        signedTx: signedTxHex,
-      });
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
+  // NOTE: an older `submitTransaction()` targeting a Nexus `transactions/submit`
+  // substrate-RPC proxy was removed — that endpoint does not exist on Nexus
+  // (submission goes through `tx/submit` → sidecar finalize, see
+  // `submitMidnightTx()`).
 
   // ---------------------------------------------------------------- DUST
 
