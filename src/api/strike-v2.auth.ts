@@ -5,11 +5,12 @@
 // Reference: Strike API Wallet Authentication TypeScript Example
 
 import * as ed25519 from '@noble/ed25519';
-import { sha512, sha256 } from '@noble/hashes/sha2.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import type { StrikeAuthHeaders } from './strike-v2.types';
 
-// Required for @noble/ed25519 — set sha512 sync implementation
-ed25519.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed25519.etc.concatBytes(...m));
+// NOTE: signing uses ed25519.signAsync (below), which hashes with async SHA-512
+// internally — so no ed.etc.sha512Sync shim is required. Matches the Strike
+// builder reference (strike-finance-skills) signing scheme.
 
 // ---------------------------------------------------------------------------
 // Hex utilities
@@ -59,7 +60,7 @@ export async function buildStrikeAuthHeaders(
 
   // Body hash: sha256 of body string (always computed, even for empty string)
   const bodyStr = body || '';
-  const bodyHash = bytesToHex(sha256(bodyStr));
+  const bodyHash = bytesToHex(sha256(new TextEncoder().encode(bodyStr)));
 
   // Canonical message per Strike v2 spec
   const message = `${method.toUpperCase()}:${path}:${timestamp}:${nonce}:${bodyHash}`;

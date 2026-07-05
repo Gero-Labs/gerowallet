@@ -92,6 +92,9 @@ export function useOrderBook(selectedSymbol: Ref<string>) {
   let unsubDepth: (() => void) | null = null;
   let unsubTrades: (() => void) | null = null;
   let unsubMarkPrice: (() => void) | null = null;
+  // Bumped on every (re)subscribe so a stale snapshot/WS callback from a previous
+  // symbol can't clobber the current book.
+  let depthGen = 0;
 
   function subscribeSymbolWs(symbol: string) {
     // Clean up previous
@@ -102,19 +105,61 @@ export function useOrderBook(selectedSymbol: Ref<string>) {
     obBids.value = [];
     recentTrades.value = [];
 
-    // WS depth — per Integrator Guide Section 5.2: each depthUpdate is a full-book snapshot
-    // Clear and rebuild on every event
+    // WS depth is a Binance-style DIFF stream: each `depthUpdate` carries only the
+    // levels that CHANGED, and qty "0" means REMOVE that level. We maintain a local
+    // book and apply deltas on top of a REST snapshot — replacing the whole book per
+    // event (the old behaviour) collapses it to just the few changed levels each tick,
+    // which is the blank/flicker bug. Protocol (strike-orderbook skill): subscribe →
+    // buffer → fetch snapshot (record lastUpdateId) → replay buffered where
+    // u > lastUpdateId → apply live. `u` continuity is NOT guaranteed, so gate on `u`.
+    type DepthEvent = { a?: [string, string][]; b?: [string, string][]; u?: number };
+    const gen = ++depthGen;
+    const bookAsks = new Map<string, string>(); // price -> size
+    const bookBids = new Map<string, string>();
+    let buffer: DepthEvent[] = [];
+    let synced = false;
+    let lastUpdateId = 0;
+
+    const applyDelta = (ev: DepthEvent): void => {
+      if (ev.a) for (const [p, q] of ev.a) { if (parseFloat(q) === 0) bookAsks.delete(p); else bookAsks.set(p, q); }
+      if (ev.b) for (const [p, q] of ev.b) { if (parseFloat(q) === 0) bookBids.delete(p); else bookBids.set(p, q); }
+      if (typeof ev.u === 'number') lastUpdateId = ev.u;
+    };
+    const publish = (): void => {
+      // best ask = lowest price first; best bid = highest price first
+      obAsks.value = Array.from(bookAsks.entries()).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+      obBids.value = Array.from(bookBids.entries()).sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]));
+    };
+
     unsubDepth = subscribeDepth(symbol, (data: unknown) => {
-      const raw = data as { a?: [string, string][]; b?: [string, string][] };
-      if (raw.a) obAsks.value = raw.a;
-      if (raw.b) obBids.value = raw.b;
+      if (gen !== depthGen) return; // superseded by a newer symbol subscription
+      const ev = data as DepthEvent;
+      if (!synced) { buffer.push(ev); return; } // not synced yet — buffer until snapshot lands
+      if (typeof ev.u === 'number' && ev.u <= lastUpdateId) return; // stale/duplicate
+      applyDelta(ev);
+      publish();
     });
 
-    // Also fetch initial REST snapshot for immediate display
+    // REST snapshot seeds the book, then we replay buffered deltas newer than it.
     strikeMarketApi.getOrderBook(symbol, 100).then((snap) => {
-      if (obAsks.value.length === 0) obAsks.value = snap.asks ?? [];
-      if (obBids.value.length === 0) obBids.value = snap.bids ?? [];
-    }).catch(() => {});
+      if (gen !== depthGen) return; // symbol changed while fetching
+      bookAsks.clear();
+      bookBids.clear();
+      for (const [p, q] of (snap.asks ?? [])) if (parseFloat(q) !== 0) bookAsks.set(p, q);
+      for (const [p, q] of (snap.bids ?? [])) if (parseFloat(q) !== 0) bookBids.set(p, q);
+      lastUpdateId = snap.lastUpdateId ?? 0;
+      for (const ev of buffer) { if (typeof ev.u === 'number' && ev.u <= lastUpdateId) continue; applyDelta(ev); }
+      buffer = [];
+      synced = true;
+      publish();
+    }).catch(() => {
+      if (gen !== depthGen) return;
+      // Snapshot unavailable — apply what we buffered and go live (best effort).
+      for (const ev of buffer) applyDelta(ev);
+      buffer = [];
+      synced = true;
+      publish();
+    });
 
     // Fetch initial recent trades
     strikeMarketApi.getRecentTrades(symbol, 50).then((trades) => {

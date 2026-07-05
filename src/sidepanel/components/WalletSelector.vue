@@ -54,7 +54,7 @@
     <!-- Add wallet -->
     <div class="add-wallet-section">
       <button class="add-wallet-btn" @click="openSetup">
-        <v-icon size="20" color="#00c7f3">mdi-plus-circle-outline</v-icon>
+        <v-icon size="20" :color="primaryColor">mdi-plus-circle-outline</v-icon>
         <span>{{ $t('miniGero.enterSetup') }}</span>
       </button>
     </div>
@@ -69,6 +69,10 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
+import { useChainContext } from '../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const geroLogo = assets.geroLogo;
 
@@ -208,8 +212,8 @@ defineEmits<{
   align-items: center;
   gap: 10px;
   padding: 12px;
-  background: rgba(0, 199, 243, 0.06);
-  border: 1px solid rgba(0, 199, 243, 0.15);
+  background: color-mix(in srgb, var(--chain-primary) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 15%, transparent);
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s;
@@ -223,6 +227,6 @@ defineEmits<{
 }
 
 .add-wallet-btn:hover {
-  background: rgba(0, 199, 243, 0.12);
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
 }
 </style>

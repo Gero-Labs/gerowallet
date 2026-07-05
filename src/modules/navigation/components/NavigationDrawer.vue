@@ -32,7 +32,7 @@
     <!-- Navigation items -->
     <v-list nav dense>
       <template v-for="(item, index) in items" >
-        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 800; height: 18px;" :key="index">
+        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px;" :key="index">
           {{ item.header }}
         </v-subheader>
 
@@ -63,7 +63,7 @@
           </v-list-item-avatar>
 
           <v-list-item-content>
-            <v-list-item-title style="font-weight: 800">
+            <v-list-item-title style="font-weight: 500">
               {{ item.title }}
             </v-list-item-title>
           </v-list-item-content>
@@ -122,7 +122,7 @@
           </v-list-item-avatar>
 
           <v-list-item-content>
-            <v-list-item-title style="font-weight: 800">
+            <v-list-item-title style="font-weight: 500">
               {{ item.title }}
               <v-chip
                 v-if="item.soon"
@@ -326,6 +326,7 @@ const items = computed((): NavigationItemUnion[] => {
       enabled: true,
       underMaintenance: !isBlogEnabledByFeatureFlag.value,
     },
+    { title: t('navigation.copilotFeed'), icon: 'mdi-bell-outline', link: '/copilot-feed', enabled: featureFlagsStore.isCopilotEnabled() },
     { header: t('navigation.financialHub'), enabled: true },
     { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
@@ -337,7 +338,6 @@ const items = computed((): NavigationItemUnion[] => {
       icon: assts.cardIcon,
       link: '/card',
       enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
-      new: true,
       underMaintenance: !isGeroCardEnabledByFeatureFlag.value,
       loading: loadingFFs.value
     },
@@ -606,6 +606,7 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 .menuItem {
   border: 1px solid transparent;
+  border-radius: 8px;
 }
 
 .menuItem ::v-deep .v-list-item__avatar {
@@ -621,38 +622,13 @@ onUnmounted(() => {
 }
 
 
-.activePage {
-  background: linear-gradient(45deg, #00c7f3, #00ffd1);
-
-  .v-icon { color: white !important; }
-  .v-image { filter: brightness(0) invert(1) !important; }
-}
-
-.activePage.apex {
-  background: linear-gradient(45deg, #F8A282, #FECB82);
-
-  .v-icon { color: white !important; }
-  .v-image { filter: brightness(0) invert(1) !important; }
-}
-
-.activePage.bitcoin {
-  background: linear-gradient(45deg, #F7931A, #F59E0B);
-
-  .v-icon { color: white !important; }
-  .v-image { filter: brightness(0) invert(1) !important; }
-}
-
+/* Active nav item — clean tinted highlight (modern, no gradient) */
+.activePage,
 .activePageDark {
-  color: #FFFFFF;
-  background: #0C0E12;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: {
-    image: linear-gradient(to right, #0C0E12, #0C0E12),
-    linear-gradient(to right, #0C0E12 8%, #00D1FF);
-    clip: padding-box, border-box;
-    origin: padding-box, border-box;
-  }
+  color: #00D1FF;
+  background: rgba(0, 209, 255, 0.12);
+  border: 1px solid rgba(0, 209, 255, 0.28);
+  border-radius: 8px;
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
@@ -663,17 +639,11 @@ onUnmounted(() => {
   }
 }
 
+.activePage.apex,
 .activePageDark.apex {
-  color: #FFFFFF;
-  background: #0C0E12;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: {
-    image: linear-gradient(to right, #0C0E12, #0C0E12),
-    linear-gradient(to right, #0C0E12 8%, #F8A282);
-    clip: padding-box, border-box;
-    origin: padding-box, border-box;
-  }
+  color: #F8A282;
+  background: rgba(248, 162, 130, 0.12);
+  border-color: rgba(248, 162, 130, 0.28);
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(92%) sepia(45%) saturate(5319%) hue-rotate(301deg) brightness(100%) contrast(95%) !important;
@@ -684,17 +654,11 @@ onUnmounted(() => {
   }
 }
 
+.activePage.bitcoin,
 .activePageDark.bitcoin {
-  color: #FFFFFF;
-  background: #0C0E12;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: {
-    image: linear-gradient(to right, #0C0E12, #0C0E12),
-    linear-gradient(to right, #0C0E12 8%, #F7931A);
-    clip: padding-box, border-box;
-    origin: padding-box, border-box;
-  }
+  color: #F7931A;
+  background: rgba(247, 147, 26, 0.12);
+  border-color: rgba(247, 147, 26, 0.28);
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(63%) sepia(88%) saturate(2100%) hue-rotate(8deg) brightness(104%) contrast(103%) !important;
@@ -725,21 +689,24 @@ onUnmounted(() => {
 
 .menuItem.v-list-item--link {
   &:before {
-    background: #0C0E12;
-    border: 1px solid transparent;
+    background: transparent;
+    border-radius: 8px;
   }
 
-  &:not(.activePageDark):hover {
-    background: #0C0E12;
-    border: 1px solid transparent;
+  &:not(.activePage):not(.activePageDark):hover {
+    background: rgba(255, 255, 255, 0.05);
   }
 }
 
 .v-subheader {
   font-size: 10px;
-  text-align: center;
-  line-height: 10px;
+  text-align: left;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+  line-height: 12px;
   width: 100%;
+  padding-left: 12px;
   position: relative;
   z-index: 1;
 }

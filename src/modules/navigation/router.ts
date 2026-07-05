@@ -127,6 +127,15 @@ const routes = [
     },
   },
   {
+    path: '/copilot-feed',
+    name: 'copilotFeed',
+    component: () => import('@/sidepanel/pages/FeedPage.vue'),
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/dev-tools',
     name: 'devTools',
     component: DevTools,
@@ -324,6 +333,10 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
       // Pool Operator dashboard gated by feature flag
       return !featureFlagsStore.isPoolOperatorEnabled();
 
+    case 'copilotFeed':
+      // Gero Copilot feed gated by the master feature flag (ships dark)
+      return !featureFlagsStore.isCopilotEnabled();
+
     case 'multisig':
       // MultiSig is currently under maintenance (route is commented out)
       return true;
@@ -387,6 +400,23 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       market: (c, n) => networks.resolveSwapSupport(c, n),
       transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
       card: (c, n) => networks.resolveGeroCardSupport(c, n),
+      // Bitcoin-dependent routes — all return false after the chain-registry
+      // master gate (networks.ts) removes the Bitcoin entries. Closes the
+      // direct-URL gap so #/thorchain etc. redirect to '/'.
+      gomining: (c, n) => networks.resolveGoMiningSupport(c, n),
+      babylon: (c, n) => networks.resolveBabylonSupport(c, n),
+      ordinals: (c, n) => networks.resolveOrdinalsSupport(c, n),
+      thorchain: (c, n) => networks.resolveThorchainSupport(c, n),
+      mempool: (c, n) => networks.resolveMempoolSupport(c, n),
+      lightning: (c, n) => networks.resolveLightningSupport(c, n),
+      // Pool Operator — hard-gated off for 2.7. Unconditional guard closes the
+      // cold-refresh window before feature flags initialize (maintenance check
+      // at the bottom only fires once flags are initialized).
+      poolOperator: () => false,
+      // Copilot feed — closes the cold-refresh window before flags init. Returns
+      // the live flag (not a hard false) so the maintenance case can turn it ON
+      // once gero-sync enables it. Falsy => redirect to '/'.
+      copilotFeed: () => featureFlagsStore.isCopilotEnabled(),
     };
     const guard = routeNetworkGuards[to.name];
     if (guard && !guard(chain, network)) {

@@ -10,12 +10,12 @@
  * devices can hold the same {@code utxoRef} simultaneously. Collateral inputs are
  * referenced (not consumed) in the success path, so concurrent reuse is safe.
  *
- * Auth: device JWT from {@link ../services/nexusDevice.service}, same as nexus-tx-api.
+ * Auth: none on the client — routed through gero-backend's Nexus proxy
+ * (VITE_NEXUS_URL → <backend>/api/nexus), which injects the Nexus API key
+ * server-side. Same as nexus-tx-api.
  */
 
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
-import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
-import { debugLog } from '@/utils/debug';
+import axios from 'axios';
 
 /**
  * Raw chain fields returned by the backend. The client builds the CIP-30
@@ -51,34 +51,6 @@ const client = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-client.interceptors.request.use(async (config) => {
-  const token = await getNexusAccessToken();
-  config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// 401 → drop cached token, reauth, retry once. Same pattern as nexus-tx-api.ts.
-client.interceptors.response.use(
-  (res) => res,
-  async (error: AxiosError) => {
-    const config = error.config as AxiosRequestConfig & { _retried?: boolean };
-    if (error.response?.status === 401 && config && !config._retried) {
-      config._retried = true;
-      try {
-        const token = await reauthenticateNexus();
-        if (config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return client.request(config);
-      } catch (refreshErr) {
-        debugLog('[nexus-collateral-api] Reauth failed after 401:', refreshErr);
-        throw error;
-      }
-    }
-    throw error;
-  }
-);
-
 /** Compose `txHash#outputIndex` from a {@link LendResponse}. */
 export function lendRef(lent: LendResponse): string {
   return `${lent.txHash}#${lent.outputIndex}`;
@@ -91,7 +63,7 @@ export const nexusCollateralApi = {
    * intentional, see the module-level note on collateral semantics.
    */
   async lend(): Promise<LendResponse> {
-    const { data } = await client.post<LendResponse>('/v1/collateral/lend');
+    const { data } = await client.post<LendResponse>('/api/collateral/lend');
     return data;
   },
 
@@ -101,7 +73,7 @@ export const nexusCollateralApi = {
    * check on the cached collateral entry.
    */
   async status(utxoRef: string): Promise<StatusResponse> {
-    const { data } = await client.get<StatusResponse>('/v1/collateral/status', {
+    const { data } = await client.get<StatusResponse>('/api/collateral/status', {
       params: { utxoRef },
     });
     return data;
@@ -113,7 +85,7 @@ export const nexusCollateralApi = {
    * guard) or 404 if the ref is no longer on-chain.
    */
   async cosign(txCbor: string, utxoRef: string): Promise<CosignResponse> {
-    const { data } = await client.post<CosignResponse>('/v1/collateral/cosign', {
+    const { data } = await client.post<CosignResponse>('/api/collateral/cosign', {
       txCbor,
       utxoRef,
     });

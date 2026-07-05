@@ -3,6 +3,7 @@
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
+    <AgentDock v-if="isAgentVisible" />
     <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
@@ -43,8 +44,11 @@ import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
 import { geroStore } from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 const { loading, isRestoring, text, progress } = toRefs(loadingState);
 const geroConfig = toRefs(geroStore).config;
@@ -55,6 +59,10 @@ const vmProxy = getCurrentInstance()!.proxy;
 
 const isLoading = computed(() => {
   return loading.value || isRestoring.value;
+});
+
+const isAgentVisible = computed(() => {
+  return featureFlagsStore.isCopilotEnabled() && !!walletStore.loggedWallet && !walletStore.isLocked;
 });
 
 // Check auto-lock immediately when page loads/becomes visible

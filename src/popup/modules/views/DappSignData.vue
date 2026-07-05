@@ -366,10 +366,12 @@ const signDataLocallyWithPrf = async () => {
     const derived = accountKey.derive([role, index]);
     const signingKey = derived.toRawKey();
 
-    // Step 4: Get address bytes for COSE_Key
+    // Step 4: Get address bytes for COSE_Key. Address.toBytes() returns a
+    // HexBlob (hex STRING) — decode to real bytes, else the emurgo WASM coerces
+    // the string per-character and embeds a garbage address (verify 401).
     let addressBytes: Uint8Array;
     if (address.startsWith('addr') || address.startsWith('stake')) {
-      addressBytes = Cardano.Address.fromBech32(address).toBytes();
+      addressBytes = Buffer.from(Cardano.Address.fromBech32(address).toBytes(), 'hex');
     } else {
       addressBytes = Buffer.from(address, 'hex');
     }

@@ -1045,7 +1045,13 @@ const txAssets = computed(() => {
     return [...received, ...sent]
       .filter((asset: TxAsset) => asset.policy_id !== '')
       .reduce((map: Record<string, ReturnType<typeof resolveAsset>>, asset: TxAsset) => {
-        map[asset.unit] = resolveAsset(asset);
+        // Defense-in-depth: a single asset that fails to resolve must not crash
+        // the entire transaction-details view.
+        try {
+          map[asset.unit] = resolveAsset(asset);
+        } catch (e) {
+          console.warn('[TransactionDetails] resolveAsset failed for', asset?.unit, e);
+        }
         return map;
       }, {});
   }

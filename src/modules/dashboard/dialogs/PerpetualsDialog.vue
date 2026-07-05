@@ -197,7 +197,15 @@
           :last-trade-class="lastTradeClass"
         />
         <!-- RIGHT COLUMN — Order Form (component) -->
+        <!-- Gate the trade form behind a Strike connection; chart + order book
+             (public) remain visible. The deposit/withdraw sheets inside
+             PerpsAccountSection are gated independently (they reuse the same
+             connect-aware DepositSheet/WithdrawSheet). -->
+        <div v-if="!isConnected" class="col-right connect-col">
+          <StrikeOnboarding @connected="onConnected" />
+        </div>
         <PerpsOrderForm
+          v-else
           :symbol="selectedSymbol"
           :base-asset="baseAsset"
           :account="account"
@@ -205,6 +213,8 @@
           :market-config="currentMarketConfig"
           :live-price="strikeRealtimeData?.lastPrice ?? 0"
           :wallet-ada-balance="walletAdaBalance"
+          :ob-asks="obAsks"
+          :ob-bids="obBids"
           @order-placed="refreshPositionsAndOrders"
           @leverage-changed="loadAccount()"
           @margin-mode-changed="loadAccount()"
@@ -253,6 +263,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { usePerpsFormatters, usePerpsChart, useOrderBook } from '@/modules/market/composables/perps';
 import { walletStore } from '@/stores/walletStore';
 import { strikeMarketApi } from '@/api/strike-v2.market';
@@ -265,6 +276,7 @@ import PerpsOrderBook from '@/modules/dashboard/components/perps/PerpsOrderBook.
 import PerpsAccountSection from '@/modules/dashboard/components/perps/PerpsAccountSection.vue';
 import PerpsPositionsPanel from '@/modules/dashboard/components/perps/PerpsPositionsPanel.vue';
 import PerpsOrderForm from '@/modules/dashboard/components/perps/PerpsOrderForm.vue';
+import StrikeOnboarding from '@/sidepanel/components/perps/StrikeOnboarding.vue';
 
 const {
   formatPrice, formatFullNumber, formatChange, formatFundingRate,
@@ -318,6 +330,8 @@ const baseCurrency = computed(() => selectedSymbol.value.split('-')[0]);
 const {
   strikeRealtimeData, liveMarkPrice, liveIndexPrice, liveFundingRate, liveNextFundingTime,
   markPriceFlash, lastTradeClass,
+  // Raw bid/ask ladders forwarded to PerpsOrderForm for VWAP entry estimation.
+  obAsks, obBids,
 } = useOrderBook(selectedSymbol);
 
 // ── Chart + open interest (composable) ────────────────────────────────────
@@ -406,6 +420,8 @@ const {
   loadPositions,
 } = useStrikeTrading();
 
+const { isConnected } = useStrikeOnboarding();
+
 const openPositions = computed<Position[]>(() =>
   (positions.value ?? []).filter((p) => parseFloat(p.Size) !== 0),
 );
@@ -437,21 +453,46 @@ const marginRatioDisplay = computed(() => {
 });
 
 
-// Load data when dialog opens
+// Load data when dialog opens. Public market data loads unconditionally;
+// account data only if Strike API keys are unlocked — otherwise the request
+// goes out unauthenticated, returns 401, and the auth-failure handler nukes
+// any stored keys (correct response to a real auth failure but noise when
+// the user simply hasn't connected yet).
 watch(dialogVisible, (visible) => {
   if (visible) {
     loadChartData();
     loadOpenInterest();
     loadMarketConfig();
+    if (isConnected.value) loadAccount();
+  }
+});
+
+// Also load account once a connect/unlock completes while the dialog is open.
+watch(isConnected, (connected) => {
+  if (connected && dialogVisible.value) {
     loadAccount();
+    loadPositions(selectedSymbol.value);
+    loadOpenOrders(selectedSymbol.value);
   }
 });
 
 const positionsPanelRef = ref<InstanceType<typeof PerpsPositionsPanel> | null>(null);
 
 async function refreshPositionsAndOrders() {
+  if (!isConnected.value) return;
   await Promise.all([loadAccount(), loadPositions(selectedSymbol.value), loadOpenOrders(selectedSymbol.value)]);
   positionsPanelRef.value?.resetTabs?.();
+}
+
+// Fired by the inline StrikeOnboarding card once connect/unlock succeeds. The
+// isConnected watcher already loads account/positions/orders while the dialog
+// is open; this is a no-op placeholder kept for an explicit template binding.
+function onConnected() {
+  if (isConnected.value && dialogVisible.value) {
+    loadAccount();
+    loadPositions(selectedSymbol.value);
+    loadOpenOrders(selectedSymbol.value);
+  }
 }
 
 function onLogoError(e: Event) {
@@ -616,6 +657,17 @@ function onLogoError(e: Event) {
   border-right: 1px solid #2b2f36;
   min-width: 0;
   overflow: hidden;
+}
+
+/* Connect gate slot — occupies the order-form column when disconnected */
+.connect-col {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 280px;
+  overflow-y: auto;
 }
 
 /* ── Chart area ───────────────────────────────────────────────────────── */

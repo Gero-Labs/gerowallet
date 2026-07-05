@@ -10,7 +10,7 @@
 
       <!-- ── Loading State ── -->
       <div v-if="loadingDetail" class="vds-loading">
-        <v-progress-circular indeterminate size="28" width="2" color="#00c7f3" />
+        <v-progress-circular indeterminate size="28" width="2" :color="primaryColor" />
       </div>
 
       <template v-else-if="vault">
@@ -27,7 +27,7 @@
               >
                 {{ $t(`vaults.status.${vault.status}`) }}
               </v-chip>
-              <v-icon v-if="vault.is_verified" size="16" color="#00c7f3" class="ml-1">mdi-check-decagram</v-icon>
+              <v-icon v-if="vault.is_verified" size="16" :color="primaryColor" class="ml-1">mdi-check-decagram</v-icon>
             </div>
           </div>
           <p class="vds-description">{{ vault.description }}</p>
@@ -150,11 +150,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import VaultPortfolioChart from './VaultPortfolioChart.vue';
 import { useStrikeVaults } from '@/modules/market/composables/useStrikeVaults';
+import { useChainContext } from '../../composables/useChainContext';
 import type { VaultInfo, VaultDepositor, UserVaultPosition, VaultPeriod } from '@/api/strike-v2.types';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -162,7 +166,7 @@ const props = defineProps<{
   value: boolean;
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'input', value: boolean): void;
   (e: 'deposit'): void;
   (e: 'withdraw'): void;
@@ -419,13 +423,13 @@ function truncateAddr(addr: string): string {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.vds-perf-cell__value--cyan { color: #00c7f3; }
+.vds-perf-cell__value--cyan { color: var(--chain-primary); }
 .vds-perf-cell__value--red  { color: #F97066; }
 
 /* ── Position Card ── */
 .vds-position-card {
-  background: rgba(0, 199, 243, 0.04);
-  border: 1px solid rgba(0, 199, 243, 0.12);
+  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 12%, transparent);
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
@@ -451,7 +455,7 @@ function truncateAddr(addr: string): string {
   color: rgba(255, 255, 255, 0.8);
 }
 
-.vds-pos-value--cyan { color: #00c7f3; }
+.vds-pos-value--cyan { color: var(--chain-primary); }
 
 /* ── Depositors ── */
 .vds-depositors {
@@ -533,13 +537,13 @@ function truncateAddr(addr: string): string {
 }
 
 .vds-btn--deposit {
-  background: rgba(0, 199, 243, 0.12) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
 }
 
 .vds-btn--deposit:hover {
-  background: rgba(0, 199, 243, 0.2) !important;
+  background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important;
 }
 
 .vds-btn--withdraw {

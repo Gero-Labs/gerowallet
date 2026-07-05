@@ -7,9 +7,9 @@
           :size="80"
           :width="4"
           indeterminate
-          color="#00c7f3"
+          :color="primaryColor"
         />
-        <v-icon class="ring-icon" color="#00c7f3" size="28">mdi-file-document-check-outline</v-icon>
+        <v-icon class="ring-icon" :color="primaryColor" size="28">mdi-file-document-check-outline</v-icon>
       </div>
     </div>
 
@@ -32,7 +32,7 @@
         <span>{{ $t('card.kycDocumentsSubmitted') }}</span>
       </div>
       <div class="status-step active">
-        <v-icon small color="#00c7f3">mdi-clock-outline</v-icon>
+        <v-icon small :color="primaryColor">mdi-clock-outline</v-icon>
         <span>{{ $t('card.verificationInProgress') }}</span>
       </div>
       <div class="status-step pending">
@@ -68,8 +68,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import cardHelpers from '@/stores/modules/card';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const refreshing = ref(false);
 
@@ -163,7 +167,7 @@ async function handleLogout() {
 }
 
 .status-step.active span {
-  color: #00c7f3;
+  color: var(--chain-primary);
   font-weight: 600;
 }
 
@@ -188,12 +192,12 @@ async function handleLogout() {
   font-weight: 600 !important;
   font-size: 14px !important;
   letter-spacing: 0 !important;
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
 }
 
 .refresh-btn:hover {
-  border-color: #00c7f3 !important;
-  background: rgba(0, 199, 243, 0.08) !important;
+  border-color: var(--chain-primary) !important;
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent) !important;
 }
 
 .logout-btn {

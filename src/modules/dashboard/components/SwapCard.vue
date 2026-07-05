@@ -30,10 +30,10 @@
                     <v-btn text plain v-bind="attrs" v-on="on" class="pa-0" style="text-transform: none">
                       <v-avatar size="26" class="mr-2">
                         <img
-                          v-if="selectedTokenA && selectedTokenA.img"
-                          :src="selectedTokenA.img"
+                          v-if="selectedTokenA"
+                          :src="getTokenImage(selectedTokenA)"
                           :alt="selectedTokenA.ticker"
-                          @error="e => (e.target.src = assets.questionMarkDark)"
+                          @error="e => (e.target.src = chainLogo)"
                         />
                         <v-icon v-else small>mdi-help-circle</v-icon>
                       </v-avatar>
@@ -74,7 +74,7 @@
                         class="token-list-item"
                       >
                         <v-list-item-avatar size="32">
-                          <v-img :src="token.img" @error="e => (e.target.src = assets.questionMarkDark)"></v-img>
+                          <v-img :src="getTokenImage(token)" @error="e => (e.target.src = chainLogo)"></v-img>
                         </v-list-item-avatar>
 
                         <v-list-item-content>
@@ -136,10 +136,10 @@
                     <v-btn text plain v-bind="attrs" v-on="on" class="pa-0" style="text-transform: none">
                       <v-avatar size="26" class="mr-2">
                         <img
-                          v-if="selectedTokenB && selectedTokenB.img"
-                          :src="selectedTokenB.img"
+                          v-if="selectedTokenB"
+                          :src="getTokenImage(selectedTokenB)"
                           :alt="selectedTokenB.ticker"
-                          @error="e => (e.target.src = assets.questionMarkDark)"
+                          @error="e => (e.target.src = chainLogo)"
                         />
                         <v-icon v-else small>mdi-help-circle</v-icon>
                       </v-avatar>
@@ -180,7 +180,7 @@
                         class="token-list-item"
                       >
                         <v-list-item-avatar size="32">
-                          <v-img :src="token.img" @error="e => (e.target.src = assets.questionMarkDark)"></v-img>
+                          <v-img :src="getTokenImage(token)" @error="e => (e.target.src = chainLogo)"></v-img>
                         </v-list-item-avatar>
 
                         <v-list-item-content>
@@ -261,6 +261,8 @@ import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import filters from '@/shared/utils/filters';
 import cardanoSvg from '@/assets/svg/cardano.svg';
+import networks from '@/utils/networks';
+import { useMarketData } from '@/modules/market/composables/useMarketData';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
@@ -270,6 +272,12 @@ const { t } = useTranslation();
 // Store refs
 const { loggedWallet, tokens } = toRefs(walletStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
+
+// Token images come from main-page market data (keyed by unit), not DexHunter.
+const { getTokenImage } = useMarketData();
+const chainLogo = computed(
+  () => networks.resolveCurrencyImage(loggedWallet.value?.chain, loggedWallet.value?.network) || cardanoSvg,
+);
 
 // Reactive data
 const amountA = ref('');
@@ -283,8 +291,6 @@ const swapType = ref<string>('swap');
 let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
-  img: cardanoSvg,
-  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
@@ -295,8 +301,6 @@ let selectedTokenA = ref({
 let selectedTokenB = ref({
   name: 'GERO',
   ticker: 'GERO',
-  img: 'https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp',
-  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,

@@ -16,6 +16,13 @@ import type {
   LeverageResponse,
   MarginModeRequest,
   ModifyMarginRequest,
+  CreateTwapRequest,
+  CreateTwapResponse,
+  CancelTwapRequest,
+  CancelTwapResponse,
+  TwapListResponse,
+  TwapStrategyView,
+  ListTwapParams,
 } from './strike-v2.types';
 
 export const strikeTradeApi = {
@@ -91,6 +98,45 @@ export const strikeTradeApi = {
 
   async modifyIsolatedMargin(req: ModifyMarginRequest): Promise<unknown> {
     const { data } = await strikeClient.post('/v2/isoMargin', req);
+    return data;
+  },
+
+  // ---------------------------------------------------------------------------
+  // Algo — TWAP strategies (/v2/algo/twap)
+  // ---------------------------------------------------------------------------
+
+  /** Create a TWAP strategy. Returns 201 with `strategy_id` and `status`. */
+  async createTwap(req: CreateTwapRequest): Promise<CreateTwapResponse> {
+    const { data } = await strikeClient.post('/v2/algo/twap', req);
+    return data;
+  },
+
+  /**
+   * List TWAP strategies for the authenticated account.
+   * Default (no status / "active") returns only active + cancelling strategies.
+   */
+  async getTwapOrders(params?: ListTwapParams): Promise<TwapListResponse> {
+    const { data } = await strikeClient.get('/v2/algo/twap', {
+      params: { status: params?.status },
+    });
+    return data;
+  },
+
+  /** Fetch a single TWAP strategy by id. */
+  async getTwapOrder(id: string): Promise<TwapStrategyView> {
+    const { data } = await strikeClient.get(`/v2/algo/twap/${encodeURIComponent(id)}`);
+    return data;
+  },
+
+  /**
+   * Cancel a TWAP strategy. The strategy transitions to `cancelling`
+   * immediately; finalisation is async on the server side.
+   *
+   * Note: per OpenAPI the cancel endpoint is `DELETE /v2/algo/twap/{id}`.
+   * The `req` object is accepted for API symmetry with other cancel methods.
+   */
+  async cancelTwap(req: CancelTwapRequest): Promise<CancelTwapResponse> {
+    const { data } = await strikeClient.delete(`/v2/algo/twap/${encodeURIComponent(req.id)}`);
     return data;
   },
 };

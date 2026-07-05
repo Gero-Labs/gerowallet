@@ -81,6 +81,8 @@ function buildCSP(dev: boolean): string {
     // (https://rpc.preview.midnight.network, etc).
     'https://*.midnight.network',
     'wss://*.midnight.network',
+    // Gero Copilot agent (direct-to-Fluxpoint dev fallback)
+    'https://api-v3.fluxpointstudios.com',
     // Dev-only
     ...(dev
       ? [
@@ -109,7 +111,7 @@ function buildCSP(dev: boolean): string {
   const styleSrc = ['*', "'unsafe-inline'", "'self'", 'blob:'];
 
   const imgSrc = dev
-    ? ["'self'", 'http:', 'data:']
+    ? ["'self'", 'http:', 'https:', 'data:']
     : ["'self'", 'https:', 'data:'];
 
   const frameSrc = [

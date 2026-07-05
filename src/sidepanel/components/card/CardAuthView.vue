@@ -10,15 +10,15 @@
     <!-- Feature highlights -->
     <div class="features">
       <div class="feature-item">
-        <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+        <v-icon small :color="primaryColor">mdi-check-circle</v-icon>
         <span>{{ $t('card.zeroMonthlyFees') }}</span>
       </div>
       <div class="feature-item">
-        <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+        <v-icon small :color="primaryColor">mdi-check-circle</v-icon>
         <span>{{ $t('card.zeroAdaEurFees') }}</span>
       </div>
       <div class="feature-item">
-        <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+        <v-icon small :color="primaryColor">mdi-check-circle</v-icon>
         <span>{{ $t('card.topUpCardWithAda') }}</span>
       </div>
     </div>
@@ -48,9 +48,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardHelpers from '@/stores/modules/card';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const emit = defineEmits<{
   (e: 'auth-complete'): void;
@@ -154,7 +158,7 @@ function handleRegister() {
 .login-btn {
   height: 44px !important;
   border-radius: 10px !important;
-  background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
+  background: linear-gradient(135deg, var(--chain-gradient1) 0%, var(--chain-gradient2) 100%) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;
@@ -175,11 +179,11 @@ function handleRegister() {
   font-weight: 600 !important;
   font-size: 14px !important;
   letter-spacing: 0 !important;
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
 }
 
 .register-btn:hover {
-  border-color: #00c7f3 !important;
-  background: rgba(0, 199, 243, 0.08) !important;
+  border-color: var(--chain-primary) !important;
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent) !important;
 }
 </style>

@@ -40,6 +40,12 @@ declare global {
   }
 }
 
+// Bitcoin dApp surface hard-gated off for 2.7 (HIDE+GATE). When false, Gero
+// does not advertise window.gero_btc, the Wallet-Standard wallet, or
+// window.btc_providers to web pages. Background BITCOIN_METHOD.* handlers
+// already reject on non-Bitcoin wallets; this stops capability leakage.
+const BITCOIN_DAPP_ENABLED = false;
+
 // CIP-30
 window.cardano = {
   ...(window.cardano||{}),
@@ -110,26 +116,28 @@ function _btcEmit(event: string, data: any) {
 // Detected by GeroBTCWallet class in @tomo-inc/tomo-wallet-provider.
 // This makes Gero visible in Babylon staking dashboard and all Tomo-powered dApps.
 // Interface: TomoBitcoinInjected from @tomo-inc/tomo-wallet-provider
-window.gero_btc = {
-  requestAccounts: () => btcRequestAccounts(),
-  getAccounts: () => btcGetAccounts(),
-  getPublicKey: () => btcGetPublicKey(),
-  signPsbt: (psbtHex: string, options?: any) => btcSignPsbt(psbtHex, options),
-  signPsbts: (psbtsHexes: string[], options?: any) => btcSignPsbts(psbtsHexes, options),
-  getNetwork: () => btcGetNetwork(),
-  signMessage: (message: string, type?: 'ecdsa' | 'bip322-simple') => btcSignMessage(message, type),
-  switchNetwork: async (_network: string) => { throw new Error('switchNetwork not supported'); },
-  sendBitcoin: async (_to: string, _amount: number) => { throw new Error('Use signPsbt for sending'); },
-  pushTx: (txHex: string) => btcPushTx({ rawtx: txHex }),
-  getBalance: () => btcGetBalance().then((b: any) => typeof b === 'object' ? b.total : b),
-  on: (event: string, cb: Function) => {
-    if (!_btcEventListeners[event]) _btcEventListeners[event] = new Set();
-    _btcEventListeners[event].add(cb);
-  },
-  off: (event: string, cb: Function) => {
-    _btcEventListeners[event]?.delete(cb);
-  },
-};
+if (BITCOIN_DAPP_ENABLED) {
+  window.gero_btc = {
+    requestAccounts: () => btcRequestAccounts(),
+    getAccounts: () => btcGetAccounts(),
+    getPublicKey: () => btcGetPublicKey(),
+    signPsbt: (psbtHex: string, options?: any) => btcSignPsbt(psbtHex, options),
+    signPsbts: (psbtsHexes: string[], options?: any) => btcSignPsbts(psbtsHexes, options),
+    getNetwork: () => btcGetNetwork(),
+    signMessage: (message: string, type?: 'ecdsa' | 'bip322-simple') => btcSignMessage(message, type),
+    switchNetwork: async (_network: string) => { throw new Error('switchNetwork not supported'); },
+    sendBitcoin: async (_to: string, _amount: number) => { throw new Error('Use signPsbt for sending'); },
+    pushTx: (txHex: string) => btcPushTx({ rawtx: txHex }),
+    getBalance: () => btcGetBalance().then((b: any) => typeof b === 'object' ? b.total : b),
+    on: (event: string, cb: Function) => {
+      if (!_btcEventListeners[event]) _btcEventListeners[event] = new Set();
+      _btcEventListeners[event].add(cb);
+    },
+    off: (event: string, cb: Function) => {
+      _btcEventListeners[event]?.delete(cb);
+    },
+  };
+}
 
 // Forward GeroWallet account/network change events (broadcast by the content
 // script proxy when the background emits them) into Bitcoin provider listeners.
@@ -305,7 +313,7 @@ const _geroWalletStandard: any = {
 };
 
 // Register with the Wallet Standard registry
-(function _registerGeroWalletStandard() {
+if (BITCOIN_DAPP_ENABLED) (function _registerGeroWalletStandard() {
   try {
     window.dispatchEvent(
       new CustomEvent('wallet-standard:register-wallet', {
@@ -332,7 +340,7 @@ const _geroWalletStandard: any = {
 // Injects Gero into window.btc_providers so dapps using Sats Connect
 // (Xverse, Leather, etc.) can discover this wallet in their selector UI.
 // See: https://wbips.netlify.app/wbips/WBIP004
-(function _registerBtcProvider() {
+if (BITCOIN_DAPP_ENABLED) (function _registerBtcProvider() {
   const provider = {
     id: 'GeroWallet',
     name: 'Gero Wallet',

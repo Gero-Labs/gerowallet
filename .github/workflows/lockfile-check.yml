@@ -1,0 +1,43 @@
+name: Lockfile Check
+
+# Validates that package.json and package-lock.json stay in sync.
+#
+# Why this exists separately from ci-cd.yml: the main build job only triggers on
+# push to `main` and materializes .env.production from repo secrets, which
+# Dependabot PRs cannot access. This job is secret-free and runs `npm ci` (which
+# fails if the lock is out of sync) on every PR and on every push to development
+# — so post-squash-merge drift (the recurring "Missing: sass... from lock file"
+# break) is caught immediately instead of days later in a local checkout.
+
+on:
+  pull_request:
+    branches:
+      - development
+      - main
+  push:
+    branches:
+      - development
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    name: npm ci (lock in sync)
+    runs-on: gero-plain
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.11.0'
+
+      - name: Upgrade npm
+        run: npm install --global npm@11.1.0
+
+      # `npm ci` exits non-zero when package.json and package-lock.json disagree.
+      # --ignore-scripts keeps it fast and avoids needing build secrets/toolchains.
+      - name: Verify lockfile is in sync
+        run: npm ci --ignore-scripts

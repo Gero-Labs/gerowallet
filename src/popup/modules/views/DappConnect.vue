@@ -19,7 +19,7 @@
             </div>
             <div style="color: white">
               <br/>
-              <p class="ml-9">{{ $t('navigation.futureTransactionsNote') }}</p>
+              <p class="ml-9">{{ $t('miniGero.futureTransactionsNote') }}</p>
             </div>
           </section>
     </v-card-text>

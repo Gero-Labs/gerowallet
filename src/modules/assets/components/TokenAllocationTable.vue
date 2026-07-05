@@ -70,14 +70,6 @@
                   {{ currentTab === 0 ? $t('assets.hideScamTokens') : $t('assets.hideScamCollectibles') }}
                 </v-list-item-title>
               </v-list-item>
-              <v-list-item v-if="currentTab === 0">
-                <v-list-item-action>
-                  <v-switch v-model="hideUnrated" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
-                </v-list-item-action>
-                <v-list-item-title>
-                  {{ $t('assets.hideUnratedTokens') }}
-                </v-list-item-title>
-              </v-list-item>
               <v-list-item v-if="currentTab === 1">
                 <v-list-item-content>
                   <v-list-item-title>{{ $t('assets.sortBy') }}</v-list-item-title>
@@ -126,7 +118,6 @@
             @update:sort-options="sortOptions = $event"
             :hide-scam="hideScam"
             :hide-unverified="hideUnverified"
-            :hide-unrated="hideUnrated"
             :search-term="currentTab === 0 ? searchTerm : ''"
             :container-height="sharedContainerHeight"
           />
@@ -161,7 +152,6 @@ const { loggedWallet, config, collections, tokens } = toRefs(walletStore);
 const { loadingTxs } = toRefs(loadingState);
 
 const hideScam = ref<boolean>(false);
-const hideUnrated = ref<boolean>(false);
 const hideUnverified = ref<boolean>(false);
 const sortOptions = ref<any>({
   by: 'allocation',
@@ -194,10 +184,6 @@ watch(hideUnverified, (newVal, _oldVal) => {
   WalletStore.setHideUnverifiedTokens(newVal);
 })
 
-watch(hideUnrated, (newVal, _oldVal) => {
-  WalletStore.setHideUnratedTokens(newVal);
-})
-
 watch(sortOptions, (newVal, _oldVal) => {
   assetsSort.value = newVal
 }, {
@@ -208,7 +194,6 @@ watch(sortOptions, (newVal, _oldVal) => {
 watch(() => config.value, (newConfig) => {
   if (newConfig) {
     hideScam.value = newConfig.hideScamTokens || false;
-    hideUnrated.value = newConfig.hideUnratedTokens || false;
     hideUnverified.value = newConfig.hideUnverifiedTokens || false;
   }
 }, { immediate: true })
@@ -222,7 +207,6 @@ const handleSwitchTab = (tab) => {
 const clearFilters = () => {
   hideUnverified.value = false;
   hideScam.value = false;
-  hideUnrated.value = false;
 }
 
 
@@ -230,9 +214,6 @@ const clearFilters = () => {
 const filtersAmount = computed(() => {
   let amt = 0
   if (hideScam.value) {
-    amt++
-  }
-  if (hideUnrated.value) {
     amt++
   }
   if (hideUnverified.value) {
@@ -349,7 +330,6 @@ const debouncedCheck = () => {
 onMounted(() => {
   sortOptions.value = assetsSort.value;
   hideScam.value = config.value?.hideScamTokens || false;
-  hideUnrated.value = config.value?.hideUnratedTokens || false;
   hideUnverified.value = config.value?.hideUnverifiedTokens || false;
 
   // Set up responsive tab detection

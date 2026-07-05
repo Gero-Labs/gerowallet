@@ -6,7 +6,7 @@ import { Blockchain, Network, WalletType, Wallet } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
 import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
-import webSocketService from '@/services/websocket.service';
+import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
@@ -14,6 +14,35 @@ import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
 import zkFoldApi from '@/api/zkFoldApi';
+import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
+import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
+import {
+  loadRemoteSigningSettings,
+  saveRemoteSigningSettings,
+} from '@/services/crossDevice/crossDeviceSettings';
+import {
+  loadOrCreateDeviceIdentity,
+  type StoredDeviceIdentity,
+} from '@/services/crossDevice/deviceIdentityStore';
+import { isDeviceIdConsistent } from '@/services/crossDevice/deviceIdentity';
+import { verifyDeviceRegisterProof, buildDeviceRegisterSubject } from '@/services/crossDevice/registerProof';
+import { loadDeviceRegisterProof, saveDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore';
+import { mintPairingNonce, consumePairingNonce, peekPairingNonce } from '@/services/crossDevice/pairingNonceStore';
+import { buildPairingQrPayload, type PairingQrPayload } from '@/services/crossDevice/pairingQr';
+import type { DeviceRegisterProof, PairConfirm } from '@/services/crossDevice/protocol';
+import {
+  defaultRemoteSigningSettings,
+  isDeviceTrusted,
+  setEnabled as trustSetEnabled,
+  setPolicy as trustSetPolicy,
+  trustDevice as trustAddDevice,
+  untrustDevice as trustRemoveDevice,
+  soleSignerDeviceId,
+  REQUIRE_PROOF_TO_PAIR,
+  type RemoteSigningSettings,
+  type SigningPolicy,
+} from '@/services/crossDevice/crossDeviceTrust';
+import type { DeviceInfo } from '@/services/crossDevice/protocol';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -24,6 +53,22 @@ export class WalletManager {
   private walletBg: WalletBg | null = null;
   private currentWalletId: number | null = null;
   private pendingSyncPromise: Promise<void> | null = null;
+  // Cross-device signing bridge handles (null unless the feature flag is on).
+  private crossDevice: ReturnType<typeof bootstrapCrossDeviceSigning> = null;
+  // Per-wallet remote-signing settings (trust list + policy), loaded on login.
+  // The bootstrap's trust predicates read this live, so trust/untrust/policy
+  // changes take effect without a re-bootstrap.
+  private remoteSigning: RemoteSigningSettings = defaultRemoteSigningSettings();
+  // Stable relay-auth identity for this browser install (persisted), so pins made
+  // by a sibling device survive a re-login instead of churning every session.
+  private crossDeviceIdentity: StoredDeviceIdentity | null = null;
+  // Cached wallet-control proof for the CURRENT wallet, produced once at enable
+  // time (needs auth) and re-sent on every DEVICE_REGISTER via getProof.
+  private crossDeviceProof: DeviceRegisterProof | null = null;
+  // Last device paired via QR scan, for the settings dialog's success poll. Set by
+  // handlePairConfirm on a successful pin; cleared on read (getPairingStatus) so a
+  // reopen never re-fires a stale success.
+  private lastPairedDevice: { deviceId: string; label: string; at: number } | null = null;
 
   // Mutex declarations for sync operations
   public tipMutex = withTimeout(new Mutex(), 2 * 60_000);
@@ -101,10 +146,15 @@ export class WalletManager {
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
         });
         LoadingState.setText('Restoring wallet...');
+        // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
+        // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
+        // id isn't set yet, the load is skipped and the pinned devices + enable state
+        // come back empty on every restart (and a wallet switch would leak the prior
+        // wallet's trust list). The catch below resets it to null on failure.
+        this.currentWalletId = wallet.id;
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
-        this.currentWalletId = wallet.id;
 
         await walletBg.syncService.resync();
 
@@ -207,10 +257,15 @@ export class WalletManager {
           this.pendingSyncPromise = webSocketService.waitForSync();
         }
 
+        // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
+        // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
+        // id isn't set yet, the load is skipped and the pinned devices + enable state
+        // come back empty on every restart (and a wallet switch would leak the prior
+        // wallet's trust list). The catch below resets it to null on failure.
+        this.currentWalletId = wallet.id;
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
-        this.currentWalletId = wallet.id;
 
         // Wait for gero-sync catch-up to complete on first restore
         if (isFirstRestore && this.pendingSyncPromise) {
@@ -418,16 +473,63 @@ export class WalletManager {
       const lastSyncedBlock = lastSyncInfo?.height || 0;
       const credentials = walletBg.derivePaymentCredentials();
 
+      // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
+      // Returns null and does nothing when the flag is off, so the handlers below
+      // are unchanged and no relay message crosses the wire. When on, it wires the
+      // WS transport and publishes a DEVICE_REGISTER for this device.
+      // The flag is read from chrome.storage.local (mirrored by the UI's
+      // featureFlagsStore) because the EventSource-based flag service cannot run in
+      // this background service worker.
+      // Per-wallet remote-signing settings (opt-in + trusted devices + policy).
+      if (this.currentWalletId != null) {
+        this.remoteSigning = await loadRemoteSigningSettings(this.currentWalletId);
+      }
+      if (!this.crossDeviceIdentity) {
+        this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
+      }
+      // Load this device's cached wallet-control proof for this wallet (if produced).
+      this.crossDeviceProof = await loadDeviceRegisterProof(
+        this.crossDeviceIdentity.deviceId,
+        walletBg.stakeAddress,
+      );
+      const serverFlagOn = await this.isCrossDeviceSigningEnabled();
+      this.crossDevice?.dispose();
+      this.crossDevice = bootstrapCrossDeviceSigning({
+        label: 'Gero Extension',
+        hasSigningKey: true,
+        identity: this.crossDeviceIdentity,
+        // Both the server flag AND this wallet's opt-in must be on.
+        enabled: serverFlagOn && this.remoteSigning.enabled,
+        // Live trust gates: only paired devices may approve/answer.
+        isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+        isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+        // Cached proof, re-sent on every register (produced once at enable-time).
+        getProof: () => this.crossDeviceProof ?? undefined,
+        // QR pairing: a frame-verified PAIR_CONFIRM -> nonce consume + proof verify + pin.
+        onPairConfirm: (frame) => void this.handlePairConfirm(frame),
+      });
+
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
-        onSync: async (data: any) => {
+        // Always a LIVE closure, never a static `undefined`. The socket outlives
+        // the bridge, which is rebuilt when remote signing is toggled on/off after
+        // login (reconfigureCrossDevice) WITHOUT a reconnect. Reading this.crossDevice
+        // at call time routes inbound DEVICES/SIGN_* frames to whatever bridge exists
+        // now (or a no-op when null). A conditional `undefined` here froze the handler
+        // to the connect-time state, so enabling post-login left inbound frames
+        // falling through to the "unknown type" branch (empty device registry).
+        onCrossDeviceMessage: (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw),
+        // Publish DEVICE_REGISTER after the socket opens + SUBSCRIBE, on every
+        // (re)connect. No-op when the feature is off (crossDevice is null).
+        onSocketOpen: () => this.crossDevice?.register(),
+        onSync: async (data: WsSyncMessage) => {
           await this.tipMutex.runExclusive(async () => {
             await walletBg.syncService.setSync(data);
           });
         },
-        onRollback: async (data: any) => {
+        onRollback: async (data: WsSyncMessage) => {
           debugLog('Rollback received:', data);
-          if (data.rollbackToSlot !== undefined) {
-            await walletBg.syncService.handleRollback(data.rollbackToSlot);
+          if (data['rollbackToSlot'] !== undefined) {
+            await walletBg.syncService.handleRollback(data['rollbackToSlot'] as number);
           }
         },
         onForceResync: async () => {
@@ -533,6 +635,23 @@ export class WalletManager {
         }
       } catch (midnightError) {
         console.warn('Failed to stop midnight sync during logout:', midnightError);
+      }
+
+      // Tear down the cross-device signing bridge (no-op when the flag is off).
+      try {
+        this.crossDevice?.dispose();
+        this.crossDevice = null;
+        // Reset ALL per-wallet cross-device state so nothing from the previous wallet
+        // can leak into the next one (defense-in-depth: even if the load-order fix
+        // regressed, a switch must never carry the prior wallet's trust list / proof /
+        // enable state, which would auto-enable the feature for the wrong wallet and
+        // authorize the wrong phone). Re-loaded per-wallet on the next login. The
+        // relay-auth identity is per-install and intentionally NOT reset here.
+        this.remoteSigning = defaultRemoteSigningSettings();
+        this.crossDeviceProof = null;
+        this.lastPairedDevice = null;
+      } catch (xdError) {
+        console.warn('Failed to cleanup cross-device signing during logout:', xdError);
       }
 
       // Clean up store messaging service
@@ -946,6 +1065,354 @@ export class WalletManager {
    */
   getWallet(): WalletBg | null {
     return this.walletBg;
+  }
+
+  /**
+   * Get the cross-device signing bridge (requester side), or null when the
+   * feature is off. Used by the REQUEST_CROSS_DEVICE_SIGNATURE background
+   * handler to hand an unsigned tx to another device for signing.
+   */
+  getCrossDeviceSigning(): CrossDeviceSigning | null {
+    return this.crossDevice?.signing ?? null;
+  }
+
+  /**
+   * The deviceId to route a SIGN_REQUEST to (the `to` field), or null to broadcast.
+   * Resolves from the PERSISTED trusted-device list (not the live DEVICES snapshot),
+   * returning the single signing-capable pinned device whether it is online OR
+   * offline. Targeting the offline case is what lets the relay APNs-wake a locked
+   * phone (a broadcast never triggers the wake, which is gated on a `to`); an offline
+   * target with no push token just times out fail-closed, never misdelivers. With >1
+   * pinned signer we broadcast (a device picker is a later refinement); with 0 there
+   * is nothing to target.
+   *
+   * Resolving from the pinned list (vs the live snapshot) also fixes a latent bug:
+   * stale-duplicate relay sessions inflated the online signer count past 1, so the
+   * old live-snapshot logic returned null (broadcast) even when the phone was the
+   * only real signer — which is why the first locked-phone wake test broadcast
+   * instead of targeting. The pinned list holds one entry per deviceId regardless of
+   * how many sockets the relay reports. The pinned deviceId MUST equal the id iOS
+   * uses in DEVICE_REGISTER (the relay PushTargetStore key) for the wake lookup to
+   * hit — see the cross-repo key contract (commit f5cae184).
+   */
+  getDefaultCrossDeviceTarget(): string | null {
+    return soleSignerDeviceId(this.remoteSigning);
+  }
+
+  // ---- QR pairing (scan-to-pair) -------------------------------------------
+
+  /**
+   * Build the QR payload the desktop renders in Remote Signing settings: this
+   * device's relay-auth identity + wallet-control proof + a freshly minted single-use
+   * nonce. Returns null when the wallet can't be paired (no cached proof yet / no
+   * stake). The phone scans it, verifies the proof out of band, pins us, and replies
+   * with a signed PAIR_CONFIRM echoing the nonce. The QR path HARD-REQUIRES the proof
+   * (the payload carries it), so a wallet with no proof simply can't render a QR.
+   */
+  async buildPairingQrPayload(): Promise<PairingQrPayload | null> {
+    const ownStake = this.walletBg?.stakeAddress;
+    const identity = this.crossDeviceIdentity;
+    if (!ownStake || !identity || !this.crossDeviceProof) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const { nonce, exp } = await mintPairingNonce(ownStake, now, (n) => {
+      const b = new Uint8Array(n);
+      globalThis.crypto.getRandomValues(b);
+      return b;
+    });
+    return buildPairingQrPayload({
+      deviceId: identity.deviceId,
+      pubKey: identity.pubKeyHex,
+      stake: ownStake,
+      proof: this.crossDeviceProof,
+      nonce,
+      exp,
+    });
+  }
+
+  /**
+   * Handle a frame-verified inbound PAIR_CONFIRM. The signing service already checked
+   * the Ed25519 subject sig against frame.pubKey and that `to` == this device. This
+   * enforces the WALLET binding + single-use, fail-closed:
+   *
+   *   1. Verify the phone's wallet-control proof against OUR stake (frame.stakeAddress
+   *      is advisory — used only to reconstruct the subject the service verified). This
+   *      is THE binding: an attacker on another wallet can sign a valid frame but cannot
+   *      forge a proof tying their key to our stake key-hash. Pass ownStake, NEVER
+   *      frame.stakeAddress / frame.proof.stakeAddress (that would be a tautology).
+   *   2. Only then consume the single-use nonce (atomic burn). Deliberately AFTER the
+   *      proof: consuming first would let anyone who photographed the QR burn the nonce
+   *      with a bad-proof frame (its own-key sig passes the service check) and DoS the
+   *      real pair. Proof-first drops that frame without touching the nonce, so the real
+   *      phone still pairs; single-use/replay protection is unchanged (a replayed valid
+   *      frame re-verifies the proof but the nonce is already used -> rejected).
+   *   3. Pin verified:true. isDeviceIdConsistent kept as defense-in-depth (iOS uses the
+   *      same sha256(pubKey)[0:16] deviceId rule as us).
+   */
+  async handlePairConfirm(frame: PairConfirm): Promise<void> {
+    try {
+      const ownStake = this.walletBg?.stakeAddress;
+      if (!ownStake || this.walletBg?.chain !== Blockchain.CARDANO) return;
+      if (!this.remoteSigning.enabled) return; // feature must be on for this wallet
+      const now = Math.floor(Date.now() / 1000);
+
+      // 0. Cheap, NON-CONSUMING early reject: no live matching nonce (e.g. no QR is
+      //    displayed) => drop before the expensive proof verify. The desktop deviceId
+      //    is public, so an untrusted relay could otherwise flood self-signed frames to
+      //    force unbounded COSE/blake2b/Ed25519 work. Non-consuming, so it does NOT
+      //    reintroduce the photographed-QR nonce-burn DoS; the consume in step 2 is the
+      //    authoritative single-use gate.
+      if (!(await peekPairingNonce(frame.nonce, ownStake, now))) {
+        debugLog('QR pair rejected: no live nonce (flood/early reject)');
+        return;
+      }
+
+      // 1. Wallet-control proof — the authoritative binding (verify vs OUR stake).
+      const proofOk = await verifyDeviceRegisterProof(
+        frame.proof,
+        { deviceId: frame.from, pubKey: frame.pubKey },
+        ownStake,
+      );
+      if (!proofOk) { debugLog('QR pair rejected: wallet-control proof invalid'); return; }
+
+      // 2. Single-use nonce (bound to our wallet, MV3-durable). Burned here on success;
+      //    proof-first so a photographed-QR bad-proof frame can't burn it. Authoritative.
+      const nonceOk = await consumePairingNonce(frame.nonce, ownStake, now);
+      if (!nonceOk) { debugLog('QR pair rejected: nonce invalid/used/expired'); return; }
+
+      // 3. Defense-in-depth id/key check, then pin verified.
+      if (!isDeviceIdConsistent(frame.from, frame.pubKey)) { debugLog('QR pair rejected: id/key mismatch'); return; }
+      const label = frame.label || 'Paired device';
+      this.remoteSigning = trustAddDevice(
+        this.remoteSigning,
+        {
+          deviceId: frame.from,
+          pubKey: frame.pubKey,
+          label,
+          platform: frame.platform || 'ios',
+          verified: true,
+          hasSigningKey: frame.hasSigningKey ?? true,
+        },
+        now,
+      );
+      await this.persistRemoteSigning();
+      this.lastPairedDevice = { deviceId: frame.from, label, at: Date.now() };
+      debugLog('QR pair: pinned', frame.from, `(${label})`);
+
+      // Cosmetic: tell the phone we pinned it too, so it shows its own confirmed tick
+      // instead of degrading after ~2.4s. Best-effort — trust is already committed; a
+      // dropped ack never un-pairs. Signed with our relay-auth key; the phone verifies
+      // it against the desktop pubKey it pinned from the QR.
+      await this.crossDevice?.signing.sendPairAck(frame.from, frame.nonce);
+    } catch (e) {
+      debugLog('QR pair: handlePairConfirm error', e);
+    }
+  }
+
+  /**
+   * Poll target for the settings QR dialog: the last device paired via QR scan, then
+   * clears it so a reopen never re-fires a stale success.
+   */
+  getPairingStatus(): { deviceId: string; label: string; at: number } | null {
+    const last = this.lastPairedDevice;
+    this.lastPairedDevice = null;
+    return last;
+  }
+
+  // ---- Remote-signing settings API (backing the Security settings UI) -------
+
+  /** Current per-wallet remote-signing settings (enable, policy, trusted devices). */
+  getRemoteSigningSettings(): RemoteSigningSettings {
+    return this.remoteSigning;
+  }
+
+  /**
+   * Devices currently visible in the relay registry, each tagged with whether it
+   * is this device and whether it is trusted. Empty when the bridge is off.
+   */
+  getCrossDeviceDevices(): Array<{ device: DeviceInfo; trusted: boolean; isSelf: boolean }> {
+    const selfId = this.crossDevice?.selfDeviceId ?? null;
+    const devices = this.crossDevice?.getDevices() ?? [];
+    return devices.map((device) => ({
+      device,
+      trusted: isDeviceTrusted(this.remoteSigning, device.deviceId, device.pubKey),
+      isSelf: device.deviceId === selfId,
+    }));
+  }
+
+  /** Persist the current settings mirror to this wallet's db. */
+  private async persistRemoteSigning(): Promise<void> {
+    if (this.currentWalletId != null) {
+      await saveRemoteSigningSettings(this.currentWalletId, this.remoteSigning);
+    }
+  }
+
+  /** Turn remote signing on/off for this wallet, restarting the bridge accordingly. */
+  async setRemoteSigningEnabled(enabled: boolean): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustSetEnabled(this.remoteSigning, enabled);
+    await this.persistRemoteSigning();
+    await this.reconfigureCrossDevice();
+    return this.remoteSigning;
+  }
+
+  /** Set the signing policy (ask | require_remote). No re-bootstrap needed. */
+  async setCrossDevicePolicy(policy: SigningPolicy): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustSetPolicy(this.remoteSigning, policy);
+    await this.persistRemoteSigning();
+    return this.remoteSigning;
+  }
+
+  /** Pair (trust) a device currently visible in the registry, pinning its pubKey. */
+  async trustCrossDevice(deviceId: string): Promise<RemoteSigningSettings> {
+    const found = this.crossDevice?.getDevices().find((d) => d.deviceId === deviceId);
+    if (!found) return this.remoteSigning; // not visible; nothing to pin
+    // Fail closed: refuse to pin a device whose id does not derive from its key
+    // (a relay listing an attacker key under a plausible id/label).
+    if (!isDeviceIdConsistent(found.deviceId, found.pubKey)) {
+      debugLog('cross-device: refusing to pin id/key mismatch for', found.deviceId);
+      return this.remoteSigning;
+    }
+    // If the device supplied a wallet-control proof, it MUST verify against this
+    // wallet's reward address (a present-but-invalid proof is always a rejection).
+    // When REQUIRE_PROOF_TO_PAIR is off (current rollout state) an ABSENT proof
+    // falls back to SAS + pin; when it flips on (coordinated with iOS) a missing
+    // proof is also rejected. See crossDeviceTrust.ts REQUIRE_PROOF_TO_PAIR.
+    let proofVerified = false;
+    if (found.proof) {
+      const ownStake = this.walletBg?.stakeAddress ?? '';
+      const ok = await verifyDeviceRegisterProof(
+        found.proof,
+        { deviceId: found.deviceId, pubKey: found.pubKey },
+        ownStake,
+      );
+      if (!ok) {
+        debugLog('cross-device: refusing to pin — wallet-control proof invalid for', found.deviceId);
+        return this.remoteSigning;
+      }
+      proofVerified = true;
+    } else if (REQUIRE_PROOF_TO_PAIR) {
+      debugLog('cross-device: refusing to pin — no wallet-control proof (fail-closed)', found.deviceId);
+      return this.remoteSigning;
+    }
+    this.remoteSigning = trustAddDevice(
+      this.remoteSigning,
+      {
+        deviceId: found.deviceId,
+        pubKey: found.pubKey,
+        label: found.label,
+        platform: found.platform,
+        verified: proofVerified,
+        // Persist signing-capability so the Send gate + offline to-targeting can
+        // recognise this device as a signer without it being online.
+        hasSigningKey: found.hasSigningKey,
+      },
+      Math.floor(Date.now() / 1000),
+    );
+    await this.persistRemoteSigning();
+    return this.remoteSigning;
+  }
+
+  /** Untrust a device. Its future requests/responses are dropped again. */
+  async untrustCrossDevice(deviceId: string): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustRemoveDevice(this.remoteSigning, deviceId);
+    await this.persistRemoteSigning();
+    return this.remoteSigning;
+  }
+
+  /**
+   * Rebuild the cross-device bridge from the current server flag + per-wallet
+   * settings without a full re-login. Used when the user toggles remote signing
+   * on/off. If the socket is already open, re-register immediately (onSocketOpen
+   * won't fire again for an existing connection).
+   */
+  private async reconfigureCrossDevice(): Promise<void> {
+    const serverFlagOn = await this.isCrossDeviceSigningEnabled();
+    if (!this.crossDeviceIdentity) {
+      this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
+    }
+    this.crossDevice?.dispose();
+    this.crossDevice = bootstrapCrossDeviceSigning({
+      label: 'Gero Extension',
+      hasSigningKey: true,
+      identity: this.crossDeviceIdentity,
+      enabled: serverFlagOn && this.remoteSigning.enabled,
+      isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+      isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
+      getProof: () => this.crossDeviceProof ?? undefined,
+      onPairConfirm: (frame) => void this.handlePairConfirm(frame),
+    });
+    if (this.crossDevice && webSocketService.isConnected()) {
+      this.crossDevice.register();
+    }
+  }
+
+  /**
+   * Produce this device's wallet-control proof: sign the DEVICE_REGISTER subject
+   * with the wallet's STAKE key (CIP-8 signData over the reward address), cache it
+   * for this (identity, wallet), and re-register so it rides immediately. Called
+   * from the enable flow where the user has just authenticated (password / PRF
+   * privateKeyBytes). Returns true on success; a wrong password / cancelled
+   * biometric throws inside signData and yields false (the caller leaves the
+   * wallet not enabled). Only for Cardano software wallets with a stake address.
+   */
+  async produceDeviceRegisterProof(auth: { password?: string; privateKeyBytes?: Uint8Array }): Promise<boolean> {
+    try {
+      const walletBg = this.walletBg;
+      if (!walletBg || walletBg.chain !== Blockchain.CARDANO) return false;
+      const stakeAddress = walletBg.stakeAddress;
+      if (!stakeAddress || !stakeAddress.startsWith('stake1')) return false; // no reward addr (enterprise/BTC)
+      if (!this.crossDeviceIdentity) {
+        this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
+      }
+      const subject = buildDeviceRegisterSubject(
+        this.crossDeviceIdentity.deviceId,
+        this.crossDeviceIdentity.pubKeyHex,
+        stakeAddress,
+      );
+      const subjectBytes = new TextEncoder().encode(subject);
+      let payloadHex = '';
+      for (let i = 0; i < subjectBytes.length; i++) payloadHex += subjectBytes[i].toString(16).padStart(2, '0');
+      const { signature, key } = await walletBg.signData(
+        stakeAddress,
+        payloadHex,
+        auth.password ?? '',
+        0,
+        WalletStore.state.keys,
+        auth.privateKeyBytes,
+      );
+      const proof: DeviceRegisterProof = { coseSign1: signature, coseKey: String(key), stakeAddress };
+      await saveDeviceRegisterProof(this.crossDeviceIdentity.deviceId, stakeAddress, proof);
+      this.crossDeviceProof = proof;
+      // Re-send now so the relay + siblings get the proof without a reconnect.
+      if (this.crossDevice && webSocketService.isConnected()) {
+        this.crossDevice.register();
+      }
+      return true;
+    } catch (e) {
+      debugLog('produceDeviceRegisterProof failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Read isCrossDeviceSigningEnabled from chrome.storage.local. The UI's
+   * featureFlagsStore mirrors flags there because the EventSource-based flag
+   * service cannot initialize in this background service worker. Defaults to
+   * false (feature dark) if storage is empty or unreadable.
+   */
+  private async isCrossDeviceSigningEnabled(): Promise<boolean> {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        return false;
+      }
+      const flags = await new Promise<Record<string, unknown>>((resolve) => {
+        chrome.storage.local.get('featureFlags', (result) => {
+          resolve((result?.['featureFlags'] as Record<string, unknown>) ?? {});
+        });
+      });
+      return flags['isCrossDeviceSigningEnabled'] === true;
+    } catch {
+      return false;
+    }
   }
 
   /**

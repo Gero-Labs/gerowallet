@@ -510,7 +510,8 @@ app.add(METHOD.enable, (request, sendResponse) => {
     return reply({ data: true });
   }
 
-  const enablePayload = { ...request.data, website: origin };
+  const favIconUrl = send.tab?.favIconUrl;
+  const enablePayload = { ...request.data, website: origin, favIconUrl };
 
   const handleMiniGeroEnable = () => {
     return sendToMiniGero('enable', enablePayload, tabId)
@@ -532,7 +533,8 @@ app.add(METHOD.enable, (request, sendResponse) => {
       .catch(() => {
         // Fallback: popup window when side panel is not supported or fails
         const popupURL = chrome.runtime.getURL(
-          `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}`
+          `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}` +
+            (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
         );
         focusOrCreatePopup(popupURL, 470, 600)
           .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
@@ -876,7 +878,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
 
-  const signDataPayload = { ...request.data, website: request.origin };
+  const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignData = () => {
@@ -921,7 +923,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
 
-  const signTxPayload = { ...request.data, website: request.data?.origin || request.origin };
+  const signTxPayload = { ...request.data, website: request.data?.origin || request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
@@ -1611,12 +1613,19 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
     // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
+      // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets).
+      // Mirrors the SIGN_TX handler convention (number[] over the wire).
+      const privateKeyBytes = request.data.privateKeyBytes
+        ? new Uint8Array(request.data.privateKeyBytes)
+        : undefined;
+
       const res = await walletBg.signData(
         request.data.address,
         request.data.payload,
         request.data.password,
         request.data.accountIndex || 0,
-        WalletStore.state.keys
+        WalletStore.state.keys,
+        privateKeyBytes, // Pass pre-decrypted root key for PRF wallets
       );
       sendResponse({
         id: request.id,
@@ -1752,6 +1761,140 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   }
+});
+
+// Cross-device signing (requester side). Hands an UNSIGNED tx CBOR to the
+// cross-device bridge, which relays it to another registered device for
+// approval + local signing, and returns a SignDecision. Dark unless the
+// isCrossDeviceSigningEnabled flag is on (getCrossDeviceSigning() returns null).
+app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, sendResponse) => {
+  try {
+    const signing = walletManager.getCrossDeviceSigning();
+    if (!signing) {
+      sendResponse({
+        id: request.id,
+        data: { decision: 'rejected', reason: 'Cross-device signing is not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
+
+    const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
+    // Route to a specific device when the caller named one, else to the sole
+    // online trusted signer; null => broadcast (backward-compatible).
+    const to = (typeof request.data?.to === 'string' && request.data.to)
+      || walletManager.getDefaultCrossDeviceTarget()
+      || undefined;
+    const decision = await signing.requestSignature({ unsignedCbor, intent, stakeAddress, ttlMs, to });
+
+    sendResponse({
+      id: request.id,
+      data: decision,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error requesting cross-device signature:', error);
+    sendResponse({
+      id: request.id,
+      data: { decision: 'rejected', reason: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// ---- Remote-signing settings (Security tab) --------------------------------
+// Read + mutate per-wallet trusted devices + policy. Mutations are auth-gated in
+// the UI (the Security verification overlay). Each responds with the fresh
+// settings so the UI store stays in sync.
+function crossDeviceReply(id: string, data: unknown) {
+  return { id, data, target: TARGET, sender: SENDER.extension };
+}
+
+app.addToOptions(MessageTypes.GET_CROSS_DEVICE_SETTINGS, async (request, sendResponse) => {
+  sendResponse(crossDeviceReply(request.id, { success: true, settings: walletManager.getRemoteSigningSettings() }));
+});
+
+app.addToOptions(MessageTypes.GET_CROSS_DEVICE_DEVICES, async (request, sendResponse) => {
+  sendResponse(crossDeviceReply(request.id, { success: true, devices: walletManager.getCrossDeviceDevices() }));
+});
+
+app.addToOptions(MessageTypes.SET_REMOTE_SIGNING_ENABLED, async (request, sendResponse) => {
+  try {
+    const settings = await walletManager.setRemoteSigningEnabled(!!request.data?.enabled);
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.SET_CROSS_DEVICE_POLICY, async (request, sendResponse) => {
+  try {
+    const policy = request.data?.policy === 'require_remote' ? 'require_remote' : 'ask';
+    const settings = await walletManager.setCrossDevicePolicy(policy);
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.TRUST_CROSS_DEVICE, async (request, sendResponse) => {
+  try {
+    const deviceId = String(request.data?.deviceId ?? '');
+    const settings = await walletManager.trustCrossDevice(deviceId);
+    // Pairing no-ops if the device left the registry between listing and click.
+    const pinned = !!settings.trustedDevices[deviceId];
+    sendResponse(crossDeviceReply(request.id, pinned
+      ? { success: true, settings }
+      : { success: false, error: 'device_unavailable', settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.UNTRUST_CROSS_DEVICE, async (request, sendResponse) => {
+  try {
+    const settings = await walletManager.untrustCrossDevice(String(request.data?.deviceId ?? ''));
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// Sign the one-time wallet-control proof endorsing this device's relay-auth key.
+// Requires spending auth (the wallet stake key COSE-signs), so the UI collects the
+// password / passkey at enable-time and passes it here; the proof is then cached and
+// rides every DEVICE_REGISTER. See docs/plans/2026-07-03-authenticated-device-register-contract.md.
+app.addToOptions(MessageTypes.PRODUCE_DEVICE_REGISTER_PROOF, async (request, sendResponse) => {
+  try {
+    const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
+    const pkBytes = request.data?.privateKeyBytes;
+    const privateKeyBytes = Array.isArray(pkBytes) ? Uint8Array.from(pkBytes) : undefined;
+    const ok = await walletManager.produceDeviceRegisterProof({ password, privateKeyBytes });
+    sendResponse(crossDeviceReply(request.id, { success: ok }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// QR scan-to-pair: mint the payload the desktop renders as a QR (identity + proof +
+// a fresh single-use nonce). Returns success:false when the wallet can't be paired
+// (no cached proof / no stake) so the UI can prompt to re-enable.
+app.addToOptions(MessageTypes.GET_PAIRING_QR, async (request, sendResponse) => {
+  try {
+    const payload = await walletManager.buildPairingQrPayload();
+    sendResponse(crossDeviceReply(request.id, { success: !!payload, payload }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// QR scan-to-pair: the last device paired via a scan (consumed on read), for the
+// settings dialog's success poll.
+app.addToOptions(MessageTypes.GET_PAIRING_STATUS, async (request, sendResponse) => {
+  sendResponse(crossDeviceReply(request.id, { success: true, paired: walletManager.getPairingStatus() }));
 });
 
 // Pool operator transaction signing handler (cold key + wallet keys)
@@ -2126,6 +2269,11 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
         console.log('original Cbor', request.data.txCbor)
         console.log('witnessHex', request.data.witnessHex)
         const serializableTx: Serialization.Transaction = Serialization.Transaction.fromCbor(HexBlob(request.data.txCbor));
+        // Integrity guard: capture the tx body hash BEFORE merging the external
+        // witness set. Merging a VKey witness set must never alter body bytes;
+        // this defends the cross-device signing path (and any external cosigner)
+        // against a swapped body sneaking in with the returned witnesses.
+        const bodyHashBefore = serializableTx.body().hash();
         const existingWitness = serializableTx.witnessSet();
         const existingWitnessCore = existingWitness.toCore();
         const newWitnesses: Cardano.Witness = Serialization.TransactionWitnessSet.fromCbor(request.data.witnessHex).toCore();
@@ -2143,6 +2291,13 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
           ),
         );
         serializableTx.setWitnessSet(existingWitness);
+        // Re-check the body hash after applying witnesses. If it changed, the
+        // merge touched body bytes: refuse to submit rather than sign something
+        // the user never confirmed.
+        const bodyHashAfter = serializableTx.body().hash();
+        if (bodyHashBefore !== bodyHashAfter) {
+          throw new Error('Transaction body changed while applying witness set; refusing to submit');
+        }
         txCbor = serializableTx.toCbor();
         console.log('Submitting transaction with witnesses:', txCbor);
       } else if (request.data.txCbor) {

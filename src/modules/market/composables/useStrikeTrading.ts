@@ -9,11 +9,16 @@ import type {
   Order,
   Position,
   MarginMode,
+  CreateTwapRequest,
+  CreateTwapResponse,
+  TwapOrder,
+  ListTwapParams,
 } from '@/api/strike-v2.types';
 
 const account = ref<AccountResponse | null>(null);
 const openOrders = ref<Order[]>([]);
 const positions = ref<Position[]>([]);
+const twapOrders = ref<TwapOrder[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -138,10 +143,53 @@ const walletBalance = computed<string | null>(() => {
   return account.value?.wallet_balance ?? null;
 });
 
+async function loadTwapOrders(params?: ListTwapParams): Promise<void> {
+  try {
+    loading.value = true;
+    error.value = null;
+    const res = await strikeTradeApi.getTwapOrders(params);
+    twapOrders.value = res.strategies ?? [];
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function placeTwapOrder(params: CreateTwapRequest): Promise<CreateTwapResponse | null> {
+  try {
+    loading.value = true;
+    error.value = null;
+    const res = await strikeTradeApi.createTwap(params);
+    // Refresh TWAP list and account so balance reservations reflect immediately.
+    await Promise.all([loadTwapOrders({ status: 'active' }), loadAccount()]);
+    return res;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+    return null;
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function cancelTwapOrder(strategyId: string): Promise<void> {
+  try {
+    loading.value = true;
+    error.value = null;
+    await strikeTradeApi.cancelTwap({ id: strategyId });
+    await loadTwapOrders({ status: 'active' });
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    loading.value = false;
+  }
+}
+
 function reset(): void {
   account.value = null;
   openOrders.value = [];
   positions.value = [];
+  twapOrders.value = [];
   loading.value = false;
   error.value = null;
 }
@@ -151,6 +199,7 @@ export function useStrikeTrading() {
     account,
     openOrders,
     positions,
+    twapOrders,
     loading,
     error,
     availableBalance,
@@ -158,9 +207,12 @@ export function useStrikeTrading() {
     loadAccount,
     loadOpenOrders,
     loadPositions,
+    loadTwapOrders,
     placeOrder,
+    placeTwapOrder,
     cancelOrder,
     cancelAllOrders,
+    cancelTwapOrder,
     setLeverage,
     setMarginMode,
     reset,

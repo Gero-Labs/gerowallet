@@ -1,12 +1,14 @@
 <template>
-  <v-card class="transparent-override" flat style="max-width: 600px; margin: auto; box-shadow: unset!important; background: transparent!important;">
-    <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
-      {{ $t('welcome.welcomeMessage') }}
-    </v-card-title>
-    <v-card-subtitle class="text-center px-0" style="font-size: 20px">
-      {{ $t('welcome.chooseAWallet') }}
-    </v-card-subtitle>
-    <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
+  <v-card class="transparent-override" flat style="max-width: 600px; width: 100%; box-shadow: unset!important; background: transparent!important;">
+    <template v-if="!hideHeader">
+      <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
+        {{ $t('welcome.welcomeMessage') }}
+      </v-card-title>
+      <v-card-subtitle class="text-center px-0" style="font-size: 20px">
+        {{ $t('welcome.chooseAWallet') }}
+      </v-card-subtitle>
+    </template>
+    <v-card-text class="px-2 pa-0 mt-4" style="max-height: 600px; overflow-y: auto; background: transparent!important;">
       <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
         <v-list-item-group v-model="selectedWallet" color="primary">
           <v-list-item
@@ -15,6 +17,7 @@
             v-for="(item, i) in availableWallets"
             :key="i"
             @click="submitLogin(item.id)"
+            @mouseenter="onWalletHover(item)"
           >
             <v-list-item-icon style="height: 40px" class="mr-4">
               <v-badge
@@ -80,8 +83,8 @@
 <script setup lang="ts">
 import assets from '@/utils/assets';
 import { Wallet, WalletType } from '@/models/types';
-import { computed, ref, toRefs, getCurrentInstance, watch } from 'vue';
-import networks from '@/utils/networks';
+import { computed, ref, toRefs, getCurrentInstance, watch, onMounted } from 'vue';
+import networks, { NetworkInfo } from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
@@ -117,6 +120,21 @@ const resolveNetworkIcon = (item: Wallet): string => {
   }
   return '';
 };
+
+defineProps<{ hideHeader?: boolean }>();
+const emit = defineEmits<{ (e: 'network-change', n: NetworkInfo): void }>();
+
+// Drive the welcome background from the wallet the user is focused on, instead
+// of leaving it frozen on the default chain during login.
+const onWalletHover = (item: Wallet): void => {
+  const network = networks.resolveNetwork(item.chain, item.network);
+  if (network) emit('network-change', network);
+};
+
+onMounted(() => {
+  const first = availableWallets.value[0];
+  if (first) onWalletHover(first);
+});
 
 const isWalletLocked = (wallet: Wallet): boolean => {
   return loggedWallet.value?.id === wallet.id && isLocked.value;

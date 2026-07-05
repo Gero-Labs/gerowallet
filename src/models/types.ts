@@ -245,13 +245,13 @@ export type UTxO = {
     size: number;
     type: string;
     bytes: string;
-    value: any;
+    value: unknown;
   };
   stake_addr: string;
   datum_hash: string;
   inline_datum: {
     bytes: string;
-    value: any;
+    value: unknown;
   };
   value: string;
 };
@@ -273,6 +273,8 @@ export type Tip = {
   next_block: string;
   confirmations: number;
 };
+
+export type { WalletTypeValue };
 
 export {
   purpose,
@@ -323,7 +325,7 @@ export interface ModalProps {
 // Section Types
 export interface SectionProps {
   className?: string;
-  children?: any;
+  children?: unknown;
 }
 
 // Legacy Transaction Type (for backward compatibility)

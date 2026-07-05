@@ -12,17 +12,18 @@ const balances = ref<BalanceResponse[]>([]);
 const portfolio = ref<PortfolioSummaryResponse | null>(null);
 const loading = ref(false);
 
-// Account computed
-const walletBalance = computed(() => account.value?.walletBalance ?? null);
-const availableBalance = computed(() => account.value?.availableBalance ?? null);
-const unrealizedPnl = computed(() => account.value?.unrealizedPnl ?? null);
-const marginBalance = computed(() => account.value?.marginBalance ?? null);
-const totalMargin = computed(() => account.value?.totalMargin ?? null);
+// Account computed — AccountResponse fields are snake_case (see strike-v2.types.ts)
+const walletBalance = computed(() => account.value?.wallet_balance ?? null);
+const availableBalance = computed(() => account.value?.available_balance ?? null);
+const unrealizedPnl = computed(() => account.value?.unrealized_pnl ?? null);
+const marginBalance = computed(() => account.value?.margin_balance ?? null);
+const totalMargin = computed(() => account.value?.total_margin ?? null);
 
-// Portfolio computed
-const allTimePnl = computed(() => portfolio.value?.allTimePnl ?? null);
-const realizedPnl = computed(() => portfolio.value?.realizedPnl ?? null);
-const allTimeVolume = computed(() => portfolio.value?.allTimeVolume ?? null);
+// Portfolio computed — PnL/volume live under PortfolioSummaryResponse.account;
+// feeTier/history/isTradingEnabled are top-level (see strike-v2.types.ts).
+const allTimePnl = computed(() => portfolio.value?.account?.allTimePnl ?? null);
+const realizedPnl = computed(() => portfolio.value?.account?.realizedPnl ?? null);
+const allTimeVolume = computed(() => portfolio.value?.account?.allTimeVolume ?? null);
 const feeTier = computed(() => portfolio.value?.feeTier ?? null);
 const isTradingEnabled = computed(() => portfolio.value?.isTradingEnabled ?? false);
 const equityHistory = computed(() => portfolio.value?.history ?? []);

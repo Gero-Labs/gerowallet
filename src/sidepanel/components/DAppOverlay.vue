@@ -1,5 +1,6 @@
 <template>
   <BottomSheet
+    v-if="!isApex"
     :value="isVisible"
     :persistent="true"
     :show-handle="false"
@@ -22,10 +23,10 @@
             <img
               :src="faviconUrl"
               class="favicon-img"
-              @error="faviconFailed = true"
+              @error="onFaviconError"
               v-if="!faviconFailed"
             />
-            <v-icon v-else size="32" color="#00c7f3">mdi-web</v-icon>
+            <v-icon v-else size="32" :color="primaryColor">mdi-web</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
@@ -44,7 +45,7 @@
           <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
           <v-checkbox
             v-model="enableConsent"
-            color="#00DFF3"
+            :color="primaryColor"
             hide-details
             dark
             dense
@@ -77,7 +78,7 @@
             <img
               :src="faviconUrl"
               class="favicon-img"
-              @error="faviconFailed = true"
+              @error="onFaviconError"
               v-if="!faviconFailed"
             />
             <v-icon v-else size="32" color="#FFF59E">mdi-file-document-edit-outline</v-icon>
@@ -148,7 +149,7 @@
         <!-- Ledger wallet -->
         <template v-else-if="walletType === WalletType.Ledger">
           <div class="hw-notice pa-3 mb-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectLedger') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -163,7 +164,7 @@
         <!-- Trezor wallet -->
         <template v-else-if="walletType === WalletType.Trezor">
           <div class="hw-notice pa-3 mb-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectTrezor') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -178,7 +179,7 @@
         <!-- Keystone wallet -->
         <template v-else-if="walletType === WalletType.Keystone">
           <div class="hw-notice pa-3 mb-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-qrcode-scan</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-qrcode-scan</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.keystoneSign') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -218,7 +219,7 @@
             <img
               :src="faviconUrl"
               class="favicon-img"
-              @error="faviconFailed = true"
+              @error="onFaviconError"
               v-if="!faviconFailed"
             />
             <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
@@ -273,7 +274,7 @@
         <!-- Ledger wallet -->
         <template v-else-if="walletType === WalletType.Ledger">
           <div class="hw-notice pa-3 mb-3 mt-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectLedger') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -288,7 +289,7 @@
         <!-- Trezor wallet -->
         <template v-else-if="walletType === WalletType.Trezor">
           <div class="hw-notice pa-3 mb-3 mt-3">
-            <v-icon color="#00c7f3" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectTrezor') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -330,8 +331,8 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { useDAppOverlay } from '../composables/useDAppOverlay';
+import { useChainContext } from '../composables/useChainContext';
 import BottomSheet from './BottomSheet.vue';
-import CopyButton from '@/shared/components/CopyButton.vue';
 import TransactionDetailsCard, {
   type TxDetailsWithdrawal,
   type TxDetailsTotals,
@@ -355,6 +356,8 @@ interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
 
 const { isVisible, currentRequest, requestQueue, approve, reject } = useDAppOverlay();
+const { isApex, themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const spendingPassword = ref('');
 const showPassword = ref(false);
@@ -372,11 +375,31 @@ const enableDomain = computed(() => {
   }
 });
 
-const faviconUrl = computed(() => {
+// Index of the favicon source currently being tried (advanced via @error).
+const faviconAttempt = ref(0);
+
+// Ordered favicon sources, best first.
+const faviconSources = computed(() => {
   const domain = enableDomain.value;
-  if (!domain) return '';
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  if (!domain) return [];
+  const tabFavicon = currentRequest.value?.payload?.favIconUrl;
+  return [
+    // Source 1: the real favicon Chrome already loaded for the dApp tab.
+    ...(tabFavicon ? [tabFavicon] : []),
+    // Source 2: Google favicon service by domain.
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+  ];
 });
+
+const faviconUrl = computed(() => faviconSources.value[faviconAttempt.value] || '');
+
+function onFaviconError() {
+  if (faviconAttempt.value < faviconSources.value.length - 1) {
+    faviconAttempt.value += 1; // try next source
+  } else {
+    faviconFailed.value = true; // exhausted → globe fallback
+  }
+}
 
 // Sign Data — domain + decoded message
 const signDataDomain = computed(() => {
@@ -399,10 +422,6 @@ const signDataMessage = computed(() => {
 });
 
 // ── Sign Tx — decoded summary so users see what they're signing ──
-
-// Cap on how many tokens we list in the asset tooltip — keeps the popover from
-// becoming a wall of text for token-heavy outputs (NFT bundles, DEX pool tokens, etc.)
-const ASSET_TOOLTIP_LIMIT = 6;
 
 interface SignTxAssetInfo {
   unit: string;
@@ -675,8 +694,7 @@ function resolveAssetInfo(unit: string): KnownAssetInfo {
   return { name: 'Unknown token', decimals: 0 };
 }
 
-// Raw CBOR hex of the current sign request — used by both the parser below and
-// the CopyButton in the tx details header.
+// Raw CBOR hex of the current sign request — used by the parser below.
 const txCborForSummary = computed<string | null>(() => {
   if (currentRequest.value?.method !== 'signTx') return null;
   return (currentRequest.value.payload?.tx as string | undefined) || null;
@@ -914,6 +932,7 @@ watch(currentRequest, () => {
   signError.value = '';
   enableConsent.value = false;
   faviconFailed.value = false;
+  faviconAttempt.value = 0;
 });
 
 function rejectSign() {
@@ -1132,7 +1151,16 @@ async function signDataNormal() {
         accountIndex: 0,
         isUsb: true,
       },
-    }) as { data: { key: string; signature: string } };
+    }) as { data: { key?: string; signature?: string; error?: string } };
+
+    // The background resolves (does not reject) on failure, returning
+    // { error }. Without this guard the error object was handed to the dApp as
+    // the "signature", surfacing downstream as an opaque verify 401. Mirror the
+    // popup path (DappSignData.vue) which only approves a real signature.
+    if (res?.data?.error) throw new Error(res.data.error);
+    if (!res?.data?.signature || !res?.data?.key) {
+      throw new Error('Wallet returned an empty signature payload');
+    }
 
     approve(res.data);
     spendingPassword.value = '';
@@ -1198,9 +1226,11 @@ async function signDataPrf() {
     const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]);
     const signingKey = accountKey.derive([role, index]).toRawKey();
 
-    // Get address bytes for COSE_Key
+    // Get address bytes for COSE_Key. Address.toBytes() returns a HexBlob
+    // (hex STRING) — decode to real bytes, else the emurgo WASM coerces the
+    // string per-character and embeds a garbage address (verify 401).
     const addressBytes = address.startsWith('addr') || address.startsWith('stake')
-      ? Cardano.Address.fromBech32(address).toBytes()
+      ? Buffer.from(Cardano.Address.fromBech32(address).toBytes(), 'hex')
       : Buffer.from(address, 'hex');
 
     const signatureData = buildSignatureAndCoseKey(addressBytes, payload, signingKey);
@@ -1230,7 +1260,12 @@ async function signDataHw() {
         accountIndex: 0,
         isUsb: true,
       },
-    }) as { data: { key: string; signature: string } };
+    }) as { data: { key?: string; signature?: string; error?: string } };
+
+    if (res?.data?.error) throw new Error(res.data.error);
+    if (!res?.data?.signature || !res?.data?.key) {
+      throw new Error('Wallet returned an empty signature payload');
+    }
 
     approve(res.data);
   } catch (e: any) {
@@ -1293,7 +1328,7 @@ async function signDataHw() {
 
 .url-warning {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   padding: 8px 10px;
   background: rgba(255, 167, 38, 0.08);
   border: 1px solid rgba(255, 167, 38, 0.15);
@@ -1415,8 +1450,8 @@ async function signDataHw() {
   font-size: 9px;
   padding: 1px 6px;
   border-radius: 6px;
-  background: rgba(0, 199, 243, 0.15);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  color: var(--chain-primary);
   font-weight: 600;
 }
 
@@ -1538,7 +1573,7 @@ async function signDataHw() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: rgba(0, 199, 243, 0.08);
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent);
   border-radius: 8px;
   width: 100%;
 }

@@ -2,6 +2,13 @@
 .DS_Store
 Thumbs.db
 
+# Secrets — never commit private key material.
+# APNs signing keys (.p8) and similar live-credential files must stay out of git.
+# The .claude/ dir is NOT ignored wholesale (it has tracked docs), so guard the
+# credential file types explicitly.
+*.p8
+*.mobileprovision
+
 # Dependencies
 node_modules/
 
@@ -79,13 +86,5 @@ docs/plans/2026-03-11-pnl-calculation-bug-analysis.md
 docs/plans/2026-03-12-pnl-acquisition-classification.md
 docs/plans/2026-03-12-wallet-ux-research.md
 docs/plans/2026-03-17-multi-chain-market-research.md
-docs/superpowers/plans/2026-03-12-mini-gero-swap.md
-docs/superpowers/plans/2026-03-13-multi-chain-implementation.md
-docs/superpowers/plans/2026-03-13-multi-chain-plan-phase2-backend.md
-docs/superpowers/plans/2026-03-13-multi-chain-plan-phase2-frontend.md
-docs/superpowers/plans/2026-03-13-multi-chain-plan-phase3-5.md
-docs/superpowers/specs/2026-03-12-mini-gero-swap-design.md
-docs/superpowers/specs/2026-03-12-multi-chain-architecture.pdf
-docs/superpowers/specs/2026-03-13-multi-chain-support-design.md
-docs/superpowers/specs/generate-arch-diagram.mjs
-docs/superpowers/specs/protocol-lattice-philosophy.md
+# Superpowers planning/spec notes (whole tree, from either skill set)
+docs/superpowers/
