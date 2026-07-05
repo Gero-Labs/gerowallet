@@ -146,10 +146,15 @@ export class WalletManager {
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
         });
         LoadingState.setText('Restoring wallet...');
+        // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
+        // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
+        // id isn't set yet, the load is skipped and the pinned devices + enable state
+        // come back empty on every restart (and a wallet switch would leak the prior
+        // wallet's trust list). The catch below resets it to null on failure.
+        this.currentWalletId = wallet.id;
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
-        this.currentWalletId = wallet.id;
 
         await walletBg.syncService.resync();
 
@@ -249,10 +254,15 @@ export class WalletManager {
           this.pendingSyncPromise = webSocketService.waitForSync();
         }
 
+        // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
+        // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
+        // id isn't set yet, the load is skipped and the pinned devices + enable state
+        // come back empty on every restart (and a wallet switch would leak the prior
+        // wallet's trust list). The catch below resets it to null on failure.
+        this.currentWalletId = wallet.id;
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
-        this.currentWalletId = wallet.id;
 
         // Wait for gero-sync catch-up to complete on first restore
         if (isFirstRestore && this.pendingSyncPromise) {
@@ -534,8 +544,14 @@ export class WalletManager {
       try {
         this.crossDevice?.dispose();
         this.crossDevice = null;
-        // Clear the QR-pair success marker so a pairing from the previous wallet can't
-        // surface in the next wallet's settings dialog (singleton in-memory state).
+        // Reset ALL per-wallet cross-device state so nothing from the previous wallet
+        // can leak into the next one (defense-in-depth: even if the load-order fix
+        // regressed, a switch must never carry the prior wallet's trust list / proof /
+        // enable state, which would auto-enable the feature for the wrong wallet and
+        // authorize the wrong phone). Re-loaded per-wallet on the next login. The
+        // relay-auth identity is per-install and intentionally NOT reset here.
+        this.remoteSigning = defaultRemoteSigningSettings();
+        this.crossDeviceProof = null;
         this.lastPairedDevice = null;
       } catch (xdError) {
         console.warn('Failed to cleanup cross-device signing during logout:', xdError);
