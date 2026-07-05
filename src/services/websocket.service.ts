@@ -39,8 +39,11 @@ interface WsHandlers {
   onSocketOpen?: () => void;
 }
 
-// Relay message types handled by the cross-device signing bridge. Kept in sync
-// with src/services/crossDevice/protocol.ts CrossDeviceMessageType.
+// Relay message types routed to the cross-device signing bridge. The first six are
+// the CrossDeviceMessageType wire messages (src/services/crossDevice/protocol.ts);
+// WAKE_PENDING is a relay CONTROL frame (unsigned, not a CrossDeviceMessage) that the
+// signing service special-cases in handleInbound — it MUST be allow-listed here too or
+// the requester never learns the target was offline and never re-issues on wake.
 const CROSS_DEVICE_MESSAGE_TYPES = [
   'DEVICE_REGISTER',
   'DEVICES',
@@ -48,6 +51,7 @@ const CROSS_DEVICE_MESSAGE_TYPES = [
   'SIGN_REQUEST',
   'SIGN_RESPONSE',
   'PAIR_CONFIRM',
+  'WAKE_PENDING',
 ];
 
 class WebSocketService {
