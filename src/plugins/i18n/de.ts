@@ -3956,6 +3956,13 @@ export default {
   'midnight.flowValidator': 'Validator',
   'midnight.flowDust': 'DUST-Adresse',
   'midnight.capacity': 'Kapazität',
+  // DUST-Batterieanzeige
+  'midnight.dustBattery': 'DUST-Batterie',
+  'midnight.dustCharge': 'Ladung',
+  'midnight.dustFull': 'Ladung',
+  'midnight.dustTimeToFull': 'Zeit bis voll',
+  'midnight.dustCapReached': 'Status',
+  'midnight.dustFullyCharged': 'Voll geladen',
   // Transaktionstypen (Verlauf)
   'midnight.txRegisterDust': 'Für DUST registriert',
   'midnight.txDeregisterDust': 'DUST-Registrierung aufgehoben',
