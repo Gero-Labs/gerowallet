@@ -436,6 +436,22 @@ class MidnightSyncService {
     if (netAmount < 0n) type = 'send';
     else if (netAmount === 0n && spentAmount > 0n) type = 'send'; // pure forward to others
 
+    // For sends, surface the recipient (largest NIGHT output NOT owned by us)
+    // so history can render "To: mn_addr_…". A receive can't reliably name the
+    // sender from a per-address unshielded subscription — the spent inputs
+    // aren't ours to inspect — so counterparty stays empty there.
+    let counterparty = '';
+    if (type === 'send') {
+      let best = 0n;
+      for (const o of created) {
+        if (!o || o.owner === myUnshielded) continue;
+        const tt = o.tokenType ?? o.token_type ?? '';
+        if (tt && tt !== NIGHT_TOKEN_TYPE_NULL) continue;
+        const v = this.toBig(o.value);
+        if (v > best) { best = v; counterparty = o.owner; }
+      }
+    }
+
     return {
       hash,
       type,
@@ -443,9 +459,12 @@ class MidnightSyncService {
       // Net amount in NIGHT base units. Positive = received, negative = sent.
       // The UI displays absolute value with a +/- sign based on `type`.
       amount: netAmount < 0n ? -netAmount : netAmount,
-      counterparty: '',
+      counterparty,
       timestamp: raw.txTimestamp ?? raw.tx_timestamp ?? 0,
       status: 'confirmed',
+      // Midnight fees are paid in DUST, not NIGHT, and the unshielded
+      // subscription doesn't carry the DUST fee — leave 0 until gero-sync
+      // forwards it (tracked as a tx-history followup).
       fee: 0n,
       blockHeight: raw.blockHeight ?? raw.block_height,
       isShielded: false, // gero-sync's per-address subscription delivers unshielded only

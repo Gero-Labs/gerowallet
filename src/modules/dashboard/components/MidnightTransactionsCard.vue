@@ -32,7 +32,9 @@
         >
           <div class="recent-tx-meta">
             <div class="recent-tx-status">{{ statusLabel(tx) }}</div>
-            <div class="recent-tx-time">{{ formatTime(tx.timestamp) }}</div>
+            <div class="recent-tx-time">
+              <span v-if="tx.counterparty">{{ shortAddress(tx.counterparty) }} · </span>{{ formatTime(tx.timestamp) }}
+            </div>
           </div>
           <div class="recent-tx-amount" :style="{ color: amountColor(tx.type) }">
             {{ formatAmountSigned(tx) }}
@@ -108,6 +110,14 @@ function formatAmountSigned(tx: MidnightTransaction): string {
   const fractionDigits = tx.token === 'NIGHT' ? 2 : 4;
   const sign = tx.type === 'receive' ? '+' : tx.type === 'send' ? '−' : '';
   return `${sign}${formatBigDecimal(tx.amount, divisor, fractionDigits)} ${currencySymbol(tx.token)}`;
+}
+
+// Truncate a bech32m Midnight address to "mn_addr…<last4>" for the tx list.
+function shortAddress(addr: string): string {
+  if (!addr) return '';
+  const sepIdx = addr.indexOf('1');
+  const prefix = sepIdx > 0 ? addr.slice(0, sepIdx) : addr.slice(0, 7);
+  return `${prefix}…${addr.slice(-4)}`;
 }
 
 function formatTime(timestamp: number): string {
