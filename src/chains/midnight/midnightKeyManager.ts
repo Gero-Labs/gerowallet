@@ -1,8 +1,8 @@
 /**
  * Midnight HD key + address derivation.
  *
- * Wraps `@midnight-ntwrk/wallet-sdk-hd` (HDWallet at `m/44'/2400'/account'/role/index`)
- * and `@midnight-ntwrk/wallet-sdk-unshielded-wallet`'s `createKeystore` so the
+ * Wraps `@midnightntwrk/wallet-sdk-hd` (HDWallet at `m/44'/2400'/account'/role/index`)
+ * and `@midnightntwrk/wallet-sdk-unshielded-wallet`'s `createKeystore` so the
  * wallet can derive a Midnight unshielded address from a BIP39 mnemonic.
  *
  * Roles (per the SDK constant `Roles`):
@@ -23,14 +23,14 @@
  */
 
 import * as bip39 from 'bip39';
-import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
-import { createKeystore } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd';
+import { createKeystore } from '@midnightntwrk/wallet-sdk-unshielded-wallet';
 import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import {
   DustAddress,
   MidnightBech32m,
   ShieldedEncryptionSecretKey,
-} from '@midnight-ntwrk/wallet-sdk-address-format';
+} from '@midnightntwrk/wallet-sdk-address-format';
 import { bech32, bech32m } from 'bech32';
 import {
   Bip32Ed25519,
@@ -52,7 +52,7 @@ import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
  * Map our project's `Network` constants to the SDK's NetworkId strings.
  * The SDK accepts `'mainnet' | 'testnet' | 'devnet' | 'qanet' | 'undeployed'
  * | 'preview' | 'preprod'` — see
- * `@midnight-ntwrk/wallet-sdk-abstractions/dist/NetworkId.d.ts`.
+ * `@midnightntwrk/wallet-sdk-abstractions/dist/NetworkId.d.ts`.
  */
 function midnightNetworkId(network: string): string {
   switch (network) {

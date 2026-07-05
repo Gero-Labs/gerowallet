@@ -63,10 +63,10 @@ export async function balanceAndSignUnshieldedTransfer(
     ledgerMod,
     abstractionsMod,
   ] = await Promise.all([
-    import('@midnight-ntwrk/wallet-sdk-unshielded-wallet'),
-    import('@midnight-ntwrk/wallet-sdk-dust-wallet'),
+    import('@midnightntwrk/wallet-sdk-unshielded-wallet'),
+    import('@midnightntwrk/wallet-sdk-dust-wallet'),
     import('@midnight-ntwrk/ledger-v8'),
-    import('@midnight-ntwrk/wallet-sdk-abstractions'),
+    import('@midnightntwrk/wallet-sdk-abstractions'),
   ]);
   const { LedgerParameters, DustSecretKey, Transaction } = ledgerMod;
   const { InMemoryTransactionHistoryStorage } = abstractionsMod;
@@ -339,7 +339,7 @@ function hexToBytes(hex: string): Uint8Array {
 
 // Small thunks so the awaited type is inferred for the let-bindings above.
 async function unshieldedBuilderStart(
-  builder: ReturnType<typeof import('@midnight-ntwrk/wallet-sdk-unshielded-wallet').UnshieldedWallet>,
+  builder: ReturnType<typeof import('@midnightntwrk/wallet-sdk-unshielded-wallet').UnshieldedWallet>,
   publicKey: Parameters<typeof builder.startWithPublicKey>[0],
 ) {
   const w = builder.startWithPublicKey(publicKey);
@@ -348,7 +348,7 @@ async function unshieldedBuilderStart(
 }
 
 async function dustBuilderStart(
-  builder: ReturnType<typeof import('@midnight-ntwrk/wallet-sdk-dust-wallet').DustWallet>,
+  builder: ReturnType<typeof import('@midnightntwrk/wallet-sdk-dust-wallet').DustWallet>,
   sk: ledger.DustSecretKey,
   dustParams: ledger.DustParameters,
   persistedState?: string | null,

@@ -287,7 +287,7 @@ export async function createNewWallet(
   } else if (chain === Blockchain.MIDNIGHT) {
     // Midnight key derivation: BIP39 → 64-byte seed. The Midnight SDK
     // (HDWallet + UnshieldedAddress) is intentionally NOT imported here —
-    // pulling `@midnight-ntwrk/wallet-sdk-*` into gero-db.ts would drag the
+    // pulling `@midnightntwrk/wallet-sdk-*` into gero-db.ts would drag the
     // ~10MB ledger-v8 WASM + `effect` runtime into the background service
     // worker bundle. Instead, callers (CreateWallet.vue, RestoreWallet.vue)
     // pre-derive the bech32m addresses in the options context and pass them

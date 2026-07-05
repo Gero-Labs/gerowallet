@@ -84,10 +84,10 @@ export async function buildAndSignShieldedTransfer(
     abstractionsMod,
     addressFormatMod,
   ] = await Promise.all([
-    import('@midnight-ntwrk/wallet-sdk-shielded'),
+    import('@midnightntwrk/wallet-sdk-shielded'),
     import('@midnight-ntwrk/ledger-v8'),
-    import('@midnight-ntwrk/wallet-sdk-abstractions'),
-    import('@midnight-ntwrk/wallet-sdk-address-format'),
+    import('@midnightntwrk/wallet-sdk-abstractions'),
+    import('@midnightntwrk/wallet-sdk-address-format'),
   ]);
   type ShieldedWalletInstance = {
     start: (keys: ledger.ZswapSecretKeys) => Promise<void>;

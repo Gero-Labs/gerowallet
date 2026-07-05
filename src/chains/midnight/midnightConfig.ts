@@ -51,7 +51,7 @@ export interface MidnightNetworkEndpoints {
   /** Block explorer URL (for tx history links in the UI). */
   blockExplorerUrl?: string;
   /**
-   * SDK NetworkId — the string the `@midnight-ntwrk/wallet-sdk-*` packages use
+   * SDK NetworkId — the string the `@midnightntwrk/wallet-sdk-*` packages use
    * internally for serialization and address-format selection. Lowercase.
    */
   sdkNetworkId: 'mainnet' | 'preprod' | 'preview' | 'undeployed';
@@ -79,7 +79,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     publicIndexerUrl: 'https://indexer.preview.midnight.network/api/v4/graphql',
     publicIndexerWsUrl: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
     publicRpcUrl: 'https://rpc.preview.midnight.network',
-    faucetUrl: 'https://faucet.preview.midnight.network',
+    faucetUrl: 'https://midnight-tmnight-preview.nethermind.dev',
     blockExplorerUrl: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.preview.midnight.network#/explorer',
     sdkNetworkId: 'preview',
   },
@@ -91,7 +91,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     publicIndexerUrl: 'https://indexer.preprod.midnight.network/api/v4/graphql',
     publicIndexerWsUrl: 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws',
     publicRpcUrl: 'https://rpc.preprod.midnight.network',
-    faucetUrl: 'https://faucet.preprod.midnight.network',
+    faucetUrl: 'https://midnight-tmnight-preprod.nethermind.dev',
     blockExplorerUrl: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.preprod.midnight.network#/explorer',
     sdkNetworkId: 'preprod',
   },
