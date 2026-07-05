@@ -88,4 +88,10 @@ export enum MessageTypes {
   //      Midnight wallet's network (midnight-preview → cardano-preview, etc.).
   // Returns the tx hash. Used by `DustRegistrationDialog` for native registration.
   SIGN_AND_SUBMIT_DUST_REGISTRATION_TX = 'SIGN_AND_SUBMIT_DUST_REGISTRATION_TX',
+  // Midnight: force a full re-sync from block 0. Clears both halves of the warm
+  // state (gero-sync WS cursor + store snapshot, and the persisted SDK
+  // wallet-state blobs) so a stuck/stale local view can be recovered without
+  // reinstalling. User-triggered from the portfolio page's reset action;
+  // delegates to `midnightSyncService.forceResync()` (BG-side, where the WS lives).
+  RESYNC_MIDNIGHT = 'RESYNC_MIDNIGHT',
 }

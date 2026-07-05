@@ -71,11 +71,16 @@ export interface MidnightAddresses {
    */
   addressHex?: string;
   /**
-   * Hex-encoded Zswap encryption public key (the "viewing key"). Gero-sync
-   * forwards this to the Midnight indexer's {@code connect(viewingKey)} mutation
-   * so the indexer can server-side-filter shielded txs to the ones this wallet
-   * can decrypt. Cannot spend; can de-anonymize incoming notes — treat as
-   * moderately sensitive but safe to persist on the wallet record.
+   * Bech32m-encoded Zswap encryption SECRET key — what the Midnight indexer
+   * calls the "viewing key" in its `connect(viewingKey)` mutation. Wire form
+   * has HRP `shield-esk` (`mn_shield-esk_<network>1…` non-mainnet, bare
+   * `mn_shield-esk…` mainnet). The indexer needs the secret to decrypt
+   * incoming shielded notes server-side — same shape as Zcash's IVK.
+   *
+   * BLAST RADIUS: anyone with this string can decrypt every incoming
+   * shielded note for this wallet, forever. Cannot spend, but can fully
+   * de-anonymize. Followup work: move to encrypted-at-rest storage
+   * alongside the mnemonic instead of plain-form on the publicKey JSON.
    *
    * Optional for backward compat: wallets created before this field was added
    * keep doing unshielded-only sync. Re-derived + persisted on first wallet

@@ -3575,6 +3575,40 @@ app.addToOptions(MessageTypes.SIGN_AND_SUBMIT_DUST_REGISTRATION_TX, async (reque
   }
 });
 
+/**
+ * Midnight: force a full re-sync from block 0. Clears the gero-sync WS cursor +
+ * store snapshot and the persisted SDK wallet-state blobs, then resubscribes
+ * from genesis. User-triggered recovery for a stuck/stale local view. The WS
+ * and the sync service live in BG, so this must run here. No params.
+ */
+app.addToOptions(MessageTypes.RESYNC_MIDNIGHT, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('RESYNC_MIDNIGHT called on non-Midnight wallet');
+    }
+    const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
+    if (!midnightSyncService.isActive()) {
+      throw new Error('Midnight sync service is not active');
+    }
+    midnightSyncService.forceResync();
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, async (request, sendResponse) => {
   try {
     // Only update panel behavior — storage is written directly by the component
