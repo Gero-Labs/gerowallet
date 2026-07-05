@@ -88,3 +88,7 @@ docs/plans/2026-03-12-wallet-ux-research.md
 docs/plans/2026-03-17-multi-chain-market-research.md
 # Superpowers planning/spec notes (whole tree, from either skill set)
 docs/superpowers/
+
+# Local MCP config + worktrees must never be committed
+.mcp.json.local
+.worktrees/

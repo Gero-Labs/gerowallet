@@ -355,7 +355,7 @@ export class WalletManager {
       LoadingState.setText('Loading Midnight wallet...');
 
       // Hydrate midnightStore with the persisted addresses so the dashboard
-      // (MidnightBalanceCards, ReceiveDialog) can render immediately.
+      // (MidnightHoldingsTable, ReceiveDialog) can render immediately.
       const { midnightActions } = await import('@/stores/midnightStore');
       let addresses: {
         unshielded: string;

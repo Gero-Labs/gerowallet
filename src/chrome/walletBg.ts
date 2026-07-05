@@ -1763,7 +1763,7 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
-      const { createKeystore } = await import('@midnight-ntwrk/wallet-sdk-unshielded-wallet');
+      const { createKeystore } = await import('@midnightntwrk/wallet-sdk-unshielded-wallet');
       // Map our project's `Network` constant to the SDK's NetworkId string.
       // We avoid duplicating the mapping here — `midnightNetworkId` lives in
       // `midnightKeyManager` and is already used during address derivation.
@@ -1779,28 +1779,35 @@ export class WalletBg {
 
       const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
 
-      // DIAGNOSTIC: compare BG-derived public key against the one persisted
-      // at wallet creation (in options context). If they differ, the BG
-      // bundle's HD-derivation chain is silently producing wrong bytes —
-      // most likely the sha512/HMAC polyfill (the same chain that crashed
-      // loudly on the Cardano CIP-1852 derivation; see the skipCardano
-      // workaround above). A mismatch here explains a Substrate-side
-      // "Custom error: 1" (signature does not verify against the
-      // nightVerifyingKey embedded in the tx at build time).
-      try {
-        const bgPublicKey = keystore.getPublicKey() as unknown as string;
-        const storedPublicKey = this.publicKey
-          ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
-          : undefined;
-        console.log('[MidnightSign] pubkey BG=', bgPublicKey, 'STORED=', storedPublicKey,
-          'match=', storedPublicKey ? bgPublicKey === storedPublicKey : 'no-stored');
-      } catch (e) {
-        console.warn('[MidnightSign] pubkey comparison failed:', e);
+      // Sanity: the BG-derived public key must match the one persisted at
+      // wallet creation. A mismatch means the BG bundle's HD-derivation chain
+      // is producing wrong bytes (historically: a broken sha512/HMAC polyfill
+      // — see the skipCardano workaround above) and every signature would
+      // fail Substrate-side with "Custom error: 1". Fail fast instead of
+      // signing garbage; debugLog only (never log key material in prod).
+      const bgPublicKey = keystore.getPublicKey() as unknown as string;
+      const storedPublicKey = this.publicKey
+        ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
+        : undefined;
+      if (storedPublicKey && bgPublicKey !== storedPublicKey) {
+        debugLog('[MidnightSign] BG-derived pubkey does not match stored pubkey — aborting sign');
+        throw new Error('Midnight signing key mismatch — please re-add this wallet');
       }
 
       const results: Array<{ index: number; signatureHex: string }> = [];
       for (const segment of segments) {
-        const dataBytes = Buffer.from(segment.dataHex, 'hex');
+        // Strip an optional 0x prefix BEFORE hex-decoding. Buffer.from(hex)
+        // stops at the first non-hex char, so a 0x-prefixed payload (which
+        // Nexus's /tx/build-unshielded segments carry) would silently decode
+        // to an EMPTY buffer and we'd sign nothing. The DUST-registration
+        // caller sends bare hex, so this is a no-op there.
+        const bareHex = segment.dataHex.startsWith('0x')
+          ? segment.dataHex.slice(2)
+          : segment.dataHex;
+        if (!/^[0-9a-fA-F]+$/.test(bareHex) || bareHex.length % 2 !== 0) {
+          throw new Error(`Segment ${segment.index}: dataHex is not valid hex`);
+        }
+        const dataBytes = Buffer.from(bareHex, 'hex');
         const signature = keystore.signData(dataBytes);
         // The SDK's `Signature` type is `string` (hex). Pass it through as-is
         // so Nexus can hand it back to `signUnprovenTransaction`.
