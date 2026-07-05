@@ -15,6 +15,15 @@
         </v-col>
       </v-row>
 
+      <!-- DUST battery: at-a-glance fee-capacity gauge (the Lace/1AM pattern).
+           Live-ticks via useMidnightDustLive; unregistered state opens the
+           same DUST registration dialog as the header button. -->
+      <v-row no-gutters>
+        <v-col cols="12" class="pa-2">
+          <MidnightDustGauge @register="dustRegistrationOpen = true" />
+        </v-col>
+      </v-row>
+
       <!-- Holdings table: same liquid-glass shell + chip bar pattern as Cardano. -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
@@ -355,6 +364,7 @@ import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransac
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
+import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
