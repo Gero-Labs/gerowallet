@@ -35,6 +35,7 @@ const tabOrder: Record<string, number> = {
   '/card': 2,
   '/market': 3,
   '/activity': 4,
+  '/feed': 5,
 };
 
 const transitionName = ref('page-fade');

@@ -335,7 +335,7 @@ const riskFillClass = computed((): string => {
 }
 
 .ap-btn--deposit {
-  background: #00c7f3 !important;
+  background: var(--chain-primary) !important;
   color: #000 !important;
 }
 

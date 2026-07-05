@@ -9,14 +9,24 @@
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Cardano') }"
       />
       <img
-        :src="assets.apexBg"
+        :src="assets.apexPrimeBg"
         class="welcome-background-image"
-        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Apex') }"
+        :class="{ 'background-active': selectedNetwork?.blockchain === 'Apex Fusion Prime' }"
       />
       <img
-        :src="assets.bitcoinBg"
+        :src="assets.apexVectorBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain === 'Apex Fusion Vector' }"
+      />
+      <img
+        :src="assets.bitcoinWavesBg"
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
+      />
+      <img
+        :src="assets.midnightBg"
+        class="welcome-background-image"
+        :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Midnight') }"
       />
     </div>
 
@@ -27,35 +37,40 @@
 
     <!-- Main container -->
     <div class="welcome-container">
-      <!-- Left column - Liquid glass panel -->
+      <!-- Left column - logo + existing wallet list -->
       <div class="welcome-left-column">
         <WalletCreation
           :selectedNetwork="selectedNetwork"
-          :createOrImportSeedPhrase="createOrImportSeedPhrase"
-          @createOrImportSeedPhrase="enableCreateOrImportSeedPhrase"
+          @network-change="onOnboardingNetwork"
         />
       </div>
 
-      <!-- Right column - Clean background, no glass effects -->
+      <!-- Right column - intro hero → onboarding (revealed on Get Started) -->
       <div class="welcome-right-column">
         <div class="right-content">
-          <!-- No wallets state -->
-          <div
-            v-if="!createOrImportSeedPhrase && Array.isArray(availableWallets) && availableWallets.length == 0"
-            class="right-panel"
-          >
-            <NoWalletsWelcomeCard />
-          </div>
+          <transition name="onboarding-reveal" mode="out-in">
+            <!-- Intro: showcase hero + Get Started CTA -->
+            <div v-if="!started" key="intro" class="right-panel">
+              <div class="welcome-intro">
+                <NoWalletsWelcomeCard />
+                <v-btn
+                  class="geroButton get-started-btn"
+                  rounded
+                  x-large
+                  depressed
+                  @click="started = true"
+                >
+                  {{ $t('welcome.getStarted') }}
+                  <v-icon right>mdi-arrow-right</v-icon>
+                </v-btn>
+              </div>
+            </div>
 
-          <!-- Create/Import state -->
-          <div v-else-if="createOrImportSeedPhrase" class="right-panel">
-            <CreateOrImportSeedPhrase @back="disableCreateOrImportSeedPhrase" :network="selectedNetwork" />
-          </div>
-
-          <!-- Wallets list -->
-          <div v-else class="right-panel">
-            <WalletsListLogin />
-          </div>
+            <!-- Onboarding flow -->
+            <div v-else key="onboarding" class="right-panel">
+              <WalletOnboarding :network="selectedNetwork" :dev-mode="devMode" @network-change="onOnboardingNetwork" @update:dev-mode="devMode = $event" />
+            </div>
+          </transition>
 
           <!-- Footer -->
           <LegalFooter />
@@ -65,35 +80,30 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs } from 'vue';
+import { ref, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
-import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
-import { Wallet, WalletType } from '@/models/types';
-import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
-import CreateOrImportSeedPhrase from '@/options/modules/welcome/components/CreateOrImportSeedPhrase.vue';
-import { geroStore } from '@/stores/geroStore';
+import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
 import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCreation.vue';
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
+import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
 
-const createOrImportSeedPhrase = ref<boolean>(false);
+const DEV_NETWORKS_KEY = 'gero:devNetworks';
+
+// Onboarding is gated behind the Get Started CTA so the welcome screen opens on
+// the showcase hero rather than the full blockchain/method form.
+const started = ref<boolean>(false);
 const selectedNetwork = ref<NetworkInfo>(networks.networks[0]);
+const devMode = ref<boolean>(localStorage.getItem(DEV_NETWORKS_KEY) === 'true');
 
-const { wallets } = toRefs(geroStore);
-
-const disableCreateOrImportSeedPhrase = (): void => {
-  createOrImportSeedPhrase.value = false;
-};
-const enableCreateOrImportSeedPhrase = (): void => {
-  createOrImportSeedPhrase.value = true;
-};
-
-const availableWallets = computed(() => {
-  return Object.values(wallets.value)?.filter(
-    (wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
-  );
+watch(devMode, (val) => {
+  localStorage.setItem(DEV_NETWORKS_KEY, String(val));
 });
+
+const onOnboardingNetwork = (n: NetworkInfo): void => {
+  selectedNetwork.value = n;
+};
 </script>
 <style scoped>
 .welcome-root {
@@ -124,9 +134,10 @@ const availableWallets = computed(() => {
   filter: none;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
-  transform: translateY(20%);
   opacity: 0;
-  transition: all 0.3s ease;
+  /* Pure cross-fade between chains — no vertical slide (a translateY here both
+     left a black gap at the top and made the image jump on hover). */
+  transition: opacity 0.3s ease;
 }
 
 .welcome-background-image.background-active {
@@ -135,8 +146,8 @@ const availableWallets = computed(() => {
 
 .language-selector-container {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 0;
+  right: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
   border-radius: 8px;
@@ -148,7 +159,6 @@ const availableWallets = computed(() => {
   width: 100%;
   height: 100%;
   display: flex;
-  gap: 60px;
   z-index: 1;
   max-width: 1440px;
   margin: 0 auto;
@@ -156,7 +166,7 @@ const availableWallets = computed(() => {
 
 /* RIGHT COLUMN - CLEAN BACKGROUND */
 .welcome-right-column {
-  width: 62%; /* Increased from 58.333333% to account for left column reduction */
+  width: 73%;
   height: 100%;
   position: relative;
   /* NO backdrop-filter or blur effects here */
@@ -178,6 +188,40 @@ const availableWallets = computed(() => {
   justify-content: center;
 }
 
+/* Intro state: compact showcase hero with the Get Started CTA overlaid on it */
+.welcome-intro {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  align-self: center; /* vertically centered within the right column */
+  margin: 0 auto;
+}
+
+.get-started-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%); /* straddle the card's bottom edge */
+  min-width: 176px;
+  height: 44px !important;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: none;
+  z-index: 5;
+}
+
+/* Reveal transition: only the intro fades OUT. The onboarding card mounts fully
+   opaque — animating its opacity makes Chrome drop the liquid-glass
+   backdrop-filter for a few frames (card flashes transparent then snaps in). */
+.onboarding-reveal-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.onboarding-reveal-leave-to {
+  opacity: 0;
+}
+
 /* Fallback for browsers without backdrop-filter support */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .welcome-glass-panel {
@@ -192,9 +236,9 @@ const availableWallets = computed(() => {
   }
 
   .welcome-left-column {
-    width: 100%;
     height: auto;
     min-height: 300px;
+    width: 450px;
   }
 
   .welcome-right-column {

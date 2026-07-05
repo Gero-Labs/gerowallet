@@ -7,7 +7,7 @@
       :class="{ active: activeTab === tab.route, center: tab.center }"
       @click="activeTab !== tab.route && $router.push(tab.route).catch(() => {})"
     >
-      <v-icon :size="tab.center ? 28 : 22" :color="activeTab === tab.route ? '#00c7f3' : '#888'">
+      <v-icon :size="tab.center ? 28 : 22" :color="activeTab === tab.route ? activeColor : '#888'">
         {{ activeTab === tab.route ? tab.activeIcon : tab.icon }}
       </v-icon>
     </button>
@@ -15,9 +15,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useMiniNavigation } from '../composables/useMiniNavigation';
+import { useChainContext } from '../composables/useChainContext';
 
 const { navTabs, activeTab } = useMiniNavigation();
+const { themeColors } = useChainContext();
+const activeColor = computed(() => themeColors.value.primary);
 </script>
 
 <style scoped>
@@ -54,7 +58,7 @@ const { navTabs, activeTab } = useMiniNavigation();
 }
 
 .nav-tab.active {
-  background: rgba(0, 199, 243, 0.1);
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
 }
 
 .nav-tab.center {
@@ -66,6 +70,6 @@ const { navTabs, activeTab } = useMiniNavigation();
 }
 
 .nav-tab.center.active {
-  background: rgba(0, 199, 243, 0.15);
+  background: color-mix(in srgb, var(--chain-primary) 18%, transparent);
 }
 </style>

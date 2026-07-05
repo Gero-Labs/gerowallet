@@ -21,6 +21,7 @@
         @settings="openDashboardSettings"
       />
       <DAppOverlay />
+      <AgentDock v-if="isCopilotEnabled" />
     </template>
 
     <!-- Wallet switcher bottom sheet (available from header) -->
@@ -42,15 +43,24 @@ import WalletSelector from './components/WalletSelector.vue';
 import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
 import BottomSheet from './components/BottomSheet.vue';
+import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Wallet } from '@/models/types';
+import { useChainContext } from './composables/useChainContext';
 
 const { t } = useTranslation();
+
+// Initialize chain context — applies CSS variables for the active wallet's theme.
+// Other components that call useChainContext() reuse the singleton CSS-variable watcher.
+useChainContext();
+
 const showWalletSwitcher = ref(false);
 
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
 const isLocked = computed(() => walletStore.isLocked);
+const isCopilotEnabled = computed(() => featureFlagsStore.isCopilotEnabled());
 
 // Watch locale changes from geroStore
 const vmProxy = getCurrentInstance()!.proxy;
@@ -77,7 +87,7 @@ async function onWalletSelect(wallet: Wallet) {
     if (!response['data'].success) {
       console.error('Login failed:', response['data'].error);
     }
-  } catch (e: any) {
+  } catch (e) {
     console.error('Login error:', e);
   }
 }

@@ -25,16 +25,52 @@ let nftWatcherRegistered = false;
 let nftWatcherStop: WatchStopHandle | null = null;
 let consumerCount = 0;
 
+// Per-collection market-data cache, shared across consumers and re-fetches.
+// A `null` entry = a collection Nexus has no data for (404); caching it stops
+// the per-sync-tick 404/429 storm by never re-requesting known-missing policies.
+const statsCache = new Map<string, NftCollectionStats | null>();
+let fetchInFlight = false;
+let fetchDebounce: ReturnType<typeof setTimeout> | null = null;
+
 function cleanup(): void {
   if (nftWatcherStop) {
     nftWatcherStop();
     nftWatcherStop = null;
   }
+  if (fetchDebounce) {
+    clearTimeout(fetchDebounce);
+    fetchDebounce = null;
+  }
   nftWatcherRegistered = false;
 }
 
 export function useNftMarketData() {
+  // Merge whatever is currently in statsCache onto a base list.
+  function applyCachedStats(base: NftCollectionDisplay[]): void {
+    collections.value = base.map(col => {
+      const s = statsCache.get(col.policyId);
+      if (s) {
+        const floor = s.floorPriceLovelace ?? null;
+        const qty = col.quantity || 0;
+        return {
+          ...col,
+          name: s.name || col.name,
+          img: s.imageUrl || col.img,
+          description: s.description || col.description || '',
+          floorPriceLovelace: floor,
+          lastSalePriceLovelace: s.lastSalePriceLovelace ?? null,
+          totalVolumeLovelace: s.totalVolumeLovelace ?? null,
+          saleCount: s.saleCount ?? null,
+          floorValueLovelace: floor != null && qty > 0 ? floor * qty : null,
+        };
+      }
+      return col;
+    });
+  }
+
   async function fetchUserNftCollections() {
+    if (fetchInFlight) return; // a run is already in progress — don't pile on
+    fetchInFlight = true;
     loading.value = true;
     try {
       // Start from walletStore.collections (populated by chain sync — always available)
@@ -63,74 +99,48 @@ export function useNftMarketData() {
           floorValueLovelace: null,
         }));
 
-      // Set immediately so the user sees their collections
-      collections.value = baseCollections;
+      // Show immediately, merging anything already cached.
+      applyCachedStats(baseCollections);
 
-      // Enrich with market data from two sources:
-      // 1. Bulk top collections endpoint (covers popular collections)
-      // 2. Individual per-collection calls (fills gaps)
-      const statsMap = new Map<string, NftCollectionStats>();
-      const userPolicyIds = new Set(baseCollections.map(c => c.policyId));
+      // Only do work for collections we have no cached answer for.
+      const uncached = baseCollections.filter(c => !statsCache.has(c.policyId));
+      if (uncached.length === 0) return;
 
-      // Source 1: Try bulk endpoint for top collections
+      // Enrich ONLY from the bulk top-collections endpoint — a single request that
+      // covers popular collections. We deliberately do NOT make per-collection
+      // /api/nft/collection/{policy} calls: Nexus 404s collections it doesn't track
+      // and 429-rate-limits the burst, and those collections have no market data to
+      // show anyway. That per-collection loop was the source of the console spam.
+      const uncachedIds = new Set(uncached.map(c => c.policyId));
+      let bulkOk = false;
       try {
         const topCollections = await marketApi.getNftCollections('volume', 200);
         if (Array.isArray(topCollections)) {
+          bulkOk = true;
           for (const tc of topCollections) {
-            if (tc.policyId && userPolicyIds.has(tc.policyId)) {
-              statsMap.set(tc.policyId, tc);
-            }
+            if (tc.policyId && uncachedIds.has(tc.policyId)) statsCache.set(tc.policyId, tc);
           }
         }
       } catch {
-        // Bulk endpoint not available — continue with individual calls
+        // Bulk endpoint unavailable — leave collections un-enriched and retry next round.
       }
 
-      // Source 2: Fetch individually for collections not covered by bulk (capped + batched to avoid API spam)
-      const MAX_INDIVIDUAL = 20;
-      const missing = baseCollections.filter(c => !statsMap.has(c.policyId)).slice(0, MAX_INDIVIDUAL);
-      const BATCH_SIZE = 5;
-      for (let i = 0; i < missing.length; i += BATCH_SIZE) {
-        const batch = missing.slice(i, i + BATCH_SIZE);
-        const results = await Promise.allSettled(
-          batch.map(async (col) => {
-            const stats = await marketApi.getNftCollectionStats(col.policyId);
-            return { policyId: col.policyId, stats };
-          })
-        );
-        for (const r of results) {
-          if (r.status === 'fulfilled' && r.value.stats) {
-            statsMap.set(r.value.policyId, r.value.stats);
-          }
+      // After a successful bulk pass, cache everything else as "no data" so we never
+      // re-request it on subsequent sync ticks. (If the bulk call failed we leave it
+      // uncached so a later run can retry — no permanent blanking.)
+      if (bulkOk) {
+        for (const c of uncached) {
+          if (!statsCache.has(c.policyId)) statsCache.set(c.policyId, null);
         }
       }
 
-      // Apply market data to collections
-      if (statsMap.size > 0) {
-        collections.value = baseCollections.map(col => {
-          const s = statsMap.get(col.policyId);
-          if (s) {
-            const floor = s.floorPriceLovelace ?? null;
-            const qty = col.quantity || 0;
-            return {
-              ...col,
-              name: s.name || col.name,
-              img: s.imageUrl || col.img,
-              description: s.description || col.description || '',
-              floorPriceLovelace: floor,
-              lastSalePriceLovelace: s.lastSalePriceLovelace ?? null,
-              totalVolumeLovelace: s.totalVolumeLovelace ?? null,
-              saleCount: s.saleCount ?? null,
-              floorValueLovelace: floor != null && qty > 0 ? floor * qty : null,
-            };
-          }
-          return col;
-        });
-      }
+      // Re-apply now that the cache is populated.
+      applyCachedStats(baseCollections);
     } catch (e) {
       console.warn('Failed to fetch NFT collection data:', e);
     } finally {
       loading.value = false;
+      fetchInFlight = false;
     }
   }
 
@@ -147,7 +157,9 @@ export function useNftMarketData() {
   if (!nftWatcherRegistered) {
     nftWatcherRegistered = true;
     nftWatcherStop = watch(() => walletStore.collections, () => {
-      fetchUserNftCollections();
+      // Coalesce bursts of sync updates (which fire on every tip) into one fetch.
+      if (fetchDebounce) clearTimeout(fetchDebounce);
+      fetchDebounce = setTimeout(() => { fetchDebounce = null; fetchUserNftCollections(); }, 600);
     });
   }
 

@@ -2,21 +2,19 @@
  * Nexus transaction builder API client.
  *
  * Replaces client-side buildCardanoTransaction calls with server-side builds via
- * nexus's /v1/tx/build* endpoints. Server-side building is preferable because:
+ * nexus's /api/tx/build* endpoints. Server-side building is preferable because:
  *   - protocol params are always fresh (server fetches from chain)
  *   - fee calculation matches the canonical Cardano JVM/Aiken impl
  *   - upgrades happen on the server, no extension release required
  *
- * Auth: every request gets an Authorization: Bearer <jwt> header from
- * nexusDevice.service. On 401 the token is invalidated and the request retried
- * once with a fresh token.
+ * Auth: none on the client. Requests go to gero-backend's Nexus proxy
+ * (VITE_NEXUS_URL → <backend>/api/nexus), which injects the Nexus API key
+ * server-side. The backend gates the extension by Origin/IP.
  */
 
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
 import { Cardano } from '@cardano-sdk/core';
-import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { Network } from '@/models/types';
-import { debugLog } from '@/utils/debug';
 
 // ── Request / response types matching nexus's BuildTxRequest / BuildTxResponse ──
 
@@ -93,51 +91,51 @@ export interface BuildTxResponse {
   estimated_signatures?: number;
 }
 
+/**
+ * Plain reward-withdrawal build request. Matches nexus `BuildWithdrawalTxRequest`.
+ * Note: this endpoint takes a single stakeAddress + amount and does NOT accept extra
+ * outputs/metadata — so the CIP-149 donation path stays on the client builder for now.
+ */
+export interface BuildWithdrawalTxRequest {
+  stakeAddress: string;
+  amount: string;
+  changeAddress: string;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+  ttl?: number;
+}
+
+/**
+ * Stake-key registration / deregistration build request. Matches nexus
+ * `BuildStakeRegistrationTxRequest`. Note: this endpoint does NOT accept a
+ * `withdrawals` field, so a deregistration that also claims pending rewards
+ * must stay on the client builder until the endpoint gains withdrawal support.
+ */
+export interface BuildStakeRegistrationTxRequest {
+  stakeAddress: string;
+  changeAddress: string;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+  deregister: boolean;
+  ttl?: number;
+}
+
 // ── Axios client ──
 
-// Fallback to public Nexus URL when env isn't injected (matches the auth
-// client default in nexusDevice.service.ts).
-const NEXUS_TX_BASE = (typeof import.meta !== 'undefined'
-  && import.meta.env
-  && import.meta.env['VITE_NEXUS_URL']) || 'https://nexus.gerowallet.io';
-
 const nexusTxClient = axios.create({
-  baseURL: NEXUS_TX_BASE,
+  baseURL: import.meta.env['VITE_NEXUS_URL'],
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });
 
-nexusTxClient.interceptors.request.use(async (config) => {
-  const token = await getNexusAccessToken();
-  config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// 401 (token invalid) or 403 (token valid but scopes stale) → drop cached
-// token, reauth, retry once. The 403 case fires when Nexus adds new scopes to
-// DEFAULT_SCOPES and the wallet's cached JWT predates them; only a fresh
-// /api/auth/device login picks up the updated claim set. The _retried flag
-// prevents loops if the server genuinely denies post-reauth.
+// Surface the Nexus error body's message so callers can parse it
+// (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
+// The backend proxy forwards the upstream status + JSON body verbatim.
 nexusTxClient.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
-    const config = error.config as AxiosRequestConfig & { _retried?: boolean };
-    const status = error.response?.status;
-    if ((status === 401 || status === 403) && config && !config._retried) {
-      config._retried = true;
-      try {
-        const token = await reauthenticateNexus();
-        if (config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return nexusTxClient.request(config);
-      } catch (refreshErr) {
-        debugLog(`[nexus-tx-api] Reauth failed after ${status}:`, refreshErr);
-        throw error;
-      }
-    }
-    // Surface the Nexus error body's message so callers can parse it
-    // (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
     const body = error.response?.data as { message?: string } | undefined;
     if (body?.message) {
       const enriched = new Error(body.message);
@@ -152,12 +150,15 @@ nexusTxClient.interceptors.response.use(
 
 /**
  * Map the wallet's typed Network value (e.g. 'Mainnet', 'Preprod') to nexus's
- * uppercase enum name. Returns undefined if the network isn't supported by nexus,
- * which lets the server fall back to its default.
+ * `network` query-param format. Nexus expects the chain-prefixed slug
+ * (`cardano-mainnet` / `cardano-preprod`) — the same format its other endpoints
+ * (/api/addresses/{addr}/utxos, /api/aggregator/*) use. It rejects the bare
+ * `MAINNET`/`PREPROD` with "Invalid value '…' for parameter 'network'".
+ * Returns undefined if unsupported, letting the server fall back to its default.
  */
-function toNexusNetwork(network: string | undefined): 'MAINNET' | 'PREPROD' | undefined {
-  if (network === Network.MAINNET) return 'MAINNET';
-  if (network === Network.PREPROD) return 'PREPROD';
+function toNexusNetwork(network: string | undefined): 'cardano-mainnet' | 'cardano-preprod' | undefined {
+  if (network === Network.MAINNET) return 'cardano-mainnet';
+  if (network === Network.PREPROD) return 'cardano-preprod';
   return undefined;
 }
 
@@ -234,8 +235,11 @@ export const nexusTxApi = {
     network?: string
   ): Promise<BuildTxResponse> {
     const nexusNetwork = toNexusNetwork(network);
-    const url = nexusNetwork ? `/v1/tx/build?network=${nexusNetwork}` : '/v1/tx/build';
-    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    const url = nexusNetwork ? `/api/tx/build?network=${nexusNetwork}` : '/api/tx/build';
+    // The body's `network` must be Nexus's enum keyName ('cardano-mainnet'), NOT the
+    // wallet's 'MAINNET'/'PREPROD' — the Network @JsonCreator rejects the latter and
+    // Spring returns "Malformed request body". Override with the resolved slug.
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, { ...request, network: nexusNetwork });
     return data;
   },
 
@@ -249,8 +253,43 @@ export const nexusTxApi = {
     network?: string
   ): Promise<MaxAdaResponse> {
     const nexusNetwork = toNexusNetwork(network);
-    const url = nexusNetwork ? `/v1/tx/max-ada?network=${nexusNetwork}` : '/v1/tx/max-ada';
-    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, request);
+    const url = nexusNetwork ? `/api/tx/max-ada?network=${nexusNetwork}` : '/api/tx/max-ada';
+    // Body `network` must be the slug ('cardano-mainnet'), not 'MAINNET' — see buildTransferTx.
+    const { data } = await nexusTxClient.post<MaxAdaResponse>(url, { ...request, network: nexusNetwork });
+    return data;
+  },
+
+  /**
+   * Build an unsigned plain reward-withdrawal transaction via nexus
+   * (`/api/tx/build/withdrawal`). Returns CBOR ready for client-side signing.
+   * For withdrawals that also carry a CIP-149 donation output, use the client
+   * builder instead — this endpoint does not accept extra outputs.
+   */
+  async buildWithdrawalTx(
+    request: BuildWithdrawalTxRequest,
+    network?: string
+  ): Promise<BuildTxResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork ? `/api/tx/build/withdrawal?network=${nexusNetwork}` : '/api/tx/build/withdrawal';
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    return data;
+  },
+
+  /**
+   * Build an unsigned stake-key registration/deregistration transaction via nexus
+   * (`/api/tx/build/stake-registration`). Returns CBOR ready for client-side signing.
+   * Does not support reward withdrawals — a deregistration that also claims rewards
+   * must use the client builder for now.
+   */
+  async buildStakeRegistrationTx(
+    request: BuildStakeRegistrationTxRequest,
+    network?: string
+  ): Promise<BuildTxResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork
+      ? `/api/tx/build/stake-registration?network=${nexusNetwork}`
+      : '/api/tx/build/stake-registration';
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
     return data;
   },
 };

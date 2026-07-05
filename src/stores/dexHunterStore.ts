@@ -1,7 +1,6 @@
 import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import dexHunterApi from '@/api/dexhunter-api';
-import filters from '@/shared/utils/filters';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -121,11 +120,11 @@ export default {
       const res = await dexHunterApi.getSwapTokens();
       if (res.status === 200) {
         this.setTokens(res.data.reduce(function(map, token) {
+          // Images/metadata for display come from market data (useMarketData), keyed by unit.
+          // DexHunter tokens only define what is swappable + provide pricing/routing.
           map[token.token_id] = {
             name: token.token_ascii,
             ticker: token.ticker,
-            img: `https://storage.googleapis.com/dexhunter-images/tokens/${token.token_id}.webp`,
-            fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
             decimals: Number(token.token_decimals),
             unit: token.token_id,
             verified: token.is_verified,
@@ -176,23 +175,11 @@ export default {
   async searchTokens(query?: string) {
     const res = await dexHunterApi.getSwapTokens(query);
     if (res) {
-      return await Promise.all(res.data.map(async token => {
-        let assetData;
-        try {
-          assetData = await dexHunterApi.getAssetData(token.token_id.slice(0, 56) + '.' + token.token_id.slice(56));
-        } catch (e) {
-          console.log(e)
-        }
-        let fallbackImg = 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg';
-        if (assetData?.logoCID) {
-          fallbackImg = filters.toIPFS(assetData.logoCID);
-        }
-
+      // Images/metadata for display come from market data (useMarketData), keyed by unit.
+      return res.data.map(token => {
         return this.state.dexHunterTokens[token.token_id] = {
           name: token.token_ascii,
           ticker: token.ticker,
-          img: `https://storage.googleapis.com/dexhunter-images/tokens/${token.token_id}.webp`,
-          fallback_img: fallbackImg,
           decimals: Number(token.token_decimals),
           unit: token.token_id,
           verified: token.is_verified,
@@ -200,7 +187,7 @@ export default {
           quantity: '0',
           price: token.price,
         }
-      }))
+      })
     } else {
       return []
     }

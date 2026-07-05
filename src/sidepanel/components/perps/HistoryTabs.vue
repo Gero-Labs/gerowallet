@@ -3,7 +3,7 @@
     <v-tabs
       v-model="activeTab"
       background-color="transparent"
-      slider-color="#00c7f3"
+      :slider-color="primaryColor"
       dense
       class="ht-tabs"
       @change="onTabChange"
@@ -158,6 +158,10 @@
 import { ref, computed } from 'vue';
 import { useStrikeHistory } from '@/modules/market/composables/useStrikeHistory';
 import type { TransactionType, TransactionStatus } from '@/api/strike-v2.types';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const activeTab = ref(0);
 const loadedTabs = ref(new Set<number>([0]));
@@ -565,8 +569,8 @@ function txStatusClass(status: TransactionStatus): string {
 }
 
 .tt--withdraw {
-  background: rgba(0, 199, 243, 0.12);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  color: var(--chain-primary);
 }
 
 .tt--fee {

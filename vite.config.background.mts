@@ -52,6 +52,12 @@ const cjsInteropPlugin = {
       // that doesn't depend on those packages at all.
       'assert': '\0virtual:assert-stub',
       'assert/': '\0virtual:assert-stub',
+      // pbkdf2 MUST be intercepted at the Vite plugin level (enforce:'pre'),
+      // not just in rollupOptions.plugins. Vite's resolver + nodePolyfills (which
+      // lists 'pbkdf2') run BEFORE Rollup-stage plugins, so a Rollup-only shim
+      // races them and loses non-deterministically → "pbkdf2Sync is not exported
+      // by pbkdf2/browser.js". Resolving it here makes the shim win every time.
+      'pbkdf2': '\0virtual:pbkdf2',
     };
     if (virtuals[source]) return virtuals[source];
 
@@ -79,6 +85,15 @@ const cjsInteropPlugin = {
   },
   load(id: string) {
     switch (id) {
+      // pbkdf2: @cardano-sdk/crypto does `import { pbkdf2Sync } from 'pbkdf2'`.
+      // The npm pbkdf2 browser build is CJS (no named ESM exports), so re-export
+      // its members explicitly from the CJS default.
+      case '\0virtual:pbkdf2':
+        return `import pbkdf2Browser from 'pbkdf2/browser.js';
+export const pbkdf2 = pbkdf2Browser.pbkdf2 || pbkdf2Browser;
+export const pbkdf2Sync = pbkdf2Browser.pbkdf2Sync || pbkdf2Browser;
+export default pbkdf2Browser;`;
+
       // gopd/gOPD.js: exports Object.getOwnPropertyDescriptor directly
       case '\0virtual:gopd-gOPD':
         return `export default Object.getOwnPropertyDescriptor;`;

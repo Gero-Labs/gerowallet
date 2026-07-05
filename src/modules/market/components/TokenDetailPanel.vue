@@ -11,7 +11,6 @@
         <div class="d-flex align-center">
           <span class="text-h6 font-weight-bold mr-2">{{ token.ticker }}</span>
           <v-icon v-if="token.verified" small color="primary" class="mr-1">mdi-check-decagram</v-icon>
-          <TokenRiskBadge v-if="token.riskRating" :rating="token.riskRating" size="small" />
         </div>
         <span class="text--secondary text-caption">{{ token.name }}</span>
       </div>
@@ -41,7 +40,7 @@
               :color="token.change24h >= 0 ? '#1b5e20' : '#b71c1c'"
               :text-color="token.change24h >= 0 ? '#47CD89' : '#F97066'"
             >
-              {{ token.change24h >= 0 ? '+' : '' }}{{ token.change24h.toFixed(2) }}%
+              {{ token.change24h >= 0 ? '+' : '-' }}{{ formatChange(token.change24h) }}
             </v-chip>
           </div>
           <div class="text--secondary text-caption mt-1">{{ secondaryPrice }}</div>
@@ -134,13 +133,14 @@
       <div class="right-col">
         <!-- Right column tabs -->
         <v-tabs v-model="rightTab" dense background-color="transparent" height="28" class="detail-sub-tabs mb-3">
-          <v-tab>{{ $t('market.swap') }}</v-tab>
-          <v-tab>{{ $t('market.depth') }}</v-tab>
+          <v-tab tab-value="swap">{{ $t('market.swap') }}</v-tab>
+          <v-tab tab-value="depth">{{ $t('market.depth') }}</v-tab>
+          <v-tab v-if="!isApex && token.unit !== 'lovelace'" tab-value="markets">{{ $t('market.markets') }}</v-tab>
         </v-tabs>
 
         <!-- Swap tab -->
         <transition name="tab-fade" mode="out-in">
-        <div v-if="rightTab === 0" key="swap">
+        <div v-if="rightTab === 'swap'" key="swap">
           <!-- QuickSwap (Cardano DEX only) -->
           <QuickSwap
             v-if="!isApex && token.unit !== 'lovelace'"
@@ -214,7 +214,7 @@
         </div>
 
         <!-- Depth tab (Cardano DEX data only) -->
-        <div v-else-if="rightTab === 1" key="depth">
+        <div v-else-if="rightTab === 'depth'" key="depth">
           <div v-if="!isApex" style="display: flex; flex-direction: column; gap: 12px">
             <DepthChart
               v-if="tokenPolicyId && tokenAssetName"
@@ -232,6 +232,11 @@
             {{ $t('market.na') }}
           </div>
         </div>
+
+        <!-- Markets tab (cross-DEX price comparison) -->
+        <div v-else-if="rightTab === 'markets'" key="markets">
+          <CrossDexPrices :asset-id="token.unit" />
+        </div>
         </transition>
       </div>
     </div>
@@ -239,17 +244,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, markRaw, type Ref } from 'vue';
+import { ref, computed, watch, type Ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
 import TechnicalAnalysisChart from './TechnicalAnalysisChart.vue';
-import TokenRiskBadge from './TokenRiskBadge.vue';
 import OrderBookTable from './OrderBookTable.vue';
 import DepthChart from './DepthChart.vue';
 import QuickSwap from './QuickSwap.vue';
 import RecentTrades from './RecentTrades.vue';
 import BuySellVolume from './BuySellVolume.vue';
+import CrossDexPrices from './CrossDexPrices.vue';
 import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
@@ -332,7 +337,7 @@ const secondaryPrice = computed(() => {
 });
 
 const selectedTimeframe = ref('1h');
-const rightTab = ref(0);
+const rightTab = ref('swap');
 
 const tokenPnl = computed(() => getTokenPnl(props.token.unit));
 const totalPnl = computed(() => {
@@ -434,16 +439,9 @@ const compactStats = computed(() => {
   const tok = props.token;
   const sym = currencySymbol.value;
   return [
-    { label: t('market.marketCap'), value: sym + formatCompact(convertUsd(tok.mcap)) },
+    { label: t('market.marketCap'), value: tok.mcap != null ? sym + formatCompact(convertUsd(tok.mcap)) : t('market.na') },
     { label: t('market.volume24h'), value: sym + formatCompact(convertUsd(tok.volume24h)) },
     { label: t('market.tvl'), value: tok.tvl ? sym + formatCompact(convertUsd(tok.tvl)) : t('market.na') },
-    { label: t('market.holders'), value: tok.holders != null ? tok.holders.toLocaleString() : t('market.na') },
-    {
-      label: t('market.risk'),
-      value: tok.riskRating || t('market.na'),
-      component: tok.riskRating ? markRaw(TokenRiskBadge) : undefined,
-      componentProps: tok.riskRating ? { rating: tok.riskRating, size: 'small' } : undefined,
-    },
     {
       label: t('market.verified'),
       value: tok.verified ? '✓' : t('market.no'),
@@ -490,7 +488,7 @@ function formatPnlSigned(adaValue: number): string {
   return sign + currencySymbol.value + converted.toFixed(2);
 }
 
-import { formatPriceRaw, formatPrice, formatCompact } from '@/modules/market/utils/formatters';
+import { formatPriceRaw, formatPrice, formatCompact, formatChange } from '@/modules/market/utils/formatters';
 
 function openExplorer() {
   const fingerprint = props.token.fingerprint;
@@ -503,7 +501,7 @@ function openExplorer() {
 // Reset timeframe and reload candles when token changes
 watch(() => props.token, () => {
   selectedTimeframe.value = '1h';
-  rightTab.value = 0;
+  rightTab.value = 'swap';
   loadCandles();
 });
 

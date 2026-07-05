@@ -186,7 +186,7 @@ function select(symbol: string) {
 
 .symbol-selector-btn:hover {
   background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(0, 199, 243, 0.35);
+  border-color: color-mix(in srgb, var(--chain-primary) 35%, transparent);
 }
 
 .symbol-selector-btn__name {
@@ -258,7 +258,7 @@ function select(symbol: string) {
 }
 
 .symbol-selector-list__item--active {
-  background: rgba(0, 199, 243, 0.1) !important;
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent) !important;
 }
 
 .symbol-selector-list__symbol {

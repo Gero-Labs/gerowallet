@@ -116,7 +116,7 @@ onMounted(() => {
 const setCollateral = async () => {
   isCreating.value = true;
   try {
-    // Build the request for nexus's /v1/tx/build endpoint.
+    // Build the request for nexus's /api/tx/build endpoint.
     // Server-side building means: nexus owns coin selection, fresh protocol params,
     // and canonical fee calculation. The wallet only signs and submits.
     const request: BuildTxRequest = {

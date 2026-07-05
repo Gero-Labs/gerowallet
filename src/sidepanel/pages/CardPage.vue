@@ -6,7 +6,7 @@
         indeterminate
         :size="40"
         :width="3"
-        color="#00c7f3"
+        :color="primaryColor"
       />
       <span class="loading-text">{{ loadingMessage || $t('wallet.loadingYourWallet') }}</span>
     </div>
@@ -47,13 +47,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, computed } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import cardHelpers from '@/stores/modules/card';
 import CardAuthView from '@/sidepanel/components/card/CardAuthView.vue';
 import CardNewView from '@/sidepanel/components/card/CardNewView.vue';
 import CardPendingView from '@/sidepanel/components/card/CardPendingView.vue';
 import CardApprovedView from '@/sidepanel/components/card/CardApprovedView.vue';
+import { useChainContext } from '../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const {
   currentState,
@@ -155,12 +159,12 @@ onMounted(async () => {
   font-weight: 600 !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
   margin-top: 8px;
 }
 
 .retry-btn:hover {
-  border-color: #00c7f3 !important;
-  background: rgba(0, 199, 243, 0.08) !important;
+  border-color: var(--chain-primary) !important;
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent) !important;
 }
 </style>

@@ -28,7 +28,7 @@
     <!-- Leverage + Margin Mode row -->
     <div class="lev-margin-row">
       <button class="lev-badge" @click="leverageDialog = true">
-        <v-icon size="11" class="mr-1" style="color:#00c7f3">mdi-lightning-bolt</v-icon>
+        <v-icon size="11" class="mr-1" style="color: var(--chain-primary)">mdi-lightning-bolt</v-icon>
         {{ localLeverage }}x
       </button>
       <span class="margin-mode-label">
@@ -163,8 +163,51 @@
       </div>
     </div>
 
+    <!-- Live Estimates -->
+    <transition name="estimates-fade">
+      <div v-if="hasValidSize" class="estimates-block">
+        <div v-if="orderType === 'market'" class="est-row">
+          <span class="est-label">{{ $t('perpetuals.estEntryPrice') }}</span>
+          <span class="est-value">{{ estEntryPriceDisplay }}</span>
+        </div>
+        <div class="est-row">
+          <span class="est-label">{{ $t('perpetuals.estLiqPrice') }}</span>
+          <span class="est-value">{{ estLiquidationPriceDisplay }}</span>
+        </div>
+        <div class="est-row">
+          <span class="est-label">{{ $t('perpetuals.requiredMargin') }}</span>
+          <span class="est-value">{{ requiredMarginDisplay }} <span class="mi-unit">USD</span></span>
+        </div>
+        <div class="est-row">
+          <span class="est-label">{{ $t('perpetuals.estFee') }}</span>
+          <span class="est-value">{{ estFeeDisplay }} <span class="mi-unit">USD</span></span>
+        </div>
+        <div v-if="slippageWarning" class="est-warning">
+          <v-icon size="11" class="est-warning-icon">mdi-alert-outline</v-icon>
+          <span>{{ slippageWarning }}</span>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Connect gate: not connected → primary CTA becomes "Connect to Strike"
+         and opens the inline connect/unlock flow instead of placing an order. -->
+    <template v-if="!isConnected">
+      <v-btn
+        v-if="!showConnect"
+        block
+        depressed
+        class="place-order-btn place-order-btn--connect"
+        @click="showConnect = true"
+      >
+        <v-icon size="14" class="mr-1">mdi-link-variant</v-icon>
+        {{ $t('perps.connect.submitCta') }}
+      </v-btn>
+      <StrikeOnboarding v-else @connected="onConnected" />
+    </template>
+
     <!-- Place Order Button -->
     <v-btn
+      v-else
       block
       depressed
       :loading="submitting"
@@ -189,7 +232,7 @@
           :step="1"
           hide-details
           class="perp-slider lev-slider"
-          color="#00c7f3"
+          :color="primaryColor"
           track-color="rgba(255,255,255,0.1)"
         />
         <div class="lev-presets">
@@ -210,10 +253,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
-import type { CreateOrderRequest, OrderType, OrderSide } from '@/api/strike-v2.types';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
+import { useChainContext } from '../../composables/useChainContext';
+import { strikeMarketApi } from '@/api/strike-v2.market';
+import StrikeOnboarding from './StrikeOnboarding.vue';
+import {
+  calcLiquidationPriceIsolated,
+  calcVwapMarketFill,
+  getMarginTier,
+  normalizeMarginTiers,
+} from '@/modules/market/math';
+import type {
+  CreateOrderRequest, CreateStrategyOrderRequest, OrderType, OrderSide,
+  StrikeMarketConfig, MarginTierNumeric,
+} from '@/api/strike-v2.types';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 // ── Props & Emits ────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -226,7 +285,54 @@ const emit = defineEmits<{
 
 // ── Composables ──────────────────────────────────────────────────────────────
 const { placeOrder, setLeverage, availableBalance, account } = useStrikeTrading();
-const { getSymbolInfo } = useStrikeMarket();
+const { getSymbolInfo, getTicker } = useStrikeMarket();
+
+// When not connected, the primary CTA reveals the inline connect/unlock flow
+// instead of attempting an (unauthenticated, 401-bound) order.
+const { isConnected } = useStrikeOnboarding();
+const showConnect = ref(false);
+
+function onConnected() {
+  showConnect.value = false;
+}
+
+// ── Market config (margin tiers, tick size) — fetched once per session ──────
+const marketConfig = ref<StrikeMarketConfig | null>(null);
+const marketTiers = computed<MarginTierNumeric[]>(() =>
+  marketConfig.value?.margin_tiers ? normalizeMarginTiers(marketConfig.value.margin_tiers) : [],
+);
+
+// Slim order-book snapshot for VWAP (refreshed on size change)
+const obAsks = ref<[string, string][]>([]);
+const obBids = ref<[string, string][]>([]);
+
+async function loadMarketConfig() {
+  try {
+    const res = await strikeMarketApi.getMarkets();
+    marketConfig.value = res.markets[props.symbol] ?? null;
+  } catch {
+    marketConfig.value = null;
+  }
+}
+
+let obFetchTimer: ReturnType<typeof setTimeout> | null = null;
+async function refreshOrderBookSnapshot() {
+  if (orderType.value !== 'market') return;
+  try {
+    const snap = await strikeMarketApi.getOrderBook(props.symbol, 50);
+    obAsks.value = snap.asks ?? [];
+    obBids.value = snap.bids ?? [];
+  } catch { /* keep previous snapshot */ }
+}
+
+function scheduleObRefresh() {
+  if (obFetchTimer) clearTimeout(obFetchTimer);
+  obFetchTimer = setTimeout(() => { refreshOrderBookSnapshot(); }, 250);
+}
+
+onMounted(() => {
+  loadMarketConfig();
+});
 
 // ── Local State ──────────────────────────────────────────────────────────────
 const side = ref<'buy' | 'sell'>('buy');
@@ -266,11 +372,10 @@ const symbolInfo = computed(() => getSymbolInfo(props.symbol));
 const baseAsset = computed(() => symbolInfo.value?.baseAsset ?? props.symbol.replace('USDT', ''));
 
 const estimatedMargin = computed(() => {
-  const s = parseFloat(size.value);
-  if (!s || s <= 0) return '—';
-  const p = parseFloat(price.value) || 1;
-  const notional = orderType.value === 'market' ? s : s * p;
-  return (notional / localLeverage.value).toFixed(2);
+  // Mirror the dashboard form: collateral = notional / leverage, where notional
+  // is always size * entry price (VWAP for market, limit/ref price otherwise).
+  if (requiredMargin.value <= 0) return '—';
+  return requiredMargin.value.toFixed(2);
 });
 
 const canSubmit = computed(() => {
@@ -278,6 +383,112 @@ const canSubmit = computed(() => {
   if (showPriceInput.value && (!price.value || parseFloat(price.value) <= 0)) return false;
   if (showTriggerInput.value && (!stopPrice.value || parseFloat(stopPrice.value) <= 0)) return false;
   return true;
+});
+
+// ── Live Estimates ───────────────────────────────────────────────────────────
+
+const sizeNum = computed(() => parseFloat(size.value) || 0);
+const hasValidSize = computed(() => sizeNum.value > 0);
+
+const tickerLastPrice = computed(() => parseFloat(getTicker(props.symbol)?.lastPrice ?? '0') || 0);
+
+/** Reference price used for non-VWAP estimates (limit price or last ticker). */
+const refPriceForEstimates = computed(() => {
+  if (orderType.value === 'market') {
+    return tickerLastPrice.value;
+  }
+  return parseFloat(price.value) || tickerLastPrice.value;
+});
+
+const DEFAULT_TAKER_RATE = 0.0006;
+
+/** Side normalised to LONG/SHORT for math layer. */
+const sideUpper = computed<'LONG' | 'SHORT'>(() => (side.value === 'buy' ? 'LONG' : 'SHORT'));
+
+/** VWAP fill estimate for market orders. */
+const marketFill = computed(() => {
+  if (orderType.value !== 'market' || sizeNum.value <= 0) return null;
+  const levels = side.value === 'buy' ? obAsks.value : obBids.value;
+  if (!levels.length) return null;
+  return calcVwapMarketFill(levels, sizeNum.value);
+});
+
+const estEntryPrice = computed(() => {
+  if (orderType.value === 'market') {
+    return marketFill.value?.avgPrice ?? tickerLastPrice.value;
+  }
+  return refPriceForEstimates.value;
+});
+
+const notional = computed(() => sizeNum.value * estEntryPrice.value);
+
+const requiredMargin = computed(() => {
+  const lev = localLeverage.value || 1;
+  if (notional.value <= 0 || lev <= 0) return 0;
+  return notional.value / lev;
+});
+
+const estFee = computed(() => notional.value * DEFAULT_TAKER_RATE);
+
+const estLiquidationPrice = computed(() => {
+  if (notional.value <= 0 || estEntryPrice.value <= 0) return 0;
+  const tier = getMarginTier(marketTiers.value, notional.value);
+  if (!tier) return 0;
+  // Use cross-as-isolated approximation: isoBalance = notional / leverage.
+  // This matches the dashboard form's preview and avoids depending on the
+  // full cross context (other positions, wallet balance) which the side
+  // panel form does not have.
+  const isoBalance = requiredMargin.value;
+  return calcLiquidationPriceIsolated(
+    sideUpper.value, estEntryPrice.value, isoBalance, sizeNum.value, tier,
+  );
+});
+
+const pricePrecision = computed(() => marketConfig.value?.quote_prec ?? 4);
+
+function fmtMoney(value: number, dp = 2): string {
+  if (!isFinite(value) || value === 0) return '—';
+  return value.toFixed(dp);
+}
+
+const estEntryPriceDisplay = computed(() => {
+  if (estEntryPrice.value <= 0) return '—';
+  return `$${estEntryPrice.value.toFixed(pricePrecision.value)}`;
+});
+
+const estLiquidationPriceDisplay = computed(() => {
+  if (estLiquidationPrice.value <= 0) return '—';
+  return `$${estLiquidationPrice.value.toFixed(pricePrecision.value)}`;
+});
+
+const requiredMarginDisplay = computed(() => fmtMoney(requiredMargin.value));
+const estFeeDisplay = computed(() => fmtMoney(estFee.value));
+
+/** Slippage warning shown when VWAP fill exceeds 50bps vs top-of-book. */
+const slippageWarning = computed(() => {
+  const fill = marketFill.value;
+  if (!fill) return '';
+  if (fill.insufficientDepth) {
+    return 'Order exceeds available book depth';
+  }
+  if (fill.slippageBps > 50) {
+    return `High slippage: ~${(fill.slippageBps / 100).toFixed(2)}%`;
+  }
+  return '';
+});
+
+// Refresh OB snapshot when size changes for market orders
+watch([sizeNum, side, orderType], () => {
+  if (orderType.value === 'market' && sizeNum.value > 0) {
+    scheduleObRefresh();
+  }
+});
+
+watch(() => props.symbol, () => {
+  marketConfig.value = null;
+  obAsks.value = [];
+  obBids.value = [];
+  loadMarketConfig();
 });
 
 // ── Methods ──────────────────────────────────────────────────────────────────
@@ -290,9 +501,14 @@ function onSliderChange(pct: number) {
   if (!availableBalance.value) return;
   const avail = parseFloat(availableBalance.value);
   if (isNaN(avail) || avail <= 0) return;
+  // `avail` is USD margin; notional (USD) = margin × leverage × pct.
   const notional = avail * localLeverage.value * (pct / 100);
+  // Size is in the base asset (e.g. ADA): qty = notional(USD) / price(USD per
+  // base). Market orders have no price input — use the live ticker price, NOT 1
+  // (dividing by 1 treated the USD notional as a 1:1 base quantity).
   const p = parseFloat(price.value);
-  const refPrice = p > 0 ? p : 1;
+  const refPrice = p > 0 ? p : tickerLastPrice.value;
+  if (!(refPrice > 0)) return;
   const qty = notional / refPrice;
   const precision = symbolInfo.value?.quantityPrecision ?? 3;
   size.value = qty.toFixed(precision);
@@ -302,7 +518,7 @@ async function handleSubmit() {
   if (!canSubmit.value || submitting.value) return;
   submitting.value = true;
   try {
-    const req: CreateOrderRequest & { takeProfitPrice?: string; stopLossPrice?: string } = {
+    const base: CreateOrderRequest = {
       symbol: props.symbol,
       side: side.value as OrderSide,
       type: orderType.value,
@@ -311,9 +527,35 @@ async function handleSubmit() {
       ...(showTriggerInput.value && stopPrice.value ? { stop_price: stopPrice.value } : {}),
       reduce_only: reduceOnly.value,
       post_only: postOnly.value,
-      ...(tpPrice.value ? { takeProfitPrice: tpPrice.value } : {}),
-      ...(slPrice.value ? { stopLossPrice: slPrice.value } : {}),
     };
+
+    // Carry TP/SL as spec-correct singular strategy legs (tp_order / sl_order),
+    // mirroring the dashboard PerpsOrderForm. placeOrder() routes any request
+    // with a strategy_id to the createStrategyOrder endpoint.
+    const hasTpSl = !!tpPrice.value || !!slPrice.value;
+    let req: CreateOrderRequest = base;
+    if (hasTpSl) {
+      const strategy: CreateStrategyOrderRequest = {
+        ...base,
+        strategy_id: crypto.randomUUID(),
+      };
+      if (tpPrice.value) {
+        strategy.tp_order = {
+          type: 'take_profit',
+          size: size.value,
+          stop_price: tpPrice.value,
+        };
+      }
+      if (slPrice.value) {
+        strategy.sl_order = {
+          type: 'stop',
+          size: size.value,
+          stop_price: slPrice.value,
+        };
+      }
+      req = strategy;
+    }
+
     const result = await placeOrder(req);
     if (result) emit('order-placed');
   } finally {
@@ -336,7 +578,8 @@ watch(() => props.symbol, () => {
 
 watch(() => account.value, (acc) => {
   if (!acc) return;
-  const setting = acc.symbol_settings?.find((s) => s.symbol === props.symbol);
+  // symbol_settings is a symbol-keyed object map (per spec), not an array.
+  const setting = acc.symbol_settings?.[props.symbol];
   if (setting?.leverage) localLeverage.value = setting.leverage;
 }, { immediate: true });
 </script>
@@ -410,9 +653,9 @@ watch(() => account.value, (acc) => {
 }
 
 .ot-chip--active {
-  border-color: #00c7f3;
-  color: #00c7f3;
-  background: rgba(0, 199, 243, 0.1);
+  border-color: var(--chain-primary);
+  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
 }
 
 /* ── Leverage / Margin Mode ── */
@@ -430,15 +673,15 @@ watch(() => account.value, (acc) => {
   border-radius: 5px;
   font-size: 11px;
   font-weight: 700;
-  color: #00c7f3;
-  background: rgba(0, 199, 243, 0.1);
-  border: 1px solid rgba(0, 199, 243, 0.25);
+  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent);
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
 .lev-badge:hover {
-  background: rgba(0, 199, 243, 0.18);
+  background: color-mix(in srgb, var(--chain-primary) 18%, transparent);
 }
 
 .margin-mode-label {
@@ -463,9 +706,14 @@ watch(() => account.value, (acc) => {
   font-size: 12px !important;
   font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
   color: #ffffff !important;
-  caret-color: #00c7f3 !important;
+  caret-color: var(--chain-primary) !important;
   padding: 0 8px !important;
 }
+
+/* Hide native number-input spinner buttons (up/down arrows) */
+.perp-input :deep(input[type='number']) { -moz-appearance: textfield; appearance: textfield; }
+.perp-input :deep(input[type='number'])::-webkit-outer-spin-button,
+.perp-input :deep(input[type='number'])::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 10px !important;
@@ -483,7 +731,7 @@ watch(() => account.value, (acc) => {
 }
 
 .perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: #00c7f3 !important;
+  border-color: var(--chain-primary) !important;
 }
 
 /* ── Size % Buttons ── */
@@ -509,9 +757,9 @@ watch(() => account.value, (acc) => {
 
 .pct-btn--active,
 .pct-btn:hover {
-  color: #00c7f3;
-  border-color: rgba(0, 199, 243, 0.3);
-  background: rgba(0, 199, 243, 0.08);
+  color: var(--chain-primary);
+  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--chain-primary) 8%, transparent);
 }
 
 /* ── Slider ── */
@@ -593,8 +841,8 @@ watch(() => account.value, (acc) => {
 }
 
 .adv-checkbox:checked + .adv-checkmark {
-  background: #00c7f3;
-  border-color: #00c7f3;
+  background: var(--chain-primary);
+  border-color: var(--chain-primary);
 }
 
 .adv-checkbox:checked + .adv-checkmark::after {
@@ -676,6 +924,16 @@ watch(() => account.value, (acc) => {
   background: rgba(249, 112, 102, 0.22) !important;
 }
 
+.place-order-btn--connect {
+  background: color-mix(in srgb, var(--chain-primary) 14%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 32%, transparent) !important;
+}
+
+.place-order-btn--connect:not(.v-btn--disabled):hover {
+  background: color-mix(in srgb, var(--chain-primary) 22%, transparent) !important;
+}
+
 .place-order-btn.v-btn--disabled {
   opacity: 0.4 !important;
 }
@@ -705,7 +963,7 @@ watch(() => account.value, (acc) => {
   font-size: 40px;
   font-weight: 800;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: #00c7f3;
+  color: var(--chain-primary);
   line-height: 1;
   margin-bottom: 12px;
 }
@@ -740,18 +998,79 @@ watch(() => account.value, (acc) => {
 
 .lev-preset-btn.active,
 .lev-preset-btn:hover {
-  color: #00c7f3;
-  border-color: rgba(0, 199, 243, 0.35);
-  background: rgba(0, 199, 243, 0.1);
+  color: var(--chain-primary);
+  border-color: color-mix(in srgb, var(--chain-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
 }
 
 .lev-confirm-btn {
-  background: rgba(0, 199, 243, 0.15) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  background: color-mix(in srgb, var(--chain-primary) 15%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
   border-radius: 8px !important;
   font-size: 12px !important;
   font-weight: 700 !important;
   text-transform: none !important;
+}
+
+/* ── Live Estimates ── */
+.estimates-block {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.est-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.est-label {
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.02em;
+}
+
+.est-value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.est-warning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(246, 190, 66, 0.08);
+  border: 1px solid rgba(246, 190, 66, 0.2);
+  color: #f6be42;
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.est-warning-icon {
+  color: #f6be42 !important;
+}
+
+.estimates-fade-enter-active,
+.estimates-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.estimates-fade-enter,
+.estimates-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
 }
 </style>

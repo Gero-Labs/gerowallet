@@ -30,7 +30,7 @@
           indeterminate
           size="20"
           width="2"
-          color="#00c7f3"
+          :color="primaryColor"
         />
         <span class="balance-currency">EUR</span>
       </div>
@@ -55,7 +55,7 @@
       </div>
 
       <div v-if="loadingHistory" class="tx-loading">
-        <v-progress-circular indeterminate size="24" width="2" color="#00c7f3" />
+        <v-progress-circular indeterminate size="24" width="2" :color="primaryColor" />
       </div>
 
       <div v-else-if="recentTransactions.length === 0" class="tx-empty">
@@ -126,6 +126,10 @@ import { cardStore } from '@/stores/modules/card';
 import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import type { CardTransactionHistory } from '@/models/card';
 import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
+import { useChainContext } from '../../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const showTopUp = ref(false);
 const showManage = ref(false);
@@ -228,7 +232,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border: 1px solid rgba(0, 199, 243, 0.15);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 15%, transparent);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   position: relative;
   overflow: hidden;
@@ -241,14 +245,14 @@ onMounted(async () => {
   right: -30%;
   width: 200px;
   height: 200px;
-  background: radial-gradient(circle, rgba(0, 199, 243, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--chain-primary) 8%, transparent) 0%, transparent 70%);
   pointer-events: none;
 }
 
 .card-logo {
   font-size: 18px;
   font-weight: 800;
-  color: #00c7f3;
+  color: var(--chain-primary);
   letter-spacing: 2px;
 }
 
@@ -288,8 +292,8 @@ onMounted(async () => {
 .card-type-badge {
   font-size: 10px;
   font-weight: 600;
-  color: #00c7f3;
-  background: rgba(0, 199, 243, 0.12);
+  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
   padding: 3px 8px;
   border-radius: 4px;
   letter-spacing: 1px;
@@ -349,8 +353,8 @@ onMounted(async () => {
 
 .action-btn:hover {
   background: #222 !important;
-  border-color: #00c7f3 !important;
-  color: #00c7f3 !important;
+  border-color: var(--chain-primary) !important;
+  color: var(--chain-primary) !important;
 }
 
 /* Transactions */
@@ -468,7 +472,7 @@ onMounted(async () => {
 .full-dashboard-btn {
   height: 44px !important;
   border-radius: 10px !important;
-  background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
+  background: linear-gradient(135deg, var(--chain-gradient1) 0%, var(--chain-gradient2) 100%) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;

@@ -154,8 +154,13 @@
 
       <!-- Actions -->
       <v-card-actions class="send-dialog-actions" :style="loggedWallet?.btSupported ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
+        <!-- Under a "require remote" policy, local signing (password AND passkey)
+             is disabled; only "Sign on another device" remains. -->
+        <div v-if="currentStep === 2 && requiresRemoteForSend" class="text-caption grey--text text-center mb-2">
+          {{ $t('crossDevice.settings.policyRequireHint') }}
+        </div>
         <!-- Transaction Authentication Section (step 2 only) -->
-        <div v-if="currentStep === 2">
+        <div v-else-if="currentStep === 2">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
@@ -200,14 +205,28 @@
           >{{ $t('common.continue') + ' ' }}
             <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
-          <!-- Step 2: Sign/Confirm button for non-PRF wallets -->
+          <!-- Step 2: Sign/Confirm button for non-PRF wallets. Local signing is
+               disabled while a "require remote" policy is active (unless already
+               at the submit step with a remote witness in hand). -->
           <v-btn
             v-else-if="!isPrfWallet"
             class="continue-button"
             @click="nextStep"
-            :disabled="!isValid || txSignLoading"
+            :disabled="!isValid || txSignLoading || (requiresRemoteForSend && !isSubmit)"
             :loading="txSignLoading"
           >{{ isSubmit ? $t('common.confirm') : $t('wallet.sign') }}
+          </v-btn>
+          <!-- Step 2: Sign on another device (flag-gated, dark by default) -->
+          <v-btn
+            v-if="currentStep === 2 && canSignOnAnotherDevice"
+            text
+            class="ml-2"
+            @click="signOnAnotherDevice()"
+            :disabled="txSignLoading"
+            :loading="txSignLoading"
+          >
+            <v-icon small class="mr-1">mdi-cellphone-link</v-icon>
+            {{ $t('crossDevice.signOnAnotherDevice') }}
           </v-btn>
         </div>
       </v-card-actions>
@@ -314,8 +333,11 @@ const {
   isBT,
   isPrfWallet,
   isBTSupported,
+  canSignOnAnotherDevice,
+  requiresRemoteForSend,
   passwordRules,
   handleSign,
+  signOnAnotherDevice,
   resetState,
   handlePassKeySuccess,
   handlePassKeyError,
@@ -613,7 +635,7 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
 }
 
 /**
- * Build the transaction via Nexus backend (/v1/tx/build).
+ * Build the transaction via Nexus backend (/api/tx/build).
  */
 async function buildTx(options?: { selectAll?: boolean }) {
   const allValid = recipients.value.every((r: SendRecipient) =>
@@ -716,7 +738,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
     return;
   }
 
-  // ADA max: ask Nexus to compute precisely via /v1/tx/max-ada.
+  // ADA max: ask Nexus to compute precisely via /api/tx/max-ada.
   // All outputs are sent — the MAX recipient has lovelace="0", Nexus maximizes it.
   // Other recipients' ADA + tokens are subtracted automatically by Nexus.
 
@@ -752,7 +774,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
   };
 
   try {
-    // Step 1: get the max amount preview from /v1/tx/max-ada (for UI display)
+    // Step 1: get the max amount preview from /api/tx/max-ada (for UI display)
     const maxResult = await nexusTxApi.calculateMaxAda(maxAdaRequest, loggedWallet.value.network);
     const maxLovelace = BigInt(maxResult.max_lovelace);
     const changeMinUtxo = BigInt(maxResult.change_min_utxo);
@@ -826,7 +848,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
     try {
       await tryBuild();
     } catch (buildErr) {
-      // Nexus sometimes disagrees with /v1/tx/max-ada about change min-UTxO
+      // Nexus sometimes disagrees with /api/tx/max-ada about change min-UTxO
       // when native tokens remain in change — parse the shortage and retry with
       // an explicit reduced lovelace so build accepts it.
       const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
@@ -850,7 +872,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
       }
     }
   } catch (err) {
-    debugLog('setMax: /v1/tx/max-ada failed:', err);
+    debugLog('setMax: /api/tx/max-ada failed:', err);
   }
 
   isCalculatingMax.value = false;

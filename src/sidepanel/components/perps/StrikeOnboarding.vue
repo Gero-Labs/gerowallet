@@ -13,7 +13,29 @@
 
       <!-- Description -->
       <div class="onboarding-desc">
-        {{ needsUnlock ? $t('perpetuals.unlockStrikeDescription') : $t('perpetuals.onboardingDescription') }}
+        {{ needsUnlock ? $t('perpetuals.unlockStrikeDescription') : $t('perps.connect.description') }}
+      </div>
+
+      <!-- In-progress step indicator -->
+      <div v-if="isLoading && connectStep !== 'idle'" class="onboarding-steps" aria-live="polite">
+        <div
+          v-for="(s, i) in stepLabels"
+          :key="s.id"
+          class="step-row"
+          :class="{ 'step-active': activeIndex === i, 'step-done': activeIndex > i }"
+        >
+          <v-icon v-if="activeIndex > i" size="14" color="#26FAB0" class="step-icon">mdi-check-circle</v-icon>
+          <v-progress-circular
+            v-else-if="activeIndex === i"
+            indeterminate
+            size="14"
+            width="2"
+            color="#00c7f3"
+            class="step-icon"
+          />
+          <v-icon v-else size="14" color="rgba(255,255,255,0.25)" class="step-icon">mdi-circle-outline</v-icon>
+          <span class="step-label">{{ s.label }}</span>
+        </div>
       </div>
 
       <!-- Error -->
@@ -38,36 +60,47 @@
         </div>
       </div>
 
-      <!-- Spending password (required to encrypt/decrypt the Strike key) -->
-      <v-text-field
-        v-if="!isConnected"
-        v-model="password"
-        :type="showPassword ? 'text' : 'password'"
-        :label="$t('perpetuals.spendingPassword')"
-        :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        outlined
-        dense
-        hide-details
-        autocomplete="current-password"
-        class="password-field"
-        :disabled="isLoading"
-        @click:append="showPassword = !showPassword"
-        @keyup.enter="onSubmit()"
-      />
+      <!-- PRF (passkey) wallet: authenticate with PassKey instead of password -->
+      <template v-if="!isConnected && isPrfWallet">
+        <PassKeyAuthButton
+          :disabled="isLoading"
+          :text="needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta')"
+          @success="onPassKeySuccess"
+          @error="onPassKeyError"
+        />
+      </template>
 
-      <!-- Action button: Unlock if encrypted blob exists, otherwise Generate -->
-      <v-btn
-        v-if="!isConnected"
-        block
-        depressed
-        :loading="isLoading"
-        :disabled="!password"
-        class="connect-btn"
-        @click="onSubmit()"
-      >
-        <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-key-variant' }}</v-icon>
-        {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perpetuals.generateApiKeys') }}
-      </v-btn>
+      <!-- Password wallet: spending password field + action button -->
+      <template v-else-if="!isConnected">
+        <!-- Spending password (required to encrypt/decrypt the Strike key) -->
+        <v-text-field
+          v-model="password"
+          :type="showPassword ? 'text' : 'password'"
+          :label="$t('perpetuals.spendingPassword')"
+          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+          outlined
+          dense
+          hide-details
+          autocomplete="current-password"
+          class="password-field"
+          :disabled="isLoading"
+          @click:append="showPassword = !showPassword"
+          @keyup.enter="onSubmit()"
+        />
+
+        <!-- Action button: Unlock if encrypted blob exists, otherwise Connect -->
+        <v-btn
+          block
+          depressed
+          :loading="isLoading"
+          :disabled="!password"
+          class="connect-btn"
+          @click="onSubmit()"
+        >
+          <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-link-variant' }}</v-icon>
+          {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta') }}
+        </v-btn>
+      </template>
 
       <template v-else>
         <div class="connected-state">
@@ -92,20 +125,27 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
+import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
+import snackbar from '@/plugins/snackbar';
+import i18n from '@/plugins/i18n';
 
 const emit = defineEmits<{
   (e: 'connected'): void;
 }>();
 
+const t = (key: string): string => i18n.t(key) as string;
+
 const {
   isConnected,
   needsUnlock,
+  isPrfWallet,
   isLoading,
   publicKey,
   error,
+  connectStep,
   checkConnection,
   unlock,
-  generateAndConnect,
+  connectWithWallet,
   disconnect,
 } = useStrikeOnboarding();
 
@@ -120,12 +160,50 @@ const truncatedKey = computed(() => {
   return `${key.slice(0, 10)}...${key.slice(-8)}`;
 });
 
+// Step indicator — three logical phases visible to the user. The composable's
+// internal 'finalizing' phase is folded into 'verifying' for UX simplicity.
+const stepLabels = computed(() => [
+  { id: 'requesting', label: t('perps.connect.stepRequesting') },
+  { id: 'awaitingSignature', label: t('perps.connect.stepSigning') },
+  { id: 'verifying', label: t('perps.connect.stepVerifying') },
+]);
+
+const activeIndex = computed(() => {
+  switch (connectStep.value) {
+    case 'requesting': return 0;
+    case 'awaitingSignature': return 1;
+    case 'verifying':
+    case 'finalizing': return 2;
+    default: return -1;
+  }
+});
+
 async function onSubmit() {
   if (!password.value) return;
   const ok = needsUnlock.value
     ? await unlock(password.value)
-    : await generateAndConnect(password.value);
+    : await connectWithWallet(password.value);
   if (ok) password.value = '';
+}
+
+/**
+ * PRF (passkey) wallets: PassKeyAuthButton has decrypted the wallet's root
+ * private key and handed us the bytes. For connect we pass these to
+ * connectWithWallet so the builder message is signed via SIGN_DATA's
+ * privateKeyBytes path. For unlock we don't need the root key — unlock()
+ * decrypts the stored Strike blob via its own passkey prompt — so we call it
+ * with an empty password.
+ */
+async function onPassKeySuccess(pkBytes: Uint8Array) {
+  if (needsUnlock.value) {
+    await unlock('');
+  } else {
+    await connectWithWallet('', pkBytes);
+  }
+}
+
+function onPassKeyError(err: Error) {
+  snackbar.setError(err?.message || t('security.passKeyAuthFailed'));
 }
 
 async function onDisconnect() {
@@ -170,7 +248,7 @@ watch(isConnected, (val) => {
   gap: 16px;
   background:
     linear-gradient(180deg, rgba(19, 22, 27, 0.7) 0%, rgba(10, 12, 16, 0.8) 100%),
-    radial-gradient(ellipse at 50% 0%, rgba(0, 199, 243, 0.08) 0%, transparent 60%);
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--chain-primary) 8%, transparent) 0%, transparent 60%);
   backdrop-filter: blur(32px) saturate(1.6);
   -webkit-backdrop-filter: blur(32px) saturate(1.6);
   border-radius: 16px;
@@ -191,16 +269,16 @@ watch(isConnected, (val) => {
   width: 68px;
   height: 68px;
   border-radius: 50%;
-  background: rgba(0, 199, 243, 0.1);
-  border: 1px solid rgba(0, 199, 243, 0.25);
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 24px rgba(0, 199, 243, 0.15);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--chain-primary) 15%, transparent);
 }
 
 .onboarding-icon {
-  color: #00c7f3 !important;
+  color: var(--chain-primary) !important;
 }
 
 .onboarding-title {
@@ -216,6 +294,42 @@ watch(isConnected, (val) => {
   color: rgba(255, 255, 255, 0.5);
   text-align: center;
   line-height: 1.55;
+}
+
+.onboarding-steps {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 199, 243, 0.04);
+  border: 1px solid rgba(0, 199, 243, 0.18);
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  transition: color 0.2s ease;
+}
+
+.step-row.step-active {
+  color: #ffffff;
+}
+
+.step-row.step-done {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.step-icon {
+  flex-shrink: 0;
+}
+
+.step-label {
+  letter-spacing: 0.01em;
 }
 
 .onboarding-error {
@@ -271,9 +385,9 @@ watch(isConnected, (val) => {
   width: 100% !important;
   height: 42px !important;
   border-radius: 10px !important;
-  background: rgba(0, 199, 243, 0.12) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
@@ -282,7 +396,7 @@ watch(isConnected, (val) => {
 }
 
 .connect-btn:hover:not(.v-btn--disabled) {
-  background: rgba(0, 199, 243, 0.2) !important;
+  background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important;
 }
 
 .connected-state {

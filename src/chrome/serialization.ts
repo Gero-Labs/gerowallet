@@ -471,7 +471,7 @@ export async function getCollateral(
   // big enough for collateral, so ask Nexus to lend one of the pool UTxOs at
   // its enterprise address. The returned ref points to a real on-chain UTxO
   // we don't control; on signTx the background detects the pool address and
-  // calls /v1/collateral/cosign for the witness.
+  // calls /api/collateral/cosign for the witness.
   try {
     const lent = await nexusCollateralApi.lend();
     const utxoCbor = buildNexusUtxoCbor(lent);
@@ -1162,8 +1162,14 @@ export async function signDataCip8(
     index: matchingAddress.index
   };
 
-  // Convert address to raw bytes for COSE headers
-  const addressBytes = Cardano.Address.fromBech32(signWith).toBytes();
+  // Convert address to raw bytes for COSE headers.
+  // NOTE: Cardano.Address.toBytes() returns a HexBlob (hex STRING), not a
+  // Uint8Array. Passing the string straight into the emurgo message-signing
+  // WASM (set_key_id / new_bytes) coerces it per-character (letters -> 0),
+  // embedding a 114-byte garbage address in the COSE -> remote verifiers
+  // (e.g. Strike's /auth/verify-signature) reject the signature with 401.
+  // Decode the HexBlob to real bytes so the COSE carries the true address.
+  const addressBytes = Buffer.from(Cardano.Address.fromBech32(signWith).toBytes(), 'hex');
 
   // Dynamic import to avoid WASM loading issues at module init time
   const { createBuilderWithSigStructure, createCoseKeyHex, safeFreeCSLObject } =

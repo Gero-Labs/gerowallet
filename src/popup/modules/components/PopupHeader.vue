@@ -5,7 +5,7 @@
       <span style="color: #ccc">{{ $t('navigation.websiteLabel') }}:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
         <v-avatar size="16">
-          <img :src="favicon" :alt="t('common.dappWebsiteFavicon')" />
+          <img :src="favicon" :alt="t('common.dappWebsiteFavicon')" @error="faviconFailed = true" />
         </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white" width="3" />
@@ -65,7 +65,14 @@ const queryParams = ref(null);
 
 const vmProxy = getCurrentInstance()!.proxy as any
 
+const faviconFailed = ref<boolean>(false);
+
 const favicon = computed(() => {
+  // Prefer the real favicon Chrome already loaded for the dApp tab.
+  if (queryParams.value?.favIconUrl && !faviconFailed.value) {
+    return queryParams.value.favIconUrl;
+  }
+  // Fallback: Google favicon service by domain.
   if (queryParams.value?.website) {
     return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${queryParams.value.website}&size=16`;
   }

@@ -1,9 +1,12 @@
 import { ref, toRefs, computed } from 'vue';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { nexusTxApi, cardanoUtxoToNexusInput, type BuildWithdrawalTxRequest } from '@/api/nexus-tx-api';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import { Blockchain } from '@/models/types';
 import { governanceStore } from '@/stores/governanceStore';
@@ -77,20 +80,43 @@ export function useWithdrawal() {
         }
       }
 
-      // Build the withdrawal transaction with wallet context for accurate fee estimation
-      txData.value = await buildCardanoTransaction({
-        withdrawals,
-        outputs,
-        utxos: utxos.value as Cardano.Utxo[],
-        epochParams: epochParams.value,
-        changeAddress: keys.value.payment[0].address,
-        tip: tip.value,
-        walletContext: {
-          keys: keys.value,
-          stakeAddress: loggedWallet.value?.stakeAddress || '',
-          accountIndex: 0,
-        }
-      });
+      // Phase 1 Nexus migration: build a plain withdrawal server-side when the flag is on
+      // and there is no CIP-149 donation output (the /build/withdrawal endpoint takes a single
+      // stakeAddress + amount and cannot carry extra outputs). Otherwise fall back to the
+      // client-side @cardano-sdk builder, which still handles the donation path.
+      const useNexus =
+        featureFlagsStore.isNexusWithdrawalEnabled() &&
+        outputs.length === 0 &&
+        withdrawals.length > 0;
+
+      if (useNexus) {
+        const request: BuildWithdrawalTxRequest = {
+          stakeAddress: loggedWallet.value.stakeAddress,
+          // Reuse the amount already validated/captured when building `withdrawals`
+          // (this branch only runs when withdrawals.length > 0).
+          amount: withdrawals[0].quantity.toString(),
+          changeAddress: keys.value.payment[0].address,
+          utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+        };
+        const { tx_cbor } = await nexusTxApi.buildWithdrawalTx(request, loggedWallet.value.network);
+        if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+        txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
+      } else {
+        // Build the withdrawal transaction with wallet context for accurate fee estimation
+        txData.value = await buildCardanoTransaction({
+          withdrawals,
+          outputs,
+          utxos: utxos.value as Cardano.Utxo[],
+          epochParams: epochParams.value,
+          changeAddress: keys.value.payment[0].address,
+          tip: tip.value,
+          walletContext: {
+            keys: keys.value,
+            stakeAddress: loggedWallet.value?.stakeAddress || '',
+            accountIndex: 0,
+          }
+        });
+      }
 
       withdrawalDialog.value = true;
     } catch (error: unknown) {

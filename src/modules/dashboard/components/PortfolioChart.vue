@@ -38,7 +38,7 @@
             <span v-if="hideBalances" key="masked" class="portfolio-amount-masked">••••••</span>
             <span v-else key="visible" class="portfolio-amount-visible">
               <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
-              <OdometerCounter v-if="isReadyToRender" :value="activePortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
+              <OdometerCounter v-if="isReadyToRender" :value="displayedPortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
               <span v-else class="portfolio-amount-placeholder">—</span>
             </span>
           </transition>
@@ -560,6 +560,16 @@ const activePortfolioValue = computed(() => {
       return isAdaOnly ? props.adaOnlyValueAda : props.portfolioValueAda;
   }
 });
+
+// Throttle the displayed portfolio value. Live prices update the underlying value
+// every few ms, which made the odometer churn constantly. Refresh the shown figure
+// at most once every 30s — but immediately on currency/mode switch or when first ready.
+const displayedPortfolioValue = ref(0);
+let portfolioValueTimer: ReturnType<typeof setInterval> | null = null;
+function syncDisplayedValue() { displayedPortfolioValue.value = activePortfolioValue.value; }
+watch([selectedCurrency, portfolioMode, isReadyToRender], () => syncDisplayedValue(), { immediate: true });
+onMounted(() => { portfolioValueTimer = setInterval(syncDisplayedValue, 30_000); });
+onBeforeUnmount(() => { if (portfolioValueTimer) clearInterval(portfolioValueTimer); });
 
 const availableCurrencies = computed(() => {
   const currencies: CurrencyType[] = [];

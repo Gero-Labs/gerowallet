@@ -16,7 +16,7 @@ interface WsSyncBlock {
   time?: number;
 }
 
-interface WsSyncMessage {
+export interface WsSyncMessage {
   type: string;
   block?: WsSyncBlock;
   [key: string]: unknown;
@@ -26,7 +26,34 @@ interface WsHandlers {
   onSync?: (data: WsSyncMessage) => Promise<void>;
   onRollback?: (data: WsSyncMessage) => Promise<void>;
   onForceResync?: () => Promise<void>;
+  // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
+  // Purely additive: when unset, cross-device message types fall through to the
+  // existing "unknown type" default and nothing else changes. See
+  // docs/plans/2026-06-29-cross-device-signing-bridge.md.
+  onCrossDeviceMessage?: (raw: unknown) => void;
+  /**
+   * Fired inside onopen, immediately after SUBSCRIBE is sent, on the initial connect
+   * and every reconnect. The socket is guaranteed OPEN and SUBSCRIBE precedes anything
+   * sent from here on the same ordered stream. Used to publish the cross-device
+   * DEVICE_REGISTER (which the relay rejects if it arrives before SUBSCRIBE).
+   */
+  onSocketOpen?: () => void;
 }
+
+// Relay message types routed to the cross-device signing bridge. The first six are
+// the CrossDeviceMessageType wire messages (src/services/crossDevice/protocol.ts);
+// WAKE_PENDING is a relay CONTROL frame (unsigned, not a CrossDeviceMessage) that the
+// signing service special-cases in handleInbound — it MUST be allow-listed here too or
+// the requester never learns the target was offline and never re-issues on wake.
+const CROSS_DEVICE_MESSAGE_TYPES = [
+  'DEVICE_REGISTER',
+  'DEVICES',
+  'DEVICE_REGISTER_ACK',
+  'SIGN_REQUEST',
+  'SIGN_RESPONSE',
+  'PAIR_CONFIRM',
+  'WAKE_PENDING',
+];
 
 class WebSocketService {
   private ws: WebSocket | null = null;
@@ -55,7 +82,14 @@ class WebSocketService {
   private pendingTxBatches: WsSyncMessage[] = [];
 
   private readonly RECONNECT_DELAYS = [3000, 5000, 10000, 30000];
-  private readonly SYNC_CHECK_INTERVAL = 120_000; // 2 minutes
+  // SYNC_CHECK doubles as the MV3 keep-alive. The service worker is torn down
+  // after 30s idle; a WebSocket send/receive resets that idle timer (Chrome 116+),
+  // so pinging every 25s keeps the worker AND the socket alive. Without it the
+  // worker recycled every ~30-42s, re-running login and, for cross-device,
+  // evicting + re-registering this device on the relay so siblings saw it flap in
+  // and out. SYNC_CHECK is idempotent + relay-handled, so this needs no relay
+  // change; it also keeps sync fresher. Must stay < 30s.
+  private readonly SYNC_CHECK_INTERVAL = 25_000;
   private readonly WS_BASE_URL = import.meta.env['VITE_SYNC_WS_URL'] || 'wss://sync.gerowallet.io';
 
   connect(
@@ -162,6 +196,10 @@ class WebSocketService {
         midnightShieldedLastIndex: this.midnightShieldedLastIndex,
       });
 
+      // Socket is OPEN and SUBSCRIBE has been queued on this ordered stream. Let
+      // subscribers (e.g. cross-device DEVICE_REGISTER) send now, after SUBSCRIBE.
+      this.handlers.onSocketOpen?.();
+
       this.startSyncCheck();
     };
 
@@ -211,6 +249,17 @@ class WebSocketService {
     try {
       const data: WsSyncMessage = JSON.parse(raw);
       const type = data.type;
+
+      // Cross-device signing bridge: forward relay messages to the injected
+      // handler and return before the sync switch. The relay sends DEVICES to
+      // every subscriber (broadcast on SUBSCRIBE), so these types appear on the
+      // wire even with the feature off; walletManager wires a live closure that
+      // no-ops when no bridge exists, keeping them out of the "unknown type"
+      // branch. SYNC/ROLLBACK/FORCE_RESYNC handling is unchanged.
+      if (this.handlers.onCrossDeviceMessage && CROSS_DEVICE_MESSAGE_TYPES.includes(type)) {
+        this.handlers.onCrossDeviceMessage(data);
+        return;
+      }
 
       switch (type) {
         case 'SYNC': {
@@ -270,7 +319,7 @@ class WebSocketService {
             addresses: data['addresses'],
             account: data['account'],
           };
-          debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as any[])?.length || 0} UTxOs`);
+          debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as unknown[])?.length || 0} UTxOs`);
           this.lastSyncedBlock = block?.height || (data['blockHeight'] as number) || 0;
           this.handlers.onSync?.(combinedPayload);
           this.pendingTxBatches = [];
@@ -319,6 +368,16 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     }
+  }
+
+  /**
+   * Public passthrough for sending an arbitrary message over the existing
+   * socket. Used by the cross-device signing transport adapter (wsTransport.ts)
+   * to publish relay messages. Thin wrapper over the private `send`; obeys the
+   * same OPEN-socket guard, so it is a no-op when disconnected.
+   */
+  sendRaw(msg: object): void {
+    this.send(msg);
   }
 
   private startSyncCheck(): void {

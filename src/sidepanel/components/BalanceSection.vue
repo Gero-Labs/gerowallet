@@ -11,7 +11,7 @@
     </div>
     <div class="balance-sub text-caption" :class="changeColor">
       <span v-if="adaBalance !== null">
-        {{ hideBalances ? '••••••' : formattedAdaBalance }} ADA
+        {{ hideBalances ? '••••••' : formattedAdaBalance }} {{ currencyTicker }}
       </span>
       <span v-if="priceChange !== null" class="ml-2">
         <v-icon x-small :color="priceChange >= 0 ? '#47CD89' : '#F97066'">
@@ -21,14 +21,15 @@
       </span>
     </div>
     <v-btn
+      v-if="showBuySell"
       rounded
       small
-      color="#00c7f3"
       class="buy-sell-btn mt-3 geroButton"
+      :style="{ color: 'var(--chain-primary)', borderColor: 'var(--chain-primary)' }"
       @click="$emit('buy-sell')"
     >
       <v-icon small left>mdi-swap-horizontal</v-icon>
-      {{ $t('miniGero.buySellAda') }}
+      {{ $t('miniGero.buySell', { ticker: currencyTicker }) }}
     </v-btn>
   </div>
 </template>
@@ -39,12 +40,16 @@ import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { getBalance } from '@/chrome/serialization';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
+import { useChainContext } from '../composables/useChainContext';
 
 defineEmits<{
   (e: 'buy-sell'): void;
 }>();
 
 const { utxos, collateral } = toRefs(walletStore);
+const { networkInfo } = useChainContext();
+const currencyTicker = computed(() => networkInfo.value?.currencyTicker || 'ADA');
+const showBuySell = computed(() => !!networkInfo.value?.buySupport);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 const { allTokens: marketTokens, adaData } = useMarketData();
 
@@ -74,7 +79,13 @@ const totalPortfolioUsd = computed(() => {
 
   const tokens = walletStore.tokens;
   if (tokens) {
-    for (const token of Object.values(tokens) as any[]) {
+    type TokenShape = {
+      policy_id?: string;
+      unit?: string;
+      quantity?: string | number;
+      metadata?: { decimals?: number };
+    };
+    for (const token of Object.values(tokens) as TokenShape[]) {
       if (token.policy_id === '') continue;
       const marketToken = marketTokens.value.find(t => t.unit === token.unit);
       if (marketToken?.price) {

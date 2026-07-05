@@ -2,14 +2,14 @@
   <v-card
     class="transparent-override liquid-glass-card"
     flat
-    style="max-width: 100%; margin: auto; width: 100%; justify-items: center; padding-top: 20px"
+    style="max-width: 100%; margin: auto; width: 100%; justify-items: center; padding-top: 1px;"
   >
     <div
       style="
         max-width: 416px;
         width: 100%;
-        height: 280px;
-        padding: 20px;
+        height: 210px;
+        padding: 16px;
         position: relative;
         border-radius: 16px;
         background-color: rgba(12, 14, 18, 0.85);
@@ -20,12 +20,12 @@
         display: flex;
         outline: 1px rgba(255, 255, 255, 0.1) solid;
         outline-offset: -1px;
-        margin-top: 120px;
+        margin-top: 24px;
       "
     >
       <v-carousel
         v-model="currentSlide"
-        :cycle="false"
+        :cycle="true"
         :interval="4000"
         height="100%"
         hide-delimiter-background
@@ -36,7 +36,7 @@
           <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
             <v-img :src="assets.debitCardBgImage" cover style="position: absolute; width: calc(100% - 1px); height: calc(100% - 1px); top: 1px; left: 1px; z-index: 0; border-radius: 16px;" />
             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 2;">
-              <div style="font-family: 'Tenby Seven', sans-serif; font-size: 24px; font-weight: 700; color: white; line-height: 1.2; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">
+              <div style="font-family: 'Tenby Seven', sans-serif; font-size: 22px; font-weight: 700; color: white; line-height: 1.2; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">
                 <div>Gero</div>
                 <div>Crypto</div>
                 <div>Card</div>
@@ -45,7 +45,7 @@
             <img
               :src="assets.frontCardNoMcx2"
               :alt="$t('card.geroCard')"
-              style="position: relative; max-width: 280px; width: 90%; height: auto; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5)); transform: rotateY(-5deg) rotateX(5deg); z-index: 1;"
+              style="position: relative; max-width: 230px; width: 82%; height: auto; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5)); transform: rotateY(-5deg) rotateX(5deg); z-index: 1;"
             />
           </div>
         </v-carousel-item>
@@ -53,38 +53,37 @@
           <v-img :src="assets.cashbackBg" cover :alt="$t('cashback.cashback')" style="width: 100%; height: 100%" />
         </v-carousel-item>
       </v-carousel>
-      <img :src="assets.rectangle"  style="width: 72px; height: 72px; right: -40px; top: -43px; position: absolute; opacity: 0.96;" alt="">
-      <img :src="assets.rectangle2" style="width: 32px; height: 32px; right: -60px; top: 13px; position: absolute;" alt="">
-      <img :src="assets.rectangle" style="width: 80px; height: 80px; left: -40px; top: 227px; position: absolute; transform: rotate(180deg); opacity: 0.9;" alt="">
+      <img :src="assets.rectangle"  style="width: 60px; height: 60px; right: -30px; top: -33px; position: absolute; opacity: 0.96;" alt="">
+      <img :src="assets.rectangle2" style="width: 28px; height: 28px; right: -46px; top: 10px; position: absolute;" alt="">
+      <img :src="assets.rectangle" style="width: 64px; height: 64px; left: -30px; top: 150px; position: absolute; transform: rotate(180deg); opacity: 0.9;" alt="">
     </div>
     <div
       style="
-        width: 456px;
+        width: 100%;
+        max-width: 456px;
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
         align-items: center;
         text-align: center;
-        gap: 16px;
-        padding: 20px;
-        padding-top: 100px;
-        padding-bottom: 40px;
+        gap: 10px;
+        padding: 16px 20px 52px;
       "
     >
       <div style="text-align: center">
         <span
           :class="['transition', gradientClass]"
-          style="color: #00c7f3; font-size: 28px; font-weight: 600; line-height: 36px; word-wrap: break-word"
+          style="color: #00c7f3; font-size: 26px; font-weight: 600; line-height: 34px; word-wrap: break-word"
           >Unifying</span
         >
-        <span style="font-size: 28px; font-weight: 600; line-height: 36px; word-wrap: break-word"> Web2 & Web3</span>
+        <span style="font-size: 26px; font-weight: 600; line-height: 34px; word-wrap: break-word"> Web2 & Web3</span>
       </div>
       <div
         style="
           text-align: center;
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 500;
-          line-height: 24px;
+          line-height: 22px;
           word-wrap: break-word;
           max-width: 400px;
         "
@@ -123,6 +122,7 @@ const gradientClass = computed(() => {
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+
 }
 .stats-viewport {
   width: 100%;

@@ -8,23 +8,14 @@
     <div class="vwithdraw-content">
 
       <!-- ── Amount Input ── -->
-      <div class="input-row">
-        <v-text-field
-          v-model="amount"
-          :label="$t('vaults.amountUsd')"
-          outlined
-          dense
-          dark
-          hide-details
-          class="perp-input"
-          suffix="USD"
-          type="number"
-          min="0"
-        />
-        <v-btn small depressed class="max-btn" @click="setMax()">
-          MAX
-        </v-btn>
-      </div>
+      <PerpsAmountField
+        ref="amountFieldRef"
+        v-model="amount"
+        currency="USD"
+        accent="var(--chain-primary)"
+        class="mb-3"
+        @max="setMax()"
+      />
 
       <!-- ── Preview ── -->
       <transition name="fade-slide">
@@ -106,8 +97,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
+import PerpsAmountField from './PerpsAmountField.vue';
 import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
@@ -137,6 +129,7 @@ const {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const amount = ref<string>('');
+const amountFieldRef = ref<{ focus: () => void } | null>(null);
 const password = ref<string>('');
 const showPassword = ref(false);
 
@@ -181,6 +174,8 @@ watch(() => props.value, (val) => {
     password.value = '';
     showPassword.value = false;
     resetWithdraw();
+  } else {
+    nextTick(() => { amountFieldRef.value?.focus(); });
   }
 });
 </script>
@@ -191,31 +186,6 @@ watch(() => props.value, (val) => {
   flex-direction: column;
   gap: 0;
   padding-bottom: 8px;
-}
-
-/* ── Amount Row ── */
-.input-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.input-row .perp-input { flex: 1; }
-
-.max-btn {
-  height: 40px !important;
-  padding: 0 12px !important;
-  border-radius: 8px !important;
-  background: rgba(0, 199, 243, 0.1) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.25) !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.06em !important;
-  text-transform: none !important;
-  flex-shrink: 0;
-  margin-top: 0 !important;
 }
 
 /* ── Inputs ── */
@@ -231,7 +201,7 @@ watch(() => props.value, (val) => {
   font-size: 13px !important;
   font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
   color: #ffffff !important;
-  caret-color: #00c7f3 !important;
+  caret-color: var(--chain-primary) !important;
 }
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 11px !important;
@@ -242,7 +212,7 @@ watch(() => props.value, (val) => {
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 .perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: #00c7f3 !important;
+  border-color: var(--chain-primary) !important;
 }
 
 /* ── Preview Card ── */
@@ -283,7 +253,7 @@ watch(() => props.value, (val) => {
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
 }
-.preview-value.highlight { color: #00c7f3; }
+.preview-value.highlight { color: var(--chain-primary); }
 .preview-value.muted { color: rgba(255, 255, 255, 0.45); font-weight: 400; }
 
 .preview-unit {
@@ -330,15 +300,15 @@ watch(() => props.value, (val) => {
 .action-btn {
   height: 44px !important;
   border-radius: 10px !important;
-  background: rgba(0, 199, 243, 0.12) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  color: var(--chain-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
   letter-spacing: 0.02em !important;
 }
-.action-btn:hover:not(.v-btn--disabled) { background: rgba(0, 199, 243, 0.2) !important; }
+.action-btn:hover:not(.v-btn--disabled) { background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important; }
 .action-btn.v-btn--disabled { opacity: 0.35 !important; }
 
 /* ── Transitions ── */

@@ -1,5 +1,5 @@
 <template>
-  <div class="featured-carousel">
+  <div v-if="!isApex" class="featured-carousel">
     <div
       class="carousel-track"
       ref="trackRef"
@@ -81,7 +81,9 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router/composables';
 import assets from '@/utils/assets';
+import { useChainContext } from '../composables/useChainContext';
 
+const { isApex } = useChainContext();
 const router = useRouter();
 const trackRef = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);

@@ -188,7 +188,6 @@ export async function createNewWalletDb(walletId: number|string, hasEncryptedMne
         { key: 'useSidePanel', value: true },
         { key: 'tokenAllocationSort', value: { by: 'allocation', desc: true } },
         { key: 'hideScamTokens', value: false },
-        { key: 'hideUnratedTokens', value: false },
         { key: 'hideUnverifiedTokens', value: false },
         { key: 'stakingProView', value: false },
         { key: 'locale', value: 'us' },

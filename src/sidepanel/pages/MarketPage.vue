@@ -38,7 +38,7 @@
 
     <!-- Loading -->
     <div v-if="loading && displayTokens.length === 0" class="loading-state">
-      <v-progress-circular indeterminate color="#00c7f3" size="32" />
+      <v-progress-circular indeterminate :color="primaryColor" size="32" />
     </div>
 
     <!-- Token list -->
@@ -214,6 +214,10 @@ import { walletStore } from '@/stores/walletStore';
 import { getBalance } from '@/chrome/serialization';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import BottomSheet from '../components/BottomSheet.vue';
+import { useChainContext } from '../composables/useChainContext';
+
+const { themeColors } = useChainContext();
+const primaryColor = computed(() => themeColors.value.primary);
 
 const { t } = useTranslation();
 const {
@@ -425,9 +429,9 @@ function onImgError(event: Event) {
 }
 
 .chip.active {
-  background: rgba(0, 199, 243, 0.12);
-  border-color: rgba(0, 199, 243, 0.3);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
+  color: var(--chain-primary);
 }
 
 .chip:hover:not(.active) {
@@ -535,9 +539,9 @@ function onImgError(event: Event) {
 .retry-btn {
   padding: 6px 20px;
   border-radius: 8px;
-  background: rgba(0, 199, 243, 0.1);
-  border: 1px solid rgba(0, 199, 243, 0.2);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chain-primary) 20%, transparent);
+  color: var(--chain-primary);
   font-size: 13px;
   cursor: pointer;
 }

@@ -41,7 +41,11 @@
 
       <!-- Trade segment -->
       <div v-if="activeSegment === 'trade'" class="segment-content px-3">
+        <!-- Authenticated action (place order) is gated behind connect; the
+             public order book stays visible regardless. -->
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
         <OrderForm
+          v-else
           :symbol="selectedSymbol"
           @order-placed="onOrderPlaced"
         />
@@ -55,6 +59,8 @@
 
       <!-- Positions segment -->
       <div v-if="activeSegment === 'positions'" class="segment-content px-3">
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
+        <template v-else>
         <div v-if="trading.loading.value && positions.length === 0" class="text-center py-6">
           <v-progress-circular indeterminate color="#26FAB0" size="32" width="3" />
           <div class="grey--text text-caption mt-2">{{ $t('perpetuals.loadingPositions') }}</div>
@@ -110,10 +116,13 @@
             </div>
           </div>
         </div>
+        </template>
       </div>
 
       <!-- Orders segment -->
       <div v-if="activeSegment === 'orders'" class="segment-content px-3">
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
+        <template v-else>
         <div v-if="trading.loading.value && openOrders.length === 0" class="text-center py-6">
           <v-progress-circular indeterminate color="#26FAB0" size="32" width="3" />
           <div class="grey--text text-caption mt-2">{{ $t('perpetuals.loadingLimitOrders') }}</div>
@@ -177,10 +186,13 @@
             </div>
           </div>
         </template>
+        </template>
       </div>
 
       <!-- History segment -->
       <div v-if="activeSegment === 'history'" class="segment-content px-3">
+        <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
+        <template v-else>
         <!-- History tabs -->
         <div class="segment-toggle mb-3" style="margin-left:0; margin-right:0;">
           <button
@@ -287,6 +299,7 @@
             </v-btn>
           </div>
         </template>
+        </template>
       </div>
     </template>
   </div>
@@ -299,16 +312,19 @@ import networks from '@/utils/networks';
 import { strikeUserApi } from '@/api/strike-v2.user';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
+import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import type { Position, Order, ClosedPosition, FillHistoryResult } from '@/api/strike-v2.types';
 import SymbolSelector from '../components/perps/SymbolSelector.vue';
 import PriceTicker from '../components/perps/PriceTicker.vue';
 import OrderForm from '../components/perps/OrderForm.vue';
 import OrderBook from '../components/perps/OrderBook.vue';
+import StrikeOnboarding from '../components/perps/StrikeOnboarding.vue';
 
 // ── Store / composables ──
 
 const trading = useStrikeTrading();
 const { getTicker } = useStrikeMarket();
+const { isConnected } = useStrikeOnboarding();
 
 const perpetualsSupported = computed(() => {
   const w = walletStore.loggedWallet;
@@ -327,12 +343,12 @@ const activeSegment = ref<Segment>('trade');
 
 // The composable may return PositionsResponse { positions, count } or Position[] depending on API shape
 const positions = computed<Position[]>(() => {
-  const raw = trading.positions.value as any;
+  const raw = trading.positions.value as Position[] | { positions?: Position[] } | null;
   if (!raw) return [];
   return Array.isArray(raw) ? raw : (raw.positions ?? []);
 });
 const openOrders = computed<Order[]>(() => {
-  const raw = trading.openOrders.value as any;
+  const raw = trading.openOrders.value as Order[] | { orders?: Order[] } | null;
   if (!raw) return [];
   return Array.isArray(raw) ? raw : (raw.orders ?? []);
 });
@@ -403,6 +419,16 @@ function onOrderPlaced() {
 
 function onPriceClick(_price: string) {
   // Future: pass price to OrderForm via shared ref or event bus
+}
+
+// Fired by the inline StrikeOnboarding card once connect/unlock succeeds. The
+// isConnected watcher already loads account/positions/orders; here we also
+// refresh the History tab if the user connected from that segment.
+function onConnected() {
+  if (activeSegment.value === 'history') {
+    if (historyTab.value === 'closed') loadClosedPositions();
+    else loadFillHistory();
+  }
 }
 
 // ── Close position ──
@@ -539,12 +565,23 @@ watch(activeSegment, (seg) => {
 
 // ── Lifecycle ──
 
+// Authenticated calls only fire once Strike API keys are unlocked. Without
+// this gate, an opened-but-not-connected page issues unauthenticated /v2/*
+// requests that 401 and trip the auth-failure handler.
+function loadAccountData() {
+  trading.loadAccount();
+  trading.loadPositions(selectedSymbol.value);
+  trading.loadOpenOrders(selectedSymbol.value);
+}
+
 onMounted(() => {
-  if (perpetualsSupported.value) {
-    trading.loadAccount();
-    trading.loadPositions(selectedSymbol.value);
-    trading.loadOpenOrders(selectedSymbol.value);
+  if (perpetualsSupported.value && isConnected.value) {
+    loadAccountData();
   }
+});
+
+watch(isConnected, (connected) => {
+  if (connected && perpetualsSupported.value) loadAccountData();
 });
 </script>
 

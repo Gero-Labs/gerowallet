@@ -1,7 +1,8 @@
 import axios from 'axios';
-import type { AxiosRequestConfig, AxiosError } from 'axios';
-import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 
+// Market data is routed through gero-backend's Nexus proxy
+// (VITE_NEXUS_URL → <backend>/api/nexus), which injects the Nexus API key
+// server-side. No client-side auth.
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_NEXUS_URL'],
   timeout: 15000,
@@ -10,35 +11,6 @@ const axiosInstance = axios.create({
   },
 });
 
-// Market data is proxied by nexus, which authenticates device-id JWTs.
-// Attach the device access token to every request.
-axiosInstance.interceptors.request.use(async (config) => {
-  const token = await getNexusAccessToken();
-  config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// On 401 (token invalid) or 403 (token valid but scopes stale), drop the
-// cached token, re-authenticate the device, and retry once. The 403 case
-// fires when Nexus adds new scopes to DEFAULT_SCOPES and the wallet's
-// cached JWT predates them; only a fresh login picks up the new claim set.
-axiosInstance.interceptors.response.use(
-  (res) => res,
-  async (error: AxiosError) => {
-    const config = error.config as AxiosRequestConfig & { _retried?: boolean };
-    const status = error.response?.status;
-    if ((status === 401 || status === 403) && config && !config._retried) {
-      config._retried = true;
-      const token = await reauthenticateNexus();
-      if (config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return axiosInstance.request(config);
-    }
-    return Promise.reject(error);
-  }
-);
-
 export { axiosInstance as marketAxiosInstance };
 
 // ── Interfaces ──────────────────────────────────────────────────────────────────
@@ -46,6 +18,7 @@ export { axiosInstance as marketAxiosInstance };
 export interface TokenPriceResponse {
   assetId: string;
   dex: string | null;
+  source?: string | null;
   assetNameAscii: string;
   priceAda: number;
   priceUsd: number;
@@ -53,9 +26,14 @@ export interface TokenPriceResponse {
   priceChange1h: number | null;
   priceChange24h: number | null;
   priceChange7d: number | null;
+  priceChange30d: number | null;
   tvl: number;
   volume24h: number;
+  volume7d: number | null;
   organicVolume24h: number;
+  txnCount24h: number | null;
+  makerCount24h: number | null;
+  totalSupply: number | null;
   marketCap: number | null;
   liquidity: number | null;
   holders: number | null;
@@ -99,6 +77,15 @@ export interface CandleResponse {
   close: number;
   volume: number;
   currency?: string;
+}
+
+export interface SparklineResponse {
+  /** Window the series covers, e.g. '24h' | '7d' | '30d'. */
+  window: string;
+  /** Number of points per series. */
+  points: number;
+  /** Per-token close-price series keyed by assetId (backend shape: { window, points, data }). */
+  data: Record<string, number[]>;
 }
 
 export interface WalletPnlToken {
@@ -279,6 +266,31 @@ export default {
 
   async getLatestPrices(symbols?: string[]): Promise<LatestPricesResponse> {
     const { data } = await axiosInstance.get('/api/prices/latest', { params: { symbols: symbols?.join(',') } });
+    return data;
+  },
+
+  /**
+   * Inline sparkline price series for every token over the given window (e.g. '7d').
+   * Backend shape: { window, points, data: { [assetId]: number[] } } (PriceController#getSparklines).
+   * NOTE: may 404 until prod deploys /api/prices/sparklines — callers must treat it as best-effort.
+   */
+  async getSparklines(window: string = '7d'): Promise<SparklineResponse> {
+    // The Nexus proxy does not forward /sparklines, but the public market backend
+    // serves it (same source the market-data website uses). Hit it directly —
+    // CSP/host_permissions already allow *.gerowallet.io.
+    const base = (import.meta.env['VITE_MARKET_API_URL'] as string | undefined) || 'https://market.gerowallet.io';
+    const { data } = await axios.get(`${base}/api/v1/prices/sparklines`, { params: { window }, timeout: 15000 });
+    return data;
+  },
+
+  /**
+   * snek.fun bonding-curve tokens — a separate off-chain feed (source: "SNEKFUN").
+   * Not forwarded by the Nexus proxy, so hit the public market backend directly
+   * (same pattern as getSparklines).
+   */
+  async getSnekFunTokens(): Promise<TokenPriceResponse[]> {
+    const base = (import.meta.env['VITE_MARKET_API_URL'] as string | undefined) || 'https://market.gerowallet.io';
+    const { data } = await axios.get(`${base}/api/v1/market/snekfun`, { timeout: 15000 });
     return data;
   },
 

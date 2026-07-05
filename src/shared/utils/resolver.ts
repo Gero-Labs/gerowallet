@@ -353,9 +353,7 @@ export const fromPlutusData = (
 
 // Token image overrides — replace bad/missing logos for specific tokens
 // In service worker (background), SVG imports are empty — overrides only apply in browser context.
-export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker ? {} : {
-  'NIGHT': assetsModule.nightTokenSvg,
-};
+export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker ? {} : {};
 
 /**
  * Apply token image overrides for a given token name/ticker.
@@ -397,15 +395,27 @@ export function resolveAsset(token: any): any {
       risk: 'AAA',
     };
   } else {
-    if (!token.policy_id && token.unit) {
-      policy_id = Cardano.AssetId.getPolicyId(token.unit);
-    } else if (token.policy_id) {
+    // `token.unit` should be a hex AssetId (policyId + assetName). Some tx assets
+    // arrive with a malformed/non-hex unit, which makes Cardano.AssetId.* throw
+    // "expected hex string" and crashes the entire TransactionDetails render. Only
+    // parse the unit when it's valid hex; otherwise fall back to the explicit
+    // policy_id / asset_name fields.
+    const unitIsHexAssetId =
+      typeof token.unit === 'string' &&
+      token.unit.length >= 56 &&
+      token.unit.length % 2 === 0 &&
+      /^[0-9a-fA-F]+$/.test(token.unit);
+
+    if (token.policy_id) {
       policy_id = token.policy_id;
+    } else if (unitIsHexAssetId) {
+      policy_id = Cardano.AssetId.getPolicyId(token.unit);
     }
-    if (!token.asset_name && token.unit) {
-      asset_name = Cardano.AssetId.getAssetName(token.unit);
-    } else {
+
+    if (token.asset_name) {
       asset_name = token.asset_name;
+    } else if (unitIsHexAssetId) {
+      asset_name = Cardano.AssetId.getAssetName(token.unit);
     }
     if (policy_id) {
       isScam = DexHunterStore.state.blacklistPolicies.includes(policy_id)
@@ -503,6 +513,10 @@ export function resolveAsset(token: any): any {
         }
       }
     }
+  }
+  // Fallback name for assets we could not resolve (e.g. non-hex unit).
+  if (!name) {
+    name = typeof unit === 'string' && unit.length > 16 ? unit.slice(0, 16) + '...' : (unit || '');
   }
   // Apply token image overrides
   img = applyTokenImageOverride(name, img);

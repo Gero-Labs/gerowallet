@@ -1,4 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useChainContext } from './useChainContext';
 
 export interface DAppRequest {
   type: 'dapp-request';
@@ -14,6 +15,7 @@ export function useDAppOverlay() {
   const isVisible = ref(false);
   const currentRequest = ref<DAppRequest | null>(null);
   const requestQueue = ref<DAppRequest[]>([]);
+  const { isApex } = useChainContext();
   let port: chrome.runtime.Port | null = null;
   let retryCount = 0;
 
@@ -98,7 +100,10 @@ export function useDAppOverlay() {
     }
   }
 
-  onMounted(() => connect());
+  onMounted(() => {
+    if (isApex.value) return; // Apex falls back to popup signing — no overlay port
+    connect();
+  });
   onUnmounted(() => port?.disconnect());
 
   return { isVisible, currentRequest, requestQueue, approve, reject };

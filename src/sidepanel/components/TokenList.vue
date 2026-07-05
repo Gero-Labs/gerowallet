@@ -179,7 +179,10 @@ const filteredTokens = computed(() => {
 
 function getTokenImg(token: any): string {
   const name = token.metadata?.ticker || token.name || token.metadata?.name;
-  const baseImg = token.img || (token.metadata?.logo ? resolveIcon(token.metadata.logo) : '') || (token.metadata?.image ? resolveIcon(token.metadata.image) : '') || '';
+  // Prefer main-page market data logo (single source of truth, keyed by unit),
+  // then fall back to the token's own / on-chain metadata image.
+  const marketImg = marketTokens.value.find(t => t.unit === token.unit)?.img;
+  const baseImg = marketImg || token.img || (token.metadata?.logo ? resolveIcon(token.metadata.logo) : '') || (token.metadata?.image ? resolveIcon(token.metadata.image) : '') || '';
   return applyTokenImageOverride(name, baseImg);
 }
 
@@ -257,12 +260,12 @@ function onImgError(event: Event) {
 }
 
 .token-item.ada-row {
-  background: rgba(0, 199, 243, 0.04);
-  border-color: rgba(0, 199, 243, 0.1);
+  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
+  border-color: color-mix(in srgb, var(--chain-primary) 10%, transparent);
 }
 
 .ada-avatar {
-  background: rgba(0, 199, 243, 0.12) !important;
+  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
 }
 
 .token-item:hover {

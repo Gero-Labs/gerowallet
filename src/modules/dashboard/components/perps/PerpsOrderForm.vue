@@ -277,6 +277,10 @@
 
       <!-- Order info estimates -->
       <div class="of-estimates mt-3">
+        <div v-if="orderType === 'market'" class="of-est-row">
+          <span>{{ $t('perpetuals.estEntryPrice') }}</span>
+          <span class="form-value">{{ estEntryPriceDisplay }}</span>
+        </div>
         <div class="of-est-row">
           <v-tooltip bottom content-class="custom-tooltip" max-width="220">
             <template #activator="{ on, attrs }">
@@ -287,7 +291,7 @@
           <span class="form-value">{{ estLiquidationPrice }}</span>
         </div>
         <div class="of-est-row">
-          <span>{{ $t('perpetuals.margin') }}</span>
+          <span>{{ $t('perpetuals.requiredMargin') }}</span>
           <span class="form-value">{{ estMargin }}</span>
         </div>
         <div class="of-est-row">
@@ -303,6 +307,16 @@
           </v-tooltip>
           <span class="form-value">{{ estFee }}</span>
         </div>
+        <v-alert
+          v-if="slippageWarning"
+          dense
+          text
+          color="#F0B90B"
+          class="of-slippage-alert mt-2"
+          icon="mdi-alert-outline"
+        >
+          {{ slippageWarning }}
+        </v-alert>
       </div>
 
     </div>
@@ -314,13 +328,18 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { usePerpsFormatters } from '@/modules/market/composables/perps';
 import { useStrikeTrading } from '@/modules/market/composables/useStrikeTrading';
 import { strikeTradeApi } from '@/api/strike-v2.trade';
+import {
+  calcLiquidationPriceIsolated,
+  calcVwapMarketFill,
+  getMarginTier,
+  normalizeMarginTiers,
+} from '@/modules/market/math';
 import type {
   AccountResponse,
   CreateOrderRequest,
   CreateOrderResponse,
   CreateStrategyOrderRequest,
   MarginMode,
-  MarginTier,
   Position,
   StrikeMarketConfig,
 } from '@/api/strike-v2.types';
@@ -336,7 +355,7 @@ const {
 // Props / emits
 // ---------------------------------------------------------------------------
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   symbol: string;
   baseAsset: string;
   account: AccountResponse;
@@ -344,7 +363,12 @@ const props = defineProps<{
   marketConfig: StrikeMarketConfig | undefined;
   livePrice: number;
   walletAdaBalance: number;
-}>();
+  obAsks?: [string, string][];
+  obBids?: [string, string][];
+}>(), {
+  obAsks: () => [],
+  obBids: () => [],
+});
 
 const emit = defineEmits<{
   (e: 'order-placed'): void;
@@ -364,17 +388,12 @@ const {
 } = useStrikeTrading();
 
 // ---------------------------------------------------------------------------
-// Margin tier lookup (local, using marketConfig prop)
+// Margin tier lookup (numeric form, memoised on marketConfig changes)
 // ---------------------------------------------------------------------------
 
-function getMarginTier(notional: number): MarginTier | null {
-  const tiers = props.marketConfig?.margin_tiers;
-  if (!tiers?.length) return null;
-  for (const tier of tiers) {
-    if (notional <= parseFloat(tier.max_notional)) return tier;
-  }
-  return tiers[tiers.length - 1];
-}
+const marketTiers = computed(() =>
+  props.marketConfig?.margin_tiers ? normalizeMarginTiers(props.marketConfig.margin_tiers) : [],
+);
 
 // ---------------------------------------------------------------------------
 // Order form state
@@ -414,19 +433,21 @@ const tradingError = ref<string | null>(null);
 
 const maxLeverage = computed(() => props.marketConfig?.margin_tiers?.[0]?.max_leverage ?? 20);
 
-// Available ADA balance for the slider
-const availableBalanceAda = computed(() => {
-  const strikeBal = parseFloat(props.account?.available_balance ?? '0');
-  const bal = strikeBal > 0 ? strikeBal : props.walletAdaBalance;
-  return bal;
+// Strike account `available_balance` is USD-denominated (it's a USD margin
+// account). Fall back to the on-chain wallet ADA balance (converted to USD)
+// only when there's no Strike balance yet.
+const availableBalanceUsd = computed(() => {
+  const strikeUsd = parseFloat(props.account?.available_balance ?? '0');
+  if (strikeUsd > 0) return strikeUsd;
+  return (props.walletAdaBalance || 0) * (props.livePrice || 0);
 });
 
-// Convert available balance to selected asset
+// Available balance expressed in the selected size asset. USD is the native
+// unit; ADA = USD / live ADA price. (The previous code treated the USD balance
+// as ADA 1:1 — a $28 balance showed as "28 ADA" instead of ~196 ADA.)
 const availableBalanceInAsset = computed(() => {
-  if (sizeAsset.value === 'USD') {
-    return availableBalanceAda.value * props.livePrice;
-  }
-  return availableBalanceAda.value;
+  if (sizeAsset.value === 'USD') return availableBalanceUsd.value;
+  return props.livePrice > 0 ? availableBalanceUsd.value / props.livePrice : 0;
 });
 
 // Open positions for current symbol
@@ -491,14 +512,31 @@ function onSizeInput(e: Event) {
 }
 
 // ---------------------------------------------------------------------------
-// Entry price & estimates
+// Entry price & estimates (math-layer backed)
 // ---------------------------------------------------------------------------
 
-const estEntryPrice = computed(() => {
+// VWAP fill estimate for market orders, using the live order book.
+const marketFill = computed(() => {
+  if (orderType.value !== 'market') return null;
+  const size = parseFloat(orderSize.value);
+  if (!size || size <= 0) return null;
+  const levels = orderSide.value === 'buy' ? props.obAsks : props.obBids;
+  if (!levels?.length) return null;
+  return calcVwapMarketFill(levels, size);
+});
+
+const estEntryPrice = computed<number>(() => {
   if (orderType.value === 'market') {
-    return props.livePrice;
+    return marketFill.value?.avgPrice || props.livePrice;
   }
   return parseFloat(limitPrice.value || '0');
+});
+
+const estEntryPriceDisplay = computed(() => {
+  const ep = estEntryPrice.value;
+  if (!ep || ep <= 0) return '\u2014';
+  const prec = props.marketConfig?.quote_prec ?? 4;
+  return `$${ep.toFixed(prec)}`;
 });
 
 const notionalValue = computed(() => {
@@ -508,7 +546,8 @@ const notionalValue = computed(() => {
   return `$${(size * price).toFixed(2)}`;
 });
 
-// Margin -- per Integrator Guide Section 13.2
+// Required margin -- net of any opposite open position (still nets out
+// the contra-position that will be closed first).
 const estMargin = computed(() => {
   const size = parseFloat(orderSize.value);
   const price = estEntryPrice.value;
@@ -530,8 +569,9 @@ const estMargin = computed(() => {
   return `$${(openingNotional / leverage.value).toFixed(2)}`;
 });
 
-// Estimated fee -- per Integrator Guide Section 12.3
-const DEFAULT_TAKER_RATE = 0.001;
+// Estimated fee -- defaults to 0.06% taker / 0.00% maker until the
+// account fee tier is wired through (see strike-calculations spec).
+const DEFAULT_TAKER_RATE = 0.0006;
 const DEFAULT_MAKER_RATE = 0.0;
 const feeDiscountRate = ref(0);
 
@@ -549,35 +589,44 @@ const estFee = computed(() => {
   return `$${fee.toFixed(2)}`;
 });
 
-// Est. liquidation price -- per Integrator Guide Section 9
+// Est. liquidation price (math layer; uses isolated formula with margin
+// = notional / leverage as the dashboard form's "preview").
 const estLiquidationPrice = computed(() => {
   const size = parseFloat(orderSize.value);
   const ep = estEntryPrice.value;
   if (!size || !ep) return '\u2014';
 
   const notional = size * ep;
-  const tier = getMarginTier(notional);
-  const mmr = tier ? parseFloat(tier.maintenance_margin_rate) : 0.004;
-  const ma = tier ? parseFloat(tier.maintenance_amount) : 0;
+  const tier = getMarginTier(marketTiers.value, notional);
+  if (!tier) return '\u2014';
 
   const isoBalance = notional / leverage.value;
-
-  const isLong = orderSide.value === 'buy';
-  const direction = isLong ? 1 : -1;
-  const signedSize = isLong ? size : -size;
-
-  const numerator = ep - (isoBalance + ma) / signedSize;
-  const denominator = 1 - direction * mmr;
-
-  if (denominator === 0) return '\u2014';
-  const lp = numerator / denominator;
-
-  if (isLong && lp >= ep) return '\u2014';
-  if (!isLong && lp <= ep) return '\u2014';
+  const lp = calcLiquidationPriceIsolated(
+    orderSide.value === 'buy' ? 'LONG' : 'SHORT',
+    ep,
+    isoBalance,
+    size,
+    tier,
+  );
   if (lp <= 0) return '\u2014';
 
   const prec = props.marketConfig?.quote_prec ?? 5;
   return lp.toFixed(prec);
+});
+
+// Slippage warning for market orders (>50 bps vs. top-of-book reference).
+const slippageWarning = computed(() => {
+  const fill = marketFill.value;
+  if (!fill) return '';
+  if (fill.insufficientDepth) {
+    return t('perpetuals.insufficientBookDepth');
+  }
+  if (fill.slippageBps > 50) {
+    return t('perpetuals.highSlippageWarning', {
+      pct: (fill.slippageBps / 100).toFixed(2),
+    });
+  }
+  return '';
 });
 
 // ---------------------------------------------------------------------------
@@ -1140,6 +1189,18 @@ async function placeOrderAction() {
   font-size: 11px;
   color: #5e6673;
   line-height: 20px;
+}
+
+.of-slippage-alert {
+  font-size: 11px !important;
+  padding: 6px 10px !important;
+  margin-bottom: 0 !important;
+  line-height: 1.4 !important;
+}
+
+.of-slippage-alert >>> .v-icon {
+  font-size: 14px !important;
+  margin-right: 4px !important;
 }
 
 /* ── Dashed label (tooltips) ─────────────────────────────────────────── */

@@ -3,8 +3,10 @@ import { Ref, ComputedRef, toRefs, ref, computed } from 'vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { WalletType } from '@/models/types';
+import { Blockchain, WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
@@ -33,6 +35,8 @@ export interface TransactionSigningReturn {
   privateKeyBytes: Ref<Uint8Array | null>;
   isPrfWallet: ComputedRef<boolean>;
   isBTSupported: ComputedRef<boolean>;
+  canSignOnAnotherDevice: ComputedRef<boolean>;
+  requiresRemoteForSend: ComputedRef<boolean>;
   // Keystone state
   overlay: Ref<boolean>;
   keystoneScan: Ref<boolean>;
@@ -43,6 +47,7 @@ export interface TransactionSigningReturn {
   signTx: () => Promise<boolean>;
   signLedgerTx: () => Promise<boolean>;
   submitTx: () => Promise<void>;
+  signOnAnotherDevice: () => Promise<void>;
   handleSign: (formRef?: { validate: () => boolean }) => Promise<void>;
   resetState: () => void;
   handlePassKeySuccess: () => void;
@@ -89,6 +94,31 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     return (loggedWallet.value?.type === WalletType.Ledger || loggedWallet.value?.type === WalletType.Trezor) &&
       !isSubmit.value &&
       loggedWallet.value?.btSupported;
+  });
+
+  // Keep the per-wallet remote-signing settings warm so the gates below are live.
+  void remoteSigningStore.ensureLoaded();
+
+  const isCardanoSoftwareWallet = computed(() =>
+    loggedWallet.value?.chain === Blockchain.CARDANO &&
+    loggedWallet.value?.type === WalletType.Normal,
+  );
+
+  // Cross-device signing button: server flag + this wallet's opt-in + at least one
+  // trusted, signing-capable device to actually answer. Dark by default.
+  const canSignOnAnotherDevice = computed(() => {
+    return featureFlagsStore.isCrossDeviceSigningEnabled() &&
+      isCardanoSoftwareWallet.value &&
+      remoteSigningStore.isEnabled() &&
+      remoteSigningStore.hasTrustedSigner();
+  });
+
+  // When the policy is "require remote", local signing for a Send is disabled and
+  // the user must approve on a trusted device (a genuine second factor).
+  const requiresRemoteForSend = computed(() => {
+    return featureFlagsStore.isCrossDeviceSigningEnabled() &&
+      isCardanoSoftwareWallet.value &&
+      remoteSigningStore.requiresRemoteForSend();
   });
 
   const setPasswordFieldRef = (ref: any) => {
@@ -373,9 +403,54 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     }
   };
 
+  // Cross-device signing: this device proposes an unsigned tx and another
+  // registered device approves + signs it locally. On approval the returned
+  // witness set is routed into the existing submit path (which re-checks the
+  // tx body hash before broadcasting).
+  const signOnAnotherDevice = async (): Promise<void> => {
+    loading.value = true;
+    try {
+      const tx = options.tx.value;
+      if (!tx) {
+        throw new Error(t('common.noTransactionToSign'));
+      }
+
+      // Serialize the ORIGINAL unsigned tx and hand it to the other device.
+      txCbor.value = serializeCardanoJsSdkTx(tx);
+      const result = (await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE,
+        data: {
+          unsignedCbor: txCbor.value,
+          intent: t('crossDevice.intentSign'),
+          stakeAddress: loggedWallet.value?.stakeAddress,
+          ttlMs: 180000,
+        },
+      })) as { data: { decision?: string; witnessSetCbor?: string; reason?: string } };
+
+      if (result.data.decision === 'approved' && result.data.witnessSetCbor) {
+        txWitnesses.value = result.data.witnessSetCbor;
+        await submitTx();
+      } else if (result.data.reason === 'expired') {
+        snackbar.setError(t('crossDevice.requestExpired'));
+      } else {
+        snackbar.setError(t('crossDevice.requestRejected'));
+      }
+    } catch (e) {
+      console.error('Error signing on another device:', e);
+      snackbar.setError(e instanceof Error ? e.message : t('crossDevice.requestRejected'));
+    } finally {
+      loading.value = false;
+    }
+  };
+
   const handleSign = async (formRef?: { validate: () => boolean }): Promise<void> => {
     if (isSubmit.value) {
       await submitTx();
+    } else if (requiresRemoteForSend.value) {
+      // Policy gate: local signing is disabled; the Send must be approved on a
+      // trusted device. Covers every local path (password, PassKey/PRF, autofill)
+      // since they all funnel through handleSign.
+      snackbar.setError(t('crossDevice.settings.policyRequireHint'));
     } else {
       if (loggedWallet.value?.type === WalletType.Normal) {
         if (!formRef || formRef.validate()) {
@@ -451,6 +526,8 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     privateKeyBytes,
     isPrfWallet,
     isBTSupported,
+    canSignOnAnotherDevice,
+    requiresRemoteForSend,
     // Keystone state
     overlay,
     keystoneScan,
@@ -461,6 +538,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     signTx,
     signLedgerTx,
     submitTx,
+    signOnAnotherDevice,
     handleSign,
     resetState,
     handlePassKeySuccess,
