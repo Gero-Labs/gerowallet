@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createCrossDeviceSigning } from './crossDeviceSigning.service';
+import { createCrossDeviceSigning, type SignDecision } from './crossDeviceSigning.service';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
-import { signMessage } from './envelope';
-import { type CrossDeviceMessage, type SignRequest, type SignResponse } from './protocol';
+import { signMessage, verifyMessage } from './envelope';
+import { isPairAck, type CrossDeviceMessage, type SignRequest, type SignResponse, type PairConfirm, type PairAck } from './protocol';
 
 // A shared in-memory bus that fans every published message out to all
 // subscribed listeners (simulating gero-sync's fan-out to sibling devices).
@@ -62,6 +62,110 @@ async function makePair(now = () => 1000) {
 
   return { bus, requester, approver };
 }
+
+// QR pairing inbound (PAIR_CONFIRM) — the auth boundary before the wallet-proof check.
+const phoneKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(44));
+const desktopKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(55));
+const phoneId = 'ios-phone-uuid';
+const desktopId = deviceIdFromPubKey(desktopKp.pubKeyHex);
+const flush = () => new Promise((r) => setTimeout(r, 30)); // let ed25519 verifyAsync settle
+
+function makeDesktop() {
+  const bus = makeBus();
+  const onPairConfirm = vi.fn();
+  const desktop = createCrossDeviceSigning({
+    transport: bus.makeTransport(),
+    identity: { deviceId: desktopId, privKeyHex: desktopKp.privKeyHex },
+    resolvePubKey: async () => null, // the phone is NOT in the registry (pairing establishes trust)
+    now: () => 1000,
+    newId: () => 'x',
+    isRequesterTrusted: () => false, // even fully UNtrusted...
+    isResponderTrusted: () => false,
+    onPairConfirm,
+  });
+  return { bus, onPairConfirm, desktop };
+}
+
+async function signedConfirm(overrides: Partial<Omit<PairConfirm, 'sig'>> = {}): Promise<PairConfirm> {
+  const frame: Omit<PairConfirm, 'sig'> = {
+    type: 'PAIR_CONFIRM',
+    from: phoneId,
+    pubKey: phoneKp.pubKeyHex,
+    to: desktopId,
+    nonce: 'n1',
+    stakeAddress: 'stake1uxyz',
+    proof: { coseSign1: 'a0', coseKey: 'a1', stakeAddress: 'stake1uxyz' },
+    label: 'iPhone',
+    platform: 'ios',
+    hasSigningKey: true,
+    ...overrides,
+  };
+  return signMessage<PairConfirm>(frame, phoneKp.privKeyHex);
+}
+
+describe('PAIR_CONFIRM inbound (QR pairing auth boundary)', () => {
+  it('delivers a valid confirm to onPairConfirm — verified via frame.pubKey, UNGATED by trust', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    bus.publish(await signedConfirm());
+    await flush();
+    expect(onPairConfirm).toHaveBeenCalledTimes(1);
+    expect(onPairConfirm.mock.calls[0][0]).toMatchObject({ from: phoneId, to: desktopId, nonce: 'n1' });
+    desktop.dispose();
+  });
+
+  it('drops a confirm whose claimed pubKey did not sign it (frame.pubKey swap)', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    const frame = await signedConfirm();
+    bus.publish({ ...frame, pubKey: approverKp.pubKeyHex }); // claim a different key than what signed
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('drops a confirm with a tampered subject field (nonce) — sig no longer matches', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    const frame = await signedConfirm();
+    bus.publish({ ...frame, nonce: 'n2' });
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('drops a confirm addressed to a DIFFERENT desktop (to != self)', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    bus.publish(await signedConfirm({ to: 'some-other-desktop' }));
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('ignores our own echoed confirm (from == self)', async () => {
+    const { bus, onPairConfirm, desktop } = makeDesktop();
+    // A confirm whose `from` is the desktop itself, correctly signed by the desktop key.
+    const selfFrame: Omit<PairConfirm, 'sig'> = {
+      type: 'PAIR_CONFIRM', from: desktopId, pubKey: desktopKp.pubKeyHex, to: desktopId,
+      nonce: 'n1', stakeAddress: 'stake1uxyz',
+      proof: { coseSign1: 'a0', coseKey: 'a1', stakeAddress: 'stake1uxyz' },
+    };
+    bus.publish(await signMessage<PairConfirm>(selfFrame, desktopKp.privKeyHex));
+    await flush();
+    expect(onPairConfirm).not.toHaveBeenCalled();
+    desktop.dispose();
+  });
+
+  it('sendPairAck emits a PAIR_ACK signed by the desktop over from|to|nonce', async () => {
+    const { bus, desktop } = makeDesktop();
+    const captured: PairAck[] = [];
+    bus.makeTransport().onMessage((raw) => { if (isPairAck(raw)) captured.push(raw); });
+    await desktop.sendPairAck(phoneId, 'nonce1');
+    await flush();
+    expect(captured).toHaveLength(1);
+    // from = desktop's own id (the QR deviceId); phone verifies vs the pinned desktop key.
+    expect(captured[0]).toMatchObject({ type: 'PAIR_ACK', from: desktopId, to: phoneId, nonce: 'nonce1' });
+    expect(await verifyMessage(captured[0], desktopKp.pubKeyHex)).toBe(true);
+    desktop.dispose();
+  });
+});
 
 describe('crossDeviceSigning happy path', () => {
   it('approver receives a verified request; requester resolves with the witness', async () => {
@@ -213,6 +317,203 @@ describe('crossDeviceSigning ttl', () => {
     });
     expect(result.decision).toBe('rejected');
     expect(result.reason).toBeDefined();
+    requester.dispose();
+  });
+});
+
+describe('crossDeviceSigning approver replay + expiry', () => {
+  it('drops a replayed SIGN_REQUEST (approver surfaces it only once)', async () => {
+    const { bus, approver } = await makePair(() => 1000);
+    const handler = vi.fn();
+    approver.onSignRequest(handler);
+
+    const req = await signMessage<SignRequest>(
+      {
+        type: 'SIGN_REQUEST',
+        reqId: 'r1',
+        nonce: 'n1',
+        from: requesterId,
+        stakeAddress: 'stake1',
+        unsignedCbor: '84a4',
+        intent: 'Swap',
+        expiresAt: 9999999999,
+      },
+      requesterKp.privKeyHex,
+    );
+    bus.publish(req);
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish(req); // exact-bytes replay (relay re-delivery)
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    approver.dispose();
+  });
+
+  it('drops an already-expired SIGN_REQUEST (never surfaces it)', async () => {
+    const { bus, approver } = await makePair(() => 1000); // nowSec = 1
+    const handler = vi.fn();
+    approver.onSignRequest(handler);
+
+    const expired = await signMessage<SignRequest>(
+      {
+        type: 'SIGN_REQUEST',
+        reqId: 'r-exp',
+        nonce: 'n-exp',
+        from: requesterId,
+        stakeAddress: 'stake1',
+        unsignedCbor: '84a4',
+        intent: 'Swap',
+        expiresAt: 0, // already past nowSec=1
+      },
+      requesterKp.privKeyHex,
+    );
+    bus.publish(expired);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(handler).not.toHaveBeenCalled();
+    approver.dispose();
+  });
+});
+
+describe('crossDeviceSigning wake / re-request (WAKE_PENDING)', () => {
+  // A transport that captures outgoing SIGN_REQUESTs and does NOT auto-deliver them
+  // (simulating an offline target: the relay would return WAKE_PENDING, not deliver).
+  // Responses/WAKE_PENDING are injected manually via publish().
+  function makeManualBus() {
+    const listeners = new Set<(raw: unknown) => void>();
+    const sent: SignRequest[] = [];
+    return {
+      sent,
+      publish: (m: unknown) => { for (const l of [...listeners]) l(m); },
+      transport: {
+        send: (msg: CrossDeviceMessage) => { if (msg.type === 'SIGN_REQUEST') sent.push(msg as SignRequest); },
+        onMessage: (cb: (raw: unknown) => void) => { listeners.add(cb); return () => listeners.delete(cb); },
+      },
+    };
+  }
+
+  it('pauses the ttl on WAKE_PENDING, re-issues a fresh request when the target reconnects', async () => {
+    const bus = makeManualBus();
+    let approverOnline = false;
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async (id) => (id === approverId ? (approverOnline ? approverKp.pubKeyHex : null) : null),
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `w-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 500,
+    });
+
+    let settled: SignDecision | null = null;
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    void resultP.then((d) => { settled = d; });
+
+    await new Promise((r) => setTimeout(r, 15));
+    expect(bus.sent.length).toBe(1);
+    expect(bus.sent[0].to).toBe(approverId);
+    const firstReqId = bus.sent[0].reqId;
+
+    // Relay: target offline -> WAKE_PENDING must PAUSE the 60ms ttl.
+    bus.publish({ type: 'WAKE_PENDING', reqId: firstReqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 90)); // past the original ttl
+    expect(settled).toBeNull();            // not rejected: ttl was paused
+    expect(bus.sent.length).toBe(1);       // not re-issued: still offline
+
+    // Target reconnects -> poll re-issues a FRESH request.
+    approverOnline = true;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(bus.sent.length).toBe(2);
+    const secondReqId = bus.sent[1].reqId;
+    expect(secondReqId).not.toBe(firstReqId);
+
+    // Approve the fresh request -> requester resolves.
+    const res = await signMessage<SignResponse>(
+      { type: 'SIGN_RESPONSE', reqId: secondReqId, nonce: 'rn', to: requesterId, deviceId: approverId, decision: 'approved', witnessSetCbor: 'a100' },
+      approverKp.privKeyHex,
+    );
+    bus.publish(res);
+    const result = await resultP;
+    expect(result.decision).toBe('approved');
+    expect(result.witnessSetCbor).toBe('a100');
+    requester.dispose();
+  });
+
+  it('rejects with wake_timeout if the target never reconnects', async () => {
+    const bus = makeManualBus();
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async () => null, // never comes online
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `t-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 40,
+    });
+
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+
+    const result = await resultP;
+    expect(result.decision).toBe('rejected');
+    expect(result.reason).toBe('wake_timeout');
+    requester.dispose();
+  });
+
+  it('dispose() during a wake-wait stops the poll and resolves disposed', async () => {
+    const bus = makeManualBus();
+    let online = false;
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      resolvePubKey: async (id) => (id === approverId && online ? approverKp.pubKeyHex : null),
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `d-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 1000,
+    });
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 60 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 10)); // now in the wake-wait, polling
+    const before = bus.sent.length;
+
+    requester.dispose();
+    const result = await resultP;
+    expect(result.reason).toBe('disposed');
+
+    // Target coming online AFTER dispose must not trigger a stray re-issue.
+    online = true;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(bus.sent.length).toBe(before);
+  });
+
+  it('does not double-issue when the registry lookup is slow (in-flight guard)', async () => {
+    const bus = makeManualBus();
+    const requester = createCrossDeviceSigning({
+      transport: bus.transport,
+      identity: { deviceId: requesterId, privKeyHex: requesterKp.privKeyHex },
+      // Slow lookup that returns online: many poll ticks fire during one await.
+      resolvePubKey: async (id) => { await new Promise((r) => setTimeout(r, 25)); return id === approverId ? approverKp.pubKeyHex : null; },
+      now: () => 1000,
+      newId: (() => { let c = 0; return () => `g-${c++}`; })(),
+      wakePollMs: 5,
+      wakeWindowMs: 1000,
+    });
+    const resultP = requester.requestSignature({ unsignedCbor: '84a4', stakeAddress: 'stake1', to: approverId, ttlMs: 500 });
+    await new Promise((r) => setTimeout(r, 10));
+    bus.publish({ type: 'WAKE_PENDING', reqId: bus.sent[0].reqId, to: approverId });
+    await new Promise((r) => setTimeout(r, 90)); // several poll ticks overlap the slow resolve
+
+    expect(bus.sent.length).toBe(2); // exactly one re-issue, not several
+
+    const res = await signMessage<SignResponse>(
+      { type: 'SIGN_RESPONSE', reqId: bus.sent[1].reqId, nonce: 'n', to: requesterId, deviceId: approverId, decision: 'approved', witnessSetCbor: 'a1' },
+      approverKp.privKeyHex,
+    );
+    bus.publish(res);
+    await resultP;
     requester.dispose();
   });
 });

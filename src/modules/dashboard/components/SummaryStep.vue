@@ -21,6 +21,7 @@ import { Cardano } from '@cardano-sdk/core';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsCard, {
+  type TxOutputKind,
   type TxDetailsOutput,
   type TxDetailsWithdrawal,
   type TxDetailsTotals,
@@ -44,14 +45,32 @@ const risks = ref<any>({ score: undefined });
 
 const { loggedWallet } = toRefs(walletStore);
 
-const recipientAddresses = computed(() => {
+// Own-address classification mirrors DAppOverlay's signTx summary so a
+// self-send renders as an internal transfer here exactly like it does in the
+// sidepanel signing card (change/self outputs never count as "sending").
+const changeAddresses = computed<Set<string>>(() => {
   const set = new Set<string>();
-  for (const r of props.recipients) {
-    const a = r.resolvedAddress || r.address;
-    if (a) set.add(a);
-  }
+  const k = walletStore.keys;
+  if (k?.change) for (const p of k.change) { if (p.address) set.add(p.address); }
   return set;
 });
+
+const paymentAddresses = computed<Set<string>>(() => {
+  const set = new Set<string>();
+  const k = walletStore.keys;
+  if (k?.payment) for (const p of k.payment) { if (p.address) set.add(p.address); }
+  // The builder sends change to baseAddress; include it so classification
+  // holds even before the key sets have synced to this context.
+  const base = loggedWallet.value?.baseAddress;
+  if (base) set.add(base);
+  return set;
+});
+
+function classifyAddress(addr: string): TxOutputKind {
+  if (changeAddresses.value.has(addr)) return 'change';
+  if (paymentAddresses.value.has(addr)) return 'own';
+  return 'external';
+}
 
 function truncateAddr(addr: string): string {
   if (!addr) return '';
@@ -67,14 +86,13 @@ const outputRows = computed<TxDetailsOutput[]>(() => {
   if (!tx.value?.body?.outputs) return [];
   return tx.value.body.outputs.map((o) => {
     const addr = String(o.address);
-    const isExternal = recipientAddresses.value.has(addr);
     const coins = BigInt(o.value.coins);
     const assets = o.value.assets;
     const assetCount = assets
       ? (assets instanceof Map ? assets.size : Object.keys(assets).length)
       : 0;
     return {
-      kind: isExternal ? 'external' : 'change',
+      kind: classifyAddress(addr),
       truncatedAddress: truncateAddr(addr),
       ada: formatAda(coins),
       assetCount,
@@ -87,15 +105,24 @@ const feeAda = computed(() => {
   return formatAda(Number(tx.value.body.fee));
 });
 
+// Only lovelace leaving the wallet counts as "sending" — change and
+// self-payments are excluded, matching the sidepanel signing summary.
 const totalSendingLovelace = computed<bigint>(() => {
   if (!tx.value?.body?.outputs) return 0n;
   let sum = 0n;
   for (const o of tx.value.body.outputs) {
-    if (recipientAddresses.value.has(String(o.address))) {
+    if (classifyAddress(String(o.address)) === 'external') {
       sum += BigInt(o.value.coins);
     }
   }
   return sum;
+});
+
+// Internal transfer = every output stays in this wallet (self-send).
+const isInternalTransfer = computed<boolean>(() => {
+  const outs = tx.value?.body?.outputs;
+  if (!outs || outs.length === 0) return false;
+  return outs.every((o) => classifyAddress(String(o.address)) !== 'external');
 });
 
 const withdrawnRewardsLovelace = computed<bigint>(() => {
@@ -115,12 +142,16 @@ const withdrawalRow = computed<TxDetailsWithdrawal | null>(() => {
 const totals = computed<TxDetailsTotals>(() => {
   const fee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : 0n;
   const net = totalSendingLovelace.value + fee - withdrawnRewardsLovelace.value;
+  // TEMP diagnostic — remove once the self-send fix is confirmed live.
+  console.log('[SummaryStep][self-send-fix] kinds:', outputRows.value.map((r) => r.kind),
+    'isInternal:', isInternalTransfer.value,
+    'totalSending:', totalSendingLovelace.value.toString());
   return {
     totalSendingAda: formatAda(totalSendingLovelace.value),
     feeAda: feeAda.value,
     withdrawalAda: withdrawnRewardsLovelace.value > 0n ? formatAda(withdrawnRewardsLovelace.value) : undefined,
     youPayAda: formatAda(net < 0n ? 0n : net),
-    isInternal: false,
+    isInternal: isInternalTransfer.value,
   };
 });
 
