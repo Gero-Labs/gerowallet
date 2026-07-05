@@ -516,6 +516,13 @@ watch(network, async (value) => {
   height: 100%;
 }
 
+/* Let the widget fill (and be bounded by) our height in the height-constrained
+   contexts so its internal body scrolls and the swap CTA stays pinned. In 'page'
+   context we leave the element at natural height (the page itself scrolls). */
+.gero-swap-embed > gero-swap { display: block; }
+.gero-swap-embed--dialog > gero-swap,
+.gero-swap-embed--sidepanel > gero-swap { height: 100%; min-height: 0; }
+
 .gero-swap-embed__maintenance {
   display: flex;
   flex-direction: column;
