@@ -121,11 +121,14 @@ export function getMidnightEndpoints(network: string): MidnightNetworkEndpoints 
  * Compose the full Nexus URL for a per-network Midnight REST resource.
  *
  * Example: `nexusUrlFor(Network.PREVIEW, 'dust/status')` →
- * `https://nexus.gerowallet.io/api/v1/midnight/midnight-preview/dust/status`
+ * `https://nexus.gerowallet.io/api/midnight/midnight-preview/dust/status`
  *
  * Network slug mapping mirrors what Nexus expects in its `?network=` parameter
  * for chain-agnostic endpoints, and the `{network}` path segment for Midnight-only
- * endpoints (`/api/v1/midnight/{network}/...`).
+ * endpoints (`/api/midnight/{network}/...`).
+ *
+ * Note: nexus PR #416 (merged 2026-06-08) dropped the `/v1` version segment
+ * from all public endpoints. Previously this was `/api/v1/midnight/...`.
  */
 export function nexusMidnightPathFor(network: string, subpath: string): string {
   const endpoints = MIDNIGHT_NETWORK_ENDPOINTS[network];
@@ -135,5 +138,5 @@ export function nexusMidnightPathFor(network: string, subpath: string): string {
   // Nexus path segment uses `midnight-<networkid>` form.
   const slug = `midnight-${endpoints.sdkNetworkId}`;
   const trimmedSubpath = subpath.startsWith('/') ? subpath.slice(1) : subpath;
-  return `${endpoints.nexusBaseUrl}/api/v1/midnight/${slug}/${trimmedSubpath}`;
+  return `${endpoints.nexusBaseUrl}/api/midnight/${slug}/${trimmedSubpath}`;
 }

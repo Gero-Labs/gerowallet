@@ -127,6 +127,22 @@ export interface MidnightStore {
    * send. Accepting writes {@code {version, acceptedAt}} here.
    */
   shieldedProvingConsent: { version: number; acceptedAt: number } | null;
+
+  /**
+   * Identity of the wallet whose balances/utxos/tx-history/cursor are
+   * currently loaded — the active unshielded address (`mn_addr_<network>1…`),
+   * unique per (wallet, network). Persisted so a cold start can detect that
+   * the rehydrated state belongs to a DIFFERENT wallet/network than the one
+   * now logging in.
+   *
+   * Without this, switching from wallet A (or preview) to wallet B (or
+   * preprod) leaves A's persisted NIGHT balance on screen until the first
+   * sync event arrives — and a tx with no matching owner never clears it,
+   * so a stale balance can linger indefinitely (this is the class of bug
+   * that made a switched wallet look funded when it wasn't). `setActive`
+   * resets the per-wallet state whenever this key changes. Null = never set.
+   */
+  activeWalletKey: string | null;
 }
 
 /**
@@ -173,6 +189,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   provingOperations: new Map(),
   lastMidnightTxId: null,
   shieldedProvingConsent: null,
+  activeWalletKey: null,
 });
 
 // ---------------------------------------------------------------- serializer
@@ -305,6 +322,9 @@ if (context === 'browser') {
       ? stored.lastMidnightTxId
       : null;
     midnightStore.shieldedProvingConsent = hydrateShieldedProvingConsent(stored.shieldedProvingConsent);
+    midnightStore.activeWalletKey = typeof stored.activeWalletKey === 'string'
+      ? stored.activeWalletKey
+      : null;
   });
 }
 
@@ -346,7 +366,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
-    'shieldedProvingConsent',
+    'shieldedProvingConsent', 'activeWalletKey',
   ] as const) {
     if (key in updates) {
       (midnightStore as any)[key] = updates[key];
@@ -411,11 +431,51 @@ export const midnightActions = {
    * gero-sync events arrive.
    */
   setActive(addresses: MidnightAddresses) {
+    // Identity of the wallet being activated. The unshielded address is
+    // unique per (wallet, network), so a change here means we're now looking
+    // at a different wallet or network than whatever state was rehydrated.
+    const newKey = addresses.unshielded || null;
+    const prevKey = midnightStore.activeWalletKey;
+    const isSwitch = !!prevKey && !!newKey && prevKey !== newKey;
+
+    if (isSwitch) {
+      // Wipe per-wallet state that belongs to the PREVIOUS wallet/network so
+      // a stale NIGHT balance / UTxO set / cursor can't leak across the
+      // switch. Without this the old balance lingers until the first sync
+      // event, and a no-matching-owner tx never clears it. Addresses +
+      // activeWalletKey are set below to the new wallet.
+      Object.assign(midnightStore, {
+        lastSync: null,
+        tip: { ...EMPTY_TIP },
+        balances: { ...EMPTY_BALANCES },
+        transactions: [],
+        utxos: [],
+        dustState: null,
+        lastMidnightTxId: null,
+      });
+      debugLog(`🌙 Midnight wallet switch detected (${prevKey.slice(-8)} → ${newKey.slice(-8)}) — cleared stale state`);
+    }
+
     midnightStore.isActive = true;
     midnightStore.addresses = addresses;
+    midnightStore.activeWalletKey = newKey;
     midnightStore.networkStatus = 'connecting';
     broadcastFromBackground(
-      { isActive: true, addresses, networkStatus: 'connecting' },
+      isSwitch
+        ? {
+          isActive: true,
+          addresses,
+          activeWalletKey: newKey,
+          networkStatus: 'connecting',
+          lastSync: null,
+          tip: { ...EMPTY_TIP },
+          balances: { ...EMPTY_BALANCES },
+          transactions: [],
+          utxos: [],
+          dustState: null,
+          lastMidnightTxId: null,
+        }
+        : { isActive: true, addresses, activeWalletKey: newKey, networkStatus: 'connecting' },
       true,
     );
   },
@@ -434,6 +494,7 @@ export const midnightActions = {
       dustState: null,
       provingOperations: new Map(),
       lastMidnightTxId: null,
+      activeWalletKey: null,
     });
     broadcastFromBackground({
       isActive: false,
@@ -447,6 +508,7 @@ export const midnightActions = {
       dustState: null,
       provingOperations: new Map(),
       lastMidnightTxId: null,
+      activeWalletKey: null,
     }, true);
     debugLog('🧹 Midnight store cleared');
   },

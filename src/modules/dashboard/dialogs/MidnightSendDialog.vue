@@ -137,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
@@ -173,12 +173,38 @@ const nightCurrency = computed(() =>
 // otherwise gero-sync isn't running a shielded subscription and the user's
 // note set is unknown. Step 6 will add an "upgrade this wallet" path to
 // re-derive the viewing key for legacy wallets.
-const shieldedAvailable = computed(() => !!midnightStore.addresses?.zswapViewingKey);
+// Shielded is only offered when the wallet record carries a viewing key in
+// the indexer-accepted `mn_shield-esk_` bech32m form (post-a3f76f1f). Legacy
+// wallets (raw-hex / `mn_shield-epk_`) can't open a shielded indexer session,
+// so we hide the tab rather than let a send fail at connect(). Matches the
+// login-time gate in walletManager.
+const shieldedAvailable = computed(() => {
+  const vk = midnightStore.addresses?.zswapViewingKey;
+  return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
+});
 
 // Tab index: 0 = unshielded (default), 1 = shielded. v-tabs v-model maps to
 // the tab order in the template.
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
+
+// Prefix auto-routing (Dynamic.xyz's sendBalance pattern): when the user
+// pastes a recipient address, select the pool that matches its prefix so
+// they don't have to also flip the tab manually. `mn_shield-addr_…` →
+// shielded; `mn_addr_…` → unshielded. Only acts when both tabs are available
+// and the prefix is unambiguous; never fights a partially-typed address.
+watch(
+  () => recipient.value,
+  (addr) => {
+    if (!shieldedAvailable.value) return;
+    const v = addr.trim();
+    if (v.startsWith('mn_shield-addr_')) {
+      if (activeTab.value !== 1) activeTab.value = 1;
+    } else if (v.startsWith('mn_addr_')) {
+      if (activeTab.value !== 0) activeTab.value = 0;
+    }
+  },
+);
 
 const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
 const available = computed(() => midnightStore.balances?.nightUnshielded ?? 0n);

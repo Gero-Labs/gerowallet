@@ -1987,10 +1987,10 @@ export class WalletBg {
       try {
         const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
         const storedViewingKey = parsed?.zswapViewingKey;
-        if (storedViewingKey && storedViewingKey !== derived.zswapViewingKeyHex) {
+        if (storedViewingKey && storedViewingKey !== derived.zswapViewingKey) {
           throw new Error(
             `Midnight viewing-key mismatch — BG-derived viewing key ` +
-            `(${derived.zswapViewingKeyHex.slice(0, 16)}…) doesn't match the ` +
+            `(${derived.zswapViewingKey.slice(0, 16)}…) doesn't match the ` +
             `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
             `Sync was running against the wrong key; the local note set is unsound.`,
           );
