@@ -15,20 +15,28 @@ import {
 
 const CONFIG_KEY = 'remoteSigning';
 
-function sanitizeTrusted(raw: unknown): Record<string, TrustedDevice> {
+/** Exported for unit testing the load-time field preservation. */
+export function sanitizeTrusted(raw: unknown): Record<string, TrustedDevice> {
   if (!raw || typeof raw !== 'object') return {};
   const out: Record<string, TrustedDevice> = {};
   for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
     if (!v || typeof v !== 'object') continue;
     const d = v as Record<string, unknown>;
     if (typeof d['deviceId'] === 'string' && typeof d['pubKey'] === 'string') {
-      out[id] = {
+      const entry: TrustedDevice = {
         deviceId: d['deviceId'],
         pubKey: d['pubKey'],
         label: typeof d['label'] === 'string' ? d['label'] : '',
         platform: typeof d['platform'] === 'string' ? d['platform'] : '',
         trustedAt: typeof d['trustedAt'] === 'number' ? d['trustedAt'] : 0,
       };
+      // Preserve the optional flags across reloads: `verified` drives the
+      // wallet-verified vs SAS-only badge; `hasSigningKey` drives the offline
+      // Send-gate + to-targeting. Dropping them on load silently downgraded a
+      // QR-verified pin to "SAS only" and could hide a paired-but-offline signer.
+      if (typeof d['verified'] === 'boolean') entry.verified = d['verified'];
+      if (typeof d['hasSigningKey'] === 'boolean') entry.hasSigningKey = d['hasSigningKey'];
+      out[id] = entry;
     }
   }
   return out;
