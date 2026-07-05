@@ -128,6 +128,7 @@ export function bootstrapCrossDeviceSigning(opts: {
     isRequesterTrusted: opts.isRequesterTrusted,
     isResponderTrusted: opts.isResponderTrusted,
     onPairConfirm: opts.onPairConfirm,
+    log: (m) => debugLog('🔗 xdev-wake:', m),
   });
 
   // NOTE: DEVICE_REGISTER is NOT sent here. At bootstrap time the socket is not yet
