@@ -98,7 +98,7 @@ import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import { getTokenByUnit, marketTokensRef } from '@/modules/market/composables/useMarketData';
-import { resolveAsset } from '@/shared/utils/resolver';
+import { resolveAsset, resolvePaymentKeyHash } from '@/shared/utils/resolver';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
@@ -368,12 +368,28 @@ function buildTokenCatalog(): CatalogToken[] {
   return catalog;
 }
 
+// The widget's Swap History needs the owner payment-key-hash to fetch indexed DEX orders.
+// We already hold the wallet's bech32 base address; derive the pkh from it (handles base +
+// enterprise addresses). Returns undefined when no wallet/address (widget then shows local
+// pending swaps only). resolvePaymentKeyHash throws on an unresolvable address — never let
+// that break wiring.
+function resolveOwnerPkh(): string | undefined {
+  const addr = walletStore.loggedWallet?.baseAddress;
+  if (!addr) return undefined;
+  try {
+    return resolvePaymentKeyHash(addr).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function wireProps() {
   const node = geroSwapEl.value as (HTMLElement & Record<string, unknown>) | null;
   if (!node) return;
   node.signer = signer;
   node.resolveToken = resolveToken;
   node.tokens = buildTokenCatalog(); // optional catalog
+  node.ownerPkh = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
 }
 
 function onSwapSubmitted(e: Event) {
