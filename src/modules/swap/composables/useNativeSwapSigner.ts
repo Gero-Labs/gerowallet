@@ -75,6 +75,22 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
     return cardanoUtxos().map(utxoToCip30Hex);
   }
 
+  // Collateral for a Plutus script spend (order-cancel): the smallest ADA-only wallet UTxO
+  // holding at least 5 ADA. Returns CIP-30 hex TransactionUnspentOutput(s), or [] when none
+  // (the widget then prompts the user to receive ~5 ADA).
+  async function getCollateral() {
+    const COLLATERAL_MIN = 5_000_000n;
+    return cardanoUtxos()
+      .filter((u) => {
+        const value = u[1]?.value;
+        const adaOnly = !value?.assets || value.assets.size === 0;
+        return adaOnly && (value?.coins ?? 0n) >= COLLATERAL_MIN;
+      })
+      .sort((a, b) => Number((a[1].value.coins ?? 0n) - (b[1].value.coins ?? 0n))) // smallest first
+      .slice(0, 1)
+      .map(utxoToCip30Hex);
+  }
+
   // ── Password / PRF (background SIGN_TX) — SwapSheet.vue:1043-1102 / :1117-1160 ──
   async function signPasswordOrPrf(cbor: string): Promise<string> {
     const w = walletStore.loggedWallet;
@@ -202,7 +218,7 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
     return signPasswordOrPrf(unsignedTxCbor); // Normal (password) + PRF flag on Normal
   }
 
-  const signer = { getAddresses, getUtxos, signTx, meta: { name: 'Gero' } };
+  const signer = { getAddresses, getUtxos, getCollateral, signTx, meta: { name: 'Gero' } };
 
   return {
     signer,
