@@ -188,6 +188,21 @@ const shieldedAvailable = computed(() => {
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
 
+const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
+const available = computed(() => midnightStore.balances?.nightUnshielded ?? 0n);
+const formattedAvailable = computed(() => {
+  const value = available.value;
+  const whole = value / NIGHT_DIVISOR;
+  const remainder = value % NIGHT_DIVISOR;
+  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
+  const fraction = remainderStr.slice(0, 2).padEnd(2, '0');
+  return `${whole.toLocaleString('en-US')}.${fraction}`;
+});
+
+const formRef = ref<{ validate: () => boolean } | null>(null);
+const formValid = ref(false);
+const recipient = ref('');
+
 // Prefix auto-routing (Dynamic.xyz's sendBalance pattern): when the user
 // pastes a recipient address, select the pool that matches its prefix so
 // they don't have to also flip the tab manually. `mn_shield-addr_…` →
@@ -206,20 +221,6 @@ watch(
   },
 );
 
-const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const available = computed(() => midnightStore.balances?.nightUnshielded ?? 0n);
-const formattedAvailable = computed(() => {
-  const value = available.value;
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
-  const fraction = remainderStr.slice(0, 2).padEnd(2, '0');
-  return `${whole.toLocaleString('en-US')}.${fraction}`;
-});
-
-const formRef = ref<{ validate: () => boolean } | null>(null);
-const formValid = ref(false);
-const recipient = ref('');
 const amount = ref('');
 const password = ref('');
 const sending = ref(false);

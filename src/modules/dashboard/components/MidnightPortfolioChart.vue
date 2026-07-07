@@ -101,6 +101,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
+import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 
 defineEmits<{ (e: 'refresh'): void }>();
 

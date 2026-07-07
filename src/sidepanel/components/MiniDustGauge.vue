@@ -2,7 +2,7 @@
   <!-- Compact DUST battery for mini-Gero — same data + visual language as the
        dashboard's MidnightDustGauge (gradient fill, sand dividers, living
        dust), shrunk to a single row + slim bar. -->
-  <div class="mini-dust" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
+  <v-card flat class="liquid-glass mini-dust" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
     <div class="mini-dust__row">
       <span class="mini-dust__label">
         <v-icon x-small class="mr-1" :color="isCharging || isFull ? '#ecc985' : '#888'">
@@ -32,7 +32,7 @@
       <span v-else>{{ $t('midnight.statusUnregistered') }}</span>
       <span v-if="isCharging"> · {{ timeToFullLabel }}</span>
     </div>
-  </div>
+  </v-card>
 </template>
 
 <script setup lang="ts">
@@ -89,12 +89,11 @@ const timeToFullLabel = computed(() => {
 </script>
 
 <style scoped>
+/* Background/border/radius come from the global .liquid-glass card styles
+   (sidepanel imports shared/styles/liquid-glass.css). */
 .mini-dust {
   margin: 0 16px 12px;
   padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(236, 201, 133, 0.12);
   display: flex;
   flex-direction: column;
   gap: 7px;
