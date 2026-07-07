@@ -9,8 +9,11 @@
         {{ $t('midnight.dustBattery') }}
       </div>
       <div class="dust-gauge__balance">
-        <span class="dust-gauge__balance-num">{{ dustCurrentFmt }}</span>
-        <span class="dust-gauge__balance-unit">{{ dustCurrency }}</span>
+        <v-skeleton-loader v-if="midnightLoading" type="text" width="110" />
+        <template v-else>
+          <span class="dust-gauge__balance-num">{{ dustCurrentFmt }}</span>
+          <span class="dust-gauge__balance-unit">{{ dustCurrency }}</span>
+        </template>
       </div>
     </div>
 
@@ -67,6 +70,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 
 defineEmits<{ (e: 'register'): void }>();
 
@@ -85,6 +89,7 @@ const {
   registrationStatus,
 } = useMidnightDustLive();
 
+const midnightLoading = useMidnightLoading();
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
 
 // Percent full (0-100) for the bar width + a11y.

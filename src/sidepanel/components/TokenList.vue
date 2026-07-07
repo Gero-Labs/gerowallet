@@ -1,5 +1,47 @@
 <template>
-  <div class="token-list">
+  <!-- Midnight: NIGHT + DUST rows from midnightStore (mirrors the dashboard's
+       Midnight holdings) — the Cardano rows below make no sense on this chain. -->
+  <div v-if="isMidnight" class="token-list">
+    <div class="token-item ada-row">
+      <div class="token-left">
+        <v-avatar size="36" class="token-avatar ada-avatar">
+          <img :src="midnightLogo" alt="NIGHT" style="width: 24px; height: 24px" />
+        </v-avatar>
+        <div class="token-info">
+          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
+            {{ nightTicker }}
+            <v-icon x-small color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
+          </div>
+          <div class="token-amount text-caption grey--text">
+            {{ hideBalances ? '••••••' : formattedNightBalance }}
+          </div>
+        </div>
+      </div>
+      <div class="token-right">
+        <div class="token-value text-body-2 grey--text">--</div>
+      </div>
+    </div>
+    <div class="token-item">
+      <div class="token-left">
+        <v-avatar size="36" class="token-avatar">
+          <v-icon small color="amber lighten-2">mdi-star-four-points</v-icon>
+        </v-avatar>
+        <div class="token-info">
+          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
+            {{ dustTicker }}
+          </div>
+          <div class="token-amount text-caption grey--text">
+            {{ hideBalances ? '••••••' : formattedDustBalance }}
+          </div>
+        </div>
+      </div>
+      <div class="token-right">
+        <div class="token-value text-body-2 grey--text">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="token-list">
     <!-- ADA pinned at top -->
     <div class="token-item ada-row" @click="handleSelect(adaToken)">
       <div class="token-left">
@@ -97,8 +139,34 @@ import { resolveIcon, applyTokenImageOverride } from '@/shared/utils/resolver';
 import { getBalance } from '@/chrome/serialization';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import assetsUtil from '@/utils/assets';
+import midnightLogo from '@/assets/svg/midnight.svg';
+import { midnightStore } from '@/stores/midnightStore';
+import { Blockchain, Network } from '@/models/types';
+import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 
 const adaLogo = assetsUtil.cardanoBlueLogo;
+
+// ── Midnight branch ───────────────────────────────────────────────────────────
+const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+const isMidnightMainnet = computed(() => isMidnight.value && walletStore.loggedWallet?.network === Network.MAINNET);
+const nightTicker = computed(() => (isMidnightMainnet.value ? 'NIGHT' : 'tNIGHT'));
+const dustTicker = computed(() => (isMidnightMainnet.value ? 'DUST' : 'tDUST'));
+
+const MN_NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
+const MN_DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
+
+function formatMidnightUnits(value: bigint, divisor: bigint, digits: number): string {
+  const whole = value / divisor;
+  const frac = (value % divisor).toString().padStart(divisor.toString().length - 1, '0');
+  return `${whole.toLocaleString('en-US')}.${frac.slice(0, digits)}`;
+}
+
+const formattedNightBalance = computed(() => {
+  const total = (midnightStore.balances.nightUnshielded ?? 0n) + (midnightStore.balances.nightShielded ?? 0n);
+  return formatMidnightUnits(total, MN_NIGHT_DIVISOR, 2);
+});
+const formattedDustBalance = computed(() =>
+  formatMidnightUnits(midnightStore.balances.dust ?? 0n, MN_DUST_DIVISOR, 4));
 
 const emit = defineEmits<{
   (e: 'select', token: any): void;

@@ -15,6 +15,7 @@
 
         <div class="portfolio-amount">
           <span v-if="hideBalances" class="portfolio-amount-masked">••••••</span>
+          <v-skeleton-loader v-else-if="midnightLoading" type="heading" width="150" />
           <span v-else class="portfolio-amount-visible">
             {{ formatNight(totalNight) }} <span class="currency-symbol">{{ nightCurrency }}</span>
           </span>
@@ -34,19 +35,22 @@
         <div class="pnl-column">
           <div class="pnl-item">
             <span class="pnl-label">{{ $t('midnight.unshielded') }}</span>
-            <span class="pnl-value" :style="{ color: '#47CD89' }">
+            <v-skeleton-loader v-if="midnightLoading && !hideBalances" type="text" width="90" />
+            <span v-else class="pnl-value" :style="{ color: '#47CD89' }">
               {{ hideBalances ? '••••' : formatNight(balances.nightUnshielded ?? 0n) + ' ' + nightCurrency }}
             </span>
           </div>
           <div class="pnl-item">
             <span class="pnl-label">{{ $t('midnight.shielded') }}</span>
-            <span class="pnl-value" :style="{ color: 'rgba(255,255,255,0.85)' }">
+            <v-skeleton-loader v-if="midnightLoading && !hideBalances" type="text" width="90" />
+            <span v-else class="pnl-value" :style="{ color: 'rgba(255,255,255,0.85)' }">
               {{ hideBalances ? '••••' : formatNight(balances.nightShielded ?? 0n) + ' ' + nightCurrency }}
             </span>
           </div>
           <div class="pnl-item">
             <span class="pnl-label">{{ $t('midnight.registered') }}</span>
-            <span class="pnl-value" :style="{ color: registrationColor }">
+            <v-skeleton-loader v-if="midnightLoading && !hideBalances" type="text" width="90" />
+            <span v-else class="pnl-value" :style="{ color: registrationColor }">
               {{ hideBalances ? '••••' : formatNight(balances.nightRegistered ?? 0n) + ' ' + nightCurrency }}
             </span>
           </div>
@@ -103,6 +107,7 @@ defineEmits<{ (e: 'refresh'): void }>();
 const { addresses, balances, dustState, transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+const midnightLoading = useMidnightLoading();
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
