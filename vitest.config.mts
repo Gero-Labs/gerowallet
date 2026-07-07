@@ -3,9 +3,11 @@ import { resolve } from 'path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import Vue from '@vitejs/plugin-vue2';
 
 export default defineConfig({
   plugins: [
+    Vue(),
     wasm(),
     topLevelAwait(),
     nodePolyfills({

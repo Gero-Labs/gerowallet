@@ -11,14 +11,14 @@
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <v-card-text class="text-center justify-center pt-6" style="position: relative;">
-      <SwapWidget @onSwap="$emit('close')" :buy-token-unit="props.buyTokenUnit"></SwapWidget>
+      <GeroSwapEmbed :token-out="props.buyTokenUnit" context="dialog" @swap-submitted="$emit('close')" />
     </v-card-text>
   </BaseDialog>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
-import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
+import GeroSwapEmbed from '@/modules/swap/components/GeroSwapEmbed.vue';
 import assets from '@/utils/assets';
 
 interface Props {
