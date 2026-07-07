@@ -35,77 +35,37 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
-import { getBalance } from '@/chrome/serialization';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
+import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { useChainContext } from '../composables/useChainContext';
 
 defineEmits<{
   (e: 'buy-sell'): void;
 }>();
 
-const { utxos, collateral } = toRefs(walletStore);
 const { networkInfo } = useChainContext();
 const currencyTicker = computed(() => networkInfo.value?.currencyTicker || 'ADA');
 const showBuySell = computed(() => !!networkInfo.value?.buySupport);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
-const { allTokens: marketTokens, adaData } = useMarketData();
+const { adaData } = useMarketData();
 
-const adaBalance = computed<number | null>(() => {
-  if (!utxos.value || utxos.value.length === 0) return 0;
-  try {
-    const balance = getBalance(utxos.value, collateral.value);
-    return Number(balance.coin().toString()) / 1_000_000;
-  } catch {
-    return 0;
-  }
-});
-
-const adaPrice = computed(() => {
-  return adaData.value?.priceUsd || priceStore.adaUsd?.lastPrice || 0;
-});
+// Portfolio value comes from the SAME composable the dashboard uses —
+// mini-Gero must mirror the dashboard's numbers exactly (house rule). The
+// old local re-implementation here lacked the DexHunter price fallback and
+// drifted from the dashboard whenever a token was only priced there.
+const { totals, adaBalance } = useHoldingsValuation();
 
 const priceChange = computed<number | null>(() => {
   return adaData.value?.priceChange24h ?? priceStore.adaUsd?.priceChangePercentage ?? null;
 });
 
-// Compute portfolio value reactively from wallet balances × live market prices
-// Same logic as PortfolioPage.myHoldings — reacts to UTXOs changes, price updates, and sync
-const totalPortfolioUsd = computed(() => {
-  const ada = adaBalance.value || 0;
-  let total = ada * adaPrice.value;
 
-  const tokens = walletStore.tokens;
-  if (tokens) {
-    type TokenShape = {
-      policy_id?: string;
-      unit?: string;
-      quantity?: string | number;
-      metadata?: { decimals?: number };
-    };
-    for (const token of Object.values(tokens) as TokenShape[]) {
-      if (token.policy_id === '') continue;
-      const marketToken = marketTokens.value.find(t => t.unit === token.unit);
-      if (marketToken?.price) {
-        const decimals = token.metadata?.decimals ?? 0;
-        let amount = Number(token.quantity || 0);
-        if (decimals > 0) amount = amount / Math.pow(10, decimals);
-        total += amount * marketToken.price;
-      }
-    }
-  }
-  return total;
-});
-
-const totalPortfolioAda = computed(() => {
-  if (adaPrice.value === 0) return adaBalance.value || 0;
-  return totalPortfolioUsd.value / adaPrice.value;
-});
 
 const formattedBalance = computed(() => {
-  const val = totalPortfolioUsd.value;
+  const val = totals.value.usd;
   if (val === 0) return '$0.00';
   if (val < 0.01) return '<$0.01';
   return '$' + val.toLocaleString('en-US', {
@@ -115,7 +75,7 @@ const formattedBalance = computed(() => {
 });
 
 const formattedAdaBalance = computed(() => {
-  const val = totalPortfolioAda.value;
+  const val = totals.value.ada;
   if (val === 0) return '0';
   return val.toLocaleString('en-US', {
     minimumFractionDigits: 2,

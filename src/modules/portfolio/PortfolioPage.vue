@@ -339,15 +339,9 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import { useDelegation } from '@/shared/composables/useDelegation';
-import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
-import { tapToolsStore } from '@/stores/tapToolsStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
-import { priceStore } from '@/stores/priceStore';
-import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain, Network } from '@/models/types';
-import { getBalance } from '@/chrome/serialization';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
 
 // Components
@@ -368,8 +362,6 @@ import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import assets from '@/utils/assets';
-import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
@@ -387,7 +379,6 @@ const {
 const { isWatched, watchlistCount } = useWatchlist();
 const { pnlSummary, pnlLoading, fetchPnl, getTokenPnl } = useWalletPnl();
 const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
-const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
 const { columns: columnPrefs, hasCustomColumns, toggleColumn, resetToDefaults } = useColumnPreferences();
 
 const columnOptions = computed<{ key: ColumnKey; label: string }[]>(() => {
@@ -421,9 +412,7 @@ const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGe
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
-const { loggedWallet, transactions, account, utxos, collateral, collections, tokens: walletTokens } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
-const { portfolio } = toRefs(tapToolsStore);
+const { loggedWallet, transactions, account, collections } = toRefs(walletStore);
 
 // ── Portfolio Data ────────────────────────────────────────────────────────────
 
@@ -435,7 +424,6 @@ const {
   refreshPortfolioData,
   loadForTimeframe,
   firstLoadedCurrency,
-  latestPortfolioValues,
 } = usePortfolioData();
 
 // ── UI State ──────────────────────────────────────────────────────────────────
@@ -526,35 +514,16 @@ const shouldBackup = computed(() => {
 
 // ── Computed: Portfolio values (ported from Dashboard.vue) ────────────────────
 
-const nativePriceUsd = computed(() => {
-  if (isApex.value) {
-    return coinGeckoStore.cache['apex-4']?.usd ?? 0;
-  }
-  // Prefer market API price (same source as holdings), fallback to networkStore
-  const marketAdaPrice = allTokens.value.find(t => t.unit === 'lovelace')?.price;
-  return marketAdaPrice || Number(price.value?.lastPrice) || 0;
-});
+// Valuation (holdings rows, totals, native price, ADA balance) is shared with
+// mini-Gero via useHoldingsValuation — the sidepanel MUST show the same
+// numbers as this page, so both consume one implementation.
+const {
+  holdings: valuationHoldings,
+  totals: currentPortfolioValues,
+  nativePriceUsd,
+  adaBalance,
+} = useHoldingsValuation();
 
-const adaBalance = computed(() => {
-  return Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
-});
-
-const computedValues = computed(() => {
-  let assetsValue = 0;
-  if (portfolio.value?.positionsFt) {
-    portfolio.value.positionsFt.forEach((position: { adaValue: number }) => { assetsValue += position.adaValue; });
-  }
-  if (account.value?.controlled_amount && Number(account.value.controlled_amount) > 0) {
-    assetsValue += Number(account.value.controlled_amount) / 1000000;
-  }
-  let totalValue;
-  if (portfolio.value?.adaValue) {
-    totalValue = portfolio.value.adaValue;
-  } else {
-    totalValue = Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
-  }
-  return { totalValue, assetsValue };
-});
 
 // Build ADA-only chart data from transaction history (works for all networks)
 const adaOnlyChartData = computed(() => {
@@ -622,100 +591,24 @@ const computeChartData = computed(() => {
   return adaOnlyChartData.value;
 });
 
-// Live portfolio value computed from holdings (reactive to balance + price changes)
-const currentPortfolioValues = computed(() => {
-  const totalUsd = myHoldings.value.reduce((sum, t) => sum + (t.value || 0), 0);
-  const adaPriceUsd = nativePriceUsd.value;
-  const totalAda = adaPriceUsd > 0 ? totalUsd / adaPriceUsd : adaBalance.value;
-  const totalEur = totalUsd * usdToEurRate.value;
-  return { ada: totalAda, usd: totalUsd, eur: totalEur };
-});
+// currentPortfolioValues comes from useHoldingsValuation (destructured above)
+// so the dashboard and mini-Gero can never disagree on the total.
 
 // ── Computed: Holdings (wallet tokens enriched with market data + P&L) ────────
 
 const myHoldings = computed<MarketToken[]>(() => {
-  const tokens = walletTokens.value || {};
-  const adaPriceUsd = isApex.value
-    ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
-    : (priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0);
-  const dhTokens = dexHunterStore.dexHunterTokens || {};
-  const holdings: MarketToken[] = [];
-
-  Object.entries(tokens).forEach(([unit, token]: [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }]) => {
-    if (!token.quantity || Number(token.quantity) <= 0) return;
-
-    const decimals = token.metadata?.decimals || 0;
-    const rawQuantity = Number(token.quantity);
-    const quantity = decimals > 0 ? rawQuantity / Math.pow(10, decimals) : rawQuantity;
-
-    // Find in market data for enrichment
-    const marketToken = allTokens.value.find(t => t.unit === unit);
-    const dhToken = dhTokens[unit];
-
-    // Price: prefer market API data, then DexHunter fallback
-    let priceUsd = marketToken?.price || 0;
-    let priceAda = marketToken?.priceAda || 0;
-
-    const isNativeToken = unit === 'lovelace' || token.policy_id === '';
-    if (isNativeToken) {
-      priceUsd = adaPriceUsd;
-      priceAda = 1;
-    } else if (!priceUsd && dhToken?.price) {
-      priceAda = dhToken.price;
-      priceUsd = priceAda * adaPriceUsd;
-    }
-
-    const value = quantity * priceUsd;
-
-    // P&L data from wallet P&L composable (mainnet Cardano only, not applicable for native ADA)
-    const pnl = (isMainnetCardano.value && !isNativeToken) ? getTokenPnl(unit) : null;
-
-    holdings.push({
-      unit,
-      name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
-      ticker: marketToken?.ticker || token.metadata?.ticker || (isNativeToken ? nativeCurrencyTicker.value : ''),
-      img: marketToken?.img || (token as { img?: string }).img || '',
-      verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
-      price: priceUsd,
-      priceAda,
-      priceEur: marketToken?.priceEur ?? 0,
-      change1h: marketToken?.change1h || 0,
-      change24h: marketToken?.change24h || 0,
-      change7d: marketToken?.change7d || 0,
-      change30d: marketToken?.change30d || 0,
-      volume24h: marketToken?.volume24h || 0,
-      volume7d: marketToken?.volume7d || 0,
-      txnCount24h: marketToken?.txnCount24h ?? null,
-      makerCount24h: marketToken?.makerCount24h ?? null,
-      totalSupply: marketToken?.totalSupply ?? null,
-      sparkline: marketToken?.sparkline ?? [],
-      mcap: marketToken?.mcap ?? null,
-      tvl: marketToken?.tvl || null,
-      liquidity: marketToken?.liquidity || 0,
-      holders: marketToken?.holders ?? dhToken?.holders ?? null,
-      isNew: false,
-      policyLocked: true,
-      fingerprint: marketToken?.fingerprint || dhToken?.fingerprint || '',
-      decimals: marketToken?.decimals ?? dhToken?.decimals ?? decimals,
-      balance: quantity,
-      value,
-      allocation: value,
-      avgCostBasis: pnl?.avgCostBasisAda ?? null,
-      totalPnl: pnl ? pnl.realizedPnlAda + pnl.unrealizedPnlAda : null,
-      realizedPnl: pnl?.realizedPnlAda ?? null,
-      unrealizedPnl: pnl?.unrealizedPnlAda ?? null,
-      isNative: isNativeToken,
-    });
+  // Shared valuation rows + page-specific P&L graft (mainnet Cardano only).
+  return valuationHoldings.value.map((h) => {
+    const pnl = (isMainnetCardano.value && !h.isNative) ? getTokenPnl(h.unit) : null;
+    if (!pnl) return h;
+    return {
+      ...h,
+      avgCostBasis: pnl.avgCostBasisAda ?? null,
+      totalPnl: pnl.realizedPnlAda + pnl.unrealizedPnlAda,
+      realizedPnl: pnl.realizedPnlAda ?? null,
+      unrealizedPnl: pnl.unrealizedPnlAda ?? null,
+    };
   });
-
-  // Sort: native token pinned to top, then by value descending
-  holdings.sort((a, b) => {
-    if (a.unit === 'lovelace' || a.isNative) return -1;
-    if (b.unit === 'lovelace' || b.isNative) return 1;
-    return (b.value || 0) - (a.value || 0);
-  });
-
-  return holdings;
 });
 
 // ── Computed: Filter chips ─────────────────────────────────────────────────────
