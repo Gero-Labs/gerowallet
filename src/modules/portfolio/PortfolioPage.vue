@@ -35,7 +35,7 @@
               <div class="filter-chip-bar d-flex align-center" style="gap: 4px;">
                 <v-chip small class="geroButton flex-shrink-0">
                   <v-icon x-small class="mr-1" color="black">mdi-wallet-outline</v-icon>
-                  {{ $t('assets.holdings') }}
+                  {{ $t('portfolio.holdings') }}
                 </v-chip>
                 <v-chip small outlined disabled class="flex-shrink-0">
                   <v-icon x-small class="mr-1">mdi-image-outline</v-icon>
@@ -43,6 +43,8 @@
                 </v-chip>
               </div>
               <v-spacer />
+              <!-- Register-for-DUST lives in the DUST battery panel; the reset
+                   icon is the only toolbar action here. -->
               <v-btn
                 icon
                 small
@@ -53,16 +55,6 @@
                 @click="resetMidnightCache()"
               >
                 <v-icon small>mdi-cached</v-icon>
-              </v-btn>
-              <v-btn
-                small
-                color="primary"
-                outlined
-                class="flex-shrink-0"
-                @click="dustRegistrationOpen = true"
-              >
-                <v-icon x-small left>mdi-shield-star</v-icon>
-                {{ $t('midnight.registerForDust') }}
               </v-btn>
             </div>
 
