@@ -3,7 +3,7 @@
     <!-- Wavy background image (same as dashboard) -->
     <div
       class="mini-bg"
-      :style="{ backgroundImage: `url(${cardanoBg})` }"
+      :style="{ backgroundImage: `url(${bgImage})` }"
     ></div>
 
     <main class="mini-content">
@@ -20,13 +20,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router/composables';
 import MiniHeader from '../components/MiniHeader.vue';
 import BottomNav from '../components/BottomNav.vue';
 import assets from '@/utils/assets';
+import { useChainContext } from '../composables/useChainContext';
 
-const cardanoBg = assets.cardanoBg;
+const { isMidnight } = useChainContext();
+// Midnight gets its own night-sky backdrop; everything else keeps the
+// Cardano waves (Apex reuses them too, matching current behavior).
+const bgImage = computed(() => (isMidnight.value ? assets.midnightBg : assets.cardanoBg));
 
 // Tab order for directional slide
 const tabOrder: Record<string, number> = {

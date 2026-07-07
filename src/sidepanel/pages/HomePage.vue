@@ -4,7 +4,9 @@
 
     <QuickActions @action="handleAction" />
 
-    <FeaturedCarousel />
+    <!-- Midnight: compact DUST battery replaces the (Cardano-centric) carousel -->
+    <MiniDustGauge v-if="isMidnight" />
+    <FeaturedCarousel v-else />
 
     <div class="section-header">
       <span class="text-subtitle-2 white--text font-weight-bold">
@@ -103,6 +105,7 @@ import { useMarketData } from '@/modules/market/composables/useMarketData';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
+import MiniDustGauge from '../components/MiniDustGauge.vue';
 import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
@@ -120,6 +123,7 @@ const showTokenDetail = ref(false);
 const selectedToken = ref<any>(null);
 
 const tokenCount = computed(() => {
+  if (isMidnight.value) return 2; // NIGHT + DUST rows
   const tokens = walletStore.tokens;
   if (!tokens) return 1; // ADA only
   // Count verified, non-scam, non-ADA tokens + 1 for ADA
@@ -131,6 +135,8 @@ const tokenCount = computed(() => {
   }).length;
   return ftCount + 1; // +1 for ADA
 });
+
+const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 
 function handleBuySell() {
   showBuySell.value = true;

@@ -22,6 +22,7 @@ export interface ChainContext {
   isCardano: ComputedRef<boolean>;
   isBitcoin: ComputedRef<boolean>;
   networkInfo: ComputedRef<NetworkInfo | null>;
+  isMidnight: ComputedRef<boolean>;
   themeColors: ComputedRef<ThemePalette>;
 }
 
@@ -39,6 +40,10 @@ export function useChainContext(): ChainContext {
 
   const isBitcoin = computed(() =>
     walletStore.loggedWallet?.chain === Blockchain.BITCOIN
+  );
+
+  const isMidnight = computed(() =>
+    walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT
   );
 
   const networkInfo = computed<NetworkInfo | null>(() => {
@@ -71,5 +76,5 @@ export function useChainContext(): ChainContext {
     }, { immediate: true });
   }
 
-  return { isApex, isCardano, isBitcoin, networkInfo, themeColors };
+  return { isApex, isMidnight, isCardano, isBitcoin, networkInfo, themeColors };
 }
