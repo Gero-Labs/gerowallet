@@ -664,8 +664,6 @@ onMounted(async () => {
   );
   resumeEstimate();
 });
-
-});
 </script>
 
 <style scoped>
