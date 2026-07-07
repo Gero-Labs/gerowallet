@@ -3,6 +3,7 @@
     <!-- Wavy background image (same as dashboard) -->
     <div
       class="mini-bg"
+      :class="{ 'mini-bg--midnight': isMidnight }"
       :style="{ backgroundImage: `url(${bgImage})` }"
     ></div>
 
@@ -91,6 +92,37 @@ watch(() => route.path, (to) => {
 
 .mini-bg[style*='url('] {
   opacity: 1;
+}
+
+/* Midnight starfield: render naturally — the flip/squash transform above is
+   art-direction for the Cardano waves and distorts the night sky. Same
+   fade-to-black mask as the dashboard's midnight-background-dashboard, tuned
+   to start darkening at the DUST battery (~1/3 down) so the token list and
+   nav sit on near-black instead of fighting the stars. */
+.mini-bg--midnight {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  background-position: center;
+  filter: brightness(0.6);
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 28%,
+    rgba(0, 0, 0, 0.7) 45%,
+    rgba(0, 0, 0, 0.3) 62%,
+    rgba(0, 0, 0, 0) 80%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 28%,
+    rgba(0, 0, 0, 0.7) 45%,
+    rgba(0, 0, 0, 0.3) 62%,
+    rgba(0, 0, 0, 0) 80%
+  );
 }
 
 .mini-content {
