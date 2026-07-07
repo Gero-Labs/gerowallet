@@ -156,7 +156,7 @@ nexusTxClient.interceptors.response.use(
  * `MAINNET`/`PREPROD` with "Invalid value '…' for parameter 'network'".
  * Returns undefined if unsupported, letting the server fall back to its default.
  */
-function toNexusNetwork(network: string | undefined): 'cardano-mainnet' | 'cardano-preprod' | undefined {
+export function toNexusNetwork(network: string | undefined): 'cardano-mainnet' | 'cardano-preprod' | undefined {
   if (network === Network.MAINNET) return 'cardano-mainnet';
   if (network === Network.PREPROD) return 'cardano-preprod';
   return undefined;
