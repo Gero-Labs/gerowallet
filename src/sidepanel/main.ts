@@ -14,6 +14,7 @@ import { activityTracker } from '@/services/activityTracker.service';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 
 Vue.config.productionTip = false;
+Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
 Vue.use(VueRouter);
 Vue.component('notifications', Notifications);
 

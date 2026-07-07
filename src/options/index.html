@@ -13,6 +13,15 @@
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Quicksand:wght@300;400;500;600;700&family=Geologica:wght@100;300;400;500;700;900&family=Baloo+2:wght@400;500;600;700;800&family=Noto+Sans+Hebrew:wght@100;300;400;500;700;900&display=swap"
         rel="stylesheet">
+  <!-- media="all" (Vite's documented escape hatch, vitejs/vite#6748) stops Vite's HTML transform
+       from merging this stylesheet into the app's own bundled CSS at build time. It still gets
+       emitted as its own hashless asset (extension/assets/gero-swap.css) with the href rewritten
+       accordingly; scripts/prepare.ts's Windows path-fixup normalizes that reference correctly for
+       both entry points. The vendor copy under extension/vendor/gero-swap/ remains the source of
+       truth on disk (and the loader script below is served from there), but this <link> ends up
+       pointing at the Vite-emitted copy in extension/assets/ instead of /vendor/gero-swap/. -->
+  <link rel="stylesheet" href="/vendor/gero-swap/gero-swap.css" media="all" />
+  <script src="/vendor/gero-swap/gero-swap.js"></script>
 </head>
 <body>
 <div id="app"></div>
