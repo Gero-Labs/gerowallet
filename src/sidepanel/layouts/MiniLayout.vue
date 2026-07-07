@@ -110,18 +110,18 @@ watch(() => route.path, (to) => {
   mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 28%,
-    rgba(0, 0, 0, 0.7) 45%,
-    rgba(0, 0, 0, 0.3) 62%,
-    rgba(0, 0, 0, 0) 80%
+    rgba(0, 0, 0, 1) 15%,
+    rgba(0, 0, 0, 0.55) 30%,
+    rgba(0, 0, 0, 0.2) 45%,
+    rgba(0, 0, 0, 0) 60%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 28%,
-    rgba(0, 0, 0, 0.7) 45%,
-    rgba(0, 0, 0, 0.3) 62%,
-    rgba(0, 0, 0, 0) 80%
+    rgba(0, 0, 0, 1) 15%,
+    rgba(0, 0, 0, 0.55) 30%,
+    rgba(0, 0, 0, 0.2) 45%,
+    rgba(0, 0, 0, 0) 60%
   );
 }
 
