@@ -102,7 +102,7 @@ function formatBigDecimal(value: bigint, divisor: bigint, fractionDigits: number
 // historical data are wired they'll fill in without layout changes.
 const headers = computed(() => [
   { text: '#', value: 'rank', align: 'center' as const, sortable: false, width: 40 },
-  { text: t('assets.token'), value: 'name', align: 'start' as const, sortable: false },
+  { text: t('market.token'), value: 'name', align: 'start' as const, sortable: false },
   { text: 'Balance', value: 'balance', align: 'end' as const, sortable: false },
   { text: 'Price', value: 'price', align: 'end' as const, sortable: false },
   { text: 'Value', value: 'value', align: 'end' as const, sortable: false },

@@ -101,12 +101,10 @@
 
                         <!-- Small progress bar (hidden in compact mode).
                              Cardano: epoch-slot percentage as a definite value.
-                             Midnight: no epoch concept — render a generic
-                             striped/streaming activity indicator instead, so
-                             the bar's "live" feeling carries over even though
-                             there's no fixed-window progress to show. -->
+                             Midnight: no epoch concept, so no bar at all —
+                             the connection icon already carries the status. -->
                         <v-progress-linear
-                          v-if="!compactNav"
+                          v-if="!compactNav && !isMidnight"
                           class="epoch-progress-liquid-glass"
                           height="8"
                           :buffer-value="isMidnight ? 100 : epochSlotPercentage"
