@@ -98,6 +98,7 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router/composables';
 import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
@@ -136,6 +137,13 @@ function handleBuySell() {
 }
 
 function handleAction(id: string) {
+  // Midnight send/receive flows live in the full dashboard (MidnightSendDialog
+  // + 3-address ReceiveDialog); the sidepanel sheets are Cardano tx builders
+  // and would mis-build for Midnight. Open the dashboard instead of breaking.
+  if (walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && (id === 'send' || id === 'receive')) {
+    window.open(chrome.runtime.getURL('index.html#/'), '_blank');
+    return;
+  }
   switch (id) {
     case 'send':
       showSend.value = true;

@@ -37,7 +37,8 @@
     </template>
 
     <template v-slot:[`item.balance`]="{ item }">
-      <span style="font-family: 'Roboto Mono', monospace; font-size: 12px;">
+      <v-skeleton-loader v-if="midnightLoading" type="text" width="110" style="margin-left: auto" />
+      <span v-else style="font-family: 'Roboto Mono', monospace; font-size: 12px;">
         {{ item.balanceFormatted }}
       </span>
     </template>
@@ -75,9 +76,11 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 import midnightLogo from '@/assets/svg/midnight.svg';
 
 const { t } = useTranslation();
+const midnightLoading = useMidnightLoading();
 
 const { balances } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
