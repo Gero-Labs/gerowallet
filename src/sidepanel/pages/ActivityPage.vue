@@ -1,7 +1,41 @@
 <template>
   <div class="activity-page">
+    <!-- Midnight: history from midnightStore (walletStore.transactions is
+         Cardano-only). Same row styling, Midnight tx semantics. -->
+    <template v-if="isMidnight">
+      <div v-if="midnightTxs.length === 0" class="empty-state">
+        <v-icon size="56" color="#2a2a2a">mdi-history</v-icon>
+        <div class="text-body-1 white--text mt-3">{{ $t('miniGero.noTransactions') }}</div>
+      </div>
+      <div v-else class="tx-list">
+        <div
+          v-for="tx in midnightTxs"
+          :key="tx.hash"
+          class="tx-item"
+        >
+          <div class="tx-icon-wrapper" :class="tx.type === 'receive' ? 'icon-receive' : 'icon-send'">
+            <v-icon size="18" color="white">
+              {{ tx.type === 'receive' ? 'mdi-arrow-bottom-left' : tx.type === 'register_dust' ? 'mdi-shield-star' : 'mdi-arrow-top-right' }}
+            </v-icon>
+          </div>
+          <div class="tx-info">
+            <div class="tx-title white--text text-body-2">{{ midnightTxLabel(tx) }}</div>
+            <div class="tx-time text-caption grey--text">{{ formatTimestamp(tx.timestamp) }}</div>
+          </div>
+          <div class="tx-amount-col text-right">
+            <div
+              class="text-body-2 font-weight-medium"
+              :class="tx.type === 'receive' ? 'accent-text' : 'error-text'"
+            >
+              {{ formatMidnightAmount(tx) }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <!-- Loading skeleton -->
-    <div v-if="loading" class="pa-4">
+    <div v-else-if="loading" class="pa-4">
       <v-skeleton-loader v-for="i in 6" :key="i" type="list-item-two-line" dark class="mb-2" />
     </div>
 
@@ -50,6 +84,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
+import { Blockchain, Network } from '@/models/types';
+import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
 import filters from '@/shared/utils/filters';
 import TxDetailSheet from '../components/flows/TxDetailSheet.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -60,6 +98,38 @@ const showTxDetail = ref(false);
 const selectedTx = ref<any>(null);
 
 const loading = computed(() => !walletStore.transactions);
+
+// ── Midnight branch ───────────────────────────────────────────────────────────
+const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+const isMidnightMainnet = computed(() => isMidnight.value && walletStore.loggedWallet?.network === Network.MAINNET);
+const MN_NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
+const MN_DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
+
+const midnightTxs = computed<MidnightTransaction[]>(() =>
+  [...midnightStore.transactions].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0)));
+
+function midnightTxLabel(tx: MidnightTransaction): string {
+  switch (tx.type) {
+    case 'send': return t('transactions.sent');
+    case 'receive': return t('transactions.received');
+    case 'register_dust': return t('midnight.txRegisterDust');
+    case 'deregister_dust': return t('midnight.txDeregisterDust');
+    case 'shield': return t('midnight.txShield');
+    case 'unshield': return t('midnight.txUnshield');
+    default: return t('transactions.transaction');
+  }
+}
+
+function formatMidnightAmount(tx: MidnightTransaction): string {
+  const divisor = tx.token === 'NIGHT' ? MN_NIGHT_DIVISOR : MN_DUST_DIVISOR;
+  const digits = tx.token === 'NIGHT' ? 2 : 4;
+  const whole = tx.amount / divisor;
+  const frac = (tx.amount % divisor).toString().padStart(divisor.toString().length - 1, '0').slice(0, digits);
+  const base = tx.token === 'DUST' ? 'DUST' : 'NIGHT';
+  const ticker = isMidnightMainnet.value ? base : `t${base}`;
+  const sign = tx.type === 'receive' ? '+' : tx.type === 'send' ? '−' : '';
+  return `${sign}${whole.toLocaleString('en-US')}.${frac} ${ticker}`;
+}
 
 interface TxGroup {
   label: string;
