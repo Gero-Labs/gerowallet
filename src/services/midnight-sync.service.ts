@@ -81,6 +81,8 @@ interface WsMidnightOutput {
   intent_hash?: string;
   outputIndex?: number;
   output_index?: number;
+  registeredForDustGeneration?: boolean;
+  registered_for_dust_generation?: boolean;
 }
 
 interface WsSyncTx {
@@ -336,21 +338,30 @@ class MidnightSyncService {
     // (intentHash, outputIndex). Balance is then re-derived from the set
     // inside `applyUtxoDeltas` so history replays + reconnects can't drift
     // the balance up or down (was the old delta-running bug class).
+    //
+    // Deltas are applied PER TRANSACTION (removals first, inside the store).
+    // Aggregating across the whole batch collapses tx ordering and broke
+    // same-key respends: DUST registration spends and re-creates the SAME
+    // (intentHash, outputIndex) — just flagged — and the aggregated
+    // adds-first pass zeroed the balance on every registration.
     if (Array.isArray(data.transactions) && data.transactions.length > 0) {
       const myUnshielded = this.currentAddresses?.unshielded ?? '';
-      const added: MidnightUnshieldedUtxo[] = [];
-      const removed: Array<{ intentHash: string; outputIndex: number }> = [];
-      let maxTxId = -1;
       for (const rawTx of data.transactions) {
         const tx = this.parseTx(rawTx, myUnshielded);
         if (tx) midnightActions.applyTransaction(tx);
         // gero-sync's per-tx WS payload carries `midnight_tx_id` (snake-cased
-        // from SyncPayload.TxData.midnightTxId). Track the highest seen so we
-        // can advance the persisted resume cursor regardless of whether the
-        // UTxO set actually changed for this tx.
+        // from SyncPayload.TxData.midnightTxId). Advancing the cursor per tx
+        // is safe — the store only moves it forward.
         const txId = rawTx.midnight_tx_id ?? rawTx.midnightTxId;
-        if (typeof txId === 'number' && txId > maxTxId) maxTxId = txId;
-        if (!myUnshielded) continue;
+        const maxTxId = typeof txId === 'number' ? txId : undefined;
+        if (!myUnshielded) {
+          if (maxTxId !== undefined) {
+            midnightActions.applyUtxoDeltas({ added: [], removed: [], maxTxId });
+          }
+          continue;
+        }
+        const added: MidnightUnshieldedUtxo[] = [];
+        const removed: Array<{ intentHash: string; outputIndex: number }> = [];
         for (const o of this.readOutputs(rawTx, 'created')) {
           if (o.owner !== myUnshielded) continue;
           if (!this.isNightOutput(o)) continue;
@@ -365,13 +376,9 @@ class MidnightSyncService {
           const outputIndex = o.outputIndex ?? o.output_index ?? 0;
           if (intentHash) removed.push({ intentHash, outputIndex });
         }
-      }
-      if (added.length > 0 || removed.length > 0 || maxTxId >= 0) {
-        midnightActions.applyUtxoDeltas({
-          added,
-          removed,
-          maxTxId: maxTxId >= 0 ? maxTxId : undefined,
-        });
+        if (added.length > 0 || removed.length > 0 || maxTxId !== undefined) {
+          midnightActions.applyUtxoDeltas({ added, removed, maxTxId });
+        }
       }
     }
 
@@ -436,6 +443,17 @@ class MidnightSyncService {
     if (netAmount < 0n) type = 'send';
     else if (netAmount === 0n && spentAmount > 0n) type = 'send'; // pure forward to others
 
+    // DUST registration: net-zero self-respend where every created output we
+    // own comes back flagged registeredForDustGeneration. Without this it
+    // renders as a confusing "Sent −0.00".
+    if (netAmount === 0n && spentAmount > 0n) {
+      const ownCreated = created.filter((o) => o?.owner === myUnshielded);
+      const allRegistered = ownCreated.length > 0 && ownCreated.every(
+        (o) => (o.registeredForDustGeneration ?? o.registered_for_dust_generation) === true,
+      );
+      if (allRegistered) type = 'register_dust';
+    }
+
     // For sends, surface the recipient (largest NIGHT output NOT owned by us)
     // so history can render "To: mn_addr_…". A receive can't reliably name the
     // sender from a per-address unshielded subscription — the spent inputs
@@ -488,7 +506,8 @@ class MidnightSyncService {
       outputIndex: o.outputIndex ?? o.output_index ?? 0,
       ctime: undefined,
       initialNonce: '',
-      registeredForDustGeneration: false,
+      registeredForDustGeneration:
+        o.registeredForDustGeneration ?? o.registered_for_dust_generation ?? false,
     };
   }
 

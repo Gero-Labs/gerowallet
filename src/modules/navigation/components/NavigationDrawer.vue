@@ -212,6 +212,7 @@ import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs }
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
 import MusicStoreModule from '@/stores/musicStore'
+import { midnightStore } from '@/stores/midnightStore'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
@@ -267,6 +268,7 @@ const hasUnlockMethod = ref(false)
 
 const { musicPlaylist, context } = toRefs(musicStore);
 const { loggedWallet, transactions } = toRefs(walletStore);
+const { transactions: midnightTransactions } = toRefs(midnightStore);
 
 const account = computed(() => {
   return loggedWallet.value
@@ -328,7 +330,8 @@ const items = computed((): NavigationItemUnion[] => {
     },
     { title: t('navigation.copilotFeed'), icon: 'mdi-bell-outline', link: '/copilot-feed', enabled: featureFlagsStore.isCopilotEnabled() },
     { header: t('navigation.financialHub'), enabled: true },
-    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
+    // Midnight tx history lives in midnightStore (walletStore.transactions is Cardano-only).
+    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && (loggedWallet.value?.chain === Blockchain.MIDNIGHT ? midnightTransactions.value.length > 0 : transactions.value.length > 0), notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
@@ -391,7 +394,9 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { header: t('navigation.media'), enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
-    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
+    // Only show the player when the wallet actually holds playable media —
+    // an empty player is dead weight (and the Media header auto-hides with it).
+    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR && (musicPlaylist.value?.length ?? 0) > 0 },
     // Uncomment to add more items:
     // { header: 'Tools' },
     // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
@@ -400,7 +405,17 @@ const items = computed((): NavigationItemUnion[] => {
     // { header: 'Documentation' },
     // { title: 'Guides', icon: 'mdi-book-open-variant', href: 'https://docs.adabox.io/' },
     // { title: 'Whitepaper', icon: 'mdi-file-certificate-outline', href: 'https://docs.adabox.io/whitepapers/forge-whitepaper' }
-  ].filter(i => i)
+  ].filter(i => i).map((item, i, all) => {
+    // Auto-hide section headers with no enabled children: a header stays
+    // enabled only if at least one non-header item before the next header is
+    // enabled. Keeps chains with sparse feature sets (e.g. Midnight) from
+    // rendering orphaned "Financial hub" / "Media" headings.
+    if (!item.header || !item.enabled) return item;
+    for (let j = i + 1; j < all.length && !all[j].header; j++) {
+      if (all[j].enabled) return item;
+    }
+    return { ...item, enabled: false };
+  })
 })
 
 // Loading state for swap feature flag

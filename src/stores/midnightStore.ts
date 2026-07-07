@@ -622,18 +622,31 @@ export const midnightActions = {
       return tt === '' || /^0+$/.test(tt);
     };
 
-    for (const u of deltas.added) {
-      const key = `${u.intentHash}:${u.outputIndex}`;
-      if (byKey.has(key)) continue; // duplicate — replay or two paths converged
-      byKey.set(key, u);
-      if (isNight(u)) balanceDelta += u.value;
-    }
+    // ORDER MATTERS: removals BEFORE additions, and callers apply deltas
+    // PER TRANSACTION. DUST registration flags a UTxO in place — the tx
+    // event carries the SAME (intentHash, outputIndex) in both spent and
+    // created (now-flagged) lists. Adds-first treated the re-add as a
+    // duplicate and then the removal wiped it: balance zeroed on every
+    // registration. Removes-first re-admits the flagged version. The
+    // opposite pattern (created in tx A, spent in tx B) stays correct
+    // because each tx's deltas are applied separately, in order.
     for (const r of deltas.removed) {
       const key = `${r.intentHash}:${r.outputIndex}`;
       const existing = byKey.get(key);
       if (!existing) continue; // never had it (or already removed) — no-op
       byKey.delete(key);
       if (isNight(existing)) balanceDelta -= existing.value;
+    }
+    for (const u of deltas.added) {
+      const key = `${u.intentHash}:${u.outputIndex}`;
+      if (byKey.has(key)) {
+        // Duplicate replay — refresh metadata (e.g. registeredForDustGeneration)
+        // without touching the balance.
+        byKey.set(key, u);
+        continue;
+      }
+      byKey.set(key, u);
+      if (isNight(u)) balanceDelta += u.value;
     }
 
     // Advance the persisted resume cursor whether or not the UTxO set
