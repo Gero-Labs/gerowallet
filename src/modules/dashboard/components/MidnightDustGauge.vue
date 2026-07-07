@@ -1,5 +1,5 @@
 <template>
-  <div class="dust-gauge" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
+  <div class="dust-gauge liquid-glass" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
     <!-- Header: label + live balance -->
     <div class="dust-gauge__head">
       <div class="dust-gauge__title">
@@ -20,10 +20,16 @@
         <div
           class="battery__fill"
           :style="{ width: pct + '%' }"
-        >
-          <div v-if="isCharging" class="battery__shimmer" />
-        </div>
-        <div v-for="n in 11" :key="n" class="battery__divider" :style="{ left: (n * 100 / 12) + '%' }" />
+        />
+        <!-- Dividers: sand (same family as the dust motes) over the empty
+             track, darker once the fill has passed them. -->
+        <div
+          v-for="n in 11"
+          :key="n"
+          class="battery__divider"
+          :class="{ 'battery__divider--covered': (n * 100 / 12) <= pct }"
+          :style="{ left: (n * 100 / 12) + '%' }"
+        />
         <!-- Dust particle field — drawn above fill + dividers, purely decorative -->
         <canvas ref="particleCanvas" class="battery__dust" aria-hidden="true" />
       </div>
@@ -251,31 +257,13 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* Panel: midnight blue deepening left → warm bright sand on the right,
-   like dust settling toward the battery's charged edge. */
+/* Standard wallet panel — the gradient lives on the progress bar, not here. */
 .dust-gauge {
-  position: relative;
   padding: 14px 16px;
   border-radius: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border: 1px solid rgba(236, 201, 133, 0.14);
-  background:
-    radial-gradient(90% 160% at 100% 50%, rgba(236, 201, 133, 0.16) 0%, rgba(236, 201, 133, 0.05) 38%, transparent 62%),
-    linear-gradient(100deg, #0a1226 0%, #0c1a3c 42%, #14264e 68%, #2c3352 84%, #4a4340 94%, #63543a 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 24px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
-}
-
-/* Charging: the sand end breathes. */
-.dust-gauge.is-charging::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(70% 130% at 100% 50%, rgba(255, 224, 158, 0.14) 0%, transparent 55%);
-  animation: dust-breathe 3.6s ease-in-out infinite;
 }
 
 .dust-gauge__head {
@@ -335,55 +323,33 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* Fill: deep blue → cyan → sand. The leading edge glows while charging. */
+/* Fill: the dark-blue → sand gradient lives HERE. No tip effects. */
 .battery__fill {
   position: absolute;
   inset: 0 auto 0 0;
   height: 100%;
   border-radius: 5px 0 0 5px;
   background: linear-gradient(90deg, #16337a 0%, #2e7cc8 45%, #9db9c9 72%, #ecc985 100%);
-  box-shadow: 0 0 12px rgba(236, 201, 133, 0.35);
   transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.is-charging .battery__fill::after {
-  content: '';
-  position: absolute;
-  right: -7px;
-  top: 50%;
-  width: 16px;
-  height: 16px;
-  transform: translateY(-50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 233, 178, 0.95) 0%, rgba(255, 224, 158, 0.35) 45%, transparent 70%);
-  filter: blur(0.5px);
 }
 
 .is-full .battery__fill {
   border-radius: 5px;
-  background: linear-gradient(90deg, #b98f45 0%, #ecc985 55%, #ffe9b2 100%);
-  box-shadow: 0 0 16px rgba(255, 224, 158, 0.55);
+  background: linear-gradient(90deg, #16337a 0%, #b98f45 55%, #ffe9b2 100%);
 }
 
-/* Charging shimmer sweep across the filled portion */
-.battery__shimmer {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgba(255, 245, 220, 0.5) 50%,
-    transparent 80%
-  );
-  transform: translateX(-100%);
-  animation: dust-sweep 1.8s ease-in-out infinite;
-}
-
+/* Dividers: sand (matches the dust motes) over the empty track; once the
+   fill passes a divider it flips to a dark notch so the gradient reads. */
 .battery__divider {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 1px;
+  background: rgba(236, 201, 133, 0.45);
+  transition: background 0.4s ease;
+}
+
+.battery__divider--covered {
   background: rgba(0, 0, 0, 0.38);
 }
 
@@ -451,19 +417,8 @@ onBeforeUnmount(() => {
 .dust-gauge__cta:hover { filter: brightness(1.08); }
 .dust-gauge__cta:active { transform: translateY(1px); }
 
-@keyframes dust-sweep {
-  0% { transform: translateX(-100%); }
-  60%, 100% { transform: translateX(220%); }
-}
-
-@keyframes dust-breathe {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .battery__shimmer { animation: none; opacity: 0.35; }
   .battery__fill { transition: none; }
-  .dust-gauge.is-charging::before { animation: none; }
+  .battery__divider { transition: none; }
 }
 </style>
