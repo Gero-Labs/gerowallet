@@ -21,7 +21,8 @@
       <v-list-item dense class="px-0">
         <v-list-item-action class="my-0" style="margin-right: 12px !important">
           <v-avatar size="28" :color="item.iconBg">
-            <v-icon small :color="item.iconColor">{{ item.icon }}</v-icon>
+            <v-img v-if="item.image" :src="item.image" contain width="20" height="20" />
+            <v-icon v-else small :color="item.iconColor">{{ item.icon }}</v-icon>
           </v-avatar>
         </v-list-item-action>
         <v-list-item-content>
@@ -74,6 +75,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import midnightLogo from '@/assets/svg/midnight.svg';
 
 const { t } = useTranslation();
 
@@ -82,10 +84,8 @@ const { loggedWallet } = toRefs(walletStore);
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
-const dustCurrency = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 
 const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 function formatBigDecimal(value: bigint, divisor: bigint, fractionDigits: number): string {
   if (value < 0n) value = 0n;
@@ -125,6 +125,8 @@ interface MidnightHoldingRow {
   icon: string;
   iconBg: string;
   iconColor: string;
+  /** Brand logo (takes precedence over the mdi icon when set). */
+  image?: string;
 }
 
 // `nightRegistered` is a SUBSET of `nightUnshielded` (the portion registered
@@ -135,6 +137,8 @@ const totalNight = computed<bigint>(() =>
   (balances.value.nightShielded ?? 0n),
 );
 
+// tDUST is deliberately NOT a table row — the dedicated DUST battery panel
+// above owns the live DUST display (it's a fee resource, not a holding).
 const rows = computed<MidnightHoldingRow[]>(() => [
   {
     ticker: nightCurrency.value,
@@ -149,20 +153,7 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     icon: 'mdi-shield-outline',
     iconBg: 'blue darken-4',
     iconColor: 'blue lighten-2',
-  },
-  {
-    ticker: dustCurrency.value,
-    name: 'Midnight Fee Resource',
-    balanceFormatted: `${formatBigDecimal(balances.value.dust ?? 0n, DUST_DIVISOR, 4)} ${dustCurrency.value}`,
-    price: '—',
-    value: '—',
-    change24h: '—',
-    mcap: '—',
-    avgCost: '—',
-    pnl: '—',
-    icon: 'mdi-star',
-    iconBg: 'amber darken-4',
-    iconColor: 'amber lighten-2',
+    image: midnightLogo,
   },
 ]);
 </script>

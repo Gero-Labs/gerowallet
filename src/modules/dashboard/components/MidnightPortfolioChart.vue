@@ -50,12 +50,8 @@
               {{ hideBalances ? '••••' : formatNight(balances.nightRegistered ?? 0n) + ' ' + nightCurrency }}
             </span>
           </div>
-          <div class="pnl-item">
-            <span class="pnl-label">{{ dustCurrency }}</span>
-            <span class="pnl-value" :style="{ color: '#FFD86E' }">
-              {{ hideBalances ? '••••' : formatDust(liveDustBalance) + ' ' + dustCurrency }}
-            </span>
-          </div>
+          <!-- tDUST intentionally not listed here — the dedicated DUST battery
+               panel below the hero row owns the live DUST display. -->
         </div>
       </div>
     </div>
@@ -101,7 +97,6 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
-import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 
 defineEmits<{ (e: 'refresh'): void }>();
 
@@ -109,20 +104,10 @@ const { addresses, balances, dustState, transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
-// Live (1s-ticking) DUST balance — composable polls Nexus every 5s and
-// extrapolates between polls using the per-second generation rate.
-const dustLive = useMidnightDustLive();
-const liveDustBalance = computed<bigint>(() => {
-  if (dustLive.hasData.value) return dustLive.dustBalance.value;
-  return balances.value.dust ?? 0n;
-});
-
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
-const dustCurrency = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 
 const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 // ── Timeframe selection ──────────────────────────────────────────────────────
 const timeframes = ['24H', '7D', '1M', '3M', '1Y'] as const;
@@ -399,9 +384,6 @@ function formatNight(value: bigint): string {
   return formatBigDecimal(value, NIGHT_DIVISOR, 2);
 }
 
-function formatDust(value: bigint): string {
-  return formatBigDecimal(value, DUST_DIVISOR, 4);
-}
 </script>
 
 <style scoped>
