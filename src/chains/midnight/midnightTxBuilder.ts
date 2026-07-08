@@ -241,7 +241,11 @@ export async function balanceAndSignUnshieldedTransfer(
     // case). For (1), checkpoints every 30s + on failure make progress
     // durable across sends, so even a capped/failed attempt is never wasted.
     const STALL_MS = 45_000;
-    const MAX_SYNC_MS = 20 * 60_000;
+    // Absolute cap. Live-measured cold-sync rate is ~490 events/s (2ms/event
+    // WASM apply), so preprod's full ~1.26M-event replay needs ~43 min — the
+    // cap must clear that or a fresh wallet can never finish in one attempt.
+    // Stall/barren guards (not this cap) are what catch dead syncs early.
+    const MAX_SYNC_MS = 45 * 60_000;
     const MAX_RESTARTS = 100;
     const MAX_BARREN_ATTEMPTS = 3;
     const DUST_INDEXER_BUFFER = 100_000;
