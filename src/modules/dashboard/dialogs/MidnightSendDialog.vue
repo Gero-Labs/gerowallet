@@ -190,6 +190,7 @@
           >
             <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
           </v-btn>
+          <!-- Step 1: advance to the review. -->
           <v-btn
             v-if="currentStep === 1"
             :class="['continue-button', { shake: shakeError }]"
@@ -198,6 +199,16 @@
           >{{ t('common.continue') + ' ' }}
             <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
+          <!-- Step 2: password wallets submit here (TransactionAuthSection only
+               renders the field for them); PRF wallets submit via the PassKey
+               button rendered inside TransactionAuthSection above. -->
+          <v-btn
+            v-else-if="currentStep === 2 && !isPrfWallet"
+            class="continue-button"
+            @click="submitWithPassword"
+            :disabled="sending"
+            :loading="sending"
+          >{{ t('midnight.signAndSend') }}</v-btn>
         </div>
       </v-card-actions>
     </BaseDialog>
