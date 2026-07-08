@@ -69,7 +69,7 @@
           <span
             class="text-caption font-weight-medium"
             :style="{ color: iconColorForKind(out.kind) }"
-          >{{ out.ada }} ₳</span>
+          >{{ out.ada }} {{ unit }}</span>
           <v-tooltip
             v-if="(out.assets && out.assets.length > 0) || (out.assetCount && out.assetCount > 0)"
             top
@@ -119,7 +119,7 @@
           <span class="tx-output-addr grey--text text-caption">{{ withdrawal.truncatedStakeAddress }}</span>
         </div>
         <div class="tx-output-right">
-          <span class="text-caption font-weight-medium" style="color: #94CFA8;">{{ withdrawal.ada }} ₳</span>
+          <span class="text-caption font-weight-medium" style="color: #94CFA8;">{{ withdrawal.ada }} {{ unit }}</span>
         </div>
       </div>
     </div>
@@ -129,15 +129,15 @@
     <div class="tx-details-section">
       <div v-if="!totals.isInternal" class="tx-summary-row">
         <span class="grey--text text-caption">{{ t('signTx.totalSending') }}</span>
-        <span class="white--text text-caption font-weight-medium">{{ totals.totalSendingAda }} ₳</span>
+        <span class="white--text text-caption font-weight-medium">{{ totals.totalSendingAda }} {{ unit }}</span>
       </div>
       <div class="tx-summary-row">
         <span class="grey--text text-caption">{{ t('signTx.networkFee') }}</span>
-        <span class="white--text text-caption font-weight-medium">{{ totals.feeAda }} ₳</span>
+        <span class="white--text text-caption font-weight-medium">{{ totals.feeAda }} {{ resolvedFeeUnit }}</span>
       </div>
       <div v-if="totals.withdrawalAda" class="tx-summary-row">
         <span class="grey--text text-caption">{{ t('wallet.rewardsWithdrawn') }}</span>
-        <span class="text-caption font-weight-medium">- {{ totals.withdrawalAda }} ₳</span>
+        <span class="text-caption font-weight-medium">- {{ totals.withdrawalAda }} {{ unit }}</span>
       </div>
       <v-divider
         v-if="!totals.isInternal || totals.withdrawalAda"
@@ -145,13 +145,14 @@
       />
       <div class="tx-summary-row tx-summary-total">
         <span class="white--text text-caption font-weight-bold">{{ t('signTx.youPay') }}</span>
-        <span class="text-caption font-weight-bold">{{ totals.youPayAda }} ₳</span>
+        <span class="text-caption font-weight-bold">{{ totals.youPayAda }} {{ unit }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
@@ -200,7 +201,7 @@ export interface TxDetailsRiskBadge {
   label: string;
 }
 
-defineProps<{
+const props = withDefaults(defineProps<{
   outputs: TxDetailsOutput[];
   totals: TxDetailsTotals;
   withdrawal?: TxDetailsWithdrawal | null;
@@ -208,7 +209,23 @@ defineProps<{
   riskLoading?: boolean;
   /** Raw CBOR for the copy-to-clipboard button. Hidden when empty. */
   cborHex?: string;
-}>();
+  /**
+   * Amount unit shown after output/sending/you-pay values. Defaults to the
+   * ADA symbol so the Cardano flow is unchanged; Midnight passes NIGHT/tNIGHT.
+   */
+  unit?: string;
+  /**
+   * Unit for the network-fee row. Defaults to {@link unit}. Midnight pays fees
+   * in DUST while amounts are in NIGHT, so it passes a distinct feeUnit.
+   */
+  feeUnit?: string;
+}>(), {
+  unit: '₳',
+  feeUnit: undefined,
+});
+
+/** Fee unit falls back to the amount unit when the caller doesn't split them. */
+const resolvedFeeUnit = computed(() => props.feeUnit ?? props.unit);
 
 function iconForKind(kind: TxOutputKind): string {
   if (kind === 'external') return 'mdi-arrow-top-right';
