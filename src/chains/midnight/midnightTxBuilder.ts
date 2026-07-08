@@ -129,54 +129,7 @@ export async function balanceAndSignUnshieldedTransfer(
 
     // ── DustWallet — must sync; balanceTransactions reads UTxO state ──
     dustSk = DustSecretKey.fromSeed(args.dustSecretSeed);
-    const dustBuilder = DustWallet({
-      networkId: args.sdkNetworkId as Parameters<typeof DustWallet>[0]['networkId'],
-      indexerClientConnection: {
-        indexerHttpUrl: args.endpoints.publicIndexerUrl,
-        indexerWsUrl: args.endpoints.publicIndexerWsUrl,
-      },
-      // Cold-sync throughput. The SDK defaults ({size: 10, timeout: 1,
-      // spacing: 4} in dust-wallet/dist/v1/Sync.js) apply 10 events per WASM
-      // batch with a forced 4ms idle gap between batches — measured at
-      // ~250 events/s in the MV3 service worker, i.e. 80+ minutes to replay
-      // preprod's ~1.26M-event global dust ledger (the stream has no address
-      // filter; every wallet replays everything — indexer v4 schema only
-      // takes a cursor `id`). Large batches amortize the per-batch JS↔WASM
-      // crossing; spacing 0 removes the idle gap. The indexer easily
-      // outpaces this (measured ~15k events/s raw), so apply is the wall.
-      batchUpdates: { size: 1000, timeout: 25, spacing: 0 },
-      costParameters: { feeBlocksMargin: 1 },
-    } as unknown as Parameters<typeof DustWallet>[0]);
-
-    // Warm-restart: load this dust wallet's persisted SDK state (keyed by
-    // network + dust seed hash). On a hit, the wallet resumes from its saved
-    // appliedIndex cursor instead of cold-syncing the indexer from genesis —
-    // turning a 30s-to-minutes wait into a short catch-up. On a miss / stale /
-    // corrupt blob, dustBuilderStart falls back to a cold startWithSecretKey.
-    const persistedDustState = await loadWalletState(
-      args.sdkNetworkId, 'dust', args.dustSecretSeed,
-    );
-    dustWallet = await dustBuilderStart(
-      dustBuilder,
-      dustSk,
-      LedgerParameters.initialParameters().dust,
-      persistedDustState,
-      args.sdkNetworkId,
-      args.dustSecretSeed,
-    );
-    // shareReplay({refCount:true}) on `state` requires an active subscriber
-    // to drive sync; without this `waitForSyncedState` can hang. We use the
-    // subscriber for two things here: (a) keep-alive for the refCount, and
-    // (b) progress logging — without observability the dust sync can sit at
-    // "waiting" for minutes on cold sync with no visible signal of whether
-    // the WS is delivering data or stalled. Logging is heuristic (the SDK
-    // doesn't publish a stable progress schema across versions) — we probe
-    // common shapes and fall through on misses.
-    // BUILD-ID marker — v3 reads the SDK's actual SyncProgress getter
-    // (appliedIndex / highestIndex / isConnected per the
-    // wallet-sdk-abstractions SyncProgress.d.ts), not the made-up
-    // `progress.synced.height` shape v2 was probing.
-    debugLog('🌙 dust sync: instrumentation BUILD=v5-batched-checkpoint');
+    debugLog('🌙 dust sync: instrumentation BUILD=v6-stall-restart');
 
     type SyncProgressLike = {
       appliedIndex?: unknown;
@@ -228,45 +181,7 @@ export async function balanceAndSignUnshieldedTransfer(
     };
     const syncStartMs = Date.now();
     let lastAdvanceMs = Date.now();
-    dustSubscription = dustWallet.state.subscribe((state: unknown) => {
-      stateUpdateCount += 1;
-      totalStateUpdates += 1;
-      const p = readProgress(state);
-      if (p.applied != null && (lastProgress.applied == null || p.applied > lastProgress.applied)) {
-        lastAdvanceMs = Date.now();
-      }
-      lastProgress = p;
-      if (totalStateUpdates === 1) {
-        debugLog('🌙 dust sync: FIRST state update', {
-          applied: p.applied?.toString() ?? null,
-          highest: p.highest?.toString() ?? null,
-          isConnected: p.isConnected,
-        });
-      }
-      // Log every time appliedIndex advances by 100+ blocks.
-      if (p.applied != null && (lastLoggedApplied < 0n || p.applied - lastLoggedApplied >= 100n)) {
-        debugLog(`🌙 dust sync: progress applied=${p.applied} highest=${p.highest ?? '?'} connected=${p.isConnected ?? '?'} (Δ=${stateUpdateCount} updates, ${Date.now() - syncStartMs}ms)`);
-        lastLoggedApplied = p.applied;
-        stateUpdateCount = 0;
-      }
-    });
-    debugLog('🌙 dust sync: waiting');
 
-    // ── Watchdog + checkpointing ──────────────────────────────────
-    // A cold sync replays the entire global dust ledger (no address filter
-    // in the indexer schema), which is minutes even with tuned batching. A
-    // blind fixed timeout was the old failure mode: it always fired first
-    // AND the state was only persisted on success, so every attempt
-    // restarted from genesis. Instead:
-    //   - checkpoint the wallet state every PERSIST_INTERVAL_MS and on
-    //     failure, so progress always survives and the next attempt resumes
-    //     from the saved cursor;
-    //   - fail only on a genuine STALL (applied index hasn't advanced for
-    //     STALL_TIMEOUT_MS) or on the absolute cap MAX_SYNC_MS;
-    //   - carry sync percent in the error message so the dialog shows how
-    //     far it got instead of a bare "timed out".
-    const STALL_TIMEOUT_MS = 60_000;
-    const MAX_SYNC_MS = 20 * 60_000;
     const PERSIST_INTERVAL_MS = 30_000;
     let lastPersistMs = Date.now();
     let lastPersistedApplied = -1n;
@@ -299,36 +214,168 @@ export async function balanceAndSignUnshieldedTransfer(
       return `${pct.toFixed(1)}% (${applied}/${highest} dust ledger events)`;
     };
 
-    let watchdogHandle: ReturnType<typeof setInterval> | undefined;
-    const watchdog = new Promise<never>((_, reject) => {
-      watchdogHandle = setInterval(() => {
-        const now = Date.now();
-        const elapsed = now - syncStartMs;
-        debugLog(`🌙 dust sync: heartbeat ${(elapsed / 1000).toFixed(1)}s totalUpdates=${totalStateUpdates} ${percentLabel()} connected=${lastProgress.isConnected ?? 'null'}`);
-        if (now - lastPersistMs >= PERSIST_INTERVAL_MS) void persistCheckpoint('interval');
-        if (now - lastAdvanceMs > STALL_TIMEOUT_MS) {
-          reject(new Error(
-            `DUST ledger sync stalled (no progress for ${STALL_TIMEOUT_MS / 1000}s) at ${percentLabel()}. `
-            + 'Progress was saved — sending again resumes where this left off.',
-          ));
-        } else if (elapsed > MAX_SYNC_MS) {
-          reject(new Error(
-            `DUST ledger sync still incomplete after ${Math.round(elapsed / 60_000)} minutes (${percentLabel()}). `
-            + 'Progress was saved — sending again resumes where this left off.',
-          ));
-        }
-      }, 5_000);
-    });
+    // ── Sync with stall-restart ───────────────────────────────────
+    // Two SDK realities shape this loop (indexer-client 1.2.3 / dust-wallet
+    // 4.2.0; no fixed stable release exists yet — only 5.0.0 canaries):
+    //
+    //  1. The indexer's dustLedgerEvents subscription has no address filter
+    //     and no snapshot query (schema takes only a cursor `id`), so a cold
+    //     wallet replays the ENTIRE global dust ledger — ~1.26M events on
+    //     preprod. WASM apply throughput caps this at hundreds of events/s
+    //     in the MV3 service worker, i.e. tens of minutes cold.
+    //
+    //  2. The SDK's backpressure wrapper (indexer-client effect/Backpressure)
+    //     pauses by DISPOSING the graphql-ws subscription once `bufferSize`
+    //     events are in flight, and is supposed to re-open it from the
+    //     cursor after the consumer drains to `resumeThreshold` — but the
+    //     re-open dies silently (the SDK swallows WS failures), so a cold
+    //     sync reliably FREEZES after ~bufferSize + pre-pause events.
+    //     Observed: stall at exactly 12,910 applied with the default 10k
+    //     buffer (2,910 applied before pause + 10,000 drained from buffer).
+    //
+    // Workaround for (2): treat a stall as "subscription dead, state fine" —
+    // checkpoint, tear the wallet down, rebuild from the checkpoint (which
+    // opens a FRESH subscription at the cursor), continue. Each cycle nets
+    // ~bufferSize events, so the buffer is raised to 100k to cut the cycle
+    // count (peak memory ≈ bufferSize × event size, ~50MB transient worst
+    // case). For (1), checkpoints every 30s + on failure make progress
+    // durable across sends, so even a capped/failed attempt is never wasted.
+    const STALL_MS = 45_000;
+    const MAX_SYNC_MS = 20 * 60_000;
+    const MAX_RESTARTS = 100;
+    const MAX_BARREN_ATTEMPTS = 3;
+    const DUST_INDEXER_BUFFER = 100_000;
+
+    let restarts = 0;
+    let barrenAttempts = 0;
 
     try {
-      await Promise.race([dustWallet.waitForSyncedState(), watchdog]);
-      debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates}, ${percentLabel()})`);
+      for (;;) {
+        // (Re)build the wallet from the latest checkpoint — a fresh builder
+        // is required per attempt because a stopped wallet can't restart.
+        // On a checkpoint hit the wallet resumes from its saved appliedIndex
+        // cursor; on a miss/corrupt blob dustBuilderStart cold-inits.
+        const persistedDustState = await loadWalletState(
+          args.sdkNetworkId, 'dust', args.dustSecretSeed,
+        );
+        const dustBuilder = DustWallet({
+          networkId: args.sdkNetworkId as Parameters<typeof DustWallet>[0]['networkId'],
+          indexerClientConnection: {
+            indexerHttpUrl: args.endpoints.publicIndexerUrl,
+            indexerWsUrl: args.endpoints.publicIndexerWsUrl,
+            bufferSize: DUST_INDEXER_BUFFER,
+          },
+          // WASM apply batching. SDK defaults ({size: 10, timeout: 1,
+          // spacing: 4}) force a 4ms idle gap between 10-event batches —
+          // ~250 events/s. Bigger batches amortize the per-batch JS↔WASM
+          // crossing; spacing 0 removes the gap. Per-event decode+apply
+          // cost is the remaining wall (~2ms/event).
+          batchUpdates: { size: 1000, timeout: 25, spacing: 0 },
+          costParameters: { feeBlocksMargin: 1 },
+        } as unknown as Parameters<typeof DustWallet>[0]);
+        dustWallet = await dustBuilderStart(
+          dustBuilder,
+          dustSk,
+          LedgerParameters.initialParameters().dust,
+          persistedDustState,
+          args.sdkNetworkId,
+          args.dustSecretSeed,
+        );
+
+        // shareReplay({refCount:true}) on `state` requires an active
+        // subscriber to drive sync; without one `waitForSyncedState` hangs.
+        // The subscriber doubles as progress bookkeeping for the watchdog.
+        const appliedAtAttemptStart = lastPersistedApplied;
+        lastAdvanceMs = Date.now();
+        dustSubscription = dustWallet.state.subscribe((state: unknown) => {
+          stateUpdateCount += 1;
+          totalStateUpdates += 1;
+          const p = readProgress(state);
+          if (p.applied != null && (lastProgress.applied == null || p.applied > lastProgress.applied)) {
+            lastAdvanceMs = Date.now();
+          }
+          lastProgress = p;
+          if (totalStateUpdates === 1) {
+            debugLog('🌙 dust sync: FIRST state update', {
+              applied: p.applied?.toString() ?? null,
+              highest: p.highest?.toString() ?? null,
+              isConnected: p.isConnected,
+            });
+          }
+          // Log every time appliedIndex advances by 100+ events.
+          if (p.applied != null && (lastLoggedApplied < 0n || p.applied - lastLoggedApplied >= 100n)) {
+            debugLog(`🌙 dust sync: progress applied=${p.applied} highest=${p.highest ?? '?'} connected=${p.isConnected ?? '?'} (Δ=${stateUpdateCount} updates, ${Date.now() - syncStartMs}ms)`);
+            lastLoggedApplied = p.applied;
+            stateUpdateCount = 0;
+          }
+        });
+        if (restarts === 0) debugLog('🌙 dust sync: waiting');
+
+        let watchdogHandle: ReturnType<typeof setInterval> | undefined;
+        const watchdog = new Promise<'stalled'>((resolve, reject) => {
+          watchdogHandle = setInterval(() => {
+            const now = Date.now();
+            const elapsed = now - syncStartMs;
+            debugLog(`🌙 dust sync: heartbeat ${(elapsed / 1000).toFixed(1)}s totalUpdates=${totalStateUpdates} ${percentLabel()} connected=${lastProgress.isConnected ?? 'null'} restarts=${restarts}`);
+            if (now - lastPersistMs >= PERSIST_INTERVAL_MS) void persistCheckpoint('interval');
+            if (elapsed > MAX_SYNC_MS) {
+              reject(new Error(
+                `DUST ledger sync still incomplete after ${Math.round(elapsed / 60_000)} minutes (${percentLabel()}). `
+                + 'Progress was saved — sending again resumes where this left off.',
+              ));
+            } else if (now - lastAdvanceMs > STALL_MS) {
+              resolve('stalled');
+            }
+          }, 5_000);
+        });
+
+        let outcome: 'synced' | 'stalled';
+        try {
+          outcome = await Promise.race([
+            dustWallet.waitForSyncedState().then(() => 'synced' as const),
+            watchdog,
+          ]);
+        } finally {
+          if (watchdogHandle) clearInterval(watchdogHandle);
+        }
+
+        if (outcome === 'synced') {
+          debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates}, restarts=${restarts}, ${percentLabel()})`);
+          break;
+        }
+
+        // Stalled: bank progress, tear down, rebuild from the checkpoint.
+        await persistCheckpoint('stall-restart');
+        const advanced = lastPersistedApplied > appliedAtAttemptStart;
+        barrenAttempts = advanced ? 0 : barrenAttempts + 1;
+        restarts += 1;
+        try { dustSubscription?.unsubscribe(); } catch { /* already torn down */ }
+        dustSubscription = undefined;
+        try { await dustWallet.stop(); } catch { /* already torn down */ }
+        dustWallet = undefined;
+        if (barrenAttempts >= MAX_BARREN_ATTEMPTS) {
+          throw new Error(
+            `DUST ledger sync is not receiving events (${barrenAttempts} attempts with zero progress) at ${percentLabel()}. `
+            + 'Check the indexer connection and try again — saved progress is kept.',
+          );
+        }
+        if (restarts >= MAX_RESTARTS) {
+          throw new Error(
+            `DUST ledger sync gave up after ${MAX_RESTARTS} subscription restarts at ${percentLabel()}. `
+            + 'Progress was saved — sending again resumes where this left off.',
+          );
+        }
+        debugLog(`🌙 dust sync: stalled at ${percentLabel()} — restarting subscription from checkpoint (restart #${restarts})`);
+      }
     } catch (syncErr) {
       // Bank whatever progress this attempt made before failing the send.
       await persistCheckpoint('failure');
       throw syncErr;
-    } finally {
-      if (watchdogHandle) clearInterval(watchdogHandle);
+    }
+
+    if (!dustWallet) {
+      // Unreachable: the loop only breaks with a live synced wallet.
+      throw new Error('DUST wallet unavailable after sync');
     }
 
     // Persist the now-synced dust state so the NEXT send restores warm
