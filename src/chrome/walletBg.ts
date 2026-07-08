@@ -101,10 +101,13 @@ export class WalletBg {
   prfEncryptedMnemonic?: string;
   webAuthnCredentialId?: string;
   prfSpendingPassword?: string;
+  /** Wallet record creation time (ISO). Lower bound for Midnight dust-registration age. */
+  createdAt?: string;
 
   constructor(wallet: any, googleBaseAddress?: string) {
     this.id = wallet.id;
     this.name = wallet.name;
+    this.createdAt = wallet.createdAt;
     this.icon = wallet.icon;
     this.type = wallet.type;
     this.theme = wallet.theme;
@@ -1917,6 +1920,16 @@ export class WalletBg {
         }
       }
 
+      // Registration lower bound for the dust snapshot bootstrap: the wallet
+      // can't have registered for DUST before it was created. For restored
+      // wallets (creation = restore time, registration possibly earlier) a
+      // too-new snapshot degrades safely to the cold-replay fallback inside
+      // the builder. Missing createdAt → conservative 90-day lookback.
+      const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
+      const dustRegisteredAt = Number.isFinite(createdMs)
+        ? new Date(createdMs)
+        : new Date(Date.now() - 90 * 24 * 3_600_000);
+
       try {
         const signedTxHex = await balanceAndSignUnshieldedTransfer({
           sdkNetworkId,
@@ -1925,6 +1938,7 @@ export class WalletBg {
           dustSecretSeed: derived.dustSecretKey,
           unprovenTxHex,
           ttl: new Date(ttlMs),
+          dustRegisteredAt,
         });
         return signedTxHex;
       } finally {

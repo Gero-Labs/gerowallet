@@ -28,6 +28,7 @@ import {
   saveWalletState,
   clearWalletState,
 } from '@/chains/midnight/midnightWalletStatePersistence';
+import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 
 export interface BalanceAndSignUnshieldedTransferArgs {
   /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
@@ -41,6 +42,65 @@ export interface BalanceAndSignUnshieldedTransferArgs {
   /** Hex of the unproven tx Nexus built. Markers: no-signature/pre-proof/pre-binding. */
   readonly unprovenTxHex: string;
   readonly ttl: Date;
+  /**
+   * When the wallet registered for DUST generation (or the earliest bound
+   * the caller can assert — wallet creation time works: a wallet can't have
+   * registered before it existed). Drives the Nexus snapshot-bootstrap fast
+   * path: on a local-checkpoint miss, the builder asks Nexus for a dust
+   * state snapshot taken BEFORE this time and replays only the tail instead
+   * of the full ledger. Omit to skip the fast path entirely.
+   */
+  readonly dustRegisteredAt?: Date;
+}
+
+/**
+ * Fetch a dust-ledger sync-bootstrap snapshot from Nexus: a serialized
+ * dust-wallet SDK state captured by the sidecar's global dummy-key sync
+ * BEFORE {@code registeredAt}. The state carries no key material — restore
+ * happens locally and the wallet's own secret key drives own-UTxO detection
+ * over the tail replay (cross-key restore verified against the SDK).
+ *
+ * Best-effort by design: any failure (404 while the server ring is warming,
+ * auth trouble, timeout) returns null and the caller falls back to the
+ * cold-replay path — this is an accelerator, never load-bearing.
+ */
+async function fetchDustBootstrapSnapshot(
+  endpoints: MidnightNetworkEndpoints,
+  sdkNetworkId: string,
+  registeredAt: Date,
+): Promise<string | null> {
+  const url = `${endpoints.nexusBaseUrl}/api/midnight/midnight-${sdkNetworkId}`
+    + `/dust/state-snapshot?registeredAt=${encodeURIComponent(registeredAt.toISOString())}`;
+  const attempt = async (token: string): Promise<Response> => fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  try {
+    let res = await attempt(await getNexusAccessToken());
+    if (res.status === 401 || res.status === 403) {
+      // Stale/under-scoped token — one reauth + retry, mirroring midnight-api.
+      res = await attempt(await reauthenticateNexus());
+    }
+    if (!res.ok) {
+      debugLog(`🌙 dust bootstrap: no snapshot (HTTP ${res.status}) — cold path`);
+      return null;
+    }
+    const body = await res.json() as {
+      serialized_state?: string;
+      applied_index?: string;
+      chain_time_ms?: number | null;
+    };
+    if (typeof body.serialized_state !== 'string' || body.serialized_state.length === 0) {
+      return null;
+    }
+    debugLog(`🌙 dust bootstrap: snapshot received (appliedIndex=${body.applied_index ?? '?'}, `
+      + `chainTime=${body.chain_time_ms ? new Date(body.chain_time_ms).toISOString() : 'unknown'}, `
+      + `${body.serialized_state.length} chars)`);
+    return body.serialized_state;
+  } catch (e) {
+    debugLog('🌙 dust bootstrap: fetch failed (non-fatal) — cold path', e);
+    return null;
+  }
 }
 
 /**
@@ -252,6 +312,7 @@ export async function balanceAndSignUnshieldedTransfer(
 
     let restarts = 0;
     let barrenAttempts = 0;
+    let bootstrapTried = false;
 
     try {
       for (;;) {
@@ -259,9 +320,20 @@ export async function balanceAndSignUnshieldedTransfer(
         // is required per attempt because a stopped wallet can't restart.
         // On a checkpoint hit the wallet resumes from its saved appliedIndex
         // cursor; on a miss/corrupt blob dustBuilderStart cold-inits.
-        const persistedDustState = await loadWalletState(
+        let persistedDustState = await loadWalletState(
           args.sdkNetworkId, 'dust', args.dustSecretSeed,
         );
+        // Local miss → snapshot bootstrap: ask Nexus for a global dust state
+        // captured before this wallet's registration and start the tail
+        // replay from there instead of genesis. Once the tail syncs, the
+        // regular checkpointing below persists LOCAL state, so this fetch
+        // happens at most once per wallet+device lifetime.
+        if (!persistedDustState && !bootstrapTried && args.dustRegisteredAt) {
+          bootstrapTried = true;
+          persistedDustState = await fetchDustBootstrapSnapshot(
+            args.endpoints, args.sdkNetworkId, args.dustRegisteredAt,
+          );
+        }
         const dustBuilder = DustWallet({
           networkId: args.sdkNetworkId as Parameters<typeof DustWallet>[0]['networkId'],
           indexerClientConnection: {
