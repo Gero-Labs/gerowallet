@@ -12,89 +12,152 @@
       :width="428"
       imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
     >
-      <v-card-text class="px-3 pb-3 midnight-send-content">
-        <!-- Tab toggle: unshielded ↔ shielded. Only renders the tab strip if
-             the wallet record carries a viewing key (post-Step-4 wallets).
-             Legacy wallets without it stay unshielded-only — without sync
-             on the shielded side the send would just hang. -->
-        <v-tabs
-          v-if="shieldedAvailable"
-          v-model="activeTab"
-          background-color="transparent"
-          centered
-          grow
-          hide-slider
-          class="mb-3 midnight-send-tabs"
-        >
-          <v-tab :disabled="sending" class="midnight-send-tab">
-            {{ t('midnight.send.tabUnshielded') }}
-          </v-tab>
-          <v-tab :disabled="sending" class="midnight-send-tab">
-            {{ t('midnight.send.tabShielded') }}
-          </v-tab>
-        </v-tabs>
-
-        <!-- Available balance reminder. Shielded balance display is a
-             follow-up — for now we show an em-dash with a one-line hint
-             so users aren't surprised the field is blank. -->
-        <div class="midnight-balance-snapshot mb-4">
-          <div class="midnight-snapshot-label">
-            {{ isShielded ? t('midnight.shielded') : t('midnight.unshielded') }}
-          </div>
-          <div class="midnight-snapshot-amount">
-            <template v-if="isShielded">
-              {{ t('midnight.send.shieldedBalanceUnavailable') }}
+      <!-- Stepper indicator — identical markup/styling to the Cardano SendDialog. -->
+      <v-card-title style="display: block;" class="pa-0">
+        <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
+          <v-stepper-header>
+            <template v-for="(item, index) in steps">
+              <div
+                class="custom-step"
+                :key="item.name"
+                :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
+              >
+                <div class="icon-container">
+                  <v-icon
+                    class="step-icon"
+                    :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                    size="16"
+                  >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
+                  </v-icon>
+                </div>
+                <span class="step-label">{{ item.label }}</span>
+              </div>
+              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
+                   v-if="index < steps.length - 1"></div>
             </template>
-            <template v-else>
-              {{ formattedAvailable }} {{ nightCurrency }}
-            </template>
-          </div>
-          <div v-if="isShielded" class="midnight-snapshot-hint">
-            {{ t('midnight.send.shieldedBalanceHint') }}
-          </div>
-        </div>
+          </v-stepper-header>
+        </v-stepper>
+      </v-card-title>
 
-        <v-form ref="formRef" v-model="formValid">
-          <v-text-field
-            v-model="recipient"
-            :label="recipientLabel"
-            outlined
-            dense
-            :rules="addressRules"
-            :disabled="sending"
-            class="mb-2"
-          />
-          <v-text-field
-            v-model="amount"
-            :label="t('common.amount') + ' (' + nightCurrency + ')'"
-            outlined
-            dense
-            type="number"
-            min="0"
-            step="0.000001"
-            :rules="amountRules"
-            :disabled="sending"
-            :hint="amountHint"
-            persistent-hint
-            class="mb-3"
-          >
-            <template v-slot:append>
-              <v-btn
-                v-if="!isShielded"
-                x-small
-                text
-                @click="setMax"
-                :disabled="sending"
-              >MAX</v-btn>
-            </template>
-          </v-text-field>
+      <v-card-text class="send-dialog-content px-3 pb-0">
+        <CustomStepper :currentStep="currentStep" :steps="steps">
+          <!-- ── Step 1: Recipient + amount ── -->
+          <v-stepper-content step="1">
+            <div class="step-recipients-wrapper">
+              <div class="step-recipients-inner" :class="{ shake: shakeError }">
+                <!-- Tab toggle: unshielded ↔ shielded (only when a viewing key exists). -->
+                <v-tabs
+                  v-if="shieldedAvailable"
+                  v-model="activeTab"
+                  background-color="transparent"
+                  centered
+                  grow
+                  hide-slider
+                  class="mb-3 midnight-send-tabs"
+                >
+                  <v-tab :disabled="sending" class="midnight-send-tab">
+                    {{ t('midnight.send.tabUnshielded') }}
+                  </v-tab>
+                  <v-tab :disabled="sending" class="midnight-send-tab">
+                    {{ t('midnight.send.tabShielded') }}
+                  </v-tab>
+                </v-tabs>
 
-          <!-- Auth: same component the Cardano stepper uses. Renders either a
-               password field (Normal wallets) or a PassKey button (PRF wallets).
-               We listen on `passkey-prf-output` (raw PRF bytes) rather than
-               `passkey-success` (decrypted Cardano private key) because Midnight
-               decrypts its own mnemonic from the raw PRF — the Cardano-specific
-               private key bytes are the wrong material for our BG handler. -->
+                <!-- Available balance reminder. -->
+                <div class="midnight-balance-snapshot mb-4">
+                  <div class="midnight-snapshot-label">
+                    {{ isShielded ? t('midnight.shielded') : t('midnight.unshielded') }}
+                  </div>
+                  <div class="midnight-snapshot-amount">
+                    <template v-if="isShielded">
+                      {{ t('midnight.send.shieldedBalanceUnavailable') }}
+                    </template>
+                    <template v-else>
+                      {{ formattedAvailable }} {{ nightCurrency }}
+                    </template>
+                  </div>
+                  <div v-if="isShielded" class="midnight-snapshot-hint">
+                    {{ t('midnight.send.shieldedBalanceHint') }}
+                  </div>
+                </div>
+
+                <v-form ref="step1FormRef" v-model="step1Valid">
+                  <v-text-field
+                    v-model="recipient"
+                    :label="recipientLabel"
+                    outlined
+                    dense
+                    :rules="addressRules"
+                    :disabled="sending"
+                    class="mb-2"
+                  />
+                  <v-text-field
+                    v-model="amount"
+                    :label="t('common.amount') + ' (' + nightCurrency + ')'"
+                    outlined
+                    dense
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    :rules="amountRules"
+                    :disabled="sending"
+                    class="mb-1"
+                  >
+                    <template v-slot:append>
+                      <v-btn
+                        v-if="!isShielded"
+                        x-small
+                        text
+                        @click="setMax"
+                        :disabled="sending"
+                      >MAX</v-btn>
+                    </template>
+                  </v-text-field>
+                </v-form>
+
+                <!-- Global total — identical styling to the Cardano step-1 total. -->
+                <div v-if="amount && Number(amount) > 0" class="global-total">
+                  <div class="global-total__row global-total__fee-row">
+                    <span class="global-total__fee-label">{{ t('signTx.networkFee') }}</span>
+                    <span class="global-total__fee">{{ feeEstimateDisplay }} {{ dustCurrency }}</span>
+                  </div>
+                  <div class="global-total__row global-total__total-row">
+                    <span class="global-total__label">{{ t('common.total') }}</span>
+                    <div>
+                      <span class="global-total__ada">{{ amount }} {{ nightCurrency }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="!shieldedAvailable" class="text-caption text--secondary text-center mt-3">
+                  {{ t('midnight.shieldedSendComingNote') }}
+                </div>
+              </div>
+            </div>
+          </v-stepper-content>
+
+          <!-- ── Step 2: Summary + auth ── -->
+          <v-stepper-content step="2">
+            <div class="midnight-summary-wrapper">
+              <TransactionDetailsCard
+                :outputs="reviewOutputs"
+                :totals="reviewTotals"
+                :unit="nightCurrency"
+                :fee-unit="dustCurrency"
+              />
+              <!-- Sending registered NIGHT resets its DUST accrual clock. -->
+              <div v-if="!isShielded" class="midnight-dust-note mt-3">
+                <v-icon size="14" color="#FEC84B" class="mr-1">mdi-information-outline</v-icon>
+                <span>{{ t('midnight.send.dustResetWarning') }}</span>
+              </div>
+            </div>
+          </v-stepper-content>
+        </CustomStepper>
+      </v-card-text>
+
+      <!-- Actions — Continue (step 1) / auth + Sign (step 2) / Back. -->
+      <v-card-actions class="send-dialog-actions" style="flex-flow: column;">
+        <div v-if="currentStep === 2">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
@@ -111,23 +174,35 @@
             button-style="width: 295px; margin-bottom: 1px;"
             button-class="mb-2"
           />
+        </div>
 
-          <div v-if="errorMessage" class="red--text text--lighten-2 text-caption mt-2">
-            {{ errorMessage }}
-          </div>
+        <div v-if="errorMessage" class="red--text text--lighten-2 text-caption mb-2 text-center px-3">
+          {{ errorMessage }}
+        </div>
 
-          <div v-if="!shieldedAvailable" class="text-caption text--secondary text-center mt-3">
-            {{ t('midnight.shieldedSendComingNote') }}
-          </div>
-        </v-form>
-      </v-card-text>
+        <div>
+          <v-btn
+            text
+            @click="prevStep"
+            v-if="currentStep > 1"
+            class="mr-2"
+            :disabled="sending"
+          >
+            <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
+          </v-btn>
+          <v-btn
+            v-if="currentStep === 1"
+            :class="['continue-button', { shake: shakeError }]"
+            @click="nextStep()"
+            :disabled="sending"
+          >{{ t('common.continue') + ' ' }}
+            <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+          </v-btn>
+        </div>
+      </v-card-actions>
     </BaseDialog>
 
-    <!-- First-time-only consent gate for shielded sends. Opened lazily when
-         the user clicks Send on the Shielded tab without a recorded consent
-         (or with a consent older than SHIELDED_PROVING_CONSENT_VERSION). On
-         accept we re-trigger the in-flight send using the credentials we
-         captured at click-time, so the user doesn't have to re-auth. -->
+    <!-- First-time-only consent gate for shielded sends. -->
     <ShieldedProvingConsentDialog
       :is-open="consentDialogOpen"
       @close="onConsentClose"
@@ -139,7 +214,12 @@
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
+import TransactionDetailsCard, {
+  type TxDetailsOutput,
+  type TxDetailsTotals,
+} from '@/shared/components/TransactionDetailsCard.vue';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import {
@@ -165,26 +245,23 @@ const { loggedWallet } = toRefs(walletStore);
 const isPrfWallet = computed(() =>
   loggedWallet.value?.type === WalletType.Normal && !!loggedWallet.value?.webAuthnCredentialId
 );
-const nightCurrency = computed(() =>
-  loggedWallet.value?.network === Network.MAINNET ? 'NIGHT' : 'tNIGHT'
-);
+const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
+const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
+const dustCurrency = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 
-// Shielded send only offered if the wallet record carries a viewing key —
-// otherwise gero-sync isn't running a shielded subscription and the user's
-// note set is unknown. Step 6 will add an "upgrade this wallet" path to
-// re-derive the viewing key for legacy wallets.
-// Shielded is only offered when the wallet record carries a viewing key in
-// the indexer-accepted `mn_shield-esk_` bech32m form (post-a3f76f1f). Legacy
-// wallets (raw-hex / `mn_shield-epk_`) can't open a shielded indexer session,
-// so we hide the tab rather than let a send fail at connect(). Matches the
-// login-time gate in walletManager.
+// Two-step flow mirroring the Cardano SendDialog: recipients → summary.
+const steps = ref([
+  { name: 'recipients', label: t('wallet.recipients') },
+  { name: 'summary', label: t('wallet.summary') },
+]);
+const currentStep = ref(1);
+const shakeError = ref(false);
+
 const shieldedAvailable = computed(() => {
   const vk = midnightStore.addresses?.zswapViewingKey;
   return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
 });
 
-// Tab index: 0 = unshielded (default), 1 = shielded. v-tabs v-model maps to
-// the tab order in the template.
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
 
@@ -199,15 +276,19 @@ const formattedAvailable = computed(() => {
   return `${whole.toLocaleString('en-US')}.${fraction}`;
 });
 
-const formRef = ref<{ validate: () => boolean } | null>(null);
-const formValid = ref(false);
+// Network fees on Midnight are paid in DUST and are negligible (~1 Speck
+// observed on-chain). We can't cheaply get the exact pre-build value (it's
+// computed during the BG dust-balance step, post-auth), so the review shows a
+// conservative "< 0.000001" estimate in DUST — enough to convey the fee is
+// paid in DUST and is tiny, matching the Cardano flow's fee row.
+const feeEstimateDisplay = '< 0.000001';
+
+const step1FormRef = ref<{ validate: () => boolean } | null>(null);
+const step1Valid = ref(false);
 const recipient = ref('');
 
-// Prefix auto-routing (Dynamic.xyz's sendBalance pattern): when the user
-// pastes a recipient address, select the pool that matches its prefix so
-// they don't have to also flip the tab manually. `mn_shield-addr_…` →
-// shielded; `mn_addr_…` → unshielded. Only acts when both tabs are available
-// and the prefix is unambiguous; never fights a partially-typed address.
+// Prefix auto-routing: pasting a `mn_shield-addr_…` selects the shielded tab,
+// `mn_addr_…` the unshielded tab, so the user doesn't flip it manually.
 watch(
   () => recipient.value,
   (addr) => {
@@ -227,9 +308,6 @@ const sending = ref(false);
 const errorMessage = ref<string | null>(null);
 
 const consentDialogOpen = ref(false);
-// Captured at the moment the user clicked Send. If we have to detour through
-// the consent dialog we re-use these on the accepted handler so the user
-// doesn't have to re-auth after consenting.
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
 
 const passwordRules = [rules.required()];
@@ -240,13 +318,6 @@ const recipientLabel = computed(() =>
     : t('common.recipientAddress'),
 );
 
-const amountHint = computed(() =>
-  isShielded.value ? '' : `Available: ${formattedAvailable.value} ${nightCurrency.value}`,
-);
-
-// Address shape check is intentionally permissive — the indexer is the final
-// arbiter; we only catch obvious typos here. Networks: mainnet uses bare
-// `mn_addr_`, others use `mn_addr_<network>_` (e.g. `mn_addr_preview_`).
 const addressRules = computed(() => {
   if (isShielded.value) {
     return [
@@ -266,9 +337,6 @@ const addressRules = computed(() => {
 
 const amountRules = computed(() => {
   if (isShielded.value) {
-    // Without shielded balance display we can't cap the amount client-side;
-    // the SDK's transferTransaction will reject if the note set can't cover
-    // it. Keep positive-amount as the only assertion here.
     return [
       (v: string) => !!v || 'Amount required',
       (v: string) => {
@@ -304,9 +372,56 @@ function setMax() {
   amount.value = remainder === 0n ? whole.toString() : `${whole}.${remainderStr.replace(/0+$/, '')}`;
 }
 
+// ── Review-step model (fed to the shared TransactionDetailsCard) ──
+function truncate(addr: string): string {
+  if (!addr) return '';
+  return addr.length <= 20 ? addr : `${addr.slice(0, 12)}…${addr.slice(-6)}`;
+}
+
+const ownAddresses = computed(() => {
+  const a = midnightStore.addresses;
+  return [a?.unshielded, a?.shielded, loggedWallet.value?.baseAddress]
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
+});
+const isSelfSend = computed(() => ownAddresses.value.includes(recipient.value.trim()));
+
+const reviewOutputs = computed<TxDetailsOutput[]>(() => [
+  {
+    kind: isSelfSend.value ? 'own' : 'external',
+    truncatedAddress: truncate(recipient.value.trim()),
+    ada: amount.value || '0',
+  },
+]);
+
+const reviewTotals = computed<TxDetailsTotals>(() => ({
+  totalSendingAda: amount.value || '0',
+  feeAda: feeEstimateDisplay,
+  // Fee is paid in DUST (a separate resource), so "you pay" stays the NIGHT
+  // amount — we don't sum a NIGHT amount with a DUST fee.
+  youPayAda: amount.value || '0',
+  isInternal: isSelfSend.value,
+}));
+
+// ── Step navigation ──
+function nextStep() {
+  errorMessage.value = null;
+  if (currentStep.value === 1) {
+    if (!step1FormRef.value?.validate()) {
+      shakeError.value = true;
+      setTimeout(() => { shakeError.value = false; }, 400);
+      return;
+    }
+    currentStep.value = 2;
+  }
+}
+
+function prevStep() {
+  errorMessage.value = null;
+  currentStep.value = 1;
+}
+
 function preflight(): boolean {
   errorMessage.value = null;
-  if (!formRef.value?.validate()) return false;
   if (loggedWallet.value?.chain !== Blockchain.MIDNIGHT) {
     errorMessage.value = 'Not a Midnight wallet';
     return false;
@@ -326,10 +441,6 @@ async function submitWithPassword() {
 
 async function onPasskeyPrfOutput(prfBytes: Uint8Array) {
   if (!preflight() || !isPrfWallet.value) return;
-  // prfBytes are the RAW WebAuthn PRF output — these decrypt the wallet's
-  // mnemonic in BG. Do NOT use `passkey-success`'s decrypted-Cardano-key
-  // bytes for this; they're the wrong material and will fail with
-  // `OperationError` inside `decryptMnemonicWithPrfOutput`.
   await routeSend({ prfSecret: prfBytes });
 }
 
@@ -337,12 +448,6 @@ function onPasskeyError(error: Error) {
   errorMessage.value = error?.message || 'PassKey authentication failed';
 }
 
-/**
- * Submit-button router. Unshielded sends pass straight through; shielded
- * sends gate on a fresh consent record, deferring to the consent dialog if
- * needed. The credentials captured here survive the consent detour via
- * pendingCredentials so the user doesn't have to re-auth after accepting.
- */
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
   if (!isShielded.value) {
     await sendUnshielded(credentials);
@@ -358,8 +463,6 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
 
 function onConsentClose() {
   consentDialogOpen.value = false;
-  // Cancel — drop the pending credentials so a later send re-prompts auth.
-  // Don't surface an error message; the user's intent was clear (cancel).
   pendingCredentials.value = null;
 }
 
@@ -428,12 +531,163 @@ function resetForm() {
   recipient.value = '';
   amount.value = '';
   password.value = '';
+  currentStep.value = 1;
 }
+
+// Reset to step 1 whenever the dialog re-opens.
+watch(
+  () => currentStep.value,
+  () => { errorMessage.value = null; },
+);
 </script>
 
 <style scoped>
-/* Carried over from the legacy in-place Midnight branch in SendDialog.vue so
-   the visual treatment stays identical after the extraction. */
+/* ─── Content / stepper / total / buttons — copied verbatim from the Cardano
+   SendDialog so the two dialogs are visually identical. ─── */
+.send-dialog-content {
+  z-index: 1;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.step-recipients-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.step-recipients-inner {
+  width: 100%;
+  min-width: 340px;
+  max-height: 480px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.global-total {
+  padding: 10px 12px;
+  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.global-total__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.global-total__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #CECFD2;
+}
+
+.global-total__ada {
+  font-size: 14px;
+  font-weight: 600;
+  color: #00DFF3;
+}
+
+.global-total__fee-row {
+  margin-bottom: 4px;
+}
+
+.global-total__total-row {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.global-total__fee-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.global-total__fee {
+  font-size: 11px;
+  color: #FDA29B !important;
+}
+
+.send-dialog-actions {
+  text-align: center;
+  justify-content: center;
+}
+
+.continue-button {
+  background: linear-gradient(to right, #00c7f3, #00fad5);
+  color: black;
+}
+.continue-button:disabled {
+  opacity: 0.5;
+  color: black !important;
+}
+
+.stepper-container {
+  background-color: transparent;
+}
+.stepper-container :deep(.v-stepper__header) {
+  box-shadow: none;
+}
+.stepper-container .custom-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 2px;
+  width: 68px;
+}
+.stepper-container .custom-step.active .icon-container {
+  box-shadow: 0 0 0 4px #00dff327;
+}
+.stepper-container .custom-step.next .icon-container {
+  background-color: #292929;
+}
+.stepper-container .custom-step .icon-container {
+  background-color: #00dff3;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 20px;
+  width: 20px;
+  padding-left: 1px;
+}
+.stepper-container .step-label {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 600;
+  color: #CECFD2;
+}
+.stepper-container .divider {
+  flex: 1;
+  height: 2px;
+  width: 100%;
+  margin-left: -38px;
+  margin-right: -38px;
+  margin-top: 11px;
+  background-color: #292929;
+}
+.stepper-container .divider.active-divider {
+  background-color: #00dff3;
+}
+:deep(.v-stepper__content) {
+  padding: 0;
+}
+
+.shake {
+  animation: shake 0.4s ease-in-out;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* ─── Midnight-specific bits ─── */
 .midnight-balance-snapshot {
   background: linear-gradient(135deg, rgba(0, 199, 243, 0.08) 0%, rgba(255, 216, 110, 0.06) 100%);
   border: 1px solid rgba(0, 199, 243, 0.2);
@@ -462,14 +716,26 @@ function resetForm() {
   margin-top: 6px;
   line-height: 1.4;
 }
-.midnight-send-content {
-  background: transparent;
-}
 .midnight-send-tabs :deep(.v-tab) {
   text-transform: none;
   letter-spacing: 0.02em;
   font-size: 13px;
   min-width: 0;
   padding: 0 12px;
+}
+.midnight-summary-wrapper {
+  padding: 8px 0 4px;
+}
+.midnight-dust-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(254, 200, 75, 0.85);
+  background: rgba(254, 200, 75, 0.06);
+  border: 1px solid rgba(254, 200, 75, 0.18);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 </style>

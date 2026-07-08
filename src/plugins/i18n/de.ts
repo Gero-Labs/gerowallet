@@ -3937,6 +3937,7 @@ export default {
   'midnight.send.shieldedAddressPrefix': 'Adresse muss mit mn_shield-addr_ beginnen',
   'midnight.send.shieldedBalanceUnavailable': 'Shielded-Guthaben —',
   'midnight.send.shieldedBalanceHint': 'Anzeige des Shielded-Guthabens kommt in einer späteren Version; Transfers werden weiterhin On-Chain verifiziert.',
+  'midnight.send.dustResetWarning': 'Beim Senden von NIGHT beginnt die DUST-Generierung der bewegten Coins von vorn. Dein DUST-Guthaben füllt sich in den nächsten Tagen wieder bis zur Obergrenze auf; die Netzwerkgebühr selbst ist vernachlässigbar.',
   // Shielded-Proving-Consent-Dialog
   'midnight.consent.title': 'Privatsphäre beim Shielded-Senden',
   'midnight.consent.subtitle': 'Vor deiner ersten Shielded-Transaktion',

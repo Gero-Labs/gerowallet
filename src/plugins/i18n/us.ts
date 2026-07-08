@@ -4036,6 +4036,7 @@ export default {
   'midnight.send.shieldedAddressPrefix': 'Address should start with mn_shield-addr_',
   'midnight.send.shieldedBalanceUnavailable': 'Shielded balance —',
   'midnight.send.shieldedBalanceHint': 'Shielded balance display is a future release; transfers still verify on-chain.',
+  'midnight.send.dustResetWarning': 'Sending NIGHT restarts DUST generation on the coins you move. Your DUST balance refills to the cap over the next few days; the network fee itself is negligible.',
   // Shielded proving consent dialog
   'midnight.consent.title': 'Shielded send privacy',
   'midnight.consent.subtitle': 'Before your first shielded transaction',
