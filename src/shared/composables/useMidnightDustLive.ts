@@ -17,6 +17,7 @@ import { computed, onBeforeUnmount, ref, watch, type ComputedRef } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { getMidnightApi } from '@/api/midnight-api';
+import { debugLog } from '@/utils/debug';
 
 // Shared module-scope state — one source of truth across all consumers.
 const polledBalance = ref<bigint>(0n);
@@ -45,8 +46,11 @@ async function refreshOnce() {
     polledNightRegistered.value = BigInt(res.night_registered ?? '0');
     polledRegistrationStatus.value = res.dust_registration_status ?? 'Unregistered';
     polledAsOfMs.value = Date.now();
-  } catch {
+  } catch (e) {
     // Keep last successful values; extrapolation continues until next success.
+    // Log it — a silently-failing poll once masqueraded as "wallet stopped
+    // generating DUST" (it was an auth-base 404 loop).
+    debugLog('🌙 dust account-state poll failed', e);
   }
 }
 
