@@ -4,8 +4,15 @@ name: Dev Bundle Gate
 #
 # Why this exists: ci-cd.yml only builds on push to `main`, so Vue SFC *syntax*
 # errors and other bundle-breaking changes reached `development` uncaught and
-# only surfaced after merge to main. This runs the real production bundle
+# only surfaced after merge to main. This bundles the main-UI vite config
 # (vite parses every single-file component) so those breaks fail pre-merge.
+#
+# Why only build:web (not the full `npm run build`): `npm run build` runs 4 vite
+# builds in parallel via run-p, each with --max-old-space-size=6144 (~24GB peak),
+# which OOM-kills the shared self-hosted `gero-plain` runner. build:web is a
+# single vite process (~6GB) and bundles the options/popup/sidepanel app — where
+# essentially all Vue SFCs live. background/content/inject are TS entrypoints
+# with ~no SFCs, so this keeps the SFC-syntax coverage while fitting the runner.
 #
 # Why build-only (no tsc/eslint step): `npm run typecheck` (plain tsc) is
 # systemically red against this repo — tsc doesn't resolve unplugin-auto-imports
@@ -65,10 +72,10 @@ jobs:
         run: npm ci
 
       # Placeholder env: VITE_* are inlined runtime strings, so the bundle parse
-      # needs no real secrets. This is the step that catches Vue SFC syntax
-      # errors — vite parses every single-file component.
-      - name: Bundle check (placeholder env)
+      # needs no real secrets. build:web is the single main-UI vite config; it
+      # parses every SFC in options/popup/sidepanel and fails on syntax errors.
+      - name: Bundle check (build:web, placeholder env)
         run: |
           cp .env.example .env.production
           echo "Wrote placeholder .env.production ($(grep -c '^VITE_' .env.production) vars)"
-          npm run build
+          npm run build:web -- --mode production
