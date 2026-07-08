@@ -40,13 +40,19 @@ interface DeviceAuthResponse {
  * Keeping it separate from the API client prevents accidental recursion when
  * the API client's auth interceptor calls login() to refresh.
  */
-// Fall back to the public Nexus URL when the env var isn't injected (e.g.
-// production builds where `.env.production` doesn't define VITE_NEXUS_URL).
+// MUST be the DIRECT Nexus origin (VITE_NEXUS_API_URL), never VITE_NEXUS_URL:
+// since the gero-backend proxy migration, VITE_NEXUS_URL points at
+// api.gerowallet.io/api/nexus — an explicit-allowlist proxy that does NOT
+// forward /api/auth/**. Pointing auth there 404s every login/refresh, and the
+// failure mode is nasty: cached tokens keep working until expiry, then every
+// authed Midnight call collapses to 403 "Access Denied" while the reauth loop
+// keeps 404ing (seen live on preprod, 2026-07-08). Same base as
+// midnightConfig's NEXUS_BASE.
 // Without a baseURL, axios resolves `/api/auth/device` against the extension's
 // own origin, producing an `ERR_FILE_NOT_FOUND` instead of a real network call.
 const NEXUS_AUTH_BASE = (typeof import.meta !== 'undefined'
   && import.meta.env
-  && import.meta.env['VITE_NEXUS_URL']) || 'https://nexus.gerowallet.io';
+  && import.meta.env['VITE_NEXUS_API_URL']) || 'https://nexus.gerowallet.io';
 
 const authClient = axios.create({
   baseURL: NEXUS_AUTH_BASE,

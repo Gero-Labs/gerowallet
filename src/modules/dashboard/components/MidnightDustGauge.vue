@@ -7,6 +7,10 @@
           {{ isCharging ? 'mdi-battery-charging-medium' : 'mdi-battery-50' }}
         </v-icon>
         {{ $t('midnight.dustBattery') }}
+        <button v-if="!isRegistered" type="button" class="dust-gauge__cta ml-3" @click="$emit('register')">
+          <v-icon x-small left>mdi-shield-star</v-icon>
+          {{ $t('midnight.registerForDust') }}
+        </button>
       </div>
       <div class="dust-gauge__balance">
         <v-skeleton-loader v-if="midnightLoading" type="text" width="110" />
@@ -55,11 +59,6 @@
       </div>
     </div>
 
-    <!-- Unregistered CTA -->
-    <button v-if="!isRegistered" type="button" class="dust-gauge__cta" @click="$emit('register')">
-      <v-icon x-small left>mdi-shield-star</v-icon>
-      {{ $t('midnight.registerForDust') }}
-    </button>
   </div>
 </template>
 
@@ -280,10 +279,9 @@ const timeToFullLabel = computed(() => {
 .dust-gauge__stat .v--full { color: #ffe9b2; }
 
 .dust-gauge__cta {
-  align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  padding: 5px 12px;
+  padding: 3px 10px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
