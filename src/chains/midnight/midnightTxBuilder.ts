@@ -166,7 +166,48 @@ export async function balanceAndSignUnshieldedTransfer(
     // (appliedIndex / highestIndex / isConnected per the
     // wallet-sdk-abstractions SyncProgress.d.ts), not the made-up
     // `progress.synced.height` shape v2 was probing.
-    debugLog('🌙 dust sync: instrumentation BUILD=v3-syncprogress');
+    debugLog('🌙 dust sync: instrumentation BUILD=v4-wsprobe');
+
+    // ── TEMP-DIAG (remove once the silent-sync root cause is confirmed) ──
+    // The SDK swallows indexer-connection failures: a wallet whose WS never
+    // connects just sits at applied=0/connected=false with no error (verified
+    // in Node — missing WebSocket produces exactly that). This probe opens a
+    // RAW graphql-transport-ws connection to the same indexer from THIS
+    // context and logs every lifecycle event, so the next hang tells us
+    // whether the service worker can reach the indexer at all.
+    try {
+      debugLog(`🌙 WS-PROBE: typeof WebSocket=${typeof WebSocket} url=${args.endpoints.publicIndexerWsUrl}`);
+      const probe = new WebSocket(args.endpoints.publicIndexerWsUrl, 'graphql-transport-ws');
+      const probeStart = Date.now();
+      let probeEvents = 0;
+      probe.onopen = () => {
+        debugLog(`🌙 WS-PROBE: open after ${Date.now() - probeStart}ms — sending connection_init`);
+        probe.send(JSON.stringify({ type: 'connection_init' }));
+      };
+      probe.onmessage = (ev) => {
+        try {
+          const m = JSON.parse(String(ev.data));
+          if (m.type === 'connection_ack') {
+            debugLog('🌙 WS-PROBE: ack — subscribing dustLedgerEvents');
+            probe.send(JSON.stringify({ id: 'p1', type: 'subscribe', payload: { query: 'subscription { dustLedgerEvents { id maxId __typename } }' } }));
+          } else if (m.type === 'next') {
+            probeEvents += 1;
+            if (probeEvents === 1 || probeEvents === 100) {
+              debugLog(`🌙 WS-PROBE: event #${probeEvents}`, JSON.stringify(m.payload?.data?.dustLedgerEvents ?? {}).slice(0, 120));
+            }
+            if (probeEvents >= 100) probe.close();
+          } else if (m.type === 'error') {
+            debugLog('🌙 WS-PROBE: SUBSCRIPTION ERROR', JSON.stringify(m.payload).slice(0, 300));
+          }
+        } catch { /* non-JSON frame */ }
+      };
+      probe.onerror = (ev) => debugLog('🌙 WS-PROBE: ERROR event', String((ev as ErrorEvent)?.message ?? 'no-message'));
+      probe.onclose = (ev) => debugLog(`🌙 WS-PROBE: closed code=${ev.code} reason=${ev.reason || '(none)'} clean=${ev.wasClean} events=${probeEvents}`);
+      setTimeout(() => { try { probe.close(); } catch { /* already closed */ } }, 25_000);
+    } catch (probeErr) {
+      debugLog('🌙 WS-PROBE: constructor THREW', probeErr);
+    }
+    // ── end TEMP-DIAG ──
 
     type SyncProgressLike = {
       appliedIndex?: unknown;
