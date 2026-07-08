@@ -135,6 +135,16 @@ export async function balanceAndSignUnshieldedTransfer(
         indexerHttpUrl: args.endpoints.publicIndexerUrl,
         indexerWsUrl: args.endpoints.publicIndexerWsUrl,
       },
+      // Cold-sync throughput. The SDK defaults ({size: 10, timeout: 1,
+      // spacing: 4} in dust-wallet/dist/v1/Sync.js) apply 10 events per WASM
+      // batch with a forced 4ms idle gap between batches — measured at
+      // ~250 events/s in the MV3 service worker, i.e. 80+ minutes to replay
+      // preprod's ~1.26M-event global dust ledger (the stream has no address
+      // filter; every wallet replays everything — indexer v4 schema only
+      // takes a cursor `id`). Large batches amortize the per-batch JS↔WASM
+      // crossing; spacing 0 removes the idle gap. The indexer easily
+      // outpaces this (measured ~15k events/s raw), so apply is the wall.
+      batchUpdates: { size: 1000, timeout: 25, spacing: 0 },
       costParameters: { feeBlocksMargin: 1 },
     } as unknown as Parameters<typeof DustWallet>[0]);
 
@@ -166,48 +176,7 @@ export async function balanceAndSignUnshieldedTransfer(
     // (appliedIndex / highestIndex / isConnected per the
     // wallet-sdk-abstractions SyncProgress.d.ts), not the made-up
     // `progress.synced.height` shape v2 was probing.
-    debugLog('🌙 dust sync: instrumentation BUILD=v4-wsprobe');
-
-    // ── TEMP-DIAG (remove once the silent-sync root cause is confirmed) ──
-    // The SDK swallows indexer-connection failures: a wallet whose WS never
-    // connects just sits at applied=0/connected=false with no error (verified
-    // in Node — missing WebSocket produces exactly that). This probe opens a
-    // RAW graphql-transport-ws connection to the same indexer from THIS
-    // context and logs every lifecycle event, so the next hang tells us
-    // whether the service worker can reach the indexer at all.
-    try {
-      debugLog(`🌙 WS-PROBE: typeof WebSocket=${typeof WebSocket} url=${args.endpoints.publicIndexerWsUrl}`);
-      const probe = new WebSocket(args.endpoints.publicIndexerWsUrl, 'graphql-transport-ws');
-      const probeStart = Date.now();
-      let probeEvents = 0;
-      probe.onopen = () => {
-        debugLog(`🌙 WS-PROBE: open after ${Date.now() - probeStart}ms — sending connection_init`);
-        probe.send(JSON.stringify({ type: 'connection_init' }));
-      };
-      probe.onmessage = (ev) => {
-        try {
-          const m = JSON.parse(String(ev.data));
-          if (m.type === 'connection_ack') {
-            debugLog('🌙 WS-PROBE: ack — subscribing dustLedgerEvents');
-            probe.send(JSON.stringify({ id: 'p1', type: 'subscribe', payload: { query: 'subscription { dustLedgerEvents { id maxId __typename } }' } }));
-          } else if (m.type === 'next') {
-            probeEvents += 1;
-            if (probeEvents === 1 || probeEvents === 100) {
-              debugLog(`🌙 WS-PROBE: event #${probeEvents}`, JSON.stringify(m.payload?.data?.dustLedgerEvents ?? {}).slice(0, 120));
-            }
-            if (probeEvents >= 100) probe.close();
-          } else if (m.type === 'error') {
-            debugLog('🌙 WS-PROBE: SUBSCRIPTION ERROR', JSON.stringify(m.payload).slice(0, 300));
-          }
-        } catch { /* non-JSON frame */ }
-      };
-      probe.onerror = (ev) => debugLog('🌙 WS-PROBE: ERROR event', String((ev as ErrorEvent)?.message ?? 'no-message'));
-      probe.onclose = (ev) => debugLog(`🌙 WS-PROBE: closed code=${ev.code} reason=${ev.reason || '(none)'} clean=${ev.wasClean} events=${probeEvents}`);
-      setTimeout(() => { try { probe.close(); } catch { /* already closed */ } }, 25_000);
-    } catch (probeErr) {
-      debugLog('🌙 WS-PROBE: constructor THREW', probeErr);
-    }
-    // ── end TEMP-DIAG ──
+    debugLog('🌙 dust sync: instrumentation BUILD=v5-batched-checkpoint');
 
     type SyncProgressLike = {
       appliedIndex?: unknown;
@@ -235,9 +204,14 @@ export async function balanceAndSignUnshieldedTransfer(
       const applied = typeof progress.appliedIndex === 'bigint'
         ? (progress.appliedIndex as bigint)
         : null;
-      const highest = typeof progress.highestIndex === 'bigint'
-        ? (progress.highestIndex as bigint)
-        : null;
+      // The dust sync capability tracks the tip as highestRelevantWalletIndex
+      // (set to the batch's maxId in applyUpdate); highestIndex stays 0 for
+      // dust wallets. Prefer the populated field so percent math works.
+      const rawHighest = typeof progress.highestRelevantWalletIndex === 'bigint'
+          && (progress.highestRelevantWalletIndex as bigint) > 0n
+        ? (progress.highestRelevantWalletIndex as bigint)
+        : (typeof progress.highestIndex === 'bigint' ? (progress.highestIndex as bigint) : null);
+      const highest = rawHighest;
       const isConnected = typeof progress.isConnected === 'boolean'
         ? (progress.isConnected as boolean)
         : null;
@@ -253,10 +227,14 @@ export async function balanceAndSignUnshieldedTransfer(
       isConnected: null,
     };
     const syncStartMs = Date.now();
+    let lastAdvanceMs = Date.now();
     dustSubscription = dustWallet.state.subscribe((state: unknown) => {
       stateUpdateCount += 1;
       totalStateUpdates += 1;
       const p = readProgress(state);
+      if (p.applied != null && (lastProgress.applied == null || p.applied > lastProgress.applied)) {
+        lastAdvanceMs = Date.now();
+      }
       lastProgress = p;
       if (totalStateUpdates === 1) {
         debugLog('🌙 dust sync: FIRST state update', {
@@ -274,54 +252,90 @@ export async function balanceAndSignUnshieldedTransfer(
     });
     debugLog('🌙 dust sync: waiting');
 
-    // 5s heartbeat — now includes the SyncProgress fields so we can see
-    // exactly where the sync is stuck (e.g., isConnected=false means
-    // the indexer WS never came up despite the SDK firing internal
-    // state updates).
-    const heartbeatHandle = setInterval(() => {
-      const elapsed = Date.now() - syncStartMs;
-      debugLog(`🌙 dust sync: heartbeat ${(elapsed / 1000).toFixed(1)}s totalUpdates=${totalStateUpdates} applied=${lastProgress.applied?.toString() ?? 'null'} highest=${lastProgress.highest?.toString() ?? 'null'} connected=${lastProgress.isConnected ?? 'null'}`);
-    }, 5_000);
-    // Bounded wait. Without this, a cold-sync that never converges (stuck
-    // indexer subscription, unmet allowedGap default, partial network
-    // drop) hangs the send dialog forever with no signal. 90s is a soft
-    // cap for preview's typical first-sync; if we hit it we retry with
-    // a generous allowedGap so the fee balance can still attempt.
-    const SYNC_TIMEOUT_MS = 90_000;
+    // ── Watchdog + checkpointing ──────────────────────────────────
+    // A cold sync replays the entire global dust ledger (no address filter
+    // in the indexer schema), which is minutes even with tuned batching. A
+    // blind fixed timeout was the old failure mode: it always fired first
+    // AND the state was only persisted on success, so every attempt
+    // restarted from genesis. Instead:
+    //   - checkpoint the wallet state every PERSIST_INTERVAL_MS and on
+    //     failure, so progress always survives and the next attempt resumes
+    //     from the saved cursor;
+    //   - fail only on a genuine STALL (applied index hasn't advanced for
+    //     STALL_TIMEOUT_MS) or on the absolute cap MAX_SYNC_MS;
+    //   - carry sync percent in the error message so the dialog shows how
+    //     far it got instead of a bare "timed out".
+    const STALL_TIMEOUT_MS = 60_000;
+    const MAX_SYNC_MS = 20 * 60_000;
+    const PERSIST_INTERVAL_MS = 30_000;
+    let lastPersistMs = Date.now();
+    let lastPersistedApplied = -1n;
+    let persistInFlight = false;
+
+    const persistCheckpoint = async (reason: string): Promise<void> => {
+      const wallet = dustWallet;
+      const applied = lastProgress.applied;
+      if (!wallet || persistInFlight || applied == null || applied <= lastPersistedApplied) return;
+      persistInFlight = true;
+      try {
+        const serialized = await wallet.serializeState();
+        await saveWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed, serialized);
+        lastPersistedApplied = applied;
+        lastPersistMs = Date.now();
+        debugLog(`🌙 dust sync: checkpoint saved (${reason}) applied=${applied}`);
+      } catch (e) {
+        debugLog(`🌙 dust sync: checkpoint save failed (${reason}, non-fatal)`, e);
+      } finally {
+        persistInFlight = false;
+      }
+    };
+
+    const percentLabel = (): string => {
+      const { applied, highest } = lastProgress;
+      if (applied == null || highest == null || highest <= 0n) {
+        return `${applied?.toString() ?? '?'} events applied`;
+      }
+      const pct = Number((applied * 1000n) / highest) / 10;
+      return `${pct.toFixed(1)}% (${applied}/${highest} dust ledger events)`;
+    };
+
+    let watchdogHandle: ReturnType<typeof setInterval> | undefined;
+    const watchdog = new Promise<never>((_, reject) => {
+      watchdogHandle = setInterval(() => {
+        const now = Date.now();
+        const elapsed = now - syncStartMs;
+        debugLog(`🌙 dust sync: heartbeat ${(elapsed / 1000).toFixed(1)}s totalUpdates=${totalStateUpdates} ${percentLabel()} connected=${lastProgress.isConnected ?? 'null'}`);
+        if (now - lastPersistMs >= PERSIST_INTERVAL_MS) void persistCheckpoint('interval');
+        if (now - lastAdvanceMs > STALL_TIMEOUT_MS) {
+          reject(new Error(
+            `DUST ledger sync stalled (no progress for ${STALL_TIMEOUT_MS / 1000}s) at ${percentLabel()}. `
+            + 'Progress was saved — sending again resumes where this left off.',
+          ));
+        } else if (elapsed > MAX_SYNC_MS) {
+          reject(new Error(
+            `DUST ledger sync still incomplete after ${Math.round(elapsed / 60_000)} minutes (${percentLabel()}). `
+            + 'Progress was saved — sending again resumes where this left off.',
+          ));
+        }
+      }, 5_000);
+    });
+
     try {
-      await Promise.race([
-        dustWallet.waitForSyncedState(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`dust sync timed out after ${SYNC_TIMEOUT_MS / 1000}s`)), SYNC_TIMEOUT_MS),
-        ),
-      ]);
-      debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates})`);
-    } catch (timeoutErr) {
-      debugLog(`🌙 dust sync: TIMEOUT after ${Date.now() - syncStartMs}ms (totalStateUpdates=${totalStateUpdates}) — retrying with allowedGap=1000`, timeoutErr);
-      // Second attempt with a non-zero allowedGap. Caps at a separate
-      // 30s budget — if THIS times out, we let the original error bubble
-      // so the UI can surface a useful failure instead of hanging.
-      await Promise.race([
-        dustWallet.waitForSyncedState(1000n),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('dust sync (gap=1000) timed out after 30s')), 30_000),
-        ),
-      ]);
-      debugLog(`🌙 dust sync: done with gap (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates})`);
+      await Promise.race([dustWallet.waitForSyncedState(), watchdog]);
+      debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates}, ${percentLabel()})`);
+    } catch (syncErr) {
+      // Bank whatever progress this attempt made before failing the send.
+      await persistCheckpoint('failure');
+      throw syncErr;
     } finally {
-      clearInterval(heartbeatHandle);
+      if (watchdogHandle) clearInterval(watchdogHandle);
     }
 
     // Persist the now-synced dust state so the NEXT send restores warm
     // instead of cold-syncing again. Best-effort: a save failure only costs
     // a cold sync next time. Done before the fee-balance step so even if
     // balancing throws we keep the sync progress we paid for.
-    try {
-      const serialized = await dustWallet.serializeState();
-      await saveWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed, serialized);
-    } catch (e) {
-      debugLog('🌙 dust state persist failed (non-fatal)', e);
-    }
+    await persistCheckpoint('synced');
 
     // ── Add DUST fee inputs (the step that needs the dust secret) ─
     // `dust.balanceTransactions` does NOT mutate or wrap the input tx — it
