@@ -17,6 +17,7 @@ describe('createMpcGoogleWallet', () => {
     const id = await createMpcGoogleWallet({
       name: 'W', icon: 'i', theme: 't', chain: 'cardano', network: 'mainnet',
       userId: 'google-sub-1', publicKey: 'xpub-1', encryptedDeviceShare: 'enc-blob',
+      webAuthnCredentialId: 'cred-1', mpcPrfSaltId: 'salt-1',
     });
     expect(typeof id).toBe('number');
 
@@ -27,5 +28,7 @@ describe('createMpcGoogleWallet', () => {
     expect(rec.userId).toBe('google-sub-1');
     expect(rec.publicKey).toBe('xpub-1');
     expect(rec.mpcDeviceShare).toBe('enc-blob');
+    expect(rec.webAuthnCredentialId).toBe('cred-1');
+    expect(rec.mpcPrfSaltId).toBe('salt-1');
   });
 });

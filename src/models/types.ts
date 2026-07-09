@@ -27,6 +27,7 @@ export interface Wallet {
   prfEncryptedPrivateKey?: string; // Private key encrypted with PRF (hex)
   prfEncryptedMnemonic?: string; // Mnemonic encrypted with PRF (hex)
   webAuthnCredentialId?: string; // WebAuthn credential ID (base64)
+  mpcPrfSaltId?: string; // MPC passkey PRF salt id (stable, non-secret)
   prfSpendingPassword?: string; // Optional spending password hash (PBKDF2-HMAC-SHA512)
   publicKey?: string; // Account xpub (bech32)
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
