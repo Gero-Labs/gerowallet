@@ -16,3 +16,22 @@ export interface GoogleWalletBgResponse {
   };
   error?: string;
 }
+
+/**
+ * The auth material the Secure step collects for an MPC Google wallet —
+ * either a freshly-enrolled passkey (PRF) or a spending password. It flows
+ * Secure -> Confirm unchanged so Confirm can unlock with the same secret that
+ * was just used to create the wallet (no re-prompting the user mid-onboarding).
+ */
+export type GoogleAuthPayload =
+  | { authMethod: 'passkey'; credentialId: string; mpcPrfSaltId: string; prfOutputHex: string }
+  | { authMethod: 'password'; spendingPassword: string };
+
+/** Convert a GoogleAuthPayload into the wire fields the background's
+ *  CREATE_MPC_GOOGLE_WALLET / UNLOCK_MPC_WALLET handlers expect
+ *  (see `buildDeviceShareSecret` in background.ts). Never logged. */
+export function authPayloadToWireFields(payload: GoogleAuthPayload): Record<string, string> {
+  return payload.authMethod === 'passkey'
+    ? { prfOutputHex: payload.prfOutputHex, webAuthnCredentialId: payload.credentialId, mpcPrfSaltId: payload.mpcPrfSaltId }
+    : { spendingPassword: payload.spendingPassword };
+}

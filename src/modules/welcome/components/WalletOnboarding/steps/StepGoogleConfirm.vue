@@ -70,7 +70,7 @@ import assets from '@/utils/assets';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
-import type { GoogleWalletBgResponse } from './googleWalletMessages';
+import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
 
 interface Props {
   network: NetworkInfo;
@@ -78,7 +78,7 @@ interface Props {
   email: string;
   walletId: number;
   idToken: string;
-  spendingPassword: string;
+  authPayload: GoogleAuthPayload;
 }
 
 const props = defineProps<Props>();
@@ -100,13 +100,13 @@ const finish = async (): Promise<void> => {
   errorMessage.value = '';
   try {
     // Populate the session cache for this session (reconstruct-at-unlock) —
-    // Note: never log idToken/spendingPassword.
+    // Note: never log idToken/spendingPassword/prfOutputHex.
     const unlockResponse = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.UNLOCK_MPC_WALLET,
       data: {
         walletId: props.walletId,
         idToken: props.idToken,
-        spendingPassword: props.spendingPassword,
+        ...authPayloadToWireFields(props.authPayload),
       },
     }) as GoogleWalletBgResponse;
     if (!unlockResponse?.data?.success) {
