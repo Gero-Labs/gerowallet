@@ -3174,6 +3174,8 @@ export default {
   'signTx.networkMismatchTitle': 'This transaction targets a different network',
   'signTx.networkMismatchBody': 'A recipient address belongs to a different network than your active wallet. This usually means the dApp built the transaction incorrectly — signing it may fail or send funds somewhere unexpected.',
   'signTx.networkMismatchAck': 'I understand the risk and want to sign anyway',
+  'signTx.signingAddress': 'Signing as',
+  'signTx.malformedSignData': 'This site sent a malformed request. Signing is disabled until it sends a valid one.',
   'signTx.risk.low': 'Safe',
   'signTx.risk.medium': 'Caution',
   'signTx.risk.high': 'High risk',
