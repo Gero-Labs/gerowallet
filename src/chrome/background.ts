@@ -955,6 +955,12 @@ app.add(METHOD.signData, (request, sendResponse) => {
   const signDataReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
+  // The content relay now fast-paths sign requests straight to background
+  // (see messaging.ts) so the user gesture survives to sidePanel.open();
+  // enforce the whitelist here instead of in that pre-check round-trip.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return signDataReply({ error: APIError.Refused });
+  }
 
   const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
@@ -1000,6 +1006,10 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   const signTxReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
+  // Same fast-path/whitelist split as signData above.
+  if (!WalletStore.isWhitelisted(request.data?.origin || request.origin)) {
+    return signTxReply({ error: APIError.Refused });
+  }
 
   const signTxPayload = { ...request.data, website: request.data?.origin || request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
@@ -4351,6 +4361,14 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
   }
   if (walletStore.isLocked) {
     reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // Same fast-path/whitelist split as Cardano's signTx/signData: the content
+  // relay now sends this straight through (see messaging.ts) so the user
+  // gesture survives to sidePanel.open(); enforce the connect-first
+  // requirement here instead of in that pre-check round-trip.
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
     return true;
   }
   const tabId = send.tab?.id;
