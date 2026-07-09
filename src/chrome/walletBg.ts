@@ -1832,6 +1832,100 @@ export class WalletBg {
   }
 
   /**
+   * DApp Connector `signData` — signs arbitrary dapp-supplied bytes with the
+   * NightExternal (unshielded) key, per @midnight-ntwrk/dapp-connector-api
+   * v4.0.1 (`keyType: 'unshielded'` is the only value the spec currently
+   * defines). Distinct from `signMidnightSegments` (which signs Nexus-built
+   * TRANSACTION segments) — this signs arbitrary APPLICATION data, so per the
+   * spec's own security requirement it must be prefixed with
+   * `midnight_signed_message:<data_size>:` (data_size = the byte length of
+   * `dataBytes`, NOT including the prefix) before signing. Without this, a
+   * malicious dapp could ask the wallet to "sign data" that happens to be a
+   * valid raw transaction segment and get a usable signature without the
+   * transaction-signing approval flow ever firing.
+   *
+   * Returns the exact bytes that were cryptographically signed (prefix +
+   * data, hex-encoded) as `data`, so a third party can independently verify
+   * `signature` against `verifyingKey` without needing to know the prefixing
+   * rule out-of-band. The wire type (`Signature`) has no `scheme` field in
+   * the 4.0.1 package we're pinned to — see the build plan doc §3.1 — so we
+   * omit it; the spec's own default when absent is `schnorr_bip340`, which is
+   * exactly what this signs with.
+   */
+  async signMidnightConnectorData(
+    dataBytes: Uint8Array,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ dataHex: string; signatureHex: string; verifyingKeyHex: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('signMidnightConnectorData called on non-Midnight wallet');
+    }
+
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+
+      const { createKeystore } = await import('@midnightntwrk/wallet-sdk-unshielded-wallet');
+      const { Network } = await import('@/models/types');
+      let networkId: string;
+      switch (this.network) {
+        case Network.MAINNET: networkId = 'mainnet'; break;
+        case Network.PREVIEW: networkId = 'preview'; break;
+        case Network.PREPROD: networkId = 'preprod'; break;
+        case Network.TESTNET: networkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+
+      const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
+
+      const bgPublicKey = keystore.getPublicKey() as unknown as string;
+      const storedPublicKey = this.publicKey
+        ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
+        : undefined;
+      if (storedPublicKey && bgPublicKey !== storedPublicKey) {
+        debugLog('[MidnightConnector signData] BG-derived pubkey does not match stored pubkey — aborting sign');
+        throw new Error('Midnight signing key mismatch — please re-add this wallet');
+      }
+
+      const prefix = Buffer.from(`midnight_signed_message:${dataBytes.length}:`, 'utf-8');
+      const prefixedBytes = new Uint8Array(prefix.length + dataBytes.length);
+      prefixedBytes.set(prefix, 0);
+      prefixedBytes.set(dataBytes, prefix.length);
+
+      const signature = keystore.signData(prefixedBytes);
+
+      derived.unshieldedSecretKey.fill(0);
+      derived.dustSecretKey.fill(0);
+      derived.seed.fill(0);
+
+      return {
+        dataHex: Buffer.from(prefixedBytes).toString('hex'),
+        signatureHex: signature as unknown as string,
+        verifyingKeyHex: bgPublicKey,
+      };
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
    * BG-side DUST-balance + sign of an unshielded NIGHT transfer Nexus built.
    *
    * Returns the SIGNED but UNPROVEN tx hex, ready for the sidecar's

@@ -1,7 +1,7 @@
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import { APIError, BITCOIN_METHOD, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -17,7 +17,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, purpose } from '@/models/types';
+import { Blockchain, coin_type, ERROR, Network, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -3794,6 +3794,492 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     sendResponse({
       id: request.id,
       data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// Midnight DApp Connector (@midnight-ntwrk/dapp-connector-api v4.0.1)
+//
+// Phase 1: discovery + connect + all read getters + signData +
+// submitTransaction. See docs/midnight/2026-07-09-midnight-dapp-connector-plan.md
+// for the full spec-vs-shipped-package verification this is grounded in
+// (several details here diverge from the SPECIFICATION.md prose because the
+// prose is measurably stale against the actual published 4.0.1 types).
+//
+// Registered via `app.add` (webpage-facing, sender:'webpage') — mirrors the
+// CIP-30 METHOD.* handlers above, NOT the internal MessageTypes handlers.
+// Every method except `connect` reaches here only after content.ts's relay
+// (messaging.ts createProxyController) has already confirmed the origin is
+// whitelisted. `WalletStore.connectedDapps` is loaded from the ACTIVE
+// wallet's own per-wallet IndexedDB (`wallet-{id}`), so a Midnight wallet's
+// whitelist is naturally disjoint from any Cardano wallet's approvals for
+// the same origin — no extra chain-scoping code needed.
+// ═════════════════════════════════════════════════════════════════════════
+
+function midnightApiError(code: string, reason: string) {
+  return { type: 'DAppConnectorAPIError', code, reason, message: reason };
+}
+
+/**
+ * Per-tab record of Midnight connector methods the user has explicitly
+ * declined THIS session — implements the spec's Rejected-vs-PermissionRejected
+ * distinction (SPECIFICATION.md §Permissions / §Errors): `Rejected` is
+ * one-time, `PermissionRejected` "persists for the session (until the
+ * browser window/tab with the DApp page is closed)". Without this, a dapp
+ * could re-prompt the user for the same approval indefinitely after an
+ * explicit decline (a "prompt bombing" consent-fatigue pattern).
+ *
+ * Scoped per-tab (not per-origin) so it naturally bounds itself: the user's
+ * escape hatch is reloading the dapp's page, which gets a fresh tab-relative
+ * state. Cleared via chrome.tabs.onRemoved — a single module-level listener,
+ * not one per request, to avoid a listener leak across many declines.
+ */
+const midnightDeclinedMethodsByTab = new Map<number, Set<string>>();
+chrome.tabs?.onRemoved?.addListener((tabId) => {
+  midnightDeclinedMethodsByTab.delete(tabId);
+});
+
+function hasMidnightPermissionDenial(tabId: number | undefined, method: string): boolean {
+  return typeof tabId === 'number' && !!midnightDeclinedMethodsByTab.get(tabId)?.has(method);
+}
+
+function recordMidnightPermissionDenial(tabId: number | undefined, method: string): void {
+  if (typeof tabId !== 'number') return;
+  const existing = midnightDeclinedMethodsByTab.get(tabId);
+  if (existing) existing.add(method);
+  else midnightDeclinedMethodsByTab.set(tabId, new Set([method]));
+}
+
+/**
+ * Gero `Network` enum → Midnight SDK's lowercase networkId string. The same
+ * mapping is duplicated at every other Midnight SDK call site in this
+ * codebase (signMidnightSegments, balanceAndSignUnshieldedTransfer, ...) —
+ * kept local here rather than centralized, matching that established pattern.
+ */
+function midnightSdkNetworkId(network: string): string {
+  switch (network) {
+    case Network.MAINNET: return 'mainnet';
+    case Network.PREVIEW: return 'preview';
+    case Network.PREPROD: return 'preprod';
+    case Network.TESTNET: return 'testnet';
+    default: throw new Error(`Unsupported Midnight network: ${network}`);
+  }
+}
+
+/**
+ * Chain + wallet-presence + unlocked guard shared by every MIDNIGHT_METHOD.*
+ * read/submit handler. `connect` and `signData` don't use this — they need to
+ * report WHY there's no connectable wallet via a popup/reply rather than a
+ * bare null.
+ *
+ * The lock check matters even for an already-whitelisted origin: locking the
+ * wallet (walletManager.lock()) only flips walletStore.isLocked — it does NOT
+ * clear the in-memory walletBg instance or midnightStore, so without this
+ * check a previously-approved dapp could keep reading real addresses,
+ * balances, and tx history from a wallet the USER believes is locked. Matches
+ * the plan doc's explicit "no capability leakage when locked" requirement.
+ */
+function requireMidnightWallet(): ReturnType<typeof walletManager.getWallet> | null {
+  if (walletStore.isLocked) return null;
+  const wallet = walletManager.getWallet();
+  if (!wallet || wallet.chain !== Blockchain.MIDNIGHT) return null;
+  return wallet;
+}
+
+/**
+ * Approve/open a Midnight dapp connection. Architecturally `enable`'s twin
+ * (background.ts:488) — same fast-accept-if-whitelisted / else-popup /
+ * on-approve-addConnectedDapp flow — with one extra guard `enable` doesn't
+ * need: verifying the ACTIVE wallet is actually a Midnight wallet, since
+ * `window.midnight` is installed regardless of which chain is logged in.
+ */
+app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const networkId = (data as { networkId?: string } | undefined)?.networkId;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No Midnight wallet is currently active') });
+    return true;
+  }
+  // A locked wallet must not connect (or silently stay connected — see
+  // requireMidnightWallet's doc comment for why an already-whitelisted origin
+  // is still a risk here): report Disconnected rather than proceeding.
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // The connector spec only formally standardizes 'mainnet' as a well-known
+  // network id (SPECIFICATION.md §Initial API point 13) — non-mainnet ids
+  // aren't governed by a canonical registry across dapps/wallets. But our
+  // own SDK networkId vocabulary ('mainnet'/'preview'/'preprod'/'testnet',
+  // via midnightSdkNetworkId) is exactly what a Gero-aware dapp — or any
+  // dapp using the same SDK convention — would send. Reject on ANY mismatch
+  // against the active wallet's actual network, not just a mainnet-specific
+  // special case: silently accepting e.g. a 'preview' request while the
+  // wallet is on 'preprod' would connect the dapp to the wrong chain without
+  // it ever knowing. Better to over-reject an unusual-but-valid networkId
+  // string than to silently cross-connect networks.
+  if (networkId && networkId !== midnightSdkNetworkId(currentWallet.network)) {
+    reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, `Wallet is on ${currentWallet.network}, not ${networkId}`) });
+    return true;
+  }
+
+  if (WalletStore.isWhitelisted(origin)) {
+    reply({ data: true });
+    return true;
+  }
+
+  const tabId = send.tab?.id;
+  if (hasMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect)) {
+    reply({ error: midnightApiError(MidnightErrorCode.PermissionRejected, 'User already declined this connection request this session') });
+    return true;
+  }
+
+  const favIconUrl = send.tab?.favIconUrl;
+  const popupURL = chrome.runtime.getURL(
+    `index.html#/${POPUP.midnightDappConnect}?website=${encodeURIComponent(origin)}` +
+      (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
+  );
+  focusOrCreatePopup(popupURL, 470, 600)
+    .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
+    .then((response: BackgroundResponse) => {
+      if (response.data) {
+        reply({ data: response.data });
+      } else {
+        recordMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect);
+        reply({ error: response.error || midnightApiError(MidnightErrorCode.Rejected, 'User declined the connection request') });
+      }
+    })
+    .catch(err => reply({ error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(err)) }));
+
+  return true; // async
+});
+
+app.add(MIDNIGHT_METHOD.getUnshieldedAddress, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet || !midnightStore.addresses.unshielded) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { unshieldedAddress: midnightStore.addresses.unshielded },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getDustAddress, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet || !midnightStore.addresses.dust) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { dustAddress: midnightStore.addresses.dust },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+/**
+ * The shielded address bech32m string is a PUBLIC, reversible encoding of the
+ * coin + encryption public keys (wallet-sdk-address-format's ShieldedAddress
+ * class). Decoding it back needs no mnemonic decrypt / no auth prompt — see
+ * build plan doc §3 for the verification.
+ */
+app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  const shieldedAddress = midnightStore.addresses.shielded;
+  if (!wallet || !shieldedAddress) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const { ShieldedAddress, MidnightBech32m } = await import('@midnightntwrk/wallet-sdk-address-format');
+    const decoded = ShieldedAddress.codec.decode(
+      midnightSdkNetworkId(wallet.network),
+      MidnightBech32m.parse(shieldedAddress),
+    );
+    sendResponse({
+      id: request.id,
+      data: {
+        shieldedAddress,
+        shieldedCoinPublicKey: decoded.coinPublicKeyString(),
+        shieldedEncryptionPublicKey: decoded.encryptionPublicKeyString(),
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  // midnightStore.utxos only ever carries NIGHT-type outputs today (the sync
+  // layer filters non-native tokenTypes out — see midnight-sync.service.ts's
+  // isNightOutput), so this record has at most one key. Normalize an empty
+  // tokenType (Gero's internal "native NIGHT" convention) to the canonical
+  // 32-byte-zero hex a dapp checking nativeToken().raw would expect.
+  let night = 0n;
+  for (const u of midnightStore.utxos) {
+    const tt = u.tokenType ?? '';
+    if (tt === '' || tt === NIGHT_TOKEN_TYPE_NULL) night += u.value;
+  }
+  sendResponse({
+    id: request.id,
+    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  // Gero only tracks native shielded NIGHT as a scalar today (no per-token
+  // breakdown from a ShieldedWallet state yet — Phase 1 known limitation,
+  // see build plan doc §3 "small gap" note).
+  const night = midnightStore.balances.nightShielded;
+  sendResponse({
+    id: request.id,
+    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  const dustState = midnightStore.dustState;
+  if (!dustState) {
+    // Don't guess: reporting {cap:0,balance:0} would read as "you have zero
+    // DUST" when the truth is "not loaded yet" — force the dapp to retry.
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, 'DUST state not yet loaded'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { cap: dustState.cap.toString(), balance: dustState.current.toString() },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getTxHistory, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  const { pageNumber, pageSize } = (request.data as { pageNumber?: number; pageSize?: number } | undefined) ?? {};
+  const size = typeof pageSize === 'number' && pageSize > 0 ? pageSize : 20;
+  const page = typeof pageNumber === 'number' && pageNumber >= 0 ? pageNumber : 0;
+  const slice = midnightStore.transactions.slice(page * size, page * size + size);
+  // Gero tracks confirmed/pending/failed; the connector's TxStatus distinguishes
+  // finalized/confirmed/pending/discarded with per-segment executionStatus we
+  // don't track yet (D8 in the July 2026 audit) — map to the closest fit with
+  // an empty executionStatus placeholder rather than inventing data.
+  const entries = slice.map(tx => ({
+    txHash: tx.hash,
+    txStatus: tx.status === 'pending'
+      ? { status: 'pending' as const }
+      : tx.status === 'failed'
+        ? { status: 'discarded' as const }
+        : { status: 'confirmed' as const, executionStatus: {} },
+  }));
+  sendResponse({ id: request.id, data: entries, target: TARGET, sender: SENDER.extension });
+});
+
+app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+    const endpoints = getMidnightEndpoints(wallet.network);
+    if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${wallet.network}`);
+    sendResponse({
+      id: request.id,
+      data: {
+        indexerUri: endpoints.publicIndexerUrl,
+        indexerWsUri: endpoints.publicIndexerWsUrl,
+        proverServerUri: endpoints.defaultProofServerUrl || undefined,
+        substrateNodeUri: endpoints.publicRpcUrl,
+        networkId: midnightSdkNetworkId(wallet.network),
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.getConnectionStatus, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, data: { status: 'disconnected' }, target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { status: 'connected', networkId: midnightSdkNetworkId(wallet.network) },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+/**
+ * Relay a balanced + sealed (proofs, signatures, cryptographically bound) tx
+ * to the network. The connector is a submit-only relayer here, mirroring
+ * midnight-tx.service's submitSignedTx — no build/balance/sign happens.
+ */
+app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  const tx = (request.data as { tx?: string } | undefined)?.tx;
+  if (typeof tx !== 'string' || !tx) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is required'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const { getMidnightApi } = await import('@/api/midnight-api');
+    const api = getMidnightApi(wallet.network);
+    await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/**
+ * Opens the sign-data approval popup (password/PRF wallets only — Midnight
+ * has no hardware-wallet support, see the July 2026 gap analysis). The popup
+ * itself calls MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA once the user
+ * authenticates; see walletBg.signMidnightConnectorData for the actual
+ * signing + mandatory prefix logic.
+ */
+app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
+  const { id, send } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // Unlike `connect` (above), signData does NOT use the sticky-denial
+  // tracker: each call carries materially different data (a login challenge,
+  // an attestation, ...), so blocking every FUTURE signData request because
+  // the user declined one unrelated one would be a functionality regression,
+  // not a security improvement. `connect` is coherent to sticky-deny because
+  // it's always the same idempotent action; signData isn't.
+  const favIconUrl = send.tab?.favIconUrl;
+  const popupURL = chrome.runtime.getURL(
+    `index.html#/${POPUP.midnightDappSignData}` + (favIconUrl ? `?favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
+  );
+  focusOrCreatePopup(popupURL, 470, 600)
+    .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
+    .then((response: BackgroundResponse) => {
+      if (response.data) reply({ data: response.data });
+      else reply({ error: response.error || midnightApiError(MidnightErrorCode.Rejected, 'User declined the signing request') });
+    })
+    .catch(err => reply({ error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(err)) }));
+  return true;
+});
+
+app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
+  // No usage-hinted permission pre-prompting implemented yet (Phase 1 scope,
+  // separate from the sticky-denial tracking on `connect` above) — resolve
+  // immediately with void per the spec's required return type.
+  sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+});
+
+/**
+ * Options-context: called by MidnightDappSignData.vue once the user has
+ * approved + authenticated. See walletBg.signMidnightConnectorData for the
+ * midnight_signed_message: prefix + BIP-340 signing logic.
+ *
+ * Request shape: `{ data: string, options: SignDataOptions, password?, prfSecret? }`.
+ */
+app.addToOptions(MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('SIGN_MIDNIGHT_CONNECTOR_DATA called on non-Midnight wallet');
+    }
+    const { data, options, password, prfSecret } = request.data || {};
+    if (typeof data !== 'string' || !data) throw new Error('data is required');
+    const encoding = options?.encoding;
+    if (encoding !== 'hex' && encoding !== 'base64' && encoding !== 'text') {
+      throw new Error(`Unsupported encoding: ${encoding}`);
+    }
+    if (options?.keyType !== 'unshielded') {
+      throw new Error(`Unsupported keyType: ${options?.keyType} — only 'unshielded' is implemented`);
+    }
+    // Strict decode — shared with the approval popup's preview (see
+    // midnightSignDataCodec.ts) so what the user is shown can never diverge
+    // from what actually gets signed. Buffer.from(str,'hex'|'base64') is
+    // LENIENT (silently truncates/skips invalid characters instead of
+    // throwing), which would let a malicious dapp show a long deceptive
+    // string while only a short, attacker-chosen prefix is actually signed.
+    const { decodeSignDataPayload } = await import('@/chrome/midnightSignDataCodec');
+    const dataBytes = decodeSignDataPayload(data, encoding);
+
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const result = await walletBg.signMidnightConnectorData(new Uint8Array(dataBytes), password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, signature: { data: result.dataHex, signature: result.signatureHex, verifyingKey: result.verifyingKeyHex } },
       target: TARGET,
       sender: SENDER.extension,
     });

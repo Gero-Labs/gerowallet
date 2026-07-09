@@ -32,6 +32,8 @@ import {
 import { Cardano, CollateralParams, Extensions, Paginate } from '@/models/types';
 import { Cardano as CardanoCore } from '@cardano-sdk/core';
 import { GERO_CARDANO_ICON } from './injectIcon';
+// Installs window.midnight[uuid] as a side effect of import (see file).
+import './injectMidnight';
 
 declare global {
   interface Window {

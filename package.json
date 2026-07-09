@@ -50,6 +50,7 @@
     "@ledgerhq/hw-transport-web-ble": "^6.34.4",
     "@ledgerhq/hw-transport-webusb": "^6.34.4",
     "@mdi/font": "^7.4.47",
+    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
     "@midnight-ntwrk/ledger-v8": "^8.1.0",
     "@midnightntwrk/wallet-sdk-abstractions": "^2.1.0",
     "@midnightntwrk/wallet-sdk-address-format": "^3.1.2",
