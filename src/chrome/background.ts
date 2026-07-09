@@ -1942,7 +1942,12 @@ app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, se
     }
 
     const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
-    const decision = await signing.requestSignature({ unsignedCbor, intent, stakeAddress, ttlMs });
+    // Route to a specific device when the caller named one, else to the sole
+    // online trusted signer; null => broadcast (backward-compatible).
+    const to = (typeof request.data?.to === 'string' && request.data.to)
+      || walletManager.getDefaultCrossDeviceTarget()
+      || undefined;
+    const decision = await signing.requestSignature({ unsignedCbor, intent, stakeAddress, ttlMs, to });
 
     sendResponse({
       id: request.id,
@@ -2033,6 +2038,24 @@ app.addToOptions(MessageTypes.PRODUCE_DEVICE_REGISTER_PROOF, async (request, sen
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
   }
+});
+
+// QR scan-to-pair: mint the payload the desktop renders as a QR (identity + proof +
+// a fresh single-use nonce). Returns success:false when the wallet can't be paired
+// (no cached proof / no stake) so the UI can prompt to re-enable.
+app.addToOptions(MessageTypes.GET_PAIRING_QR, async (request, sendResponse) => {
+  try {
+    const payload = await walletManager.buildPairingQrPayload();
+    sendResponse(crossDeviceReply(request.id, { success: !!payload, payload }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// QR scan-to-pair: the last device paired via a scan (consumed on read), for the
+// settings dialog's success poll.
+app.addToOptions(MessageTypes.GET_PAIRING_STATUS, async (request, sendResponse) => {
+  sendResponse(crossDeviceReply(request.id, { success: true, paired: walletManager.getPairingStatus() }));
 });
 
 // Pool operator transaction signing handler (cold key + wallet keys)
@@ -2703,38 +2726,6 @@ app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {
     sendResponse({
       id: request.id,
       data: { success: false },
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
-  return true;
-});
-
-app.addToOptions(MessageTypes.ENRICH_TRANSACTIONS, async (request, sendResponse) => {
-  try {
-    const currentWallet = walletManager.getWallet();
-    const txHashes: string[] = request?.data?.txHashes || [];
-    if (currentWallet && txHashes.length > 0) {
-      const transactions = await currentWallet.syncService.enrichTransactions(txHashes);
-      sendResponse({
-        id: request.id,
-        data: { success: true, transactions },
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    } else {
-      sendResponse({
-        id: request.id,
-        data: { success: false, error: 'No wallet loaded or no tx hashes', transactions: [] },
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    }
-  } catch (err) {
-    console.error('ENRICH_TRANSACTIONS error:', err);
-    sendResponse({
-      id: request.id,
-      data: { success: false, transactions: [] },
       target: TARGET,
       sender: SENDER.extension,
     });

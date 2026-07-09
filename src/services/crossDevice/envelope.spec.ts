@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSubject, blake2b256Hex, signMessage, verifyMessage } from './envelope';
 import { generateDeviceKeypair } from './deviceIdentity';
-import type { SignRequest, SignResponse } from './protocol';
+import type { SignRequest, SignResponse, PairConfirm, PairAck } from './protocol';
 
 const kp = generateDeviceKeypair((n) => new Uint8Array(n).fill(3));
 const otherKp = generateDeviceKeypair((n) => new Uint8Array(n).fill(4));
@@ -64,6 +64,85 @@ describe('buildSubject (cross-client conformance vectors)', () => {
       decision: 'rejected',
     };
     expect(buildSubject(rejected)).toBe('gero-xdev/v1|SIGN_RESPONSE|req-1|n2|dev2|rejected|');
+  });
+});
+
+// QR pairing (PAIR_CONFIRM). `to` is INSIDE the subject (binds the scanned desktop),
+// unlike SIGN_*. The iOS scanner must reproduce this exact pipe-joined string.
+const pairProof = { coseSign1: 'a0', coseKey: 'a1', stakeAddress: 'stake1uxyz' };
+const pair: Omit<PairConfirm, 'sig'> = {
+  type: 'PAIR_CONFIRM',
+  from: 'ios-abc',
+  pubKey: 'deadbeef',
+  to: 'ext-123',
+  nonce: 'nonce1',
+  stakeAddress: 'stake1uxyz',
+  proof: pairProof,
+  label: "Adam's iPhone",
+  platform: 'ios',
+  hasSigningKey: true,
+};
+
+describe('buildSubject PAIR_CONFIRM (cross-client conformance vector)', () => {
+  it('binds from|pubKey|to|nonce|stakeAddress in that exact order', () => {
+    expect(buildSubject(pair)).toBe(
+      'gero-xdev/v1|PAIR_CONFIRM|ios-abc|deadbeef|ext-123|nonce1|stake1uxyz',
+    );
+  });
+
+  it('excludes advisory fields (proof/label/platform/hasSigningKey) from the subject', () => {
+    const stripped = buildSubject({
+      ...pair,
+      proof: { coseSign1: 'ff', coseKey: 'ff', stakeAddress: 'stake1uxyz' },
+      label: 'different label',
+      platform: 'android',
+      hasSigningKey: false,
+    });
+    expect(stripped).toBe('gero-xdev/v1|PAIR_CONFIRM|ios-abc|deadbeef|ext-123|nonce1|stake1uxyz');
+  });
+});
+
+describe('signMessage / verifyMessage PAIR_CONFIRM', () => {
+  it('round-trips with the matching key', async () => {
+    const signed = await signMessage<PairConfirm>(pair, kp.privKeyHex);
+    expect(signed.sig).toMatch(/^[0-9a-f]{128}$/);
+    expect(await verifyMessage(signed, kp.pubKeyHex)).toBe(true);
+  });
+
+  it('re-targeting `to` after signing breaks verify (anti cross-desktop replay)', async () => {
+    const signed = await signMessage<PairConfirm>(pair, kp.privKeyHex);
+    expect(await verifyMessage({ ...signed, to: 'ext-999' }, kp.pubKeyHex)).toBe(false);
+  });
+
+  it('tampering with pubKey or nonce breaks verify', async () => {
+    const signed = await signMessage<PairConfirm>(pair, kp.privKeyHex);
+    expect(await verifyMessage({ ...signed, pubKey: 'cafe' }, kp.pubKeyHex)).toBe(false);
+    expect(await verifyMessage({ ...signed, nonce: 'nonce2' }, kp.pubKeyHex)).toBe(false);
+  });
+});
+
+// PAIR_ACK (desktop -> phone cosmetic tick). Subject binds from|to|nonce only. The iOS
+// listener must reproduce this exact string (goldenPairAckSubjectVector).
+const ack: Omit<PairAck, 'sig'> = { type: 'PAIR_ACK', from: 'ext-123', to: 'ios-abc', nonce: 'nonce1' };
+
+describe('buildSubject PAIR_ACK (cross-client conformance vector)', () => {
+  it('joins from|to|nonce in that exact order', () => {
+    expect(buildSubject(ack)).toBe('gero-xdev/v1|PAIR_ACK|ext-123|ios-abc|nonce1');
+  });
+});
+
+describe('signMessage / verifyMessage PAIR_ACK', () => {
+  it('round-trips with the matching key', async () => {
+    const signed = await signMessage<PairAck>(ack, kp.privKeyHex);
+    expect(signed.sig).toMatch(/^[0-9a-f]{128}$/);
+    expect(await verifyMessage(signed, kp.pubKeyHex)).toBe(true);
+  });
+
+  it('tampering with any subject field breaks verify', async () => {
+    const signed = await signMessage<PairAck>(ack, kp.privKeyHex);
+    expect(await verifyMessage({ ...signed, from: 'ext-999' }, kp.pubKeyHex)).toBe(false);
+    expect(await verifyMessage({ ...signed, to: 'ios-999' }, kp.pubKeyHex)).toBe(false);
+    expect(await verifyMessage({ ...signed, nonce: 'nonce2' }, kp.pubKeyHex)).toBe(false);
   });
 });
 

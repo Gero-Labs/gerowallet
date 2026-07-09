@@ -64,6 +64,7 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
   });
 
   Vue.config.productionTip = false;
+  Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
   Vue.use(FlagIcon);
   Vue.use(VueShowdown, {
     flavor: 'github',

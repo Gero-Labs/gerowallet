@@ -1,6 +1,6 @@
 import { ref, computed, watch, onUnmounted, getCurrentInstance, type Ref, type ComputedRef, type WatchStopHandle } from 'vue';
 import marketApi, { type TokenPriceResponse, type CandleResponse } from '@/api/market-api';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { walletStore } from '@/stores/walletStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { Blockchain } from '@/models/types';
@@ -71,6 +71,8 @@ export interface AdaMarketData {
 // --- Singleton state (shared across all component instances) ---
 
 const allTokens: Ref<MarketToken[]> = ref([]);
+// Read-only view of the module-level market cache, for passive watchers (see below).
+export const marketTokensRef: Readonly<Ref<MarketToken[]>> = allTokens;
 const snekTokens: Ref<MarketToken[]> = ref([]);
 const adaData: Ref<AdaMarketData | null> = ref(null);
 const loading = ref(false);
@@ -90,7 +92,7 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
   const assetId = apiToken.assetId;
 
   // DexHunter data as fallback for fields the backend doesn't yet provide
-  const dhToken = (dexHunterStore.dexHunterTokens as Record<string, any>)[assetId];
+  const dhToken = (tokenMetadataStore.tokens as Record<string, any>)[assetId];
 
   // Fingerprint: prefer API, fallback to DexHunter
   const fingerprint = apiToken.fingerprint || dhToken?.fingerprint || '';
@@ -417,7 +419,12 @@ function searchTokens(query: string): MarketToken[] {
   );
 }
 
-function getTokenByUnit(unit: string): MarketToken | undefined {
+// Exported at module scope so consumers (e.g. the embedded swap widget's token
+// resolver/catalog) can read the market cache PASSIVELY — without calling
+// useMarketData(), which would register a poll consumer and start the 15s
+// interval. These read the shared `allTokens` ref with no side effects; they
+// return empty/undefined until some active useMarketData() consumer fills it.
+export function getTokenByUnit(unit: string): MarketToken | undefined {
   return allTokens.value.find(t => t.unit === unit);
 }
 
@@ -427,7 +434,7 @@ function getTokenByUnit(unit: string): MarketToken | undefined {
  * Reactive on `allTokens`, so images appear as soon as market data loads.
  * @param token - anything carrying `unit` (and optionally `ticker`/`name` for overrides)
  */
-function getTokenImage(token: { unit?: string; ticker?: string; name?: string; img?: string } | null | undefined): string {
+export function getTokenImage(token: { unit?: string; ticker?: string; name?: string; img?: string } | null | undefined): string {
   const chainLogo = networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || '';
   const name = token?.ticker || token?.name;
   // Hard overrides win (e.g. NIGHT ships a bundled logo).

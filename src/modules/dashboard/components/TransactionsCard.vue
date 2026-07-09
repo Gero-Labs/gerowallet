@@ -344,7 +344,7 @@
                     x-small
                     color="#007DFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.dexHunter') }}</v-chip
+                    >{{ $t('transactions.swap') }}</v-chip
                   >
                   <v-chip
                     v-if="isMinswap(item)"
@@ -1277,6 +1277,12 @@ const isStrike = (item: StoredTransaction): boolean => {
   return hasStrikeAddress || hasStrikeScript || false;
 };
 
+// Detects historical DexHunter swap transactions (pre-aggregator-embed migration).
+// Displayed with the neutral 'transactions.swap' label since DexHunter is no longer
+// the branded swap provider.
+// TODO: add aggregator swap-tx heuristic (order/fee address or metadata) once the
+// Gero aggregator's on-chain order/fee address is confirmed, so newly created
+// aggregator swaps are also tagged here.
 const isDexHunter = (item: StoredTransaction): boolean => {
   if (!isCardanoTx(item)) return false;
   // Check for DexHunter order contract address (primary indicator)

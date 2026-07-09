@@ -16,6 +16,7 @@
 import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDeviceSigning.service';
+import type { PairConfirm } from './protocol';
 import { createWsTransport, feedCrossDeviceMessage } from './wsTransport';
 import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo, type DeviceRegisterProof } from './protocol';
 import { emptyRegistry, applyDevicesSnapshot, pubKeyOf, type DeviceRegistryState } from './deviceRegistry';
@@ -87,6 +88,9 @@ export function bootstrapCrossDeviceSigning(opts: {
   // Latest cached wallet-control proof, read at each register() so a proof
   // produced AFTER bootstrap (on enable) rides the next DEVICE_REGISTER.
   getProof?: () => DeviceRegisterProof | undefined;
+  // QR pairing: a verified inbound PAIR_CONFIRM (already frame-sig-checked by the
+  // service). The caller (walletManager) does the nonce consume + proof verify + pin.
+  onPairConfirm?: (frame: PairConfirm) => void;
 }): CrossDeviceHandles | null {
   if (!opts.enabled) {
     return null;
@@ -123,6 +127,8 @@ export function bootstrapCrossDeviceSigning(opts: {
     newId: () => globalThis.crypto.randomUUID(),
     isRequesterTrusted: opts.isRequesterTrusted,
     isResponderTrusted: opts.isResponderTrusted,
+    onPairConfirm: opts.onPairConfirm,
+    log: (m) => debugLog('🔗 xdev-wake:', m),
   });
 
   // NOTE: DEVICE_REGISTER is NOT sent here. At bootstrap time the socket is not yet
