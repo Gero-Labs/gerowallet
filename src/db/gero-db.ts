@@ -551,6 +551,8 @@ export async function createMpcGoogleWallet(params: {
   publicKey: string;
   encryptedDeviceShare: string;
   addressType?: string;
+  webAuthnCredentialId?: string;
+  mpcPrfSaltId?: string;
 }): Promise<number> {
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
@@ -574,6 +576,8 @@ export async function createMpcGoogleWallet(params: {
     encryptionMethod: 'mpc' as const,
     userId: params.userId,
     mpcDeviceShare: params.encryptedDeviceShare,
+    webAuthnCredentialId: params.webAuthnCredentialId,
+    mpcPrfSaltId: params.mpcPrfSaltId,
   };
 
   const walletId = await db['wallets'].add(walletData);
