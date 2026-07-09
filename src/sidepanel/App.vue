@@ -3,16 +3,22 @@
     <notifications></notifications>
 
     <!-- No wallet exists -->
-    <NoWalletScreen v-if="!hasWallets" />
+    <template v-if="!hasWallets">
+      <PendingRequestBanner />
+      <NoWalletScreen />
+    </template>
 
     <!-- Wallet selection needed -->
-    <WalletSelector
-      v-else-if="!hasActiveWallet"
-      @select="onWalletSelect"
-    />
+    <template v-else-if="!hasActiveWallet">
+      <PendingRequestBanner />
+      <WalletSelector @select="onWalletSelect" />
+    </template>
 
     <!-- Wallet locked -->
-    <LockScreen v-else-if="isLocked" />
+    <template v-else-if="isLocked">
+      <PendingRequestBanner />
+      <LockScreen />
+    </template>
 
     <!-- Logged in — show main UI -->
     <template v-else>
@@ -20,9 +26,11 @@
         @wallet-switch="showWalletSwitcher = true"
         @settings="openDashboardSettings"
       />
-      <DAppOverlay />
       <AgentDock v-if="isCopilotEnabled" />
     </template>
+
+    <!-- Approval overlay: rendered whenever a signable session exists, above AgentDock -->
+    <DAppOverlay v-if="hasActiveWallet && !isLocked" />
 
     <!-- Wallet switcher bottom sheet (available from header) -->
     <BottomSheet v-model="showWalletSwitcher" :title="t('miniGero.selectWallet')" height="60%">
@@ -42,7 +50,9 @@ import NoWalletScreen from './components/NoWalletScreen.vue';
 import WalletSelector from './components/WalletSelector.vue';
 import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
+import PendingRequestBanner from './components/PendingRequestBanner.vue';
 import BottomSheet from './components/BottomSheet.vue';
+import { initDappRequestHub } from './services/dappRequestHub';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -54,6 +64,10 @@ const { t } = useTranslation();
 // Initialize chain context — applies CSS variables for the active wallet's theme.
 // Other components that call useChainContext() reuse the singleton CSS-variable watcher.
 useChainContext();
+
+// Panel-lifetime dApp port: must outlive lock/logout so requests park instead
+// of being rejected when the overlay unmounts.
+initDappRequestHub();
 
 const showWalletSwitcher = ref(false);
 
