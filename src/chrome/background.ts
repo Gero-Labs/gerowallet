@@ -162,14 +162,19 @@ export async function openSidebar(tabId: number, path: string) {
   if (typeof tabId !== 'number') {
     return null;
   }
-  // Append tabId so the side panel can identify which tab it belongs to
-  const separator = path.includes('?') ? '&' : '?';
-  const fullPath = `${path}${separator}tabId=${tabId}`;
-  chrome.sidePanel.setOptions({
+  // If this tab's panel is already connected, do NOT rewrite its path:
+  // setOptions with a new path reloads the panel document and destroys
+  // whatever the user was doing (half-filled send form, running flow).
+  if (!miniGeroPorts.has(tabId)) {
+    // Append tabId so the side panel can identify which tab it belongs to
+    const separator = path.includes('?') ? '&' : '?';
+    const fullPath = `${path}${separator}tabId=${tabId}`;
+    chrome.sidePanel.setOptions({
       tabId,
       path: fullPath,
       enabled: true
-  })
+    });
+  }
   try {
     await chrome.sidePanel.open({ tabId });
   } catch (e) {
@@ -186,96 +191,125 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 // Mini-gero DApp channel — per-tab port routing
 // Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
 const miniGeroPorts = new Map<number, chrome.runtime.Port>();
-// requestId → { resolver, tabId, method } so port-disconnect handlers can
-// reject the requests sent through that specific tab's port (closing the
-// side panel via the X button must register as a user reject, not silently
-// hang). `method` lets the disconnect handler synthesize a shape-appropriate
-// error — Midnight connector methods need the DAppConnectorAPIError shape,
-// not CIP-30's flat {code,info} string.
-const pendingDAppRequests = new Map<string, { resolve: DAppRequestResolver; tabId: number; method: string }>();
 
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name.startsWith('mini-gero-dapp-channel')) {
-    // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123")
-    const parts = port.name.split(':');
-    const tabId = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
-    if (isNaN(tabId)) {
-      console.warn('[DApp] mini-gero port connected without tab ID, ignoring');
+// requestId → pending entry. `payload`/`method` are kept so a request can be
+// RE-DELIVERED when a panel port (re)connects: closing the panel, locking it,
+// or switching tabs PARKS requests instead of rejecting them. Only an explicit
+// user response (approve/reject) or a NACK settles the dApp's promise.
+// `walletId` snapshots the wallet the request was issued against so a mid-
+// request wallet switch cannot silently have the NEW wallet's keys answer it.
+type PendingDAppEntry = {
+  resolve: DAppRequestResolver;
+  tabId: number;
+  method: string;
+  payload: unknown;
+  walletId?: string;
+};
+const pendingDAppRequests = new Map<string, PendingDAppEntry>();
+
+function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
+  for (const [requestId, entry] of pendingDAppRequests.entries()) {
+    const matchesTab = entry.tabId === tabId || Number.isNaN(entry.tabId);
+    if (!matchesTab) continue;
+    try {
+      port.postMessage({ type: 'dapp-request', method: entry.method, requestId, payload: entry.payload });
+    } catch {
+      // Port died mid-loop; the next connect will retry.
       return;
     }
-
-    // Reject pending requests from old port for this tab
-    const oldPort = miniGeroPorts.get(tabId);
-    if (oldPort) {
-      try { oldPort.disconnect(); } catch { /* already disconnected */ }
-    }
-    miniGeroPorts.set(tabId, port);
-
-    port.onMessage.addListener((message) => {
-      if (message.type === 'dapp-response' && message.requestId) {
-        const entry = pendingDAppRequests.get(message.requestId);
-        if (entry) {
-          entry.resolve(message);
-          pendingDAppRequests.delete(message.requestId);
-        }
-      }
-    });
-
-    port.onDisconnect.addListener(() => {
-      if (miniGeroPorts.get(tabId) === port) {
-        miniGeroPorts.delete(tabId);
-      }
-      // Closing the side panel (X button, navigating away, ...) disconnects
-      // the port. Treat that as a lost connection for any in-flight request
-      // so the dApp gets a real response instead of hanging forever waiting
-      // on a sign that won't come — but for Midnight methods this is
-      // Disconnected, NOT Rejected. Rejected means "the user clicked
-      // Reject" (see DAppOverlay.vue's rejectMidnightConnect/
-      // rejectMidnightSignData) — a panel close is a DIFFERENT, far more
-      // common event (accidental close, tab navigation, "let me think about
-      // it") that carries no such decision. Using Rejected here fed straight
-      // into connect's sticky-denial tracker (hasMidnightPermissionDenial),
-      // permanently sticky-denying that tab's connect() calls for the rest
-      // of the session over what might have been an accidental close.
-      for (const [requestId, entry] of pendingDAppRequests.entries()) {
-        if (entry.tabId === tabId) {
-          entry.resolve({
-            error: entry.method.startsWith('midnight_')
-              ? JSON.stringify(midnightApiError(MidnightErrorCode.Disconnected, 'The approval panel closed before responding'))
-              : (APIError.Refused.info || 'User rejected'),
-          });
-          pendingDAppRequests.delete(requestId);
-        }
-      }
-    });
   }
+}
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (!port.name.startsWith('mini-gero-dapp-channel')) return;
+  // Only our own extension pages may register an approval surface.
+  if (port.sender?.id !== chrome.runtime.id) {
+    console.warn('[DApp] rejected foreign mini-gero port from', port.sender?.id);
+    try { port.disconnect(); } catch { /* noop */ }
+    return;
+  }
+  // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123")
+  const parts = port.name.split(':');
+  const tabId = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
+  if (isNaN(tabId)) {
+    console.warn('[DApp] mini-gero port connected without tab ID, ignoring');
+    return;
+  }
+
+  const oldPort = miniGeroPorts.get(tabId);
+  if (oldPort) {
+    try { oldPort.disconnect(); } catch { /* already disconnected */ }
+  }
+  miniGeroPorts.set(tabId, port);
+
+  port.onMessage.addListener((message) => {
+    if (!message?.requestId) return;
+    const entry = pendingDAppRequests.get(message.requestId);
+    if (!entry) return;
+    if (message.type === 'dapp-response') {
+      // Wallet-switch guard: if the active wallet changed since the request
+      // was issued, an approval must not be honored silently.
+      const activeWalletId = (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
+      if (entry.walletId && message.error == null && activeWalletId !== entry.walletId) {
+        entry.resolve({ error: 'wallet_changed_during_request' });
+      } else {
+        entry.resolve(message);
+      }
+      pendingDAppRequests.delete(message.requestId);
+    } else if (message.type === 'dapp-nack') {
+      entry.resolve({ error: String(message.error || 'unsupported_method') });
+      pendingDAppRequests.delete(message.requestId);
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    if (miniGeroPorts.get(tabId) === port) {
+      miniGeroPorts.delete(tabId);
+    }
+    // PARK, do not reject: closing the panel, locking it, or switching tabs
+    // must not answer a pending dApp request on the user's behalf. Pending
+    // entries stay in the map and are re-delivered once a panel port
+    // reconnects (see redeliverParkedRequests below); only an explicit user
+    // action (approve/reject) or a NACK settles them.
+  });
+
+  // Re-deliver anything parked for this tab (and tabless requests).
+  redeliverParkedRequests(tabId, port);
 });
 
 function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promise<BackgroundResponse> {
-  // Find the correct port: prefer exact tab, fall back to any connected port
-  const port = (typeof tabId === 'number' && miniGeroPorts.get(tabId)) || miniGeroPorts.values().next().value;
-  if (!port) return Promise.reject(new Error('mini-gero not connected'));
-  // Resolve the tabId we're actually sending through so the disconnect handler
-  // can reject this request if the side panel closes before responding.
-  const sendingTabId = (typeof tabId === 'number' ? tabId : NaN);
+  // Exact-port routing for tab-originated requests: rendering tab A's
+  // approval in tab B's panel is a trust bug, so a tab with no connected port
+  // does NOT fall back to some other tab's panel. Tabless requests (no
+  // tabId — e.g. today's WalletConnect relay events) may use any connected
+  // panel until Phase 3 gives them proper tab capture.
+  const port = typeof tabId === 'number'
+    ? miniGeroPorts.get(tabId)
+    : miniGeroPorts.values().next().value;
+  const sendingTabId = typeof tabId === 'number' ? tabId : NaN;
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
-    // No timeout — user interaction can take as long as needed.
-    // Cleanup happens via port disconnect or explicit user response.
+    // No timeout — user interaction can take as long as needed. Requests are
+    // parked across disconnects and settled only by an explicit response/NACK.
     pendingDAppRequests.set(requestId, {
       tabId: sendingTabId,
       method,
+      payload,
+      walletId: (WalletStore.state.loggedWallet as { id?: string } | null)?.id,
       resolve: (response) => {
         if (response.error) reject(new Error(String(response.error)));
         else resolve(response);
       },
     });
-    port.postMessage({
-      type: 'dapp-request',
-      method,
-      requestId,
-      payload,
-    });
+    if (port) {
+      try {
+        port.postMessage({ type: 'dapp-request', method, requestId, payload });
+      } catch {
+        // Port died between lookup and post: the entry stays parked and will
+        // be re-delivered on the next connect.
+      }
+    }
+    // No port: stays parked; openSidebar + the panel's own connect handles delivery.
   });
 }
 
