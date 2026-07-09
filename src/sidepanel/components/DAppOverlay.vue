@@ -14,6 +14,15 @@
         </span>
       </div>
 
+      <!-- Wallet identity: which wallet/network this request acts on. Shown
+           once for every method (not duplicated per-branch below). Network
+           badge only appears off mainnet, so the common case stays quiet. -->
+      <div v-if="loggedWallet" class="wallet-identity-strip mb-2">
+        <v-icon size="13" color="rgba(255,255,255,0.45)" class="mr-1">mdi-wallet-outline</v-icon>
+        <span class="grey--text text-caption">{{ loggedWallet.name }}</span>
+        <span v-if="loggedWallet.network !== Network.MAINNET" class="network-badge ml-2">{{ loggedWallet.network }}</span>
+      </div>
+
       <!-- DApp Connect -->
       <div v-if="currentRequest.method === 'enable'" class="dapp-connect">
         <!-- Favicon + domain -->
@@ -158,6 +167,25 @@
               dense
               class="mt-2"
               :label="$t('signTx.decodeFailedAck')"
+            />
+          </div>
+        </div>
+
+        <!-- Network mismatch guard: an external output address belongs to a
+             different network (mainnet/testnet) than the active wallet. -->
+        <div v-if="signTxNetworkMismatch" class="tx-decode-failed-banner mb-3">
+          <v-icon color="#ff6464" size="20" class="mr-2">mdi-swap-horizontal-circle-outline</v-icon>
+          <div class="tx-expired-text">
+            <div class="tx-expired-title">{{ $t('signTx.networkMismatchTitle') }}</div>
+            <div class="tx-expired-body">{{ $t('signTx.networkMismatchBody') }}</div>
+            <v-checkbox
+              v-model="networkMismatchAck"
+              color="#ff6464"
+              hide-details
+              dark
+              dense
+              class="mt-2"
+              :label="$t('signTx.networkMismatchAck')"
             />
           </div>
         </div>
@@ -528,7 +556,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { WalletType } from '@/models/types';
+import { WalletType, Network } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
 import cardanoShieldApi from '@/api/cardano-shield-api';
@@ -1188,10 +1216,53 @@ const ttlDisplay = computed<{ relative: string | null; expired: boolean }>(() =>
   };
 });
 
-// Single gate for every signTx Sign button: expired TTL or an unacknowledged
-// decode failure. Kept as one computed so all five wallet-type branches
-// (password/PRF/Ledger/Trezor/Keystone) can't drift out of sync.
-const signTxBlocked = computed(() => ttlDisplay.value.expired || (signTxDecodeFailed.value && !decodeFailedAck.value));
+// Network mismatch: does any EXTERNAL output address belong to a different
+// network (mainnet vs testnet) than the active wallet? Cardano addresses only
+// encode mainnet-vs-testnet in their header byte, not which specific testnet
+// (preprod/preview/sanchonet all read as Testnet) — so this catches "wallet
+// is on mainnet but this address is testnet" and its inverse, not a
+// preprod-vs-preview mixup. Own/change outputs are skipped (trivially
+// correct — they came from the wallet's own key set).
+const signTxNetworkMismatch = computed(() => {
+  const summary = signTxSummary.value;
+  const wallet = loggedWallet.value;
+  if (!summary || !wallet) return false;
+  const expectedNetworkId = wallet.network === Network.MAINNET
+    ? Cardano.NetworkId.Mainnet
+    : Cardano.NetworkId.Testnet;
+  return summary.outputs.some((o) => {
+    if (o.isOwn) return false;
+    const parsed = Cardano.Address.fromString(o.address);
+    if (!parsed) return false; // unparseable — don't false-flag on a shape we don't recognize
+    return parsed.getNetworkId() !== expectedNetworkId;
+  });
+});
+const networkMismatchAck = ref(false);
+
+// Single gate for every signTx Sign button: expired TTL, an unacknowledged
+// decode failure, or an unacknowledged network mismatch. Kept as one
+// computed so all five wallet-type branches (password/PRF/Ledger/Trezor/
+// Keystone) can't drift out of sync.
+const signTxBlocked = computed(() =>
+  ttlDisplay.value.expired
+  || (signTxDecodeFailed.value && !decodeFailedAck.value)
+  || (signTxNetworkMismatch.value && !networkMismatchAck.value)
+);
+
+// Wallet-switch mid-request: background.ts already refuses to honor a
+// response from a DIFFERENT wallet than the one the request was issued
+// against (see the wallet-switch guard in the port layer), so a signature
+// produced here can never reach the wrong dApp — but letting the user type a
+// password and sign into a response that's guaranteed to be discarded is
+// still a bad, confusing experience. Auto-reject as soon as the switch
+// happens instead.
+watch(loggedWallet, (newWallet, oldWallet) => {
+  if (!currentRequest.value || !oldWallet || !newWallet) return;
+  if (newWallet.id === oldWallet.id) return;
+  if (currentRequest.value.method === 'midnight_connect') rejectMidnightConnect();
+  else if (currentRequest.value.method === 'midnight_signData') rejectMidnightSignData();
+  else reject('wallet_changed');
+});
 
 // ── Cardano Shield risk scan (matches popup SignTx.vue behavior) ──
 
@@ -1292,6 +1363,7 @@ watch(currentRequest, () => {
   faviconFailed.value = false;
   faviconAttempt.value = 0;
   decodeFailedAck.value = false;
+  networkMismatchAck.value = false;
 });
 
 function rejectSign() {
@@ -1763,6 +1835,23 @@ async function signMidnightDataPrf() {
 }
 
 /* ── Enable / Connect ── */
+
+.wallet-identity-strip {
+  display: flex;
+  align-items: center;
+}
+
+.network-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 167, 38, 0.12);
+  color: #FFA726;
+  border: 1px solid rgba(255, 167, 38, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
 
 .dapp-identity {
   display: flex;
