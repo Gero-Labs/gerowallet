@@ -2,10 +2,9 @@
   <BottomSheet
     v-if="!isApex"
     :value="isVisible"
-    :persistent="true"
-    :show-handle="false"
+    variant="trust"
     :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect') ? '70%' : '85%'"
-    :draggable="false"
+    @escape="onEscapeReject"
   >
     <div v-if="currentRequest" class="dapp-overlay">
       <!-- Queue indicator -->
@@ -1470,6 +1469,20 @@ function rejectMidnightSignData() {
   spendingPassword.value = '';
   signError.value = '';
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined the signing request'));
+}
+
+// Escape on the trust sheet is a deliberate, recoverable reject — but
+// Midnight's reject wrappers pass a JSON-shaped DAppConnectorAPIError, not
+// useDAppOverlay's default plain string, so route through those instead of
+// calling reject() bare for those two methods.
+function onEscapeReject() {
+  if (currentRequest.value?.method === 'midnight_connect') {
+    rejectMidnightConnect();
+  } else if (currentRequest.value?.method === 'midnight_signData') {
+    rejectMidnightSignData();
+  } else {
+    reject();
+  }
 }
 
 async function signMidnightDataNormal() {
