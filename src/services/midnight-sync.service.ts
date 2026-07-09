@@ -200,7 +200,21 @@ class MidnightSyncService {
     // applied. gero-sync uses it to open the indexer subscription at
     // (cursor + 1), skipping replay of already-known history. Null = fresh
     // install / cleared state → server falls back to full replay.
-    const midnightLastTxId = midnightStore.lastMidnightTxId ?? null;
+    //
+    // Only trust the cursor when there's a preserved UTxO set to resume ON TOP
+    // of. With a cursor but an empty UTxO set, gero-sync is caught up and sends
+    // no snapshot, so the wallet would show 0 forever. An empty set means
+    // either a genuinely-empty wallet or state an earlier empty-snapshot bug
+    // zeroed — a full replay correctly recovers both by rebuilding the UTxO set
+    // from transaction deltas. No UX cost: there's no fast balance to render
+    // when the preserved set is empty anyway.
+    const hasPreservedUtxos = midnightStore.utxos.length > 0;
+    const midnightLastTxId = hasPreservedUtxos
+      ? (midnightStore.lastMidnightTxId ?? null)
+      : null;
+    if (!hasPreservedUtxos && midnightStore.lastMidnightTxId != null) {
+      debugLog('🌙 Midnight sync: cursor present but no preserved UTxOs — forcing full replay to rebuild balance');
+    }
     // Privacy: log only whether shielded is enabled, never the viewing key.
     debugLog(`🌙 Midnight sync start: resume cursor=${midnightLastTxId} shielded=${shielded != null}`);
 
@@ -399,7 +413,16 @@ class MidnightSyncService {
     // 3) UTXOs — bulk-replace path used by CATCH_UP_COMPLETE's absolute
     // snapshot. Re-derive balance from the new set to keep nightUnshielded
     // consistent with the UTxO source of truth.
-    if (Array.isArray(data.utxos)) {
+    //
+    // ONLY when the snapshot actually carries UTxOs. A caught-up keep-alive
+    // (SYNC_CHECK_OK) is forwarded here as `{...data, type:'SYNC'}` with
+    // `utxos: []`; `[]` is truthy and passes the websocket-layer guard, so it
+    // reached this branch and `setUtxos([])` + a from-scratch re-sum zeroed the
+    // preserved NIGHT balance on every same-wallet re-login (the "0 tNIGHT but
+    // history/graph still show" bug). The genuinely-emptied-to-zero case is
+    // already handled by the per-transaction deltas in section 2, so skipping
+    // the empty snapshot here loses nothing.
+    if (Array.isArray(data.utxos) && data.utxos.length > 0) {
       const parsed = this.parseUtxos(data.utxos);
       midnightActions.setUtxos(parsed);
       let night = 0n;
