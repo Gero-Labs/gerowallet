@@ -506,6 +506,15 @@ class WebSocketService {
     this.network = null;
     this.catchingUp = false;
     this.pendingTxBatches = [];
+    // Flush the block-hash dedup cache on teardown. Without this, block hashes
+    // from the previous wallet/session linger and cause a re-delivered SYNC
+    // replay to be dropped as "duplicate" — e.g. switch away from a Midnight
+    // wallet and back: the store is wiped and gero-sync replays the history,
+    // but the stale cache skips every block, leaving the balance/tx-list/graph
+    // empty. close() is only called on a full teardown (wallet switch / logout
+    // / connect), NOT on transient auto-reconnect (scheduleReconnect →
+    // openConnection), so in-session duplicate-tip dedup is unaffected.
+    this.tipCache.flush();
   }
 
   updateLastSyncedBlock(block: number): void {
