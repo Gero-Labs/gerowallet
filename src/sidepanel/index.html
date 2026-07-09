@@ -37,9 +37,15 @@
     background: linear-gradient(45deg, var(--chain-gradient1, #00c7f3), var(--chain-gradient2, #00ffd1)) !important;
     color: black !important;
   }
-  .geroButton:disabled {
-    filter: brightness(0.5);
-    color: black !important;
+  /* Vuetify's own .v-btn--disabled already blocks pointer events (the click
+     handler genuinely can't fire), but a "blocked for your safety" state
+     must ALSO look unmistakably non-interactive — a subtle brightness dip
+     against a bright gradient isn't enough. Grey it out and desaturate. */
+  .geroButton:disabled,
+  .geroButton.v-btn--disabled {
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: rgba(255, 255, 255, 0.3) !important;
+    filter: grayscale(1);
   }
 </style>
 </body>
