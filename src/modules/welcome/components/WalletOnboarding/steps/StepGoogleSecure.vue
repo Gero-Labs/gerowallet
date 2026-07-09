@@ -16,39 +16,69 @@
 
       <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
 
-      <!-- Spending password -->
-      <div class="step-section-label mb-2">{{ $t('welcome.spendingPassword') }}</div>
-      <div class="field-hint mb-2">{{ $t('welcome.spendingPasswordMpcHint') }}</div>
-      <v-text-field
-        v-model="spendingPassword"
-        dense
-        filled
-        :label="$t('welcome.spendingPassword')"
-        :type="showSpending ? 'text' : 'password'"
-        :append-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
-        @click:append="showSpending = !showSpending"
-        :rules="[
-          rules.required(),
-          rules.minCharacters(10),
-          rules.oneOrMoreNumbers,
-          rules.containCapital,
-          rules.containLowerCase,
-          rules.containSpecialCharacter,
-          rules.spaceNotAllowed
-        ]"
-      ></v-text-field>
-      <v-text-field
-        v-model="confirmSpendingPassword"
-        dense
-        filled
-        :label="$t('welcome.confirmPassword')"
-        :type="showSpending ? 'text' : 'password'"
-        :rules="[
-          rules.required(),
-          (v) => v === spendingPassword || $t('welcome.passwordsMustMatch')
-        ]"
-        class="mb-2"
-      ></v-text-field>
+      <!-- Spending password (fallback when the device/browser has no WebAuthn PRF) -->
+      <template v-if="!passkeyCapable">
+        <div class="step-section-label mb-2">{{ $t('welcome.spendingPassword') }}</div>
+        <div class="field-hint mb-2">{{ $t('welcome.spendingPasswordMpcHint') }}</div>
+        <v-text-field
+          v-model="spendingPassword"
+          dense
+          filled
+          :label="$t('welcome.spendingPassword')"
+          :type="showSpending ? 'text' : 'password'"
+          :append-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
+          @click:append="showSpending = !showSpending"
+          :rules="[
+            rules.required(),
+            rules.minCharacters(10),
+            rules.oneOrMoreNumbers,
+            rules.containCapital,
+            rules.containLowerCase,
+            rules.containSpecialCharacter,
+            rules.spaceNotAllowed
+          ]"
+        ></v-text-field>
+        <v-text-field
+          v-model="confirmSpendingPassword"
+          dense
+          filled
+          :label="$t('welcome.confirmPassword')"
+          :type="showSpending ? 'text' : 'password'"
+          :rules="[
+            rules.required(),
+            (v) => v === spendingPassword || $t('welcome.passwordsMustMatch')
+          ]"
+          class="mb-2"
+        ></v-text-field>
+      </template>
+
+      <!-- Passkey (preferred path — hardware-backed, no password to remember) -->
+      <template v-else>
+        <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
+        <div class="field-hint mb-2">{{ $t('welcome.secureWithPasskeyHint') }}</div>
+        <v-btn
+          class="passkey-auth-button mb-2"
+          block
+          depressed
+          :color="passkey ? 'success' : 'primary'"
+          :loading="enrolling"
+          @click="secureWithPasskey()"
+        >
+          <v-icon left small>{{ passkey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
+          {{ passkey ? $t('welcome.passkeySecured') : $t('welcome.secureWithPasskey') }}
+        </v-btn>
+        <v-alert
+          v-if="passkeyError"
+          color="error"
+          icon="mdi-alert-outline"
+          outlined
+          dense
+          border="left"
+          class="mb-2"
+        >
+          <span class="text-body-2">{{ passkeyError }}</span>
+        </v-alert>
+      </template>
 
       <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
 
@@ -71,7 +101,7 @@
           rules.containLowerCase,
           rules.containSpecialCharacter,
           rules.spaceNotAllowed,
-          (v) => v !== spendingPassword || $t('welcome.recoveryPasswordMustDiffer')
+          (v) => passkeyCapable || v !== spendingPassword || $t('welcome.recoveryPasswordMustDiffer')
         ]"
       ></v-text-field>
       <v-text-field
@@ -116,14 +146,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import { Theme } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import networks, { NetworkInfo } from '@/utils/networks';
-import type { GoogleWalletBgResponse } from './googleWalletMessages';
+import { mpcPasskeyAvailable, enrollMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
+import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
 
 interface Props {
   network: NetworkInfo;
@@ -138,7 +169,7 @@ const emit = defineEmits<{
     walletId: number;
     recoveryShare: string;
     publicKey: string;
-    spendingPassword: string;
+    authPayload: GoogleAuthPayload;
     recoveryPassword: string;
     name: string;
   }): void;
@@ -159,7 +190,45 @@ const showRecovery = ref(false);
 const creating = ref(false);
 const errorMessage = ref('');
 
-const canContinue = computed(() => formValid.value && !creating.value);
+// Passkey-first: capability is probed once on mount and never re-checked mid-flow,
+// so the form doesn't jump between layouts while the user is typing.
+const passkeyCapable = ref(false);
+const passkey = ref<{ credentialId: string; mpcPrfSaltId: string; prfOutputHex: string } | null>(null);
+const enrolling = ref(false);
+const passkeyError = ref('');
+
+onMounted(async () => {
+  passkeyCapable.value = await mpcPasskeyAvailable();
+});
+
+async function secureWithPasskey(): Promise<void> {
+  enrolling.value = true;
+  passkeyError.value = '';
+  try {
+    passkey.value = await enrollMpcPasskey(name.value || 'Gero Google Wallet');
+  } catch (error: unknown) {
+    passkeyError.value = error instanceof Error ? error.message : (vmProxy.$t('errors.unknownError') as string);
+  } finally {
+    enrolling.value = false;
+  }
+}
+
+// The secret this step yields to its parent — either the freshly-enrolled
+// passkey (PRF) material or the spending password. Threaded unchanged all the
+// way to the Confirm step so it can unlock with the very same secret.
+const authPayload = computed<GoogleAuthPayload>(() => (
+  passkey.value
+    ? { authMethod: 'passkey', ...passkey.value }
+    : { authMethod: 'password', spendingPassword: spendingPassword.value }
+));
+
+const secretReady = computed(() => (
+  passkeyCapable.value
+    ? !!passkey.value
+    : spendingPassword.value.length >= 8 && spendingPassword.value === confirmSpendingPassword.value
+));
+
+const canContinue = computed(() => formValid.value && !creating.value && secretReady.value);
 
 const createWallet = async (): Promise<void> => {
   if (!canContinue.value) return;
@@ -167,8 +236,9 @@ const createWallet = async (): Promise<void> => {
   errorMessage.value = '';
   try {
     const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
+    const payload = authPayload.value;
 
-    // Note: never log request payload — contains idToken/spendingPassword
+    // Note: never log request payload — contains idToken/spendingPassword/prfOutputHex
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.CREATE_MPC_GOOGLE_WALLET,
       data: {
@@ -178,7 +248,7 @@ const createWallet = async (): Promise<void> => {
         chain: props.network?.blockchain,
         network: props.network?.network,
         idToken: props.idToken,
-        spendingPassword: spendingPassword.value,
+        ...authPayloadToWireFields(payload),
       },
     }) as GoogleWalletBgResponse;
 
@@ -190,7 +260,7 @@ const createWallet = async (): Promise<void> => {
       walletId: response.data.walletId,
       recoveryShare: response.data.recoveryShare,
       publicKey: response.data.publicKey,
-      spendingPassword: spendingPassword.value,
+      authPayload: payload,
       recoveryPassword: recoveryPassword.value,
       name: name.value,
     });
@@ -215,5 +285,12 @@ const createWallet = async (): Promise<void> => {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.45);
   line-height: 1.4;
+}
+
+.passkey-auth-button {
+  text-transform: none;
+  font-weight: 500;
+  border-radius: 8px !important;
+  box-shadow: none !important;
 }
 </style>

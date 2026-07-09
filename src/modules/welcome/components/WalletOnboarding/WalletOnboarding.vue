@@ -108,7 +108,7 @@
           :email="googleEmail"
           :wallet-id="googleWalletId"
           :id-token="googleIdToken"
-          :spending-password="googleSpendingPassword"
+          :auth-payload="googleAuthPayload"
         />
         <StepGoogleRestore class="onboarding-step"
           v-else-if="currentStep.key === 'googleRestore'"
@@ -138,6 +138,7 @@ import StepGoogleSecure from './steps/StepGoogleSecure.vue';
 import StepGoogleBackup from './steps/StepGoogleBackup.vue';
 import StepGoogleConfirm from './steps/StepGoogleConfirm.vue';
 import StepGoogleRestore from './steps/StepGoogleRestore.vue';
+import type { GoogleAuthPayload } from './steps/googleWalletMessages';
 
 interface ConnectionPayload {
   publicKey: string;
@@ -180,7 +181,7 @@ const googleEmail = ref<string>('');
 const googleWalletId = ref<number>(0);
 const googleRecoveryShare = ref<string>('');
 const googlePublicKey = ref<string>('');
-const googleSpendingPassword = ref<string>('');
+const googleAuthPayload = ref<GoogleAuthPayload>({ authMethod: 'password', spendingPassword: '' });
 const googleRecoveryPassword = ref<string>('');
 
 const steps = computed<StepDef[]>(() => {
@@ -244,7 +245,7 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair' | 'google' | 'googleRes
   googleWalletId.value = 0;
   googleRecoveryShare.value = '';
   googlePublicKey.value = '';
-  googleSpendingPassword.value = '';
+  googleAuthPayload.value = { authMethod: 'password', spendingPassword: '' };
   googleRecoveryPassword.value = '';
   // Network + Method share step 1 — method-specific steps start at 2.
   step.value = 2;
@@ -260,14 +261,14 @@ const onGoogleCreated = (payload: {
   walletId: number;
   recoveryShare: string;
   publicKey: string;
-  spendingPassword: string;
+  authPayload: GoogleAuthPayload;
   recoveryPassword: string;
   name: string;
 }): void => {
   googleWalletId.value = payload.walletId;
   googleRecoveryShare.value = payload.recoveryShare;
   googlePublicKey.value = payload.publicKey;
-  googleSpendingPassword.value = payload.spendingPassword;
+  googleAuthPayload.value = payload.authPayload;
   googleRecoveryPassword.value = payload.recoveryPassword;
   walletName.value = payload.name;
   step.value++;
