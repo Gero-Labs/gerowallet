@@ -154,6 +154,29 @@ function reject(reason = 'user_rejected') {
   if (currentRequest.value) respond(currentRequest.value.requestId, null, reason);
 }
 
+/**
+ * Reject one specific QUEUED item (not the currently displayed one) without
+ * disturbing currentRequest — lets a user clear a single unwanted queued
+ * request (or all of them, via rejectAll) instead of only ever being able to
+ * act on whatever happens to be on top.
+ */
+function rejectQueued(requestId: string, reason = 'user_rejected') {
+  const idx = requestQueue.value.findIndex((r) => r.requestId === requestId);
+  if (idx === -1) return;
+  requestQueue.value.splice(idx, 1);
+  seenRequestIds.delete(requestId);
+  const delivered = safePost({ type: 'dapp-response', requestId, data: null, error: reason });
+  if (!delivered) pendingResponses.push({ requestId, data: null, error: reason });
+}
+
+/** Reject everything: every queued item, then the currently displayed one. */
+function rejectAll(reason = 'user_rejected') {
+  for (const item of [...requestQueue.value]) {
+    rejectQueued(item.requestId, reason);
+  }
+  reject(reason);
+}
+
 export const hub = {
   isVisible,
   currentRequest,
@@ -161,6 +184,8 @@ export const hub = {
   connectionLost,
   approve,
   reject,
+  rejectQueued,
+  rejectAll,
   respond,
   // test hook: force an immediate reconnect (bypasses the backoff timer)
   async _reconnectNow() {

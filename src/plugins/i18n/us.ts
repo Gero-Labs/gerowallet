@@ -3189,6 +3189,7 @@ export default {
   'signTx.rejected': 'Transaction signing cancelled',
   'miniGero.futureTransactionsNote': 'For your security, any future transactions from this website will require additional verification before signing.',
   'miniGero.requestQueueIndicator': 'Request {current} of {total}',
+  'miniGero.rejectAll': 'Reject all',
   'miniGero.pendingRequestBanner': 'Unlock to review the request from {domain}',
   'miniGero.pendingRequestBannerNoDomain': 'Unlock to review a pending dApp request',
   'miniGero.pendingRequestCount': '{count} request waiting | {count} requests waiting',

@@ -16,5 +16,7 @@ export function useDAppOverlay() {
     connectionLost: hub.connectionLost,
     approve: hub.approve,
     reject: hub.reject,
+    rejectQueued: hub.rejectQueued,
+    rejectAll: hub.rejectAll,
   };
 }
