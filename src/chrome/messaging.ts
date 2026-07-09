@@ -543,12 +543,23 @@ export const Messaging = {
       // (Midnight's `connect` is the CIP-30 `enable` analog —
       // MIDNIGHT_METHOD.connect's own handler in background.ts IS the approval
       // gate, so it must reach background before any origin is whitelisted.)
+      //
+      // Sign requests are fast-pathed too, for a different reason:
+      // chrome.sidePanel.open() requires a user gesture, and gestures don't
+      // survive the extra async round-trip the isWhitelisted pre-check below
+      // does. Sending these straight through keeps the gesture alive long
+      // enough to reach sidePanel.open(); background enforces the whitelist
+      // itself for these methods (see the signTx/signData/MIDNIGHT_METHOD.
+      // signData handlers in background.ts).
       if (
         request.method === METHOD.enable ||
         request.method === METHOD.isEnabled ||
         request.method === BITCOIN_METHOD.enable ||
         request.method === BITCOIN_METHOD.isEnabled ||
-        request.method === MIDNIGHT_METHOD.connect
+        request.method === MIDNIGHT_METHOD.connect ||
+        request.method === METHOD.signTx ||
+        request.method === METHOD.signData ||
+        request.method === MIDNIGHT_METHOD.signData
       ) {
         Messaging.sendToBackground({
           ...request,
