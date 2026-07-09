@@ -480,37 +480,37 @@ export const midnightActions = {
     );
   },
 
-  /** Reset to empty state on wallet logout. */
+  /**
+   * Deactivate on wallet logout, but PRESERVE the per-wallet data
+   * (balances / utxos / transactions / dustState / tip / lastSync /
+   * lastMidnightTxId cursor / activeWalletKey / addresses).
+   *
+   * Why not wipe: wiping forces the next login of the SAME wallet to
+   * re-derive everything from a full gero-sync history replay (cursor sent as
+   * null → server replays from the start of the indexer → the visible 5-10s
+   * "no data yet" gap). Keeping the state lets a same-wallet re-login render
+   * instantly and resume the WS from the saved cursor (delta only), exactly
+   * like the Cardano side restores its persisted UTxOs from DB.
+   *
+   * Safety: this is never shown while logged out (the router is on /welcome
+   * and isActive=false gates the Midnight views). A genuine wallet/network
+   * SWITCH still wipes the stale state in {@link setActive} via the
+   * activeWalletKey guard, so a different wallet can never inherit these
+   * balances. Only in-flight proving operations are dropped — they don't
+   * survive a session.
+   */
   clear() {
     Object.assign(midnightStore, {
       isActive: false,
-      lastSync: null,
-      tip: { ...EMPTY_TIP },
       networkStatus: 'disconnected',
-      balances: { ...EMPTY_BALANCES },
-      addresses: { ...EMPTY_ADDRESSES },
-      transactions: [],
-      utxos: [],
-      dustState: null,
       provingOperations: new Map(),
-      lastMidnightTxId: null,
-      activeWalletKey: null,
     });
     broadcastFromBackground({
       isActive: false,
-      lastSync: null,
-      tip: { ...EMPTY_TIP },
       networkStatus: 'disconnected',
-      balances: { ...EMPTY_BALANCES },
-      addresses: { ...EMPTY_ADDRESSES },
-      transactions: [],
-      utxos: [],
-      dustState: null,
       provingOperations: new Map(),
-      lastMidnightTxId: null,
-      activeWalletKey: null,
     }, true);
-    debugLog('🧹 Midnight store cleared');
+    debugLog('🌙 Midnight store deactivated (per-wallet state preserved for fast re-login)');
   },
 
   /**
