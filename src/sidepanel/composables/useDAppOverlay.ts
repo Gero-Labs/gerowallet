@@ -3,12 +3,12 @@ import { useChainContext } from './useChainContext';
 
 export interface DAppRequest {
   type: 'dapp-request';
-  method: 'enable' | 'signTx' | 'signData';
+  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData';
   requestId: string;
   payload: any;
 }
 
-const VALID_METHODS = new Set(['enable', 'signTx', 'signData']);
+const VALID_METHODS = new Set(['enable', 'signTx', 'signData', 'midnight_connect', 'midnight_signData']);
 const MAX_RETRIES = 10;
 
 export function useDAppOverlay() {

@@ -13,8 +13,6 @@ import PortfolioPage from '@/modules/portfolio/PortfolioPage.vue';
 const Staking = () => import("@/modules/staking/Staking.vue");
 const DappConnect = () => import("@/popup/modules/views/DappConnect.vue");
 const DappSignData = () => import('@/popup/modules/views/DappSignData.vue');
-const MidnightDappConnect = () => import('@/popup/modules/views/MidnightDappConnect.vue');
-const MidnightDappSignData = () => import('@/popup/modules/views/MidnightDappSignData.vue');
 const SignTx = () => import('@/popup/modules/views/SignTx.vue');
 const Cashback = () => import("@/modules/cashback/Cashback.vue");
 const MediaPlayer = () => import("@/modules/media-player/MediaPlayer.vue");
@@ -159,24 +157,6 @@ const routes = [
     path: '/dapp-sign',
     name: 'dapp-sign',
     component: DappSignData,
-    meta: {
-      layout: PopupLayout,
-      requiresAuth: true,
-    },
-  },
-  {
-    path: '/midnight-dapp-connect',
-    name: 'midnight-dapp-connect',
-    component: MidnightDappConnect,
-    meta: {
-      layout: PopupLayout,
-      requiresAuth: true,
-    },
-  },
-  {
-    path: '/midnight-dapp-sign',
-    name: 'midnight-dapp-sign',
-    component: MidnightDappSignData,
     meta: {
       layout: PopupLayout,
       requiresAuth: true,

@@ -186,10 +186,13 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 // Mini-gero DApp channel — per-tab port routing
 // Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
 const miniGeroPorts = new Map<number, chrome.runtime.Port>();
-// requestId → { resolver, tabId } so port-disconnect handlers can reject the
-// requests sent through that specific tab's port (closing the side panel via
-// the X button must register as a user reject, not silently hang).
-const pendingDAppRequests = new Map<string, { resolve: DAppRequestResolver; tabId: number }>();
+// requestId → { resolver, tabId, method } so port-disconnect handlers can
+// reject the requests sent through that specific tab's port (closing the
+// side panel via the X button must register as a user reject, not silently
+// hang). `method` lets the disconnect handler synthesize a shape-appropriate
+// error — Midnight connector methods need the DAppConnectorAPIError shape,
+// not CIP-30's flat {code,info} string.
+const pendingDAppRequests = new Map<string, { resolve: DAppRequestResolver; tabId: number; method: string }>();
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name.startsWith('mini-gero-dapp-channel')) {
@@ -222,12 +225,25 @@ chrome.runtime.onConnect.addListener((port) => {
       if (miniGeroPorts.get(tabId) === port) {
         miniGeroPorts.delete(tabId);
       }
-      // Closing the side panel (X button) disconnects the port. Treat that as
-      // a user reject for any in-flight request so the dApp gets a real
-      // response instead of hanging forever waiting on a sign that won't come.
+      // Closing the side panel (X button, navigating away, ...) disconnects
+      // the port. Treat that as a lost connection for any in-flight request
+      // so the dApp gets a real response instead of hanging forever waiting
+      // on a sign that won't come — but for Midnight methods this is
+      // Disconnected, NOT Rejected. Rejected means "the user clicked
+      // Reject" (see DAppOverlay.vue's rejectMidnightConnect/
+      // rejectMidnightSignData) — a panel close is a DIFFERENT, far more
+      // common event (accidental close, tab navigation, "let me think about
+      // it") that carries no such decision. Using Rejected here fed straight
+      // into connect's sticky-denial tracker (hasMidnightPermissionDenial),
+      // permanently sticky-denying that tab's connect() calls for the rest
+      // of the session over what might have been an accidental close.
       for (const [requestId, entry] of pendingDAppRequests.entries()) {
         if (entry.tabId === tabId) {
-          entry.resolve({ error: APIError.Refused.info || 'User rejected' });
+          entry.resolve({
+            error: entry.method.startsWith('midnight_')
+              ? JSON.stringify(midnightApiError(MidnightErrorCode.Disconnected, 'The approval panel closed before responding'))
+              : (APIError.Refused.info || 'User rejected'),
+          });
           pendingDAppRequests.delete(requestId);
         }
       }
@@ -248,6 +264,7 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
     // Cleanup happens via port disconnect or explicit user response.
     pendingDAppRequests.set(requestId, {
       tabId: sendingTabId,
+      method,
       resolve: (response) => {
         if (response.error) reject(new Error(String(response.error)));
         else resolve(response);
@@ -3831,6 +3848,29 @@ function midnightApiError(code: string, reason: string) {
 }
 
 /**
+ * `sendToMiniGero`'s resolver rejects with `new Error(String(response.error))`
+ * — the mini-gero port protocol only carries a plain string, not a structured
+ * object. The side panel's Midnight branches (DAppOverlay.vue) JSON-encode a
+ * DAppConnectorAPIError into that string so the rich {code, reason} shape
+ * survives the round trip; decode it back here, with a safe fallback for any
+ * other rejection shape (timeouts, non-Midnight panel-closed strings, etc).
+ */
+function parseMidnightMiniGeroError(
+  err: unknown,
+  fallbackCode: string,
+  fallbackReason: string,
+): { type: string; code: string; reason: string; message: string } {
+  const message = err instanceof Error ? err.message : String(err);
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed && typeof parsed === 'object' && parsed.type === 'DAppConnectorAPIError') {
+      return parsed;
+    }
+  } catch { /* not a JSON-encoded Midnight error — synthesize below */ }
+  return midnightApiError(fallbackCode, message || fallbackReason);
+}
+
+/**
  * Per-tab record of Midnight connector methods the user has explicitly
  * declined THIS session — implements the spec's Rejected-vs-PermissionRejected
  * distinction (SPECIFICATION.md §Permissions / §Errors): `Rejected` is
@@ -3897,11 +3937,14 @@ function requireMidnightWallet(): ReturnType<typeof walletManager.getWallet> | n
 }
 
 /**
- * Approve/open a Midnight dapp connection. Architecturally `enable`'s twin
- * (background.ts:488) — same fast-accept-if-whitelisted / else-popup /
- * on-approve-addConnectedDapp flow — with one extra guard `enable` doesn't
- * need: verifying the ACTIVE wallet is actually a Midnight wallet, since
- * `window.midnight` is installed regardless of which chain is logged in.
+ * Approve/open a Midnight dapp connection. Routes EXCLUSIVELY through the
+ * mini-gero side panel (same `sendToMiniGero`/`miniGeroPorts`/`openSidebar`/
+ * `waitForMiniGeroPort` mechanism as CIP-30's `enable`, background.ts:488) —
+ * deliberately NO popup fallback: if the side panel can't be opened/
+ * connected, the request fails outright rather than degrading to a
+ * standalone popup window. One extra guard `enable` doesn't need: verifying
+ * the ACTIVE wallet is actually a Midnight wallet, since `window.midnight` is
+ * installed regardless of which chain is logged in.
  */
 app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   const { id, origin, send, data } = request;
@@ -3948,23 +3991,51 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.PermissionRejected, 'User already declined this connection request this session') });
     return true;
   }
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
 
   const favIconUrl = send.tab?.favIconUrl;
-  const popupURL = chrome.runtime.getURL(
-    `index.html#/${POPUP.midnightDappConnect}?website=${encodeURIComponent(origin)}` +
-      (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
-  );
-  focusOrCreatePopup(popupURL, 470, 600)
-    .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
-    .then((response: BackgroundResponse) => {
-      if (response.data) {
+  const connectPayload = { website: origin, favIconUrl };
+
+  const sendToPanel = () =>
+    sendToMiniGero(MIDNIGHT_METHOD.connect, connectPayload, tabId)
+      .then(async (response: BackgroundResponse) => {
+        if (response.data === true) {
+          await WalletStore.addConnectedDapp(currentWallet.id, origin);
+        }
         reply({ data: response.data });
-      } else {
-        recordMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect);
-        reply({ error: response.error || midnightApiError(MidnightErrorCode.Rejected, 'User declined the connection request') });
-      }
-    })
-    .catch(err => reply({ error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(err)) }));
+      })
+      .catch(err => {
+        // Fallback code is deliberately NOT Rejected: Rejected must only ever
+        // come from a genuinely-parsed JSON round-trip of the panel's own
+        // explicit rejectMidnightConnect() (see midnightError() in
+        // DAppOverlay.vue) — sticky-denial below keys off exactly that. An
+        // unparseable/unexpected rejection (a bug, a future refactor that
+        // makes sendToMiniGero reject with a plain Error) must NOT be able
+        // to masquerade as a user decision just because Rejected happened to
+        // be convenient as a fallback value.
+        const midnightErr = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the connection request');
+        if (midnightErr.code === MidnightErrorCode.Rejected) {
+          recordMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect);
+        }
+        reply({ error: midnightErr });
+      });
+
+  // Primary: the panel is already open and listening for this tab.
+  if (miniGeroPorts.has(tabId)) {
+    sendToPanel();
+    return true;
+  }
+
+  // Open the panel and wait for it to connect. No popup fallback.
+  openSidebar(tabId, 'sidepanel/index.html')
+    .then(() => waitForMiniGeroPort(5000, tabId))
+    .then(() => sendToPanel())
+    .catch(err => reply({
+      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+    }));
 
   return true; // async
 });
@@ -4196,14 +4267,15 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
 });
 
 /**
- * Opens the sign-data approval popup (password/PRF wallets only — Midnight
- * has no hardware-wallet support, see the July 2026 gap analysis). The popup
- * itself calls MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA once the user
- * authenticates; see walletBg.signMidnightConnectorData for the actual
- * signing + mandatory prefix logic.
+ * Opens the sign-data approval view in the mini-gero side panel (password/PRF
+ * wallets only — Midnight has no hardware-wallet support, see the July 2026
+ * gap analysis). Same side-panel-only routing as `connect` above — no popup
+ * fallback. The panel itself calls MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA
+ * once the user authenticates; see walletBg.signMidnightConnectorData for the
+ * actual signing + mandatory prefix logic.
  */
 app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
-  const { id, send } = request;
+  const { id, origin, send, data } = request;
   const reply = (opts: ReplyOpts) => {
     sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
   };
@@ -4216,6 +4288,11 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
     return true;
   }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
   // Unlike `connect` (above), signData does NOT use the sticky-denial
   // tracker: each call carries materially different data (a login challenge,
   // an attestation, ...), so blocking every FUTURE signData request because
@@ -4223,16 +4300,30 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
   // not a security improvement. `connect` is coherent to sticky-deny because
   // it's always the same idempotent action; signData isn't.
   const favIconUrl = send.tab?.favIconUrl;
-  const popupURL = chrome.runtime.getURL(
-    `index.html#/${POPUP.midnightDappSignData}` + (favIconUrl ? `?favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
-  );
-  focusOrCreatePopup(popupURL, 470, 600)
-    .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
-    .then((response: BackgroundResponse) => {
-      if (response.data) reply({ data: response.data });
-      else reply({ error: response.error || midnightApiError(MidnightErrorCode.Rejected, 'User declined the signing request') });
-    })
-    .catch(err => reply({ error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(err)) }));
+  const signDataPayload = { data, website: origin, favIconUrl };
+
+  const sendToPanel = () =>
+    sendToMiniGero(MIDNIGHT_METHOD.signData, signDataPayload, tabId)
+      .then((response: BackgroundResponse) => reply({ data: response.data }))
+      .catch(err => reply({
+        // Same reasoning as connect's catch above: the fallback must not be
+        // Rejected, or a dapp branching on error.code === 'Rejected' would
+        // be told "the user declined" for e.g. a panel-closed/internal
+        // failure that was never an actual decision.
+        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the signing request'),
+      }));
+
+  if (miniGeroPorts.has(tabId)) {
+    sendToPanel();
+    return true;
+  }
+
+  openSidebar(tabId, 'sidepanel/index.html')
+    .then(() => waitForMiniGeroPort(5000, tabId))
+    .then(() => sendToPanel())
+    .catch(err => reply({
+      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+    }));
   return true;
 });
 
@@ -4244,9 +4335,10 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
 });
 
 /**
- * Options-context: called by MidnightDappSignData.vue once the user has
- * approved + authenticated. See walletBg.signMidnightConnectorData for the
- * midnight_signed_message: prefix + BIP-340 signing logic.
+ * Options-context (side-panel bundle): called by DAppOverlay.vue's Midnight
+ * signData branch once the user has approved + authenticated. See
+ * walletBg.signMidnightConnectorData for the midnight_signed_message: prefix
+ * + BIP-340 signing logic.
  *
  * Request shape: `{ data: string, options: SignDataOptions, password?, prfSecret? }`.
  */

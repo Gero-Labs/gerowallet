@@ -43,7 +43,7 @@ import { ref, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { getDb } from '@/db/wallet-db';
-import { decryptSpendingPasswordWithPrf, decryptPrivateKeyWithPrf } from '@/shared/utils/webauthn-prf';
+import { decryptSpendingPasswordWithPrf, decryptPrivateKeyWithPrf, evaluatePrfForWallet } from '@/shared/utils/webauthn-prf';
 
 const loading = ref(true);
 const error = ref('');
@@ -55,13 +55,30 @@ onMounted(async () => {
       throw new Error('No wallet logged in');
     }
 
-    // Get mode from query parameter ('password' or 'privateKey')
+    // Get mode from query parameter ('password' | 'privateKey' | 'rawPrf')
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode') || 'password'; // Default to password for backwards compatibility
 
     let resultPayload: any;
 
-    if (mode === 'privateKey') {
+    if (mode === 'rawPrf') {
+      // Raw PRF output — for chains (Midnight) whose signing key material is
+      // NOT derived through the Cardano-specific decryptPrivateKeyWithPrf
+      // path. Callers (e.g. the mini-gero side panel's Midnight signData
+      // branch) decrypt the mnemonic themselves in the background using this
+      // raw output, same as the direct-in-page TransactionAuthSection PRF
+      // flow (MidnightSendDialog.vue) — this popup exists only because
+      // WebAuthn doesn't reliably work from inside the side panel's own
+      // window, so the ceremony has to happen in a real top-level popup.
+      if (!wallet.webAuthnCredentialId) {
+        throw new Error('PRF wallet not properly configured');
+      }
+      const prfOutput = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+      resultPayload = {
+        success: true,
+        prfOutput: Array.from(new Uint8Array(prfOutput)),
+      };
+    } else if (mode === 'privateKey') {
       // Decrypt private key using PRF (for data signing)
       if (!wallet.prfEncryptedPrivateKey || !wallet.webAuthnCredentialId) {
         throw new Error('PRF wallet not properly configured');

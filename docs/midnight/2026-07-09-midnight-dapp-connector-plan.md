@@ -3,6 +3,7 @@
 **Date:** 2026-07-09
 **Spec:** `@midnightntwrk/dapp-connector-api` — https://github.com/midnightntwrk/midnight-dapp-connector-api/blob/main/SPECIFICATION.md
 **Status:** Phase 1 implemented (2026-07-09) — discovery, `connect` approval, all read getters, `signData`, `submitTransaction`. `makeTransfer`/`makeIntent`/`balanceUnsealedTransaction`/`balanceSealedTransaction`/`getProvingProvider` present on the returned `ConnectedAPI` but reject with `InternalError` until Phase 2/3 land (see §4). Full build green across all 4 Vite contexts (main/background/content/inject); dedicated `@midnight-ntwrk/dapp-connector-api@^4.0.1` dep installed for types.
+**Approval UI (2026-07-10 revision):** `connect`/`signData` approvals route EXCLUSIVELY through the mini-gero side panel (`DAppOverlay.vue` + `useDAppOverlay.ts`'s `mini-gero-dapp-channel:${tabId}` port) — the standalone-popup approach originally shipped (`MidnightDappConnect.vue`/`MidnightDappSignData.vue` under `src/popup/modules/views/`) was retired per product decision. No popup fallback: if the side panel can't be opened/connected within 5s, the request fails outright. See §2.2 for the mechanism this actually uses (it is NOT the popup-view `useSidePanel`/`InternalSidePanelController` pattern described in earlier revisions of this doc — that pattern is dead code, confirmed unreachable, in the current codebase).
 **Goal:** expose Gero as a discoverable Midnight wallet provider so dapps (LunarSwap, Midnames, the official Bboard/Counter examples, etc.) can connect, read, sign, and submit.
 
 ---
@@ -78,6 +79,23 @@ Traced the ACTUAL mechanism `Messaging.createProxyController()` implements (not 
 
 **One Midnight-specific guard the CIP-30 pattern doesn't need**: `MIDNIGHT_METHOD.connect`'s handler must ALSO check `currentWallet.chain === Blockchain.MIDNIGHT` and reject (not silently misroute) if a non-Midnight wallet is active — mirroring the existing chain guard in `METHOD.getAddress` (`background.ts:592`, which already restricts to Cardano/Apex chains and returns `APIError.Refused` otherwise).
 
+### 2.2 Approval surface: mini-gero side panel, no popup (revised 2026-07-10)
+
+Phase 1 originally shipped `connect`/`signData` as standalone popup windows (`focusOrCreatePopup` + `Messaging.sendToPopupInternal`, mirroring `DappConnect.vue`/`DappSignData.vue`). Per product decision, this was retired — Midnight approvals now route EXCLUSIVELY through the mini-gero side panel, with no popup fallback.
+
+**This is a different mechanism from the popup-view `useSidePanel` computed / `Messaging.createInternalSidePanelController` pattern** those retired components used — that pattern connects to a port named `internal-background-sidepanel-communication`, whose background-side handler (`Messaging.sendToSidePanelInternal`) is never actually called anywhere in `background.ts`. It's dead/vestigial code from an earlier side-panel design. **Do not use it for new work.**
+
+The REAL mechanism (already used by CIP-30's `enable`/`signData`/`signTx` and Bitcoin's `enable`, `background.ts:186-285`):
+
+- `miniGeroPorts: Map<number, chrome.runtime.Port>` — keyed by tabId, populated when the side panel's `DAppOverlay.vue` mounts and `useDAppOverlay.ts`'s `connect()` opens a port named `mini-gero-dapp-channel:${tabId}` (tabId read from a `?tabId=` query param `openSidebar` appends to the side panel's URL).
+- `sendToMiniGero(method, payload, tabId)` — posts `{type:'dapp-request', method, requestId, payload}` down that port; resolves/rejects when a matching `{type:'dapp-response', requestId, data, error}` arrives (or the port disconnects, treated as a decline).
+- `openSidebar(tabId, 'sidepanel/index.html')` — opens the native `chrome.sidePanel` UI; `waitForMiniGeroPort(5000, tabId)` polls until the port registers or times out.
+- Primary path: if `miniGeroPorts.has(tabId)` already (panel already open for this tab, e.g. a prior `connect` call), skip straight to `sendToMiniGero`. Otherwise: `openSidebar` → `waitForMiniGeroPort` → `sendToMiniGero`. **On failure at any step (timeout, `sendToMiniGero` rejecting), reply with an error — no popup fallback.**
+
+**Error shape over the mini-gero port is a plain string, not an object** (`reject(new Error(String(response.error)))` in `sendToMiniGero`'s resolver) — this loses the Midnight `{type, code, reason}` shape unless explicitly preserved. Fix: `DAppOverlay.vue`'s Midnight branches JSON-encode a `DAppConnectorAPIError` into that string (`midnightError(code, reason)` helper in the component); `background.ts`'s `parseMidnightMiniGeroError` JSON-decodes it back out, falling back to a synthesized `InternalError` for anything that isn't valid JSON (a genuine timeout, a non-Midnight decline string, etc). The "panel closed without responding" disconnect handler (`background.ts`'s `port.onDisconnect` listener) is similarly method-aware — `pendingDAppRequests` now stores the originating `method` alongside `tabId`/`resolve` so it can synthesize the correctly-shaped error for Midnight vs. CIP-30/Bitcoin requests sharing the same port infrastructure.
+
+**PRF/PassKey signing in the side panel needs its own popup** — this is a platform constraint, not a UX choice, and is NOT what "retire the popup" refers to (that was about the approval PROMPT surface). WebAuthn doesn't reliably work from inside the side panel's own window (see `?mode=privateKey#/passkey-auth` used by the existing `signDataPrf`), so `signMidnightDataPrf` in `DAppOverlay.vue` opens the SAME kind of small top-level popup, now with a new `mode=rawPrf` on `PassKeyAuth.vue` that returns the raw PRF output (`evaluatePrfForWallet`) rather than a Cardano-decrypted private key — Midnight decrypts its mnemonic from the raw PRF output directly (`walletBg.signMidnightConnectorData`), unlike CIP-30's Cardano-specific `decryptPrivateKeyWithPrf` path.
+
 ## 3. Method → Gero mapping
 
 Verified against the ACTUAL published `@midnight-ntwrk/dapp-connector-api@4.0.1` package (`npm pack` + read `dist/api.d.ts` directly) — not just the `SPECIFICATION.md` prose, which is measurably stale in two places (see §3.1). Where they conflict, the shipped `.d.ts` wins: that's what real dapps compile against.
@@ -124,16 +142,19 @@ Injector + `window.midnight[uuid]` + `InitialAPI` + `connect()` approval + all r
 New files:
 - `src/chrome/injectMidnight.ts` — page-context provider (mirror `inject.ts`)
 - `src/chrome/midnightWebpage.ts` — page→content bridge fns (mirror `webpage.ts`)
-- `src/popup/modules/views/MidnightDappConnect.vue` — connect approval (mirrors `DappConnect.vue`; actual path — the popup convention lives in `src/popup/modules/views/`, not `src/modules/dashboard/dialogs/` as an earlier draft of this doc said)
-- `src/popup/modules/views/MidnightDappSignData.vue` — signData approval (mirrors `DappSignData.vue`)
+- `src/chrome/midnightSignDataCodec.ts` — shared strict hex/base64/text decoder for the signData preview + actual sign step (single source of truth, see §5)
 
 Modified files:
 - `src/chrome/inject.ts` — import/install the Midnight provider block
-- `src/chrome/content.ts` — relay + per-origin gate for `MIDNIGHT_METHOD.*`
-- `src/chrome/config.ts` — `MIDNIGHT_METHOD` name registry
-- `src/models/MessageTypes.ts` — connector message types (or reuse `METHOD` scheme)
-- `src/chrome/background.ts` — handlers mapping each method to existing Gero fns
-- per-origin permission store (reuse the CIP-30 dApp-whitelist mechanism)
+- `src/chrome/messaging.ts` — `MIDNIGHT_METHOD.connect` bypasses the whitelist pre-check (like `enable`); `popupDisconnectedError` shapes the disconnect-without-response fallback correctly per originating connector
+- `src/chrome/config.ts` — `MIDNIGHT_METHOD` name registry, `MidnightErrorCode`
+- `src/models/MessageTypes.ts` — `SIGN_MIDNIGHT_CONNECTOR_DATA` (options-context, called by the side panel)
+- `src/chrome/background.ts` — `MIDNIGHT_METHOD.*` handlers; `connect`/`signData` route through `sendToMiniGero`/`miniGeroPorts`/`openSidebar`/`waitForMiniGeroPort` (see §2.2) — no popup fallback
+- `src/chrome/walletBg.ts` — `signMidnightConnectorData` (BIP-340 sign + mandatory `midnight_signed_message:` prefix)
+- `src/sidepanel/composables/useDAppOverlay.ts` — `midnight_connect`/`midnight_signData` added to `VALID_METHODS` + the `DAppRequest['method']` union
+- `src/sidepanel/components/DAppOverlay.vue` — the actual approval UI: `midnight_connect` (mirrors the `enable` branch) and `midnight_signData` (mirrors the `signData` branch, using `midnightSignDataCodec.ts` for the decoded-bytes preview + malformed-input guard)
+- `src/modules/authentication/views/PassKeyAuth.vue` — new `mode=rawPrf` (WebAuthn doesn't work reliably inside the side panel's own window, so PRF signing opens this as a small top-level popup, same workaround the existing CIP-30 `signDataPrf` already uses — but returns raw PRF output via `evaluatePrfForWallet`, not a Cardano-decrypted private key)
+- per-origin permission store (reuses the CIP-30 dApp-whitelist mechanism, `WalletStore.connectedDapps`)
 
 Acceptance: the official Bboard/Counter example detects Gero in its wallet list, connects (with an approval prompt), reads addresses/balances, `signData` round-trips (verifiable), and can submit a pre-built tx.
 

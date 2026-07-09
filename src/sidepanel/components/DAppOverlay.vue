@@ -4,7 +4,7 @@
     :value="isVisible"
     :persistent="true"
     :show-handle="false"
-    :height="currentRequest?.method === 'enable' ? '70%' : '85%'"
+    :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect') ? '70%' : '85%'"
     :draggable="false"
   >
     <div v-if="currentRequest" class="dapp-overlay">
@@ -312,6 +312,132 @@
           </div>
         </template>
       </div>
+
+      <!-- Midnight: Connect (DApp Connector connect()) -->
+      <div v-else-if="currentRequest.method === 'midnight_connect'" class="dapp-connect">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-web</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
+            <span class="dapp-url grey--text text-caption">{{ enableDomain }}</span>
+          </div>
+        </div>
+
+        <div class="url-warning mb-3">
+          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        </div>
+
+        <div class="permissions-section mb-3">
+          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
+          <v-checkbox
+            v-model="enableConsent"
+            :color="primaryColor"
+            hide-details
+            dark
+            dense
+            class="consent-checkbox mt-0"
+            :label="$t('midnight.connector.viewAddressAndBalance')"
+          />
+        </div>
+
+        <div class="security-note mb-4">
+          <v-icon size="14" color="rgba(255,255,255,0.4)" class="mr-1 flex-shrink-0" style="margin-top: 2px;">mdi-shield-check-outline</v-icon>
+          <span class="grey--text text-caption">{{ $t('midnight.connector.futureRequestsNote') }}</span>
+        </div>
+
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectMidnightConnect">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :disabled="!enableConsent" @click="approveMidnightConnect">
+            {{ $t('miniGero.approve') }}
+          </v-btn>
+        </div>
+      </div>
+
+      <!-- Midnight: Sign Data (DApp Connector signData()) -->
+      <div v-else-if="currentRequest.method === 'midnight_signData'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.signDataRequest') }}</h3>
+            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+          </div>
+        </div>
+
+        <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.signData') }}</p>
+        <div class="sign-data-message">
+          <!-- Shows the ACTUAL decoded bytes that will be signed (hex), never
+               the raw un-decoded wire string — see midnightSignDataCodec.ts
+               for why: a lenient decode could let a dapp show a long
+               deceptive string while only a short prefix is really signed. -->
+          <p v-if="midnightSignDataDecodeError" class="decode-error text-caption">
+            {{ $t('midnight.connector.malformedSignData') }}
+          </p>
+          <p v-else class="white--text text-caption" style="word-break: break-all;">
+            {{ midnightSignDataMessage }}
+          </p>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signMidnightDataNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              :disabled="!spendingPassword || !!midnightSignDataDecodeError"
+              @click="signMidnightDataNormal"
+            >
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              :disabled="!!midnightSignDataDecodeError"
+              @click="signMidnightDataPrf"
+            >
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- Midnight has no hardware-wallet signing support (see the July 2026
+             gap analysis) — Ledger/Trezor/Keystone can only decline. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectMidnightSignData">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
     </div>
 
     <!-- Keystone QR dialog -->
@@ -351,6 +477,8 @@ import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature 
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
+import { decodedPayloadHexPreview, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
+import { MidnightErrorCode } from '@/chrome/config';
 
 interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
@@ -418,6 +546,44 @@ const signDataMessage = computed(() => {
     return Buffer.from(payload, 'hex').toString('utf-8');
   } catch {
     return payload;
+  }
+});
+
+// ── Midnight DApp Connector: signData preview ──────────────────────────────
+// Shows the ACTUAL decoded bytes that will be signed (hex-encoded), matching
+// exactly what walletBg.signMidnightConnectorData signs — never the raw
+// un-decoded wire string. See midnightSignDataCodec.ts: Buffer.from(str,
+// 'hex'|'base64') is lenient (silently truncates/skips invalid characters
+// instead of throwing), so a naive raw-string preview could show the user a
+// long, plausible string while a malicious dapp gets only a short,
+// attacker-chosen prefix actually signed. Malformed input blocks signing
+// entirely rather than rendering a partial/misleading preview.
+const midnightSignDataEncoding = computed<MidnightSignDataEncoding>(() =>
+  (currentRequest.value?.payload?.data?.options?.encoding ?? 'text') as MidnightSignDataEncoding
+);
+const midnightSignDataRaw = computed(() => currentRequest.value?.payload?.data?.data ?? '');
+// Two independent, pure computeds (rather than one computed that mutates a
+// ref as a side effect) — a getter mutating unrelated state is fragile here
+// specifically because the template gates on `midnightSignDataDecodeError`
+// via v-if/v-else: if the mutation only happened inside the OTHER branch's
+// computed, the error flag would never update while that branch is hidden.
+const midnightSignDataDecodeError = computed(() => {
+  if (midnightSignDataEncoding.value === 'text') return false;
+  try {
+    decodedPayloadHexPreview(midnightSignDataRaw.value, midnightSignDataEncoding.value);
+    return false;
+  } catch (e) {
+    console.error('[DApp] Malformed Midnight signData payload:', e);
+    return true;
+  }
+});
+const midnightSignDataMessage = computed(() => {
+  const encoding = midnightSignDataEncoding.value;
+  if (encoding === 'text') return midnightSignDataRaw.value;
+  try {
+    return `0x${decodedPayloadHexPreview(midnightSignDataRaw.value, encoding)}`;
+  } catch {
+    return '';
   }
 });
 
@@ -1275,6 +1441,107 @@ async function signDataHw() {
     signing.value = false;
   }
 }
+
+// ── Midnight DApp Connector ────────────────────────────────────────────────
+// `useDAppOverlay`'s reject(reason) only carries a plain string across the
+// mini-gero port (background's sendToMiniGero rejects with
+// `new Error(String(response.error))`), but the connector spec needs a
+// structured {type, code, reason, message} shape so dapps can branch on
+// `code` (Rejected vs PermissionRejected etc). JSON-encode it into that
+// string; background.ts's handlers JSON.parse it back out.
+function midnightError(code: string, reason: string): string {
+  return JSON.stringify({ type: 'DAppConnectorAPIError', code, reason, message: reason });
+}
+
+function approveMidnightConnect() {
+  // Whitelisting the origin (WalletStore.addConnectedDapp) happens in
+  // background.ts's MIDNIGHT_METHOD.connect handler once it sees
+  // `response.data === true` — mirrors exactly how the CIP-30 `enable` mini-
+  // gero path is split (background owns the whitelist write, the panel only
+  // signals approve/reject).
+  approve(true);
+}
+
+function rejectMidnightConnect() {
+  reject(midnightError(MidnightErrorCode.Rejected, 'User declined the connection request'));
+}
+
+function rejectMidnightSignData() {
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.Rejected, 'User declined the signing request'));
+}
+
+async function signMidnightDataNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  signing.value = true;
+  signError.value = '';
+
+  try {
+    const { data, options } = currentRequest.value.payload.data;
+    const res = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA,
+      data: { data, options, password: spendingPassword.value },
+    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+
+    if (!res?.data?.success) throw new Error(res?.data?.error || 'Failed to sign data');
+    approve(res.data.signature);
+    spendingPassword.value = '';
+  } catch (e: any) {
+    console.error('[DApp] Midnight sign data error:', e);
+    signError.value = e.message || 'Signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signMidnightDataPrf() {
+  if (!currentRequest.value) return;
+  signing.value = true;
+  signError.value = '';
+
+  try {
+    // WebAuthn doesn't reliably work from inside the side panel's own
+    // window — same cross-window popup workaround as signDataPrf() above,
+    // but requesting RAW PRF output (mode=rawPrf) rather than a Cardano-
+    // decrypted private key, since Midnight decrypts its mnemonic from the
+    // raw PRF output directly (see walletBg.signMidnightConnectorData).
+    const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+
+    const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    });
+
+    const { data, options } = currentRequest.value.payload.data;
+    const res = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA,
+      data: { data, options, prfSecret: Array.from(prfBytes) },
+    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+
+    if (!res?.data?.success) throw new Error(res?.data?.error || 'Failed to sign data');
+    approve(res.data.signature);
+  } catch (e: any) {
+    console.error('[DApp] Midnight PRF sign data error:', e);
+    signError.value = e.message || 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -1562,6 +1829,12 @@ async function signDataHw() {
   overflow-y: auto;
   width: 100%;
   white-space: pre-line;
+}
+
+.decode-error {
+  color: #F97066;
+  font-weight: 600;
+  margin: 0;
 }
 
 .password-input {
