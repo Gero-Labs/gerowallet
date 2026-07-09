@@ -249,16 +249,18 @@
                 :unit="nightCurrency"
                 :fee-unit="dustCurrency"
               />
-              <!-- Sending registered NIGHT resets its DUST accrual clock. -->
-              <div v-if="!isShielded" class="midnight-dust-note mt-3">
+              <!-- Sending registered NIGHT resets its DUST accrual clock.
+                   Suppressed when the low-DUST warning below is showing — it
+                   already carries the reset message, so both at once repeats. -->
+              <div v-if="!isShielded && !isDustLow" class="midnight-dust-note mt-3">
                 <v-icon size="14" color="#FEC84B" class="mr-1">mdi-information-outline</v-icon>
                 <span>{{ t('midnight.send.dustResetWarning') }}</span>
               </div>
-              <!-- Extra nudge when DUST is already low: the reset could delay
-                   the next send until it refills. -->
+              <!-- When DUST is already low, this replaces the general note: the
+                   reset could delay the next send until it refills. -->
               <div
-                v-if="!isShielded && dustBattery && dustBattery.percent < 20"
-                class="midnight-dust-note midnight-dust-note--low mt-2"
+                v-if="!isShielded && isDustLow"
+                class="midnight-dust-note midnight-dust-note--low mt-3"
               >
                 <v-icon size="14" color="#F97066" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
                 <span>{{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
@@ -507,6 +509,10 @@ const dustBattery = computed<{ percent: number } | null>(() => {
   const raw = Number((ds.current * 10000n) / ds.cap) / 100;
   return { percent: Math.max(0, Math.min(100, Math.round(raw))) };
 });
+
+// Below this the review step swaps the general reset note for the sharper
+// low-DUST warning (they overlap, so only one shows at a time).
+const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percent < 20);
 
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
