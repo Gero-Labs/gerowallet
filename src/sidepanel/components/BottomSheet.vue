@@ -226,10 +226,18 @@ function onPointerDown(e: PointerEvent) {
   if (e.button !== 0 && e.pointerType === 'mouse') return;
 
   const target = e.target as HTMLElement;
-  dragFromHandle = !!target.closest('.bottom-sheet-handle') || !!target.closest('.bottom-sheet-header');
 
-  // Never begin a drag from interactive elements (typing, tapping, selecting).
-  if (!dragFromHandle && target.closest(INTERACTIVE)) return;
+  // Never begin a drag — and critically, never call setPointerCapture — from
+  // a real control (buttons, inputs, links), regardless of whether it sits
+  // inside the handle/header zone. Capturing the pointer on the container
+  // disrupts the browser's native click synthesis on the ORIGINAL target, so
+  // gating this on "not in the handle/header" silently broke the header close
+  // button: pointerdown on it started a drag-capture sequence and its click
+  // handler never fired. Only bare handle/header background may start a drag
+  // directly; a button placed there must always be clickable.
+  if (target.closest(INTERACTIVE)) return;
+
+  dragFromHandle = !!target.closest('.bottom-sheet-handle') || !!target.closest('.bottom-sheet-header');
 
   dragPointerId = e.pointerId;
   dragCommitted = false;
