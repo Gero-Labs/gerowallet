@@ -51,6 +51,13 @@ export interface BalanceAndSignUnshieldedTransferArgs {
    * of the full ledger. Omit to skip the fast path entirely.
    */
   readonly dustRegisteredAt?: Date;
+  /**
+   * Optional live-progress sink for the (long) DUST-ledger sync sub-step.
+   * Called with a 0-100 percent (or -1 when the tip isn't known yet) so the
+   * caller can drive a real progress bar. Best-effort and throttled by the
+   * builder; a throwing callback must not break the send (caller wraps it).
+   */
+  readonly onDustSyncProgress?: (percent: number, detail: string) => void;
 }
 
 /**
@@ -274,6 +281,20 @@ export async function balanceAndSignUnshieldedTransfer(
       return `${pct.toFixed(1)}% (${applied}/${highest} dust ledger events)`;
     };
 
+    // Numeric 0-100 percent (or -1 when the tip isn't known yet) for the UI
+    // progress bar, plus a compact "applied / highest events" detail line.
+    const emitProgress = (): void => {
+      if (!args.onDustSyncProgress) return;
+      const { applied, highest } = lastProgress;
+      const percent = applied != null && highest != null && highest > 0n
+        ? Number((applied * 10000n) / highest) / 100
+        : -1;
+      const detail = applied != null && highest != null && highest > 0n
+        ? `${applied.toLocaleString('en-US')} / ${highest.toLocaleString('en-US')} events`
+        : `${applied?.toLocaleString('en-US') ?? '0'} events`;
+      try { args.onDustSyncProgress(percent, detail); } catch { /* UI sink must never break the send */ }
+    };
+
     // ── Sync with stall-restart ───────────────────────────────────
     // Two SDK realities shape this loop (indexer-client 1.2.3 / dust-wallet
     // 4.2.0; no fixed stable release exists yet — only 5.0.0 canaries):
@@ -378,11 +399,12 @@ export async function balanceAndSignUnshieldedTransfer(
               isConnected: p.isConnected,
             });
           }
-          // Log every time appliedIndex advances by 100+ events.
+          // Log + surface progress every time appliedIndex advances by 100+.
           if (p.applied != null && (lastLoggedApplied < 0n || p.applied - lastLoggedApplied >= 100n)) {
             debugLog(`🌙 dust sync: progress applied=${p.applied} highest=${p.highest ?? '?'} connected=${p.isConnected ?? '?'} (Δ=${stateUpdateCount} updates, ${Date.now() - syncStartMs}ms)`);
             lastLoggedApplied = p.applied;
             stateUpdateCount = 0;
+            emitProgress();
           }
         });
         if (restarts === 0) debugLog('🌙 dust sync: waiting');
@@ -417,6 +439,7 @@ export async function balanceAndSignUnshieldedTransfer(
 
         if (outcome === 'synced') {
           debugLog(`🌙 dust sync: done (${Date.now() - syncStartMs}ms, totalStateUpdates=${totalStateUpdates}, restarts=${restarts}, ${percentLabel()})`);
+          emitProgress();
           break;
         }
 

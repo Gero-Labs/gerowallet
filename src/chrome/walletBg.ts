@@ -1877,6 +1877,7 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
       const { balanceAndSignUnshieldedTransfer } = await import('@/chains/midnight/midnightTxBuilder');
+      const { midnightActions } = await import('@/stores/midnightStore');
 
       // skipCardano:true: the BG-bundle pbkdf2/sha512 shim breaks on the
       // Cardano BIP-32 derivation path. We don't need Cardano keys for a
@@ -1939,9 +1940,18 @@ export class WalletBg {
           unprovenTxHex,
           ttl: new Date(ttlMs),
           dustRegisteredAt,
+          // Forward the (long) DUST-ledger sync percentage to the store so the
+          // send dialog's stage timeline renders a real bar. Broadcast-only,
+          // cleared in the finally below.
+          onDustSyncProgress: (percent, detail) => {
+            midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
+          },
         });
         return signedTxHex;
       } finally {
+        // Clear the transient progress bar (success or failure) so a stale
+        // percentage can't linger on the next send's opening frame.
+        midnightActions.setSendProgress(null);
         // Wipe the derived secrets regardless of success/failure. The
         // mnemonic itself is cleared in the outer finally.
         derived.unshieldedSecretKey.fill(0);

@@ -4037,6 +4037,14 @@ export default {
   'midnight.send.shieldedBalanceUnavailable': 'Shielded balance —',
   'midnight.send.shieldedBalanceHint': 'Shielded balance display is a future release; transfers still verify on-chain.',
   'midnight.send.dustResetWarning': 'Sending NIGHT restarts DUST generation on the coins you move. Your DUST balance refills to the cap over the next few days; the network fee itself is negligible.',
+  'midnight.send.dustResetShort': 'Sending restarts DUST generation; it refills over the next few days.',
+  'midnight.send.dustLowHint': 'Your DUST is low ({percent}%). Sending restarts generation on the coins you move, so it may take time to refill before your next send.',
+  // Send progress timeline stage labels
+  'midnight.send.stageAuthorize': 'Authorize',
+  'midnight.send.stageBuild': 'Build transaction',
+  'midnight.send.stageSync': 'Sync DUST ledger',
+  'midnight.send.stageSign': 'Sign transaction',
+  'midnight.send.stageSubmit': 'Submit',
   // Shielded proving consent dialog
   'midnight.consent.title': 'Shielded send privacy',
   'midnight.consent.subtitle': 'Before your first shielded transaction',
