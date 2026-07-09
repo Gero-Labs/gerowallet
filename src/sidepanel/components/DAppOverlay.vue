@@ -100,6 +100,68 @@
           class="mb-3"
         />
 
+        <!-- Non-output intents: certificates, mint/burn, collateral, metadata.
+             Rendered only when at least one is present — an ordinary payment
+             shows nothing here. This is what stops a delegation/mint/vote
+             transaction from presenting as just an address and an amount. -->
+        <div
+          v-if="signTxSummary && (signTxSummary.certificates.length || signTxSummary.mints.length || signTxSummary.collateralCount > 0 || signTxSummary.hasMetadata)"
+          class="tx-intents mb-3"
+        >
+          <div class="tx-intents-header text-caption grey--text text-uppercase">{{ $t('signTx.thisTransactionWill') }}</div>
+          <div
+            v-for="(cert, i) in signTxSummary.certificates"
+            :key="'cert-' + i"
+            class="tx-intent-row"
+          >
+            <v-icon size="14" :color="primaryColor" class="mr-1">mdi-certificate-outline</v-icon>
+            <div class="tx-intent-text">
+              <span class="white--text text-caption">{{ cert.label }}</span>
+              <span v-if="cert.poolId" class="grey--text text-caption ml-1">{{ cert.poolId }}</span>
+              <span v-if="cert.depositAda" class="grey--text text-caption ml-1">({{ $t('signTx.depositAmount', { amount: cert.depositAda }) }})</span>
+              <span v-if="cert.drepSentinel" class="grey--text text-caption ml-1">{{ $t(`governance.${cert.drepSentinel === 'alwaysAbstain' ? 'alwaysAbstain' : 'alwaysNoConfidence'}`) }}</span>
+            </div>
+          </div>
+          <div
+            v-for="(mint, i) in signTxSummary.mints"
+            :key="'mint-' + i"
+            class="tx-intent-row"
+          >
+            <v-icon size="14" :color="mint.isBurn ? '#FDA29B' : '#94CFA8'" class="mr-1">{{ mint.isBurn ? 'mdi-fire' : 'mdi-file-plus-outline' }}</v-icon>
+            <span class="white--text text-caption">
+              {{ $t(mint.isBurn ? 'signTx.burnsAsset' : 'signTx.mintsAsset', { quantity: mint.formattedQuantity, name: mint.label }) }}
+            </span>
+          </div>
+          <div v-if="signTxSummary.collateralCount > 0" class="tx-intent-row">
+            <v-icon size="14" color="rgba(255,255,255,0.5)" class="mr-1">mdi-shield-lock-outline</v-icon>
+            <span class="white--text text-caption">{{ $tc('signTx.reservesCollateral', signTxSummary.collateralCount, { count: signTxSummary.collateralCount }) }}</span>
+          </div>
+          <div v-if="signTxSummary.hasMetadata" class="tx-intent-row">
+            <v-icon size="14" color="rgba(255,255,255,0.5)" class="mr-1">mdi-tag-text-outline</v-icon>
+            <span class="white--text text-caption">{{ $t('signTx.includesMetadata') }}</span>
+          </div>
+        </div>
+
+        <!-- Decode-failure guard: CBOR parse failed (signTxSummary is null while
+             the payload itself decoded to a tx). Blocking — the user must
+             explicitly acknowledge before the Sign button below unlocks. -->
+        <div v-if="signTxDecodeFailed" class="tx-decode-failed-banner mb-3">
+          <v-icon color="#ff6464" size="20" class="mr-2">mdi-alert-octagon-outline</v-icon>
+          <div class="tx-expired-text">
+            <div class="tx-expired-title">{{ $t('signTx.decodeFailedTitle') }}</div>
+            <div class="tx-expired-body">{{ $t('signTx.decodeFailedBody') }}</div>
+            <v-checkbox
+              v-model="decodeFailedAck"
+              color="#ff6464"
+              hide-details
+              dark
+              dense
+              class="mt-2"
+              :label="$t('signTx.decodeFailedAck')"
+            />
+          </div>
+        </div>
+
         <!-- Expired banner — shown once the live TTL countdown reaches 0. Sign buttons
              below all gate on `ttlDisplay.expired`, so the user is forced to reject. -->
         <div v-if="ttlDisplay.expired" class="tx-expired-banner">
@@ -126,7 +188,7 @@
             />
             <div class="action-buttons">
               <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || ttlDisplay.expired" @click="signNormal">
+              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || signTxBlocked" @click="signNormal">
                 {{ $t('miniGero.sign') }}
               </v-btn>
             </div>
@@ -138,7 +200,7 @@
             <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
             <div class="action-buttons">
               <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signPrf">
+              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signPrf">
                 {{ $t('miniGero.sign') }}
               </v-btn>
             </div>
@@ -154,7 +216,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signLedger">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signLedger">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -169,7 +231,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signTrezor">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -184,7 +246,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signKeystone">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -608,12 +670,34 @@ interface SignTxOutputSummary {
   assetPillLabel: string;
 }
 
+interface SignTxCertificateRow {
+  label: string;       // human-readable certificate type (mirrors TransactionDetails.vue's getCertificateType)
+  poolId?: string;      // truncated bech32 pool id, when present (delegation/registration/retirement)
+  depositAda?: string;  // formatted ADA deposit, when present (registration certs)
+  drepSentinel?: string; // 'alwaysAbstain' | 'alwaysNoConfidence' — only for sentinel DRep targets
+}
+
+interface SignTxMintRow {
+  label: string;            // resolved asset name or 'Unknown token'
+  formattedQuantity: string; // absolute value, decimal-adjusted
+  isBurn: boolean;
+}
+
 interface SignTxSummary {
   outputs: SignTxOutputSummary[];
   /** Null when no withdrawals; the shared card uses this to render the row. */
   withdrawal: TxDetailsWithdrawal | null;
   totals: TxDetailsTotals;
   isInternal: boolean;
+  // Non-output intents — certs/mint/collateral/metadata. All empty/falsy for
+  // an ordinary payment. When any of these is present, `isInternal` is forced
+  // false even if every output happens to return to the wallet: a tx that
+  // delegates stake while returning all ADA to you is NOT "just moving money
+  // between your own addresses".
+  certificates: SignTxCertificateRow[];
+  mints: SignTxMintRow[];
+  collateralCount: number;
+  hasMetadata: boolean;
   // TTL — only the absolute slot is computed here. The live "in Xh Ym Zs" string
   // is derived in `ttlDisplay` so the expensive CBOR parse below doesn't re-run
   // every tick of the 1-second timer.
@@ -859,6 +943,38 @@ function resolveAssetInfo(unit: string): KnownAssetInfo {
   return { name: 'Unknown token', decimals: 0 };
 }
 
+/**
+ * Human-readable certificate type label. Mirrors TransactionDetails.vue's
+ * getCertificateType exactly (same Cardano.CertificateType enum, same
+ * strings) — that mapping is already proven correct in the dashboard's own
+ * transaction detail view; duplicated here rather than imported since it's
+ * a private inline function there, not exported.
+ */
+function getCertificateLabel(certificateType: Cardano.CertificateType): string {
+  switch (certificateType) {
+    case Cardano.CertificateType.StakeRegistration: return 'Stake Registration';
+    case Cardano.CertificateType.StakeDeregistration: return 'Stake De-Registration';
+    case Cardano.CertificateType.PoolRegistration: return 'Pool Registration';
+    case Cardano.CertificateType.PoolRetirement: return 'Pool Retirement';
+    case Cardano.CertificateType.StakeDelegation: return 'Stake Delegation';
+    case Cardano.CertificateType.MIR: return 'MIR';
+    case Cardano.CertificateType.GenesisKeyDelegation: return 'Genesis Key Delegation';
+    case Cardano.CertificateType.Registration: return 'Registration';
+    case Cardano.CertificateType.Unregistration: return 'Unregistration';
+    case Cardano.CertificateType.VoteDelegation: return 'Vote Delegation';
+    case Cardano.CertificateType.StakeVoteDelegation: return 'Stake Vote Delegation';
+    case Cardano.CertificateType.StakeRegistrationDelegation: return 'Stake Registration Delegation';
+    case Cardano.CertificateType.VoteRegistrationDelegation: return 'Vote Registration Delegation';
+    case Cardano.CertificateType.StakeVoteRegistrationDelegation: return 'Stake Vote Registration Delegation';
+    case Cardano.CertificateType.AuthorizeCommitteeHot: return 'Authorize Committee Hot';
+    case Cardano.CertificateType.ResignCommitteeCold: return 'Resign Committee Cold';
+    case Cardano.CertificateType.RegisterDelegateRepresentative: return 'Register Delegate Representative';
+    case Cardano.CertificateType.UnregisterDelegateRepresentative: return 'Unregister Delegate Representative';
+    case Cardano.CertificateType.UpdateDelegateRepresentative: return 'Update Delegate Representative';
+    default: return 'Unknown certificate';
+  }
+}
+
 // Raw CBOR hex of the current sign request — used by the parser below.
 const txCborForSummary = computed<string | null>(() => {
   if (currentRequest.value?.method !== 'signTx') return null;
@@ -933,6 +1049,59 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
         }
       : null;
 
+    // ── Certificates: delegation/registration/DRep/vote actions. These carry
+    // NO output of their own — a tx that delegates stake while returning
+    // every ADA to the wallet must not read as "just an internal transfer"
+    // (see isInternal below). Mirrors TransactionDetails.vue's proven
+    // Cardano.CertificateType mapping via getCertificateLabel above.
+    const rawCertificates = (body.certificates || []) as Cardano.Certificate[];
+    const certificates: SignTxCertificateRow[] = rawCertificates.map((cert) => {
+      const row: SignTxCertificateRow = {
+        label: getCertificateLabel(cert.__typename as Cardano.CertificateType),
+      };
+      if ('poolId' in cert && cert.poolId) {
+        row.poolId = filters.truncate(String(cert.poolId));
+      }
+      if ('deposit' in cert && cert.deposit != null) {
+        row.depositAda = formatLovelace(BigInt(cert.deposit as unknown as bigint));
+      }
+      if ('dRep' in cert && cert.dRep && typeof cert.dRep === 'object' && '__typename' in cert.dRep) {
+        const drepTypename = (cert.dRep as { __typename: string }).__typename;
+        if (drepTypename === 'AlwaysAbstain') row.drepSentinel = 'alwaysAbstain';
+        else if (drepTypename === 'AlwaysNoConfidence') row.drepSentinel = 'alwaysNoConfidence';
+      }
+      return row;
+    });
+
+    // ── Mint/burn: body.mint is a Cardano.TokenMap (Map<AssetId, bigint>);
+    // negative quantity = burn, positive = mint (standard Cardano semantics).
+    // Reuses the same asset-name resolution as output token pills.
+    const mints: SignTxMintRow[] = [];
+    const rawMint = body.mint as Map<string, bigint> | Record<string, unknown> | undefined;
+    if (rawMint) {
+      const mintEntries: [string, unknown][] = rawMint instanceof Map
+        ? Array.from(rawMint.entries())
+        : Object.entries(rawMint);
+      for (const [unit, quantity] of mintEntries) {
+        const qty = BigInt(String(quantity));
+        const info = resolveAssetInfo(unit);
+        const absQty = qty < 0n ? -qty : qty;
+        mints.push({
+          label: info.name,
+          formattedQuantity: formatTokenQuantity(absQty.toString(), info.decimals),
+          isBurn: qty < 0n,
+        });
+      }
+    }
+
+    // ── Collateral: count only. Resolving the reserved ADA amount would need
+    // a wallet-UTxO lookup per txId#index; showing a wrong amount is worse
+    // than showing none, so this stays a plain count until that's verified.
+    const collateralCount = Array.isArray(body.collaterals) ? body.collaterals.length : 0;
+
+    // ── Metadata presence flag only — content is not decoded/shown here.
+    const hasMetadata = !!(body as { auxiliaryDataHash?: unknown }).auxiliaryDataHash;
+
     // Sum lovelace going to external addresses (excludes change AND self-payments)
     const totalSendingLovelace = outputs.reduce<bigint>((sum, o) => {
       if (o.isOwn) return sum;
@@ -945,8 +1114,12 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
     const youPayLovelace = feeLovelace + totalSendingLovelace - withdrawalsLovelace;
     const youPayAda = formatLovelace(youPayLovelace < 0n ? 0n : youPayLovelace);
 
-    // "Internal transfer" = every output address belongs to this wallet
-    const isInternal = outputs.length > 0 && outputs.every(o => o.isOwn);
+    // "Internal transfer" = every output address belongs to the wallet AND
+    // there is no certificate/mint/collateral action attached. A tx that
+    // delegates stake or mints an asset is never "just moving money between
+    // your own addresses", even if every output happens to return to you.
+    const isInternal = outputs.length > 0 && outputs.every(o => o.isOwn)
+      && certificates.length === 0 && mints.length === 0 && collateralCount === 0;
 
     // TTL: invalidHereafter is the absolute slot at which this tx becomes
     // invalid. We only capture the absolute slot here — the live "in Xh Ym Zs"
@@ -968,6 +1141,10 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
         isInternal,
       },
       isInternal,
+      certificates,
+      mints,
+      collateralCount,
+      hasMetadata,
       ttlSlot,
     };
   } catch (e) {
@@ -975,6 +1152,17 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
     return null;
   }
 });
+
+// Phase 1b: on CBOR decode failure, signTxSummary is null and the details
+// card simply doesn't render (v-if="signTxSummary" below) while the
+// password field and Sign button rendered normally beneath it — an
+// unguarded blind-sign screen. This flag drives a blocking banner instead,
+// requiring the same explicit "I understand" acknowledgment as any other
+// undecodable/high-risk transaction.
+const signTxDecodeFailed = computed(
+  () => currentRequest.value?.method === 'signTx' && !!txCborForSummary.value && !signTxSummary.value
+);
+const decodeFailedAck = ref(false); // reset alongside the other per-request state, see the watcher below
 
 // Live TTL display — re-runs every 1s tick.
 //
@@ -999,6 +1187,11 @@ const ttlDisplay = computed<{ relative: string | null; expired: boolean }>(() =>
     expired: secondsRemaining <= 0,
   };
 });
+
+// Single gate for every signTx Sign button: expired TTL or an unacknowledged
+// decode failure. Kept as one computed so all five wallet-type branches
+// (password/PRF/Ledger/Trezor/Keystone) can't drift out of sync.
+const signTxBlocked = computed(() => ttlDisplay.value.expired || (signTxDecodeFailed.value && !decodeFailedAck.value));
 
 // ── Cardano Shield risk scan (matches popup SignTx.vue behavior) ──
 
@@ -1098,6 +1291,7 @@ watch(currentRequest, () => {
   enableConsent.value = false;
   faviconFailed.value = false;
   faviconAttempt.value = 0;
+  decodeFailedAck.value = false;
 });
 
 function rejectSign() {
@@ -1804,6 +1998,41 @@ async function signMidnightDataPrf() {
   align-items: flex-start;
   padding: 12px 14px;
   margin: 12px 0;
+  border-radius: 10px;
+  background: rgba(255, 100, 100, 0.08);
+  border: 1px solid rgba(255, 100, 100, 0.32);
+}
+
+.tx-intents {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tx-intents-header {
+  letter-spacing: 0.5px;
+}
+
+.tx-intent-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tx-intent-text {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.tx-decode-failed-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 14px;
   border-radius: 10px;
   background: rgba(255, 100, 100, 0.08);
   border: 1px solid rgba(255, 100, 100, 0.32);
