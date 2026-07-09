@@ -1,110 +1,20 @@
-import { ref, onMounted, onUnmounted } from 'vue';
-import { useChainContext } from './useChainContext';
+import { hub, DAppRequest } from '../services/dappRequestHub';
 
-export interface DAppRequest {
-  type: 'dapp-request';
-  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData';
-  requestId: string;
-  payload: any;
-}
+export type { DAppRequest };
 
-const VALID_METHODS = new Set(['enable', 'signTx', 'signData', 'midnight_connect', 'midnight_signData']);
-const MAX_RETRIES = 10;
-
+// Thin adapter kept for backward compatibility: the port now lives in the
+// panel-lifetime dappRequestHub (initialized once from App.vue), so locking,
+// logging out, or unmounting DAppOverlay no longer disconnects the port or
+// rejects requests — they park and re-deliver instead. The hub also owns the
+// Apex popup-fallback exclusion internally (see dappRequestHub.ts), so this
+// adapter no longer needs its own useChainContext()/isApex gate.
 export function useDAppOverlay() {
-  const isVisible = ref(false);
-  const currentRequest = ref<DAppRequest | null>(null);
-  const requestQueue = ref<DAppRequest[]>([]);
-  const { isApex } = useChainContext();
-  let port: chrome.runtime.Port | null = null;
-  let retryCount = 0;
-
-  function connect() {
-    try {
-      // Read tabId from URL query param (set by openSidebar in background)
-      const params = new URLSearchParams(window.location.search);
-      const tabId = params.get('tabId') || '';
-      port = chrome.runtime.connect({ name: `mini-gero-dapp-channel:${tabId}` });
-    } catch (e) {
-      console.warn('[DApp] Failed to connect:', e);
-      scheduleReconnect();
-      return;
-    }
-
-    port.onMessage.addListener((message: DAppRequest) => {
-      if (message.type === 'dapp-request' && VALID_METHODS.has(message.method)) {
-        retryCount = 0; // Reset on successful message
-        if (currentRequest.value) {
-          requestQueue.value.push(message);
-        } else {
-          currentRequest.value = message;
-          isVisible.value = true;
-        }
-      }
-    });
-
-    port.onDisconnect.addListener(() => {
-      port = null;
-      scheduleReconnect();
-    });
-  }
-
-  function scheduleReconnect() {
-    if (retryCount < MAX_RETRIES) {
-      const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
-      retryCount++;
-      setTimeout(() => connect(), delay);
-    } else {
-      console.warn('[DApp] Max reconnection attempts reached');
-    }
-  }
-
-  function respond(requestId: string, data: any, error: string | null = null) {
-    try {
-      if (port) {
-        port.postMessage({
-          type: 'dapp-response',
-          requestId,
-          data,
-          error,
-        });
-      } else {
-        console.warn('[DApp] Port not connected, response dropped for request:', requestId);
-      }
-    } catch (e) {
-      // Port may have disconnected between the null check and postMessage
-      console.warn('[DApp] Failed to send response, port likely disconnected:', e);
-      port = null;
-    }
-
-    currentRequest.value = null;
-    isVisible.value = false;
-
-    // Process next queued request
-    if (requestQueue.value.length > 0) {
-      const next = requestQueue.value.shift()!;
-      currentRequest.value = next;
-      isVisible.value = true;
-    }
-  }
-
-  function approve(data: any) {
-    if (currentRequest.value) {
-      respond(currentRequest.value.requestId, data);
-    }
-  }
-
-  function reject(reason = 'user_rejected') {
-    if (currentRequest.value) {
-      respond(currentRequest.value.requestId, null, reason);
-    }
-  }
-
-  onMounted(() => {
-    if (isApex.value) return; // Apex falls back to popup signing — no overlay port
-    connect();
-  });
-  onUnmounted(() => port?.disconnect());
-
-  return { isVisible, currentRequest, requestQueue, approve, reject };
+  return {
+    isVisible: hub.isVisible,
+    currentRequest: hub.currentRequest,
+    requestQueue: hub.requestQueue,
+    connectionLost: hub.connectionLost,
+    approve: hub.approve,
+    reject: hub.reject,
+  };
 }
