@@ -319,10 +319,20 @@
           </div>
         </div>
 
+        <!-- Signing address — payload.address is signed against but was
+             previously never shown, so the user couldn't see which key attests. -->
+        <div v-if="signDataAddress" class="signing-address-row mb-2">
+          <span class="grey--text text-caption">{{ $t('signTx.signingAddress') }}</span>
+          <span class="white--text text-caption signing-address-value">{{ filters.truncate(signDataAddress) }}</span>
+        </div>
+
         <!-- Message content -->
         <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.signData') }}</p>
         <div class="sign-data-message">
-          <p class="white--text text-caption" style="word-break: break-all;">
+          <p v-if="signDataDecodeError" class="decode-error text-caption">
+            {{ $t('signTx.malformedSignData') }}
+          </p>
+          <p v-else class="white--text text-caption" style="word-break: break-all;">
             {{ signDataMessage }}
           </p>
         </div>
@@ -342,7 +352,7 @@
           />
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signDataNormal">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -354,7 +364,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataPrf">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataPrf">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -369,7 +379,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataHw">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -384,7 +394,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataHw">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -395,7 +405,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataNormal">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -566,7 +576,7 @@ import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature 
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
-import { decodedPayloadHexPreview, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
+import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
 
 interface BackgroundResponse<T> { data: T }
@@ -628,14 +638,41 @@ const signDataDomain = computed(() => {
   }
 });
 
-const signDataMessage = computed(() => {
-  const payload = currentRequest.value?.payload?.message || currentRequest.value?.payload?.payload;
-  if (!payload) return '';
+// ── CIP-30 signData preview: strict decode, WYSIWYS ─────────────────────────
+// Mirrors the Midnight signData codec's own rationale exactly: Buffer.from(x,
+// 'hex') is lenient (silently truncates at the first invalid character
+// instead of throwing), and the ACTUAL signing path (createSignDataBuilder in
+// converter.ts) uses that same lenient decode. Gating every Sign button below
+// on !signDataDecodeError means malformed input never reaches the signer, so
+// by the time signing happens the lenient decode has no invalid input left to
+// diverge from this preview on.
+const signDataRawPayload = computed(() =>
+  currentRequest.value?.payload?.message || currentRequest.value?.payload?.payload || ''
+);
+// payload.address is signed against (see signDataNormal/signDataPrf/signDataHw
+// below) but was never shown — the user could not see which key attests.
+const signDataAddress = computed(() => currentRequest.value?.payload?.address || '');
+
+const signDataDecodeError = computed(() => {
+  if (!signDataRawPayload.value) return false;
   try {
-    return Buffer.from(payload, 'hex').toString('utf-8');
-  } catch {
-    return payload;
+    decodeSignDataPayload(signDataRawPayload.value, 'hex');
+    return false;
+  } catch (e) {
+    console.error('[DApp] Malformed signData payload:', e);
+    return true;
   }
+});
+
+const signDataMessage = computed(() => {
+  const payload = signDataRawPayload.value;
+  if (!payload || signDataDecodeError.value) return '';
+  const bytes = decodeSignDataPayload(payload, 'hex');
+  const asUtf8 = Buffer.from(bytes).toString('utf-8');
+  // Same printable-character idiom already used by decodeAssetNameHex above —
+  // show hex rather than mangled/misleading text for non-printable payloads.
+  const isPrintable = /^[\x20-\x7e\r\n\t]*$/.test(asUtf8);
+  return isPrintable ? asUtf8 : `0x${Buffer.from(bytes).toString('hex')}`;
 });
 
 // ── Midnight DApp Connector: signData preview ──────────────────────────────
@@ -2160,6 +2197,18 @@ async function signMidnightDataPrf() {
   overflow-y: auto;
   width: 100%;
   white-space: pre-line;
+}
+
+.signing-address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.signing-address-value {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11px;
 }
 
 .decode-error {

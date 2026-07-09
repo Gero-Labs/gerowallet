@@ -3458,6 +3458,8 @@ export default {
   'signTx.networkMismatchTitle': 'Diese Transaktion zielt auf ein anderes Netzwerk ab',
   'signTx.networkMismatchBody': 'Eine Empfängeradresse gehört zu einem anderen Netzwerk als Ihre aktive Wallet. Das bedeutet meist, dass die dApp die Transaktion falsch erstellt hat — das Signieren kann fehlschlagen oder Gelder an eine unerwartete Adresse senden.',
   'signTx.networkMismatchAck': 'Ich verstehe das Risiko und möchte trotzdem signieren',
+  'signTx.signingAddress': 'Signiert als',
+  'signTx.malformedSignData': 'Diese Website hat eine fehlerhafte Anfrage gesendet. Das Signieren ist deaktiviert, bis eine gültige Anfrage gesendet wird.',
   'signTx.risk.low': 'Sicher',
   'signTx.risk.medium': 'Vorsicht',
   'signTx.risk.high': 'Hohes Risiko',
