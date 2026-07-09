@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
@@ -42,6 +43,7 @@ import {
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
 } from '@/chrome/mpcWalletHandlers';
+import type { DeviceShareSecret } from '@/shared/utils/mpc';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
 
@@ -1590,13 +1592,29 @@ function isMpcConflictError(error: unknown): boolean {
   return raw.includes('"status":409');
 }
 
+/** Build a DeviceShareSecret from a request payload (passkey PRF or password). Never logged. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- request.data payload shape varies per handler (see Message.data in messaging.ts)
+function buildDeviceShareSecret(data: any): { secret: DeviceShareSecret; webAuthnCredentialId?: string; mpcPrfSaltId?: string } {
+  if (data?.prfOutputHex && data?.webAuthnCredentialId && data?.mpcPrfSaltId) {
+    const prfOutput = Uint8Array.from(Buffer.from(data.prfOutputHex, 'hex'));
+    return {
+      secret: { kind: 'prf', prfOutput, credentialId: data.webAuthnCredentialId, saltId: data.mpcPrfSaltId },
+      webAuthnCredentialId: data.webAuthnCredentialId,
+      mpcPrfSaltId: data.mpcPrfSaltId,
+    };
+  }
+  if (data?.spendingPassword) {
+    return { secret: { kind: 'password', password: data.spendingPassword } };
+  }
+  throw new Error('A passkey or spending password is required');
+}
+
 app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
   try {
-    // Note: Never log request.data — contains idToken/spendingPassword
-    const { name, icon, theme, chain, network, idToken, spendingPassword } = request.data || {};
-    if (!idToken || !spendingPassword) {
-      throw new Error('idToken and spendingPassword are required');
-    }
+    // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
+    const { name, icon, theme, chain, network, idToken } = request.data || {};
+    if (!idToken) throw new Error('idToken is required');
+    const { secret, webAuthnCredentialId, mpcPrfSaltId } = buildDeviceShareSecret(request.data);
 
     const { prepareMpcWalletCreation, encryptDeviceShare } = await import('@/shared/utils/mpc');
     const { createMpcGoogleWallet } = await import('@/db/gero-db');
@@ -1604,7 +1622,7 @@ app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResp
     const api = new Api(undefined, undefined);
 
     const { walletId, recoveryShare, publicKey } = await createMpcGoogleWalletFlow(
-      { name, icon, theme, chain, network, idToken, spendingPassword },
+      { name, icon, theme, chain, network, idToken, secret, webAuthnCredentialId, mpcPrfSaltId },
       {
         prepareMpcWalletCreation,
         encryptDeviceShare,
@@ -1640,11 +1658,10 @@ app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResp
 
 app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) => {
   try {
-    // Note: Never log request.data — contains idToken/spendingPassword
-    const { walletId, idToken, spendingPassword } = request.data || {};
-    if (!walletId || !idToken || !spendingPassword) {
-      throw new Error('walletId, idToken and spendingPassword are required');
-    }
+    // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
+    const { walletId, idToken } = request.data || {};
+    if (!walletId || !idToken) throw new Error('walletId and idToken are required');
+    const { secret } = buildDeviceShareSecret(request.data);
 
     const { reconstructRootKeyBytes } = await import('@/shared/utils/mpc');
     const { getAllWallets } = await import('@/db/gero-db');
@@ -1652,7 +1669,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     const api = new Api(undefined, undefined);
 
     await unlockMpcWalletFlow(
-      { walletId, idToken, spendingPassword },
+      { walletId, idToken, secret },
       {
         getWallet: async (id) => {
           const wallets = await getAllWallets();
@@ -1684,14 +1701,15 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
 
 app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
   try {
-    // Note: Never log request.data — contains idToken/recoveryPassword/newSpendingPassword
+    // Note: Never log request.data — contains idToken/recoveryPassword/newSpendingPassword/prfOutputHex
     const {
       name, icon, theme, chain, network, idToken,
-      recoveryBlob, recoveryPassword, newSpendingPassword, publicKey: expectedXpub,
+      recoveryBlob, recoveryPassword, publicKey: expectedXpub,
     } = request.data || {};
-    if (!idToken || !recoveryBlob || !recoveryPassword || !newSpendingPassword || !expectedXpub) {
-      throw new Error('idToken, recoveryBlob, recoveryPassword, newSpendingPassword and publicKey are required');
+    if (!idToken || !recoveryBlob || !recoveryPassword || !expectedXpub) {
+      throw new Error('idToken, recoveryBlob, recoveryPassword and publicKey are required');
     }
+    const { secret: newSecret, webAuthnCredentialId, mpcPrfSaltId } = buildDeviceShareSecret(request.data);
 
     const { decryptRecoveryShare, reconstructAndValidateEntropy, encryptDeviceShare } = await import('@/shared/utils/mpc');
     const { createMpcGoogleWallet } = await import('@/db/gero-db');
@@ -1699,7 +1717,10 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
     const api = new Api(undefined, undefined);
 
     const { walletId, publicKey } = await recoverMpcGoogleWalletFlow(
-      { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSpendingPassword, expectedXpub },
+      {
+        name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSecret,
+        expectedXpub, webAuthnCredentialId, mpcPrfSaltId,
+      },
       {
         decryptRecoveryShare,
         getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
@@ -1888,6 +1909,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
             const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
             witnessResult = { witnesses: merged };
             debugLog('🔗 Merged Nexus collateral cosign for', ref);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- axios-shaped error, status/message accessed defensively below
           } catch (cosignErr: any) {
             const status = cosignErr?.response?.status;
             // 404 = ref isn't in the Nexus pool (it's a user-owned UTxO),
