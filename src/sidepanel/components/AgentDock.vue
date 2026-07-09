@@ -3,8 +3,9 @@
   <div class="agent-dock">
     <button
       class="agent-dock__fab"
-      :class="{ 'is-open': dock.isOpen.value }"
+      :class="{ 'is-open': dock.isOpen.value, 'is-hidden': isAnySheetOpen }"
       :aria-label="dock.isOpen.value ? $t('copilot.close') : $t('copilot.open')"
+      :tabindex="isAnySheetOpen ? -1 : 0"
       @click="dock.toggle()"
     >
       <v-icon v-if="!dock.isOpen.value" size="22" color="#00DFF3">mdi-robot-outline</v-icon>
@@ -120,6 +121,7 @@
 import { defineComponent, nextTick, ref, watch } from 'vue';
 import { agentDock } from '@/sidepanel/composables/useAgentDock';
 import { renderMarkdown } from '@/services/agent/renderMarkdown';
+import { useSheetVisibility } from '@/sidepanel/composables/useSheetVisibility';
 import ChartCard from '@/sidepanel/components/agent/ChartCard.vue';
 import SwapCard from '@/sidepanel/components/agent/SwapCard.vue';
 import StakingCard from '@/sidepanel/components/agent/StakingCard.vue';
@@ -132,6 +134,15 @@ export default defineComponent({
     const draft = ref('');
     const dock = agentDock;
     const scroll = ref<HTMLElement | null>(null);
+    const { isAnySheetOpen } = useSheetVisibility();
+
+    // Nothing may compete for attention while the user is mid-flow —
+    // signing above all. Close the chat panel the instant a sheet opens
+    // (the FAB itself just fades out via the is-hidden class below), and
+    // reopening it is one tap away once the sheet closes.
+    watch(isAnySheetOpen, (open) => {
+      if (open && dock.isOpen.value) dock.close();
+    });
 
     async function submit(): Promise<void> {
       const text = draft.value;
@@ -154,7 +165,7 @@ export default defineComponent({
       },
     );
 
-    return { draft, dock, submit, quickSend, scroll, renderMarkdown };
+    return { draft, dock, submit, quickSend, scroll, renderMarkdown, isAnySheetOpen };
   },
 });
 </script>
@@ -214,6 +225,16 @@ export default defineComponent({
 .agent-dock__fab.is-open {
   border: 1.5px solid var(--accent-80);
   animation-play-state: paused;
+}
+
+/* Nothing may compete for attention while the user reviews a sheet — most of
+   all a signing request. Faded rather than unmounted so it resumes exactly
+   where it was the instant the sheet closes. */
+.agent-dock__fab.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  animation-play-state: paused;
+  transition: opacity 150ms ease;
 }
 
 @keyframes fab-pulse {
