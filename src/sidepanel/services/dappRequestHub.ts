@@ -1,4 +1,6 @@
-import { ref } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 
 export interface DAppRequest {
   type: 'dapp-request';
@@ -19,6 +21,20 @@ const isVisible = ref(false);
 const currentRequest = ref<DAppRequest | null>(null);
 const requestQueue = ref<DAppRequest[]>([]);
 const connectionLost = ref(false);
+
+// Apex wallets fall back to popup signing (product decision pending — see
+// docs/design/2026-07-10-sidepanel-first-signing.md Phase 2). DAppOverlay.vue
+// still hides its entire sheet with `v-if="!isApex"`, so this hub must NEVER
+// hold a healthy port while an Apex wallet is active: if it did, background
+// would see `miniGeroPorts.has(tabId) === true` and deliver requests via
+// sendToMiniGero instead of falling back to the popup — but nothing renders
+// them (isVisible flips true, no UI shows), stranding the request with no
+// recourse. Reactive so a mid-session wallet switch (Cardano <-> Apex)
+// connects/disconnects correctly instead of only checking once at mount.
+const isApexActive = computed(() =>
+  walletStore.loggedWallet?.chain === Blockchain.APEX_PRIME ||
+  walletStore.loggedWallet?.chain === Blockchain.APEX_VECTOR
+);
 
 let port: chrome.runtime.Port | null = null;
 let retryCount = 0;
@@ -46,6 +62,7 @@ function resolveTabId(): Promise<string> {
 }
 
 function connect() {
+  if (isApexActive.value) return; // preserve today's Apex→popup fallback
   try {
     port = chrome.runtime.connect({ name: `mini-gero-dapp-channel:${resolvedTabId}` });
   } catch (e) {
@@ -83,6 +100,7 @@ function connect() {
 
 function scheduleReconnect() {
   if (retryTimer) return;
+  if (isApexActive.value) return; // don't fight an intentional Apex disconnect
   const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
   retryCount++;
   retryTimer = setTimeout(() => {
@@ -157,7 +175,7 @@ export async function initDappRequestHub() {
   if (initialized) return;
   initialized = true;
   resolvedTabId = await resolveTabId();
-  connect();
+  connect(); // no-ops if isApexActive is already true at boot
   // A hidden panel can burn through retries; give it a fresh start when the
   // user looks at it again instead of staying a permanent zombie.
   if (typeof document !== 'undefined') {
@@ -169,4 +187,17 @@ export async function initDappRequestHub() {
       }
     });
   }
+  // Mid-session wallet switch: disconnect immediately on switching TO Apex
+  // (so background's miniGeroPorts check goes false right away, instead of
+  // waiting on the next request's timeout); reconnect on switching AWAY.
+  watch(isApexActive, (nowApex) => {
+    if (nowApex && port) {
+      try { port.disconnect(); } catch { /* already gone */ }
+      port = null;
+    } else if (!nowApex && !port) {
+      retryCount = 0;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      connect();
+    }
+  });
 }
