@@ -15,7 +15,9 @@
              have no unlockMethod config row, so they'd otherwise fall to the
              password default and be stranded here). -->
         <template v-if="isMpcWallet">
-          <p class="text-caption grey--text mb-3 text-center">{{ $t('welcome.unlockGoogleWalletDescription') }}</p>
+          <p class="text-caption grey--text mb-3 text-center">
+            {{ $t(mpcUsesPasskey ? 'welcome.unlockApprovePasskey' : 'welcome.unlockGoogleWalletDescription') }}
+          </p>
 
           <template v-if="!googleEmail">
             <v-btn
@@ -31,6 +33,23 @@
               {{ $t('welcome.googleSignInButton') }}
             </v-btn>
             <p v-if="error" class="red--text text-caption mt-2 mb-0">{{ error }}</p>
+          </template>
+
+          <template v-else-if="mpcUsesPasskey">
+            <p class="text-caption grey--text mb-3 text-center">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</p>
+            <p v-if="error" class="red--text text-caption mb-2">{{ error }}</p>
+
+            <v-btn
+              class="geroButton"
+              block
+              rounded
+              depressed
+              :loading="loading"
+              @click="handleMpcUnlock"
+            >
+              <v-icon left small>mdi-fingerprint</v-icon>
+              {{ $t('security.usePassKey') }}
+            </v-btn>
           </template>
 
           <template v-else>
@@ -142,6 +161,7 @@ import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
 import { useChainContext } from '../composables/useChainContext';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { evaluateMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import assets from '@/utils/assets';
 
 /** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
@@ -167,6 +187,11 @@ const error = ref('');
 
 // MPC "Sign in with Google" unlock state — never logged (idToken).
 const isMpcWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'mpc');
+// Passkey material lives on the wallet record (Task 5); present only when the
+// wallet was secured with a passkey at creation, undefined for password wallets.
+const mpcUsesPasskey = computed(() => (
+  !!walletStore.loggedWallet?.webAuthnCredentialId && !!walletStore.loggedWallet?.mpcPrfSaltId
+));
 const googleIdToken = ref('');
 const googleEmail = ref('');
 const signingInGoogle = ref(false);
@@ -292,21 +317,35 @@ async function signInWithGoogle() {
 }
 
 async function handleMpcUnlock() {
-  if (!password.value) return;
+  if (loading.value) return;
   const walletId = walletStore.loggedWallet?.id;
-  if (!walletId) return;
+  if (!walletId || !googleIdToken.value) return;
+  if (!mpcUsesPasskey.value && !password.value) return;
 
   loading.value = true;
   error.value = '';
 
   try {
-    // Note: never log request.data — contains idToken/spendingPassword
+    // Passkey wallets EVALUATE the existing passkey (triggers Touch ID/biometric
+    // prompt) to re-derive the PRF output; password wallets send the entered
+    // spending password. Never log request.data — contains idToken/spendingPassword/prfOutputHex.
+    const extra = mpcUsesPasskey.value
+      ? {
+          prfOutputHex: await evaluateMpcPasskey(
+            walletStore.loggedWallet.webAuthnCredentialId,
+            walletStore.loggedWallet.mpcPrfSaltId,
+          ),
+          webAuthnCredentialId: walletStore.loggedWallet.webAuthnCredentialId,
+          mpcPrfSaltId: walletStore.loggedWallet.mpcPrfSaltId,
+        }
+      : { spendingPassword: password.value };
+
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.UNLOCK_MPC_WALLET,
       data: {
         walletId,
         idToken: googleIdToken.value,
-        spendingPassword: password.value,
+        ...extra,
       },
     }) as BackgroundMessageResponse;
 
