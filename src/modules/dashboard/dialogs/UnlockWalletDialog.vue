@@ -34,6 +34,30 @@
               {{ $t('welcome.googleSignInButton') }}
             </v-btn>
           </template>
+          <template v-else-if="mpcUsesPasskey">
+            <div class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
+            <v-tooltip
+              v-model="tooltip.enabled"
+              top
+              color="red"
+            >
+              <template v-slot:activator="{ }">
+                <v-btn
+                  class="mpc-google-btn"
+                  block
+                  depressed
+                  outlined
+                  :loading="unlocking"
+                  :disabled="!canUnlock"
+                  @click="handleMpcUnlock()"
+                >
+                  <v-icon left small>mdi-fingerprint</v-icon>
+                  {{ $t('security.usePassKey') }}
+                </v-btn>
+              </template>
+              <span>{{ tooltip.text }}</span>
+            </v-tooltip>
+          </template>
           <template v-else>
             <div class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
             <v-tooltip
@@ -264,6 +288,7 @@ import assets from '@/utils/assets';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { getAllWallets } from '@/db/gero-db';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { evaluateMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import type { Wallet } from '@/models/types';
 
 /** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
@@ -321,6 +346,10 @@ const totpCode = ref('');
 const googleIdToken = ref('');
 const googleEmail = ref('');
 const signingInGoogle = ref(false);
+// MPC passkey material (from the wallet record, not config table) — present only
+// when the wallet was secured with a passkey at creation; undefined for password wallets.
+const mpcWebAuthnCredentialId = ref<string | null>(null);
+const mpcSaltId = ref<string | null>(null);
 
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
@@ -357,11 +386,16 @@ const isMpcWallet = computed(() => {
   return preLoginEncryptionMethod.value === 'mpc';
 });
 
+// MPC wallet secured with a passkey (vs. spending password) at creation time.
+const mpcUsesPasskey = computed(() => !!mpcWebAuthnCredentialId.value && !!mpcSaltId.value);
+
 const canUnlock = computed(() => {
   if (unlocking.value || !configLoaded.value) return false;
 
   if (isMpcWallet.value) {
-    return !!googleIdToken.value && password.value.length > 0;
+    return mpcUsesPasskey.value
+      ? !!googleIdToken.value
+      : !!googleIdToken.value && password.value.length > 0;
   } else if (unlockMethod.value === 'pin') {
     return pinCode.value.length >= 4;
   } else if (unlockMethod.value === 'pattern') {
@@ -374,7 +408,9 @@ const canUnlock = computed(() => {
 
 const unlockDescription = computed(() => {
   if (isMpcWallet.value) {
-    return t('welcome.unlockGoogleWalletDescription');
+    return mpcUsesPasskey.value
+      ? t('welcome.unlockApprovePasskey')
+      : t('welcome.unlockGoogleWalletDescription');
   } else if (unlockMethod.value === 'pin') {
     return t('security.enterPinToUnlock');
   } else if (unlockMethod.value === 'pattern') {
@@ -477,6 +513,14 @@ async function loadSecurityConfig() {
       webAuthnCredentialId.value = credentialIdConfig?.value || null;
     }
 
+    // MPC "Sign in with Google" wallet: passkey credential + PRF salt live on the
+    // wallet record (not config table) — same shape as PRF, different fields.
+    const walletIsMpc = wallet?.encryptionMethod === 'mpc' || preLoginEncryptionMethod.value === 'mpc';
+    if (walletIsMpc) {
+      mpcWebAuthnCredentialId.value = wallet?.webAuthnCredentialId || preLoginWalletRecord?.webAuthnCredentialId || null;
+      mpcSaltId.value = wallet?.mpcPrfSaltId || preLoginWalletRecord?.mpcPrfSaltId || null;
+    }
+
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
     // that works alongside PIN, password, or pattern
 
@@ -487,6 +531,8 @@ async function loadSecurityConfig() {
     twoFactorEnabled.value = false;
     passKeyEnabled.value = false;
     webAuthnCredentialId.value = null;
+    mpcWebAuthnCredentialId.value = null;
+    mpcSaltId.value = null;
     pinLength.value = 6;
     configLoaded.value = true; // Allow interaction even on error (fallback to password)
     configLoadError.value = true;
@@ -604,13 +650,23 @@ async function handleMpcUnlock() {
       return;
     }
 
-    // Note: never log request.data — contains idToken/spendingPassword
+    // Passkey wallets EVALUATE the existing passkey (triggers Touch ID/biometric
+    // prompt) to re-derive the PRF output; password wallets send the entered
+    // spending password. Never log request.data — contains idToken/spendingPassword/prfOutputHex.
+    const extra = mpcUsesPasskey.value
+      ? {
+          prfOutputHex: await evaluateMpcPasskey(mpcWebAuthnCredentialId.value!, mpcSaltId.value!),
+          webAuthnCredentialId: mpcWebAuthnCredentialId.value,
+          mpcPrfSaltId: mpcSaltId.value,
+        }
+      : { spendingPassword: password.value };
+
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.UNLOCK_MPC_WALLET,
       data: {
         walletId,
         idToken: googleIdToken.value,
-        spendingPassword: password.value,
+        ...extra,
       },
     }) as BackgroundMessageResponse;
 
@@ -619,8 +675,10 @@ async function handleMpcUnlock() {
       emit('unlocked');
     } else {
       showError(response?.data?.error || t('security.unlockFailed'));
-      password.value = '';
-      passwordError.value = true;
+      if (!mpcUsesPasskey.value) {
+        password.value = '';
+        passwordError.value = true;
+      }
     }
   } catch (error: unknown) {
     console.error('MPC unlock error:', error);
@@ -759,6 +817,8 @@ function resetForm() {
   googleIdToken.value = '';
   googleEmail.value = '';
   signingInGoogle.value = false;
+  mpcWebAuthnCredentialId.value = null;
+  mpcSaltId.value = null;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 
