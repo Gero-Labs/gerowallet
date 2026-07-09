@@ -130,8 +130,6 @@ export const POPUP = {
   warning:'warning',
   passKeyAuth: 'passkey-auth',
   wcSessionProposal: 'wc-session-proposal',
-  midnightDappConnect: 'midnight-dapp-connect',
-  midnightDappSignData: 'midnight-dapp-sign',
 };
 
 export const POPUP_WINDOW = {

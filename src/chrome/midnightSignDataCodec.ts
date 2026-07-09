@@ -1,9 +1,9 @@
 // Shared strict decoder for the Midnight DApp Connector's signData payload.
-// Used by BOTH the approval popup (MidnightDappSignData.vue, to render a
-// preview of the ACTUAL bytes that will be signed) and the background signing
-// handler (background.ts's SIGN_MIDNIGHT_CONNECTOR_DATA) — a single source of
-// truth so the two can never disagree on what a given (data, encoding) pair
-// decodes to.
+// Used by BOTH the mini-gero side panel's approval UI (DAppOverlay.vue, to
+// render a preview of the ACTUAL bytes that will be signed) and the
+// background signing handler (background.ts's SIGN_MIDNIGHT_CONNECTOR_DATA)
+// — a single source of truth so the two can never disagree on what a given
+// (data, encoding) pair decodes to.
 //
 // Security rationale: Node/Buffer's hex/base64 decoders are LENIENT —
 // `Buffer.from('aabbZZZZlongdeceptivetext', 'hex')` silently truncates at the
