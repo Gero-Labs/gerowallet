@@ -338,20 +338,6 @@ class MidnightSyncService {
   // ---------------------------------------------------------------- handlers
 
   private async handleSync(data: WsSyncMessage): Promise<void> {
-    // TEMP-DIAG (remove once switch-between-wallets sync is confirmed): prove
-    // whether replayed txs actually reach the apply path and whether the
-    // wallet address is bound. If txCount>0 but addr=MISSING, the UTxO build
-    // is skipped (myUnshielded==''); if addr is set but the end-of-sync counts
-    // stay 0, the store apply itself is the culprit.
-    debugLog('🌙 handleSync ENTER', {
-      txs: Array.isArray(data.transactions) ? data.transactions.length : 0,
-      hasUtxos: Array.isArray(data.utxos) ? data.utxos.length : 0,
-      block: data.block?.height ?? null,
-      addr: this.currentAddresses?.unshielded
-        ? this.currentAddresses.unshielded.slice(-8)
-        : 'MISSING',
-    });
-
     // 1) Tip update
     if (data.block && typeof data.block.height === 'number') {
       midnightActions.applyTipUpdate({
@@ -442,20 +428,6 @@ class MidnightSyncService {
     }
 
     midnightActions.setNetworkStatus('connected');
-
-    // TEMP-DIAG (remove with the ENTER log): the store's state AFTER this sync
-    // applied. If this stays utxos=0/night=0/txHist=0 across a switch-back
-    // while handleSync ENTER shows txs>0 addr=set, the apply/store layer is
-    // dropping the rebuild (not gero-sync, not the WS dedup).
-    debugLog('🌙 handleSync DONE', {
-      utxos: midnightStore.utxos.length,
-      night: midnightStore.balances.nightUnshielded.toString(),
-      txHist: midnightStore.transactions.length,
-      netStatus: midnightStore.networkStatus,
-      activeKey: midnightStore.activeWalletKey
-        ? midnightStore.activeWalletKey.slice(-8)
-        : null,
-    });
   }
 
   private async handleRollback(data: WsSyncMessage): Promise<void> {
