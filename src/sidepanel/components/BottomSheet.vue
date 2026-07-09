@@ -34,6 +34,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { createSpring, projectMomentum, rubberBand } from '../composables/sheetPhysics';
+import { useSheetVisibility } from '../composables/useSheetVisibility';
 
 const props = withDefaults(defineProps<{
   value: boolean;
@@ -131,9 +132,12 @@ const sheetStyle = computed(() => ({
 
 // --- Open / Close ---
 let previouslyFocused: HTMLElement | null = null;
+const { markSheetOpened, markSheetClosed } = useSheetVisibility();
+let holdsOpenCredit = false; // guards against double-increment/decrement
 
 watch(() => props.value, async (val) => {
   if (val) {
+    if (!holdsOpenCredit) { holdsOpenCredit = true; markSheetOpened(); }
     previouslyFocused = document.activeElement as HTMLElement | null;
     visible.value = true;
     phase.value = 'entering';
@@ -174,6 +178,7 @@ function finishClose() {
   phase.value = 'closed';
   spring.setValue(0);
   translateY.value = 0;
+  if (holdsOpenCredit) { holdsOpenCredit = false; markSheetClosed(); }
   emit('input', false);
   emit('close');
   previouslyFocused?.focus?.();
@@ -354,6 +359,10 @@ onBeforeUnmount(() => {
   stopLoop();
   releasePointer();
   window.removeEventListener('click', clickBlocker, true);
+  // Safety net: if this instance is destroyed while still holding an "open"
+  // credit (torn down by a parent re-render rather than going through
+  // finishClose), don't leak the shared counter.
+  if (holdsOpenCredit) { holdsOpenCredit = false; markSheetClosed(); }
 });
 </script>
 
