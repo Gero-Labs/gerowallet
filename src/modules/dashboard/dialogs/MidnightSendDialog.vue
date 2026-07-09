@@ -63,56 +63,100 @@
                   </v-tab>
                 </v-tabs>
 
-                <!-- Available balance reminder. -->
-                <div class="midnight-balance-snapshot mb-4">
-                  <div class="midnight-snapshot-label">
-                    {{ isShielded ? t('midnight.shielded') : t('midnight.unshielded') }}
-                  </div>
-                  <div class="midnight-snapshot-amount">
-                    <template v-if="isShielded">
-                      {{ t('midnight.send.shieldedBalanceUnavailable') }}
-                    </template>
-                    <template v-else>
-                      {{ formattedAvailable }} {{ nightCurrency }}
-                    </template>
-                  </div>
-                  <div v-if="isShielded" class="midnight-snapshot-hint">
-                    {{ t('midnight.send.shieldedBalanceHint') }}
-                  </div>
-                </div>
-
+                <!-- Recipient card — same panel + address-field + pill asset-row
+                     layout as the Cardano SendRecipientCard, adapted to a single
+                     NIGHT recipient (no ADA-Handle / NFT / multi-recipient). -->
                 <v-form ref="step1FormRef" v-model="step1Valid">
-                  <v-text-field
-                    v-model="recipient"
-                    :label="recipientLabel"
-                    outlined
-                    dense
-                    :rules="addressRules"
-                    :disabled="sending"
-                    class="mb-2"
-                  />
-                  <v-text-field
-                    v-model="amount"
-                    :label="t('common.amount') + ' (' + nightCurrency + ')'"
-                    outlined
-                    dense
-                    type="number"
-                    min="0"
-                    step="0.000001"
-                    :rules="amountRules"
-                    :disabled="sending"
-                    class="mb-1"
-                  >
-                    <template v-slot:append>
-                      <v-btn
-                        v-if="!isShielded"
-                        x-small
-                        text
-                        @click="setMax"
+                  <div class="recipient-card">
+                    <div class="address-row">
+                      <v-text-field
+                        v-model="recipient"
+                        :placeholder="recipientPlaceholder"
+                        outlined
+                        dense
+                        hide-details="auto"
+                        class="address-input"
+                        :rules="addressRules"
                         :disabled="sending"
-                      >MAX</v-btn>
-                    </template>
-                  </v-text-field>
+                        color="#00DFF3"
+                      >
+                        <template v-slot:append>
+                          <v-icon
+                            v-if="recipient"
+                            style="font-size: 14px; cursor: pointer; opacity: 0.6;"
+                            color="white"
+                            @click="recipient = ''"
+                          >mdi-close</v-icon>
+                        </template>
+                      </v-text-field>
+                      <v-btn
+                        icon
+                        small
+                        class="address-row__icon-btn"
+                        :disabled="sending"
+                        @click="qrScanDialog = true"
+                      >
+                        <v-icon small color="#00DFF3">mdi-qrcode</v-icon>
+                      </v-btn>
+                      <QRAddressScannerDialog
+                        :isOpen="qrScanDialog"
+                        :chain="loggedWallet && loggedWallet.chain"
+                        :network="loggedWallet && loggedWallet.network"
+                        @close="qrScanDialog = false"
+                        @scan="onQRScan"
+                      />
+                    </div>
+
+                    <!-- Asset row: NIGHT token + balance | amount + MAX -->
+                    <div class="assets-section">
+                      <div class="token-row">
+                        <div class="token-row__left">
+                          <v-avatar size="20" class="mr-1">
+                            <img :src="midnightLogo" alt="NIGHT" />
+                          </v-avatar>
+                          <span class="token-ticker">{{ nightCurrency }}</span>
+                          <v-icon
+                            x-small
+                            color="#00DFF3"
+                            class="ml-1"
+                            style="margin-top: -1px; font-size: 10px;"
+                          >mdi-check-decagram</v-icon>
+                          <span class="token-balance">
+                            <template v-if="isShielded">{{ t('midnight.send.shieldedBalanceUnavailable') }}</template>
+                            <template v-else>{{ formattedAvailable }}</template>
+                          </span>
+                        </div>
+                        <div class="token-row__right">
+                          <v-text-field
+                            v-model="amount"
+                            type="number"
+                            min="0"
+                            step="0.000001"
+                            outlined
+                            dense
+                            hide-details="auto"
+                            class="amount-input"
+                            placeholder="0"
+                            :rules="amountRules"
+                            :disabled="sending"
+                          />
+                          <v-btn
+                            v-if="!isShielded"
+                            text
+                            x-small
+                            color="#00DFF3"
+                            class="max-btn"
+                            :disabled="sending"
+                            @click="setMax"
+                          >MAX</v-btn>
+                        </div>
+                      </div>
+                      <div v-if="isShielded" class="token-info">
+                        <v-icon x-small color="#FEC84B" class="mr-1">mdi-information-outline</v-icon>
+                        {{ t('midnight.send.shieldedBalanceHint') }}
+                      </div>
+                    </div>
+                  </div>
                 </v-form>
 
                 <!-- Global total — identical styling to the Cardano step-1 total. -->
@@ -232,6 +276,8 @@ import TransactionDetailsCard, {
   type TxDetailsTotals,
 } from '@/shared/components/TransactionDetailsCard.vue';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
+import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
+import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import {
   midnightStore,
@@ -323,11 +369,19 @@ const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | n
 
 const passwordRules = [rules.required()];
 
-const recipientLabel = computed(() =>
+const recipientPlaceholder = computed(() =>
   isShielded.value
     ? t('midnight.send.shieldedRecipientLabel')
     : t('common.recipientAddress'),
 );
+
+const qrScanDialog = ref(false);
+function onQRScan(scanned: string) {
+  qrScanDialog.value = false;
+  if (typeof scanned === 'string' && scanned.trim()) {
+    recipient.value = scanned.trim();
+  }
+}
 
 const addressRules = computed(() => {
   if (isShielded.value) {
@@ -698,35 +752,138 @@ watch(
   40%, 80% { transform: translateX(4px); }
 }
 
-/* ─── Midnight-specific bits ─── */
-.midnight-balance-snapshot {
-  background: linear-gradient(135deg, rgba(0, 199, 243, 0.08) 0%, rgba(255, 216, 110, 0.06) 100%);
-  border: 1px solid rgba(0, 199, 243, 0.2);
+/* ─── Recipient card + asset row — copied from SendRecipientCard /
+   AssetsToSendStep so the Midnight step 1 matches the Cardano one. ─── */
+.recipient-card {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.address-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.address-row__icon-btn {
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 28px !important;
+  flex-shrink: 0;
+}
+
+.address-input {
+  flex: 1;
+  min-width: 0;
+}
+.address-input :deep(.v-input__slot) {
+  background-color: #161B26 !important;
   border-radius: 10px;
-  padding: 14px 16px;
-  margin: 8px auto 16px;
-  min-width: 200px;
+  min-height: 32px !important;
+  padding: 0 8px !important;
 }
-.midnight-snapshot-label {
+.address-input :deep(input) {
+  font-size: 12px;
+  padding: 4px 0;
+}
+.address-input :deep(fieldset) {
+  border-color: transparent !important;
+}
+.address-input :deep(.v-input--is-focused fieldset) {
+  border-color: #00DFF3 !important;
+  border-width: 1px !important;
+}
+.address-input.error--text :deep(fieldset) {
+  border-color: #F97066 !important;
+}
+
+.assets-section {
+  margin-top: 10px;
+}
+
+.token-row {
+  display: flex;
+  align-items: center;
+  background: #161B26;
+  border-radius: 8px;
+  padding: 6px 10px;
+  gap: 6px;
+}
+.token-row__left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.token-ticker {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
+.token-balance {
   font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 4px;
+  color: rgba(255, 255, 255, 0.3);
+  margin-left: 6px;
+  white-space: nowrap;
 }
-.midnight-snapshot-amount {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffff;
+.token-row__right {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
 }
-.midnight-snapshot-hint {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  margin-top: 6px;
+.amount-input {
+  max-width: 140px;
+  flex-shrink: 1;
+}
+.amount-input :deep(.v-input__slot) {
+  background-color: transparent !important;
+  border: none !important;
+  min-height: 28px !important;
+  padding: 0 4px !important;
+}
+.amount-input :deep(input) {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  padding: 0;
+}
+.amount-input :deep(input::-webkit-outer-spin-button),
+.amount-input :deep(input::-webkit-inner-spin-button) {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.amount-input :deep(input[type='number']) {
+  -moz-appearance: textfield;
+}
+.amount-input :deep(fieldset) {
+  border: none !important;
+}
+.max-btn {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  min-width: 0 !important;
+  padding: 0 4px !important;
+  height: 22px !important;
+}
+.token-info {
+  font-size: 10px;
+  color: #FEC84B;
+  padding: 4px 2px 0;
+  display: flex;
+  align-items: center;
   line-height: 1.4;
 }
+
+/* ─── Midnight-specific bits ─── */
 .midnight-send-tabs :deep(.v-tab) {
   text-transform: none;
   letter-spacing: 0.02em;
