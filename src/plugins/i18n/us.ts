@@ -2786,7 +2786,7 @@ export default {
 
   // MPC "Sign in with Google" wallet (Plan D)
   'welcome.googleWalletMethod': 'Google wallet',
-  'welcome.googleWalletMethodDescription': 'Sign in with Google — no seed phrase.',
+  'welcome.googleWalletMethodDescription': 'Sign in with Google - no seed phrase.',
   'welcome.googleWalletNotSupportedOnNetwork': 'Google wallet is only available on Cardano right now.',
   'welcome.restoreGoogleWalletLink': 'Have a Google wallet backup? Restore it.',
   'welcome.onboardingStepGoogleSignIn': 'Sign In',

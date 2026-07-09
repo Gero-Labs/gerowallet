@@ -3254,7 +3254,7 @@ export default {
 
   // MPC "Mit Google anmelden" Wallet (Plan D)
   'welcome.googleWalletMethod': 'Google-Wallet',
-  'welcome.googleWalletMethodDescription': 'Mit Google anmelden — keine Seed-Phrase nötig.',
+  'welcome.googleWalletMethodDescription': 'Mit Google anmelden - keine Seed-Phrase nötig.',
   'welcome.googleWalletNotSupportedOnNetwork': 'Die Google-Wallet ist derzeit nur auf Cardano verfügbar.',
   'welcome.restoreGoogleWalletLink': 'Haben Sie ein Google-Wallet-Backup? Jetzt wiederherstellen.',
   'welcome.onboardingStepGoogleSignIn': 'Anmelden',
