@@ -217,7 +217,7 @@ import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 
@@ -317,8 +317,8 @@ function getTokenPriceInUsd(token: any): number {
 
   // For other tokens: get price from DexHunter (in ADA), convert to USD
   const unit = token.unit;
-  if (unit && dexHunterStore.dexHunterTokens[unit]) {
-    const priceInAda = dexHunterStore.dexHunterTokens[unit].price || 0;
+  if (unit && tokenMetadataStore.tokens[unit]) {
+    const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
     const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
     return priceInAda * adaPriceUsd;
   }

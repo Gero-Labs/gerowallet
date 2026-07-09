@@ -2,6 +2,13 @@
 .DS_Store
 Thumbs.db
 
+# Secrets — never commit private key material.
+# APNs signing keys (.p8) and similar live-credential files must stay out of git.
+# The .claude/ dir is NOT ignored wholesale (it has tracked docs), so guard the
+# credential file types explicitly.
+*.p8
+*.mobileprovision
+
 # Dependencies
 node_modules/
 

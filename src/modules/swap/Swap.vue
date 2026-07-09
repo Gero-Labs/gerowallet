@@ -9,7 +9,7 @@
           <v-card flat outlined class="liquid-glass">
             <v-card-title>{{ $t('swap.swap') }}</v-card-title>
             <v-card-text class="text-center justify-center">
-              <SwapWidget></SwapWidget>
+              <GeroSwapEmbed context="page" />
             </v-card-text>
           </v-card>
         </v-col>
@@ -26,7 +26,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
+import GeroSwapEmbed from '@/modules/swap/components/GeroSwapEmbed.vue';
 </script>
 
 <style scoped>

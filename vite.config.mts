@@ -279,6 +279,17 @@ export default defineConfig(({ command }) => {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
                 dest: 'extension/assets'
               },
+              // Only the JS loader (+ README) belongs in the runtime vendor dir — the CSS is
+              // NOT loaded from here at runtime. It's a Vite build INPUT (see the <link
+              // media="all"> comment in src/options/index.html / src/sidepanel/index.html):
+              // Vite emits it as extension/assets/gero-swap.css and rewrites the href to
+              // point there. Copying it into extension/vendor/gero-swap too would just be a
+              // ~196KB dead duplicate that nothing ever loads.
+              {
+                src: ['src/vendor/gero-swap/gero-swap.js', 'src/vendor/gero-swap/README.md'],
+                dest: 'extension/vendor/gero-swap',
+                flatten: true,
+              },
             ],
             hook: 'writeBundle',
             copySync: false, // Async copying

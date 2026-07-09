@@ -40,7 +40,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in loadingState) {
-        (loadingState as any)[key] = updates[key as keyof LoadingState];
+        (loadingState as Record<string, unknown>)[key] = updates[key as keyof LoadingState];
       }
     });
   });
@@ -51,6 +51,17 @@ if (context === 'browser') {
     if (result[STORE_NAME]) {
       // Hydrate from storage immediately - this ensures we have the latest persisted state
       Object.assign(loadingState, result[STORE_NAME]);
+      // …but NEVER restore the transient in-progress flags. These describe a live operation,
+      // not durable state. If a sync/restore was interrupted (page closed or the sync backend
+      // hiccupped mid-run), a persisted `loading:true`/`progress:50`/`isSyncing:true` would
+      // otherwise strand the loading overlay (and the /welcome→dashboard ready-watcher)
+      // forever on the next open — cleared only by a lucky refresh. Always start them at rest;
+      // the background re-broadcasts the true current state over the port once it connects.
+      loadingState.loading = false;
+      loadingState.progress = 0;
+      loadingState.isRestoring = false;
+      loadingState.isSyncing = false;
+      loadingState.text = '';
     }
   });
 }
@@ -116,7 +127,7 @@ function createSetter<K extends keyof LoadingState>(
       // Apply additional updates locally
       Object.keys(updates).forEach(updateKey => {
         if (updateKey !== key && updateKey in loadingState) {
-          (loadingState as any)[updateKey] = updates[updateKey as keyof LoadingState];
+          (loadingState as Record<string, unknown>)[updateKey] = updates[updateKey as keyof LoadingState];
         }
       });
     }
