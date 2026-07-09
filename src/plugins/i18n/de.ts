@@ -3473,6 +3473,7 @@ export default {
   'signTx.rejected': 'Transaktionssignierung abgebrochen',
   'miniGero.futureTransactionsNote': 'Zu Ihrer Sicherheit erfordern zukünftige Transaktionen von dieser Website eine zusätzliche Verifizierung vor der Signierung.',
   'miniGero.requestQueueIndicator': 'Anfrage {current} von {total}',
+  'miniGero.rejectAll': 'Alle ablehnen',
   'miniGero.pendingRequestBanner': 'Entsperren, um die Anfrage von {domain} zu prüfen',
   'miniGero.pendingRequestBannerNoDomain': 'Entsperren, um eine ausstehende dApp-Anfrage zu prüfen',
   'miniGero.pendingRequestCount': '{count} Anfrage wartet | {count} Anfragen warten',

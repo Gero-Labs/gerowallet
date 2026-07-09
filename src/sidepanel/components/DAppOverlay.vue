@@ -8,10 +8,23 @@
   >
     <div v-if="currentRequest" class="dapp-overlay">
       <!-- Queue indicator -->
-      <div v-if="requestQueue.length > 0" class="queue-indicator mb-2">
-        <span class="grey--text text-caption">
-          {{ $t('miniGero.requestQueueIndicator', { current: 1, total: requestQueue.length + 1 }) }}
-        </span>
+      <div v-if="requestQueue.length > 0" class="queue-strip mb-2">
+        <div class="queue-strip-header">
+          <span class="grey--text text-caption">
+            {{ $t('miniGero.requestQueueIndicator', { current: 1, total: requestQueue.length + 1 }) }}
+          </span>
+          <v-btn text x-small color="#ff6464" @click="rejectAll()">{{ $t('miniGero.rejectAll') }}</v-btn>
+        </div>
+        <div
+          v-for="item in requestQueue"
+          :key="item.requestId"
+          class="queue-strip-row"
+        >
+          <span class="grey--text text-caption queue-strip-label">{{ queuedItemLabel(item) }}</span>
+          <v-btn icon x-small @click="rejectQueued(item.requestId)">
+            <v-icon size="14" color="rgba(255,255,255,0.4)">mdi-close</v-icon>
+          </v-btn>
+        </div>
       </div>
 
       <!-- Wallet identity: which wallet/network this request acts on. Shown
@@ -589,6 +602,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { WalletType, Network } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
@@ -605,7 +619,27 @@ import { MidnightErrorCode } from '@/chrome/config';
 interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
 
-const { isVisible, currentRequest, requestQueue, approve, reject } = useDAppOverlay();
+const { isVisible, currentRequest, requestQueue, approve, reject, rejectQueued, rejectAll } = useDAppOverlay();
+const { t } = useTranslation();
+
+// Domain + method label for a queued (not-yet-shown) request, for the queue
+// strip below. Reuses the same URL-hostname extraction as enableDomain/
+// signDataDomain (identical parsing, different source object).
+function queuedItemLabel(item: DAppRequest): string {
+  const payload = item.payload as { website?: string } | undefined;
+  const website = payload?.website || '';
+  let domain = website;
+  try { domain = new URL(website).hostname; } catch { /* leave as-is */ }
+  const methodKeys: Record<string, string> = {
+    enable: 'miniGero.connectRequest',
+    signTx: 'miniGero.signTxRequest',
+    signData: 'miniGero.signDataRequest',
+    midnight_connect: 'miniGero.connectRequest',
+    midnight_signData: 'miniGero.signDataRequest',
+  };
+  const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
+  return `${domain} — ${methodLabel}`;
+}
 const { isApex, themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
@@ -1913,8 +1947,32 @@ async function signMidnightDataPrf() {
   padding: 16px;
 }
 
-.queue-indicator {
-  text-align: center;
+.queue-strip {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.queue-strip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.queue-strip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.queue-strip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Enable / Connect ── */

@@ -120,4 +120,38 @@ describe('dappRequestHub', () => {
       type: 'dapp-response', requestId: 'r1', data: 'signed-cbor', error: null,
     });
   });
+
+  it('rejectQueued removes one queued item without disturbing currentRequest', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r2', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signData', requestId: 'r3', payload: {} });
+
+    hub.rejectQueued('r2');
+
+    expect(hub.currentRequest.value?.requestId).toBe('r1'); // untouched
+    expect(hub.requestQueue.value.map((r) => r.requestId)).toEqual(['r3']);
+    expect(port.postMessage).toHaveBeenCalledWith({
+      type: 'dapp-response', requestId: 'r2', data: null, error: 'user_rejected',
+    });
+  });
+
+  it('rejectAll clears the queue and the current request', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r2', payload: {} });
+
+    hub.rejectAll();
+
+    expect(hub.currentRequest.value).toBe(null);
+    expect(hub.requestQueue.value.length).toBe(0);
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'r1', error: 'user_rejected' })
+    );
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'r2', error: 'user_rejected' })
+    );
+  });
 });
