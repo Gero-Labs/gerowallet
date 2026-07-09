@@ -118,7 +118,10 @@ interface WsSyncTx {
   };
 }
 
-const NIGHT_TOKEN_TYPE_NULL = '0000000000000000000000000000000000000000000000000000000000000000';
+// Exported for the DApp Connector (background.ts) to normalize NIGHT balance
+// keys against the same canonical zero-tokenType this file already uses to
+// recognize NIGHT outputs — avoids a copy/pasted literal silently drifting.
+export const NIGHT_TOKEN_TYPE_NULL = '0000000000000000000000000000000000000000000000000000000000000000';
 
 interface WsAccountInfo {
   controlled_amount?: string;

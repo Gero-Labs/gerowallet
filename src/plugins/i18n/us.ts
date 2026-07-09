@@ -4045,6 +4045,12 @@ export default {
   'midnight.send.stageSync': 'Sync DUST ledger',
   'midnight.send.stageSign': 'Sign transaction',
   'midnight.send.stageSubmit': 'Submit',
+  // DApp Connector (@midnight-ntwrk/dapp-connector-api)
+  'midnight.connector.viewAddressAndBalance': 'View your Midnight addresses and balances',
+  'midnight.connector.futureRequestsNote': 'This site will be able to request signatures and submit transactions for your approval.',
+  'midnight.connector.signData': 'Sign Data',
+  'midnight.connector.websiteRequestedSignature': 'The website requested a signature',
+  'midnight.connector.malformedSignData': 'This site sent malformed data — signing is blocked for your safety.',
   // Shielded proving consent dialog
   'midnight.consent.title': 'Shielded send privacy',
   'midnight.consent.subtitle': 'Before your first shielded transaction',

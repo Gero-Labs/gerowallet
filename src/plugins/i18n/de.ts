@@ -3946,6 +3946,12 @@ export default {
   'midnight.send.stageSync': 'DUST-Ledger synchronisieren',
   'midnight.send.stageSign': 'Transaktion signieren',
   'midnight.send.stageSubmit': 'Senden',
+  // DApp-Connector (@midnight-ntwrk/dapp-connector-api)
+  'midnight.connector.viewAddressAndBalance': 'Deine Midnight-Adressen und -Guthaben einsehen',
+  'midnight.connector.futureRequestsNote': 'Diese Website kann Signaturen anfragen und Transaktionen zur Genehmigung einreichen.',
+  'midnight.connector.signData': 'Daten signieren',
+  'midnight.connector.websiteRequestedSignature': 'Die Website hat eine Signatur angefordert',
+  'midnight.connector.malformedSignData': 'Diese Website hat fehlerhafte Daten gesendet — das Signieren wurde zu deiner Sicherheit blockiert.',
   // Shielded-Proving-Consent-Dialog
   'midnight.consent.title': 'Privatsphäre beim Shielded-Senden',
   'midnight.consent.subtitle': 'Vor deiner ersten Shielded-Transaktion',
