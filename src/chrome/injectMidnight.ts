@@ -112,7 +112,8 @@ function installMidnightProvider(): void {
         configurable: false,
       });
     }
-    Object.defineProperty(window.midnight!, crypto.randomUUID(), {
+    const uuid = crypto.randomUUID();
+    Object.defineProperty(window.midnight!, uuid, {
       configurable: false,
       writable: false,
       enumerable: true,
