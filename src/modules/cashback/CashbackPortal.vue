@@ -58,6 +58,9 @@ function post(message: object) {
 async function bootstrap(reason: 'initial' | 'resync' = 'initial') {
   loading.value = true;
   errorState.value = false;
+  // A fresh initial load (mount or Retry) re-mounts/reloads the iframe, so re-arm
+  // the on-load refresh; otherwise a post-error Retry would silently skip it.
+  if (reason === 'initial') didRefreshOnLoad = false;
   try {
     const res = await cashbackApi.portal(baseAddress(), theme);
     if (reason === 'initial' || !portalUrl.value) {
