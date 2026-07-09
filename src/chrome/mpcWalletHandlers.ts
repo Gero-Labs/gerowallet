@@ -7,12 +7,12 @@
  * wires the real implementations in and calls these from thin
  * `app.addToOptions(...)` handlers.
  *
- * Secret hygiene: never log idToken, spendingPassword, device/login/recovery
- * shares, entropy, or key bytes. Catch-handler discipline lives in
- * background.ts; these flows just throw/rethrow.
+ * Secret hygiene: never log idToken, device-share secrets (password or PRF
+ * output), device/login/recovery shares, entropy, or key bytes. Catch-handler
+ * discipline lives in background.ts; these flows just throw/rethrow.
  */
 import { MpcValidationError } from '@/shared/utils/mpc';
-import type { MpcShareSet } from '@/shared/utils/mpc';
+import type { MpcShareSet, DeviceShareSecret } from '@/shared/utils/mpc';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 
 /** Minimal wallet shape the sign-path helpers need. */
@@ -97,12 +97,15 @@ export interface CreateMpcGoogleWalletInput {
   chain: string;
   network: string;
   idToken: string;
-  spendingPassword: string;
+  secret: DeviceShareSecret;
+  /** Present when secret.kind === 'prf'; persisted so unlock can re-derive. */
+  webAuthnCredentialId?: string;
+  mpcPrfSaltId?: string;
 }
 
 export interface CreateMpcGoogleWalletDeps {
   prepareMpcWalletCreation: () => Promise<{ entropy: Uint8Array; shareSet: MpcShareSet; expectedXpub: string }>;
-  encryptDeviceShare: (deviceShare: string, password: string) => string;
+  encryptDeviceShare: (deviceShare: string, secret: DeviceShareSecret) => Promise<string>;
   enrollLoginShare: (idToken: string, chain: string, network: string, loginShare: string) => Promise<{ stored: boolean }>;
   createMpcGoogleWallet: (params: {
     name: string;
@@ -113,6 +116,8 @@ export interface CreateMpcGoogleWalletDeps {
     userId: string;
     publicKey: string;
     encryptedDeviceShare: string;
+    webAuthnCredentialId?: string;
+    mpcPrfSaltId?: string;
   }) => Promise<number>;
   subFromIdToken: (idToken: string) => string;
 }
@@ -134,7 +139,8 @@ export interface CreateMpcGoogleWalletResult {
 /**
  * Create a new MPC Google wallet: split fresh entropy into 3 shares, enroll
  * the login share with the backend (verifies idToken), encrypt the device
- * share at rest under the spending password, and persist the wallet record.
+ * share at rest under the device-share secret (password or passkey PRF
+ * output), and persist the wallet record.
  * The recovery share is returned to the caller — it is never logged and
  * never sent anywhere by this flow (the UI is responsible for the
  * encrypted-download backup step).
@@ -143,11 +149,11 @@ export async function createMpcGoogleWalletFlow(
   input: CreateMpcGoogleWalletInput,
   deps: CreateMpcGoogleWalletDeps,
 ): Promise<CreateMpcGoogleWalletResult> {
-  const { name, icon, theme, chain, network, idToken, spendingPassword } = input;
+  const { name, icon, theme, chain, network, idToken, secret, webAuthnCredentialId, mpcPrfSaltId } = input;
   const { prepareMpcWalletCreation, encryptDeviceShare, enrollLoginShare, createMpcGoogleWallet, subFromIdToken: getSub } = deps;
 
   const { shareSet, expectedXpub } = await prepareMpcWalletCreation();
-  const encryptedDeviceShare = encryptDeviceShare(shareSet.deviceShare, spendingPassword);
+  const encryptedDeviceShare = await encryptDeviceShare(shareSet.deviceShare, secret);
   await enrollLoginShare(idToken, chain, network, shareSet.loginShare);
   const userId = getSub(idToken);
 
@@ -160,6 +166,8 @@ export async function createMpcGoogleWalletFlow(
     userId,
     publicKey: expectedXpub,
     encryptedDeviceShare,
+    webAuthnCredentialId,
+    mpcPrfSaltId,
   });
 
   return { walletId, recoveryShare: shareSet.recoveryShare, publicKey: expectedXpub };
@@ -174,12 +182,14 @@ export interface MpcWalletRecord {
   network: string;
   publicKey: string;
   mpcDeviceShare: string;
+  webAuthnCredentialId?: string;
+  mpcPrfSaltId?: string;
 }
 
 export interface UnlockMpcWalletInput {
   walletId: number;
   idToken: string;
-  spendingPassword: string;
+  secret: DeviceShareSecret;
 }
 
 export interface UnlockMpcWalletDeps {
@@ -187,7 +197,7 @@ export interface UnlockMpcWalletDeps {
   getLoginShare: (idToken: string, chain: string, network: string) => Promise<string>;
   reconstructRootKeyBytes: (
     encryptedDeviceShare: string,
-    password: string,
+    secret: DeviceShareSecret,
     loginShare: string,
     expectedXpub: string,
   ) => Promise<Uint8Array>;
@@ -206,7 +216,7 @@ export async function unlockMpcWalletFlow(
   input: UnlockMpcWalletInput,
   deps: UnlockMpcWalletDeps,
 ): Promise<void> {
-  const { walletId, idToken, spendingPassword } = input;
+  const { walletId, idToken, secret } = input;
   const { getWallet, getLoginShare, reconstructRootKeyBytes, sessionCache } = deps;
 
   const wallet = await getWallet(walletId);
@@ -219,7 +229,7 @@ export async function unlockMpcWalletFlow(
   try {
     const bytes = await reconstructRootKeyBytes(
       wallet.mpcDeviceShare,
-      spendingPassword,
+      secret,
       loginShare,
       wallet.publicKey,
     );
@@ -245,7 +255,10 @@ export interface RecoverMpcGoogleWalletInput {
   idToken: string;
   recoveryBlob: string;
   recoveryPassword: string;
-  newSpendingPassword: string;
+  newSecret: DeviceShareSecret;
+  /** Present when newSecret.kind === 'prf'; persisted so unlock can re-derive. */
+  webAuthnCredentialId?: string;
+  mpcPrfSaltId?: string;
   /**
    * The wallet's xpub, read from the recovery-file envelope. Used as the anchor
    * to validate the reconstructed key: if the uploaded recovery file belongs to
@@ -264,7 +277,7 @@ export interface RecoverMpcGoogleWalletDeps {
     loginShare: string,
     expectedXpub: string,
   ) => Promise<Uint8Array>;
-  encryptDeviceShare: (deviceShare: string, password: string) => string;
+  encryptDeviceShare: (deviceShare: string, secret: DeviceShareSecret) => Promise<string>;
   createMpcGoogleWallet: (params: {
     name: string;
     icon: string;
@@ -274,6 +287,8 @@ export interface RecoverMpcGoogleWalletDeps {
     userId: string;
     publicKey: string;
     encryptedDeviceShare: string;
+    webAuthnCredentialId?: string;
+    mpcPrfSaltId?: string;
   }) => Promise<number>;
   subFromIdToken: (idToken: string) => string;
 }
@@ -305,7 +320,7 @@ export async function recoverMpcGoogleWalletFlow(
   input: RecoverMpcGoogleWalletInput,
   deps: RecoverMpcGoogleWalletDeps,
 ): Promise<RecoverMpcGoogleWalletResult> {
-  const { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSpendingPassword, expectedXpub } = input;
+  const { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSecret, webAuthnCredentialId, mpcPrfSaltId, expectedXpub } = input;
   const {
     decryptRecoveryShare,
     getLoginShare,
@@ -323,7 +338,7 @@ export async function recoverMpcGoogleWalletFlow(
   const publicKey = expectedXpub;
 
   // Reuse the recovery share as the new device's local device factor (see decision above).
-  const encryptedDeviceShare = encryptDeviceShare(recoveryShare, newSpendingPassword);
+  const encryptedDeviceShare = await encryptDeviceShare(recoveryShare, newSecret);
   const userId = getSub(idToken);
 
   const walletId = await createMpcGoogleWallet({
@@ -335,6 +350,8 @@ export async function recoverMpcGoogleWalletFlow(
     userId,
     publicKey,
     encryptedDeviceShare,
+    webAuthnCredentialId,
+    mpcPrfSaltId,
   });
 
   return { walletId, publicKey };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MpcValidationError } from '@/shared/utils/mpc';
+import { MpcValidationError, type DeviceShareSecret } from '@/shared/utils/mpc';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -39,10 +39,12 @@ describe('createMpcGoogleWalletFlow', () => {
   const shareSet = { deviceShare: 'gmpc1.01.device', loginShare: 'gmpc1.02.login', recoveryShare: 'gmpc1.03.recovery' };
   const expectedXpub = 'xpub-test';
 
+  const secret: DeviceShareSecret = { kind: 'password', password: 'super-secret-password' };
+
   function makeDeps(overrides: Partial<CreateMpcGoogleWalletDeps> = {}): CreateMpcGoogleWalletDeps {
     return {
       prepareMpcWalletCreation: vi.fn(async () => ({ entropy: new Uint8Array(32), shareSet, expectedXpub })),
-      encryptDeviceShare: vi.fn((deviceShare: string, password: string) => `enc(${deviceShare},${password})`),
+      encryptDeviceShare: vi.fn(async (deviceShare: string, s: DeviceShareSecret) => `enc(${deviceShare},${(s as { password: string }).password})`),
       enrollLoginShare: vi.fn(async () => ({ stored: true })),
       createMpcGoogleWallet: vi.fn(async () => 42),
       subFromIdToken: vi.fn(() => 'google-sub-123'),
@@ -57,7 +59,9 @@ describe('createMpcGoogleWalletFlow', () => {
     chain: 'cardano',
     network: 'mainnet',
     idToken: fakeIdToken(),
-    spendingPassword: 'super-secret-password',
+    secret,
+    webAuthnCredentialId: 'cred-1',
+    mpcPrfSaltId: 'salt-1',
   };
 
   it('enrolls the login share with idToken/chain/network/loginShare', async () => {
@@ -71,13 +75,13 @@ describe('createMpcGoogleWalletFlow', () => {
     );
   });
 
-  it('encrypts the device share under the spending password before persisting', async () => {
+  it('encrypts the device share under the secret before persisting', async () => {
     const deps = makeDeps();
     await createMpcGoogleWalletFlow(baseInput, deps);
-    expect(deps.encryptDeviceShare).toHaveBeenCalledWith(shareSet.deviceShare, baseInput.spendingPassword);
+    expect(deps.encryptDeviceShare).toHaveBeenCalledWith(shareSet.deviceShare, baseInput.secret);
   });
 
-  it('persists the wallet record with sub as userId, the expected xpub, and the encrypted device share', async () => {
+  it('persists the wallet record with sub as userId, the expected xpub, the encrypted device share, and the credential/salt ids', async () => {
     const deps = makeDeps();
     await createMpcGoogleWalletFlow(baseInput, deps);
     expect(deps.createMpcGoogleWallet).toHaveBeenCalledWith({
@@ -88,7 +92,9 @@ describe('createMpcGoogleWalletFlow', () => {
       network: baseInput.network,
       userId: 'google-sub-123',
       publicKey: expectedXpub,
-      encryptedDeviceShare: `enc(${shareSet.deviceShare},${baseInput.spendingPassword})`,
+      encryptedDeviceShare: `enc(${shareSet.deviceShare},${(secret as { password: string }).password})`,
+      webAuthnCredentialId: 'cred-1',
+      mpcPrfSaltId: 'salt-1',
     });
   });
 
@@ -120,7 +126,14 @@ describe('createMpcGoogleWalletFlow', () => {
 });
 
 describe('unlockMpcWalletFlow', () => {
-  const wallet = { chain: 'cardano', network: 'mainnet', publicKey: 'xpub-test', mpcDeviceShare: 'enc-device-share' };
+  const wallet = {
+    chain: 'cardano',
+    network: 'mainnet',
+    publicKey: 'xpub-test',
+    mpcDeviceShare: 'enc-device-share',
+    webAuthnCredentialId: 'cred-1',
+    mpcPrfSaltId: 'salt-1',
+  };
 
   function makeDeps(overrides: Partial<UnlockMpcWalletDeps> = {}): UnlockMpcWalletDeps {
     return {
@@ -132,7 +145,8 @@ describe('unlockMpcWalletFlow', () => {
     };
   }
 
-  const baseInput = { walletId: 7, idToken: fakeIdToken(), spendingPassword: 'pw' };
+  const secret: DeviceShareSecret = { kind: 'password', password: 'pw' };
+  const baseInput = { walletId: 7, idToken: fakeIdToken(), secret };
 
   it('fetches the login share for the wallet chain/network and caches the reconstructed bytes on success', async () => {
     const deps = makeDeps();
@@ -141,11 +155,23 @@ describe('unlockMpcWalletFlow', () => {
     expect(deps.getLoginShare).toHaveBeenCalledWith(baseInput.idToken, wallet.chain, wallet.network);
     expect(deps.reconstructRootKeyBytes).toHaveBeenCalledWith(
       wallet.mpcDeviceShare,
-      baseInput.spendingPassword,
+      baseInput.secret,
       'gmpc1.02.login',
       wallet.publicKey,
     );
     expect(deps.sessionCache.set).toHaveBeenCalledWith(baseInput.walletId, new Uint8Array([9, 9, 9]));
+  });
+
+  it('passes the exact secret through to reconstructRootKeyBytes unchanged', async () => {
+    let seenSecret: DeviceShareSecret | undefined;
+    const deps = makeDeps({
+      reconstructRootKeyBytes: vi.fn(async (_enc: string, sec: DeviceShareSecret) => {
+        seenSecret = sec;
+        return new Uint8Array([1]);
+      }),
+    });
+    await unlockMpcWalletFlow(baseInput, deps);
+    expect(seenSecret).toEqual(secret);
   });
 
   it('does NOT cache and rethrows a clean error on MpcValidationError', async () => {
@@ -180,12 +206,14 @@ describe('recoverMpcGoogleWalletFlow', () => {
       getLoginShare: vi.fn(async () => 'gmpc1.02.login'),
       // Validates internally; returns entropy on success, throws MpcValidationError on mismatch.
       reconstructAndValidateEntropy: vi.fn(async () => new Uint8Array(32)),
-      encryptDeviceShare: vi.fn((share: string, password: string) => `enc(${share},${password})`),
+      encryptDeviceShare: vi.fn(async (share: string, s: DeviceShareSecret) => `enc(${share},${(s as { password: string }).password})`),
       createMpcGoogleWallet: vi.fn(async () => 99),
       subFromIdToken: vi.fn(() => 'google-sub-123'),
       ...overrides,
     };
   }
+
+  const newSecret: DeviceShareSecret = { kind: 'password', password: 'new-pw' };
 
   const baseInput = {
     name: 'Restored Wallet',
@@ -196,7 +224,9 @@ describe('recoverMpcGoogleWalletFlow', () => {
     idToken: fakeIdToken(),
     recoveryBlob: 'gmpc-recovery1.blob',
     recoveryPassword: 'recovery-pw',
-    newSpendingPassword: 'new-pw',
+    newSecret,
+    webAuthnCredentialId: 'cred-2',
+    mpcPrfSaltId: 'salt-2',
     expectedXpub: 'xpub-anchor',
   };
 
@@ -209,11 +239,11 @@ describe('recoverMpcGoogleWalletFlow', () => {
     expect(deps.reconstructAndValidateEntropy).toHaveBeenCalledWith('gmpc1.03.recovery', 'gmpc1.02.login', 'xpub-anchor');
   });
 
-  it('persists the wallet using the validated anchor xpub and the recovery share re-encrypted as the device factor', async () => {
+  it('persists the wallet using the validated anchor xpub, the recovery share re-encrypted as the device factor, and the credential/salt ids', async () => {
     const deps = makeDeps();
     const result = await recoverMpcGoogleWalletFlow(baseInput, deps);
 
-    expect(deps.encryptDeviceShare).toHaveBeenCalledWith('gmpc1.03.recovery', baseInput.newSpendingPassword);
+    expect(deps.encryptDeviceShare).toHaveBeenCalledWith('gmpc1.03.recovery', baseInput.newSecret);
     expect(deps.createMpcGoogleWallet).toHaveBeenCalledWith({
       name: baseInput.name,
       icon: baseInput.icon,
@@ -222,7 +252,9 @@ describe('recoverMpcGoogleWalletFlow', () => {
       network: baseInput.network,
       userId: 'google-sub-123',
       publicKey: 'xpub-anchor',
-      encryptedDeviceShare: `enc(gmpc1.03.recovery,${baseInput.newSpendingPassword})`,
+      encryptedDeviceShare: `enc(gmpc1.03.recovery,${(newSecret as { password: string }).password})`,
+      webAuthnCredentialId: 'cred-2',
+      mpcPrfSaltId: 'salt-2',
     });
     expect(result).toEqual({ walletId: 99, publicKey: 'xpub-anchor' });
   });
