@@ -108,6 +108,9 @@
           :cbor-hex="txCborForSummary"
           class="mb-3"
         />
+        <div v-if="signTxSummary && formatFiatFromAda(signTxSummary.totals.youPayAda)" class="tx-fiat-approx mb-3">
+          {{ formatFiatFromAda(signTxSummary.totals.youPayAda) }}
+        </div>
 
         <!-- Non-output intents: certificates, mint/burn, collateral, metadata.
              Rendered only when at least one is present — an ordinary payment
@@ -186,6 +189,25 @@
               dense
               class="mt-2"
               :label="$t('signTx.networkMismatchAck')"
+            />
+          </div>
+        </div>
+
+        <!-- Proportional risk friction: quiet when Shield says low/medium/
+             unverified (the badge above is enough); blocking only on "high". -->
+        <div v-if="txRiskBadge && txRiskBadge.label === 'high'" class="tx-decode-failed-banner mb-3">
+          <v-icon color="#ff6464" size="20" class="mr-2">mdi-shield-alert-outline</v-icon>
+          <div class="tx-expired-text">
+            <div class="tx-expired-title">{{ $t('signTx.highRiskTitle') }}</div>
+            <div class="tx-expired-body">{{ $t('signTx.risk.highTooltip') }}</div>
+            <v-checkbox
+              v-model="highRiskAck"
+              color="#ff6464"
+              hide-details
+              dark
+              dense
+              class="mt-2"
+              :label="$t('signTx.highRiskAck')"
             />
           </div>
         </div>
@@ -566,6 +588,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { WalletType, Network } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
@@ -585,6 +608,21 @@ interface SignTxResponse { success: boolean; error?: string; signatures?: Array<
 const { isVisible, currentRequest, requestQueue, approve, reject } = useDAppOverlay();
 const { isApex, themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
+
+// Fiat approximation for the tx total — "≈ $5,620" when you meant $56 is
+// instantly visible where "12482.1 ADA" is not. Reuses the already-cached
+// price (networkStore.getAdaPrice(), populated by background sync — no new
+// API call here) and the existing display-currency conversion, so this is
+// pure presentation over data the app already has.
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+function formatFiatFromAda(adaAmountStr: string): string | null {
+  const adaPrice = networkStore.getAdaPrice();
+  if (!adaPrice) return null; // no price data yet — omit rather than show a stale/zero amount
+  const ada = parseFloat(adaAmountStr);
+  if (!Number.isFinite(ada)) return null;
+  const converted = convertFiat(ada * adaPrice);
+  return `≈ ${getCurrencySymbol()}${converted.toFixed(2)}`;
+}
 
 const spendingPassword = ref('');
 const showPassword = ref(false);
@@ -1276,14 +1314,21 @@ const signTxNetworkMismatch = computed(() => {
 });
 const networkMismatchAck = ref(false);
 
+// Proportional risk friction: the Cardano Shield badge was purely
+// decorative (rendered in TransactionDetailsCard's header, never gated
+// anything). Quiet when safe — low/medium/unverified show only the existing
+// badge, no extra friction — blocking only when Shield says "high".
+const highRiskAck = ref(false);
+
 // Single gate for every signTx Sign button: expired TTL, an unacknowledged
-// decode failure, or an unacknowledged network mismatch. Kept as one
+// decode failure, network mismatch, or high Cardano Shield risk. Kept as one
 // computed so all five wallet-type branches (password/PRF/Ledger/Trezor/
 // Keystone) can't drift out of sync.
 const signTxBlocked = computed(() =>
   ttlDisplay.value.expired
   || (signTxDecodeFailed.value && !decodeFailedAck.value)
   || (signTxNetworkMismatch.value && !networkMismatchAck.value)
+  || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
 );
 
 // Wallet-switch mid-request: background.ts already refuses to honor a
@@ -1401,6 +1446,7 @@ watch(currentRequest, () => {
   faviconAttempt.value = 0;
   decodeFailedAck.value = false;
   networkMismatchAck.value = false;
+  highRiskAck.value = false;
 });
 
 function rejectSign() {
@@ -2127,6 +2173,13 @@ async function signMidnightDataPrf() {
   border-radius: 10px;
   background: rgba(255, 100, 100, 0.08);
   border: 1px solid rgba(255, 100, 100, 0.32);
+}
+
+.tx-fiat-approx {
+  text-align: right;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: -6px;
 }
 
 .tx-intents {

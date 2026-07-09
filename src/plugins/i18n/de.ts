@@ -3460,6 +3460,8 @@ export default {
   'signTx.networkMismatchAck': 'Ich verstehe das Risiko und möchte trotzdem signieren',
   'signTx.signingAddress': 'Signiert als',
   'signTx.malformedSignData': 'Diese Website hat eine fehlerhafte Anfrage gesendet. Das Signieren ist deaktiviert, bis eine gültige Anfrage gesendet wird.',
+  'signTx.highRiskTitle': 'Cardano Shield hat dies als hohes Risiko markiert',
+  'signTx.highRiskAck': 'Ich verstehe das Risiko und möchte trotzdem signieren',
   'signTx.risk.low': 'Sicher',
   'signTx.risk.medium': 'Vorsicht',
   'signTx.risk.high': 'Hohes Risiko',
