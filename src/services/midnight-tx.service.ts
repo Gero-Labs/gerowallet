@@ -42,6 +42,19 @@ export interface MidnightSendCredentials {
 }
 
 /**
+ * High-level stages of an unshielded send, in order. Drives the send
+ * dialog's progress timeline. The `working` stage is the single BG
+ * balance+sign round-trip; the dialog splits it into "sync DUST" vs "sign"
+ * using the live `midnightStore.sendProgress` percentage the BG broadcasts.
+ */
+export type MidnightSendStage =
+  | 'authorizing'
+  | 'building'
+  | 'working'
+  | 'submitting'
+  | 'done';
+
+/**
  * Retrieve publicKeyHex + addressHex via BG. Fast path if already stored in
  * the wallet record; slow path decrypts the mnemonic once and persists.
  * Credentials are only needed for the slow path (legacy wallets).
@@ -152,11 +165,40 @@ export async function sendUnshieldedNight(
   network: string,
   baseRequest: Omit<BuildMidnightTxRequest, 'publicKeyHex' | 'addressHex'>,
   credentials: MidnightSendCredentials,
+  onStage?: (stage: MidnightSendStage) => void,
 ): Promise<SubmitMidnightTxResponse> {
+  onStage?.('authorizing');
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
+  onStage?.('building');
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
+  onStage?.('working');
   const signedTxHex = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
-  return submitSignedTx(network, signedTxHex);
+  onStage?.('submitting');
+  const result = await submitSignedTx(network, signedTxHex);
+  onStage?.('done');
+  return result;
+}
+
+/**
+ * Optimistically insert a just-submitted tx into the store as `pending` so it
+ * shows in history immediately, before gero-sync indexes and pushes it back.
+ * Best-effort: a failure here is silent (gero-sync backfills the confirmed
+ * entry regardless, and its hash-normalized dedup replaces this pending row).
+ */
+export async function addPendingMidnightTx(
+  hash: string,
+  amount: bigint,
+  counterparty: string,
+  isShielded: boolean,
+): Promise<void> {
+  try {
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.ADD_MIDNIGHT_PENDING_TX,
+      data: { hash, amount: amount.toString(), counterparty, isShielded },
+    });
+  } catch {
+    /* optimistic-only — gero-sync will deliver the confirmed entry anyway */
+  }
 }
 
 // ─── Shielded NIGHT send ──────────────────────────────────────────────────────
@@ -219,13 +261,18 @@ export async function sendShieldedNight(
   outputs: ReadonlyArray<ShieldedTransferOutput>,
   credentials: MidnightSendCredentials,
   waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
+  onStage?: (stage: MidnightSendStage) => void,
 ): Promise<SubmitMidnightTxResponse> {
   if (outputs.length === 0) {
     throw new Error('sendShieldedNight: at least one output is required');
   }
+  onStage?.('working');
   const signedTxHex = await buildAndSignShieldedInBg(outputs, credentials);
+  onStage?.('submitting');
   const api = getMidnightApi(network);
-  return api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
+  const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
+  onStage?.('done');
+  return result;
 }
 
 // ─── Path A — NIGHT-for-DUST registration ─────────────────────────────────────

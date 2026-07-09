@@ -2,18 +2,19 @@
   <div class="midnight-send-root">
     <BaseDialog
       :isOpen="isOpen"
-      @close="emit('close')"
+      @close="onDialogClose"
       :title="t('wallet.quickSend')"
-      :loading="sending"
+      :loading="false"
       :min-height="0"
       :subtitle="t('wallet.quickSendSubtitle', { currency: nightCurrency })"
-      :persistent="false"
+      :persistent="sending"
       :img="assets.sendSvg"
-      :width="428"
+      :width="sending ? 468 : 428"
       imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
     >
-      <!-- Stepper indicator — identical markup/styling to the Cardano SendDialog. -->
-      <v-card-title style="display: block;" class="pa-0">
+      <!-- Stepper indicator — identical markup/styling to the Cardano SendDialog.
+           Hidden while sending; the progress timeline takes over. -->
+      <v-card-title v-if="!sending" style="display: block;" class="pa-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
           <v-stepper-header>
             <template v-for="(item, index) in steps">
@@ -40,7 +41,66 @@
       </v-card-title>
 
       <v-card-text class="send-dialog-content px-3 pb-0">
-        <CustomStepper :currentStep="currentStep" :steps="steps">
+        <!-- ── Send-in-progress: left summary + right stage timeline ── -->
+        <div v-if="sending" class="midnight-progress-view">
+          <div class="mpv-summary">
+            <div class="mpv-summary-amount">{{ amount || '0' }} {{ nightCurrency }}</div>
+            <div class="mpv-summary-to">
+              <span class="mpv-summary-to-label">{{ t('common.to') }}</span>
+              <span class="mpv-summary-to-addr">{{ truncate(recipient.trim()) }}</span>
+            </div>
+            <div v-if="dustBattery" class="mpv-summary-dust">
+              <div class="mpv-summary-dust-head">
+                <v-icon size="12" color="#00DFF3" class="mr-1">mdi-lightning-bolt</v-icon>
+                <span>{{ dustCurrency }}</span>
+                <span class="mpv-summary-dust-pct">{{ dustBattery.percent }}%</span>
+              </div>
+              <div class="mpv-summary-dust-track">
+                <div class="mpv-summary-dust-fill" :style="{ width: dustBattery.percent + '%' }"></div>
+              </div>
+              <div class="mpv-summary-dust-note">{{ t('midnight.send.dustResetShort') }}</div>
+            </div>
+          </div>
+
+          <div class="mpv-timeline">
+            <div
+              v-for="(node, i) in timelineNodes"
+              :key="node.key"
+              class="mpv-node"
+              :class="node.state"
+            >
+              <div class="mpv-node-marker">
+                <div class="mpv-dot">
+                  <v-icon v-if="node.state === 'done'" size="13" color="#0c0e12">mdi-check</v-icon>
+                  <span v-else-if="node.state === 'active'" class="mpv-pulse"></span>
+                </div>
+                <div
+                  v-if="i < timelineNodes.length - 1"
+                  class="mpv-connector"
+                  :class="{ filled: node.state === 'done' }"
+                ></div>
+              </div>
+              <div class="mpv-node-body">
+                <div class="mpv-node-label">{{ node.label }}</div>
+                <div
+                  v-if="node.state === 'active' && node.showBar"
+                  class="mpv-node-bar"
+                  :class="{ indeterminate: node.percent == null || node.percent < 0 }"
+                >
+                  <div
+                    class="mpv-node-bar-fill"
+                    :style="node.percent != null && node.percent >= 0 ? { width: node.percent + '%' } : {}"
+                  ></div>
+                </div>
+                <div v-if="node.state === 'active' && node.detail" class="mpv-node-detail">
+                  {{ node.detail }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <CustomStepper v-else :currentStep="currentStep" :steps="steps">
           <!-- ── Step 1: Recipient + amount ── -->
           <v-stepper-content step="1">
             <div class="step-recipients-wrapper">
@@ -194,13 +254,23 @@
                 <v-icon size="14" color="#FEC84B" class="mr-1">mdi-information-outline</v-icon>
                 <span>{{ t('midnight.send.dustResetWarning') }}</span>
               </div>
+              <!-- Extra nudge when DUST is already low: the reset could delay
+                   the next send until it refills. -->
+              <div
+                v-if="!isShielded && dustBattery && dustBattery.percent < 20"
+                class="midnight-dust-note midnight-dust-note--low mt-2"
+              >
+                <v-icon size="14" color="#F97066" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+                <span>{{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
+              </div>
             </div>
           </v-stepper-content>
         </CustomStepper>
       </v-card-text>
 
-      <!-- Actions — Continue (step 1) / auth + Sign (step 2) / Back. -->
-      <v-card-actions class="send-dialog-actions" style="flex-flow: column;">
+      <!-- Actions — Continue (step 1) / auth + Sign (step 2) / Back.
+           Hidden while sending; the timeline is the only affordance then. -->
+      <v-card-actions v-if="!sending" class="send-dialog-actions" style="flex-flow: column;">
         <div v-if="currentStep === 2">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
@@ -283,6 +353,7 @@ import {
   midnightStore,
   SHIELDED_PROVING_CONSENT_VERSION,
 } from '@/stores/midnightStore';
+import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -363,6 +434,79 @@ const amount = ref('');
 const password = ref('');
 const sending = ref(false);
 const errorMessage = ref<string | null>(null);
+
+// ── Send progress timeline ──
+// High-level stage of the in-flight send, driven by sendUnshieldedNight's
+// onStage callback. The `working` stage (BG balance+sign round-trip) is split
+// into "sync DUST" vs "sign" in the UI using the live percentage the BG
+// broadcasts into midnightStore.sendProgress.
+type SendStageOrIdle = MidnightSendStage | 'idle';
+const sendStage = ref<SendStageOrIdle>('idle');
+
+const STAGE_RANK: Record<SendStageOrIdle, number> = {
+  idle: 0, authorizing: 1, building: 2, working: 3, submitting: 4, done: 5,
+};
+
+interface TimelineNode {
+  key: string;
+  label: string;
+  state: 'pending' | 'active' | 'done';
+  showBar?: boolean;
+  percent?: number | null;
+  detail?: string;
+}
+
+const timelineNodes = computed<TimelineNode[]>(() => {
+  const s = sendStage.value;
+  const rank = STAGE_RANK[s] ?? 0;
+  const prog = midnightStore.sendProgress;
+  const pct = prog && prog.phase === 'syncingDust' ? prog.percent : null;
+  // Within the single BG `working` stage: sync is active until the ledger
+  // replay hits 100%, then sign takes over until the call resolves.
+  const syncDone = pct != null && pct >= 100;
+  const syncActive = s === 'working' && !syncDone;
+  const signActive = s === 'working' && syncDone;
+
+  return [
+    {
+      key: 'authorize',
+      label: t('midnight.send.stageAuthorize'),
+      state: s === 'authorizing' ? 'active' : rank > 1 ? 'done' : 'pending',
+    },
+    {
+      key: 'build',
+      label: t('midnight.send.stageBuild'),
+      state: s === 'building' ? 'active' : rank > 2 ? 'done' : 'pending',
+    },
+    {
+      key: 'sync',
+      label: t('midnight.send.stageSync'),
+      state: rank > 3 || signActive ? 'done' : syncActive ? 'active' : 'pending',
+      showBar: true,
+      percent: syncActive ? pct : undefined,
+      detail: syncActive ? prog?.detail : undefined,
+    },
+    {
+      key: 'sign',
+      label: t('midnight.send.stageSign'),
+      state: rank > 3 ? 'done' : signActive ? 'active' : 'pending',
+    },
+    {
+      key: 'submit',
+      label: t('midnight.send.stageSubmit'),
+      state: s === 'submitting' ? 'active' : s === 'done' ? 'done' : 'pending',
+    },
+  ];
+});
+
+// Compact DUST battery for the progress summary (current / cap), so the user
+// sees their DUST level while the send runs and the reset note has context.
+const dustBattery = computed<{ percent: number } | null>(() => {
+  const ds = midnightStore.dustState;
+  if (!ds || ds.cap <= 0n) return null;
+  const raw = Number((ds.current * 10000n) / ds.cap) / 100;
+  return { percent: Math.max(0, Math.min(100, Math.round(raw))) };
+});
 
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
@@ -543,6 +687,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
   const wallet = loggedWallet.value;
   if (!wallet) return;
   sending.value = true;
+  sendStage.value = 'authorizing';
   try {
     const { sendUnshieldedNight } = await import('@/services/midnight-tx.service');
     const result = await sendUnshieldedNight(
@@ -557,14 +702,20 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
         ttlMs: Date.now() + 5 * 60_000,
       },
       credentials,
+      (stage) => { sendStage.value = stage; },
     );
-    resetForm();
     debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status);
+    // Show it in history right away — gero-sync backfills the confirmed entry.
+    void addOptimisticPendingTx(result.txHash);
+    // Brief completed-state hold so the user sees the timeline finish.
+    await new Promise((r) => setTimeout(r, 550));
+    resetForm();
     emit('close');
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : String(e);
   } finally {
     sending.value = false;
+    sendStage.value = 'idle';
   }
 }
 
@@ -572,6 +723,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
   const wallet = loggedWallet.value;
   if (!wallet) return;
   sending.value = true;
+  sendStage.value = 'authorizing';
   try {
     const { sendShieldedNight } = await import('@/services/midnight-tx.service');
     const result = await sendShieldedNight(
@@ -581,15 +733,40 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
         amount: parseAmount(amount.value),
       }],
       credentials,
+      'InBlock',
+      (stage) => { sendStage.value = stage; },
     );
-    resetForm();
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'status:', result.status);
+    void addOptimisticPendingTx(result.txHash, true);
+    await new Promise((r) => setTimeout(r, 550));
+    resetForm();
     emit('close');
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : String(e);
   } finally {
     sending.value = false;
+    sendStage.value = 'idle';
   }
+}
+
+// Insert the just-submitted tx into history immediately (values captured
+// synchronously so a later resetForm can't blank them out).
+async function addOptimisticPendingTx(hash: string, shielded = false) {
+  const amountBig = parseAmount(amount.value);
+  const to = recipient.value.trim();
+  try {
+    const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
+    await addPendingMidnightTx(hash, amountBig, to, shielded);
+  } catch {
+    /* non-fatal — gero-sync backfills the confirmed entry */
+  }
+}
+
+// Block dismissal while a send is running (the BG work continues even if the
+// UI closes, so keep the timeline visible until it resolves).
+function onDialogClose() {
+  if (sending.value) return;
+  emit('close');
 }
 
 function resetForm() {
@@ -597,6 +774,7 @@ function resetForm() {
   amount.value = '';
   password.value = '';
   currentStep.value = 1;
+  sendStage.value = 'idle';
 }
 
 // Reset to step 1 whenever the dialog re-opens.
@@ -905,5 +1083,188 @@ watch(
   border: 1px solid rgba(254, 200, 75, 0.18);
   border-radius: 8px;
   padding: 8px 10px;
+}
+.midnight-dust-note--low {
+  color: rgba(249, 112, 102, 0.9);
+  background: rgba(249, 112, 102, 0.06);
+  border-color: rgba(249, 112, 102, 0.2);
+}
+
+/* ─── Send-progress timeline (right-side, appears while sending) ─── */
+.midnight-progress-view {
+  display: flex;
+  gap: 16px;
+  padding: 14px 4px 18px;
+  min-height: 230px;
+  animation: mpv-fade 0.3s ease;
+}
+@keyframes mpv-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Left summary column */
+.mpv-summary {
+  width: 150px;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding-right: 14px;
+}
+.mpv-summary-amount {
+  font-size: 18px;
+  font-weight: 700;
+  color: #00DFF3;
+  line-height: 1.2;
+  word-break: break-word;
+}
+.mpv-summary-to {
+  margin-top: 5px;
+  font-size: 11px;
+}
+.mpv-summary-to-label {
+  color: rgba(255, 255, 255, 0.35);
+  margin-right: 4px;
+}
+.mpv-summary-to-addr {
+  color: #CECFD2;
+}
+.mpv-summary-dust {
+  margin-top: 16px;
+}
+.mpv-summary-dust-head {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #CECFD2;
+}
+.mpv-summary-dust-pct {
+  margin-left: auto;
+  color: #00DFF3;
+}
+.mpv-summary-dust-track {
+  margin-top: 5px;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.mpv-summary-dust-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #00c7f3, #00fad5);
+  transition: width 0.45s ease;
+}
+.mpv-summary-dust-note {
+  margin-top: 6px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: rgba(254, 200, 75, 0.75);
+}
+
+/* Right timeline column */
+.mpv-timeline {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mpv-node {
+  display: flex;
+  gap: 12px;
+  min-height: 54px;
+}
+.mpv-node:last-child {
+  min-height: auto;
+}
+.mpv-node-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.mpv-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #292929;
+  transition: background-color 0.35s ease, box-shadow 0.35s ease;
+}
+.mpv-node.done .mpv-dot {
+  background: #00DFF3;
+}
+.mpv-node.active .mpv-dot {
+  background: transparent;
+  box-shadow: 0 0 0 2px #00DFF3;
+}
+.mpv-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00DFF3;
+  animation: mpv-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mpv-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.55); opacity: 0.5; }
+}
+.mpv-connector {
+  width: 2px;
+  flex: 1;
+  min-height: 20px;
+  margin: 3px 0;
+  background: #292929;
+  transition: background-color 0.4s ease;
+}
+.mpv-connector.filled {
+  background: #00DFF3;
+}
+.mpv-node-body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+.mpv-node-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6B6F76;
+  transition: color 0.3s ease;
+}
+.mpv-node.active .mpv-node-label {
+  color: #ffffff;
+}
+.mpv-node.done .mpv-node-label {
+  color: #CECFD2;
+}
+.mpv-node-bar {
+  margin-top: 7px;
+  height: 4px;
+  max-width: 190px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.mpv-node-bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #00c7f3, #00fad5);
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.mpv-node-bar.indeterminate .mpv-node-bar-fill {
+  width: 40%;
+  animation: mpv-indet 1.1s ease-in-out infinite;
+}
+@keyframes mpv-indet {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+.mpv-node-detail {
+  margin-top: 5px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
 }
 </style>

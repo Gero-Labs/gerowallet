@@ -66,6 +66,25 @@ export interface MidnightProvingOperation {
 }
 
 /**
+ * Live progress of the DUST-ledger sync sub-step of a send, broadcast from
+ * the background so the send dialog's stage timeline can show a real bar
+ * instead of an indeterminate spinner. `null` when no send is in flight.
+ *
+ * Only the background-driven sub-steps live here (the DUST replay is the one
+ * long, measurable phase). The dialog owns the high-level stage sequence
+ * (authorize → build → sync → sign → submit) locally via its onStage
+ * callback and attaches this percentage to whichever phase is active.
+ */
+export interface MidnightSendProgress {
+  /** Which background phase this refers to (e.g. 'syncingDust'). */
+  phase: 'syncingDust';
+  /** 0-100 within the phase; -1 = indeterminate (highest not known yet). */
+  percent: number;
+  /** Optional human detail, e.g. "1,259,015 / 1,261,599 events". */
+  detail?: string;
+}
+
+/**
  * Midnight wallet state. All fields are populated reactively as the wallet
  * receives gero-sync WS events and Nexus REST responses.
  */
@@ -143,6 +162,14 @@ export interface MidnightStore {
    * resets the per-wallet state whenever this key changes. Null = never set.
    */
   activeWalletKey: string | null;
+
+  /**
+   * Transient live progress of an in-flight send's background sub-step.
+   * Deliberately NOT hydrated from chrome.storage on cold start (see the
+   * hydrate block) so a reload can never resurrect a stale mid-send bar.
+   * `null` whenever no send is running.
+   */
+  sendProgress: MidnightSendProgress | null;
 }
 
 /**
@@ -190,6 +217,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   lastMidnightTxId: null,
   shieldedProvingConsent: null,
   activeWalletKey: null,
+  sendProgress: null,
 });
 
 // ---------------------------------------------------------------- serializer
@@ -203,6 +231,12 @@ function serializeValue(_key: string, value: unknown): unknown {
   if (value instanceof Map) return Array.from(value.entries());
   if (value instanceof Set) return Array.from(value);
   return value;
+}
+
+/** Canonical tx-hash key for dedup: lowercase, no leading `0x`. */
+function normalizeTxHash(hash: string): string {
+  const h = (hash || '').toLowerCase();
+  return h.startsWith('0x') ? h.slice(2) : h;
 }
 
 // ---------------------------------------------------------------- hydration
@@ -366,7 +400,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
-    'shieldedProvingConsent', 'activeWalletKey',
+    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress',
   ] as const) {
     if (key in updates) {
       (midnightStore as any)[key] = updates[key];
@@ -543,6 +577,21 @@ export const midnightActions = {
     broadcastFromBackground({ networkStatus: status });
   },
 
+  /**
+   * Publish (or clear) the live background progress of an in-flight send so
+   * the send dialog's stage timeline can render a real bar. Pass `null` when
+   * the send finishes or fails.
+   *
+   * The browser broadcast is always immediate (that's what drives the bar);
+   * only the chrome.storage write is debounced here — sendProgress is
+   * transient and never hydrated, so there's no reason to burst full-store
+   * writes to disk on every sync tick.
+   */
+  setSendProgress(progress: MidnightSendProgress | null) {
+    midnightStore.sendProgress = progress;
+    broadcastFromBackground({ sendProgress: progress });
+  },
+
   /** New chain tip observed by gero-sync (or Nexus tip query). */
   applyTipUpdate(tip: MidnightChainTip) {
     midnightStore.tip = tip;
@@ -557,7 +606,12 @@ export const midnightActions = {
    * the wallet already has.
    */
   applyTransaction(tx: MidnightTransaction) {
-    const existing = midnightStore.transactions.findIndex(t => t.hash === tx.hash);
+    // Normalize (strip 0x, lowercase) so an optimistic pending entry inserted
+    // right after submit — whose hash may carry a `0x` prefix or different
+    // case than gero-sync's later confirmed hash — is replaced in place rather
+    // than duplicated when the confirmed event arrives.
+    const key = normalizeTxHash(tx.hash);
+    const existing = midnightStore.transactions.findIndex(t => normalizeTxHash(t.hash) === key);
     if (existing >= 0) {
       midnightStore.transactions.splice(existing, 1, tx);
     } else {

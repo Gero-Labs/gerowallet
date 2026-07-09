@@ -3760,6 +3760,53 @@ app.addToOptions(MessageTypes.RESYNC_MIDNIGHT, async (request, sendResponse) => 
   }
 });
 
+/**
+ * Midnight: optimistically insert a just-submitted tx as `pending` so the send
+ * appears in history immediately. gero-sync's confirmed entry (same hash)
+ * replaces it via `applyTransaction`'s hash dedup once indexed.
+ *
+ * Request shape: `{ hash, amount (decimal string), counterparty?, isShielded? }`.
+ * Amount is a string because Chrome messaging can't carry BigInt.
+ */
+app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('ADD_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
+    }
+    const { hash, amount, counterparty, isShielded } = request.data || {};
+    if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
+    const { midnightActions } = await import('@/stores/midnightStore');
+    let amountBig = 0n;
+    try { amountBig = BigInt(amount ?? '0'); } catch { amountBig = 0n; }
+    midnightActions.applyTransaction({
+      hash,
+      type: 'send',
+      token: 'NIGHT',
+      amount: amountBig,
+      counterparty: typeof counterparty === 'string' ? counterparty : '',
+      timestamp: Date.now(),
+      status: 'pending',
+      fee: 0n,
+      isShielded: !!isShielded,
+    });
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, async (request, sendResponse) => {
   try {
     // Only update panel behavior — storage is written directly by the component

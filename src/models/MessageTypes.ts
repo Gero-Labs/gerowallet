@@ -106,4 +106,9 @@ export enum MessageTypes {
   // reinstalling. User-triggered from the portfolio page's reset action;
   // delegates to `midnightSyncService.forceResync()` (BG-side, where the WS lives).
   RESYNC_MIDNIGHT = 'RESYNC_MIDNIGHT',
+  // Insert a locally-known pending Midnight tx into the store immediately after
+  // submit, so the send shows in history without waiting for gero-sync to index
+  // and push it back. Deduplicated by hash: the confirmed entry from gero-sync
+  // replaces it when it arrives.
+  ADD_MIDNIGHT_PENDING_TX = 'ADD_MIDNIGHT_PENDING_TX',
 }

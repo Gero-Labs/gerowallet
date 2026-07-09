@@ -3938,6 +3938,14 @@ export default {
   'midnight.send.shieldedBalanceUnavailable': 'Shielded-Guthaben —',
   'midnight.send.shieldedBalanceHint': 'Anzeige des Shielded-Guthabens kommt in einer späteren Version; Transfers werden weiterhin On-Chain verifiziert.',
   'midnight.send.dustResetWarning': 'Beim Senden von NIGHT beginnt die DUST-Generierung der bewegten Coins von vorn. Dein DUST-Guthaben füllt sich in den nächsten Tagen wieder bis zur Obergrenze auf; die Netzwerkgebühr selbst ist vernachlässigbar.',
+  'midnight.send.dustResetShort': 'Senden startet die DUST-Generierung neu; sie füllt sich über die nächsten Tage wieder auf.',
+  'midnight.send.dustLowHint': 'Dein DUST ist niedrig ({percent}%). Beim Senden beginnt die Generierung der bewegten Coins von vorn, daher kann es dauern, bis vor der nächsten Transaktion wieder genug vorhanden ist.',
+  // Fortschrittsanzeige beim Senden
+  'midnight.send.stageAuthorize': 'Autorisieren',
+  'midnight.send.stageBuild': 'Transaktion erstellen',
+  'midnight.send.stageSync': 'DUST-Ledger synchronisieren',
+  'midnight.send.stageSign': 'Transaktion signieren',
+  'midnight.send.stageSubmit': 'Senden',
   // Shielded-Proving-Consent-Dialog
   'midnight.consent.title': 'Privatsphäre beim Shielded-Senden',
   'midnight.consent.subtitle': 'Vor deiner ersten Shielded-Transaktion',
