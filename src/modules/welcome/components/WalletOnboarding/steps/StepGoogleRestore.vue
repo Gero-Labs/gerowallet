@@ -226,7 +226,7 @@ const authPayload = computed<GoogleAuthPayload>(() => (
 const secretReady = computed(() => (
   passkeyCapable.value
     ? !!enrolledPasskey.value
-    : spendingPassword.value.length >= 8 && spendingPassword.value === confirmSpendingPassword.value
+    : spendingPassword.value.length >= 10 && spendingPassword.value === confirmSpendingPassword.value
 ));
 
 const canRestore = computed(() => (

@@ -1701,7 +1701,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
 
 app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
   try {
-    // Note: Never log request.data — contains idToken/recoveryPassword/newSpendingPassword/prfOutputHex
+    // Note: Never log request.data — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
     const {
       name, icon, theme, chain, network, idToken,
       recoveryBlob, recoveryPassword, publicKey: expectedXpub,
