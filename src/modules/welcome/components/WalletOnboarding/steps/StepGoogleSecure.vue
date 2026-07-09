@@ -225,7 +225,7 @@ const authPayload = computed<GoogleAuthPayload>(() => (
 const secretReady = computed(() => (
   passkeyCapable.value
     ? !!passkey.value
-    : spendingPassword.value.length >= 8 && spendingPassword.value === confirmSpendingPassword.value
+    : spendingPassword.value.length >= 10 && spendingPassword.value === confirmSpendingPassword.value
 ));
 
 const canContinue = computed(() => formValid.value && !creating.value && secretReady.value);

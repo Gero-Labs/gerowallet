@@ -71,6 +71,14 @@ export async function decryptRecoveryShare(blob: string, password: string): Prom
     const t = view.getUint32(1, false);
     const m = view.getUint32(5, false);
     const p = view.getUint32(9, false);
+    // The header is untrusted (read from an imported file). @noble/hashes doesn't bound `m`
+    // tightly enough to stop a crafted backup from requesting gigabytes of Argon2 memory, which
+    // would hang or OOM-crash the extension before a passphrase is even checked. We only ever
+    // WRITE `V2_ARGON` above, so these bounds are generous but tight enough to always accept
+    // legitimate files while rejecting anything attacker-tunable to be dangerous.
+    if (t < 1 || t > 10 || m < 8 || m > 262_144 /* 256 MiB in KiB */ || p < 1 || p > 4) {
+      throw new RecoveryDecryptError('unsupported recovery backup parameters');
+    }
     const salt = raw.slice(13, 13 + SALT_LEN);
     nonce = raw.slice(13 + SALT_LEN, V2_HEADER_LEN);
     ciphertext = raw.slice(V2_HEADER_LEN);
