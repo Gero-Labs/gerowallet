@@ -548,15 +548,6 @@ app.add(METHOD.enable, (request, sendResponse) => {
     });
   };
 
-
-  const currentWallet = walletManager.getWallet();
-  if (!currentWallet) {
-    return reply({ error: APIError.AccountNotSet });
-  }
-  if (WalletStore.isWhitelisted(origin)) {
-    return reply({ data: true });
-  }
-
   const favIconUrl = send.tab?.favIconUrl;
   const enablePayload = { ...request.data, website: origin, favIconUrl };
 
@@ -564,7 +555,10 @@ app.add(METHOD.enable, (request, sendResponse) => {
     return sendToMiniGero('enable', enablePayload, tabId)
       .then(async (response) => {
         if (response.data === true) {
-          await WalletStore.addConnectedDapp(currentWallet.id, origin);
+          // Read the wallet fresh: a cold-start request may have logged a
+          // wallet in between the initial check and this resolution.
+          const walletNow = walletManager.getWallet();
+          if (walletNow) await WalletStore.addConnectedDapp(walletNow.id, origin);
         }
         reply({ data: response.data });
       });
@@ -594,15 +588,52 @@ app.add(METHOD.enable, (request, sendResponse) => {
       });
   };
 
-  // Primary: route through mini-gero side panel drawer
-  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
-    handleMiniGeroEnable()
-      .catch((err: unknown) => {
-        reply({ error: errorMessage(err) || APIError.InternalError });
-      });
-  } else {
-    openSidePanelAndSend();
+  const routeEnable = () => {
+    if (WalletStore.isWhitelisted(origin)) {
+      return reply({ data: true });
+    }
+    // Primary: route through mini-gero side panel drawer
+    if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+      handleMiniGeroEnable()
+        .catch((err: unknown) => {
+          reply({ error: errorMessage(err) || APIError.InternalError });
+        });
+    } else {
+      openSidePanelAndSend();
+    }
+  };
+
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet) {
+    // Cold start: open the panel so the user can log in, then continue the
+    // enable flow. Mirrors the popupLogin machinery (login wait, 5 min cap)
+    // instead of returning AccountNotSet before any UI ever opens.
+    if (typeof tabId !== 'number') {
+      return reply({ error: APIError.AccountNotSet });
+    }
+    openSidebar(tabId, 'sidepanel/index.html')
+      .then(() => new Promise<boolean>((resolve) => {
+        const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+        const started = Date.now();
+        const interval = setInterval(() => {
+          if (WalletStore.state.loggedWallet) {
+            clearInterval(interval);
+            resolve(true);
+          } else if (Date.now() - started >= LOGIN_TIMEOUT_MS) {
+            clearInterval(interval);
+            resolve(false);
+          }
+        }, 250);
+      }))
+      .then((loggedIn) => {
+        if (!loggedIn) return reply({ error: APIError.Refused });
+        routeEnable();
+      })
+      .catch(() => reply({ error: APIError.InternalError }));
+    return true;
   }
+
+  routeEnable();
 
   // IMPORTANT: Return true so that Chrome knows we'll call sendResponse asynchronously
   return true;
