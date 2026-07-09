@@ -2825,6 +2825,11 @@ export default {
   'welcome.restoringWallet': 'Restoring wallet...',
   'welcome.unlockWithGoogle': 'Sign in with Google to unlock',
   'welcome.unlockGoogleWalletDescription': 'Sign in with Google, then enter your spending password to unlock this wallet.',
+  'welcome.secureWithPasskey': 'Secure with a passkey',
+  'welcome.secureWithPasskeyHint': 'Unlock with Touch ID, Windows Hello, or a security key. No password to remember.',
+  'welcome.passkeySecured': 'Passkey ready. This device will unlock with your passkey.',
+  'welcome.unlockApprovePasskey': 'Sign in with Google, then approve with your passkey.',
+  'welcome.setUpPasskeyThisDevice': 'Set up a passkey on this device',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',

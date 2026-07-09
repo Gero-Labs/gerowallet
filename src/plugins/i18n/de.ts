@@ -3293,6 +3293,11 @@ export default {
   'welcome.restoringWallet': 'Wallet wird wiederhergestellt...',
   'welcome.unlockWithGoogle': 'Mit Google anmelden, um zu entsperren',
   'welcome.unlockGoogleWalletDescription': 'Melden Sie sich mit Google an und geben Sie dann Ihr Ausgabepasswort ein, um diese Wallet zu entsperren.',
+  'welcome.secureWithPasskey': 'Mit Passkey sichern',
+  'welcome.secureWithPasskeyHint': 'Entsperren mit Touch ID, Windows Hello oder Sicherheitsschlüssel. Kein Passwort nötig.',
+  'welcome.passkeySecured': 'Passkey bereit. Dieses Gerät entsperrt mit deinem Passkey.',
+  'welcome.unlockApprovePasskey': 'Mit Google anmelden, dann mit deinem Passkey bestätigen.',
+  'welcome.setUpPasskeyThisDevice': 'Passkey auf diesem Gerät einrichten',
 
   // Market
   'market.allTokens': 'Alle Token',
