@@ -2362,6 +2362,7 @@ export default {
   'security.passKeyRegisteredSuccess': 'PassKey erfolgreich registriert',
   'security.passKeyRegistrationFailed': 'PassKey-Registrierung fehlgeschlagen',
   'security.passKeyRequiredForPrfWallet': 'PassKey ist für die PRF-Wallet-Verschlüsselung erforderlich und kann nicht deregistriert werden',
+  'security.passKeyRequiredForMpcWallet': 'PassKey sichert den Geräteanteil dieser Wallet und kann nicht deregistriert werden',
   'security.passKeyRequiresUnlockMethod': 'Erfordert die Auswahl einer Entsperrmethode.',
   'security.passKeySettings': 'PassKey-Einstellungen',
   'security.passKeySettingsUpdateFailed': 'Aktualisierung der PassKey-Einstellungen fehlgeschlagen',

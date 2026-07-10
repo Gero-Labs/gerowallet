@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="isPrfWallet ? t('security.lockSettingsOnly') : t('security.lockSettings')"
+    :title="(isPrfWallet || isMpcWallet) ? t('security.lockSettingsOnly') : t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"
@@ -9,8 +9,8 @@
     :min-height="300"
   >
     <v-card-text class="px-3 py-0 lock-settings-dialog">
-      <!-- Unlock Method Section -->
-      <v-card class="transparent" flat>
+      <!-- Unlock Method Section (hidden for MPC — unlock is fixed to Google + creation secret) -->
+      <v-card v-if="!isMpcWallet" class="transparent" flat>
         <v-card-title class="justify-center pt-0">
           <v-icon color="primary" class="mr-1" small>mdi-lock-outline</v-icon>
           <span class="subtitle-1 font-weight-bold">{{ $t('security.unlockMethod') }}</span>
@@ -93,10 +93,10 @@
         </v-card-text>
       </v-card>
 
-      <v-divider class="my-5 mx-1" />
+      <v-divider class="my-5 mx-1" v-if="!isMpcWallet" />
 
-      <!-- Auto-Lock Timer Section -->
-      <v-card class="transparent" flat :disabled="selectedUnlockMethod === null">
+      <!-- Auto-Lock Timer Section (always enabled for MPC — it locks then requires Google re-unlock) -->
+      <v-card class="transparent" flat :disabled="selectedUnlockMethod === null && !isMpcWallet">
         <v-card-title class="justify-center pt-0">
           <v-icon color="primary" class="mr-1" small>mdi-timer-lock-outline</v-icon>
           <span class="subtitle-1 font-weight-bold">{{ $t('security.autoLockTimer') }}</span>
@@ -133,10 +133,12 @@
         </v-card-text>
       </v-card>
 
-      <v-divider class="my-5 mx-1" v-if="!isPrfWallet" />
+      <v-divider class="my-5 mx-1" v-if="showPassKeySection" />
 
-      <!-- PassKey Section (hidden for PRF wallets — PassKey is their core encryption) -->
-      <v-card class="transparent" flat v-if="!isPrfWallet">
+      <!-- PassKey Section: hidden for PRF wallets (PassKey is their core encryption)
+           and for password-only MPC wallets (nothing to manage). For passkey-MPC
+           it renders in a protected, non-deregisterable form. -->
+      <v-card class="transparent" flat v-if="showPassKeySection">
         <v-card-title class="justify-center pt-0">
           <v-avatar size="18" class="mr-1">
             <v-img :src="assets.passKeySvg" contain style="filter: brightness(0) saturate(100%) invert(71%) sepia(43%) saturate(4033%) hue-rotate(146deg) brightness(95%) contrast(103%);"></v-img>
@@ -178,8 +180,8 @@
                   {{ isPassKeyRegistered ? $t('security.passKeyRegistered') : $t('security.passKeyNotRegistered') }}
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  <!-- PRF wallets: PassKey is core encryption, cannot be deregistered -->
-                  <template v-if="isPrfWallet && isPassKeyRegistered">
+                  <!-- Core-encryption passkeys (PRF or passkey-MPC): cannot be deregistered -->
+                  <template v-if="(isPrfWallet || isMpcPasskeyWallet) && isPassKeyRegistered">
                     {{ $t('security.passKeyPrfWalletDescription') }}
                   </template>
                   <!-- Normal wallets: Regular descriptions -->
@@ -188,7 +190,7 @@
                   </template>
                 </v-list-item-subtitle>
               </v-list-item-content>
-              <v-list-item-action v-if="!isPrfWallet">
+              <v-list-item-action v-if="!isPrfWallet && !isMpcPasskeyWallet">
                 <v-btn
                   small
                   text
@@ -200,8 +202,8 @@
                   {{ isPassKeyRegistered ? $t('security.deregister') : $t('security.register') }}
                 </v-btn>
               </v-list-item-action>
-              <!-- PRF wallets: Show lock icon instead of button -->
-              <v-list-item-action v-else-if="isPrfWallet && isPassKeyRegistered">
+              <!-- Core-encryption passkeys (PRF or passkey-MPC): show lock icon instead of button -->
+              <v-list-item-action v-else-if="(isPrfWallet || isMpcPasskeyWallet) && isPassKeyRegistered">
                 <v-tooltip bottom content-class="custom-tooltip">
                   <template v-slot:activator="{ on, attrs }">
                     <v-icon
@@ -212,7 +214,7 @@
                       mdi-lock
                     </v-icon>
                   </template>
-                  <span>{{ $t('security.passKeyRequiredForPrfWallet') }}</span>
+                  <span>{{ isMpcPasskeyWallet ? $t('security.passKeyRequiredForMpcWallet') : $t('security.passKeyRequiredForPrfWallet') }}</span>
                 </v-tooltip>
               </v-list-item-action>
             </v-list-item>
@@ -281,8 +283,8 @@
             <!-- Divider after password autofill section (Normal non-PRF wallets only) -->
             <v-divider class="my-3 mx-1" v-if="isNormalWallet && !isPrfWallet" />
 
-            <!-- Use PassKey for Unlocking -->
-            <v-list-item :disabled="isPassKeyUnlockDisabled">
+            <!-- Use PassKey for Unlocking (not MPC — its passkey is core encryption, always on) -->
+            <v-list-item v-if="!isMpcWallet" :disabled="isPassKeyUnlockDisabled">
               <v-list-item-avatar class="my-0">
                 <v-icon :disabled="isPassKeyUnlockDisabled">mdi-lock-open-outline</v-icon>
               </v-list-item-avatar>
@@ -307,8 +309,8 @@
               </v-list-item-action>
             </v-list-item>
 
-            <!-- Auto-Trigger PassKey Authentication for Unlock -->
-            <v-list-item :disabled="!passKeyForUnlock">
+            <!-- Auto-Trigger PassKey Authentication for Unlock (not MPC) -->
+            <v-list-item v-if="!isMpcWallet" :disabled="!passKeyForUnlock">
               <v-list-item-avatar class="my-0">
                 <v-img :src="assets.autoTriggerSvg" contain :style="{
                   width: '24px',
@@ -454,6 +456,28 @@ const isPrfWallet = computed(() => {
   const wallet = walletStore.loggedWallet;
   return wallet?.encryptionMethod === 'prf';
 });
+
+// MPC "Sign in with Google" wallet: unlock is fixed to Google sign-in + the
+// secret chosen at creation (passkey or spending password), read from the
+// wallet record — the local unlock-method radio has no effect on it. So the
+// radio is hidden and only the auto-lock timer (+ a protected passkey view)
+// stay meaningful.
+const isMpcWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'mpc');
+
+// MPC wallet secured with a passkey: that passkey's PRF output encrypts the
+// device share, so it is core encryption — treat it like a PRF wallet's
+// passkey (never deregisterable, or the device share becomes undecryptable
+// and this browser can no longer unlock the wallet).
+const isMpcPasskeyWallet = computed(() =>
+  isMpcWallet.value
+  && !!walletStore.loggedWallet?.webAuthnCredentialId
+  && !!walletStore.loggedWallet?.mpcPrfSaltId,
+);
+
+// The passkey management block is meaningful only for Normal wallets and for
+// MPC wallets that actually have a passkey; a password-only MPC wallet has
+// nothing to manage here.
+const showPassKeySection = computed(() => !isPrfWallet.value && !(isMpcWallet.value && !isMpcPasskeyWallet.value));
 
 const isPassKeyAutofillDisabled = computed(() => {
   // Disable if browser doesn't support PassKey, if PassKey not registered, if loading, or if no unlock method is set
@@ -878,6 +902,13 @@ async function handlePassKeyAutoTriggerChange() {
  * Handle PassKey registration
  */
 async function handlePassKeyRegister() {
+  // Passkey enrollment here targets Normal wallets. For MPC the passkey must be
+  // bound to the device-share cipher at creation, and PRF wallets already own
+  // their passkey — registering another via this dialog would be a broken,
+  // partial operation, so refuse.
+  if (isPrfWallet.value || isMpcWallet.value) {
+    return;
+  }
   loadingPassKeyRegistration.value = true;
 
   try {
@@ -922,6 +953,13 @@ async function handlePassKeyRegister() {
  * Handle PassKey deregistration
  */
 async function handlePassKeyDeregister() {
+  // Defense-in-depth: the passkey is core encryption for PRF and passkey-MPC
+  // wallets (it derives the key / decrypts the device share). The template
+  // already hides the button for them; this guard ensures a future regression
+  // can never deregister and strand the wallet.
+  if (isPrfWallet.value || isMpcWallet.value) {
+    return;
+  }
   loadingPassKeyRegistration.value = true;
 
   try {
