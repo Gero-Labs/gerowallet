@@ -208,7 +208,6 @@ const valid = ref(false);
 const isBT = ref(false);
 const loading = ref(false);
 const controller = ref(null);
-const tabId = ref<number | null>(null);
 const signature = ref<{ signature: string; key: HexBlob }>(undefined);
 const form = ref(null);
 // Keystone state
@@ -221,10 +220,6 @@ const keystoneAddressBytes = ref<Uint8Array | null>(null); // Store address byte
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
-});
-
-const useSidePanel = computed(() => {
-  return config.value?.useSidePanel;
 });
 
 // Check if wallet uses PRF encryption (PassKey)
@@ -681,13 +676,14 @@ const init = async () => {
 };
 
 onMounted(async () => {
-  if (useSidePanel.value) {
-    const params = new URLSearchParams(window.location.href);
-    tabId.value = Number(params.get("tabId"));
-    controller.value = Messaging.createInternalSidePanelController(tabId.value);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see
+  // openSidePanelForSignData's popup fallback in background.ts, which always
+  // targets index.html) — never inside the side panel, which renders
+  // DAppOverlay.vue instead. It must always speak the popup port protocol
+  // regardless of the user's Prompt Display Mode setting; branching on it
+  // here connected the wrong port name and hung forever whenever this
+  // fallback view was reached.
+  controller.value = Messaging.createInternalController();
   await init();
 
   // Set document title
