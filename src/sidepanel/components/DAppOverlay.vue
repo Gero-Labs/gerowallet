@@ -1750,9 +1750,12 @@ const txRiskBadge = computed<{ color: string; icon: string; label: string } | nu
   const isHigh = score === DappScore.high || scoreStr === 'high' || score === 2;
   const isMedium = score === DappScore.medium || scoreStr === 'medium' || score === 1;
   const isLow = score === DappScore.low || scoreStr === 'low' || score === 0;
-  if (isHigh) return { color: 'error', icon: 'mdi-shield-alert', label: 'high' };
-  if (isMedium) return { color: 'warning', icon: 'mdi-shield-half-full', label: 'medium' };
-  if (isLow) return { color: 'success', icon: 'mdi-shield-check', label: 'low' };
+  // CSS var, not a Vuetify theme name: riskBadge.color feeds both a v-icon
+  // :color (which accepts var(--...)) AND an inline :style color/border-color
+  // on the badge, where a theme name like 'error' would be invalid CSS.
+  if (isHigh) return { color: 'var(--g-error)', icon: 'mdi-shield-alert', label: 'high' };
+  if (isMedium) return { color: 'var(--g-warning)', icon: 'mdi-shield-half-full', label: 'medium' };
+  if (isLow) return { color: 'var(--g-success)', icon: 'mdi-shield-check', label: 'low' };
   // Scan completed but score is 'unknown' or unrecognized → show neutral state
   return { color: 'var(--g-text-3)', icon: 'mdi-shield-outline', label: 'unverified' };
 });
@@ -2629,8 +2632,8 @@ function approveWcSession() {
   padding: 12px 14px;
   margin: 12px 0;
   border-radius: 10px;
-  background: rgba(255, 100, 100, 0.08);
-  border: 1px solid rgba(255, 100, 100, 0.32);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
 }
 
 .tx-fiat-approx {
@@ -2672,8 +2675,8 @@ function approveWcSession() {
   align-items: flex-start;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(255, 100, 100, 0.08);
-  border: 1px solid rgba(255, 100, 100, 0.32);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
 }
 
 .tx-expired-text {
@@ -2689,7 +2692,7 @@ function approveWcSession() {
 }
 
 .tx-expired-body {
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--g-text-2);
   font-size: 11px;
   line-height: 1.45;
   margin-top: 2px;
