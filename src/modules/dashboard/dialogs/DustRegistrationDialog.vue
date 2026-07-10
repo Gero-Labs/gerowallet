@@ -23,7 +23,7 @@
            registering — give it visual weight. When dust=='' (legacy wallet),
            the same card swaps to an upgrade prompt instead of the address. -->
       <div class="recipient-card" v-if="dustAddress">
-        <div class="recipient-label">{{ t('midnight.dustRecipientAddress') }}</div>
+        <div class="recipient-label t-label">{{ t('midnight.dustRecipientAddress') }}</div>
         <div class="recipient-row">
           <v-avatar size="32" color="amber darken-4" class="mr-3">
             <v-icon small color="amber lighten-2">mdi-star</v-icon>
@@ -39,7 +39,7 @@
       <!-- Upgrade card: shown when dust='' so the legacy wallet user can derive.
            Same recipient-card shape so the layout doesn't shift between states. -->
       <div class="recipient-card recipient-card--upgrade" v-else>
-        <div class="recipient-label">{{ t('midnight.dustRecipientAddress') }}</div>
+        <div class="recipient-label t-label">{{ t('midnight.dustRecipientAddress') }}</div>
         <div class="upgrade-body">
           <v-icon small color="amber" class="mr-2">mdi-alert-outline</v-icon>
           <span class="upgrade-text">
@@ -58,7 +58,7 @@
           :disabled="upgradeBusy"
           @keydown.enter="runUpgrade"
         />
-        <div v-if="upgradeError" class="red--text text--lighten-2 text-caption mt-2">
+        <div v-if="upgradeError" class="error--text text-caption mt-2">
           {{ upgradeError }}
         </div>
         <v-btn
@@ -85,8 +85,8 @@
           <div class="flow-stop-label">Cardano cNIGHT</div>
         </div>
         <div class="flow-arrow">
-          <v-icon small color="rgba(255,255,255,0.3)">mdi-arrow-right</v-icon>
-          <span class="flow-arrow-label">{{ t('midnight.flowSign') }}</span>
+          <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
+          <span class="flow-arrow-label t-label">{{ t('midnight.flowSign') }}</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--validator">
@@ -95,8 +95,8 @@
           <div class="flow-stop-label">{{ t('midnight.flowValidator') }}</div>
         </div>
         <div class="flow-arrow">
-          <v-icon small color="rgba(255,255,255,0.3)">mdi-arrow-right</v-icon>
-          <span class="flow-arrow-label">~2.5h</span>
+          <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
+          <span class="flow-arrow-label t-label">~2.5h</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--midnight">
@@ -125,7 +125,7 @@
         </div>
         <v-progress-linear
           rounded
-          color="cyan"
+          color="var(--g-accent)"
           height="6"
           :value="capProgress"
           striped
@@ -157,7 +157,7 @@
                low-prominence option for users who want to use cNIGHT on Cardano
                instead of native NIGHT registration. -->
           <div class="text-center mt-3">
-            <v-btn small text color="rgba(255,255,255,0.6)" @click="openRedemptionPortal">
+            <v-btn small text color="var(--g-text-2)" @click="openRedemptionPortal">
               <v-icon small left>mdi-open-in-new</v-icon>
               {{ t('midnight.openRedemptionPortal') }}
             </v-btn>
@@ -179,7 +179,7 @@
             class="mb-2"
           />
 
-          <div v-if="submitError" class="red--text text--lighten-2 text-caption mb-2">
+          <div v-if="submitError" class="error--text text-caption mb-2">
             {{ submitError }}
           </div>
 
@@ -559,22 +559,22 @@ void props;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
   margin-bottom: 16px;
   font-size: 12px;
 }
 
 .status-pill-label {
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--g-text-1);
 }
 
 .status-pill-help {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   font-size: 11px;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
 }
 
 .status-dot {
@@ -594,17 +594,17 @@ void props;
   animation: dot-pulse 2.4s ease-in-out infinite;
 }
 
-.status-dot--unregistered { background: rgba(255, 255, 255, 0.5); }
-.status-dot--unregistered::after { background: rgba(255, 255, 255, 0.5); }
+.status-dot--unregistered { background: var(--g-text-3); }
+.status-dot--unregistered::after { background: var(--g-text-3); }
 
-.status-dot--pending { background: #FFD86E; }
-.status-dot--pending::after { background: #FFD86E; }
+.status-dot--pending { background: var(--g-warning); }
+.status-dot--pending::after { background: var(--g-warning); }
 
-.status-dot--registered { background: #47CD89; }
-.status-dot--registered::after { background: #47CD89; }
+.status-dot--registered { background: var(--g-success); }
+.status-dot--registered::after { background: var(--g-success); }
 
-.status-dot--invalid { background: #F97066; }
-.status-dot--invalid::after { background: #F97066; }
+.status-dot--invalid { background: var(--g-error); }
+.status-dot--invalid::after { background: var(--g-error); }
 
 @keyframes dot-pulse {
   0%, 100% { transform: scale(1); opacity: 0.4; }
@@ -612,19 +612,19 @@ void props;
 }
 
 .status-pill--unregistered {
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--g-hairline-1);
 }
 .status-pill--pending {
-  background: rgba(255, 216, 110, 0.06);
-  border-color: rgba(255, 216, 110, 0.2);
+  background: var(--g-warning-fill);
+  border-color: var(--g-warning-line);
 }
 .status-pill--registered {
-  background: rgba(71, 205, 137, 0.06);
-  border-color: rgba(71, 205, 137, 0.2);
+  background: var(--g-success-fill);
+  border-color: var(--g-success-line);
 }
 .status-pill--invalid {
-  background: rgba(249, 112, 102, 0.06);
-  border-color: rgba(249, 112, 102, 0.2);
+  background: var(--g-error-fill);
+  border-color: var(--g-error-line);
 }
 
 /* ── Recipient card ──────────────────────────────────────────────────────────
@@ -632,24 +632,19 @@ void props;
    real visual weight so the user knows that's what they're mapping TO. */
 
 .recipient-card {
-  background: linear-gradient(135deg, rgba(255, 216, 110, 0.04) 0%, rgba(0, 199, 243, 0.04) 100%);
-  border: 1px solid rgba(255, 216, 110, 0.18);
-  border-radius: 12px;
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-card);
   padding: 14px 16px;
   margin-bottom: 16px;
 }
 
 .recipient-card--upgrade {
-  background: rgba(255, 216, 110, 0.04);
-  border-color: rgba(255, 216, 110, 0.25);
+  background: var(--g-warning-fill);
+  border-color: var(--g-warning-line);
 }
 
 .recipient-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.5);
   margin-bottom: 8px;
 }
 
@@ -664,19 +659,18 @@ void props;
 }
 
 .recipient-address-text {
-  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-family: var(--g-font-mono);
   font-size: 13px;
-  color: #ffffff;
+  color: var(--g-text-1);
   font-weight: 500;
-  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .recipient-network {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-top: 2px;
 }
 
@@ -684,7 +678,7 @@ void props;
   display: flex;
   align-items: flex-start;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--g-text-2);
   line-height: 1.5;
 }
 
@@ -703,7 +697,7 @@ void props;
   gap: 4px;
   padding: 12px 0 16px;
   margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .flow-stop {
@@ -722,7 +716,7 @@ void props;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--g-hairline-2);
 }
 
 .flow-stop-icon--cardano {
@@ -738,8 +732,8 @@ void props;
 }
 
 .flow-stop-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  color: var(--g-text-2);
   text-align: center;
   white-space: nowrap;
   font-weight: 500;
@@ -754,18 +748,11 @@ void props;
   min-width: 0;
 }
 
-.flow-arrow-label {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.35);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
 /* ── Generation stats (post-registration) ──────────────────────────────────── */
 
 .generation-stats {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
+  background: var(--g-surface);
+  border-radius: var(--g-r-control);
   padding: 12px 14px;
   margin-top: 8px;
 }
@@ -779,13 +766,13 @@ void props;
 
 .stat-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
 }
 
 .stat-value {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 12px;
   font-weight: 500;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 </style>
