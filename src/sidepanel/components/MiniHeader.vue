@@ -22,6 +22,14 @@
       <v-icon size="14" color="rgba(255,255,255,0.4)" class="chevron-icon">mdi-chevron-down</v-icon>
     </div>
     <div class="header-right">
+      <v-tooltip v-if="connectedSiteEntry" bottom content-class="custom-tooltip">
+        <template v-slot:activator="{ on }">
+          <v-btn icon x-small @click="disconnectActiveSite" class="toolbar-btn" v-on="on">
+            <v-icon size="16" color="#47CD89">mdi-link-variant</v-icon>
+          </v-btn>
+        </template>
+        <span>{{ $t('miniGero.connectedToSite', { domain: connectedSiteEntry.domain }) }}</span>
+      </v-tooltip>
       <v-tooltip bottom content-class="custom-tooltip">
         <template v-slot:activator="{ on }">
           <v-btn icon x-small @click="toggleHideBalances()" class="toolbar-btn" v-on="on">
@@ -46,12 +54,56 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
+
+// Connected-site visibility: no session management existed anywhere in the
+// panel before this — once whitelisted, enable() auto-approved silently
+// forever with no way to see or revoke it from here. Resolved once on mount
+// and re-resolved on visibilitychange (same pattern dappRequestHub uses) to
+// track tab navigation while the panel stays open across it.
+const activeTabOrigin = ref('');
+
+function resolveActiveTabOrigin() {
+  try {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const url = tabs?.[0]?.url;
+      if (!url) { activeTabOrigin.value = ''; return; }
+      try { activeTabOrigin.value = new URL(url).origin; } catch { activeTabOrigin.value = ''; }
+    });
+  } catch { activeTabOrigin.value = ''; }
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') resolveActiveTabOrigin();
+}
+
+onMounted(() => {
+  resolveActiveTabOrigin();
+  document.addEventListener('visibilitychange', onVisibilityChange);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+});
+
+interface ConnectedDappEntry { id: string; domain: string }
+const connectedSiteEntry = computed<ConnectedDappEntry | null>(() => {
+  const origin = activeTabOrigin.value;
+  if (!origin || !WalletStore.isWhitelisted(origin)) return null;
+  const dapps = (walletStore.connectedDapps || []) as ConnectedDappEntry[];
+  return dapps.find((d) => d.domain && origin.indexOf(String(d.domain)) !== -1) || null;
+});
+
+function disconnectActiveSite() {
+  const entry = connectedSiteEntry.value;
+  const walletId = walletStore.loggedWallet?.id;
+  if (!entry || walletId == null) return;
+  WalletStore.disconnectDapp(walletId, entry.id);
+}
 
 const ADA_HANDLE_POLICY = 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a';
 
