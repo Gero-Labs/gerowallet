@@ -679,10 +679,10 @@ onMounted(async () => {
   // This view is only ever opened inside a standalone popup window (see
   // openSidePanelForSignData's popup fallback in background.ts, which always
   // targets index.html) — never inside the side panel, which renders
-  // DAppOverlay.vue instead. It must always speak the popup port protocol
-  // regardless of the user's Prompt Display Mode setting; branching on it
-  // here connected the wrong port name and hung forever whenever this
-  // fallback view was reached.
+  // DAppOverlay.vue instead. It must always speak the popup port protocol.
+  // It used to branch on the now-retired Prompt Display Mode setting
+  // instead, which connected the wrong port name and hung forever whenever
+  // this fallback view was reached.
   controller.value = Messaging.createInternalController();
   await init();
 
