@@ -29,7 +29,7 @@
           <span class="balance-label">{{ $t('perpetuals.deposit.available') }}</span>
           <span class="balance-value" @click="setMax()">
             {{ availableAdaDisplay }} <span class="preview-unit">ADA</span>
-            <v-icon size="11" class="ml-1" color="#00c7f3">mdi-flash</v-icon>
+            <v-icon size="11" class="ml-1" color="var(--g-accent)">mdi-flash</v-icon>
           </span>
         </div>
 
@@ -43,13 +43,13 @@
         />
 
         <div class="warning-banner mt-2">
-          <v-icon size="14" color="#FFA726" class="mr-2" style="flex-shrink:0">mdi-alert-outline</v-icon>
+          <v-icon size="14" color="warning" class="mr-2" style="flex-shrink:0">mdi-alert-outline</v-icon>
           <span>{{ $t('perpetuals.stablecoinWarning') }}</span>
         </div>
 
         <transition name="fade-slide">
           <div v-if="depositError" class="error-banner mt-3">
-            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
             <span>{{ depositError }}</span>
           </div>
         </transition>
@@ -97,7 +97,7 @@
           </div>
 
           <div class="countdown-row">
-            <v-icon size="12" :color="quoteCountdown < 30 ? '#F97066' : '#FFA726'" class="mr-1">
+            <v-icon size="12" :color="quoteCountdown < 30 ? 'error' : 'warning'" class="mr-1">
               mdi-clock-outline
             </v-icon>
             <span class="countdown-text" :class="{ urgent: quoteCountdown < 30 }">
@@ -137,19 +137,19 @@
         />
 
         <!-- PRF (passkey) wallets confirm by authenticating with their PassKey -->
-        <div v-else-if="isPrfWallet" class="info-banner mt-3" style="background: rgba(0,199,243,0.06); border-color: rgba(0,199,243,0.22); color: #00c7f3;">
-          <v-icon size="14" color="#00c7f3" class="mr-2" style="flex-shrink:0">mdi-fingerprint</v-icon>
+        <div v-else-if="isPrfWallet" class="info-banner mt-3" style="background: color-mix(in srgb, var(--g-accent) 6%, transparent); border-color: color-mix(in srgb, var(--g-accent) 22%, transparent); color: var(--g-accent);">
+          <v-icon size="14" color="var(--g-accent)" class="mr-2" style="flex-shrink:0">mdi-fingerprint</v-icon>
           <span>{{ $t('perps.passkeySignHint') }}</span>
         </div>
 
         <div v-else class="info-banner mt-3">
-          <v-icon size="14" color="#FFB454" class="mr-2" style="flex-shrink:0">mdi-information-outline</v-icon>
+          <v-icon size="14" color="warning" class="mr-2" style="flex-shrink:0">mdi-information-outline</v-icon>
           <span>{{ $t('perpetuals.deposit.hwNotSupported', { addr: truncatedAddress }) }}</span>
         </div>
 
         <transition name="fade-slide">
           <div v-if="depositError" class="error-banner mt-3">
-            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
             <span>{{ depositError }}</span>
           </div>
         </transition>
@@ -200,12 +200,12 @@
               indeterminate
               size="56"
               width="3"
-              color="#00c7f3"
+              color="var(--g-accent)"
             />
-            <v-icon v-else-if="depositStatus === 'error'" size="56" color="#F97066">
+            <v-icon v-else-if="depositStatus === 'error'" size="56" color="error">
               mdi-alert-circle
             </v-icon>
-            <v-icon v-else size="56" color="#26FAB0">
+            <v-icon v-else size="56" color="success">
               mdi-check-circle
             </v-icon>
           </div>
@@ -224,7 +224,7 @@
                 done: stepIndexFor(depositStatus) > idx,
               }"
             >
-              <v-icon size="10" v-if="stepIndexFor(depositStatus) > idx" color="#26FAB0">mdi-check</v-icon>
+              <v-icon size="10" v-if="stepIndexFor(depositStatus) > idx" color="success">mdi-check</v-icon>
               <span>{{ s.label }}</span>
             </div>
           </div>
@@ -240,7 +240,7 @@
 
           <transition name="fade-slide">
             <div v-if="depositError" class="error-banner mt-3">
-              <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+              <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
               <span>{{ depositError }}</span>
             </div>
           </transition>
@@ -554,20 +554,20 @@ watch(() => props.value, (val) => {
 
 <style scoped>
 .perps-action-dialog {
-  background: linear-gradient(180deg, #13161B 0%, #0A0C10 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .dialog-title {
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 .dialog-body {
   padding: 16px !important;
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 .deposit-content {
@@ -579,7 +579,7 @@ watch(() => props.value, (val) => {
 
 .connect-gate-sub {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   text-align: center;
   line-height: 1.5;
   margin-bottom: 4px;
@@ -594,8 +594,8 @@ watch(() => props.value, (val) => {
 }
 
 .balance-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -603,8 +603,8 @@ watch(() => props.value, (val) => {
 
 .balance-value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: #00c7f3;
+  font-family: var(--g-font-mono);
+  color: var(--g-accent);
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
@@ -616,46 +616,46 @@ watch(() => props.value, (val) => {
 
 /* ── Inputs ── */
 .perp-input :deep(.v-input__slot) {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: var(--g-hairline-1) !important;
   min-height: 40px !important;
 }
 .perp-input :deep(.v-label) {
   font-size: 12px !important;
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--g-text-3) !important;
 }
 .perp-input :deep(input) {
   font-size: 13px !important;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
-  color: #ffffff !important;
-  caret-color: var(--chain-primary) !important;
+  font-family: var(--g-font-mono) !important;
+  color: var(--g-text-1) !important;
+  caret-color: var(--g-accent) !important;
 }
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 11px !important;
-  color: rgba(255, 255, 255, 0.35) !important;
+  color: var(--g-text-3) !important;
   font-weight: 600 !important;
 }
 .perp-input :deep(fieldset) {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--g-hairline-2) !important;
 }
 .perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--chain-primary) !important;
+  border-color: var(--g-accent) !important;
 }
 
 /* ── Preview Card ── */
 .preview-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px 14px;
   margin-bottom: 4px;
 }
 
 .preview-title {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   margin-bottom: 10px;
 }
 
@@ -664,30 +664,30 @@ watch(() => props.value, (val) => {
   justify-content: space-between;
   align-items: center;
   padding: 4px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 .preview-row:last-child { border-bottom: none; }
 
 .preview-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
 }
 
 .preview-value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--g-font-mono);
+  color: var(--g-text-1);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
 }
-.preview-value.highlight { color: #26FAB0; }
-.preview-value.muted { color: rgba(255, 255, 255, 0.45); font-weight: 400; }
+.preview-value.highlight { color: var(--g-success); }
+.preview-value.muted { color: var(--g-text-3); font-weight: 400; }
 .preview-value.mono-addr { font-size: 11px; }
 
 .preview-unit {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   font-weight: 400;
 }
 
@@ -696,28 +696,28 @@ watch(() => props.value, (val) => {
   opacity: 0.6;
   transition: opacity 0.15s ease, color 0.15s ease;
 }
-.copy-icon:hover { opacity: 1; color: #00c7f3 !important; }
+.copy-icon:hover { opacity: 1; color: var(--g-accent) !important; }
 
 .countdown-row {
   display: flex;
   align-items: center;
   padding-top: 10px;
   margin-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .countdown-text {
-  font-size: 10px;
-  color: #FFA726;
+  font-size: 11px;
+  color: var(--g-warning);
   font-weight: 600;
 }
-.countdown-text.urgent { color: #F97066; }
+.countdown-text.urgent { color: var(--g-error); }
 
 .refresh-btn {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em !important;
-  color: #00c7f3 !important;
+  color: var(--g-accent) !important;
   text-transform: none !important;
   padding: 0 6px !important;
   min-width: 0 !important;
@@ -729,11 +729,11 @@ watch(() => props.value, (val) => {
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(255, 167, 38, 0.08);
-  border: 1px solid rgba(255, 167, 38, 0.22);
+  border-radius: var(--g-r-control);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
   font-size: 11px;
-  color: rgba(255, 167, 38, 0.9);
+  color: var(--g-warning);
   line-height: 1.5;
 }
 
@@ -744,9 +744,9 @@ watch(() => props.value, (val) => {
   align-items: center;
   text-align: center;
   padding: 18px 14px 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
 }
 
 .status-icon-wrap {
@@ -761,13 +761,13 @@ watch(() => props.value, (val) => {
 .status-title {
   font-size: 14px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   margin-bottom: 4px;
 }
 
 .status-sub {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   margin-bottom: 12px;
   line-height: 1.4;
 }
@@ -785,24 +785,24 @@ watch(() => props.value, (val) => {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 9px;
+  border-radius: var(--g-r-pill);
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.4);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  color: var(--g-text-3);
 }
 .step-pill.active {
-  background: rgba(0, 199, 243, 0.12);
-  border-color: rgba(0, 199, 243, 0.4);
-  color: #00c7f3;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent);
+  color: var(--g-accent);
 }
 .step-pill.done {
-  background: rgba(38, 250, 176, 0.08);
-  border-color: rgba(38, 250, 176, 0.25);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  border-color: var(--g-success-line);
+  color: var(--g-success);
 }
 
 .tx-link-row {
@@ -815,26 +815,26 @@ watch(() => props.value, (val) => {
   align-items: center;
   font-size: 11px;
   font-weight: 600;
-  color: #00c7f3;
+  color: var(--g-accent);
   text-decoration: none;
   padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(0, 199, 243, 0.08);
-  border: 1px solid rgba(0, 199, 243, 0.22);
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 22%, transparent);
   transition: background 0.15s ease;
 }
-.tx-link:hover { background: rgba(0, 199, 243, 0.16); }
+.tx-link:hover { background: color-mix(in srgb, var(--g-accent) 16%, transparent); }
 
 /* ── Error banner ── */
 .error-banner {
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(249, 112, 102, 0.08);
-  border: 1px solid rgba(249, 112, 102, 0.22);
+  border-radius: var(--g-r-control);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
   font-size: 11px;
-  color: #F97066;
+  color: var(--g-error);
   line-height: 1.5;
 }
 
@@ -843,11 +843,11 @@ watch(() => props.value, (val) => {
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(255, 180, 84, 0.08);
-  border: 1px solid rgba(255, 180, 84, 0.22);
+  border-radius: var(--g-r-control);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
   font-size: 11px;
-  color: #FFB454;
+  color: var(--g-warning);
   line-height: 1.5;
 }
 
@@ -862,7 +862,7 @@ watch(() => props.value, (val) => {
 
 .back-btn {
   height: 44px !important;
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: var(--g-text-2) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   text-transform: none !important;
@@ -870,10 +870,10 @@ watch(() => props.value, (val) => {
 
 .action-btn {
   height: 44px !important;
-  border-radius: 10px !important;
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
+  border-radius: var(--g-r-control) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
@@ -881,7 +881,7 @@ watch(() => props.value, (val) => {
 }
 
 .action-btn:hover:not(.v-btn--disabled) {
-  background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important;
 }
 
 .action-btn.v-btn--disabled {

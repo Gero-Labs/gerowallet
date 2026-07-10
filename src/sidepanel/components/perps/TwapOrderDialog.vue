@@ -111,7 +111,7 @@
 
       <!-- Slice preview -->
       <div class="td-preview">
-        <span class="td-preview-label">{{ $t('perps.algo.slices') }}</span>
+        <span class="td-preview-label t-label">{{ $t('perps.algo.slices') }}</span>
         <span class="td-preview-value">{{ slicePreview }}</span>
       </div>
 
@@ -249,9 +249,9 @@ async function submit(): Promise<void> {
 
 <style scoped>
 .twap-dialog {
-  background: #15171d;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -265,15 +265,15 @@ async function submit(): Promise<void> {
 }
 
 .td-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
 }
 
 .td-close {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
   cursor: pointer;
   padding: 2px;
   border-radius: 4px;
@@ -282,13 +282,13 @@ async function submit(): Promise<void> {
 }
 
 .td-close:hover {
-  color: #fff;
+  color: var(--g-text-1);
   background: rgba(255, 255, 255, 0.08);
 }
 
 .td-description {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   margin: 0 0 4px 0;
   line-height: 1.4;
 }
@@ -296,37 +296,36 @@ async function submit(): Promise<void> {
 .td-side-toggle {
   display: flex;
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   padding: 3px;
   margin-bottom: 4px;
 }
 
 .td-side-btn {
   flex: 1;
-  border-radius: 6px !important;
+  border-radius: var(--g-r-control) !important;
   text-transform: none;
   font-weight: 700;
   font-size: 12px;
-  letter-spacing: 0.02em;
   background: transparent !important;
-  color: rgba(255, 255, 255, 0.55) !important;
+  color: var(--g-text-3) !important;
   height: 30px !important;
   box-shadow: none !important;
 }
 
 .td-side-btn--buy.active {
-  background: rgba(38, 250, 176, 0.15) !important;
-  color: #26FAB0 !important;
+  background: var(--g-success-fill) !important;
+  color: var(--g-success) !important;
 }
 
 .td-side-btn--sell.active {
-  background: rgba(249, 112, 102, 0.15) !important;
-  color: #F97066 !important;
+  background: var(--g-error-fill) !important;
+  color: var(--g-error) !important;
 }
 
 .td-input :deep(.v-input__slot) {
   background: rgba(255, 255, 255, 0.03) !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   min-height: 36px !important;
 }
 
@@ -354,19 +353,19 @@ async function submit(): Promise<void> {
   align-items: flex-start;
   gap: 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
   cursor: pointer;
 }
 
 .td-toggle input {
   margin-top: 2px;
-  accent-color: #00c7f3;
+  accent-color: var(--g-accent);
 }
 
 .td-hint {
   display: block;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-top: 1px;
 }
 
@@ -375,31 +374,24 @@ async function submit(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  background: rgba(0, 199, 243, 0.06);
-  border: 1px solid rgba(0, 199, 243, 0.15);
-  border-radius: 8px;
+  background: color-mix(in srgb, var(--g-accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 15%, transparent);
+  border-radius: var(--g-r-control);
   font-size: 11px;
 }
 
-.td-preview-label {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.45);
-  font-weight: 600;
-}
-
 .td-preview-value {
-  color: #00c7f3;
+  color: var(--g-accent);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .td-error {
   font-size: 11px;
-  color: #F97066;
-  background: rgba(249, 112, 102, 0.08);
-  border: 1px solid rgba(249, 112, 102, 0.2);
-  border-radius: 6px;
+  color: var(--g-error);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  border-radius: var(--g-r-control);
   padding: 6px 8px;
 }
 
@@ -412,7 +404,7 @@ async function submit(): Promise<void> {
 .td-btn {
   flex: 1;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   border: none;
   font-size: 12px;
   font-weight: 700;
@@ -430,7 +422,7 @@ async function submit(): Promise<void> {
 
 .td-btn--ghost {
   background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .td-btn--ghost:hover:not(:disabled) {
@@ -438,11 +430,11 @@ async function submit(): Promise<void> {
 }
 
 .td-btn--primary {
-  background: #00c7f3;
-  color: #000;
+  background: var(--g-accent);
+  color: var(--g-on-grad);
 }
 
 .td-btn--primary:hover:not(:disabled) {
-  background: #00b1da;
+  background: color-mix(in srgb, var(--g-accent) 88%, var(--g-canvas));
 }
 </style>
