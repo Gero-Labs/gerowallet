@@ -43,6 +43,8 @@
     "@cardano-sdk/tx-construction": "^0.28.9",
     "@cardano-sdk/web-extension": "^0.39.42",
     "@emurgo/cardano-message-signing-browser": "^1.1.0",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@keystonehq/animated-qr-base": "^0.0.1",
     "@keystonehq/keystone-sdk": "^0.12.3",
     "@ledgerhq/devices": "^8.15.1",

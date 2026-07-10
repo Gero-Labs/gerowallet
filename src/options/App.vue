@@ -31,7 +31,7 @@
         :timeout="snackbarPlugin.timeout"
         :color="snackbarPlugin.color"
         bottom
-        style="font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;"
+        style="font-family: var(--g-font-ui);"
         transition="scroll-y-transition"
     >
       {{ snackbarPlugin.text }}

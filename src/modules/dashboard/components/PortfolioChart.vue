@@ -721,7 +721,7 @@ const initChart = () => {
           color: 'transparent',
         } as SolidColor,
         textColor: 'rgba(255, 255, 255, 0.5)',
-        fontFamily: 'Quicksand, Inter, sans-serif',
+        fontFamily: 'Inter Variable, Inter, sans-serif',
       },
       grid: {
         vertLines: { visible: false },
