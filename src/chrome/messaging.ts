@@ -550,7 +550,8 @@ export const Messaging = {
       // does. Sending these straight through keeps the gesture alive long
       // enough to reach sidePanel.open(); background enforces the whitelist
       // itself for these methods (see the signTx/signData/MIDNIGHT_METHOD.
-      // signData handlers in background.ts).
+      // signData/BITCOIN_METHOD.signPsbt(s)/signMessage handlers in
+      // background.ts).
       if (
         request.method === METHOD.enable ||
         request.method === METHOD.isEnabled ||
@@ -559,7 +560,10 @@ export const Messaging = {
         request.method === MIDNIGHT_METHOD.connect ||
         request.method === METHOD.signTx ||
         request.method === METHOD.signData ||
-        request.method === MIDNIGHT_METHOD.signData
+        request.method === MIDNIGHT_METHOD.signData ||
+        request.method === BITCOIN_METHOD.signPsbt ||
+        request.method === BITCOIN_METHOD.signPsbts ||
+        request.method === BITCOIN_METHOD.signMessage
       ) {
         Messaging.sendToBackground({
           ...request,

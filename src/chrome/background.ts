@@ -3030,20 +3030,55 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
     return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
   }
 
-  const popupURL = chrome.runtime.getURL(
-    `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
-  );
-  focusOrCreatePopup(popupURL, 470, 600)
-    .then(tab => Messaging.sendToPopupInternal(tab.id, request))
-    .then((response: BackgroundResponse) => {
-      if (response.data !== undefined) {
-        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
-      } else {
-        sendResponse({ id: request.id, error: response.error ?? APIError.InternalError, target: TARGET, sender: SENDER.extension });
-      }
-    })
-    .catch(err => sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension }));
+  // Same fast-path/whitelist split and primary(mini-gero port)/fallback(popup)
+  // shape as METHOD.signTx above.
+  const signPsbtReply = (opts: ReplyOpts) => {
+    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const btcSignPsbtPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const tabId = request.send?.tab?.id;
 
+  const handleMiniGeroSignPsbt = () => {
+    return sendToMiniGero('btcSignPsbt', btcSignPsbtPayload, tabId)
+      .then((response) => signPsbtReply({ data: response.data }));
+  };
+
+  const openPopupForSignPsbt = () => {
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
+    );
+    return focusOrCreatePopup(popupURL, 470, 600)
+      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then((response: BackgroundResponse) => {
+        if (response.data !== undefined) signPsbtReply({ data: response.data });
+        else signPsbtReply({ error: response.error ?? APIError.InternalError });
+      })
+      .catch((e) => signPsbtReply({ error: e }));
+  };
+
+  const openSidePanelForSignPsbt = () => {
+    if (typeof tabId !== 'number') {
+      return signPsbtReply({ error: APIError.InternalError });
+    }
+    return openSidebar(tabId, 'sidepanel/index.html')
+      .then(() => waitForMiniGeroPort(5000, tabId))
+      .then(() => handleMiniGeroSignPsbt())
+      .catch(() => openPopupForSignPsbt());
+  };
+
+  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
+  if (!useSidePanel) {
+    openPopupForSignPsbt();
+    return true;
+  }
+
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+    handleMiniGeroSignPsbt().catch((err: unknown) => {
+      signPsbtReply({ error: errorMessage(err) || APIError.InternalError });
+    });
+  } else {
+    openSidePanelForSignPsbt();
+  }
   return true;
 });
 
@@ -3057,17 +3092,54 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   }
 
   const { psbtHexs, options } = request.data;
-  const signedHexs: string[] = [];
-  try {
-    for (const psbtHex of psbtHexs) {
-      const singleRequest = { ...request, data: { psbtHex, options } };
+  const tabId = request.send?.tab?.id;
+  const favIconUrl = request.send?.tab?.favIconUrl;
+  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
+
+  // Signs one PSBT in the batch via the mini-gero port (primary), an
+  // auto-opened side panel (secondary), or a standalone popup (fallback / when
+  // the side panel is disabled) — same primary/fallback shape as the singular
+  // signPsbt handler above, extracted here since this handler drives it once
+  // per PSBT in a sequential loop (matching the popup-only version's original
+  // one-popup-per-PSBT behavior).
+  const signOne = async (psbtHex: string): Promise<string> => {
+    const singleRequest = { ...request, data: { psbtHex, options } };
+
+    const viaPopup = async (): Promise<string> => {
       const popupURL = chrome.runtime.getURL(
         `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
       );
       const tab = await focusOrCreatePopup(popupURL, 470, 600);
       const response = await Messaging.sendToPopupInternal(tab.id, singleRequest) as BackgroundResponse;
-      if (response.error) throw response.error;
-      signedHexs.push(response.data as string);
+      if (response.data !== undefined) return response.data as string;
+      throw response.error ?? APIError.InternalError;
+    };
+
+    const viaMiniGero = async (): Promise<string> => {
+      try {
+        const response = await sendToMiniGero('btcSignPsbt', { psbtHex, options, website: request.origin, favIconUrl }, tabId);
+        return response.data as string;
+      } catch (err) {
+        throw errorMessage(err) || APIError.InternalError;
+      }
+    };
+
+    if (!useSidePanel) return viaPopup();
+    if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) return viaMiniGero();
+    if (typeof tabId !== 'number') throw APIError.InternalError;
+    try {
+      await openSidebar(tabId, 'sidepanel/index.html');
+      await waitForMiniGeroPort(5000, tabId);
+    } catch {
+      return viaPopup();
+    }
+    return viaMiniGero();
+  };
+
+  const signedHexs: string[] = [];
+  try {
+    for (const psbtHex of psbtHexs) {
+      signedHexs.push(await signOne(psbtHex));
     }
     sendResponse({ id: request.id, data: signedHexs, target: TARGET, sender: SENDER.extension });
   } catch (err) {
@@ -3085,20 +3157,53 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
     return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
   }
 
-  const popupURL = chrome.runtime.getURL(
-    `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent(request.origin)}`
-  );
-  focusOrCreatePopup(popupURL, 470, 600)
-    .then(tab => Messaging.sendToPopupInternal(tab.id, request))
-    .then((response: BackgroundResponse) => {
-      if (response.data !== undefined) {
-        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
-      } else {
-        sendResponse({ id: request.id, error: response.error ?? APIError.InternalError, target: TARGET, sender: SENDER.extension });
-      }
-    })
-    .catch(err => sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension }));
+  const signMessageReply = (opts: ReplyOpts) => {
+    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const btcSignMessagePayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const tabId = request.send?.tab?.id;
 
+  const handleMiniGeroSignMessage = () => {
+    return sendToMiniGero('btcSignMessage', btcSignMessagePayload, tabId)
+      .then((response) => signMessageReply({ data: response.data }));
+  };
+
+  const openPopupForSignMessage = () => {
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent(request.origin)}`
+    );
+    return focusOrCreatePopup(popupURL, 470, 600)
+      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then((response: BackgroundResponse) => {
+        if (response.data !== undefined) signMessageReply({ data: response.data });
+        else signMessageReply({ error: response.error ?? APIError.InternalError });
+      })
+      .catch((e) => signMessageReply({ error: e }));
+  };
+
+  const openSidePanelForSignMessage = () => {
+    if (typeof tabId !== 'number') {
+      return signMessageReply({ error: APIError.InternalError });
+    }
+    return openSidebar(tabId, 'sidepanel/index.html')
+      .then(() => waitForMiniGeroPort(5000, tabId))
+      .then(() => handleMiniGeroSignMessage())
+      .catch(() => openPopupForSignMessage());
+  };
+
+  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
+  if (!useSidePanel) {
+    openPopupForSignMessage();
+    return true;
+  }
+
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+    handleMiniGeroSignMessage().catch((err: unknown) => {
+      signMessageReply({ error: errorMessage(err) || APIError.InternalError });
+    });
+  } else {
+    openSidePanelForSignMessage();
+  }
   return true;
 });
 
