@@ -10,6 +10,10 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
 // import { viteImagemin } from 'vite-plugin-imagemin';
 
+// Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
+// alias on Windows (r() yields backslashes), so we hand it a literal path.
+const tokensScss = r('src/shared/styles/_tokens.scss').replace(/\\/g, '/');
+
 export const sharedConfig: UserConfig = {
   root: r('src'),
   envDir: r('.'),
@@ -54,6 +58,18 @@ export const sharedConfig: UserConfig = {
       '@noble/hashes/sha2': '@noble/hashes/sha2.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
+  },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // Every `<style lang="scss">` block sees the token mirror. tokens.css
+        // is canonical; these sass vars exist only for compile-time contexts
+        // (breakpoints, sass math) where custom properties cannot work.
+        additionalData: `@import "${tokensScss}";\n`,
+        quietDeps: true,
+        silenceDeprecations: ['legacy-js-api', 'import'],
+      },
+    },
   },
   define: {
     // Note: 'global' is handled by nodePolyfills plugin below
