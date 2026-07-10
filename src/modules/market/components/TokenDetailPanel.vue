@@ -35,13 +35,13 @@
         <div class="pb-3">
           <div class="d-flex align-center" style="gap: 8px">
             <span class="text-h5 font-weight-bold">{{ displayPrice }}</span>
-            <v-chip
-              x-small
-              :color="token.change24h >= 0 ? '#1b5e20' : '#b71c1c'"
-              :text-color="token.change24h >= 0 ? '#47CD89' : '#F97066'"
+            <span
+              class="g-num"
+              :class="token.change24h >= 0 ? 'delta-up' : 'delta-down'"
+              style="font-size: 13px; font-weight: 550;"
             >
-              {{ token.change24h >= 0 ? '+' : '-' }}{{ formatChange(token.change24h) }}
-            </v-chip>
+              {{ formatSignedChange(token.change24h) }}
+            </span>
           </div>
           <div class="text--secondary text-caption mt-1">{{ secondaryPrice }}</div>
 
@@ -487,7 +487,7 @@ function formatPnlSigned(adaValue: number): string {
   return sign + currencySymbol.value + converted.toFixed(2);
 }
 
-import { formatPriceRaw, formatPrice, formatCompact, formatChange } from '@/modules/market/utils/formatters';
+import { formatPriceRaw, formatPrice, formatCompact, formatSignedChange } from '@/modules/market/utils/formatters';
 
 function openExplorer() {
   const fingerprint = props.token.fingerprint;

@@ -1136,22 +1136,28 @@ onBeforeUnmount(() => {
   margin-bottom: 2px;
 }
 
+/* Section label on the type-ramp label tier (11px, tracked caps, muted). */
 .portfolio-label {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 550;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.08em;
+  color: var(--g-text-3);
 }
 
+/* Hero balance: the display-tier number, tabular so digits align as the
+   odometer ticks. Clamps down in the narrow metrics panel (28px floor) and
+   reaches the 36px dashboard hero size on wide viewports. */
 .portfolio-amount {
-  font-size: 1.4rem;
-  font-weight: 600;
-  color: #ffffff;
+  font-size: clamp(28px, 2.5vw, 36px);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--g-text-1);
   display: inline-flex;
   align-items: baseline;
   gap: 0.1em;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--g-dur-base) ease;
   margin-bottom: 4px;
 }
 
