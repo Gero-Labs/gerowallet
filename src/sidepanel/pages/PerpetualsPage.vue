@@ -4,7 +4,7 @@
     <div class="perps-header pa-3">
       <div class="d-flex align-center" style="gap: 8px;">
         <v-btn icon small @click="$router.push('/')">
-          <v-icon color="white">mdi-arrow-left</v-icon>
+          <v-icon color="var(--g-text-1)">mdi-arrow-left</v-icon>
         </v-btn>
         <SymbolSelector :value="selectedSymbol" @input="selectedSymbol = $event" />
         <span class="text-caption grey--text ml-auto">{{ $t('miniGero.perpsTitle') }}</span>
@@ -18,7 +18,7 @@
 
     <!-- Not supported -->
     <div v-if="!perpetualsSupported" class="empty-state">
-      <v-icon size="48" color="rgba(255,255,255,0.1)">mdi-chart-line</v-icon>
+      <v-icon size="48" color="var(--g-text-3)">mdi-chart-line</v-icon>
       <div class="text-body-2 grey--text mt-3 text-center">
         {{ $t('miniGero.perpsNotSupported') }}
       </div>
@@ -62,11 +62,11 @@
         <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
         <template v-else>
         <div v-if="trading.loading.value && positions.length === 0" class="text-center py-6">
-          <v-progress-circular indeterminate color="#26FAB0" size="32" width="3" />
+          <v-progress-circular indeterminate color="success" size="32" width="3" />
           <div class="grey--text text-caption mt-2">{{ $t('perpetuals.loadingPositions') }}</div>
         </div>
         <div v-else-if="positions.length === 0" class="empty-state-small">
-          <v-icon size="36" color="rgba(255,255,255,0.08)">mdi-chart-line</v-icon>
+          <v-icon size="36" color="var(--g-text-3)">mdi-chart-line</v-icon>
           <div class="text-body-2 grey--text mt-2">{{ $t('perpetuals.noOpenPositions') }}</div>
           <div class="text-caption grey--text mt-1">{{ $t('perpetuals.yourPerpetualPositions') }}</div>
         </div>
@@ -124,11 +124,11 @@
         <StrikeOnboarding v-if="!isConnected" @connected="onConnected" />
         <template v-else>
         <div v-if="trading.loading.value && openOrders.length === 0" class="text-center py-6">
-          <v-progress-circular indeterminate color="#26FAB0" size="32" width="3" />
+          <v-progress-circular indeterminate color="success" size="32" width="3" />
           <div class="grey--text text-caption mt-2">{{ $t('perpetuals.loadingLimitOrders') }}</div>
         </div>
         <div v-else-if="openOrders.length === 0" class="empty-state-small">
-          <v-icon size="36" color="rgba(255,255,255,0.08)">mdi-target</v-icon>
+          <v-icon size="36" color="var(--g-text-3)">mdi-target</v-icon>
           <div class="text-body-2 grey--text mt-2">{{ $t('perpetuals.noLimitOrders') }}</div>
           <div class="text-caption grey--text mt-1">{{ $t('perpetuals.yourPendingLimitOrders') }}</div>
         </div>
@@ -208,14 +208,14 @@
         </div>
 
         <div v-if="loadingHistory" class="text-center py-6">
-          <v-progress-circular indeterminate color="#26FAB0" size="32" width="3" />
+          <v-progress-circular indeterminate color="success" size="32" width="3" />
           <div class="grey--text text-caption mt-2">{{ $t('perpetuals.loadingHistory') }}</div>
         </div>
 
         <!-- Closed Positions list -->
         <template v-if="historyTab === 'closed' && !loadingHistory">
           <div v-if="closedPositions.length === 0" class="empty-state-small">
-            <v-icon size="36" color="rgba(255,255,255,0.08)">mdi-format-list-bulleted</v-icon>
+            <v-icon size="36" color="var(--g-text-3)">mdi-format-list-bulleted</v-icon>
             <div class="text-body-2 grey--text mt-2">{{ $t('perpetuals.noHistory') }}</div>
           </div>
           <div v-else class="position-cards">
@@ -250,7 +250,7 @@
             </div>
           </div>
           <div v-if="hasMoreClosed" class="text-center mt-3">
-            <v-btn x-small text color="#26FAB0" :loading="loadingHistory" @click="loadMoreClosed">
+            <v-btn x-small text color="success" :loading="loadingHistory" @click="loadMoreClosed">
               {{ $t('common.loadMore') }}
             </v-btn>
           </div>
@@ -259,7 +259,7 @@
         <!-- Fill History list -->
         <template v-if="historyTab === 'fills' && !loadingHistory">
           <div v-if="fillHistory.length === 0" class="empty-state-small">
-            <v-icon size="36" color="rgba(255,255,255,0.08)">mdi-format-list-bulleted</v-icon>
+            <v-icon size="36" color="var(--g-text-3)">mdi-format-list-bulleted</v-icon>
             <div class="text-body-2 grey--text mt-2">{{ $t('perpetuals.noHistory') }}</div>
           </div>
           <div v-else class="position-cards">
@@ -294,7 +294,7 @@
             </div>
           </div>
           <div v-if="hasMoreFills" class="text-center mt-3">
-            <v-btn x-small text color="#26FAB0" :loading="loadingHistory" @click="loadMoreFills">
+            <v-btn x-small text color="success" :loading="loadingHistory" @click="loadMoreFills">
               {{ $t('common.loadMore') }}
             </v-btn>
           </div>
@@ -595,23 +595,21 @@ watch(isConnected, (connected) => {
 .perps-header {
   position: sticky;
   top: 0;
-  z-index: 10;
-  background: rgba(14, 14, 18, 0.92);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: var(--g-z-sticky);
+  background: var(--g-surface);
+  border-bottom: 1px solid var(--g-hairline-1);
   padding-bottom: 8px !important;
 }
 
-.green-text { color: #26FAB0 !important; }
-.red-text   { color: #ef4444 !important; }
+.green-text { color: var(--g-success) !important; }
+.red-text   { color: var(--g-error) !important; }
 
 /* Segment toggle */
 .segment-toggle {
   display: flex;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 3px;
   gap: 2px;
 }
@@ -620,9 +618,9 @@ watch(isConnected, (connected) => {
   flex: 1;
   padding: 6px 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   background: transparent;
-  color: #888;
+  color: var(--g-text-3);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -634,22 +632,22 @@ watch(isConnected, (connected) => {
 }
 
 .segment-btn--active {
-  background: rgba(38, 250, 176, 0.15);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
   font-weight: 600;
 }
 
 .segment-count {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: var(--g-hairline-2);
+  border-radius: var(--g-r-control);
   padding: 0 5px;
-  font-size: 10px;
+  font-size: 11px;
   min-width: 16px;
   text-align: center;
 }
 
 .segment-btn--active .segment-count {
-  background: rgba(38, 250, 176, 0.2);
+  background: var(--g-success-fill);
 }
 
 /* Empty states */
@@ -677,11 +675,10 @@ watch(isConnected, (connected) => {
 }
 
 .position-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 12px;
-  backdrop-filter: blur(8px);
 }
 
 .position-card-header {
@@ -692,42 +689,42 @@ watch(isConnected, (connected) => {
 }
 
 .position-ticker {
-  color: white;
+  color: var(--g-text-1);
   font-size: 13px;
   font-weight: 600;
 }
 
 .position-leverage {
-  color: #888;
+  color: var(--g-text-3);
   font-size: 11px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--g-r-chip);
 }
 
 .position-type-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--g-r-chip);
   letter-spacing: 0.5px;
 }
 
 .badge-long {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--g-success-fill);
+  color: var(--g-success);
+  border: 1px solid var(--g-success-line);
 }
 
 .badge-short {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--g-error-fill);
+  color: var(--g-error);
+  border: 1px solid var(--g-error-line);
 }
 
 .order-type-label {
-  color: #666;
-  font-size: 10px;
+  color: var(--g-text-3);
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -744,13 +741,13 @@ watch(isConnected, (connected) => {
 }
 
 .stat-label {
-  font-size: 10px;
-  color: #666;
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .stat-value {
   font-size: 13px;
-  color: white;
+  color: var(--g-text-1);
   font-weight: 500;
 }
 
