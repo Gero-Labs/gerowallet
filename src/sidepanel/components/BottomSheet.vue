@@ -376,7 +376,9 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 100;
+  /* Below Vuetify's dialog stack (~202) on purpose: a v-dialog opened FROM a
+     sheet, such as KeystoneSignDialog over DAppOverlay, must render above it. */
+  z-index: var(--g-z-sheet);
   display: flex;
   align-items: flex-end;
   transition: background 0.35s ease;

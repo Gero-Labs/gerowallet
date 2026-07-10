@@ -203,7 +203,7 @@ export default defineComponent({
   position: fixed;
   bottom: 80px;
   right: 16px;
-  z-index: 1001;
+  z-index: var(--g-z-dock);
   width: 48px;
   height: 48px;
   display: flex;
@@ -252,7 +252,7 @@ export default defineComponent({
   position: fixed;
   bottom: 140px;
   right: 16px;
-  z-index: 1000;
+  z-index: var(--g-z-dock);
   width: 320px;
   max-height: 60vh;
   display: flex;
