@@ -1,5 +1,6 @@
 <template>
   <div class="step-connect" style="text-align: -webkit-center;">
+    <div class="step-scroll">
     <img
       style="width: 400px; align-self: center;"
       v-if="walletType === WalletType.Ledger"
@@ -73,6 +74,7 @@
         @error="onKeystoneError"
         @progress="onKeystoneProgress"
       />
+    </div>
     </div>
 
     <!-- Navigation buttons -->

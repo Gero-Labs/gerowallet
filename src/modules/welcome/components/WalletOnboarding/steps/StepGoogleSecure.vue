@@ -1,5 +1,6 @@
 <template>
   <div class="step-google-secure">
+    <div class="step-scroll">
     <v-form ref="secureForm" v-model="formValid" style="width: 100%;">
 
       <!-- Wallet name field -->
@@ -128,6 +129,7 @@
         <span class="text-body-2">{{ errorMessage }}</span>
       </v-alert>
     </v-form>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">

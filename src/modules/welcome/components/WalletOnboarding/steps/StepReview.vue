@@ -1,5 +1,6 @@
 <template>
   <div class="step-review">
+    <div class="step-scroll">
     <v-form ref="form3" v-model="valid3">
       <v-card flat class="transparent" :disabled="creatingWalletLoader">
 
@@ -65,6 +66,7 @@
 
       </v-card>
     </v-form>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">

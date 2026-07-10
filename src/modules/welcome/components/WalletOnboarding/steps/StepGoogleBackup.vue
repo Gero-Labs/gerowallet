@@ -1,5 +1,6 @@
 <template>
   <div class="step-google-backup">
+    <div class="step-scroll">
     <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
       <v-card-text class="pa-3">
         <div class="d-flex align-center mb-2">
@@ -46,10 +47,6 @@
         <span class="text-body-2">{{ $t('welcome.confirmSavedRecoveryFile') }}</span>
       </template>
     </v-checkbox>
-
-    <div class="mnemonic-note mt-3">
-      <v-icon x-small color="grey lighten-1" class="mr-1 flex-shrink-0">mdi-information-outline</v-icon>
-      <span>{{ $t('welcome.mnemonicBackupNote') }}</span>
     </div>
 
     <!-- Navigation -->
