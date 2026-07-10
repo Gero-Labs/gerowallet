@@ -6,7 +6,7 @@
       <div v-if="step === 1" class="step-content">
         <div class="choice-grid">
           <div class="choice-card" @click="chooseMethod('BUY')">
-            <v-icon size="36" color="#47CD89">mdi-arrow-bottom-left</v-icon>
+            <v-icon size="36" color="success">mdi-arrow-bottom-left</v-icon>
             <div class="choice-label white--text font-weight-bold mt-2">
               {{ $t('wallet.buyADA') }}
             </div>
@@ -15,7 +15,7 @@
             </div>
           </div>
           <div class="choice-card" @click="chooseMethod('SELL')">
-            <v-icon size="36" color="#F97066">mdi-arrow-top-right</v-icon>
+            <v-icon size="36" color="error">mdi-arrow-top-right</v-icon>
             <div class="choice-label white--text font-weight-bold mt-2">
               {{ $t('wallet.sellADA') }}
             </div>
@@ -213,9 +213,9 @@ watch(() => props.value, (open) => {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  border-radius: 14px;
+  border-radius: var(--g-r-card);
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
   text-align: center;
@@ -223,7 +223,7 @@ watch(() => props.value, (open) => {
 
 .choice-card:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
 }
 
 .choice-card:active {
@@ -231,7 +231,7 @@ watch(() => props.value, (open) => {
 }
 
 .choice-label {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .choice-desc {
@@ -254,8 +254,8 @@ watch(() => props.value, (open) => {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
   background: rgba(255, 255, 255, 0.04);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -263,7 +263,7 @@ watch(() => props.value, (open) => {
 
 .provider-item:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
 }
 
 .provider-logo {
@@ -288,8 +288,8 @@ watch(() => props.value, (open) => {
 .widget-iframe {
   width: 100%;
   height: calc(100% - 40px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   margin-top: 4px;
 }
 

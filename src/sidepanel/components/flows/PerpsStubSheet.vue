@@ -2,9 +2,9 @@
   <BottomSheet :value="value" @input="$emit('input', $event)" :title="$t('miniGero.perpsTitle')" height="55%">
     <div class="perps-sheet">
       <div class="perps-placeholder">
-        <v-icon size="64" color="#2a2a2a">mdi-chart-line</v-icon>
-        <div class="text-h6 white--text mt-4">{{ $t('miniGero.perpsComingSoon') }}</div>
-        <div class="text-body-2 grey--text mt-2 text-center">
+        <v-icon size="64" color="var(--g-text-3)">mdi-chart-line</v-icon>
+        <div class="text-h6 mt-4" style="color: var(--g-text-1)">{{ $t('miniGero.perpsComingSoon') }}</div>
+        <div class="text-body-2 mt-2 text-center" style="color: var(--g-text-3)">
           {{ $t('miniGero.perpsDesc') }}
         </div>
       </div>

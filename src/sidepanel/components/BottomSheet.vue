@@ -386,23 +386,15 @@ onBeforeUnmount(() => {
 
 .bottom-sheet-container {
   width: 100%;
-  background:
-    linear-gradient(180deg, rgba(19, 22, 27, 0.65) 0%, rgba(10, 12, 16, 0.75) 100%),
-    radial-gradient(ellipse at 30% 0%, rgba(45, 240, 247, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse at 70% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
-  backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-  border-radius: 16px 16px 0 0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--g-overlay);
+  border-radius: var(--g-r-sheet) var(--g-r-sheet) 0 0;
+  border: 1px solid var(--g-hairline-3);
   border-bottom: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   will-change: transform;
-  box-shadow:
-    0 -12px 40px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset -1px 0 0 rgba(45, 240, 247, 0.06);
+  box-shadow: var(--g-shadow-sheet);
   outline: none;
 }
 
@@ -422,7 +414,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 4px;
   background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-radius: var(--g-r-pill);
   transition: background 0.15s ease;
 }
 
@@ -435,8 +427,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
   touch-action: none;
 }
 
@@ -456,7 +448,7 @@ onBeforeUnmount(() => {
 .bottom-sheet-footer {
   flex-shrink: 0;
   padding: 12px 16px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 12, 16, 0.4);
+  border-top: 1px solid var(--g-hairline-1);
+  background: var(--g-surface);
 }
 </style>
