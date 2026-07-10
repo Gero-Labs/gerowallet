@@ -277,7 +277,7 @@ export class Backend {
    * @returns {string} Proof ID for polling status
    */
   async requestProof(proofInput: any): Promise<string> {
-    const { data } = await axios.post(`${this.url}/zkfold/prove`, { // legacy zkFold hosted endpoint — unused, retained for reference
+    const { data } = await axios.post(`${this.url}/prove`, { // legacy hosted endpoint — unused, retained for reference
       proofInput: proofInput
     }, this.headers())
 
@@ -291,7 +291,7 @@ export class Backend {
    * @returns {string} Raw JSON string (proof status or proof bytes)
    */
   async getProofStatus(proofId: string): Promise<string> {
-    const { data } = await axios.get(`${this.url}/zkfold/proof-status/${proofId}`, { // legacy zkFold hosted endpoint — unused, retained for reference
+    const { data } = await axios.get(`${this.url}/proof-status/${proofId}`, { // legacy hosted endpoint — unused, retained for reference
       ...this.headers(),
       responseType: 'text'
     })

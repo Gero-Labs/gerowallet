@@ -140,7 +140,7 @@ export class WalletBg {
       this.stakeAddress = '';  // Bitcoin has no staking address
       console.log('✅ Bitcoin address initialized:', this.baseAddress);
     } else if (wallet.type === WalletType.Google && this.encryptionMethod !== 'mpc' && googleBaseAddress) {
-      // Legacy zkFold smart-contract Google wallet: address comes from the
+      // Legacy smart-contract Google wallet: address comes from the
       // contract, not HD derivation. MPC Sign-in-with-Google wallets are also
       // type===Google but hold a real CIP-1852 xpub, so they fall through to
       // the normal HD-derivation branch below.
