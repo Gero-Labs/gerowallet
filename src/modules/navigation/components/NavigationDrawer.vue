@@ -181,7 +181,7 @@
         </v-list-item-content>
 
         <v-list-item-action style="margin: auto" class="d-flex flex-row">
-          <v-tooltip v-if="hasUnlockMethod" top content-class="custom-tooltip">
+          <v-tooltip v-if="hasUnlockMethod || isMpcWallet" top content-class="custom-tooltip">
             <template v-slot:activator="{ on, attrs }">
               <v-btn icon @click="submitLock" v-bind="attrs" v-on="on">
                 <v-icon size="18">mdi-lock</v-icon>
@@ -267,6 +267,12 @@ const hasUnlockMethod = ref(false)
 
 const { musicPlaylist, context } = toRefs(musicStore);
 const { loggedWallet, transactions } = toRefs(walletStore);
+
+// MPC "Sign in with Google" wallets have no local unlock-method config row, so
+// hasUnlockMethod is false for them — but they CAN always be re-unlocked via
+// Google, and LOCK clears their session cache. So the manual lock button must
+// be available for MPC regardless of hasUnlockMethod.
+const isMpcWallet = computed(() => loggedWallet.value?.encryptionMethod === 'mpc');
 
 const account = computed(() => {
   return loggedWallet.value

@@ -118,11 +118,14 @@
         <v-list-item-content class="py-0">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">
-              {{ isPrfWallet ? $t('security.lockSettingsOnly') : $t('security.lockSettings') }}
+              {{ (isPrfWallet || isMpcWallet) ? $t('security.lockSettingsOnly') : $t('security.lockSettings') }}
             </h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            <template v-if="isPrfWallet">
+            <template v-if="isMpcWallet">
+              {{ $t('security.autoLock') }}: {{ autoLockText }}
+            </template>
+            <template v-else-if="isPrfWallet">
               {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }}
             </template>
             <template v-else>
@@ -482,6 +485,13 @@ const getUnlockMethodTitle = (method: string | null) => {
 };
 
 const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
+
+// MPC "Sign in with Google" wallet: unlock is Google sign-in + the secret
+// chosen at creation, not a local unlock method / config-table passkey. The
+// lock-settings row therefore shows only the auto-lock summary (matching the
+// reduced dialog), not the misleading "Unlock Method: None • PassKey: Not
+// configured" the generic branch would render.
+const isMpcWallet = computed(() => loggedWallet.value?.encryptionMethod === 'mpc');
 
 const canBackup = computed(() => {
   return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
