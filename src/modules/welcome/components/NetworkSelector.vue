@@ -119,7 +119,7 @@ const optionLabel = (net: NetworkInfo): string => {
 };
 
 const commit = (net: NetworkInfo): void => {
-  updateVuetifyTheme(net.blockchain, true);
+  updateVuetifyTheme(net.blockchain);
   emit('change', net);
 };
 
