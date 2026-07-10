@@ -161,3 +161,55 @@ The handler dependency signatures change from `spendingPassword: string` to a di
 - Recover anchor xpub is self-declared from the recovery envelope (inherent to fresh-device
   recovery; wrong Google account still rejected by the xpub check).
 - Pre-mainnet: third-party audit; swap backend AES-GCM `LoginShareCipher` → Cloud KMS.
+
+---
+
+## Addendum (2026-07-10): recovery robustness & server-independence
+
+The 2-of-3 scheme is: **device** (local, encrypted) + **login** (backend, Google-gated)
++ **recovery** (user's encrypted `.gmpc` file). "No seed phrase" is the product
+promise — the recovery file is the seedless backup. This addendum records how each
+loss maps to recoverability and closes the "server loss = lockout" gap.
+
+### Reconstruct paths (any 2 of 3 rebuild the key)
+
+- **Online unlock** — device + login (backend). `reconstructRootKeyBytes(deviceShare, secret, loginShare, xpub)`.
+- **Restore (fresh device)** — recovery + login (backend). `reconstructAndValidateEntropy(recoveryShare, loginShare, xpub)`.
+- **Offline unlock (NEW, this addendum)** — **device + recovery**, NO backend, NO Google.
+  `reconstructAndValidateEntropy` is share-agnostic, so the same helper takes the
+  recovery share as the second share. Wired as `UNLOCK_MPC_WALLET_OFFLINE`
+  (`background.ts`) + a fallback in `UnlockWalletDialog` ("Server unavailable? Unlock
+  with your recovery file"). Uses the device secret (passkey PRF or spending password)
+  to decrypt the local device share + the recovery passphrase to decrypt the file.
+
+### Loss matrix
+
+| Scenario | Shares available | Recoverable? |
+|---|---|---|
+| Backend restart | all persist (Postgres) | ✅ no effect |
+| Backend replaced, same DB | all persist | ✅ no effect |
+| **Backend DB wiped** (login share lost) | device + recovery | ✅ **offline unlock** (this addendum) on a device that has the device share |
+| Lost passkey (new PC) | recovery + login | ✅ restore + enroll new passkey |
+| Lost recovery file, still on device | device + login | ✅ normal unlock |
+| **Fresh device, no recovery file, backend up** | login only (1 of 3) | ❌ not enough — by design (Google alone ≠ key) |
+| **Fresh device + backend gone** | none reachable | ❌ unrecoverable |
+
+### Inherent limits (non-custodial, by the user's choice)
+
+- **Google alone can never restore** — it gates only 1 share. This is the
+  non-custodial guarantee (the backend can't sign or lock you out); the cost is that
+  the recovery file is mandatory for cross-device recovery.
+- **Server-independence only holds on a device that has the device share** (device +
+  recovery). A *fresh* device inherently needs either the backend (login share) or the
+  device share; there is no 2nd share otherwise. The 24-word seed (Settings → Security,
+  derivable once unlocked) remains the ultimate cross-everything escape, but exposing it
+  is opt-in so the seedless UX is preserved.
+
+### Open items
+
+- Surface the offline path more prominently (e.g. auto-offer it when `getLoginShare`
+  times out), and consider a "download an encrypted key backup" that bundles device +
+  recovery for the truly paranoid.
+- Multi-chain (deferred — "c"): the reconstructed BIP39 entropy is chain-agnostic; extend
+  by un-gating the network + per-chain derivation from the reconstructed mnemonic. Backend
+  enroll is already per chain/network.

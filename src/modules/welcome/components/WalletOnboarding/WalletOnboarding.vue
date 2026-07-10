@@ -83,13 +83,17 @@
         />
         <StepGoogleSignIn class="onboarding-step"
           v-else-if="currentStep.key === 'googleSignin'"
+          :network="network"
           @signed-in="onGoogleSignedIn"
+          @restore="onGoogleRestoreFromSignin"
           @back="step--"
         />
         <StepGoogleSecure class="onboarding-step"
           v-else-if="currentStep.key === 'googleSecure'"
           :network="network"
           :id-token="googleIdToken"
+          :google-picture="googlePicture"
+          :google-name="googleName"
           @created="onGoogleCreated"
           @back="step--"
         />
@@ -113,6 +117,10 @@
         <StepGoogleRestore class="onboarding-step"
           v-else-if="currentStep.key === 'googleRestore'"
           :network="network"
+          :prefill-id-token="googleIdToken"
+          :prefill-email="googleEmail"
+          :prefill-picture="googlePicture"
+          :prefill-name="googleName"
           @back="step--"
         />
       </div>
@@ -178,6 +186,8 @@ const connection = ref<ConnectionPayload | null>(null);
 // Google wallet (MPC "Sign in with Google") flow state — never logged.
 const googleIdToken = ref<string>('');
 const googleEmail = ref<string>('');
+const googlePicture = ref<string>('');
+const googleName = ref<string>('');
 const googleWalletId = ref<number>(0);
 const googleRecoveryShare = ref<string>('');
 const googlePublicKey = ref<string>('');
@@ -251,10 +261,24 @@ const onMethodSelect = (m: 'create' | 'restore' | 'pair' | 'google' | 'googleRes
   step.value = 2;
 };
 
-const onGoogleSignedIn = (payload: { idToken: string; email: string }): void => {
+const onGoogleSignedIn = (payload: { idToken: string; email: string; picture: string; name: string }): void => {
   googleIdToken.value = payload.idToken;
   googleEmail.value = payload.email;
+  googlePicture.value = payload.picture;
+  googleName.value = payload.name;
   step.value++;
+};
+
+/** From the Google create sign-in step: account is enrolled on the backend but has
+ *  no wallet on this device → switch to the Google restore flow, carrying the
+ *  already-signed-in Google session so the restore step skips a second sign-in. */
+const onGoogleRestoreFromSignin = (payload: { idToken: string; email: string; picture: string; name: string }): void => {
+  googleIdToken.value = payload.idToken;
+  googleEmail.value = payload.email;
+  googlePicture.value = payload.picture;
+  googleName.value = payload.name;
+  selectedMethod.value = 'googleRestore';
+  step.value = 2; // googleRestore steps = [start, googleRestore]
 };
 
 const onGoogleCreated = (payload: {
@@ -398,6 +422,38 @@ onUnmounted(() => {
 .content-body ::v-deep .onboarding-actions {
   margin-top: auto;
   padding-top: 16px;
+}
+
+/* A step may opt into an internal scroll (content scrolls, action row stays a
+   fixed footer OUTSIDE the scrollbar). Such a step fills the body exactly so the
+   outer .content-body never scrolls — the scrollbar lives on .step-scroll and
+   covers content only. A step just needs to wrap its content in .step-scroll and
+   keep .onboarding-actions as a sibling after it. */
+.content-body ::v-deep .onboarding-step:has(.step-scroll) {
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.content-body ::v-deep .step-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.content-body ::v-deep .onboarding-step:has(.step-scroll) .onboarding-actions {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Vuetify's .v-btn--block sets `flex: 1 0 auto` (for full-width in a row).
+   Inside .onboarding-step (a flex column), that flex-grow:1 makes a block
+   button stretch vertically to fill a short step's free space. Pin it to its
+   natural height; min-width:100% from --block still gives full width. */
+.content-body ::v-deep .onboarding-step .v-btn--block {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 768px) {

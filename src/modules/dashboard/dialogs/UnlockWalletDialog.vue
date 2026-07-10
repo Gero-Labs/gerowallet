@@ -309,6 +309,10 @@ const props = defineProps<{
   preLoginWalletId?: number | null;
   preLoginWalletName?: string | null;
   preLoginWalletIcon?: string | null;
+  // Optional: an already-obtained Google session (from the create sign-in that
+  // detected this enrolled account) so the MPC unlock skips a second sign-in.
+  mpcPrefillIdToken?: string | null;
+  mpcPrefillEmail?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -519,6 +523,10 @@ async function loadSecurityConfig() {
     if (walletIsMpc) {
       mpcWebAuthnCredentialId.value = wallet?.webAuthnCredentialId || preLoginWalletRecord?.webAuthnCredentialId || null;
       mpcSaltId.value = wallet?.mpcPrfSaltId || preLoginWalletRecord?.mpcPrfSaltId || null;
+      // Reuse a Google session passed in (enrolled-account "Log in") so the user
+      // isn't asked to sign in again; otherwise start clean and show the sign-in button.
+      googleIdToken.value = props.mpcPrefillIdToken || '';
+      googleEmail.value = props.mpcPrefillIdToken ? (props.mpcPrefillEmail || '') : '';
     }
 
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature

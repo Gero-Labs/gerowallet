@@ -1549,7 +1549,7 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
         const proof = await prover.prove(empi);
         console.log('✅ Proof generated successfully for wallet:', walletId);
 
-        const zkSmartWalletUrl = import.meta.env['VITE_ZK_SMART_WALLET_API_URL'] || 'https://wallet-api.zkfold.io'; // legacy zkFold hosted endpoint — unused, retained for reference
+        const zkSmartWalletUrl = import.meta.env['VITE_ZK_SMART_WALLET_API_URL'] || ''; // legacy hosted endpoint — unused, retained for reference
         const zkSmartWalletApiKey = import.meta.env['VITE_ZK_SMART_WALLET_API_KEY'] || null;
         const backend = new Backend(zkSmartWalletUrl, zkSmartWalletApiKey);
 
@@ -1699,6 +1699,60 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
   return true; // Required for async Chrome message handlers
 });
 
+/**
+ * Server-INDEPENDENT unlock (safety valve): reconstruct from the LOCAL device share
+ * + the user's recovery file (device + recovery = 2 of 3), so a lost/unreachable
+ * backend can't lock the user out of the funds on this device. No login-share fetch,
+ * no Google call. reconstructRootKeyBytes combines any two shares — here we pass the
+ * recovery share as the second share instead of the backend login share. Never log
+ * the device secret / recovery passphrase / shares.
+ */
+app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET_OFFLINE, async (request, sendResponse) => {
+  try {
+    const { walletId, recoveryBlob, recoveryPassword } = request.data || {};
+    if (!walletId || !recoveryBlob || !recoveryPassword) {
+      throw new Error('walletId, recoveryBlob and recoveryPassword are required');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const { reconstructRootKeyBytes, decryptRecoveryShare, MpcValidationError } = await import('@/shared/utils/mpc');
+    const { getAllWallets } = await import('@/db/gero-db');
+
+    const wallet = (await getAllWallets())[walletId];
+    if (!wallet || !wallet.mpcDeviceShare) {
+      throw new Error('MPC wallet not found on this device');
+    }
+
+    const recoveryShare = await decryptRecoveryShare(recoveryBlob, recoveryPassword);
+    try {
+      // device + recovery (recoveryShare passed as the second share); validates xpub.
+      const bytes = await reconstructRootKeyBytes(wallet.mpcDeviceShare, secret, recoveryShare, wallet.publicKey);
+      mpcSessionCache.set(walletId, bytes);
+    } catch (err) {
+      if (err instanceof MpcValidationError) {
+        throw new Error('Recovery data does not match this wallet — check your recovery file and password.');
+      }
+      throw err;
+    }
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error unlocking MPC wallet offline:', getErrorMessage(error, 'offline unlock failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to unlock offline') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
 app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
   try {
     // Note: Never log request.data — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
@@ -1748,6 +1802,53 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
     sendResponse({
       id: request.id,
       data: { success: false, error: message },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Check whether this Google account is already enrolled for an MPC wallet on the
+ * backend (for a fresh device with no local wallet). Probes the login-share
+ * endpoint: a stored share (idempotent retrieval) means enrolled; a 404 means not.
+ * The JWT is verified server-side; the login share is never logged.
+ */
+app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken
+    const { idToken, chain, network } = request.data || {};
+    if (!idToken || !chain || !network) {
+      throw new Error('idToken, chain and network are required');
+    }
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    let enrolled = false;
+    try {
+      await api.mpc.getLoginShare(idToken, chain, network);
+      enrolled = true;
+    } catch (probeError) {
+      const raw = typeof probeError === 'string' ? probeError : getErrorMessage(probeError, '');
+      if (raw.includes('"status":404')) {
+        enrolled = false; // no share stored → not enrolled
+      } else {
+        throw probeError; // unknown error — don't misreport as "not enrolled"
+      }
+    }
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, enrolled },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error checking MPC enrollment:', getErrorMessage(error, 'check failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to check enrollment') },
       target: TARGET,
       sender: SENDER.extension,
     });

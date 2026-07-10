@@ -1,5 +1,6 @@
 <template>
   <div class="step-google-restore">
+    <div class="step-scroll">
     <!-- Google sign-in -->
     <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepGoogleSignIn') }}</div>
     <template v-if="!email">
@@ -138,8 +139,9 @@
         <span class="text-body-2">{{ errorMessage }}</span>
       </v-alert>
     </v-form>
+    </div>
 
-    <!-- Navigation buttons -->
+    <!-- Navigation buttons (footer — outside the scroll region above) -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
@@ -167,7 +169,15 @@ import { google } from '@/utils/assets';
 import { mpcPasskeyAvailable, enrollMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
 
-const props = defineProps<{ network: NetworkInfo }>();
+const props = defineProps<{
+  network: NetworkInfo;
+  /** When routed here after already signing in (enrolled-account detection), the
+   *  Google session is passed in so this step skips a second "Sign in with Google". */
+  prefillIdToken?: string;
+  prefillEmail?: string;
+  prefillPicture?: string;
+  prefillName?: string;
+}>();
 defineEmits<{ (e: 'back'): void }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
@@ -177,10 +187,13 @@ const restoreForm = ref<{ resetValidation: () => void } | null>(null);
 const formValid = ref(false);
 
 const signingIn = ref(false);
-const idToken = ref('');
-const email = ref('');
+// Seed from a Google session passed in by the enrolled-account detection flow, so
+// a pre-signed-in user isn't asked to sign in again (email set ⇒ sign-in button hidden).
+const idToken = ref(props.prefillIdToken ?? '');
+const email = ref(props.prefillEmail ?? '');
+const picture = ref(props.prefillPicture ?? '');
 
-const name = ref(generateWalletName());
+const name = ref(props.prefillName?.trim() || generateWalletName());
 const recoveryFile = ref<File | null>(null);
 const recoveryPassword = ref('');
 const spendingPassword = ref('');
@@ -257,6 +270,11 @@ const signIn = async (): Promise<void> => {
     }
     idToken.value = token;
     email.value = profile.email;
+    // Prefill the restored wallet's icon (Google picture) and name (Google name).
+    picture.value = typeof profile.picture === 'string' ? profile.picture : '';
+    if (typeof profile.name === 'string' && profile.name.trim()) {
+      name.value = profile.name.trim();
+    }
   } catch (error: unknown) {
     console.error('Google sign-in failed:', error instanceof Error ? error.message : 'unknown error');
     errorMessage.value = error instanceof Error ? error.message : (vmProxy.$t('welcome.googleSignInFailed') as string);
@@ -299,7 +317,8 @@ const restore = async (): Promise<void> => {
       throw new Error(vmProxy.$t('welcome.invalidRecoveryFile') as string);
     }
 
-    const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
+    // Prefer the Google profile picture as the restored wallet's icon.
+    const walletIcon = picture.value || networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
     const payload = authPayload.value;
 
     // Note: never log request payload — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
