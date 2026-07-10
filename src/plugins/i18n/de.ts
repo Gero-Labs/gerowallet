@@ -3303,6 +3303,8 @@ export default {
   'welcome.secureWithPasskeyHint': 'Entsperren mit Touch ID, Windows Hello oder Sicherheitsschlüssel. Kein Passwort nötig.',
   'welcome.passkeySecured': 'Passkey bereit. Dieses Gerät entsperrt mit deinem Passkey.',
   'welcome.unlockApprovePasskey': 'Mit Google anmelden, dann mit deinem Passkey bestätigen.',
+  'welcome.unlockApprovePasskeyOnly': 'Mit deinem Passkey bestätigen, um diese Wallet zu entsperren.',
+  'welcome.unlockPasswordOnly': 'Gib dein Ausgabepasswort ein, um diese Wallet zu entsperren.',
   'welcome.setUpPasskeyThisDevice': 'Passkey auf diesem Gerät einrichten',
   'welcome.googleWalletAlreadyExists': 'Du hast auf diesem Gerät bereits die Wallet „{name}" mit diesem Konto.\nMelde dich an, statt eine neue zu erstellen.',
   'welcome.logInToThisWallet': 'Bei dieser Wallet anmelden',

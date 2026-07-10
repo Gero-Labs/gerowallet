@@ -146,6 +146,7 @@ export class WalletManager {
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
           prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
+          mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
         LoadingState.setText('Restoring wallet...');
         // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
@@ -207,7 +208,7 @@ export class WalletManager {
         mpcSessionCache.clearAll();
         // A wallet switch must also drop the cached login share so one wallet's
         // session can never enable a Google-free unlock of another.
-        mpcLoginShareCache.clearAll();
+        await mpcLoginShareCache.clearAll();
         TapToolsStore.clear();
         let walletBg: WalletBg
         if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
@@ -254,6 +255,7 @@ export class WalletManager {
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
           prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
+          mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
         LoadingState.setText('Initializing wallet...');
 
@@ -537,7 +539,7 @@ export class WalletManager {
     try {
       // Clear all cached MPC root-key bytes and login shares — never survive a logout.
       mpcSessionCache.clearAll();
-      mpcLoginShareCache.clearAll();
+      await mpcLoginShareCache.clearAll();
 
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
@@ -653,7 +655,7 @@ export class WalletManager {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
       mpcSessionCache.clearAll();
-      mpcLoginShareCache.clearAll();
+      await mpcLoginShareCache.clearAll();
       if (this.currentWalletId !== null) {
         clearDbCache(this.currentWalletId);
       }
@@ -680,7 +682,8 @@ export class WalletManager {
       // login share across a lock lets the still-logged-in wallet be re-unlocked
       // with only the device secret (passkey/spending password) — no repeat
       // Google sign-in — while re-auth (the passkey/password) is still required.
-      // It is dropped on logout / wallet switch and dies with the service worker.
+      // It is dropped on logout / wallet switch and on browser close (it lives in
+      // chrome.storage.session, which survives service-worker restarts).
       // Set locked state
       WalletStore.setLocked(true);
       // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again

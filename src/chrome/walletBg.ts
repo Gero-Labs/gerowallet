@@ -99,6 +99,9 @@ export class WalletBg {
   prfEncryptedPrivateKey?: string;
   prfEncryptedMnemonic?: string;
   webAuthnCredentialId?: string;
+  // MPC passkey PRF salt id — pairs with webAuthnCredentialId so the unlock UI
+  // can tell a passkey MPC wallet from a spending-password one.
+  mpcPrfSaltId?: string;
   prfSpendingPassword?: string;
 
   constructor(wallet: any, googleBaseAddress?: string) {
@@ -120,6 +123,7 @@ export class WalletBg {
     this.prfEncryptedPrivateKey = wallet.prfEncryptedPrivateKey;
     this.prfEncryptedMnemonic = wallet.prfEncryptedMnemonic;
     this.webAuthnCredentialId = wallet.webAuthnCredentialId;
+    this.mpcPrfSaltId = wallet.mpcPrfSaltId;
     this.prfSpendingPassword = wallet.prfSpendingPassword;
     this.addressType = wallet.addressType || 'segwit';  // Version 15+
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);

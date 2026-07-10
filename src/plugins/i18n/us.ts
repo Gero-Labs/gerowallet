@@ -2829,6 +2829,8 @@ export default {
   'welcome.secureWithPasskeyHint': 'Unlock with Touch ID, Windows Hello, or a security key. No password to remember.',
   'welcome.passkeySecured': 'Passkey ready. This device will unlock with your passkey.',
   'welcome.unlockApprovePasskey': 'Sign in with Google, then approve with your passkey.',
+  'welcome.unlockApprovePasskeyOnly': 'Approve with your passkey to unlock this wallet.',
+  'welcome.unlockPasswordOnly': 'Enter your spending password to unlock this wallet.',
   'welcome.setUpPasskeyThisDevice': 'Set up a passkey on this device',
   'welcome.googleWalletAlreadyExists': 'You already have the wallet "{name}" on this device with this account.\nLog in instead of creating a new one.',
   'welcome.logInToThisWallet': 'Log in to this wallet',

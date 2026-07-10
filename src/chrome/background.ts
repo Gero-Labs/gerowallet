@@ -1665,7 +1665,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     // Two ways in: a fresh Google idToken (first unlock of the session) OR a
     // login share already cached from an earlier unlock this session (re-unlock
     // after a lock, no repeat Google sign-in). One of them must be present.
-    const hasCachedLoginShare = mpcLoginShareCache.has(walletId);
+    const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
     if (!idToken && !hasCachedLoginShare) {
       // No fresh Google token and no cached session (e.g. the service worker
       // restarted). Surface guidance the UI can show and fall back to Google.
@@ -1691,7 +1691,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
           return share;
         }
       : async (): Promise<string> => {
-          const cached = mpcLoginShareCache.get(walletId);
+          const cached = await mpcLoginShareCache.get(walletId);
           if (!cached) throw new Error('MPC session expired — sign in with Google');
           return cached;
         };
@@ -1712,7 +1712,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     // Reconstruct+validate passed — only now is it safe to cache the freshly
     // fetched login share so later re-unlocks this session can skip Google.
     if (fetchedLoginShare) {
-      mpcLoginShareCache.set(walletId, fetchedLoginShare);
+      await mpcLoginShareCache.set(walletId, fetchedLoginShare);
     }
 
     // Flip the global lock the same way walletManager.unlock() does. Without
@@ -1748,9 +1748,10 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
  */
 app.addToOptions(MessageTypes.HAS_MPC_SESSION, async (request, sendResponse) => {
   const { walletId } = request.data || {};
+  const hasSession = !!walletId && (await mpcLoginShareCache.has(walletId));
   sendResponse({
     id: request.id,
-    data: { success: true, hasSession: !!walletId && mpcLoginShareCache.has(walletId) },
+    data: { success: true, hasSession },
     target: TARGET,
     sender: SENDER.extension,
   });
