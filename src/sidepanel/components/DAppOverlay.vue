@@ -526,9 +526,9 @@
     <!-- Keystone QR dialog -->
     <KeystoneSignDialog
       v-if="showKeystoneDialog"
-      :visible="showKeystoneDialog"
-      :type="keystoneType"
-      :cbor="keystoneCbor"
+      :isOpen="showKeystoneDialog"
+      :keystoneType="keystoneType"
+      :keystoneCbor="keystoneCbor"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @close="showKeystoneDialog = false"
