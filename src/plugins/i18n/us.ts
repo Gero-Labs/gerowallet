@@ -3478,6 +3478,7 @@ export default {
   'bitcoin.finalizedTx': 'Broadcast-ready tx',
   'bitcoin.signedPsbt': 'Signed PSBT',
   'bitcoin.hardwareMessageSigningNotSupported': 'Message signing is not yet supported for hardware wallets.',
+  'bitcoin.walletTypeUnsupportedInPanel': 'This wallet type is not yet supported for signing here.',
 
   // Navigation - Bitcoin integrations
   'navigation.babylon': 'Babylon Staking',

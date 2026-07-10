@@ -144,6 +144,7 @@ export default {
   'bitcoin.addressPlaceholder': 'bc1q... oder 3... oder 1...',
   'bitcoin.finalizedTx': 'Sendebereite Transaktion',
   'bitcoin.hardwareMessageSigningNotSupported': 'Nachrichtensignierung wird für Hardware-Wallets noch nicht unterstützt.',
+  'bitcoin.walletTypeUnsupportedInPanel': 'Dieser Wallet-Typ wird hier noch nicht zum Signieren unterstützt.',
   'bitcoin.inputs': 'Eingaben',
   'bitcoin.outputs': 'Ausgaben',
   'bitcoin.priceHistory': 'BTC / USD',

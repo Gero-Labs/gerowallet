@@ -396,6 +396,115 @@
         </template>
       </div>
 
+      <!-- Bitcoin: Sign PSBT -->
+      <div v-else-if="currentRequest.method === 'btcSignPsbt'" class="dapp-sign-tx">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" color="#FFF59E">mdi-file-document-edit-outline</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('bitcoin.signPsbtRequest') }}</h3>
+            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+          </div>
+        </div>
+
+        <div v-if="btcPsbtInfo" class="tx-intents mb-3">
+          <div class="tx-intent-row">
+            <span class="grey--text text-caption">{{ $t('bitcoin.inputs') }}</span>
+            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.inputs }}</span>
+          </div>
+          <div class="tx-intent-row">
+            <span class="grey--text text-caption">{{ $t('bitcoin.outputs') }}</span>
+            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.outputs }}</span>
+          </div>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signBtcPsbtNormal"
+          />
+        </template>
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+        </template>
+        <!-- Hardware wallets: not yet supported for Bitcoin dApp signing in the
+             panel — see the script-section comment above for why this is an
+             honest deferral rather than a port of already-broken popup code. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('bitcoin.walletTypeUnsupportedInPanel') }}</p>
+        </template>
+      </div>
+
+      <!-- Bitcoin: Sign Message -->
+      <div v-else-if="currentRequest.method === 'btcSignMessage'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('bitcoin.signMessageRequest') }}</h3>
+            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+          </div>
+        </div>
+
+        <v-chip x-small color="orange darken-2" text-color="white" class="mb-2">
+          {{ btcMessageSigningType === 'bip322-simple' ? 'BIP-322' : 'ECDSA' }}
+        </v-chip>
+        <div class="sign-data-message">
+          <p class="white--text text-caption" style="word-break: break-all;">{{ btcMessageText }}</p>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signBtcMessageNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signBtcMessageNormal">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" @click="runBtcPrf(signBtcMessagePrf)">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+        <!-- Hardware wallets: never supported for Bitcoin message signing —
+             matches the popup's own BitcoinSignMessage.vue, which never
+             offered this either. Not a scope reduction on my part. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('bitcoin.hardwareMessageSigningNotSupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
       <!-- Midnight: Connect (DApp Connector connect()) -->
       <div v-else-if="currentRequest.method === 'midnight_connect'" class="dapp-connect">
         <div class="dapp-identity mb-4">
@@ -539,57 +648,80 @@
          time-critical value are never scrolled out of view on a long
          decoded transaction. Other methods (enable/signData/midnight_*) have
          short enough content that this wasn't the ergonomics problem. -->
-    <template v-if="currentRequest && currentRequest.method === 'signTx'" #footer>
-      <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
-        <div class="action-buttons">
-          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn
-            v-if="!isPrfWallet"
-            class="geroButton" rounded depressed :loading="signing"
-            :disabled="!spendingPassword || signTxBlocked" @click="signNormal"
-          >{{ $t('miniGero.sign') }}</v-btn>
-          <v-btn
-            v-else
-            class="geroButton" rounded depressed :loading="signing"
-            :disabled="signTxBlocked" @click="signPrf"
-          >{{ $t('miniGero.sign') }}</v-btn>
-        </div>
-      </template>
-      <div v-else-if="walletType === WalletType.Ledger" class="action-buttons">
-        <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-        <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signLedger">
-          {{ $t('miniGero.sign') }}
-        </v-btn>
-      </div>
-      <div v-else-if="walletType === WalletType.Trezor" class="action-buttons">
-        <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-        <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
-          {{ $t('miniGero.sign') }}
-        </v-btn>
-      </div>
-      <div v-else-if="walletType === WalletType.Keystone" class="action-buttons">
-        <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-        <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
-          {{ $t('miniGero.sign') }}
-        </v-btn>
-      </div>
-
-      <!-- Live TTL countdown — centered, monospaced so digits don't shift
-           width as it ticks. Hidden once expired (the red banner replaces it). -->
-      <v-tooltip
-        v-if="ttlDisplay.relative && !ttlDisplay.expired"
-        top
-        content-class="custom-tooltip"
-        max-width="260"
-      >
-        <template v-slot:activator="{ on, attrs }">
-          <div class="tx-ttl-footer" v-bind="attrs" v-on="on">
-            <span>{{ $t('signTx.expiresIn') }}</span>
-            <span class="tx-ttl-footer-value">{{ ttlDisplay.relative }}</span>
+    <template v-if="currentRequest && (currentRequest.method === 'signTx' || currentRequest.method === 'btcSignPsbt')" #footer>
+      <template v-if="currentRequest.method === 'signTx'">
+        <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              v-if="!isPrfWallet"
+              class="geroButton" rounded depressed :loading="signing"
+              :disabled="!spendingPassword || signTxBlocked" @click="signNormal"
+            >{{ $t('miniGero.sign') }}</v-btn>
+            <v-btn
+              v-else
+              class="geroButton" rounded depressed :loading="signing"
+              :disabled="signTxBlocked" @click="signPrf"
+            >{{ $t('miniGero.sign') }}</v-btn>
           </div>
         </template>
-        <span>{{ $t('signTx.expiresTooltip', { slot: signTxSummary?.ttlSlot }) }}</span>
-      </v-tooltip>
+        <div v-else-if="walletType === WalletType.Ledger" class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signLedger">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+        <div v-else-if="walletType === WalletType.Trezor" class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+        <div v-else-if="walletType === WalletType.Keystone" class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+
+        <!-- Live TTL countdown — centered, monospaced so digits don't shift
+             width as it ticks. Hidden once expired (the red banner replaces it). -->
+        <v-tooltip
+          v-if="ttlDisplay.relative && !ttlDisplay.expired"
+          top
+          content-class="custom-tooltip"
+          max-width="260"
+        >
+          <template v-slot:activator="{ on, attrs }">
+            <div class="tx-ttl-footer" v-bind="attrs" v-on="on">
+              <span>{{ $t('signTx.expiresIn') }}</span>
+              <span class="tx-ttl-footer-value">{{ ttlDisplay.relative }}</span>
+            </div>
+          </template>
+          <span>{{ $t('signTx.expiresTooltip', { slot: signTxSummary?.ttlSlot }) }}</span>
+        </v-tooltip>
+      </template>
+
+      <!-- Bitcoin PSBT: Normal/PRF only, matching the pane above -->
+      <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signBtcPsbtNormal">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+      </template>
+      <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" @click="runBtcPrf(signBtcPsbtPrf)">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+      </template>
+      <div v-else class="action-buttons">
+        <v-btn outlined rounded dark block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+      </div>
     </template>
   </BottomSheet>
 </template>
@@ -753,6 +885,164 @@ const signDataMessage = computed(() => {
   const isPrintable = /^[\x20-\x7e\r\n\t]*$/.test(asUtf8);
   return isPrintable ? asUtf8 : `0x${Buffer.from(bytes).toString('hex')}`;
 });
+
+// ── Bitcoin: PSBT + message signing ────────────────────────────────────────
+// Password/PRF paths mirror the popup's BitcoinSignPsbt.vue/BitcoinSignMessage.vue
+// exactly (same MessageTypes.BITCOIN_DAPP_SIGN_PSBT/MESSAGE handler, proven
+// correct). Hardware wallets (Ledger/Trezor/Keystone) are NOT ported here:
+// the popup's own Ledger/Trezor calls pass arguments and read a
+// `signedPsbtHex` field that no longer exist on the current
+// bitcoinHardwareSigner.ts API (it now returns {signedPsbt, txHex, txId} from
+// a unified signPsbtWithHardwareWallet, added in the same commit as the
+// popup view yet never wired to it) — that path silently always throws
+// "Ledger/Trezor signing failed" today regardless of whether the device
+// signed successfully. Rather than port that bug or guess at the Keystone
+// QR/UR bridging without hardware to verify against, hardware wallets get an
+// honest "not supported here yet" decline-only state — the same pattern
+// Midnight's own signData branch already uses for its unsupported wallet
+// types (see below).
+
+const btcPsbtInfo = ref<{ inputs: number; outputs: number } | null>(null);
+watch(
+  () => currentRequest.value?.method === 'btcSignPsbt' ? (currentRequest.value?.payload as { psbtHex?: string })?.psbtHex : undefined,
+  async (psbtHex) => {
+    btcPsbtInfo.value = null;
+    if (!psbtHex) return;
+    try {
+      const bitcoin = await import('bitcoinjs-lib');
+      let psbt;
+      try { psbt = bitcoin.Psbt.fromHex(psbtHex); }
+      catch { psbt = bitcoin.Psbt.fromBase64(psbtHex); }
+      btcPsbtInfo.value = { inputs: psbt.data.inputs.length, outputs: psbt.data.outputs.length };
+    } catch (e) {
+      console.error('[DApp] Failed to decode Bitcoin PSBT for preview:', e);
+    }
+  },
+  { immediate: true },
+);
+
+const btcMessageText = computed(() => {
+  if (currentRequest.value?.method !== 'btcSignMessage') return '';
+  return (currentRequest.value.payload as { message?: string })?.message || '';
+});
+const btcMessageSigningType = computed<'ecdsa' | 'bip322-simple'>(() => {
+  if (currentRequest.value?.method !== 'btcSignMessage') return 'ecdsa';
+  return ((currentRequest.value.payload as { type?: string })?.type as 'ecdsa' | 'bip322-simple') || 'ecdsa';
+});
+
+async function signBtcPsbtNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { psbtHex, options } = currentRequest.value.payload as { psbtHex: string; options?: unknown };
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
+      data: { psbtHex, options, password: spendingPassword.value },
+    }) as { data: { success: boolean; signedHex?: string; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signedHex);
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Bitcoin PSBT sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'Signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signBtcPsbtPrf(pkBytes: Uint8Array) {
+  if (!currentRequest.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { psbtHex, options } = currentRequest.value.payload as { psbtHex: string; options?: unknown };
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
+      data: { psbtHex, options, privateKeyBytes: Array.from(pkBytes) },
+    }) as { data: { success: boolean; signedHex?: string; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signedHex);
+  } catch (e) {
+    console.error('[DApp] Bitcoin PSBT PRF sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signBtcMessageNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
+      data: { message: btcMessageText.value, type: btcMessageSigningType.value, password: spendingPassword.value },
+    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signature);
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Bitcoin message sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'Signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signBtcMessagePrf(pkBytes: Uint8Array) {
+  if (!currentRequest.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
+      data: { message: btcMessageText.value, type: btcMessageSigningType.value, privateKeyBytes: Array.from(pkBytes) },
+    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signature);
+  } catch (e) {
+    console.error('[DApp] Bitcoin message PRF sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+// PRF wallets need the WebAuthn ceremony (same cross-window pattern as
+// signPrf/signDataPrf above) before either Bitcoin signer can run.
+async function runBtcPrf(onSuccess: (pkBytes: Uint8Array) => Promise<void>) {
+  if (!currentRequest.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+    const pkBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, privateKeyBytes: bytes, error } = event.data.payload;
+          if (success && bytes) resolve(new Uint8Array(bytes));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    });
+    await onSuccess(pkBytes);
+  } catch (e) {
+    console.error('[DApp] Bitcoin PRF auth error:', e);
+    signError.value = e instanceof Error ? e.message : 'PassKey authentication failed';
+    signing.value = false;
+  }
+}
 
 // ── Midnight DApp Connector: signData preview ──────────────────────────────
 // Shows the ACTUAL decoded bytes that will be signed (hex-encoded), matching

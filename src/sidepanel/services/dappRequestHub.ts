@@ -4,7 +4,7 @@ import { Blockchain } from '@/models/types';
 
 export interface DAppRequest {
   type: 'dapp-request';
-  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData';
+  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData' | 'btcSignPsbt' | 'btcSignMessage';
   requestId: string;
   payload: unknown;
 }
@@ -15,7 +15,10 @@ type DAppResponseData = unknown;
 
 // Methods this panel version can render. Anything else gets an immediate NACK
 // so the dApp receives an error instead of hanging against a dropped message.
-const VALID_METHODS = new Set(['enable', 'signTx', 'signData', 'midnight_connect', 'midnight_signData']);
+const VALID_METHODS = new Set([
+  'enable', 'signTx', 'signData', 'midnight_connect', 'midnight_signData',
+  'btcSignPsbt', 'btcSignMessage',
+]);
 
 const isVisible = ref(false);
 const currentRequest = ref<DAppRequest | null>(null);

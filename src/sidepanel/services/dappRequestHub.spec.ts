@@ -56,6 +56,16 @@ describe('dappRequestHub', () => {
     );
   });
 
+  it('accepts btcSignPsbt and btcSignMessage as valid methods', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'btcSignPsbt', requestId: 'b1', payload: {} });
+    expect(hub.currentRequest.value?.requestId).toBe('b1');
+    expect(port.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'dapp-nack', requestId: 'b1' })
+    );
+  });
+
   it('deduplicates re-delivered requestIds', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
