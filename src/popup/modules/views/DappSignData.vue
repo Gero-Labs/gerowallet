@@ -443,7 +443,7 @@ const sign = async () => {
         }) as BackgroundResponse<VerifyPasswordResponse>;
 
         if (!passwordVerification.data.success) {
-          passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
+          passwordField.value?.showError(t('errors.wrongPassword'));
         } else {
           await signAndReturnTx();
         }

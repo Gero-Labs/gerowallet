@@ -243,7 +243,7 @@ const addresses = computed(() => new Set()); // Placeholder
 const currentStep = ref(1);
 const tooltip = ref<Tooltip>({
   enabled: false,
-  text: t('wallet.wrongSpendingPassword'),
+  text: t('errors.wrongPassword'),
 });
 const txBody = ref<any>(undefined);
 const txData = ref<any>(undefined);
