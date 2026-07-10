@@ -2940,6 +2940,7 @@ export default {
   'security.passKeyNotRegisteredDescription': 'Register a PassKey to enable quick unlock and password autofill',
   'security.passKeyPrfWalletDescription': 'PassKey is your wallet\'s primary encryption - it cannot be removed',
   'security.passKeyRequiredForPrfWallet': 'PassKey is required for PRF wallet encryption and cannot be deregistered',
+  'security.passKeyRequiredForMpcWallet': 'PassKey secures this wallet\'s device share and cannot be deregistered',
   'security.register': 'Register',
   'security.deregister': 'Deregister',
   'security.passKeyRegisteredSuccess': 'PassKey registered successfully',
