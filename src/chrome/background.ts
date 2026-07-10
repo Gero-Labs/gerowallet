@@ -1826,21 +1826,24 @@ app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse
     const api = new Api(undefined, undefined);
 
     let enrolled = false;
+    let serverReachable = true;
     try {
       await api.mpc.getLoginShare(idToken, chain, network);
-      enrolled = true;
+      enrolled = true; // share returned → enrolled, server up
     } catch (probeError) {
       const raw = typeof probeError === 'string' ? probeError : getErrorMessage(probeError, '');
       if (raw.includes('"status":404')) {
-        enrolled = false; // no share stored → not enrolled
+        enrolled = false; // no share stored → not enrolled, server up
       } else {
-        throw probeError; // unknown error — don't misreport as "not enrolled"
+        // Network error / timeout / 5xx → the backend is unreachable. Report it so the
+        // UI can offer the server-independent (offline) recovery only when relevant.
+        serverReachable = false;
       }
     }
 
     sendResponse({
       id: request.id,
-      data: { success: true, enrolled },
+      data: { success: true, enrolled, serverReachable },
       target: TARGET,
       sender: SENDER.extension,
     });

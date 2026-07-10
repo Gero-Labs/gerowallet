@@ -1,5 +1,6 @@
 <template>
   <div class="step-google-signin">
+    <div class="step-scroll">
     <div class="google-signin-panel">
       <div class="google-signin-icon">
         <v-avatar size="56" color="rgba(255,255,255,0.05)">
@@ -63,13 +64,13 @@
           <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletEnrolledRestore') }}</span>
         </v-alert>
 
-        <!-- Server-independent unlock (device share + recovery file) — only relevant when
-             a wallet already exists locally and the backend can't be reached. -->
-        <div v-if="existingWallet" class="mpc-offline mt-3">
-          <v-btn text x-small color="grey" @click="showOffline = !showOffline">
-            {{ $t('security.mpcOfflineUnlockToggle') }}
-          </v-btn>
-          <div v-if="showOffline" class="mt-2 text-left">
+        <!-- Server-independent unlock (device share + recovery file) — shown ONLY when a
+             wallet exists locally AND the backend is unreachable. -->
+        <div v-if="existingWallet && serverReachable === false" class="mpc-offline mt-3">
+          <v-alert color="warning" icon="mdi-cloud-off-outline" outlined dense border="left" class="mpc-info-alert mb-2">
+            <span class="text-body-2">{{ $t('security.mpcOfflineUnlockToggle') }}</span>
+          </v-alert>
+          <div class="mt-2 text-left">
             <div class="text-caption grey--text mb-2">{{ $t('security.mpcOfflineUnlockHint') }}</div>
             <v-file-input
               v-model="offlineFile"
@@ -117,13 +118,14 @@
         </div>
       </template>
     </div>
+    </div>
 
-    <!-- Navigation -->
+    <!-- Navigation (footer — outside the scroll region above) -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
-        v-if="existingWallet"
+        v-if="existingWallet && serverReachable !== false"
         class="onb-btn"
         depressed
         color="primary"
@@ -141,7 +143,7 @@
         {{ $t('welcome.restoreThisWallet') }}
       </v-btn>
       <v-btn
-        v-else
+        v-else-if="!existingWallet"
         class="onb-btn"
         depressed
         color="primary"
@@ -205,10 +207,12 @@ const restoreExisting = (): void => {
 /** True when this Google account is enrolled on the BACKEND but has no wallet on
  *  this device — the user must restore (recovery file) rather than create. */
 const enrolledOnBackend = ref(false);
+// null = unknown (assume reachable); false = backend unreachable → offer offline recovery.
+const serverReachable = ref<boolean | null>(null);
 
 async function checkBackendEnrollment(token: string): Promise<void> {
   enrolledOnBackend.value = false;
-  if (existingWallet.value) return; // a local wallet exists → login path handles it
+  serverReachable.value = null;
   const chain = props.network?.blockchain;
   const network = props.network?.network;
   if (!chain || !network) return;
@@ -217,10 +221,16 @@ async function checkBackendEnrollment(token: string): Promise<void> {
       method: MessageTypes.CHECK_MPC_ENROLLMENT,
       data: { idToken: token, chain, network },
     }) as GoogleWalletBgResponse;
-    enrolledOnBackend.value = resp?.data?.success === true
-      && (resp.data as { enrolled?: boolean }).enrolled === true;
+    const data = resp?.data as { success?: boolean; enrolled?: boolean; serverReachable?: boolean } | undefined;
+    if (data?.success) {
+      serverReachable.value = data.serverReachable !== false;
+      // Only relevant for a fresh device (no local wallet).
+      if (!existingWallet.value) enrolledOnBackend.value = data.enrolled === true;
+    } else {
+      serverReachable.value = false;
+    }
   } catch {
-    enrolledOnBackend.value = false;
+    serverReachable.value = false;
   }
 }
 
@@ -301,7 +311,6 @@ const onUnlocked = async (): Promise<void> => {
 // Server-independent (offline) unlock — device share + recovery file, no backend/Google.
 // Reachable from the Google-wallet log-in screen so a lost/unreachable server can't lock
 // the user out on a device that still has its device share.
-const showOffline = ref(false);
 const offlineFile = ref<File | null>(null);
 const offlinePassphrase = ref('');
 const offlineSpendingPassword = ref('');
