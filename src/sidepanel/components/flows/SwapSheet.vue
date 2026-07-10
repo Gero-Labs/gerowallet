@@ -4,7 +4,7 @@
       <!-- ═══════ MAINTENANCE OVERLAY (isSwapEnabled gate, preserved from the old flow) ═══════ -->
       <div v-if="!isSwapEnabled" class="maintenance-overlay">
         <v-icon size="56" color="warning">mdi-alert-circle-outline</v-icon>
-        <div class="text-h6 white--text mt-3">{{ $t('miniGero.swapMaintenance') }}</div>
+        <div class="text-h6 mt-3" style="color: var(--g-text-1)">{{ $t('miniGero.swapMaintenance') }}</div>
       </div>
 
       <GeroSwapEmbed v-else context="sidepanel" />
