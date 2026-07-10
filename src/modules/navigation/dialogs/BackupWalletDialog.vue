@@ -429,7 +429,7 @@ const decryptMnemonic = async (): Promise<void> => {
       [seedPhraseToConfirm.value, seedPhraseReplaced.value] = randomReplace(seedPhrase.value, 4);
       overlay.value = false
     } catch (e) {
-      passwordField.value?.showError(t('common.wrongPassword'));
+      passwordField.value?.showError(t('errors.wrongPassword'));
       console.log(e) //TODO
     }
   }

@@ -197,7 +197,7 @@ const steps: Step[] = [
 const currentStep = ref(1);
 const tooltip = ref({
   enabled: false,
-  text: t('wallet.wrongSpendingPassword')
+  text: t('errors.wrongPassword')
 });
 const txBody = ref<Serialization.TransactionBody | undefined>();
 const txData = ref<Serialization.Transaction | undefined>();
