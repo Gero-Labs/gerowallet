@@ -278,7 +278,7 @@ import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialo
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
-import { iconFilters, themes } from '@/config/themes';
+import { themes } from '@/config/themes';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
@@ -454,27 +454,22 @@ async function openMiniMode() {
 const updateThemeColors = () => {
   const chain = loggedWallet.value?.chain ?? '';
   let currentTheme: typeof themes.cardano;
-  let currentFilter: string;
 
   if (chain === Blockchain.BITCOIN) {
     currentTheme = themes.bitcoin;
-    currentFilter = iconFilters.bitcoin;
   } else if (isApex.value) {
     currentTheme = themes.apex;
-    currentFilter = iconFilters.apex;
   } else {
     currentTheme = themes.cardano;
-    currentFilter = iconFilters.cardano;
   }
 
   // Update Vuetify theme
-  updateVuetifyTheme(chain, true); // Always dark theme for now
+  updateVuetifyTheme(chain);
 
   // Set CSS custom properties
   Object.entries(currentTheme).forEach(([key, value]) => {
     document.documentElement.style.setProperty(`--${key}-color`, value);
   });
-  document.documentElement.style.setProperty('--icon-filter', currentFilter);
 };
 
 // Watch for wallet chain changes
