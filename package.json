@@ -45,6 +45,8 @@
     "@cardano-sdk/hardware-ledger": "^0.16.25",
     "@cardano-sdk/tx-construction": "^0.28.9",
     "@cardano-sdk/web-extension": "^0.39.42",
+    "@contentful/rich-text-html-renderer": "^17.2.2",
+    "@contentful/rich-text-types": "^17.2.7",
     "@emurgo/cardano-message-signing-browser": "^1.1.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",

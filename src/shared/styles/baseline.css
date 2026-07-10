@@ -90,6 +90,24 @@ html .v-application .display-3, html .v-application .display-4 {
   color: var(--g-text-3) !important;
 }
 
+/* ---- Skeleton: the one sanctioned shimmer (1.4s). Reduced-motion is handled
+   by the global block at the bottom of this file, so no per-use override. ---- */
+.g-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--g-surface);
+  border-radius: var(--g-r-control);
+}
+.g-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: g-skeleton-shimmer 1.4s infinite;
+}
+@keyframes g-skeleton-shimmer { 100% { transform: translateX(100%); } }
+
 /* ---- Type ramp. Weight via the Inter Variable axis. ---- */
 .t-display { font-size: 32px; font-weight: 620; letter-spacing: -0.02em; color: var(--g-text-1); }
 .t-title   { font-size: 24px; font-weight: 620; letter-spacing: -0.02em; color: var(--g-text-1); }

@@ -116,10 +116,37 @@ for (const [k, v] of Object.entries(metrics)) {
   console.log(`${ok ? 'OK  ' : 'OVER'}  ${k}: ${v} (budget ${b ?? 'unset'})`);
 }
 
+// --rebaseline is the ONLY way a budget may go up, and it exists for exactly one
+// situation: code has entered the tree that the budgets were never measured
+// against (a down-synced lineage, a new feature that legitimately adds a
+// sanctioned pattern, or pre-existing drift the committed budget missed). It
+// demands a reason, prints every raise, and is meant to appear in history a
+// handful of times. Normal work uses --write, which can only ratchet down.
+if (process.argv.includes('--rebaseline')) {
+  const reasonArg = process.argv.find((a) => a.startsWith('--reason='));
+  const reason = reasonArg && reasonArg.slice('--reason='.length).trim();
+  if (!reason) {
+    console.error('refusing --rebaseline: pass --reason="why this tree legitimately has more debt"');
+    process.exit(1);
+  }
+  const raises = Object.entries(metrics).filter(([k, v]) => budgets[k] !== undefined && v > budgets[k]);
+  if (!raises.length) {
+    console.error('refusing --rebaseline: nothing is over budget. Use --write to ratchet down.');
+    process.exit(1);
+  }
+  console.error(`\nREBASELINE (${reason})`);
+  for (const [k, v] of raises) console.error(`  RAISED  ${k}: ${budgets[k]} -> ${v}`);
+  for (const [k, v] of Object.entries(metrics)) budgets[k] = v;
+  writeFileSync('scripts/design/budgets.json', JSON.stringify(budgets, null, 2) + '\n');
+  console.error(`\n${raises.length} budget(s) raised, ${Object.keys(metrics).length - raises.length} re-pinned at or below. Justify this in the commit message.`);
+  process.exit(0);
+}
+
 if (process.argv.includes('--write')) {
   for (const [k, v] of Object.entries(metrics)) {
     if (budgets[k] !== undefined && v > budgets[k]) {
-      console.error(`refusing --write: ${k} would RAISE the budget (${budgets[k]} -> ${v})`); process.exit(1);
+      console.error(`refusing --write: ${k} would RAISE the budget (${budgets[k]} -> ${v}). If a merge or feature legitimately added code, use --rebaseline --reason="..."`);
+      process.exit(1);
     }
     budgets[k] = Math.min(budgets[k] ?? v, v);
   }
