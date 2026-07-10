@@ -1,11 +1,9 @@
 <template>
   <div class="google-btn-container">
     <GButton
+      tier="secondary"
       block
-      outlined
-      color="black"
       class="google-btn"
-      large
       @click="googleLogin"
       :loading="loadingGoogleLogin"
       :disabled="!props.selectedNetwork?.zkFoldSupport"
@@ -129,14 +127,10 @@ const submitLogin = async (walletId: string): Promise<void> => {
 .google-btn-container{
   width: 100%;
 }
+/* Surface, border, radius, case and tracking come from GButton's secondary
+   tier; only the layout and the deliberate de-emphasis stay local. */
 .google-btn {
-  margin-top: 16px;
-  background-color: black;
-  text-transform: none;
-  border-color: #373a41;
-  color: white;
-  letter-spacing: normal;
-  border-radius: 8px;
+  margin-top: var(--g-s-4);
   opacity: 0.7;
 }
 </style>

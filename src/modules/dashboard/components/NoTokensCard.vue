@@ -107,7 +107,7 @@ const hasAssets = computed(() => {
     .stake-button-pools {
       margin: 10px 0;
       width: 200px;
-      font-family: Inter,serif;
+      font-family: var(--g-font-ui);
       font-size: 12px;
     }
 

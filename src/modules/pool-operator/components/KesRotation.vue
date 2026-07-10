@@ -143,7 +143,7 @@ async function rotateKes() {
     }) as { data: { success: boolean; error?: string } };
 
     if (!verification.data.success) {
-      snackbar.setError(t('wallet.wrongSpendingPassword'));
+      snackbar.setError(t('errors.wrongPassword'));
       return;
     }
 

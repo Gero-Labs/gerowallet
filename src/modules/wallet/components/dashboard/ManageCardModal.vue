@@ -171,7 +171,7 @@ const handleConfirmBlock = async () => {
 }
 
 .modal-title {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 24px;
   line-height: 1.17;
@@ -180,7 +180,7 @@ const handleConfirmBlock = async () => {
 }
 
 .modal-subtitle {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--g-font-ui);
   font-weight: 400;
   font-size: 16px;
   line-height: 1.5;
@@ -213,7 +213,7 @@ const handleConfirmBlock = async () => {
 }
 
 .tab-btn {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;

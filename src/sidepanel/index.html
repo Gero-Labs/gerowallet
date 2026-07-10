@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gero Mini</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+  <!-- Fonts are self-hosted and bundled: see the @fontsource imports at the top of main.ts. -->
   <!-- media="all" (Vite's documented escape hatch, vitejs/vite#6748) stops Vite's HTML transform
        from merging this stylesheet into the app's own bundled CSS at build time. It still gets
        emitted as its own hashless asset (extension/assets/gero-swap.css) with the href rewritten
@@ -19,36 +19,22 @@
 <div id="app"></div>
 <script type="module" src="./main.ts"></script>
 <style>
+  /* This inline block is emitted AFTER the bundled stylesheet, so anything
+     declared here beats baseline.css on source order. Keep it to layout only:
+     the canvas color, the scrollbar recipe and .geroButton all live in
+     src/shared/styles/baseline.css. */
   html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
     height: 100%;
-    background: #0a0a0a;
+    background: var(--g-canvas);
   }
   #app {
     height: 100%;
   }
   .v-application {
-    font-family: 'Inter', sans-serif;
-  }
-  ::-webkit-scrollbar {
-    width: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #383838;
-    border-radius: 30px;
-  }
-  .geroButton {
-    background: linear-gradient(45deg, var(--chain-gradient1, #00c7f3), var(--chain-gradient2, #00ffd1)) !important;
-    color: black !important;
-  }
-  .geroButton:disabled {
-    filter: brightness(0.5);
-    color: black !important;
+    font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
   }
 </style>
 </body>

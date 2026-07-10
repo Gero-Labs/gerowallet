@@ -278,8 +278,7 @@ import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialo
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
-import { iconFilters, themes } from '@/config/themes';
-import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { chainAccents, chainKeyFor } from '@/config/themes';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
 import { walletStore } from '@/stores/walletStore';
@@ -332,15 +331,9 @@ watch(settingsNavRequest, (req) => {
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
-const primaryColor = computed(() => {
-  if (loggedWallet.value?.chain === Blockchain.BITCOIN) return themes.bitcoin.primary;
-  if (isApex.value) return themes.apex.primary;
-  return themes.cardano.primary;
-});
+// Chain-correct for every chain, Midnight included (the old branching had no
+// Midnight case and fell through to Cardano cyan).
+const primaryColor = computed(() => chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent);
 
 const changeLog = changeLogPlugin;
 const shouldBackup = computed(() => {
@@ -450,43 +443,9 @@ async function openMiniMode() {
   }
 }
 
-// Theme management - update colors when a chain changes
-const updateThemeColors = () => {
-  const chain = loggedWallet.value?.chain ?? '';
-  let currentTheme: typeof themes.cardano;
-  let currentFilter: string;
-
-  if (chain === Blockchain.BITCOIN) {
-    currentTheme = themes.bitcoin;
-    currentFilter = iconFilters.bitcoin;
-  } else if (isApex.value) {
-    currentTheme = themes.apex;
-    currentFilter = iconFilters.apex;
-  } else {
-    currentTheme = themes.cardano;
-    currentFilter = iconFilters.cardano;
-  }
-
-  // Update Vuetify theme
-  updateVuetifyTheme(chain, true); // Always dark theme for now
-
-  // Set CSS custom properties
-  Object.entries(currentTheme).forEach(([key, value]) => {
-    document.documentElement.style.setProperty(`--${key}-color`, value);
-  });
-  document.documentElement.style.setProperty('--icon-filter', currentFilter);
-};
-
-// Watch for wallet chain changes
-watch(
-  () => loggedWallet.value?.chain,
-  newChain => {
-    if (newChain) {
-      updateThemeColors();
-    }
-  },
-  { immediate: true }
-);
+// Theme management lives in useChainAccent (bootstrapped in options/App.vue).
+// It owns both the CSS accent slots and the Vuetify theme, so the local
+// --*-color writer and its watcher that used to sit here are gone.
 
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
@@ -545,8 +504,8 @@ onMounted(async () => {
     }
   });
 
-  // Ensure colors are set on mount
-  updateThemeColors();
+  // Chain colors are applied by useChainAccent (bootstrapped in options/App.vue
+  // with immediate: true), so there is nothing to do here on mount.
 
   // Load SPO node config and start polling for KES notifications.
   // Pool Operator is hard-gated off for 2.7 — skip polling entirely.
@@ -670,12 +629,12 @@ onBeforeUnmount(() => {
 /* Force progress bar colors to use CSS variables with higher specificity */
 .v-progress-linear .v-progress-linear__determinate,
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, var(--primary-color, #00c7f3), var(--secondary-color, #00ffd1)) !important;
-  border-color: var(--primary-color, #00c7f3) !important;
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2)) !important;
+  border-color: var(--g-grad-1) !important;
 }
 
 .epoch-progress-liquid-glass .v-progress-linear__determinate {
-  background: var(--primary-color, #00c7f3) !important;
+  background: var(--g-grad-1) !important;
 }
 
 /* Ensure v-app has pure black background outside working area */

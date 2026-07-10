@@ -608,6 +608,10 @@ export default {
   'common.realTimeAnyMoment': 'Real-time (any moment)',
   'common.receive': 'Receive',
   'common.recipient': 'Recipient',
+  // Canonical home for the retry label used by shared feedback components.
+  // staking.retry and miniGero.retry duplicate this string and get re-pointed
+  // here by a later sweep.
+  'common.retry': 'Retry',
   'common.recipientAddress': 'Recipient Address',
   'common.refresh': 'Refresh',
   'common.remove': 'Remove',
@@ -665,6 +669,7 @@ export default {
   'common.wrongPassphrase': 'Wrong Passphrase',
   'common.year': 'year',
   'common.yes': 'Yes',
+  // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'common.wrongPassword': 'Wrong password',
   'common.decryptionFailed': 'Failed to decrypt data',
   'common.network': 'Network',
@@ -1445,6 +1450,7 @@ export default {
   'navigation.improvedUx': 'Improved UX',
   'navigation.inChromeStore': 'in Chrome Store.',
   'navigation.interactingWithHardware': ' interacting with your hardware wallet ',
+  // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'navigation.invalidPassword': 'Invalid Password',
   'navigation.lastSync': 'Last Sync',
   'navigation.markAs': 'Mark as ',
@@ -1535,6 +1541,7 @@ export default {
   'navigation.writeDescriptionHere': 'Write your description here...',
   'navigation.writeDownWords': 'Write down or copy these words in the following order. You will need',
   'navigation.writeEvidenceHere': 'Write your evidence here...',
+  // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'navigation.wrongPassword': 'Wrong Password',
   'navigation.youreGiving': 'You\'re giving',
   'navigation.youreReceiving': 'You\'re receiving',
@@ -2310,6 +2317,9 @@ export default {
   'errors.insufficientBalance': 'Insufficient balance',
   'errors.invalidAddress': 'Invalid address',
   'errors.invalidOrder': 'Invalid order data',
+  // The single wrong-password message. Shown as an inline, persistent field
+  // error -- never an auto-dismissing toast.
+  'errors.wrongPassword': 'Incorrect password. Please try again.',
   'errors.invalidPaymentDetails': 'Invalid payment details',
   'errors.networkError': 'Network data not available. Please try again.',
   'swap.placeOrder': 'Place Order',
@@ -2626,7 +2636,9 @@ export default {
   'wallet.welcomeBack': 'Welcome Back',
   'wallet.writeDownWords': 'Write down or copy these words in the following order. You will need',
   'wallet.writeSeedPhrase': 'Write down your recovery phrase',
+  // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'wallet.wrongPassword': 'Wrong password',
+  // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'wallet.wrongSpendingPassword': 'Wrong Spending Password!',
   'wallet.xpubNotFound': 'Extended public key not found',
   'wallet.youllUseThisToLogin': 'You\'ll use this to log into your wallet and make transactions.',
@@ -3311,6 +3323,7 @@ export default {
   'miniGero.swapNetworkNotSupported': "Swap isn't available on this network.",
   'miniGero.direct': 'Direct',
   'miniGero.confirmOnDevice': 'Confirm on your device',
+  // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'miniGero.wrongPassword': 'Wrong spending password',
   'miniGero.swapFailedGeneric': 'Swap failed',
   'miniGero.passKeyAuthFailed': 'PassKey authentication failed',

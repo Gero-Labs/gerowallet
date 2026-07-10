@@ -71,6 +71,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Design ratchet. Unlike tsc/eslint (see the header note) these gates are
+      # green today and may only get greener: audit.mjs fails if any style-debt
+      # metric in scripts/design/budgets.json grows, and contrast.mjs fails if a
+      # token drops below its WCAG threshold. Pure Node, no ripgrep dependency,
+      # so it runs identically here and in the pre-commit hook. Runs before the
+      # bundle because it takes ~1s and the bundle takes minutes.
+      - name: Design ratchet (budgets + WCAG contrast)
+        run: npm run design:check
+
       # Placeholder env: VITE_* are inlined runtime strings, so the bundle parse
       # needs no real secrets. build:web is the single main-UI vite config; it
       # parses every SFC in options/popup/sidepanel and fails on syntax errors.

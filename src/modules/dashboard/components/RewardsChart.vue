@@ -57,7 +57,7 @@ const chartOptions = computed(() => {
       spacingTop: 15,
       spacingBottom: 5,
       style: {
-        fontFamily: 'Quicksand',
+        fontFamily: 'Inter Variable, Inter, sans-serif',
       },
     },
     rangeSelector: {
@@ -108,7 +108,7 @@ const chartOptions = computed(() => {
       },
       labels: {
         style: {
-          fontFamily: 'Inter',
+          fontFamily: 'Inter Variable, Inter, sans-serif',
           color: '#fff',
           fontSize: '10px'
         },

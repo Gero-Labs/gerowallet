@@ -10,6 +10,19 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
 // import { viteImagemin } from 'vite-plugin-imagemin';
 
+// Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
+// alias on Windows (r() yields backslashes), so we hand it a literal path.
+const tokensScss = r('src/shared/styles/_tokens.scss').replace(/\\/g, '/');
+
+// Silence dart-sass deprecation noise coming out of node_modules (Vuetify 2's
+// styles are written against the pre-3.0 API). All six IDs are valid on the
+// installed sass 1.101; `mixed-decls` is deliberately omitted because it is now
+// obsolete and silencing it emits its own warning.
+const sassQuiet = {
+  quietDeps: true,
+  silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'color-functions', 'if-function'],
+};
+
 export const sharedConfig: UserConfig = {
   root: r('src'),
   envDir: r('.'),
@@ -54,6 +67,24 @@ export const sharedConfig: UserConfig = {
       '@noble/hashes/sha2': '@noble/hashes/sha2.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
+  },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // Every `<style lang="scss">` block sees the token mirror. tokens.css
+        // is canonical; these sass vars exist only for compile-time contexts
+        // (breakpoints, sass math) where custom properties cannot work.
+        additionalData: `@import "${tokensScss}";\n`,
+        ...sassQuiet,
+      },
+      // Vuetify's own styles are INDENTED-syntax `.sass`, which dart-sass
+      // compiles through this key rather than `scss`. Without it, every build
+      // and every `npm run dev` prints thousands of `global-builtin` / `import`
+      // / `legacy-js-api` deprecation warnings from node_modules. No
+      // additionalData here: the token mirror is scss syntax and would not
+      // parse as indented sass.
+      sass: { ...sassQuiet },
+    },
   },
   define: {
     // Note: 'global' is handled by nodePolyfills plugin below

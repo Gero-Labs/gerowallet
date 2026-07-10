@@ -36,7 +36,7 @@
           <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
             <v-img :src="assets.debitCardBgImage" cover style="position: absolute; width: calc(100% - 1px); height: calc(100% - 1px); top: 1px; left: 1px; z-index: 0; border-radius: 16px;" />
             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 2;">
-              <div style="font-family: 'Tenby Seven', sans-serif; font-size: 22px; font-weight: 700; color: white; line-height: 1.2; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">
+              <div style="font-family: var(--g-font-ui); font-size: 22px; font-weight: 700; color: white; line-height: 1.2; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">
                 <div>Gero</div>
                 <div>Crypto</div>
                 <div>Card</div>
@@ -94,13 +94,10 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 
-
-const { t } = useTranslation();
 
 const currentSlide = ref(0)
 
