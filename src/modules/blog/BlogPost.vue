@@ -82,6 +82,16 @@ const load = async (): Promise<void> => {
   }
 };
 
+/** Escape a value for safe interpolation into a double-quoted HTML attribute. */
+const escapeAttr = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Allow only http(s) and mailto; everything else (javascript:, data:, ...) is rejected. */
+const safeUrl = (raw: string): string | null => {
+  const u = (raw || '').trim();
+  return /^https?:\/\//i.test(u) || /^mailto:/i.test(u) ? u : null;
+};
+
 /** Full-width hero: strip the list-thumbnail transform if present. */
 const heroImage = computed(() => (post.value?.image ? post.value.image.split('?')[0] : ''));
 
@@ -101,12 +111,21 @@ const bodyHtml = computed<string>(() => {
         const id = (node.data?.target as { sys?: { id?: string } })?.sys?.id;
         const asset = id ? p.assets[id] : undefined;
         if (!asset?.url || !(asset.contentType || '').startsWith('image/')) return '';
-        const alt = asset.title ? asset.title.replace(/"/g, '&quot;') : '';
-        return `<img src="${asset.url}" alt="${alt}" loading="lazy" />`;
+        // Only allow https image sources, and escape every interpolated value:
+        // this is v-html, so an unescaped " in a URL/title would break out of
+        // the attribute. Do not trust the CMS field to be attribute-safe.
+        const src = safeUrl(asset.url);
+        if (!src) return '';
+        return `<img src="${escapeAttr(src)}" alt="${escapeAttr(asset.title || '')}" loading="lazy" />`;
       },
       [INLINES.HYPERLINK]: (node, next) => {
-        const uri = (node.data?.uri as string) || '#';
-        return `<a href="${uri}" target="_blank" rel="noopener noreferrer">${next(node.content)}</a>`;
+        const uri = (node.data?.uri as string) || '';
+        const href = safeUrl(uri);
+        const inner = next(node.content); // already-rendered, escaped HTML
+        // A disallowed protocol (javascript:, data:, ...) renders as plain text,
+        // never a clickable link.
+        if (!href) return `<span>${inner}</span>`;
+        return `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
       },
     },
   });
