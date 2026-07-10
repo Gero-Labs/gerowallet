@@ -101,7 +101,7 @@
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
-              color="geroButton"
+              color="primary"
               x-small
             >
               {{ $t('common.new') }}
@@ -519,7 +519,7 @@ async function submitLogout() {
       method: MessageTypes.LOGOUT,
       data: { },
     });
-    updateVuetifyTheme(false, true);
+    updateVuetifyTheme('Cardano'); // logout resets to the default chain accent
     // Navigate to welcome page after store is cleared
     // Use replace to avoid adding to history, and catch navigation guard redirects
     router.replace('/welcome').catch(err => {

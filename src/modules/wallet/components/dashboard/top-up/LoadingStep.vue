@@ -298,7 +298,7 @@ onUnmounted(() => {
 }
 
 .progress-text {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 16px;
   line-height: 1.25;
@@ -334,7 +334,7 @@ onUnmounted(() => {
   position: absolute;
   width: 100%;
   text-align: center;
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 16px;
   line-height: 1.25;

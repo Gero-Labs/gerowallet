@@ -302,7 +302,7 @@ async function importWithPassword() {
       }) as { data: { success: boolean; error?: string } };
 
       if (!verification.data.success) {
-        error.value = t('wallet.wrongSpendingPassword');
+        error.value = t('errors.wrongPassword');
         return;
       }
     }

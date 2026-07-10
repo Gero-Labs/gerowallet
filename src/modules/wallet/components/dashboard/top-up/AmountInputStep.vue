@@ -285,7 +285,7 @@ watch(
 }
 
 .rate-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -293,7 +293,7 @@ watch(
 }
 
 .rate-value {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -301,7 +301,7 @@ watch(
 }
 
 .rate-equals {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -321,7 +321,7 @@ watch(
 }
 
 .balance-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
@@ -329,7 +329,7 @@ watch(
 }
 
 .balance-value {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -353,7 +353,7 @@ watch(
 }
 
 .notice-text {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
@@ -386,7 +386,7 @@ watch(
 }
 
 .input-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -403,7 +403,7 @@ watch(
 
 .custom-input {
   flex: 1;
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 24px;
   line-height: 1.58;
@@ -441,7 +441,7 @@ watch(
 }
 
 .currency-badge {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 24px;
   line-height: 1.58;

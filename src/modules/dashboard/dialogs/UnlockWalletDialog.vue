@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog
+  <BaseDialog persistent
     :is-open="value"
     :title="t('security.walletLocked')"
     :subtitle="unlockDescription"
@@ -546,7 +546,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
       } else {
         // Password unlock — for PRF wallets, lock password was already verified locally
         // so a background failure means something else went wrong (DB error, wallet load, etc.)
-        showError(isPrfWallet.value ? t('security.unlockFailed') : t('wallet.wrongSpendingPassword'));
+        showError(isPrfWallet.value ? t('security.unlockFailed') : t('errors.wrongPassword'));
         password.value = '';  // Clear password input
         passwordError.value = true;
       }

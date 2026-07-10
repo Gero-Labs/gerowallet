@@ -46,7 +46,7 @@
     <v-card-actions class="justify-center py-2 px-4">
       <v-row>
         <v-col cols="6">
-          <v-btn block outlined color="red" style="text-transform: capitalize;" @click="reject">
+          <v-btn block outlined color="error" style="text-transform: capitalize;" @click="reject">
             {{ $t('walletConnect.reject') }}
           </v-btn>
         </v-col>

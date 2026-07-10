@@ -27,7 +27,7 @@
       <v-layout>
         <v-row>
           <v-col cols="6">
-            <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline">
+            <v-btn block outlined color="error" style="text-transform: capitalize;" @click="decline">
               {{ $t('navigation.decline') }}
             </v-btn>
           </v-col>
