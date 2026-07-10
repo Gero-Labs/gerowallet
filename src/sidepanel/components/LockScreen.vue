@@ -19,7 +19,7 @@
             {{ $t(mpcUsesPasskey ? 'welcome.unlockApprovePasskey' : 'welcome.unlockGoogleWalletDescription') }}
           </p>
 
-          <template v-if="!googleEmail">
+          <template v-if="!googleEmail && !mpcSessionActive">
             <v-btn
               block
               outlined
@@ -36,7 +36,7 @@
           </template>
 
           <template v-else-if="mpcUsesPasskey">
-            <p class="text-caption grey--text mb-3 text-center">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</p>
+            <p v-if="googleEmail" class="text-caption grey--text mb-3 text-center">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</p>
             <p v-if="error" class="red--text text-caption mb-2">{{ error }}</p>
 
             <v-btn
@@ -53,7 +53,7 @@
           </template>
 
           <template v-else>
-            <p class="text-caption grey--text mb-3 text-center">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</p>
+            <p v-if="googleEmail" class="text-caption grey--text mb-3 text-center">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</p>
             <v-text-field
               v-model="password"
               :type="showPassword ? 'text' : 'password'"
@@ -195,6 +195,9 @@ const mpcUsesPasskey = computed(() => (
 const googleIdToken = ref('');
 const googleEmail = ref('');
 const signingInGoogle = ref(false);
+// True when the background still holds this wallet's login share from an earlier
+// unlock this session — re-unlock then needs only the device secret, no Google.
+const mpcSessionActive = ref(false);
 
 const pinCode = ref('');
 const pinLength = ref(6);
@@ -227,6 +230,20 @@ async function loadSecurityConfig() {
 
     unlockMethod.value = unlockMethodConfig?.value || null;
     pinLength.value = pinLengthConfig?.value || 6;
+
+    // MPC: if the login share is still cached in the background, re-unlock can
+    // skip Google and use only the device secret.
+    if (isMpcWallet.value) {
+      try {
+        const sessionResp = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.HAS_MPC_SESSION,
+          data: { walletId },
+        }) as { data?: { hasSession?: boolean } };
+        mpcSessionActive.value = !!sessionResp?.data?.hasSession;
+      } catch {
+        mpcSessionActive.value = false;
+      }
+    }
 
     configLoaded.value = true;
   } catch (e) {
@@ -319,13 +336,36 @@ async function signInWithGoogle() {
 async function handleMpcUnlock() {
   if (loading.value) return;
   const walletId = walletStore.loggedWallet?.id;
-  if (!walletId || !googleIdToken.value) return;
+  // Either a fresh Google idToken or a cached session login share is required.
+  if (!walletId || (!googleIdToken.value && !mpcSessionActive.value)) return;
   if (!mpcUsesPasskey.value && !password.value) return;
 
   loading.value = true;
   error.value = '';
 
   try {
+    // Re-unlocking via a cached session (no fresh idToken): the MV3 service
+    // worker may have died since the lock screen opened, dropping the login
+    // share. Re-verify BEFORE any passkey ceremony so we fall back to Google
+    // cleanly instead of consuming a biometric prompt and dead-ending.
+    if (mpcSessionActive.value && !googleIdToken.value) {
+      let stillActive = false;
+      try {
+        const resp = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.HAS_MPC_SESSION,
+          data: { walletId },
+        }) as { data?: { hasSession?: boolean } };
+        stillActive = !!resp?.data?.hasSession;
+      } catch {
+        stillActive = false;
+      }
+      if (!stillActive) {
+        mpcSessionActive.value = false; // re-show the Google sign-in button
+        error.value = t('security.mpcSessionExpired');
+        loading.value = false;
+        return;
+      }
+    }
     // Passkey wallets EVALUATE the existing passkey (triggers Touch ID/biometric
     // prompt) to re-derive the PRF output; password wallets send the entered
     // spending password. Never log request.data — contains idToken/spendingPassword/prfOutputHex.

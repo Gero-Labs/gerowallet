@@ -20,7 +20,7 @@
       <div class="unlock-method-wrapper">
         <!-- MPC "Sign in with Google" wallet -->
         <div v-if="isMpcWallet" class="text-center unlock-method-content">
-          <template v-if="!googleEmail">
+          <template v-if="!googleEmail && !mpcSessionActive">
             <v-btn
               class="mpc-google-btn"
               depressed
@@ -35,7 +35,7 @@
             </v-btn>
           </template>
           <template v-else-if="mpcUsesPasskey">
-            <div class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
+            <div v-if="googleEmail" class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
             <v-tooltip
               v-model="tooltip.enabled"
               top
@@ -59,7 +59,7 @@
             </v-tooltip>
           </template>
           <template v-else>
-            <div class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
+            <div v-if="googleEmail" class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
             <v-tooltip
               v-model="tooltip.enabled"
               top
@@ -358,6 +358,10 @@ const mpcSaltId = ref<string | null>(null);
 // The Google `sub` this MPC wallet belongs to (wallet.userId) — used to reject a
 // sign-in with the wrong Google account before any unlock attempt.
 const mpcExpectedSub = ref<string | null>(null);
+// True when this MPC wallet already has a login share cached in the background
+// this session (unlocked with Google earlier). Then re-unlock needs only the
+// device secret (passkey/spending password) — no repeat Google sign-in.
+const mpcSessionActive = ref(false);
 
 /** Decode a JWT payload's `sub` (not verified — the backend verifies the token;
  *  this is only to match the signed-in account against the wallet's owner). */
@@ -414,9 +418,12 @@ const canUnlock = computed(() => {
   if (unlocking.value || !configLoaded.value) return false;
 
   if (isMpcWallet.value) {
+    // With an active session the login share is cached in the background, so no
+    // Google idToken is required — only the device secret (passkey/password).
+    const hasLoginFactor = mpcSessionActive.value || !!googleIdToken.value;
     return mpcUsesPasskey.value
-      ? !!googleIdToken.value
-      : !!googleIdToken.value && password.value.length > 0;
+      ? hasLoginFactor
+      : hasLoginFactor && password.value.length > 0;
   } else if (unlockMethod.value === 'pin') {
     return pinCode.value.length >= 4;
   } else if (unlockMethod.value === 'pattern') {
@@ -545,6 +552,18 @@ async function loadSecurityConfig() {
       // isn't asked to sign in again; otherwise start clean and show the sign-in button.
       googleIdToken.value = props.mpcPrefillIdToken || '';
       googleEmail.value = props.mpcPrefillIdToken ? (props.mpcPrefillEmail || '') : '';
+
+      // If the background still holds this wallet's login share from an earlier
+      // unlock this session, re-unlock can skip Google entirely.
+      try {
+        const sessionResp = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.HAS_MPC_SESSION,
+          data: { walletId },
+        }) as { data?: { hasSession?: boolean } };
+        mpcSessionActive.value = !!sessionResp?.data?.hasSession;
+      } catch {
+        mpcSessionActive.value = false;
+      }
     }
 
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
@@ -559,6 +578,7 @@ async function loadSecurityConfig() {
     webAuthnCredentialId.value = null;
     mpcWebAuthnCredentialId.value = null;
     mpcSaltId.value = null;
+    mpcSessionActive.value = false;
     pinLength.value = 6;
     configLoaded.value = true; // Allow interaction even on error (fallback to password)
     configLoadError.value = true;
@@ -682,6 +702,28 @@ async function handleMpcUnlock() {
     if (!walletId) {
       showError(t('security.unlockFailed'));
       return;
+    }
+
+    // Re-unlocking via a cached session (no fresh idToken): the MV3 service
+    // worker may have died since the dialog opened, dropping the login share.
+    // Re-verify BEFORE any passkey ceremony so we fall back to Google cleanly
+    // instead of consuming a biometric prompt and dead-ending on an empty cache.
+    if (mpcSessionActive.value && !googleIdToken.value) {
+      let stillActive = false;
+      try {
+        const resp = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.HAS_MPC_SESSION,
+          data: { walletId },
+        }) as { data?: { hasSession?: boolean } };
+        stillActive = !!resp?.data?.hasSession;
+      } catch {
+        stillActive = false;
+      }
+      if (!stillActive) {
+        mpcSessionActive.value = false; // re-show the Google sign-in button
+        showError(t('security.mpcSessionExpired'));
+        return;
+      }
     }
 
     // Passkey wallets EVALUATE the existing passkey (triggers Touch ID/biometric
