@@ -43,7 +43,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, onMounted, ref, toRefs, getCurrentInstance } from 'vue';
+import { onMounted, ref, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
@@ -55,18 +55,12 @@ const { t } = useTranslation();
 const vmProxy = getCurrentInstance()!.proxy as any
 
 // Get store values
-const { loggedWallet, config } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 
 // Reactive data
 const consent = ref<boolean>(false);
 const controller = ref<any>(null);
 const popupHeader = ref<any>(null);
-const tabId = ref<number | null>(null);
-
-// Computed properties
-const useSidePanel = computed(() => {
-  return config.value?.useSidePanel || false;
-});
 
 // Methods
 const decline = async () => {
@@ -90,13 +84,15 @@ const confirm = async () => {
 
 // Lifecycle
 onMounted(() => {
-  if (useSidePanel.value) {
-    const params = new URLSearchParams(window.location.href);
-    tabId.value = Number(params.get("tabId"));
-    controller.value = Messaging.createInternalSidePanelController(tabId.value);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see the
+  // Cardano/Bitcoin enable() popup fallbacks in background.ts, which always
+  // target index.html) — never inside the side panel, which renders
+  // DAppOverlay.vue instead. It must always speak the popup port protocol
+  // regardless of the user's Prompt Display Mode setting; branching on it
+  // here connected the wrong port name and hung forever whenever this
+  // fallback view was reached (same bug fixed in 371b9ce for the other five
+  // popup dApp views).
+  controller.value = Messaging.createInternalController();
 
   // Set document title with domain
   const route = vmProxy.$route;
