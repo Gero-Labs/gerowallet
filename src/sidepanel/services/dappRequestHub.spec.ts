@@ -83,37 +83,17 @@ describe('dappRequestHub', () => {
     });
   });
 
-  // These two import walletStore/Blockchain/nextTick DYNAMICALLY, after the
-  // same vi.resetModules() as the hub itself — a static top-level import
-  // would resolve to a DIFFERENT module instance than the one dappRequestHub
-  // reads internally once resetModules() decouples the graphs, so mutating
-  // it would silently do nothing.
-  it('never connects while the active wallet is Apex (preserves the popup fallback)', async () => {
+  // Apex shares the same Cardano signTx/signData/enable pipeline (no popup
+  // view special-cases it), so it gets no special hub treatment: it connects
+  // and renders through DAppOverlay exactly like a Cardano wallet instead of
+  // eating a 5s dead wait before falling back to a popup.
+  it('connects normally when the active wallet is Apex', async () => {
     const { walletStore } = await import('@/stores/walletStore');
     const { Blockchain } = await import('@/models/types');
     walletStore.loggedWallet = { chain: Blockchain.APEX_PRIME } as never;
-    const { initDappRequestHub } = await import('./dappRequestHub');
-    await initDappRequestHub();
-    expect(chrome.runtime.connect).not.toHaveBeenCalled();
-  });
-
-  it('disconnects immediately when switching to an Apex wallet mid-session, reconnects on switching away', async () => {
-    const { walletStore } = await import('@/stores/walletStore');
-    const { Blockchain } = await import('@/models/types');
-    const { nextTick } = await import('vue');
     const { initDappRequestHub } = await import('./dappRequestHub');
     await initDappRequestHub();
     expect(chrome.runtime.connect).toHaveBeenCalledTimes(1);
-
-    walletStore.loggedWallet = { chain: Blockchain.APEX_PRIME } as never;
-    await nextTick();
-    expect(port.disconnect).toHaveBeenCalled();
-
-    const port2 = makePort();
-    vi.mocked(chrome.runtime.connect).mockReturnValueOnce(port2 as unknown as chrome.runtime.Port);
-    walletStore.loggedWallet = { chain: Blockchain.CARDANO } as never;
-    await nextTick();
-    expect(chrome.runtime.connect).toHaveBeenCalledTimes(2);
   });
 
   it('queues a response while disconnected and flushes it after reconnect', async () => {
