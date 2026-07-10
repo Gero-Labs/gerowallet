@@ -273,7 +273,6 @@ const controller = ref<any>(null);
 const witnesses = ref<any>(undefined);
 const form = ref<any>(null);
 const popupHeader = ref<any>(null);
-const tabId = ref<number>();
 // Keystone state
 const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
@@ -287,10 +286,6 @@ const addresses = computed(() => {
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
-});
-
-const useSidePanel = computed(() => {
-  return config.value?.useSidePanel;
 });
 
 // Check if wallet uses PRF encryption (PassKey)
@@ -859,13 +854,13 @@ const init = async () => {
 };
 
 onMounted(async () => {
-  if (useSidePanel.value) {
-    const params = new URLSearchParams(window.location.href);
-    tabId.value = Number(params.get("tabId"));
-    controller.value = Messaging.createInternalSidePanelController(tabId.value);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see
+  // openPopupForSignTx in background.ts, which always targets index.html) —
+  // never inside the side panel, which renders DAppOverlay.vue instead. It
+  // must always speak the popup port protocol regardless of the user's
+  // Prompt Display Mode setting; branching on it here connected the wrong
+  // port name and hung forever whenever this fallback view was reached.
+  controller.value = Messaging.createInternalController();
 
   await init();
 

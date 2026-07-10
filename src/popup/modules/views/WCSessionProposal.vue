@@ -62,16 +62,13 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, onMounted, ref, toRefs, getCurrentInstance } from 'vue';
+import { computed, onMounted, ref, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
-import { walletStore } from '@/stores/walletStore';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 const { t } = useTranslation();
 const vmProxy = getCurrentInstance()!.proxy as any;
-
-const { config } = toRefs(walletStore);
 
 const consent = ref(false);
 const loading = ref(false);
@@ -123,14 +120,15 @@ const approve = async () => {
 };
 
 onMounted(async () => {
-  const useSidePanel = config.value?.useSidePanel || false;
-  if (useSidePanel) {
-    const params = new URLSearchParams(window.location.href);
-    const tabId = Number(params.get('tabId'));
-    controller.value = Messaging.createInternalSidePanelController(tabId);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see
+  // onSessionProposal's focusOrCreatePopup call in background.ts, which
+  // always targets index.html) — never inside the side panel, which renders
+  // DAppOverlay.vue instead. It must always speak the popup port protocol
+  // regardless of the user's Prompt Display Mode setting; branching on it
+  // here connected the wrong port name and hung forever, breaking every
+  // WalletConnect session proposal for default-config (useSidePanel: true)
+  // users.
+  controller.value = Messaging.createInternalController();
 
   // Get proposal data from background
   try {
