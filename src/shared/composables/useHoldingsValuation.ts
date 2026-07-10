@@ -19,7 +19,7 @@ import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { networkStore } from '@/stores/networkStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { Blockchain } from '@/models/types';
 import { getBalance } from '@/chrome/serialization';
 import type { Cardano } from '@cardano-sdk/core';
@@ -67,7 +67,7 @@ export function useHoldingsValuation() {
     const adaPriceUsd = isApex.value
       ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
       : (priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0);
-    const dhTokens = dexHunterStore.dexHunterTokens || {};
+    const dhTokens = tokenMetadataStore.tokens || {};
     const rows: MarketToken[] = [];
 
     Object.entries(tokens).forEach(([unit, token]: [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }]) => {

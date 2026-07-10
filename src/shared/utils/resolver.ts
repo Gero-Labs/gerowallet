@@ -3,7 +3,7 @@ import { jsonToPlutusData } from '@/chrome/serialization';
 import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
 import { isNotNil } from '@cardano-sdk/util';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
-import DexHunterStore from '@/stores/dexHunterStore';
+import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import NetworkStore from '@/stores/networkStore';
 import { CID } from 'multiformats/cid';
 import * as bip39 from 'bip39';
@@ -418,7 +418,7 @@ export function resolveAsset(token: any): any {
       asset_name = Cardano.AssetId.getAssetName(token.unit);
     }
     if (policy_id) {
-      isScam = DexHunterStore.state.blacklistPolicies.includes(policy_id)
+      isScam = TokenMetadataStore.state.blacklistPolicies.includes(policy_id)
     }
     const label: number = cip68Label(asset_name)
     if (label && asset) {
@@ -434,7 +434,7 @@ export function resolveAsset(token: any): any {
           asset.metadata = cip68Data
         }
         if (label === 333 && asset.metadata && !asset.metadata.decimals) {
-          const token = structuredClone(DexHunterStore.state.dexHunterTokens[asset.asset])
+          const token = structuredClone(TokenMetadataStore.state.tokens[asset.asset])
           if (token?.decimals) {
             asset.metadata.decimals = token.decimals
           } else {
@@ -467,7 +467,7 @@ export function resolveAsset(token: any): any {
       } else if (asset.metadata?.image) {
         img = resolveIcon(asset.metadata.image);
       }
-      verified = DexHunterStore.state.dexHunterTokens[asset.asset]?.verified || false;
+      verified = TokenMetadataStore.state.tokens[asset.asset]?.verified || false;
     } else if (asset.onchain_metadata) {
       if (asset.onchain_metadata?.image) {
         if (typeof asset.onchain_metadata.image == "string") {

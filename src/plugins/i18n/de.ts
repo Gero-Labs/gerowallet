@@ -618,6 +618,8 @@ export default {
   'common.comingSoon': 'Demnächst',
   'common.completed': 'Abgeschlossen',
   'common.confirm': 'Bestätigen',
+  // Kanonischer Ort für das Wiederholen-Label der geteilten Feedback-Komponenten.
+  'common.retry': 'Erneut versuchen',
   'common.drop': 'Bild hier ablegen',
   'common.noResults': 'Keine Ergebnisse gefunden',
   'common.connect': 'Verbinden',
@@ -776,6 +778,7 @@ export default {
   'common.welcomeToGeroDashboard': 'Willkommen im Gero Dashboard',
   'common.with': 'mit',
   'common.wrongPassphrase': 'Falsche Passphrase',
+  // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'common.wrongPassword': 'Falsches Passwort',
   'common.year': 'Jahr',
   'common.yes': 'Ja',
@@ -1180,6 +1183,9 @@ export default {
   'errors.invalidAddress': 'Ungültige Adresse',
   'errors.invalidAmount': 'Ungültiger Betrag. Bitte überprüfen Sie den Zahlungsbetrag und versuchen Sie es erneut.',
   'errors.invalidOrder': 'Ungültige Bestelldaten',
+  // Die einzige Meldung für ein falsches Passwort. Wird als dauerhafter
+  // Inline-Feldfehler angezeigt, niemals als automatisch verschwindender Toast.
+  'errors.wrongPassword': 'Falsches Passwort. Bitte versuchen Sie es erneut.',
   'errors.invalidPaymentDetails': 'Ungültige Zahlungsdetails',
   'errors.networkError': 'Netzwerkdaten nicht verfügbar. Bitte versuchen Sie es erneut.',
   'errors.noWalletLogged': 'Derzeit ist keine Wallet angemeldet',
@@ -1663,6 +1669,7 @@ export default {
   'navigation.improvedUx': 'Verbesserte UX',
   'navigation.inChromeStore': 'im Chrome Web Store.',
   'navigation.interactingWithHardware': 'bei der Interaktion mit Ihrem Hardware-Wallet',
+  // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'navigation.invalidPassword': 'Ungültiges Passwort',
   'navigation.lastSync': 'Letzte Synchronisierung',
   'navigation.legal': 'Rechtliches',
@@ -1752,6 +1759,7 @@ export default {
   'navigation.writeDescriptionHere': 'Schreiben Sie hier Ihre Beschreibung...',
   'navigation.writeDownWords': 'Schreiben Sie diese Wörter in der folgenden Reihenfolge auf oder kopieren Sie sie. Sie werden sie benötigen',
   'navigation.writeEvidenceHere': 'Schreiben Sie hier Ihren Nachweis...',
+  // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'navigation.wrongPassword': 'Falsches Passwort',
   'navigation.youreGiving': 'Sie geben',
   'navigation.youreReceiving': 'Sie erhalten',
@@ -2730,6 +2738,7 @@ export default {
   'swap.title': 'Tauschen',
   'swap.to': 'Zu',
   'swap.tokensNotInitialized': 'Token nicht richtig initialisiert',
+  'swap.unknownTokenDecimals': 'Details für dieses Token konnten nicht ermittelt werden',
   'swap.unlimitedSlippage': 'Unbegrenzte Slippage',
   'swap.unlimitedSlippageWarning': 'Warnung: Unbegrenzte Slippage kann zu erheblichen Verlusten führen. Bitte mit Vorsicht verwenden und nur, wenn Sie die damit verbundenen Risiken verstehen.',
   'swap.wingrider': 'WINGRIDER',
@@ -2765,7 +2774,7 @@ export default {
   'transactions.delegatingTo': 'Delegiere an {pool}',
   'transactions.delegatingToPool': 'An Pool delegieren',
   'transactions.delegation': 'Delegation',
-  'transactions.dexHunter': 'DexHunter',
+  'transactions.swap': 'Swap',
   'transactions.epoch': 'Epoch',
   'transactions.failed': 'Fehlgeschlagen',
   'transactions.failedTransaction': 'Fehlgeschlagene Transaktion',
@@ -3088,7 +3097,9 @@ export default {
   'wallet.welcomeBack': 'Willkommen zurück',
   'wallet.writeDownWords': 'Schreibe diese Wörter in der folgenden Reihenfolge auf oder kopiere sie. Du wirst sie benötigen',
   'wallet.writeSeedPhrase': 'Schreibe deine Wiederherstellungsphrase auf',
+  // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'wallet.wrongPassword': 'Falsches Passwort',
+  // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'wallet.wrongSpendingPassword': 'Falsches Ausgabepasswort!',
   'wallet.xpubNotFound': 'Erweiterter öffentlicher Schlüssel nicht gefunden',
   'wallet.youllUseThisToLogin': 'Du wirst dies verwenden, um dich in dein Wallet einzuloggen und Transaktionen durchzuführen.',
@@ -3302,7 +3313,7 @@ export default {
   'market.holdersTooltip': 'Anzahl einzigartiger Wallets, die diesen Token halten',
   'market.policyLocked': 'Gesperrt - keine neuen Token können erstellt werden',
   'market.policyOpen': 'Offen - der Ersteller kann zusätzliche Token prägen',
-  'market.verifiedTooltip': 'Token-Identität von DexHunter verifiziert',
+  'market.verifiedTooltip': 'Token-Identität verifiziert',
   'market.smaTooltip': 'Einfacher gleitender Durchschnitt - zeigt den Durchschnittspreis über einen Zeitraum zur Trenderkennung',
   'market.emaTooltip': 'Exponentieller gleitender Durchschnitt - gewichteter Durchschnitt mit höherer Gewichtung aktueller Preise',
   'market.rsiTooltip': 'Relative-Stärke-Index - Momentum-Indikator (über 70 = überkauft, unter 30 = überverkauft)',
@@ -3613,8 +3624,10 @@ export default {
   'miniGero.placeSplitOrder': 'Split-Orders platzieren',
   'miniGero.placeOrders': '{count} Orders platzieren',
   'miniGero.swapMaintenance': 'Tausch ist derzeit in Wartung',
+  'miniGero.swapNetworkNotSupported': 'Tausch ist in diesem Netzwerk nicht verfügbar.',
   'miniGero.direct': 'Direkt',
   'miniGero.confirmOnDevice': 'Auf dem Gerät bestätigen',
+  // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'miniGero.wrongPassword': 'Falsches Ausgabepasswort',
   'miniGero.swapFailedGeneric': 'Tausch fehlgeschlagen',
   'miniGero.passKeyAuthFailed': 'PassKey-Authentifizierung fehlgeschlagen',

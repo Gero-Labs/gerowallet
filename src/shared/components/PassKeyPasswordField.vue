@@ -76,7 +76,8 @@ interface Props {
   rules?: any[];
   outlined?: boolean;
   dense?: boolean;
-  hideDetails?: boolean;
+  /** `'auto'` reserves space for a validation error only while one is shown. */
+  hideDetails?: boolean | 'auto';
   disabled?: boolean;
   required?: boolean;
 }

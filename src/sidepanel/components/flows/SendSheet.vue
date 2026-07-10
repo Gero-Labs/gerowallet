@@ -552,7 +552,6 @@ import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScanner
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';

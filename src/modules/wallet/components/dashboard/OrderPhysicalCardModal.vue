@@ -73,7 +73,7 @@ const handleClose = () => {
 }
 
 .modal-title {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 24px;
   line-height: 1.17;
@@ -82,7 +82,7 @@ const handleClose = () => {
 }
 
 .modal-subtitle {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--g-font-ui);
   font-weight: 400;
   font-size: 16px;
   line-height: 1.5;

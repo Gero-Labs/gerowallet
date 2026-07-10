@@ -219,7 +219,7 @@ import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
-import { themes } from '@/config/themes';
+import { chainAccents, chainKeyFor } from '@/config/themes';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import OdometerCounter from '@/shared/components/OdometerCounter.vue';
 
@@ -276,9 +276,10 @@ const isApex = computed(() => {
   return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
 });
 
+// Follows the chain accent for EVERY chain. The old branching was
+// Apex-vs-Cardano only, so Bitcoin and Midnight drew a Cardano cyan line.
 const chartTheme = computed(() => {
-  const t = isApex.value ? themes.apex : themes.cardano;
-  const hex = t.primary;
+  const hex = chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent;
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -721,7 +722,7 @@ const initChart = () => {
           color: 'transparent',
         } as SolidColor,
         textColor: 'rgba(255, 255, 255, 0.5)',
-        fontFamily: 'Quicksand, Inter, sans-serif',
+        fontFamily: 'Inter Variable, Inter, sans-serif',
       },
       grid: {
         vertLines: { visible: false },
