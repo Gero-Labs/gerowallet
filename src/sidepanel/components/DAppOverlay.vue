@@ -237,36 +237,22 @@
 
         <!-- Normal wallet: password input -->
         <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
-          <template v-if="!isPrfWallet">
-            <v-text-field
-              v-model="spendingPassword"
-              :type="showPassword ? 'text' : 'password'"
-              :label="$t('miniGero.spendingPassword')"
-              :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-              :error-messages="signError"
-              outlined dense dark
-              class="password-input"
-              @click:append="showPassword = !showPassword"
-              @keyup.enter="signNormal"
-            />
-            <div class="action-buttons">
-              <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || signTxBlocked" @click="signNormal">
-                {{ $t('miniGero.sign') }}
-              </v-btn>
-            </div>
-          </template>
-
+          <v-text-field
+            v-if="!isPrfWallet"
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signNormal"
+          />
           <!-- PRF wallet: PassKey authentication -->
           <template v-else>
             <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
             <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-            <div class="action-buttons">
-              <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signPrf">
-                {{ $t('miniGero.sign') }}
-              </v-btn>
-            </div>
           </template>
         </template>
 
@@ -277,12 +263,6 @@
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectLedger') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signLedger">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
         </template>
 
         <!-- Trezor wallet -->
@@ -292,12 +272,6 @@
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectTrezor') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
         </template>
 
         <!-- Keystone wallet -->
@@ -307,32 +281,7 @@
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.keystoneSign') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
         </template>
-
-        <!-- Live TTL footer — pinned to the very bottom of the bottom sheet, beneath
-             the action buttons. Single instance for all wallet types. Centered,
-             monospaced so digits don't shift width as the countdown ticks. Hidden
-             once expired (the red banner above replaces the message). -->
-        <v-tooltip
-          v-if="ttlDisplay.relative && !ttlDisplay.expired"
-          top
-          content-class="custom-tooltip"
-          max-width="260"
-        >
-          <template v-slot:activator="{ on, attrs }">
-            <div class="tx-ttl-footer" v-bind="attrs" v-on="on">
-              <span>{{ $t('signTx.expiresIn') }}</span>
-              <span class="tx-ttl-footer-value">{{ ttlDisplay.relative }}</span>
-            </div>
-          </template>
-          <span>{{ $t('signTx.expiresTooltip', { slot: signTxSummary?.ttlSlot }) }}</span>
-        </v-tooltip>
       </div>
 
       <!-- Sign Data -->
@@ -584,6 +533,64 @@
       @error="onKeystoneError"
       @close="showKeystoneDialog = false"
     />
+
+    <!-- Sticky footer: signTx's action buttons + TTL countdown pinned below
+         the scrollable review content, so the primary action and the one
+         time-critical value are never scrolled out of view on a long
+         decoded transaction. Other methods (enable/signData/midnight_*) have
+         short enough content that this wasn't the ergonomics problem. -->
+    <template v-if="currentRequest && currentRequest.method === 'signTx'" #footer>
+      <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn
+            v-if="!isPrfWallet"
+            class="geroButton" rounded depressed :loading="signing"
+            :disabled="!spendingPassword || signTxBlocked" @click="signNormal"
+          >{{ $t('miniGero.sign') }}</v-btn>
+          <v-btn
+            v-else
+            class="geroButton" rounded depressed :loading="signing"
+            :disabled="signTxBlocked" @click="signPrf"
+          >{{ $t('miniGero.sign') }}</v-btn>
+        </div>
+      </template>
+      <div v-else-if="walletType === WalletType.Ledger" class="action-buttons">
+        <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+        <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signLedger">
+          {{ $t('miniGero.sign') }}
+        </v-btn>
+      </div>
+      <div v-else-if="walletType === WalletType.Trezor" class="action-buttons">
+        <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+        <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
+          {{ $t('miniGero.sign') }}
+        </v-btn>
+      </div>
+      <div v-else-if="walletType === WalletType.Keystone" class="action-buttons">
+        <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+        <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
+          {{ $t('miniGero.sign') }}
+        </v-btn>
+      </div>
+
+      <!-- Live TTL countdown — centered, monospaced so digits don't shift
+           width as it ticks. Hidden once expired (the red banner replaces it). -->
+      <v-tooltip
+        v-if="ttlDisplay.relative && !ttlDisplay.expired"
+        top
+        content-class="custom-tooltip"
+        max-width="260"
+      >
+        <template v-slot:activator="{ on, attrs }">
+          <div class="tx-ttl-footer" v-bind="attrs" v-on="on">
+            <span>{{ $t('signTx.expiresIn') }}</span>
+            <span class="tx-ttl-footer-value">{{ ttlDisplay.relative }}</span>
+          </div>
+        </template>
+        <span>{{ $t('signTx.expiresTooltip', { slot: signTxSummary?.ttlSlot }) }}</span>
+      </v-tooltip>
+    </template>
   </BottomSheet>
 </template>
 

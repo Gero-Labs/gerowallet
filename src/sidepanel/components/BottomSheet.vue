@@ -27,6 +27,9 @@
       <div class="bottom-sheet-content" ref="contentRef">
         <slot />
       </div>
+      <div v-if="$slots.footer" class="bottom-sheet-footer">
+        <slot name="footer" />
+      </div>
     </div>
   </div>
 </template>
@@ -441,5 +444,17 @@ onBeforeUnmount(() => {
   padding: 16px;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+}
+
+/* Optional sticky footer (Sign/Reject, a TTL countdown, ...) — stays fixed
+   at the bottom of the sheet while .bottom-sheet-content scrolls above it,
+   so the primary action and time-critical info are never scrolled out of
+   view on a long review (Apple fluid-interfaces §11: what's in the frame
+   matters more than raw scroll position). */
+.bottom-sheet-footer {
+  flex-shrink: 0;
+  padding: 12px 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 16, 0.4);
 }
 </style>
