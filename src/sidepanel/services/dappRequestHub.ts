@@ -2,7 +2,7 @@ import { ref } from 'vue';
 
 export interface DAppRequest {
   type: 'dapp-request';
-  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData' | 'btcSignPsbt' | 'btcSignMessage';
+  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData' | 'btcSignPsbt' | 'btcSignMessage' | 'wcSessionProposal';
   requestId: string;
   payload: unknown;
 }
@@ -13,9 +13,12 @@ type DAppResponseData = unknown;
 
 // Methods this panel version can render. Anything else gets an immediate NACK
 // so the dApp receives an error instead of hanging against a dropped message.
+// WalletConnect session *requests* (signing) reuse signTx/signData/
+// btcSignPsbt/btcSignMessage directly — same rendering, different origin
+// metadata — so only the session *proposal* (pairing) needs its own method.
 const VALID_METHODS = new Set([
   'enable', 'signTx', 'signData', 'midnight_connect', 'midnight_signData',
-  'btcSignPsbt', 'btcSignMessage',
+  'btcSignPsbt', 'btcSignMessage', 'wcSessionProposal',
 ]);
 
 const isVisible = ref(false);

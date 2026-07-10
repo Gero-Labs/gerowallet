@@ -66,6 +66,16 @@ describe('dappRequestHub', () => {
     );
   });
 
+  it('accepts wcSessionProposal as a valid method', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'wcSessionProposal', requestId: 'w1', payload: {} });
+    expect(hub.currentRequest.value?.requestId).toBe('w1');
+    expect(port.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'dapp-nack', requestId: 'w1' })
+    );
+  });
+
   it('deduplicates re-delivered requestIds', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();

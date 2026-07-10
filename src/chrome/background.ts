@@ -281,8 +281,11 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
   // Exact-port routing for tab-originated requests: rendering tab A's
   // approval in tab B's panel is a trust bug, so a tab with no connected port
   // does NOT fall back to some other tab's panel. Tabless requests (no
-  // tabId — e.g. today's WalletConnect relay events) may use any connected
-  // panel until Phase 3 gives them proper tab capture.
+  // tabId — WalletConnect relay events, which are never tied to a browser
+  // tab) use any connected panel instead: whichever panel the user has open
+  // is the only one that could possibly show it, and there is no tab to open
+  // one on if none is connected — callers must check miniGeroPorts.size > 0
+  // themselves and fall back to a popup when it's empty.
   const port = typeof tabId === 'number'
     ? miniGeroPorts.get(tabId)
     : miniGeroPorts.values().next().value;
@@ -3316,15 +3319,49 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
   // Sync store on init
   updateStore().catch(() => {});
 
-  // ---- Session Proposal → open approval popup ----
+  // ---- Session Proposal → mini-gero panel (if one's open) or approval popup ----
   wcService.onSessionProposal = async (proposal) => {
     try {
       const proposalData = proposal.params;
-      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}`);
-      const tab = await focusOrCreatePopup(popupURL, 470, 600);
-      const response = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
+      const peerUrl = proposalData?.proposer?.metadata?.url || '';
 
-      if (response?.data?.approved) {
+      // Blacklist check: WC pairing had no equivalent of the tab-navigation
+      // blacklist scan (handleBlacklisted above) — a malicious dApp's WC
+      // metadata was never checked, unlike a malicious website's URL.
+      if (peerUrl) {
+        try {
+          const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
+            ? walletStore.config.websiteProtection : true;
+          if (websiteProtectionEnabled) {
+            const scanResponse = await urlScan(peerUrl);
+            const verdict = await scanResponse.json();
+            if (verdict === 'blacklist') {
+              await wcService.rejectSession(proposalData.id, 'Website flagged as malicious');
+              return;
+            }
+          }
+        } catch {
+          // Scan failure must not block legitimate pairing — fail open, same
+          // as handleBlacklisted's catch-all for tab navigation.
+        }
+      }
+
+      let approved = false;
+      if (miniGeroPorts.size > 0) {
+        try {
+          const response = await sendToMiniGero('wcSessionProposal', { ...proposalData, website: peerUrl || 'WalletConnect' }, undefined);
+          approved = !!(response.data as { approved?: boolean } | undefined)?.approved;
+        } catch {
+          approved = false; // explicit reject, NACK, or wallet-changed guard
+        }
+      } else {
+        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}`);
+        const tab = await focusOrCreatePopup(popupURL, 470, 600);
+        const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
+        approved = !!popupResponse?.data?.approved;
+      }
+
+      if (approved) {
         // Build accounts from current wallet
         const loggedWallet = WalletStore.state.loggedWallet;
         if (!loggedWallet) {
@@ -3349,6 +3386,46 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       try { await wcService.rejectSession(proposal.params.id, 'Internal error'); } catch {}
     }
   };
+
+  // Routes one WC session-request (signing) through the mini-gero panel if
+  // one's connected, reusing the SAME port methods (signTx/signData/
+  // btcSignPsbt/btcSignMessage) an injected dApp's request would use — same
+  // rendering, different origin metadata — falling back to the existing
+  // popup fallback (fakeRequest + focusOrCreatePopup) when no panel is open,
+  // since a tabless relay event can never open one itself.
+  async function routeWcSigningRequest(
+    portMethod: 'signTx' | 'signData' | 'btcSignPsbt' | 'btcSignMessage',
+    data: Record<string, unknown>,
+    topic: string,
+    id: number,
+    popupRoute: string,
+    popupSize: [number, number],
+  ): Promise<void> {
+    const session = wcService.getSessionForTopic(topic) as { peer?: { metadata?: { url?: string; icons?: string[] } } } | null;
+    const peerMeta = session?.peer?.metadata;
+    const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0] };
+
+    if (miniGeroPorts.size > 0) {
+      try {
+        const response = await sendToMiniGero(portMethod, payload, undefined);
+        await wcService.respondSuccess(topic, id, response.data);
+      } catch (err) {
+        await wcService.respondError(topic, id, 4001, errorMessage(err) || 'User rejected');
+      }
+      return;
+    }
+
+    const fakeRequest = { id: `wc-${id}`, data: payload, origin: 'WalletConnect', send: { tab: { id: -1 } } };
+    const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?website=${encodeURIComponent('WalletConnect')}`);
+    const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
+    const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
+    if (response.data !== undefined) {
+      await wcService.respondSuccess(topic, id, response.data);
+    } else {
+      const errInfo = (response.error as { info?: string } | undefined)?.info;
+      await wcService.respondError(topic, id, 4001, errInfo || 'User rejected');
+    }
+  }
 
   // ---- Session Request → route to appropriate handler ----
   wcService.onSessionRequest = async (event) => {
@@ -3426,44 +3503,21 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             return;
           }
           case 'cardano_signTx': {
-            // Open SignTx popup — reuse existing pattern
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { tx: wcParams.tx || wcParams, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.signTx}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'signTx',
+              { tx: wcParams.tx || wcParams, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
+              topic, id, POPUP.signTx, [470, 852],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 852);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, (response.error as { info?: string } | undefined)?.info || 'User rejected');
-            }
             return;
           }
           case 'cardano_signData': {
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.dappSignData}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'signData',
+              { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
+              topic, id, POPUP.dappSignData, [470, 600],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, (response.error as { info?: string } | undefined)?.info || 'User rejected');
-            }
             return;
           }
         }
@@ -3479,42 +3533,20 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           }
           case 'signPsbt': {
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'btcSignPsbt',
+              { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
+              topic, id, POPUP.bitcoinSignPsbt, [470, 600],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data !== undefined) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, 'User rejected');
-            }
             return;
           }
           case 'signMessage': {
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { message: wcParams.message, type: wcParams.type || 'ecdsa' },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'btcSignMessage',
+              { message: wcParams.message, type: wcParams.type || 'ecdsa' },
+              topic, id, POPUP.bitcoinSignMessage, [470, 600],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data !== undefined) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, 'User rejected');
-            }
             return;
           }
         }

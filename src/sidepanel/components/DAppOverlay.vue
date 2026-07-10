@@ -2,7 +2,7 @@
   <BottomSheet
     :value="isVisible"
     variant="trust"
-    :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect') ? '70%' : '85%'"
+    :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect' || currentRequest?.method === 'wcSessionProposal') ? '70%' : '85%'"
     @escape="onEscapeReject"
   >
     <div v-if="currentRequest" class="dapp-overlay">
@@ -629,6 +629,54 @@
           </div>
         </template>
       </div>
+
+      <!-- WalletConnect: session proposal (pairing) -->
+      <div v-else-if="currentRequest.method === 'wcSessionProposal'" class="dapp-connect">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-link-variant</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ wcPeerName }}</h3>
+            <span class="dapp-url grey--text text-caption">{{ wcPeerUrl }}</span>
+          </div>
+        </div>
+
+        <div class="url-warning mb-3">
+          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        </div>
+
+        <div class="permissions-section mb-3">
+          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('walletConnect.requestedChains') }}</p>
+          <v-chip
+            v-for="chain in wcRequestedChainNames"
+            :key="chain"
+            small outlined :color="primaryColor"
+            class="mr-1 mb-1"
+          >{{ chain }}</v-chip>
+          <div v-if="wcHasUnsupportedChains" class="decode-error text-caption mt-1">
+            {{ $t('walletConnect.unsupportedChain') }}
+          </div>
+          <v-checkbox
+            v-model="wcConsent"
+            :color="primaryColor"
+            hide-details dark dense
+            class="consent-checkbox mt-2"
+            :label="$t('navigation.viewAddressAndBalance')"
+          />
+        </div>
+
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="reject()">{{ $t('walletConnect.reject') }}</v-btn>
+          <v-btn
+            class="geroButton" rounded depressed
+            :disabled="!wcConsent || wcHasUnsupportedChains"
+            @click="approveWcSession"
+          >{{ $t('walletConnect.approve') }}</v-btn>
+        </div>
+      </div>
     </div>
 
     <!-- Keystone QR dialog -->
@@ -753,6 +801,7 @@ import networks from '@/utils/networks';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
@@ -774,6 +823,7 @@ function queuedItemLabel(item: DAppRequest): string {
     signData: 'miniGero.signDataRequest',
     midnight_connect: 'miniGero.connectRequest',
     midnight_signData: 'miniGero.signDataRequest',
+    wcSessionProposal: 'miniGero.connectRequest',
   };
   const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
   return `${domain} — ${methodLabel}`;
@@ -2233,6 +2283,51 @@ async function signMidnightDataPrf() {
   } finally {
     signing.value = false;
   }
+}
+
+// ── WalletConnect: session proposal (pairing) ──────────────────────────────
+// Mirrors WCSessionProposal.vue's popup fallback exactly (same fields, same
+// approve/reject payload shape) so background's onSessionProposal handler
+// doesn't need to know which surface answered it. Session *requests*
+// (signing) don't need their own pane — they reuse the signTx/signData/
+// btcSignPsbt/btcSignMessage panes above with origin metadata swapped in.
+interface WcSessionProposalPayload {
+  id: number;
+  proposer?: { metadata?: { name?: string; url?: string; icons?: string[] } };
+  requiredNamespaces?: Record<string, { chains?: string[] }>;
+  optionalNamespaces?: Record<string, { chains?: string[] }>;
+}
+const wcProposal = computed(() =>
+  currentRequest.value?.method === 'wcSessionProposal'
+    ? (currentRequest.value.payload as WcSessionProposalPayload)
+    : null
+);
+const wcPeerName = computed(() => wcProposal.value?.proposer?.metadata?.name || 'Unknown dApp');
+const wcPeerUrl = computed(() => wcProposal.value?.proposer?.metadata?.url || '');
+const wcRequestedChains = computed(() => {
+  if (!wcProposal.value) return [];
+  const chains: string[] = [];
+  const ns = { ...wcProposal.value.requiredNamespaces, ...wcProposal.value.optionalNamespaces };
+  for (const namespace of Object.values(ns)) {
+    if (namespace?.chains) chains.push(...namespace.chains);
+  }
+  return [...new Set(chains)];
+});
+const wcRequestedChainNames = computed(() =>
+  wcRequestedChains.value.map((c) => {
+    const info = resolveGeroChain(c);
+    return info ? `${info.chain} ${info.network}` : c;
+  })
+);
+const wcHasUnsupportedChains = computed(() => wcRequestedChains.value.some((c) => !resolveGeroChain(c)));
+const wcConsent = ref(false);
+watch(currentRequest, (req) => {
+  if (req?.method === 'wcSessionProposal') wcConsent.value = false;
+});
+
+function approveWcSession() {
+  if (!wcProposal.value) return;
+  approve({ approved: true, proposalId: wcProposal.value.id });
 }
 </script>
 
