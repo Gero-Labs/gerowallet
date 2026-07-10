@@ -21,7 +21,7 @@
       </div>
       <v-img
         v-if="isMpcGoogleWallet"
-        :src="assets.google"
+        :src="assets.googleSvg"
         contain
         width="14"
         height="14"
