@@ -41,23 +41,9 @@
     height: 5px;
   }
 
-  .geroButton {
-    background: linear-gradient(45deg, #00c7f3, #00ffd1)!important;
-    color: black!important;
-    &:disabled {
-      filter: brightness(0.5);
-      color: black!important;
-    }
-  }
-
-  .apexButton {
-    background: linear-gradient(45deg, #F8A282, #FECB82)!important;
-    color: black!important;
-    &:disabled {
-      filter: brightness(0.5);
-      color: black!important;
-    }
-  }
+  /* .geroButton lives in src/shared/styles/baseline.css (one chain-aware definition).
+     The old per-chain Apex CTA class is retired: the gradient now follows
+     --g-grad-1/--g-grad-2, which useChainAccent re-points on wallet switch. */
 
   /* Track */
   ::-webkit-scrollbar-track {

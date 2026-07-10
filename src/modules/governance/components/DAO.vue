@@ -703,11 +703,6 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.02) !important;
 }
 
-.geroButton {
-  background: linear-gradient(to right, #00c7f3, #00fad5) !important;
-  color: black !important;
-}
-
 .cursor-pointer {
   cursor: pointer;
 }

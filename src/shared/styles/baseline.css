@@ -1,0 +1,106 @@
+/* ============================================================
+   Gero baseline. Loaded AFTER vuetify css in every entry.
+   Retires Material-2014 defaults and provides the type ramp.
+   ============================================================ */
+
+/* ---- App chrome ---- */
+html { background: var(--g-canvas); }
+.v-application {
+  font-family: var(--g-font-ui) !important;
+  color: var(--g-text-1);
+}
+.v-application .text-h1, .v-application .text-h2, .v-application .text-h3,
+.v-application .text-h4, .v-application .text-h5, .v-application .text-h6,
+.v-application .subtitle-1, .v-application .subtitle-2,
+.v-application .body-1, .v-application .body-2,
+.v-application .caption, .v-application .overline {
+  font-family: var(--g-font-ui) !important; /* Vuetify pins Roboto on ~700 elements otherwise */
+}
+
+/* ---- Buttons: sentence case, no tracking, press on pointer-down ----
+   Radius is scoped: Vuetify's .v-btn--round/.v-btn--fab (circles) and
+   .v-btn--tile are only specificity 0,1,0 and would LOSE to an unscoped
+   0,2,0 override, squaring every icon button in the app. */
+.v-application .v-btn {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  transition: color var(--g-dur-fast) ease-out,
+              border-color var(--g-dur-fast) ease-out,
+              background-color var(--g-dur-fast) ease-out,
+              filter var(--g-dur-fast) ease-out;
+}
+.v-application .v-btn:not(.v-btn--round):not(.v-btn--fab):not(.v-btn--tile) {
+  border-radius: var(--g-r-control);
+}
+.v-application .v-btn:active {
+  transform: translateY(1px);
+  filter: brightness(0.96);
+}
+
+/* Primary CTA: the ONLY gradient on a screen. One definition,
+   replaces the copies that lived in two index.html files and two SFCs. */
+.v-application .geroButton,
+.geroButton {
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2)) !important;
+  color: var(--g-on-grad) !important;
+  font-weight: 600;
+  border-radius: var(--g-r-control);
+}
+.geroButton.v-btn--disabled,
+.geroButton:disabled {
+  background: var(--g-raised) !important;
+  color: var(--g-text-3) !important;
+}
+
+/* ---- Type ramp. Weight via the Inter Variable axis. ---- */
+.t-display { font-size: 32px; font-weight: 620; letter-spacing: -0.02em; color: var(--g-text-1); }
+.t-title   { font-size: 24px; font-weight: 620; letter-spacing: -0.02em; color: var(--g-text-1); }
+.t-heading { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--g-text-1); }
+.t-body-lg { font-size: 16px; font-weight: 500; color: var(--g-text-1); }
+.t-body    { font-size: 14px; font-weight: 400; color: var(--g-text-2); }
+.t-body-sm { font-size: 13px; font-weight: 400; color: var(--g-text-2); }
+.t-caption { font-size: 12px; font-weight: 400; color: var(--g-text-3); }
+.t-label   {
+  font-size: 11px; font-weight: 550; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--g-text-3);
+}
+
+/* Numbers: always tabular */
+.g-num { font-variant-numeric: tabular-nums; }
+/* Addresses/hashes: one mono face, chunked in the markup in groups of four */
+.g-mono {
+  font-family: var(--g-font-mono);
+  font-size: 12.5px;
+  color: var(--g-text-2);
+  word-break: break-all;
+  line-height: 1.7;
+}
+.g-mono b, .g-mono .emph { color: var(--g-text-1); font-weight: 500; }
+
+/* ---- Focus: visible ring, never removed ---- */
+:where(a, button, [role='button'], .v-btn, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+}
+
+/* ---- Delta colors: colored text + glyph, never chips ---- */
+.delta-up { color: var(--g-success); }
+.delta-down { color: var(--g-error); }
+
+/* ---- Scrollbars: one recipe for both entries ---- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--g-hairline-3); border-radius: var(--g-r-pill); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* ---- Reduced motion: everything collapses to a 150ms crossfade ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--g-dur-fast) !important;
+    transition-property: opacity, color, background-color, border-color !important;
+    scroll-behavior: auto !important;
+  }
+}
