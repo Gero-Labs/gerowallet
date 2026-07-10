@@ -89,7 +89,7 @@ const emit = defineEmits<{
 }
 
 .transaction-id {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 16px;
   line-height: 1.25;
