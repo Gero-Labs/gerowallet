@@ -51,7 +51,9 @@
         </v-list-item>
       </v-card-title>
       <slot></slot>
-      <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 999;"/>
+      <!-- z-index 1, not 999: this only has to sit above the card's own content,
+           and it shares a stacking context with .close-button, which uses 1. -->
+      <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 1;"/>
       <v-btn icon @click="$emit('close')" class="close-button" :disabled="loading">
         <v-icon color="var(--g-text-2)">mdi-window-close</v-icon>
       </v-btn>

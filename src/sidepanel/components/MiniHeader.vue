@@ -50,6 +50,7 @@
         <v-icon size="18" color="#888">mdi-cog-outline</v-icon>
       </v-btn>
     </div>
+    <div class="chain-hairline" aria-hidden="true"></div>
   </header>
 </template>
 
@@ -147,7 +148,7 @@ function openFullDashboard() {
   background: rgba(10, 12, 16, 0.55);
   backdrop-filter: blur(24px) saturate(1.8);
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--g-hairline-1);
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
   flex-shrink: 0;
 }
@@ -221,5 +222,27 @@ function openFullDashboard() {
 .toolbar-btn {
   width: 32px;
   height: 32px;
+}
+
+/* The one sanctioned flourish: the chain-colored hairline draws in under the
+   header on mount, once. It lives in the header component rather than a router
+   view so it plays on panel open, not on every route change. The color is a
+   live token, so a wallet switch recolors it without replaying the draw. */
+.chain-hairline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  transform-origin: left center;
+  animation: hairline-draw var(--g-dur-slow) var(--g-ease) 1 both;
+}
+@keyframes hairline-draw {
+  from { transform: scaleX(0); opacity: 0.4; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chain-hairline { animation: none; }
 }
 </style>

@@ -215,6 +215,7 @@
                       <img :src="assets.settingsSvg" :alt="t('common.settings')" />
                     </v-avatar>
                   </v-btn>
+                  <div class="chain-hairline" aria-hidden="true"></div>
                 </v-app-bar>
                 <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
                   <v-col cols="12">
@@ -696,6 +697,28 @@ onBeforeUnmount(() => {
   &[style*='url('] {
     opacity: 1;
   }
+}
+
+/* The one sanctioned flourish: the chain-colored hairline draws in under the
+   app bar on dashboard load, once. Vuetify's .v-toolbar is already
+   position: relative, so this anchors to it. The color is a live token, so a
+   wallet switch recolors it without replaying the draw. */
+.chain-hairline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  transform-origin: left center;
+  animation: hairline-draw var(--g-dur-slow) var(--g-ease) 1 both;
+}
+@keyframes hairline-draw {
+  from { transform: scaleX(0); opacity: 0.4; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chain-hairline { animation: none; }
 }
 
 /* Force progress bar colors to use CSS variables with higher specificity */
