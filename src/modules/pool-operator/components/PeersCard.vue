@@ -1,17 +1,17 @@
 <template>
   <div class="peers-card liquid-glass">
     <div class="card-header">
-      <v-icon size="14" color="#A078FF" class="mr-1">mdi-lan</v-icon>
+      <v-icon size="14" color="var(--g-info)" class="mr-1">mdi-lan</v-icon>
       <span>{{ $t('poolOperator.networkPeers') }}</span>
       <v-spacer />
-      <v-progress-circular v-if="loading" indeterminate size="10" width="1" color="#A078FF" class="mr-2" />
+      <v-progress-circular v-if="loading" indeterminate size="10" width="1" color="var(--g-info)" class="mr-2" />
       <span v-if="peerData" class="mode-badge" :class="peerData.mode === 'p2p' ? 'mode-p2p' : 'mode-legacy'">
         {{ peerData.mode === 'p2p' ? $t('poolOperator.p2pMode') : $t('poolOperator.legacyMode') }}
       </span>
     </div>
 
     <div v-if="!connected" class="peers-offline">
-      <v-icon small color="rgba(255,255,255,0.3)">mdi-server-off</v-icon>
+      <v-icon small color="var(--g-text-3)">mdi-server-off</v-icon>
       <span>{{ $t('poolOperator.noPeerData') }}</span>
     </div>
 
@@ -22,11 +22,11 @@
         <span class="pc-lbl">{{ $t('poolOperator.peers') }}</span>
       </div>
       <div v-if="loading" class="peers-loading">
-        <v-progress-circular indeterminate size="14" width="1" color="rgba(255,255,255,0.3)" class="mr-2" />
+        <v-progress-circular indeterminate size="14" width="1" color="var(--g-text-3)" class="mr-2" />
         <span>{{ $t('poolOperator.loadingPeerDetails') }}</span>
       </div>
       <div v-else-if="fetchFailed" class="peers-hint">
-        <v-icon x-small color="rgba(255,255,255,0.3)" class="mr-1">mdi-information-outline</v-icon>
+        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
         <span>{{ $t('poolOperator.peersEndpointUnavailable') }}</span>
       </div>
     </div>
@@ -38,13 +38,13 @@
           {{ $t('common.all') }} {{ peerData.peers?.length || 0 }}
         </span>
         <span v-if="peerData.inbound" class="chip chip-in" :class="{ 'chip-active': filter === 'in' }" @click="filter = filter === 'in' ? 'all' : 'in'">
-          <v-icon size="9" color="#2DF0F7">mdi-arrow-down-bold</v-icon> {{ peerData.inbound }} {{ $t('poolOperator.inbound') }}
+          <v-icon size="9" color="var(--g-accent)">mdi-arrow-down-bold</v-icon> {{ peerData.inbound }} {{ $t('poolOperator.inbound') }}
         </span>
         <span v-if="peerData.outbound" class="chip chip-out" :class="{ 'chip-active': filter === 'out' }" @click="filter = filter === 'out' ? 'all' : 'out'">
-          <v-icon size="9" color="#FDB022">mdi-arrow-up-bold</v-icon> {{ peerData.outbound }} {{ $t('poolOperator.outbound') }}
+          <v-icon size="9" color="warning">mdi-arrow-up-bold</v-icon> {{ peerData.outbound }} {{ $t('poolOperator.outbound') }}
         </span>
         <span v-if="peerData.bidirectional" class="chip chip-bi" :class="{ 'chip-active': filter === 'bi' }" @click="filter = filter === 'bi' ? 'all' : 'bi'">
-          <v-icon size="9" color="#A078FF">mdi-swap-vertical-bold</v-icon> {{ peerData.bidirectional }} Bi
+          <v-icon size="9" color="var(--g-info)">mdi-swap-vertical-bold</v-icon> {{ peerData.bidirectional }} Bi
         </span>
         <span v-if="peerData.hotPeers" class="chip chip-hot" :class="{ 'chip-active': filter === 'hot' }" @click="filter = filter === 'hot' ? 'all' : 'hot'">
           <span class="chip-dot dot-hot" /> {{ peerData.hotPeers }} {{ $t('poolOperator.hot') }}
@@ -56,10 +56,10 @@
           <span class="chip-dot dot-cold" /> {{ peerData.coldPeers }} {{ $t('poolOperator.cold') }}
         </span>
         <span v-if="relayCount" class="chip chip-relay" :class="{ 'chip-active': filter === 'relay' }" @click="filter = filter === 'relay' ? 'all' : 'relay'">
-          <v-icon size="9" color="#2DF0F7">mdi-access-point</v-icon> {{ relayCount }} {{ $t('poolOperator.myRelays') }}
+          <v-icon size="9" color="var(--g-accent)">mdi-access-point</v-icon> {{ relayCount }} {{ $t('poolOperator.myRelays') }}
         </span>
         <span v-if="configuredCount" class="chip chip-cfg" :class="{ 'chip-active': filter === 'cfg' }" @click="filter = filter === 'cfg' ? 'all' : 'cfg'">
-          <v-icon size="9" color="#75E0A7">mdi-check-circle</v-icon> {{ configuredCount }} {{ $t('poolOperator.configured') }}
+          <v-icon size="9" color="success">mdi-check-circle</v-icon> {{ configuredCount }} {{ $t('poolOperator.configured') }}
         </span>
       </div>
 
@@ -86,7 +86,7 @@
           </div>
           <!-- Tags -->
           <span v-if="isRelay(peer)" class="peer-tag tag-relay">
-            <v-icon size="8" color="#2DF0F7">mdi-access-point</v-icon> relay
+            <v-icon size="8" color="var(--g-accent)">mdi-access-point</v-icon> relay
           </span>
           <span v-if="peer.configured" class="peer-tag tag-cfg">cfg</span>
           <span v-if="peer.trustable" class="peer-tag tag-trust">trust</span>
@@ -218,9 +218,9 @@ function dirIcon(dir: string): string {
 }
 
 function dirColor(dir: string): string {
-  if (dir === 'in') return '#2DF0F7';
-  if (dir === 'bi') return '#A078FF';
-  return '#FDB022';
+  if (dir === 'in') return 'var(--g-accent)';
+  if (dir === 'bi') return 'var(--g-info)';
+  return 'var(--g-warning)';
 }
 
 function formatRtt(rtt: number): string {
@@ -240,26 +240,25 @@ function rttClass(rtt: number): string {
 .peers-card { padding: 14px; }
 
 .card-header {
-  font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.5);
-  text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 11px; font-weight: 600; color: var(--g-text-3);
   display: flex; align-items: center; margin-bottom: 12px;
 }
 
 .mode-badge {
-  font-size: 9px; font-weight: 700; padding: 2px 8px;
-  border-radius: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+  font-size: 11px; font-weight: 700; padding: 2px 8px;
+  border-radius: var(--g-r-control);
 }
-.mode-p2p { background: rgba(160,120,255,0.15); color: #A078FF; }
-.mode-legacy { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5); }
+.mode-p2p { background: rgba(160,120,255,0.15); color: var(--g-info); }
+.mode-legacy { background: rgba(255,255,255,0.06); color: var(--g-text-3); }
 
 .peers-offline {
   display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: rgba(255,255,255,0.4); padding: 12px 0;
+  font-size: 12px; color: var(--g-text-3); padding: 12px 0;
 }
 
 .peers-loading, .peers-hint {
   display: flex; align-items: center;
-  font-size: 11px; color: rgba(255,255,255,0.35);
+  font-size: 11px; color: var(--g-text-3);
 }
 .peers-hint { margin-top: 4px; }
 
@@ -270,45 +269,45 @@ function rttClass(rtt: number): string {
 
 .chip {
   display: inline-flex; align-items: center; gap: 3px;
-  font-size: 10px; font-weight: 600; padding: 3px 8px;
-  border-radius: 12px; cursor: pointer; white-space: nowrap;
-  background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5);
+  font-size: 11px; font-weight: 600; padding: 3px 8px;
+  border-radius: var(--g-r-card); cursor: pointer; white-space: nowrap;
+  background: rgba(255,255,255,0.04); color: var(--g-text-3);
   border: 1px solid transparent;
   transition: all 0.15s;
 }
-.chip:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
-.chip-active { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.08); }
+.chip:hover { background: rgba(255,255,255,0.08); color: var(--g-text-2); }
+.chip-active { border-color: var(--g-hairline-3); color: var(--g-text-1); background: rgba(255,255,255,0.08); }
 
 .chip-in.chip-active { border-color: rgba(45,240,247,0.3); background: rgba(45,240,247,0.08); }
 .chip-out.chip-active { border-color: rgba(253,176,34,0.3); background: rgba(253,176,34,0.08); }
 .chip-bi.chip-active { border-color: rgba(160,120,255,0.3); background: rgba(160,120,255,0.08); }
 .chip-hot.chip-active { border-color: rgba(117,224,167,0.3); background: rgba(117,224,167,0.08); }
 .chip-warm.chip-active { border-color: rgba(253,176,34,0.3); background: rgba(253,176,34,0.08); }
-.chip-cold.chip-active { border-color: rgba(255,255,255,0.15); }
+.chip-cold.chip-active { border-color: var(--g-hairline-3); }
 .chip-relay.chip-active { border-color: rgba(45,240,247,0.3); background: rgba(45,240,247,0.08); }
 .chip-cfg.chip-active { border-color: rgba(117,224,167,0.3); background: rgba(117,224,167,0.08); }
 
 .chip-dot { width: 5px; height: 5px; border-radius: 50%; }
-.dot-hot { background: #75E0A7; box-shadow: 0 0 3px rgba(117,224,167,0.5); }
-.dot-warm { background: #FDB022; }
-.dot-cold { background: rgba(255,255,255,0.25); }
+.dot-hot { background: var(--g-success); }
+.dot-warm { background: var(--g-warning); }
+.dot-cold { background: var(--g-text-3); }
 
 /* Sort controls */
 .sort-row {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 6px; padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
-.sort-label { font-size: 10px; color: rgba(255,255,255,0.3); }
+.sort-label { font-size: 11px; color: var(--g-text-3); }
 
 .sort-opt {
-  font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.4);
+  font-size: 11px; font-weight: 600; color: var(--g-text-3);
   cursor: pointer; display: inline-flex; align-items: center; gap: 2px;
   transition: color 0.15s;
 }
-.sort-opt:hover { color: rgba(255,255,255,0.7); }
-.sort-active { color: #A078FF; }
+.sort-opt:hover { color: var(--g-text-2); }
+.sort-active { color: var(--g-info); }
 
 /* Peer list */
 .peer-list {
@@ -327,7 +326,7 @@ function rttClass(rtt: number): string {
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
   background: rgba(255,255,255,0.02);
   transition: background 0.15s;
 }
@@ -337,29 +336,29 @@ function rttClass(rtt: number): string {
 
 .peer-addr-col {
   flex: 1; min-width: 0;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
 }
 
-.peer-addr { color: rgba(255,255,255,0.8); }
-.peer-port { color: rgba(45,240,247,0.6); }
+.peer-addr { color: var(--g-text-2); }
+.peer-port { color: var(--g-accent); }
 
 /* Tags */
 .peer-tag {
-  font-size: 8px; font-weight: 700; padding: 1px 5px;
-  border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px;
+  font-size: 11px; font-weight: 700; padding: 1px 5px;
+  border-radius: var(--g-r-chip);
   white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;
 }
-.tag-relay { background: rgba(45,240,247,0.1); color: #2DF0F7; }
-.tag-cfg { background: rgba(117,224,167,0.1); color: rgba(117,224,167,0.7); }
-.tag-trust { background: rgba(160,120,255,0.1); color: rgba(160,120,255,0.7); }
+.tag-relay { background: rgba(45,240,247,0.1); color: var(--g-accent); }
+.tag-cfg { background: rgba(117,224,167,0.1); color: var(--g-success); }
+.tag-trust { background: rgba(160,120,255,0.1); color: var(--g-info); }
 
 .peer-rtt {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 10px; font-weight: 600;
+  font-family: var(--g-font-mono);
+  font-size: 11px; font-weight: 600;
   white-space: nowrap; flex-shrink: 0;
 }
-.rtt-good { color: #75E0A7; }
-.rtt-ok { color: #FDB022; }
-.rtt-slow { color: #FDA29B; }
+.rtt-good { color: var(--g-success); }
+.rtt-ok { color: var(--g-warning); }
+.rtt-slow { color: var(--g-error); }
 </style>

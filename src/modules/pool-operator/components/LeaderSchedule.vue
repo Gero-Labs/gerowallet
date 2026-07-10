@@ -2,15 +2,15 @@
   <div class="leader-schedule">
     <div class="section-header">
       <div class="section-title">
-        <v-icon size="16" color="white" class="mr-2">mdi-calendar-clock</v-icon>
+        <v-icon size="16" color="var(--g-text-1)" class="mr-2">mdi-calendar-clock</v-icon>
         {{ $t('poolOperator.leaderSchedule') }}
       </div>
     </div>
 
     <!-- Node not connected -->
     <div v-if="!nodeConnected" class="ls-notice liquid-glass-compact">
-      <div class="ls-notice-icon" style="background: rgba(253,176,34,0.1)">
-        <v-icon size="20" color="#FDB022">mdi-server-off</v-icon>
+      <div class="ls-notice-icon" style="background: var(--g-warning-fill)">
+        <v-icon size="20" color="warning">mdi-server-off</v-icon>
       </div>
       <div>
         <div class="ls-notice-title">{{ $t('poolOperator.nodeRequiredForSchedule') }}</div>
@@ -33,13 +33,13 @@
 
       <!-- Loading -->
       <div v-if="loading" class="text-center py-6">
-        <v-progress-circular indeterminate color="#FDB022" size="24" />
+        <v-progress-circular indeterminate color="warning" size="24" />
         <div class="loading-text mt-2">{{ $t('poolOperator.calculatingSchedule') }}</div>
       </div>
 
       <!-- Error -->
       <div v-else-if="error" class="ls-error liquid-glass-compact mt-3">
-        <v-icon size="16" color="#FDA29B" class="mr-2">mdi-alert-circle</v-icon>
+        <v-icon size="16" color="error" class="mr-2">mdi-alert-circle</v-icon>
         <span>{{ error }}</span>
       </div>
 
@@ -84,13 +84,13 @@
             </div>
             <div class="slot-status">
               <template v-if="slot.isPast">
-                <v-icon v-if="slot.produced" x-small color="#75E0A7">mdi-check-circle</v-icon>
-                <v-icon v-else x-small color="#FDA29B">mdi-close-circle</v-icon>
+                <v-icon v-if="slot.produced" x-small color="success">mdi-check-circle</v-icon>
+                <v-icon v-else x-small color="error">mdi-close-circle</v-icon>
               </template>
               <template v-else-if="slot.isNext">
                 <span class="next-badge">{{ $t('poolOperator.nextBlock') }}</span>
               </template>
-              <v-icon v-else x-small color="rgba(255,255,255,0.15)">mdi-clock-outline</v-icon>
+              <v-icon v-else x-small color="var(--g-text-3)">mdi-clock-outline</v-icon>
             </div>
           </div>
         </div>
@@ -98,7 +98,7 @@
 
       <!-- Empty -->
       <div v-else-if="!loading && fetched" class="text-center py-4">
-        <v-icon size="32" color="rgba(255,255,255,0.1)">mdi-calendar-blank</v-icon>
+        <v-icon size="32" color="var(--g-text-3)">mdi-calendar-blank</v-icon>
         <div class="empty-text mt-2">{{ $t('poolOperator.noSlotsAssigned') }}</div>
       </div>
 
@@ -235,7 +235,7 @@ watch(scheduleView, () => {
 .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(255,255,255,0.6);
+  color: var(--g-text-2);
   display: flex;
   align-items: center;
   text-transform: uppercase;
@@ -254,7 +254,7 @@ watch(scheduleView, () => {
   width: 36px;
   height: 36px;
   min-width: 36px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -263,12 +263,12 @@ watch(scheduleView, () => {
 .ls-notice-title {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255,255,255,0.7);
+  color: var(--g-text-2);
 }
 
 .ls-notice-text {
   font-size: 13px;
-  color: rgba(255,255,255,0.55);
+  color: var(--g-text-3);
   line-height: 1.5;
   margin-top: 2px;
 }
@@ -289,13 +289,13 @@ watch(scheduleView, () => {
 .refresh-btn {
   text-transform: none !important;
   letter-spacing: normal !important;
-  color: rgba(255,255,255,0.5) !important;
+  color: var(--g-text-3) !important;
   font-size: 13px !important;
 }
 
 .loading-text {
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
 }
 
 /* Error */
@@ -304,7 +304,7 @@ watch(scheduleView, () => {
   align-items: center;
   padding: 12px;
   font-size: 14px;
-  color: #FDA29B;
+  color: var(--g-error);
 }
 
 /* Summary */
@@ -320,24 +320,24 @@ watch(scheduleView, () => {
 }
 
 .summary-card--warn {
-  border-color: rgba(253,162,155,0.15) !important;
+  border-color: var(--g-error-line) !important;
 }
 
 .summary-value {
   display: block;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
-  color: rgba(255,255,255,0.95);
+  color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
 }
 
-.summary-value.text-accent { color: #FDB022; }
-.summary-value.text-warn { color: #FDA29B; }
+.summary-value.text-accent { color: var(--g-warning); }
+.summary-value.text-warn { color: var(--g-error); }
 
 .summary-label {
   display: block;
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   margin-top: 2px;
@@ -347,8 +347,8 @@ watch(scheduleView, () => {
 .slot-list {
   max-height: 400px;
   overflow-y: auto;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .slot-item {
@@ -356,7 +356,7 @@ watch(scheduleView, () => {
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--g-hairline-1);
   transition: background 0.15s;
 }
 
@@ -365,19 +365,19 @@ watch(scheduleView, () => {
 
 .slot-past { opacity: 0.45; }
 .slot-next {
-  background: rgba(253,176,34,0.04);
+  background: var(--g-warning-fill);
   opacity: 1;
-  border-left: 2px solid #FDB022;
+  border-left: 2px solid var(--g-warning);
 }
 .slot-missed {
   opacity: 0.7;
-  background: rgba(253,162,155,0.03);
-  border-left: 2px solid rgba(253,162,155,0.3);
+  background: var(--g-error-fill);
+  border-left: 2px solid var(--g-error-line);
 }
 
 .slot-index {
   font-size: 14px;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
   min-width: 28px;
   font-variant-numeric: tabular-nums;
 }
@@ -387,14 +387,14 @@ watch(scheduleView, () => {
 .slot-time {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(255,255,255,0.8);
+  color: var(--g-text-2);
   display: block;
 }
 
 .slot-detail {
   font-size: 14px;
-  color: rgba(255,255,255,0.4);
-  font-family: 'Roboto Mono', monospace;
+  color: var(--g-text-3);
+  font-family: var(--g-font-mono);
 }
 
 .slot-status {
@@ -405,13 +405,13 @@ watch(scheduleView, () => {
 .next-badge {
   font-size: 13px;
   font-weight: 700;
-  color: #FDB022;
+  color: var(--g-warning);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .empty-text {
-  color: rgba(255,255,255,0.45);
+  color: var(--g-text-3);
   font-size: 14px;
 }
 </style>
