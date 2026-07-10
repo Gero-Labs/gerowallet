@@ -49,7 +49,7 @@
         />
         <v-img
           v-else-if="wallet.type === WalletType.Google && wallet.encryptionMethod === 'mpc'"
-          :src="assets.google"
+          :src="assets.googleSvg"
           contain
           max-width="18"
           max-height="18"
