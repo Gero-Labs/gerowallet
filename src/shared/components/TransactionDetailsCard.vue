@@ -1,7 +1,7 @@
 <template>
   <div class="tx-details">
     <div class="tx-details-header">
-      <span class="white--text text-caption font-weight-bold text-uppercase">
+      <span class="t-label">
         {{ t('signTx.transactionDetails') }}
       </span>
       <div class="d-flex align-center">
@@ -63,7 +63,7 @@
             </template>
             <span>{{ t(tooltipKeyForKind(out.kind)) }}</span>
           </v-tooltip>
-          <span class="tx-output-addr grey--text text-caption">{{ out.truncatedAddress }}</span>
+          <span class="tx-output-addr g-mono">{{ out.truncatedAddress }}</span>
         </div>
         <div class="tx-output-right">
           <span
@@ -110,16 +110,16 @@
         <div class="tx-output-left">
           <v-tooltip top content-class="custom-tooltip" max-width="260">
             <template v-slot:activator="{ on, attrs }">
-              <v-icon size="14" color="#94CFA8" class="mr-1" v-bind="attrs" v-on="on">
+              <v-icon size="14" color="success" class="mr-1" v-bind="attrs" v-on="on">
                 mdi-cash-refund
               </v-icon>
             </template>
             <span>{{ t('wallet.rewardsWithdrawnTooltip') }}</span>
           </v-tooltip>
-          <span class="tx-output-addr grey--text text-caption">{{ withdrawal.truncatedStakeAddress }}</span>
+          <span class="tx-output-addr g-mono">{{ withdrawal.truncatedStakeAddress }}</span>
         </div>
         <div class="tx-output-right">
-          <span class="text-caption font-weight-medium" style="color: #94CFA8;">{{ withdrawal.ada }} {{ unit }}</span>
+          <span class="text-caption font-weight-medium g-num" style="color: var(--g-success);">{{ withdrawal.ada }} {{ unit }}</span>
         </div>
       </div>
     </div>
@@ -128,24 +128,24 @@
 
     <div class="tx-details-section">
       <div v-if="!totals.isInternal" class="tx-summary-row">
-        <span class="grey--text text-caption">{{ t('signTx.totalSending') }}</span>
-        <span class="white--text text-caption font-weight-medium">{{ totals.totalSendingAda }} {{ unit }}</span>
+        <span class="tx-sum-label">{{ t('signTx.totalSending') }}</span>
+        <span class="tx-sum-value g-num">{{ totals.totalSendingAda }} {{ unit }}</span>
       </div>
       <div class="tx-summary-row">
-        <span class="grey--text text-caption">{{ t('signTx.networkFee') }}</span>
-        <span class="white--text text-caption font-weight-medium">{{ totals.feeAda }} {{ resolvedFeeUnit }}</span>
+        <span class="tx-sum-label">{{ t('signTx.networkFee') }}</span>
+        <span class="tx-sum-value g-num">{{ totals.feeAda }} {{ resolvedFeeUnit }}</span>
       </div>
       <div v-if="totals.withdrawalAda" class="tx-summary-row">
-        <span class="grey--text text-caption">{{ t('wallet.rewardsWithdrawn') }}</span>
-        <span class="text-caption font-weight-medium">- {{ totals.withdrawalAda }} {{ unit }}</span>
+        <span class="tx-sum-label">{{ t('wallet.rewardsWithdrawn') }}</span>
+        <span class="tx-sum-value g-num" style="color: var(--g-success);">- {{ totals.withdrawalAda }} {{ unit }}</span>
       </div>
       <v-divider
         v-if="!totals.isInternal || totals.withdrawalAda"
         class="tx-details-divider my-1"
       />
       <div class="tx-summary-row tx-summary-total">
-        <span class="white--text text-caption font-weight-bold">{{ t('signTx.youPay') }}</span>
-        <span class="text-caption font-weight-bold">{{ totals.youPayAda }} {{ unit }}</span>
+        <span class="tx-sum-total-label">{{ t('signTx.youPay') }}</span>
+        <span class="tx-sum-total-value g-num">{{ totals.youPayAda }} {{ unit }}</span>
       </div>
     </div>
   </div>
@@ -234,9 +234,9 @@ function iconForKind(kind: TxOutputKind): string {
 }
 
 function iconColorForKind(kind: TxOutputKind): string {
-  if (kind === 'external') return '#FDA29B';
-  if (kind === 'change') return '#94969c';
-  return '#94CFA8';
+  if (kind === 'external') return 'var(--g-error)';
+  if (kind === 'change') return 'var(--g-text-3)';
+  return 'var(--g-success)';
 }
 
 function tooltipKeyForKind(kind: TxOutputKind): string {
@@ -248,17 +248,15 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 
 <style scoped>
 .tx-details {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
   overflow: hidden;
 }
 
 .tx-details-header {
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--g-hairline-1);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -267,13 +265,13 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 
 .tx-internal-banner {
   padding: 6px 12px;
-  background: rgba(148, 207, 168, 0.06);
-  border-bottom: 1px solid rgba(148, 207, 168, 0.15);
+  background: var(--g-success-fill);
+  border-bottom: 1px solid var(--g-success-line);
   text-align: center;
 }
 
 .tx-internal-banner .text-caption {
-  color: #94CFA8 !important;
+  color: var(--g-success) !important;
   font-weight: 500;
 }
 
@@ -285,7 +283,7 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 }
 
 .tx-details-divider {
-  border-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 
 .tx-output-row {
@@ -304,8 +302,7 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 }
 
 .tx-output-addr {
-  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 10px !important;
+  font-size: 12px !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -318,12 +315,12 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 }
 
 .tx-asset-pill {
-  font-size: 9px;
+  font-size: 11px;
   padding: 1px 6px;
-  border-radius: 8px;
-  background: rgba(0, 199, 243, 0.12);
-  color: #00c7f3;
-  border: 1px solid rgba(0, 199, 243, 0.3);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  color: var(--g-text-2);
+  border: 1px solid var(--g-hairline-2);
   cursor: help;
 }
 
@@ -356,14 +353,12 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 .risk-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   border: 1px solid;
-  background: rgba(255, 255, 255, 0.02);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  background: transparent;
   height: 20px;
 }
 
@@ -372,6 +367,13 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
   align-items: center;
   justify-content: space-between;
 }
+
+/* Net panel: label left in the muted tone, value right-aligned and tabular so
+   digits line up down the column (the specimen's rule for amounts). */
+.tx-sum-label { font-size: 12.5px; color: var(--g-text-3); }
+.tx-sum-value { font-size: 14px; font-weight: 600; color: var(--g-text-1); text-align: right; }
+.tx-sum-total-label { font-size: 13px; font-weight: 600; color: var(--g-text-1); }
+.tx-sum-total-value { font-size: 15px; font-weight: 700; color: var(--g-text-1); text-align: right; }
 
 .tx-summary-total {
   margin-top: 2px;
