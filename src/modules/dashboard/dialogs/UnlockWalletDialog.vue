@@ -289,6 +289,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { getAllWallets } from '@/db/gero-db';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { evaluateMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
+import snackbar from '@/plugins/snackbar';
 import type { Wallet } from '@/models/types';
 
 /** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
@@ -662,8 +663,9 @@ async function signInWithGoogle() {
     googleIdToken.value = idToken;
     googleEmail.value = profile.email;
   } catch (error: unknown) {
-    console.error('Google sign-in failed:', getErrorMessage(error, 'unknown error'));
-    showError(getErrorMessage(error, t('welcome.googleSignInFailed')));
+    // Surface via the global snackbar: in the not-yet-signed-in branch the
+    // tooltip anchor isn't rendered, so showError() would be invisible here.
+    snackbar.setError(getErrorMessage(error, t('welcome.googleSignInFailed')));
   } finally {
     signingInGoogle.value = false;
   }
