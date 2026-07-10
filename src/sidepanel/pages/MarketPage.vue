@@ -57,7 +57,7 @@
               :alt="token.ticker"
               @error="onImgError($event)"
             />
-            <v-icon v-else size="20" color="#888">mdi-circle-outline</v-icon>
+            <v-icon v-else size="20" color="var(--g-text-3)">mdi-circle-outline</v-icon>
           </v-avatar>
           <div class="token-info">
             <div class="token-name text-body-2 white--text">
@@ -91,14 +91,14 @@
 
     <!-- Error -->
     <div v-else-if="marketError" class="empty-state">
-      <v-icon size="40" color="#F97066">mdi-alert-circle-outline</v-icon>
+      <v-icon size="40" color="error">mdi-alert-circle-outline</v-icon>
       <div class="text-body-2 grey--text mt-2">{{ marketError }}</div>
       <button class="retry-btn mt-3" @click="retry">{{ $t('miniGero.retry') }}</button>
     </div>
 
     <!-- Empty -->
     <div v-else class="empty-state">
-      <v-icon size="40" color="#333">mdi-chart-line</v-icon>
+      <v-icon size="40" color="var(--g-text-3)">mdi-chart-line</v-icon>
       <div class="text-body-2 grey--text mt-2">{{ $t('miniGero.noMarketData') }}</div>
     </div>
 
@@ -117,7 +117,7 @@
               :src="selectedToken.img"
               :alt="selectedToken.ticker"
             />
-            <v-icon v-else size="28" color="#888">mdi-circle-outline</v-icon>
+            <v-icon v-else size="28" color="var(--g-text-3)">mdi-circle-outline</v-icon>
           </v-avatar>
           <div class="text-h6 white--text font-weight-bold">
             {{ selectedToken.ticker || selectedToken.name }}
@@ -391,9 +391,9 @@ function onImgError(event: Event) {
 }
 
 .search-input >>> .v-input__slot {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 10px !important;
+  background: var(--g-hairline-1) !important;
+  border-color: var(--g-hairline-1) !important;
+  border-radius: var(--g-r-control) !important;
   min-height: 38px !important;
 }
 
@@ -418,10 +418,10 @@ function onImgError(event: Event) {
 .chip {
   flex-shrink: 0;
   padding: 5px 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: #888;
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -429,13 +429,13 @@ function onImgError(event: Event) {
 }
 
 .chip.active {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
+  color: var(--g-accent);
 }
 
 .chip:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
 }
 
 /* Token list */
@@ -451,16 +451,16 @@ function onImgError(event: Event) {
   padding: 10px 16px;
   cursor: pointer;
   transition: background 0.15s ease;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   margin: 1px 8px;
 }
 
 .token-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--g-hairline-1);
 }
 
 .token-row:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
 }
 
 .token-left {
@@ -473,7 +473,7 @@ function onImgError(event: Event) {
 
 .token-avatar {
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
 }
 
 .token-info {
@@ -515,11 +515,11 @@ function onImgError(event: Event) {
 }
 
 .green-text {
-  color: #47CD89 !important;
+  color: var(--g-success) !important;
 }
 
 .red-text {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 
 /* Loading & empty */
@@ -538,10 +538,10 @@ function onImgError(event: Event) {
 
 .retry-btn {
   padding: 6px 20px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 20%, transparent);
-  color: var(--chain-primary);
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 20%, transparent);
+  color: var(--g-accent);
   font-size: 13px;
   cursor: pointer;
 }
@@ -564,7 +564,7 @@ function onImgError(event: Event) {
   justify-content: space-between;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--g-hairline-3);
 }
 
 .detail-row:last-child {

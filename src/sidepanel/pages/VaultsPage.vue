@@ -112,7 +112,7 @@
         v-else-if="!loading && filteredVaults.length === 0 && (searchQuery || activeFilter !== 'all')"
         class="empty-state"
       >
-        <v-icon size="40" color="rgba(255,255,255,0.08)">mdi-safe-square-outline</v-icon>
+        <v-icon size="40" color="var(--g-text-3)">mdi-safe-square-outline</v-icon>
         <div class="text-body-2 grey--text mt-3 text-center">{{ $t('vaults.noVaultsFound') }}</div>
         <v-btn x-small text :color="primaryColor" class="mt-2" @click="clearFilters()">
           {{ $t('vaults.clearFilters') }}
@@ -124,7 +124,7 @@
         v-else-if="!loading && vaults.length === 0"
         class="empty-state"
       >
-        <v-icon size="40" color="rgba(255,255,255,0.08)">mdi-safe-square-outline</v-icon>
+        <v-icon size="40" color="var(--g-text-3)">mdi-safe-square-outline</v-icon>
         <div class="text-body-2 grey--text mt-3 text-center">{{ $t('vaults.noVaultsAvailable') }}</div>
       </div>
 
@@ -355,18 +355,16 @@ onMounted(() => {
 .vaults-header {
   position: sticky;
   top: 0;
-  z-index: 10;
-  background: rgba(14, 14, 18, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: var(--g-z-sticky);
+  background: var(--g-surface);
+  border-bottom: 1px solid var(--g-hairline-1);
   padding-bottom: 8px !important;
 }
 
 .vaults-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
 }
 
@@ -377,11 +375,11 @@ onMounted(() => {
 
 /* ── Section label ── */
 .vaults-section-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   margin-bottom: 6px;
 }
 
@@ -389,12 +387,10 @@ onMounted(() => {
 .deposits-summary {
   display: flex;
   align-items: center;
-  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  border-radius: 12px;
+  background: color-mix(in srgb, var(--g-accent) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border-radius: var(--g-r-card);
   padding: 12px 16px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .deposits-summary__col {
@@ -408,26 +404,26 @@ onMounted(() => {
 .deposits-summary__divider {
   width: 1px;
   height: 28px;
-  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 15%, transparent);
   margin: 0 16px;
 }
 
 .deposits-summary__label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 .deposits-summary__value {
   font-size: 16px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
 }
 
-.deposits-summary__value--cyan { color: var(--chain-primary); }
+.deposits-summary__value--cyan { color: var(--g-accent); }
 
 /* ── Position Mini-Cards (horizontal scroll) ── */
 .positions-scroll-wrap {
@@ -449,25 +445,23 @@ onMounted(() => {
 .position-mini-card {
   flex-shrink: 0;
   width: 112px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .position-mini-card:hover {
-  background: color-mix(in srgb, var(--chain-primary) 5%, transparent);
-  border-color: color-mix(in srgb, var(--chain-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 5%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 22%, transparent);
 }
 
 .pmini-name {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -476,22 +470,22 @@ onMounted(() => {
 
 .pmini-value {
   font-size: 13px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   margin-bottom: 2px;
 }
 
 .pmini-pnl {
   font-size: 11px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 600;
 }
 
 /* ── Search ── */
 .vaults-search {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-radius: 10px !important;
+  background: var(--g-raised) !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 /* ── Filters Row ── */
@@ -509,10 +503,10 @@ onMounted(() => {
 
 .filter-chip {
   padding: 4px 10px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-2);
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -521,9 +515,9 @@ onMounted(() => {
 }
 
 .filter-chip--active {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
+  color: var(--g-accent);
   font-weight: 600;
 }
 
@@ -549,6 +543,6 @@ onMounted(() => {
 }
 
 /* ── Color Utilities ── */
-.color--green { color: #26FAB0; }
-.color--red   { color: #F97066; }
+.color--green { color: var(--g-success); }
+.color--red   { color: var(--g-error); }
 </style>
