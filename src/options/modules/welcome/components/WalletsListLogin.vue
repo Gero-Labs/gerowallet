@@ -55,16 +55,16 @@
                 {{ item.chain }} - {{item.network}}
               </v-list-item-subtitle>
             </v-list-item-content>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
+            <v-list-item-avatar tile size="20" style="margin-right: 6px;" v-if="item.type === WalletType.Ledger">
               <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
             </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Trezor">
+            <v-list-item-avatar tile size="20" style="margin-right: 6px;" v-if="item.type === WalletType.Trezor">
               <v-img :src="assets.trezorSvg" contain width="18"></v-img>
             </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
+            <v-list-item-avatar tile size="20" style="margin-right: 6px;" v-if="item.type === WalletType.Keystone">
               <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
             </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Google && item.encryptionMethod === 'mpc'">
+            <v-list-item-avatar tile size="20" style="margin-right: 6px;" v-if="item.type === WalletType.Google && item.encryptionMethod === 'mpc'">
               <v-img :src="assets.googleSvg" contain width="18"></v-img>
             </v-list-item-avatar>
           </v-list-item>
