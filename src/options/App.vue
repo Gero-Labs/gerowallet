@@ -49,6 +49,12 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { useChainAccent } from '@/shared/composables/useChainAccent';
+
+// Bootstrap the single chain-accent writer at the dashboard root. It lives here
+// rather than in ContentLayout because ContentLayout unmounts on the welcome
+// route, which would strand the module-level latch as a permanent no-op.
+useChainAccent();
 
 const { loading, isRestoring, text, progress } = toRefs(loadingState);
 const geroConfig = toRefs(geroStore).config;

@@ -1,8 +1,9 @@
-import { computed, watch, ComputedRef } from 'vue';
+import { computed, ComputedRef } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { themes } from '@/config/themes';
+import { useChainAccent } from '@/shared/composables/useChainAccent';
 
 export interface ThemePalette {
   primary: string;
@@ -21,13 +22,15 @@ export interface ChainContext {
   isApex: ComputedRef<boolean>;
   isCardano: ComputedRef<boolean>;
   isBitcoin: ComputedRef<boolean>;
+  isMidnight: ComputedRef<boolean>;
   networkInfo: ComputedRef<NetworkInfo | null>;
   themeColors: ComputedRef<ThemePalette>;
 }
 
-let cssVariablesApplied = false;
-
 export function useChainContext(): ChainContext {
+  // The CSS custom properties are written by the single accent writer.
+  useChainAccent();
+
   const isApex = computed(() =>
     walletStore.loggedWallet?.chain === Blockchain.APEX_PRIME ||
     walletStore.loggedWallet?.chain === Blockchain.APEX_VECTOR
@@ -41,6 +44,10 @@ export function useChainContext(): ChainContext {
     walletStore.loggedWallet?.chain === Blockchain.BITCOIN
   );
 
+  const isMidnight = computed(() =>
+    walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT
+  );
+
   const networkInfo = computed<NetworkInfo | null>(() => {
     const wallet = walletStore.loggedWallet;
     if (!wallet) return null;
@@ -49,27 +56,15 @@ export function useChainContext(): ChainContext {
     ) || null;
   });
 
+  // Kept for the ~28 JS `:color` bindings that read themeColors directly.
+  // The Midnight branch is required: without it a Midnight wallet would mix
+  // violet CSS accents (from useChainAccent) with teal JS bindings.
   const themeColors = computed<ThemePalette>(() => {
     if (isApex.value) return themes.apex;
     if (isBitcoin.value) return themes.bitcoin;
+    if (isMidnight.value) return themes.midnight;
     return themes.cardano;
   });
 
-  // Apply CSS variables once per composable lifetime. Multiple components can
-  // call useChainContext() — we only want one watcher writing to the document root.
-  if (!cssVariablesApplied && typeof document !== 'undefined') {
-    cssVariablesApplied = true;
-    watch(themeColors, (colors) => {
-      const root = document.documentElement;
-      root.style.setProperty('--chain-primary', colors.primary);
-      root.style.setProperty('--chain-secondary', colors.secondary);
-      root.style.setProperty('--chain-accent', colors.accent);
-      root.style.setProperty('--chain-gradient1', colors.gradient1);
-      root.style.setProperty('--chain-gradient2', colors.gradient2);
-      root.style.setProperty('--chain-light', colors.light);
-      root.style.setProperty('--chain-dark', colors.dark);
-    }, { immediate: true });
-  }
-
-  return { isApex, isCardano, isBitcoin, networkInfo, themeColors };
+  return { isApex, isCardano, isBitcoin, isMidnight, networkInfo, themeColors };
 }
