@@ -5,16 +5,36 @@
 
 /* ---- App chrome ---- */
 html { background: var(--g-canvas); }
-.v-application {
+html .v-application {
   font-family: var(--g-font-ui) !important;
   color: var(--g-text-1);
 }
-.v-application .text-h1, .v-application .text-h2, .v-application .text-h3,
-.v-application .text-h4, .v-application .text-h5, .v-application .text-h6,
-.v-application .subtitle-1, .v-application .subtitle-2,
-.v-application .body-1, .v-application .body-2,
-.v-application .caption, .v-application .overline {
-  font-family: var(--g-font-ui) !important; /* Vuetify pins Roboto on ~700 elements otherwise */
+
+/* Vuetify pins Roboto, with the override flag, on every typography
+   helper at (0,2,0), and ships BOTH the legacy unprefixed names and the modern
+   `text-`-prefixed ones. This app uses the modern ones heavily (text-caption in
+   70 files, text-body-2 in 41). Roboto is not bundled, so any helper we miss
+   falls back to system sans.
+   The `html` prefix is load-bearing, not decoration. Vuetify's CSS is emitted
+   TWICE -- once from vuetify.min.css and again from the per-component
+   `vuetify/lib` sass that VuetifyResolver pulls in -- and the second copy lands
+   AFTER baseline.css in the bundle. A tying (0,2,0) rule would therefore lose on
+   source order, which is exactly what happened before this prefix existed
+   (verified in a browser against the built stylesheet). `html ...` is (0,2,1)
+   and wins regardless of order. */
+html .v-application .text-h1, html .v-application .text-h2, html .v-application .text-h3,
+html .v-application .text-h4, html .v-application .text-h5, html .v-application .text-h6,
+html .v-application .text-subtitle-1, html .v-application .text-subtitle-2,
+html .v-application .text-body-1, html .v-application .text-body-2,
+html .v-application .text-caption, html .v-application .text-overline,
+html .v-application .text-button,
+html .v-application .subtitle-1, html .v-application .subtitle-2,
+html .v-application .body-1, html .v-application .body-2,
+html .v-application .caption, html .v-application .overline,
+html .v-application .headline,
+html .v-application .display-1, html .v-application .display-2,
+html .v-application .display-3, html .v-application .display-4 {
+  font-family: var(--g-font-ui) !important;
 }
 
 /* ---- Buttons: sentence case, no tracking, press on pointer-down ----
@@ -39,16 +59,33 @@ html { background: var(--g-canvas); }
 }
 
 /* Primary CTA: the ONLY gradient on a screen. One definition,
-   replaces the copies that lived in two index.html files and two SFCs. */
-.v-application .geroButton,
-.geroButton {
-  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2)) !important;
-  color: var(--g-on-grad) !important;
+   replaces the copies that lived in two index.html files and two SFCs.
+
+   Specificity, spelled out, because it is easy to get wrong:
+   Vuetify's enabled rule `.theme--dark.v-btn.v-btn--has-bg` is (0,3,0) with NO
+   override flag, so (0,4,0) beats it cleanly and no flag is needed here. */
+.v-application .theme--dark.v-btn.geroButton {
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  color: var(--g-on-grad);
   font-weight: 600;
   border-radius: var(--g-r-control);
 }
-.geroButton.v-btn--disabled,
-.geroButton:disabled {
+/* Fallback for the rare non-v-btn use of the class. */
+.geroButton {
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  color: var(--g-on-grad);
+  font-weight: 600;
+  border-radius: var(--g-r-control);
+}
+/* Disabled is different: Vuetify's
+   `.theme--dark.v-btn.v-btn--disabled.v-btn--has-bg` (0,4,0) and
+   `.theme--dark.v-btn.v-btn--disabled` (0,3,0) BOTH carry an override flag.
+   A flag always beats a non-flagged declaration whatever the specificity, and
+   between two flagged declarations specificity decides -- so this rule must be
+   flagged AND reach (0,5,0), or the disabled CTA renders Vuetify's translucent
+   grey instead of the raised surface. */
+.v-application .theme--dark.v-btn.geroButton.v-btn--disabled,
+.v-application .theme--dark.v-btn.geroButton:disabled {
   background: var(--g-raised) !important;
   color: var(--g-text-3) !important;
 }
