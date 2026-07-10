@@ -84,6 +84,20 @@ html { background: var(--g-canvas); }
   outline-offset: 2px;
 }
 
+/* ---- The house dialog transition: fade + a 2% scale, once.
+   v-dialog renders a plain <transition name="...">, so these are Vue 2's
+   enter/leave class names. ---- */
+.g-dialog-transition-enter-active,
+.g-dialog-transition-leave-active {
+  transition: opacity var(--g-dur-base) var(--g-ease),
+              transform var(--g-dur-base) var(--g-ease);
+}
+.g-dialog-transition-enter,
+.g-dialog-transition-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
 /* ---- Delta colors: colored text + glyph, never chips ---- */
 .delta-up { color: var(--g-success); }
 .delta-down { color: var(--g-error); }
