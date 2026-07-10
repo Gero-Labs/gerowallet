@@ -1,5 +1,5 @@
 <template>
-    <BaseDialog :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.newMultisigTransactionFull')" :loading="txSubmitLoading" :min-height="0"
+    <BaseDialog persistent :width="850" :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.newMultisigTransactionFull')" :loading="txSubmitLoading" :min-height="0"
                 :subtitle="$t('multisig.multisigRequiresSignatures')">
       <v-card-title style="display: block;" class="py-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>

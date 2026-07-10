@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog
+  <BaseDialog persistent
     :is-open="value"
     :title="t('security.walletLocked')"
     :subtitle="unlockDescription"
