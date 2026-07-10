@@ -247,7 +247,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .rate-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -255,7 +255,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .rate-value {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -263,7 +263,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .rate-equals {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -291,7 +291,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .gero-info-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
@@ -299,7 +299,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .gero-info-value {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -307,7 +307,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .gero-tier-badge {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -364,7 +364,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .summary-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -421,7 +421,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .fee-option-text {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
@@ -443,7 +443,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .transfer-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -457,7 +457,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .amount-value {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 16px;
   line-height: 2.375;
@@ -465,7 +465,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .currency-badge {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 16px;
   line-height: 2.375;
@@ -475,7 +475,7 @@ watch(selectedFeeOption, updateFeeOption);
 .fee-amount,
 .total-amount,
 .receive-amount {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 16px;
   line-height: 1.25;
@@ -497,7 +497,7 @@ watch(selectedFeeOption, updateFeeOption);
 }
 
 .password-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
@@ -510,7 +510,7 @@ watch(selectedFeeOption, updateFeeOption);
   background: $background-dark;
   border: 1px solid #373a41;
   border-radius: $border-radius-md;
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 400;
   font-size: 16px;
   line-height: 1.5;
