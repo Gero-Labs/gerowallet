@@ -28,10 +28,10 @@
       <!-- Top Gainer column -->
       <div class="stat-col">
         <div class="stat-header" @click="expanded = !expanded">
-          <v-icon x-small color="#47CD89" class="mr-1">mdi-trending-up</v-icon>
+          <v-icon x-small color="success" class="mr-1">mdi-trending-up</v-icon>
           <span class="stat-label">{{ $t('market.topGainer') }}</span>
           <span class="stat-ticker stat-ticker--link ml-1" @click.stop="$emit('token-click', gainers[0].unit)">{{ gainers[0].ticker }}</span>
-          <span class="stat-value ml-1 green--text">+{{ gainers[0].change24h.toFixed(1) }}%</span>
+          <span class="stat-value ml-1 g-num delta-up">{{ formatSignedChange(gainers[0].change24h) }}</span>
         </div>
         <template v-if="expanded">
           <div
@@ -42,7 +42,7 @@
           >
             <span class="rank">{{ i + 2 }}</span>
             <span class="ticker">{{ tok.ticker }}</span>
-            <span class="val ml-auto green--text">+{{ tok.change24h.toFixed(1) }}%</span>
+            <span class="val ml-auto g-num delta-up">{{ formatSignedChange(tok.change24h) }}</span>
           </div>
         </template>
       </div>
@@ -52,10 +52,10 @@
       <!-- Top Loser column -->
       <div class="stat-col">
         <div class="stat-header" @click="expanded = !expanded">
-          <v-icon x-small color="#F97066" class="mr-1">mdi-trending-down</v-icon>
+          <v-icon x-small color="error" class="mr-1">mdi-trending-down</v-icon>
           <span class="stat-label">{{ $t('market.topLoser') }}</span>
           <span class="stat-ticker stat-ticker--link ml-1" @click.stop="$emit('token-click', losers[0].unit)">{{ losers[0].ticker }}</span>
-          <span class="stat-value ml-1 red--text">{{ losers[0].change24h.toFixed(1) }}%</span>
+          <span class="stat-value ml-1 g-num delta-down">{{ formatSignedChange(losers[0].change24h) }}</span>
         </div>
         <template v-if="expanded">
           <div
@@ -66,7 +66,7 @@
           >
             <span class="rank">{{ i + 2 }}</span>
             <span class="ticker">{{ tok.ticker }}</span>
-            <span class="val ml-auto red--text">{{ tok.change24h.toFixed(1) }}%</span>
+            <span class="val ml-auto g-num delta-down">{{ formatSignedChange(tok.change24h) }}</span>
           </div>
         </template>
       </div>
@@ -120,7 +120,7 @@ const totalVolume = computed(() => {
   return props.tokens.reduce((sum, t) => sum + t.volume24h, 0);
 });
 
-import { formatCompact } from '@/modules/market/utils/formatters';
+import { formatCompact, formatSignedChange } from '@/modules/market/utils/formatters';
 </script>
 
 <style scoped>
