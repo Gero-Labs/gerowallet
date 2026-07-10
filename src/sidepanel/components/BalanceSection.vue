@@ -1,6 +1,6 @@
 <template>
   <div class="balance-section">
-    <div class="balance-label text-caption grey--text">
+    <div class="balance-label t-label grey--text">
       {{ $t('miniGero.portfolioValue') }}
     </div>
     <div class="balance-row">
@@ -16,7 +16,7 @@
           {{ hideBalances ? '••••••' : formattedDustBalance }} {{ dustTicker }}
         </span>
         <span v-if="nightChange24h !== null" class="ml-2">
-          <v-icon x-small :color="nightChange24h >= 0 ? '#47CD89' : '#F97066'">
+          <v-icon x-small :color="nightChange24h >= 0 ? 'success' : 'error'">
             {{ nightChange24h >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
           </v-icon>
           {{ Math.abs(nightChange24h).toFixed(2) }}%
@@ -27,7 +27,7 @@
           {{ hideBalances ? '••••••' : formattedAdaBalance }} {{ currencyTicker }}
         </span>
         <span v-if="priceChange !== null" class="ml-2">
-          <v-icon x-small :color="priceChange >= 0 ? '#47CD89' : '#F97066'">
+          <v-icon x-small :color="priceChange >= 0 ? 'success' : 'error'">
             {{ priceChange >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
           </v-icon>
           {{ Math.abs(priceChange).toFixed(2) }}%
@@ -39,7 +39,7 @@
       rounded
       small
       class="buy-sell-btn mt-3 geroButton"
-      :style="{ color: 'var(--chain-primary)', borderColor: 'var(--chain-primary)' }"
+      :style="{ color: 'var(--g-accent)', borderColor: 'var(--g-accent)' }"
       @click="$emit('buy-sell')"
     >
       <v-icon small left>mdi-swap-horizontal</v-icon>
@@ -153,12 +153,6 @@ const changeColor = computed(() => {
   padding: 20px 16px 12px;
 }
 
-.balance-label {
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  font-size: 11px !important;
-}
-
 .balance-row {
   margin-top: 4px;
 }
@@ -175,11 +169,11 @@ const changeColor = computed(() => {
 }
 
 .green-change {
-  color: #47CD89 !important;
+  color: var(--g-success) !important;
 }
 
 .red-change {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 
 .buy-sell-btn {

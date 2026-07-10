@@ -89,7 +89,7 @@
               :alt="getTokenName(token)"
               @error="onImgError($event)"
             />
-            <v-icon v-else size="20" color="#888">mdi-circle-outline</v-icon>
+            <v-icon v-else size="20" color="var(--g-text-3)">mdi-circle-outline</v-icon>
           </v-avatar>
           <div class="token-info">
             <div class="token-name text-body-2 white--text text-truncate">
@@ -125,7 +125,7 @@
 
     <!-- Empty state -->
     <div v-else class="empty-state">
-      <v-icon size="40" color="#333">mdi-wallet-outline</v-icon>
+      <v-icon size="40" color="var(--g-text-3)">mdi-wallet-outline</v-icon>
       <div class="text-body-2 grey--text mt-2">{{ $t('miniGero.noTokens') }}</div>
     </div>
   </div>
@@ -322,27 +322,27 @@ function onImgError(event: Event) {
   padding: 10px 16px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   margin: 2px 8px;
   border: 1px solid transparent;
 }
 
 .token-item.ada-row {
-  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
-  border-color: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 4%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 10%, transparent);
 }
 
 .ada-avatar {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
 }
 
 .token-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
+  border-color: var(--g-hairline-1);
 }
 
 .token-item:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
 }
 
 .token-left {
@@ -355,7 +355,7 @@ function onImgError(event: Event) {
 
 .token-avatar {
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
 }
 
 .token-info {
@@ -394,11 +394,11 @@ function onImgError(event: Event) {
 }
 
 .green-text {
-  color: #47CD89 !important;
+  color: var(--g-success) !important;
 }
 
 .red-text {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 
 .empty-state {
