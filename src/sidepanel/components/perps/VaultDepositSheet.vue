@@ -12,7 +12,7 @@
         ref="amountFieldRef"
         v-model="amount"
         currency="ADA"
-        accent="var(--chain-primary)"
+        accent="var(--g-accent)"
         class="mb-3"
         @max="setMax()"
       />
@@ -43,7 +43,7 @@
 
       <!-- ── Stablecoin Warning ── -->
       <div class="warning-banner">
-        <v-icon size="14" color="#FFA726" class="mr-2" style="flex-shrink:0">mdi-alert-outline</v-icon>
+        <v-icon size="14" color="warning" class="mr-2" style="flex-shrink:0">mdi-alert-outline</v-icon>
         <span>{{ $t('perpetuals.stablecoinWarning') }}</span>
       </div>
 
@@ -64,14 +64,14 @@
       <!-- ── Status Banners ── -->
       <transition name="fade-slide">
         <div v-if="depositStatus === 'confirmed'" class="success-banner mt-3">
-          <v-icon size="16" color="#26FAB0" class="mr-2">mdi-check-circle</v-icon>
+          <v-icon size="16" color="success" class="mr-2">mdi-check-circle</v-icon>
           {{ $t('vaults.depositConfirmed') }}
         </div>
       </transition>
 
       <transition name="fade-slide">
         <div v-if="depositError" class="error-banner mt-3">
-          <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+          <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
           <span>{{ depositError }}</span>
         </div>
       </transition>
@@ -205,46 +205,46 @@ watch(() => props.value, (val) => {
 
 /* ── Inputs ── */
 .perp-input :deep(.v-input__slot) {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: var(--g-hairline-1) !important;
   min-height: 40px !important;
 }
 .perp-input :deep(.v-label) {
   font-size: 12px !important;
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--g-text-3) !important;
 }
 .perp-input :deep(input) {
   font-size: 13px !important;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
-  color: #ffffff !important;
-  caret-color: var(--chain-primary) !important;
+  font-family: var(--g-font-mono) !important;
+  color: var(--g-text-1) !important;
+  caret-color: var(--g-accent) !important;
 }
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 11px !important;
-  color: rgba(255, 255, 255, 0.35) !important;
+  color: var(--g-text-3) !important;
   font-weight: 600 !important;
 }
 .perp-input :deep(fieldset) {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--g-hairline-2) !important;
 }
 .perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--chain-primary) !important;
+  border-color: var(--g-accent) !important;
 }
 
 /* ── Preview Card ── */
 .preview-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px 14px;
   margin-bottom: 12px;
 }
 
 .preview-title {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   margin-bottom: 10px;
 }
 
@@ -253,27 +253,27 @@ watch(() => props.value, (val) => {
   justify-content: space-between;
   align-items: center;
   padding: 4px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 .preview-row:last-child { border-bottom: none; }
 
 .preview-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
 }
 
 .preview-value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--g-font-mono);
+  color: var(--g-text-1);
   font-weight: 600;
 }
-.preview-value.highlight { color: #26FAB0; }
-.preview-value.muted { color: rgba(255, 255, 255, 0.45); font-weight: 400; }
+.preview-value.highlight { color: var(--g-success); }
+.preview-value.muted { color: var(--g-text-3); font-weight: 400; }
 
 .preview-unit {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   font-weight: 400;
 }
 
@@ -282,11 +282,11 @@ watch(() => props.value, (val) => {
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(255, 167, 38, 0.08);
-  border: 1px solid rgba(255, 167, 38, 0.22);
+  border-radius: var(--g-r-control);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
   font-size: 11px;
-  color: rgba(255, 167, 38, 0.9);
+  color: var(--g-warning);
   line-height: 1.5;
 }
 
@@ -295,39 +295,38 @@ watch(() => props.value, (val) => {
   display: flex;
   align-items: center;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(38, 250, 176, 0.08);
-  border: 1px solid rgba(38, 250, 176, 0.22);
+  border-radius: var(--g-r-control);
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
   font-size: 12px;
   font-weight: 600;
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .error-banner {
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(249, 112, 102, 0.08);
-  border: 1px solid rgba(249, 112, 102, 0.22);
+  border-radius: var(--g-r-control);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
   font-size: 11px;
-  color: #F97066;
+  color: var(--g-error);
   line-height: 1.5;
 }
 
 /* ── Action Button ── */
 .action-btn {
   height: 44px !important;
-  border-radius: 10px !important;
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
+  border-radius: var(--g-r-control) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
-  letter-spacing: 0.02em !important;
 }
-.action-btn:hover:not(.v-btn--disabled) { background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important; }
+.action-btn:hover:not(.v-btn--disabled) { background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important; }
 .action-btn.v-btn--disabled { opacity: 0.35 !important; }
 
 /* ── Transitions ── */

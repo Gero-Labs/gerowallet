@@ -159,11 +159,9 @@ const riskFillClass = computed((): string => {
 
 <style scoped>
 .account-panel {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
@@ -178,23 +176,23 @@ const riskFillClass = computed((): string => {
 }
 
 .ap-balance-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
 }
 
 .ap-balance-value {
   font-size: 24px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
 
 .ap-placeholder {
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
 }
 
 /* ── Stats Grid ── */
@@ -219,25 +217,25 @@ const riskFillClass = computed((): string => {
 }
 
 .ap-stat-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 .ap-stat-value {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--g-text-2);
 }
 
 .pnl--positive {
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .pnl--negative {
-  color: #F97066;
+  color: var(--g-error);
 }
 
 /* ── Margin ratio ── */
@@ -254,16 +252,16 @@ const riskFillClass = computed((): string => {
 }
 
 .ap-margin-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   flex: 1;
 }
 
 .ap-margin-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 1px 6px;
@@ -271,31 +269,31 @@ const riskFillClass = computed((): string => {
 }
 
 .badge--healthy {
-  background: rgba(38, 250, 176, 0.15);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .badge--warning {
-  background: rgba(255, 167, 38, 0.15);
-  color: #FFA726;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .badge--danger {
-  background: rgba(249, 112, 102, 0.15);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 .ap-margin-pct {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   min-width: 36px;
   text-align: right;
 }
 
 .ap-progress-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -307,15 +305,15 @@ const riskFillClass = computed((): string => {
 }
 
 .fill--healthy {
-  background: #26FAB0;
+  background: var(--g-success);
 }
 
 .fill--warning {
-  background: #FFA726;
+  background: var(--g-warning);
 }
 
 .fill--danger {
-  background: #F97066;
+  background: var(--g-error);
 }
 
 /* ── Actions ── */
@@ -328,19 +326,17 @@ const riskFillClass = computed((): string => {
 .ap-btn {
   font-size: 11px !important;
   font-weight: 700 !important;
-  letter-spacing: 0.06em !important;
-  text-transform: uppercase !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   height: 32px !important;
 }
 
 .ap-btn--deposit {
-  background: var(--chain-primary) !important;
-  color: #000 !important;
+  background: var(--g-accent) !important;
+  color: var(--g-on-grad) !important;
 }
 
 .ap-btn--withdraw {
-  border-color: rgba(255, 255, 255, 0.18) !important;
-  color: rgba(255, 255, 255, 0.75) !important;
+  border-color: var(--g-hairline-3) !important;
+  color: var(--g-text-2) !important;
 }
 </style>

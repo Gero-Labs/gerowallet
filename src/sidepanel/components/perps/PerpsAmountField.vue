@@ -40,7 +40,7 @@ withDefaults(defineProps<{
   showMax?: boolean;
 }>(), {
   placeholder: '0',
-  accent: '#00c7f3',
+  accent: 'var(--g-accent)',
   showMax: true,
 });
 
@@ -78,9 +78,9 @@ defineExpose({ focus });
   gap: 10px;
   padding: 0 8px 0 16px;
   height: 66px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 .af--focus {
@@ -94,29 +94,29 @@ defineExpose({ focus });
   background: none;
   border: none;
   outline: none;
-  color: #ffffff;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 30px;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
+  font-size: 32px;
   font-weight: 600;
   letter-spacing: -0.01em;
   caret-color: var(--af-accent);
   padding: 0;
 }
-.af__input::placeholder { color: rgba(255, 255, 255, 0.22); }
+.af__input::placeholder { color: var(--g-text-3); }
 /* Belt-and-braces: hide native number spinners if a number type ever sneaks in */
 .af__input::-webkit-outer-spin-button,
 .af__input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .af__ccy {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }
 .af__max {
   flex-shrink: 0;
   padding: 7px 13px;
-  border-radius: 9px;
+  border-radius: var(--g-r-control);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
