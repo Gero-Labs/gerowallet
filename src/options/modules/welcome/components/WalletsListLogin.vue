@@ -65,7 +65,7 @@
               <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
             </v-list-item-avatar>
             <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Google && item.encryptionMethod === 'mpc'">
-              <v-img :src="assets.google" contain width="18"></v-img>
+              <v-img :src="assets.googleSvg" contain width="18"></v-img>
             </v-list-item-avatar>
           </v-list-item>
         </v-list-item-group>
