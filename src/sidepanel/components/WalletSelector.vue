@@ -4,24 +4,40 @@
       <img :src="geroLogo" alt="Gero" class="gero-logo mb-3" />
       <h2 class="white--text text-h6">{{ $t('miniGero.selectWallet') }}</h2>
     </div>
+    <div v-if="errorMessage" class="wallet-selector-error mb-2">
+      <v-icon size="14" color="#ff6464" class="mr-1">mdi-alert-circle-outline</v-icon>
+      <span class="error--text text-caption">{{ errorMessage }}</span>
+    </div>
+
     <div class="wallet-list">
       <div
         v-for="wallet in availableWallets"
         :key="wallet.id"
         class="wallet-item"
-        @click="$emit('select', wallet)"
+        :class="{ 'is-disabled': loadingWalletId !== null && loadingWalletId !== wallet.id }"
+        @click="loadingWalletId === null && $emit('select', wallet)"
       >
         <div class="wallet-icon-wrapper">
           <v-avatar size="36" class="wallet-avatar">
             <v-img :src="assets.resolveIcon(wallet.icon)" />
           </v-avatar>
-          <v-avatar size="16" class="network-badge">
+          <v-avatar v-if="loadingWalletId !== wallet.id" size="16" class="network-badge">
             <v-img contain :src="resolveNetworkIcon(wallet)" />
           </v-avatar>
+          <v-progress-circular
+            v-else
+            size="16"
+            width="2"
+            indeterminate
+            :color="primaryColor"
+            class="network-badge"
+          />
         </div>
         <div class="wallet-info">
           <span class="white--text text-body-2">{{ wallet.name }}</span>
-          <span class="grey--text text-caption">{{ wallet.chain }} - {{ wallet.network }}</span>
+          <span class="grey--text text-caption">
+            {{ loadingWalletId === wallet.id ? $t('miniGero.unlocking') : `${wallet.chain} - ${wallet.network}` }}
+          </span>
         </div>
         <v-img
           v-if="wallet.type === WalletType.Ledger"
@@ -103,7 +119,14 @@ async function openSetup() {
   chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/welcome') });
 }
 
-defineProps<{ compact?: boolean }>();
+withDefaults(defineProps<{
+  compact?: boolean;
+  loadingWalletId?: number | null;
+  errorMessage?: string;
+}>(), {
+  loadingWalletId: null,
+  errorMessage: '',
+});
 defineEmits<{
   (e: 'select', wallet: Wallet): void;
 }>();
@@ -168,6 +191,21 @@ defineEmits<{
 .wallet-item:active {
   transform: scale(0.98);
   background: rgba(255, 255, 255, 0.06);
+}
+
+.wallet-item.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.wallet-selector-error {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(255, 100, 100, 0.08);
+  border: 1px solid rgba(255, 100, 100, 0.25);
+  border-radius: 8px;
 }
 
 .wallet-icon-wrapper {

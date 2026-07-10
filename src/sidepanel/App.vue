@@ -11,7 +11,11 @@
     <!-- Wallet selection needed -->
     <template v-else-if="!hasActiveWallet">
       <PendingRequestBanner />
-      <WalletSelector @select="onWalletSelect" />
+      <WalletSelector
+        :loading-wallet-id="loggingInWalletId"
+        :error-message="loginError"
+        @select="onWalletSelect"
+      />
     </template>
 
     <!-- Wallet locked -->
@@ -34,7 +38,12 @@
 
     <!-- Wallet switcher bottom sheet (available from header) -->
     <BottomSheet v-model="showWalletSwitcher" :title="t('miniGero.selectWallet')" height="60%">
-      <WalletSelector compact @select="onWalletSwitch" />
+      <WalletSelector
+        compact
+        :loading-wallet-id="loggingInWalletId"
+        :error-message="loginError"
+        @select="onWalletSwitch"
+      />
     </BottomSheet>
 
   </v-app>
@@ -92,7 +101,16 @@ watch(() => geroStore.config?.locale, async (newLocale, oldLocale) => {
   }
 }, { immediate: true, deep: true });
 
+// Login was the single most-repeated moment in the panel with zero feedback
+// — tapping a wallet did nothing visible until the whole screen swapped out
+// from under the logged-in branch (or never did, on failure, with only a
+// console.error). Per-row spinner + a real error message close that gap.
+const loggingInWalletId = ref<number | null>(null);
+const loginError = ref('');
+
 async function onWalletSelect(wallet: Wallet) {
+  loggingInWalletId.value = wallet.id;
+  loginError.value = '';
   try {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
@@ -100,9 +118,13 @@ async function onWalletSelect(wallet: Wallet) {
     });
     if (!response['data'].success) {
       console.error('Login failed:', response['data'].error);
+      loginError.value = t('miniGero.loginFailed');
     }
   } catch (e) {
     console.error('Login error:', e);
+    loginError.value = t('miniGero.loginFailed');
+  } finally {
+    loggingInWalletId.value = null;
   }
 }
 
