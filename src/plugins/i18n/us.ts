@@ -2785,13 +2785,13 @@ export default {
   'welcome.hardwareConnectionFailed': 'Could not connect to your hardware wallet. Please try again.',
 
   // MPC "Sign in with Google" wallet (Plan D)
-  'welcome.googleWalletMethod': 'Google wallet',
+  'welcome.googleWalletMethod': 'Google Wallet',
   'welcome.googleWalletMethodDescription': 'Sign in with Google - no seed phrase.',
   'welcome.googleWalletNotSupportedOnNetwork': 'Google wallet is only available on Cardano right now.',
   'welcome.restoreGoogleWalletLink': 'Have a Google wallet backup? Restore it.',
   'welcome.onboardingStepGoogleSignIn': 'Sign In',
   'welcome.onboardingSubGoogleSignIn': 'Google account',
-  'welcome.onboardingDescGoogleSignIn': 'Sign in with the Google account you\'ll use to secure this wallet.',
+  'welcome.onboardingDescGoogleSignIn': 'Sign in with your Google account to secure this wallet.',
   'welcome.onboardingStepGoogleSecure': 'Secure',
   'welcome.onboardingSubGoogleSecure': 'Spending & recovery passwords',
   'welcome.onboardingDescGoogleSecure': 'Choose a spending password and a recovery password.',
@@ -2830,6 +2830,10 @@ export default {
   'welcome.passkeySecured': 'Passkey ready. This device will unlock with your passkey.',
   'welcome.unlockApprovePasskey': 'Sign in with Google, then approve with your passkey.',
   'welcome.setUpPasskeyThisDevice': 'Set up a passkey on this device',
+  'welcome.googleWalletAlreadyExists': 'You already have the wallet "{name}" on this device with this account.\nLog in instead of creating a new one.',
+  'welcome.logInToThisWallet': 'Log in to this wallet',
+  'welcome.googleWalletEnrolledRestore': 'This Google account already has a wallet.\nRestore it on this device with your recovery file.',
+  'welcome.restoreThisWallet': 'Restore this wallet',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',
@@ -2908,6 +2912,9 @@ export default {
   'security.passKeySettingsUpdateFailed': 'Failed to update PassKey settings',
   'security.passKeyCredentialChanged': 'PassKey credential has changed. Please re-register PassKey in settings.',
   'security.usePassKey': 'Use PassKey',
+  'security.mpcOfflineUnlockToggle': "Server unavailable? Unlock with your recovery file",
+  'security.mpcOfflineUnlockHint': 'Reconstruct on this device from your recovery file — no server or Google needed.',
+  'security.mpcOfflineUnlockAction': 'Unlock offline',
   'security.orUsePassKey': 'Or use PassKey',
   'security.passKeyAuthFailed': 'PassKey authentication failed',
   'security.passKeyAuthSuccess': 'Password autofilled successfully',

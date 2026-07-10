@@ -1,5 +1,6 @@
 <template>
   <div class="step-start">
+    <div class="step-scroll">
     <!-- ── Network (two-step: blockchain → network) ────────── -->
     <NetworkSelector :network="localNetwork" :dev-mode="devMode" @change="onNetworkChange" />
 
@@ -58,7 +59,7 @@
         :disabled="!googleWalletSupported"
         @click="selectedMethod = 'google'"
       >
-        <span class="method-card__icon"><v-img :src="googlePng" contain width="24" height="24" /></span>
+        <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(googleGlyph)" /></span>
         <span class="method-card__text">
           <span class="method-card__title">{{ $t('welcome.googleWalletMethod') }}</span>
           <span class="method-card__desc">
@@ -68,14 +69,9 @@
       </button>
     </div>
 
-    <!-- Google wallet: restore-from-backup entry point -->
-    <div v-if="googleWalletVisible && googleWalletSupported" class="google-restore-link">
-      <button type="button" class="link-btn" @click="selectedMethod = 'googleRestore'">
-        {{ $t('welcome.restoreGoogleWalletLink') }}
-      </button>
     </div>
 
-    <!-- Navigation -->
+    <!-- Navigation (footer — outside the scroll region above) -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-spacer />
       <v-btn class="onb-btn" depressed color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
@@ -86,7 +82,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import assets from '@/utils/assets';
-import { google as googlePng } from '@/utils/assets';
 import { NetworkInfo } from '@/utils/networks';
 import { Blockchain } from '@/models/types';
 import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
@@ -117,6 +112,7 @@ const googleWalletSupported = computed(() => localNetwork.value?.blockchain === 
 const walletSvg = assets.walletGeroSvg;
 const keyGeroSvg = assets.keyGeroSvg;
 const pairSvg = assets.pairGeroSvg;
+const googleGlyph = assets.googleOutlineSvg; // outlined Google "G" — masked/tinted to match the other line glyphs
 
 // Method icons take the selected network's accent gradient (lighter -> base),
 // matching the per-network logo gradients.
@@ -154,6 +150,29 @@ const onContinue = (): void => {
 </script>
 
 <style scoped>
+/* Fill the onboarding body and split into a scrollable content region plus a
+   pinned action footer. The scrollbar lives on .step-scroll (content only), so
+   the CONTINUE row sits below/outside it instead of scrolling with the list. */
+.step-start {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.step-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.step-start .onboarding-actions {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .step-section-label {
   font-size: 10px;
   font-weight: 600;

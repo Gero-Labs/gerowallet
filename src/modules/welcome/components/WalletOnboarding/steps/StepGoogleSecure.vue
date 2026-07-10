@@ -159,6 +159,10 @@ import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPa
 interface Props {
   network: NetworkInfo;
   idToken: string;
+  /** Google profile picture URL — used as the wallet icon when present. */
+  googlePicture?: string;
+  /** Google display name — prefills the wallet name when present. */
+  googleName?: string;
 }
 
 const props = defineProps<Props>();
@@ -180,7 +184,7 @@ const vmProxy = getCurrentInstance()!.proxy;
 const secureForm = ref<{ resetValidation: () => void } | null>(null);
 const formValid = ref(false);
 
-const name = ref(generateWalletName());
+const name = ref(props.googleName?.trim() || generateWalletName());
 const spendingPassword = ref('');
 const confirmSpendingPassword = ref('');
 const recoveryPassword = ref('');
@@ -235,7 +239,10 @@ const createWallet = async (): Promise<void> => {
   creating.value = true;
   errorMessage.value = '';
   try {
-    const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
+    // Prefer the Google profile picture as the wallet icon; fall back to the
+    // network-colored default when there is no picture. resolveIcon renders an
+    // http/data icon directly, so no other render site needs changing.
+    const walletIcon = props.googlePicture || networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
     const payload = authPayload.value;
 
     // Note: never log request payload — contains idToken/spendingPassword/prfOutputHex
