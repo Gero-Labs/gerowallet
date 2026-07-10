@@ -504,8 +504,8 @@ onMounted(async () => {
     }
   });
 
-  // Ensure colors are set on mount
-  updateThemeColors();
+  // Chain colors are applied by useChainAccent (bootstrapped in options/App.vue
+  // with immediate: true), so there is nothing to do here on mount.
 
   // Load SPO node config and start polling for KES notifications.
   // Pool Operator is hard-gated off for 2.7 — skip polling entirely.
