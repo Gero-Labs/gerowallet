@@ -54,6 +54,7 @@
 import { computed, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { chainAccents, chainKeyFor } from '@/config/themes';
 
 interface Family {
   name: string;
@@ -98,15 +99,10 @@ const currentIsTestnet = computed<boolean>(() => !!props.network && props.networ
 // any chain that has at least one live network is pickable.
 const isFamilySelectable = (fam: Family): boolean => (props.devMode ? !fam.comingSoon : famHasLiveMainnet(fam));
 
-// Per-network accent for the active tile ring (matches the theme primary set in
-// updateVuetifyTheme). Empty string => fall back to the CSS class (primary var).
-const CHAIN_COLORS: Record<string, string> = {
-  'Cardano': '#00c7f3',
-  'Apex Fusion Prime': '#057468',
-  'Apex Fusion Vector': '#f25140',
-  'Bitcoin': '#F7931A'
-};
-const chainColor = (name: string): string => CHAIN_COLORS[name] || '';
+// Per-network accent for the active tile ring, from the single accent source.
+// The old hardcoded map carried the retired Apex Prime/Vector one-offs and had
+// no Midnight entry.
+const chainColor = (name: string): string => chainAccents[chainKeyFor(name)].accent;
 
 const isNetActive = (net: NetworkInfo): boolean =>
   props.network?.blockchain === net.blockchain && props.network?.network === net.network;
