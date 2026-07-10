@@ -3439,6 +3439,7 @@ export default {
   'miniGero.unlockInDashboard': 'Im Dashboard entsperren',
   'miniGero.getStarted': 'Loslegen',
   'miniGero.connectRequest': 'Verbindungsanfrage',
+  'dapp.suspiciousHostname': 'Die Adresse dieser Website enthält ungewöhnliche Zeichen. Bitte sorgfältig prüfen.',
   'miniGero.signDataRequest': 'Daten signieren',
   'miniGero.signTxRequest': 'Transaktion signieren',
   'signTx.transactionDetails': 'Tx-Details',

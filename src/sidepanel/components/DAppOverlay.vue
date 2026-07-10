@@ -12,7 +12,7 @@
           <span class="grey--text text-caption">
             {{ $t('miniGero.requestQueueIndicator', { current: 1, total: requestQueue.length + 1 }) }}
           </span>
-          <v-btn text x-small color="#ff6464" @click="rejectAll()">{{ $t('miniGero.rejectAll') }}</v-btn>
+          <v-btn text x-small color="error" @click="rejectAll()">{{ $t('miniGero.rejectAll') }}</v-btn>
         </div>
         <div
           v-for="item in requestQueue"
@@ -50,41 +50,34 @@
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ enableDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(enableDomain).sub }}</span><b class="dapp-root">{{ splitHost(enableDomain).root }}</b></span>
           </div>
         </div>
 
-        <!-- URL warning -->
-        <div class="url-warning mb-3">
-          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
-          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        <!-- Homograph / punycode warning: only when the hostname actually warrants it -->
+        <div v-if="splitHost(enableDomain).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
         </div>
 
-        <!-- Permissions -->
-        <div class="permissions-section mb-3">
-          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
-          <v-checkbox
-            v-model="enableConsent"
-            :color="primaryColor"
-            hide-details
-            dark
-            dense
-            class="consent-checkbox mt-0"
-            :label="$t('navigation.viewAddressAndBalance')"
-          />
-        </div>
-
-        <!-- Security note -->
-        <div class="security-note mb-4">
-          <v-icon size="14" color="rgba(255,255,255,0.4)" class="mr-1 flex-shrink-0" style="margin-top: 2px;">mdi-shield-check-outline</v-icon>
-          <span class="grey--text text-caption">
-            {{ $t('miniGero.futureTransactionsNote') }}
-          </span>
+        <!-- Permissions. A checkbox here was fake agency: it gated a button the
+             user had already decided to press, and taught them to click past
+             consent UI. The grants are stated, not negotiated. -->
+        <div class="permissions-section mb-4">
+          <p class="t-label mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('navigation.viewAddressAndBalance') }}</span>
+          </div>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('miniGero.futureTransactionsNote') }}</span>
+          </div>
         </div>
 
         <div class="action-buttons">
           <v-btn outlined rounded dark @click="reject()">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :disabled="!enableConsent" @click="approve(true)">
+          <v-btn class="geroButton" rounded depressed @click="approve(true)">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -101,11 +94,11 @@
               @error="onFaviconError"
               v-if="!faviconFailed"
             />
-            <v-icon v-else size="32" color="#FFF59E">mdi-file-document-edit-outline</v-icon>
+            <v-icon v-else size="32" color="warning">mdi-file-document-edit-outline</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.signTxRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
@@ -151,17 +144,17 @@
             :key="'mint-' + i"
             class="tx-intent-row"
           >
-            <v-icon size="14" :color="mint.isBurn ? '#FDA29B' : '#94CFA8'" class="mr-1">{{ mint.isBurn ? 'mdi-fire' : 'mdi-file-plus-outline' }}</v-icon>
+            <v-icon size="14" :color="mint.isBurn ? 'error' : 'success'" class="mr-1">{{ mint.isBurn ? 'mdi-fire' : 'mdi-file-plus-outline' }}</v-icon>
             <span class="white--text text-caption">
               {{ $t(mint.isBurn ? 'signTx.burnsAsset' : 'signTx.mintsAsset', { quantity: mint.formattedQuantity, name: mint.label }) }}
             </span>
           </div>
           <div v-if="signTxSummary.collateralCount > 0" class="tx-intent-row">
-            <v-icon size="14" color="rgba(255,255,255,0.5)" class="mr-1">mdi-shield-lock-outline</v-icon>
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-lock-outline</v-icon>
             <span class="white--text text-caption">{{ $tc('signTx.reservesCollateral', signTxSummary.collateralCount, { count: signTxSummary.collateralCount }) }}</span>
           </div>
           <div v-if="signTxSummary.hasMetadata" class="tx-intent-row">
-            <v-icon size="14" color="rgba(255,255,255,0.5)" class="mr-1">mdi-tag-text-outline</v-icon>
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-tag-text-outline</v-icon>
             <span class="white--text text-caption">{{ $t('signTx.includesMetadata') }}</span>
           </div>
         </div>
@@ -170,13 +163,13 @@
              the payload itself decoded to a tx). Blocking — the user must
              explicitly acknowledge before the Sign button below unlocks. -->
         <div v-if="signTxDecodeFailed" class="tx-decode-failed-banner mb-3">
-          <v-icon color="#ff6464" size="20" class="mr-2">mdi-alert-octagon-outline</v-icon>
+          <v-icon color="error" size="20" class="mr-2">mdi-alert-octagon-outline</v-icon>
           <div class="tx-expired-text">
             <div class="tx-expired-title">{{ $t('signTx.decodeFailedTitle') }}</div>
             <div class="tx-expired-body">{{ $t('signTx.decodeFailedBody') }}</div>
             <v-checkbox
               v-model="decodeFailedAck"
-              color="#ff6464"
+              color="error"
               hide-details
               dark
               dense
@@ -189,13 +182,13 @@
         <!-- Network mismatch guard: an external output address belongs to a
              different network (mainnet/testnet) than the active wallet. -->
         <div v-if="signTxNetworkMismatch" class="tx-decode-failed-banner mb-3">
-          <v-icon color="#ff6464" size="20" class="mr-2">mdi-swap-horizontal-circle-outline</v-icon>
+          <v-icon color="error" size="20" class="mr-2">mdi-swap-horizontal-circle-outline</v-icon>
           <div class="tx-expired-text">
             <div class="tx-expired-title">{{ $t('signTx.networkMismatchTitle') }}</div>
             <div class="tx-expired-body">{{ $t('signTx.networkMismatchBody') }}</div>
             <v-checkbox
               v-model="networkMismatchAck"
-              color="#ff6464"
+              color="error"
               hide-details
               dark
               dense
@@ -208,13 +201,13 @@
         <!-- Proportional risk friction: quiet when Shield says low/medium/
              unverified (the badge above is enough); blocking only on "high". -->
         <div v-if="txRiskBadge && txRiskBadge.label === 'high'" class="tx-decode-failed-banner mb-3">
-          <v-icon color="#ff6464" size="20" class="mr-2">mdi-shield-alert-outline</v-icon>
+          <v-icon color="error" size="20" class="mr-2">mdi-shield-alert-outline</v-icon>
           <div class="tx-expired-text">
             <div class="tx-expired-title">{{ $t('signTx.highRiskTitle') }}</div>
             <div class="tx-expired-body">{{ $t('signTx.risk.highTooltip') }}</div>
             <v-checkbox
               v-model="highRiskAck"
-              color="#ff6464"
+              color="error"
               hide-details
               dark
               dense
@@ -227,7 +220,7 @@
         <!-- Expired banner — shown once the live TTL countdown reaches 0. Sign buttons
              below all gate on `ttlDisplay.expired`, so the user is forced to reject. -->
         <div v-if="ttlDisplay.expired" class="tx-expired-banner">
-          <v-icon color="#ff6464" size="20" class="mr-2">mdi-clock-alert-outline</v-icon>
+          <v-icon color="error" size="20" class="mr-2">mdi-clock-alert-outline</v-icon>
           <div class="tx-expired-text">
             <div class="tx-expired-title">{{ $t('signTx.expiredTitle') }}</div>
             <div class="tx-expired-body">{{ $t('signTx.expiredBody') }}</div>
@@ -294,11 +287,11 @@
               @error="onFaviconError"
               v-if="!faviconFailed"
             />
-            <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
+            <v-icon v-else size="32" color="error">mdi-file-sign</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.signDataRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
@@ -400,11 +393,11 @@
         <div class="dapp-identity mb-4">
           <div class="favicon-wrapper">
             <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
-            <v-icon v-else size="32" color="#FFF59E">mdi-file-document-edit-outline</v-icon>
+            <v-icon v-else size="32" color="warning">mdi-file-document-edit-outline</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('bitcoin.signPsbtRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
@@ -449,11 +442,11 @@
         <div class="dapp-identity mb-4">
           <div class="favicon-wrapper">
             <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
-            <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
+            <v-icon v-else size="32" color="error">mdi-file-sign</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('bitcoin.signMessageRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
@@ -513,36 +506,30 @@
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ enableDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(enableDomain).sub }}</span><b class="dapp-root">{{ splitHost(enableDomain).root }}</b></span>
           </div>
         </div>
 
-        <div class="url-warning mb-3">
-          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
-          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        <div v-if="splitHost(enableDomain).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
         </div>
 
-        <div class="permissions-section mb-3">
-          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
-          <v-checkbox
-            v-model="enableConsent"
-            :color="primaryColor"
-            hide-details
-            dark
-            dense
-            class="consent-checkbox mt-0"
-            :label="$t('midnight.connector.viewAddressAndBalance')"
-          />
-        </div>
-
-        <div class="security-note mb-4">
-          <v-icon size="14" color="rgba(255,255,255,0.4)" class="mr-1 flex-shrink-0" style="margin-top: 2px;">mdi-shield-check-outline</v-icon>
-          <span class="grey--text text-caption">{{ $t('midnight.connector.futureRequestsNote') }}</span>
+        <div class="permissions-section mb-4">
+          <p class="t-label mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('midnight.connector.viewAddressAndBalance') }}</span>
+          </div>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('midnight.connector.futureRequestsNote') }}</span>
+          </div>
         </div>
 
         <div class="action-buttons">
           <v-btn outlined rounded dark @click="rejectMidnightConnect">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :disabled="!enableConsent" @click="approveMidnightConnect">
+          <v-btn class="geroButton" rounded depressed @click="approveMidnightConnect">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -553,11 +540,11 @@
         <div class="dapp-identity mb-4">
           <div class="favicon-wrapper">
             <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
-            <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
+            <v-icon v-else size="32" color="error">mdi-file-sign</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.signDataRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
@@ -639,13 +626,13 @@
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ wcPeerName }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ wcPeerUrl }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(wcPeerUrl).sub }}</span><b class="dapp-root">{{ splitHost(wcPeerUrl).root }}</b></span>
           </div>
         </div>
 
-        <div class="url-warning mb-3">
-          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
-          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        <div v-if="splitHost(wcPeerUrl).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
         </div>
 
         <div class="permissions-section mb-3">
@@ -659,20 +646,19 @@
           <div v-if="wcHasUnsupportedChains" class="decode-error text-caption mt-1">
             {{ $t('walletConnect.unsupportedChain') }}
           </div>
-          <v-checkbox
-            v-model="wcConsent"
-            :color="primaryColor"
-            hide-details dark dense
-            class="consent-checkbox mt-2"
-            :label="$t('navigation.viewAddressAndBalance')"
-          />
+          <div class="permission-row mt-2">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('navigation.viewAddressAndBalance') }}</span>
+          </div>
         </div>
 
         <div class="action-buttons">
           <v-btn outlined rounded dark @click="reject()">{{ $t('walletConnect.reject') }}</v-btn>
+          <!-- The consent gate is gone, the CAPABILITY gate stays: an unsupported
+               chain means we genuinely cannot honour the session. -->
           <v-btn
             class="geroButton" rounded depressed
-            :disabled="!wcConsent || wcHasUnsupportedChains"
+            :disabled="wcHasUnsupportedChains"
             @click="approveWcSession"
           >{{ $t('walletConnect.approve') }}</v-btn>
         </div>
@@ -775,6 +761,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { getDomain } from 'tldts';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { useDAppOverlay, type DAppRequest } from '../composables/useDAppOverlay';
 import { useChainContext } from '../composables/useChainContext';
@@ -850,7 +837,6 @@ const spendingPassword = ref('');
 const showPassword = ref(false);
 const signing = ref(false);
 const signError = ref('');
-const enableConsent = ref(false);
 const faviconFailed = ref(false);
 
 const enableDomain = computed(() => {
@@ -861,6 +847,25 @@ const enableDomain = computed(() => {
     return website;
   }
 });
+
+/**
+ * Split a hostname into its de-emphasized subdomain and its registrable root,
+ * so the part that actually identifies the site is the part that reads loudest.
+ * `suspicious` flags punycode or non-ASCII labels, the classic homograph
+ * spoof (аpple.com with a Cyrillic а renders identically to apple.com).
+ */
+function splitHost(input: string): { sub: string; root: string; suspicious: boolean } {
+  if (!input) return { sub: '', root: '', suspicious: false };
+  // wcPeerUrl is a full URL; enableDomain/signDataDomain are already hostnames.
+  let host = input;
+  try {
+    if (/^[a-z]+:\/\//i.test(input)) host = new URL(input).hostname;
+  } catch { /* fall through with the raw string */ }
+  const root = getDomain(host) || host;
+  const sub = host.endsWith(root) ? host.slice(0, host.length - root.length) : '';
+  const suspicious = host.split('.').some((l) => l.startsWith('xn--')) || /[^\x00-\x7F]/.test(host);
+  return { sub, root, suspicious };
+}
 
 // Index of the favicon source currently being tried (advanced via @error).
 const faviconAttempt = ref(0);
@@ -1745,11 +1750,11 @@ const txRiskBadge = computed<{ color: string; icon: string; label: string } | nu
   const isHigh = score === DappScore.high || scoreStr === 'high' || score === 2;
   const isMedium = score === DappScore.medium || scoreStr === 'medium' || score === 1;
   const isLow = score === DappScore.low || scoreStr === 'low' || score === 0;
-  if (isHigh) return { color: '#FDA29B', icon: 'mdi-shield-alert', label: 'high' };
-  if (isMedium) return { color: '#FFD54F', icon: 'mdi-shield-half-full', label: 'medium' };
-  if (isLow) return { color: '#94CFA8', icon: 'mdi-shield-check', label: 'low' };
+  if (isHigh) return { color: 'error', icon: 'mdi-shield-alert', label: 'high' };
+  if (isMedium) return { color: 'warning', icon: 'mdi-shield-half-full', label: 'medium' };
+  if (isLow) return { color: 'success', icon: 'mdi-shield-check', label: 'low' };
   // Scan completed but score is 'unknown' or unrecognized → show neutral state
-  return { color: '#94969c', icon: 'mdi-shield-outline', label: 'unverified' };
+  return { color: 'var(--g-text-3)', icon: 'mdi-shield-outline', label: 'unverified' };
 });
 
 // Watch the current request: when it becomes a signTx, kick off a Cardano Shield scan
@@ -1821,7 +1826,6 @@ watch(currentRequest, () => {
   showPassword.value = false;
   signing.value = false;
   signError.value = '';
-  enableConsent.value = false;
   faviconFailed.value = false;
   faviconAttempt.value = 0;
   decodeFailedAck.value = false;
@@ -2320,10 +2324,6 @@ const wcRequestedChainNames = computed(() =>
   })
 );
 const wcHasUnsupportedChains = computed(() => wcRequestedChains.value.some((c) => !resolveGeroChain(c)));
-const wcConsent = ref(false);
-watch(currentRequest, (req) => {
-  if (req?.method === 'wcSessionProposal') wcConsent.value = false;
-});
 
 function approveWcSession() {
   if (!wcProposal.value) return;
@@ -2379,7 +2379,7 @@ function approveWcSession() {
   padding: 1px 6px;
   border-radius: 6px;
   background: rgba(255, 167, 38, 0.12);
-  color: #FFA726;
+  color: var(--g-warning);
   border: 1px solid rgba(255, 167, 38, 0.3);
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -2416,37 +2416,46 @@ function approveWcSession() {
   min-width: 0;
 }
 
+/* The subdomain is chrome; the registrable root is the identity. Both are always
+   rendered, so nothing about the hostname is hidden from the user. */
 .dapp-url {
   word-break: break-all;
   line-height: 1.3;
+  font-size: 14.5px;
 }
+.dapp-sub { color: var(--g-text-3); }
+.dapp-root { color: var(--g-text-1); font-weight: 600; }
 
-.url-warning {
+/* Replaces the unconditional "confirm the URL" nag: it only appears when the
+   hostname actually contains punycode or non-ASCII characters. */
+.suspicious-host {
   display: flex;
   align-items: center;
-  padding: 8px 10px;
-  background: rgba(255, 167, 38, 0.08);
-  border: 1px solid rgba(255, 167, 38, 0.15);
-  border-radius: 8px;
+  padding: var(--g-s-2) 10px;
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
+  color: var(--g-warning);
 }
 
 .permissions-section {
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  padding: var(--g-s-3);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
 }
 
-.consent-checkbox >>> .v-label {
-  font-size: 13px !important;
-  color: rgba(255, 255, 255, 0.8) !important;
-}
-
-.security-note {
+.permission-row {
   display: flex;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--g-s-2);
   line-height: 1.4;
+}
+.permission-row + .permission-row { margin-top: var(--g-s-2); }
+.permission-check {
+  color: var(--g-text-3);
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 /* ── Sign ── */
@@ -2493,11 +2502,11 @@ function approveWcSession() {
   background: rgba(148, 207, 168, 0.06);
   border-bottom: 1px solid rgba(148, 207, 168, 0.15);
   text-align: center;
-  color: #94CFA8;
+  color: var(--g-success);
 }
 
 .tx-internal-banner .text-caption {
-  color: #94CFA8 !important;
+  color: var(--g-success) !important;
   font-weight: 500;
 }
 
@@ -2570,7 +2579,7 @@ function approveWcSession() {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
-  color: #f5f5f6;
+  color: var(--g-text-1);
 }
 
 .tx-asset-name {
@@ -2591,7 +2600,7 @@ function approveWcSession() {
 }
 
 .tx-ttl-expired {
-  color: #FDA29B !important;
+  color: var(--g-error) !important;
 }
 
 /* Centered countdown footer beneath the financial card. Monospaced so digit
@@ -2603,7 +2612,7 @@ function approveWcSession() {
   gap: 6px;
   margin-top: 10px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   cursor: help;
 }
 
@@ -2626,8 +2635,9 @@ function approveWcSession() {
 
 .tx-fiat-approx {
   text-align: right;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 11.5px;
+  color: var(--g-text-3);
+  font-variant-numeric: tabular-nums;
   margin-top: -6px;
 }
 
@@ -2672,7 +2682,7 @@ function approveWcSession() {
 }
 
 .tx-expired-title {
-  color: #FDA29B;
+  color: var(--g-error);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.3;
@@ -2714,7 +2724,7 @@ function approveWcSession() {
 }
 
 .decode-error {
-  color: #F97066;
+  color: var(--g-error);
   font-weight: 600;
   margin: 0;
 }
@@ -2733,16 +2743,22 @@ function approveWcSession() {
   width: 100%;
 }
 
+/* The specimen's action row: Decline is deliberately the narrower column. The
+   destructive-looking choice should never be the easiest one to hit by reflex,
+   but it must stay a first-class control, not a link. */
 .action-buttons {
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
   width: 100%;
-  justify-content: center;
-  margin-top: 16px;
+  margin-top: var(--g-s-4);
 }
-
+/* A pane with a single action (some hardware-wallet branches) spans the row. */
+.action-buttons > *:only-child {
+  grid-column: 1 / -1;
+}
 .action-buttons .v-btn {
-  flex: 1;
-  max-width: 160px;
+  width: 100%;
+  min-width: 0;
 }
 </style>

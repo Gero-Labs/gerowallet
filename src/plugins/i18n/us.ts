@@ -3156,6 +3156,9 @@ export default {
   'miniGero.unlockInDashboard': 'Unlock in Dashboard',
   'miniGero.getStarted': 'Get Started',
   'miniGero.connectRequest': 'Connection Request',
+  // Shown only when the hostname contains punycode or non-ASCII characters,
+  // the classic homograph spoof. Not a generic "check the URL" nag.
+  'dapp.suspiciousHostname': "This site's address uses unusual characters. Verify it carefully.",
   'miniGero.signDataRequest': 'Sign Data Request',
   'miniGero.signTxRequest': 'Sign Transaction',
   'signTx.transactionDetails': 'Tx Details',
