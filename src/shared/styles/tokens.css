@@ -1,0 +1,94 @@
+/* ============================================================
+   Gero Design Language tokens. CANONICAL FILE.
+   Source: docs/design/2026-07-09-design-coherence-audit.md +
+   the Gero Design Language artifact (2026-07).
+   _tokens.scss MUST mirror these values; scripts/design/audit.mjs
+   fails the build if the two files diverge.
+   Chain-accent slots (--g-accent, --g-grad-1, --g-grad-2) are
+   OVERRIDDEN at runtime by useChainAccent. Everything
+   else never changes per chain.
+   ============================================================ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: depth is position in this ramp, never a bespoke color */
+  --g-canvas: #000000;
+  --g-surface: #0C0E12;
+  --g-raised: #12151B;
+  --g-overlay: #1A1E26;
+
+  /* Hairlines: borders do elevation, not glow */
+  --g-hairline-1: rgba(255, 255, 255, 0.06);
+  --g-hairline-2: rgba(255, 255, 255, 0.10);
+  --g-hairline-3: rgba(255, 255, 255, 0.14);
+
+  /* Text: three tones, alpha < 0.6 is banned for text */
+  --g-text-1: #F7F8F9;
+  --g-text-2: #B8BCC4;
+  --g-text-3: #7A8088;
+
+  /* Accent slots: the ONLY tokens a chain switch may change */
+  --g-accent: #33C7DD;
+  --g-grad-1: #00DFF3;
+  --g-grad-2: #00FAD5;
+  --g-grad: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  /* Text color ON the gradient (near-black, AA on both stops) */
+  --g-on-grad: #06181B;
+
+  /* Semantic */
+  --g-error: #F97066;
+  --g-success: #47CD89;
+  --g-warning: #FDB022;
+  --g-info: #7AA7FF;
+  /* Muted tints for banners/chips: 12% fill, 25% border */
+  --g-error-fill: rgba(249, 112, 102, 0.12);
+  --g-error-line: rgba(249, 112, 102, 0.25);
+  --g-success-fill: rgba(71, 205, 137, 0.12);
+  --g-success-line: rgba(71, 205, 137, 0.25);
+  --g-warning-fill: rgba(253, 176, 34, 0.12);
+  --g-warning-line: rgba(253, 176, 34, 0.25);
+
+  /* Type */
+  --g-font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  --g-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Radii */
+  --g-r-chip: 4px;
+  --g-r-control: 8px;
+  --g-r-card: 12px;
+  --g-r-sheet: 16px;
+  --g-r-pill: 999px;
+
+  /* Spacing: nothing off this grid */
+  --g-s-1: 4px;
+  --g-s-2: 8px;
+  --g-s-3: 12px;
+  --g-s-4: 16px;
+  --g-s-5: 24px;
+  --g-s-6: 32px;
+
+  /* Sizing */
+  --g-btn-h: 40px;
+  --g-btn-h-compact: 36px;
+  --g-row-h-table: 44px;
+  --g-row-h-panel: 48px;
+  --g-content-max: 1200px;
+
+  /* Motion */
+  --g-dur-fast: 150ms;
+  --g-dur-base: 250ms;
+  --g-dur-slow: 350ms;
+  --g-ease: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* z ladder: Vuetify dialogs/menus keep their internal ~202 stack;
+     our sheets sit at 100 so a v-dialog opened from a sheet renders above it */
+  --g-z-sticky: 10;
+  --g-z-dock: 90;
+  --g-z-sheet: 100;
+  --g-z-toast: 1100;
+
+  /* Shadows: ONLY for true overlays */
+  --g-shadow-sheet: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --g-shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.45);
+}

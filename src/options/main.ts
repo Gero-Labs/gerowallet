@@ -1,3 +1,4 @@
+import '../shared/styles/tokens.css';
 import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/dist/vuetify.min.css';
 import '../shared/styles/liquid-glass.css';
