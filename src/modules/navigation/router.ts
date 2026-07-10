@@ -371,7 +371,12 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn && !isLocked && !isSyncing) {
+  // ?addWallet=1 is the escape hatch for "Enter Setup" (WalletSelector.vue):
+  // adding a wallet from an already-logged-in session used to force a global
+  // logout first purely to get past this guard, which killed the caller's
+  // active session (and every other open tab's) as collateral damage. This
+  // lets the new tab reach /welcome without touching anyone else's state.
+  if (isWelcome && isLoggedIn && !isLocked && !isSyncing && to.query['addWallet'] !== '1') {
     // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
   }
