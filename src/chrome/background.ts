@@ -1681,6 +1681,12 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
       },
     );
 
+    // Flip the global lock the same way walletManager.unlock() does. Without
+    // this, an already-logged-in MPC wallet that was re-locked stays stuck:
+    // the dashboard router guard (needsAuth && isLocked) bounces to /welcome
+    // and the side panel keeps rendering LockScreen (both gate on isLocked).
+    WalletStore.setLocked(false);
+
     sendResponse({
       id: request.id,
       data: { success: true },
@@ -1734,6 +1740,10 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET_OFFLINE, async (request, sendRes
       }
       throw err;
     }
+
+    // Same as the online path: clear the global lock so the dashboard/side panel
+    // actually leave the locked state after a successful offline reconstruction.
+    WalletStore.setLocked(false);
 
     sendResponse({
       id: request.id,
