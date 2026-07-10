@@ -1074,16 +1074,6 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     });
   };
 
-  // Honor the user's "Prompt Display Mode" preference (Settings → Advanced).
-  // useSidePanel === false means the user picked Popup, so skip the side panel
-  // entirely instead of opening it and forcing a Reject before falling through.
-  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
-
-  if (!useSidePanel) {
-    openPopupForSignTx();
-    return;
-  }
-
   // Primary: route through mini-gero side panel drawer
   if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroSignTx()
@@ -3069,12 +3059,6 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
       .catch(() => openPopupForSignPsbt());
   };
 
-  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
-  if (!useSidePanel) {
-    openPopupForSignPsbt();
-    return true;
-  }
-
   if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroSignPsbt().catch((err: unknown) => {
       signPsbtReply({ error: errorMessage(err) || APIError.InternalError });
@@ -3097,11 +3081,10 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   const { psbtHexs, options } = request.data;
   const tabId = request.send?.tab?.id;
   const favIconUrl = request.send?.tab?.favIconUrl;
-  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
 
   // Signs one PSBT in the batch via the mini-gero port (primary), an
-  // auto-opened side panel (secondary), or a standalone popup (fallback / when
-  // the side panel is disabled) — same primary/fallback shape as the singular
+  // auto-opened side panel (secondary), or a standalone popup (fallback, when
+  // no panel connects) — same primary/fallback shape as the singular
   // signPsbt handler above, extracted here since this handler drives it once
   // per PSBT in a sequential loop (matching the popup-only version's original
   // one-popup-per-PSBT behavior).
@@ -3127,7 +3110,6 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
       }
     };
 
-    if (!useSidePanel) return viaPopup();
     if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) return viaMiniGero();
     if (typeof tabId !== 'number') throw APIError.InternalError;
     try {
@@ -3193,12 +3175,6 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
       .then(() => handleMiniGeroSignMessage())
       .catch(() => openPopupForSignMessage());
   };
-
-  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
-  if (!useSidePanel) {
-    openPopupForSignMessage();
-    return true;
-  }
 
   if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
     handleMiniGeroSignMessage().catch((err: unknown) => {

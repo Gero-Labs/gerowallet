@@ -123,11 +123,10 @@ onMounted(async () => {
   // This view is only ever opened inside a standalone popup window (see
   // onSessionProposal's focusOrCreatePopup call in background.ts, which
   // always targets index.html) — never inside the side panel, which renders
-  // DAppOverlay.vue instead. It must always speak the popup port protocol
-  // regardless of the user's Prompt Display Mode setting; branching on it
-  // here connected the wrong port name and hung forever, breaking every
-  // WalletConnect session proposal for default-config (useSidePanel: true)
-  // users.
+  // DAppOverlay.vue instead. It must always speak the popup port protocol.
+  // It used to branch on the now-retired Prompt Display Mode setting
+  // instead, which connected the wrong port name and hung forever, breaking
+  // every WalletConnect session proposal on the (then-default) setting.
   controller.value = Messaging.createInternalController();
 
   // Get proposal data from background

@@ -2515,8 +2515,6 @@ export default {
   'settings.noContacts': 'Noch keine Kontakte',
   'settings.noDAppsConnected': 'Keine DApps verbunden',
   'settings.profile': 'Profil',
-  'settings.promptDisplayMode': 'Anzeigemodus für Aufforderungen',
-  'settings.promptDisplayModeHelper': 'Wählen Sie, wie Transaktionsaufforderungen angezeigt werden',
   'settings.protectAgainstMalicious': 'Schützen Sie vor bösartigen Websites und Betrugsversuchen',
   'settings.reSync': 'Neu synchronisieren',
   'settings.reSyncWallet': 'Wallet neu synchronisieren',

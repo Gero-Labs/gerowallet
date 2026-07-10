@@ -2084,8 +2084,6 @@ export default {
   'settings.noContacts': 'No contacts yet',
   'settings.noDAppsConnected': 'No DApps connected',
   'settings.profile': 'Profile',
-  'settings.promptDisplayMode': 'Prompt Display Mode',
-  'settings.promptDisplayModeHelper': 'Choose how transaction prompts are displayed',
   'settings.protectAgainstMalicious': 'Protect against malicious websites and scams',
   'settings.reSync': 'Re-sync',
   'settings.reSyncWallet': 'Re-sync Wallet',
