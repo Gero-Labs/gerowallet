@@ -138,7 +138,7 @@ const timeToFullLabel = computed(() => {
 /* Standard wallet panel — the gradient lives on the progress bar, not here. */
 .dust-gauge {
   padding: 14px 16px;
-  border-radius: 14px;
+  border-radius: var(--g-r-card);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -154,7 +154,7 @@ const timeToFullLabel = computed(() => {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   display: flex;
   align-items: center;
 }
@@ -166,10 +166,10 @@ const timeToFullLabel = computed(() => {
 }
 
 .dust-gauge__balance-num {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 18px;
+  font-family: var(--g-font-mono);
+  font-size: 16px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
 }
 
@@ -181,7 +181,7 @@ const timeToFullLabel = computed(() => {
 
 .dust-gauge__balance-unit {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
 }
 
 /* Battery track */
@@ -262,16 +262,16 @@ const timeToFullLabel = computed(() => {
 }
 
 .dust-gauge__stat .k {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
   white-space: nowrap;
 }
 
 .dust-gauge__stat .v {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
   white-space: nowrap;
 }
 
@@ -285,8 +285,8 @@ const timeToFullLabel = computed(() => {
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #0b1220;
-  background: linear-gradient(90deg, #22d3ee 0%, #ecc985 100%);
+  color: var(--g-on-grad);
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
   cursor: pointer;
   transition: filter 0.15s ease, transform 0.1s ease;
 }
