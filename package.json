@@ -192,6 +192,6 @@
     "not dead"
   ],
   "gitHooks": {
-    "pre-commit": "eslint --cache --fix && node scripts/design/audit.mjs"
+    "pre-commit": "eslint --cache --fix && node scripts/design/audit.mjs && node scripts/design/contrast.mjs"
   }
 }

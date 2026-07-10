@@ -27,8 +27,10 @@ withDefaults(defineProps<{
   align-items: center;
   justify-content: center;
   gap: var(--g-s-3);
-  background: var(--g-overlay);
-  opacity: 0.6;
+  /* The alpha belongs to the scrim, not the container. `opacity` here would
+     also dim the spinner and label, cutting their own contrast rather than
+     just letting the content behind show through. */
+  background: color-mix(in srgb, var(--g-overlay) 60%, transparent);
   border-radius: inherit;
 }
 .loading-overlay__label {
