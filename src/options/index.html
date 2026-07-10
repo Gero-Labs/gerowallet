@@ -11,8 +11,9 @@
   <!-- <link rel="preload" as="image" href="./assets/cardanoBg.png" media="(max-width: 1920px)" fetchpriority="high"> -->
   <!-- <link rel="preload" as="image" href="./assets/apexBg.png" media="(max-width: 1920px)" fetchpriority="high"> -->
 
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Quicksand:wght@300;400;500;600;700&family=Geologica:wght@100;300;400;500;700;900&family=Baloo+2:wght@400;500;600;700;800&family=Noto+Sans+Hebrew:wght@100;300;400;500;700;900&display=swap"
-        rel="stylesheet">
+  <!-- Fonts are self-hosted and bundled: see the @fontsource imports at the top of main.ts.
+       Nothing is fetched from a remote font CDN, so the extension renders identically offline
+       and the production CSP pins font-src to 'self'. -->
   <!-- media="all" (Vite's documented escape hatch, vitejs/vite#6748) stops Vite's HTML transform
        from merging this stylesheet into the app's own bundled CSS at build time. It still gets
        emitted as its own hashless asset (extension/assets/gero-swap.css) with the href rewritten
@@ -33,7 +34,7 @@
     overflow-y: auto;
   }
   .v-application {
-    font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;
+    font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
   }
   ::-webkit-scrollbar {
     width: 5px;
