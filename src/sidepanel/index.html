@@ -19,12 +19,16 @@
 <div id="app"></div>
 <script type="module" src="./main.ts"></script>
 <style>
+  /* This inline block is emitted AFTER the bundled stylesheet, so anything
+     declared here beats baseline.css on source order. Keep it to layout only:
+     the canvas color, the scrollbar recipe and .geroButton all live in
+     src/shared/styles/baseline.css. */
   html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
     height: 100%;
-    background: #0a0a0a;
+    background: var(--g-canvas);
   }
   #app {
     height: 100%;
@@ -32,17 +36,6 @@
   .v-application {
     font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
   }
-  ::-webkit-scrollbar {
-    width: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #383838;
-    border-radius: 30px;
-  }
-  /* .geroButton lives in src/shared/styles/baseline.css (one chain-aware definition). */
 </style>
 </body>
 </html>
