@@ -207,7 +207,7 @@ export class WalletManager {
         TapToolsStore.clear();
         let walletBg: WalletBg
         if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
-          // Legacy zkFold smart-contract Google wallet: address is fetched from
+          // Legacy smart-contract Google wallet: address is fetched from
           // the contract. MPC Sign-in-with-Google wallets are also type===Google
           // but are normal HD wallets (real CIP-1852 xpub) — construct them the
           // same way as Normal wallets (no smart-contract address).
@@ -386,7 +386,7 @@ export class WalletManager {
     const network: string = Object.keys(Network).find(key => Network[key] === walletBg.network);
     let address: string;
     // MPC Google wallets are normal HD wallets — sync on the stake address like
-    // any other wallet. Only legacy zkFold Google wallets sync on baseAddress.
+    // any other wallet. Only legacy Google wallets sync on baseAddress.
     if (walletBg.isEnterpriseAddress() || (walletBg.type === WalletType.Google && walletBg.encryptionMethod !== 'mpc')) {
       address = walletBg.baseAddress;
     } else {

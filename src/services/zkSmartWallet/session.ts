@@ -5,7 +5,7 @@ interface SessionI {
 }
 
 export class Session {
-  private readonly SESSION_KEY = 'zkfold-smart-wallet' // legacy zkFold hosted endpoint — unused, retained for reference
+  private readonly SESSION_KEY = 'legacy-smart-wallet' // legacy hosted endpoint — unused, retained for reference
 
   public saveState(state: string): void {
     const session = this.getSession()
