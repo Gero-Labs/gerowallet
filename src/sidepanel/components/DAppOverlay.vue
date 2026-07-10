@@ -597,7 +597,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { useDAppOverlay } from '../composables/useDAppOverlay';
+import { useDAppOverlay, type DAppRequest } from '../composables/useDAppOverlay';
 import { useChainContext } from '../composables/useChainContext';
 import BottomSheet from './BottomSheet.vue';
 import TransactionDetailsCard, {
