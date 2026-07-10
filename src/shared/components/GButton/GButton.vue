@@ -34,12 +34,20 @@ withDefaults(defineProps<{
 </script>
 
 <style scoped>
-/* No override flags on purpose. Vuetify's strongest competing rules are
+/* For the ENABLED states, no override flags: Vuetify's competing rules
    `.theme--dark.v-btn.v-btn--has-bg` and
-   `.v-btn:not(.v-btn--round).v-size--default`, both specificity 0,3,0. Every
-   rule below is 0,4,0 once the scoped [data-v] attribute is appended, so it
-   wins outright instead of joining the specificity arms race this design
+   `.v-btn:not(.v-btn--round).v-size--default` are (0,3,0) and carry no flag, so
+   the rules below -- (0,4,0) or better once the scoped [data-v] attribute is
+   appended -- win outright without joining the specificity arms race this design
    system exists to end.
+
+   The DISABLED state is the exception, and it is not optional. Vuetify ships
+   `.theme--dark.v-btn.v-btn--disabled` (0,3,0, color) and
+   `.theme--dark.v-btn.v-btn--disabled.v-btn--has-bg` (0,4,0, background-color),
+   and BOTH carry the override flag. A flagged declaration beats an unflagged one
+   at ANY specificity, so an unflagged rule here -- however specific -- loses, and
+   every disabled GButton would render Vuetify's translucent grey instead of the
+   raised surface. Every tier is has-bg (no tier passes text/plain/outlined/icon).
 
    Consumers that need a different foreground override the --g-btn-fg seam
    custom property rather than out-specify these rules. */
@@ -78,8 +86,9 @@ withDefaults(defineProps<{
   color: var(--g-btn-fg, var(--g-error));
 }
 .v-btn.g-btn.v-btn--disabled:not(.v-btn--loading) {
-  background: var(--g-raised);
-  color: var(--g-text-3);
+  background: var(--g-raised) !important;
+  color: var(--g-text-3) !important;
+  /* Vuetify sets no border-color on disabled, so this one needs no flag. */
   border-color: var(--g-hairline-1);
 }
 </style>
