@@ -2915,6 +2915,7 @@ export default {
   'security.mpcOfflineUnlockToggle': "Server unavailable? Unlock with your recovery file",
   'security.mpcOfflineUnlockHint': 'Reconstruct on this device from your recovery file — no server or Google needed.',
   'security.mpcOfflineUnlockAction': 'Unlock offline',
+  'security.mpcWrongGoogleAccount': 'Wrong Google account — this wallet belongs to a different account.',
   'security.orUsePassKey': 'Or use PassKey',
   'security.passKeyAuthFailed': 'PassKey authentication failed',
   'security.passKeyAuthSuccess': 'Password autofilled successfully',

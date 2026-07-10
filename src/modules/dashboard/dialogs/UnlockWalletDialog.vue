@@ -354,6 +354,22 @@ const signingInGoogle = ref(false);
 // when the wallet was secured with a passkey at creation; undefined for password wallets.
 const mpcWebAuthnCredentialId = ref<string | null>(null);
 const mpcSaltId = ref<string | null>(null);
+// The Google `sub` this MPC wallet belongs to (wallet.userId) — used to reject a
+// sign-in with the wrong Google account before any unlock attempt.
+const mpcExpectedSub = ref<string | null>(null);
+
+/** Decode a JWT payload's `sub` (not verified — the backend verifies the token;
+ *  this is only to match the signed-in account against the wallet's owner). */
+function subFromToken(token: string): string {
+  try {
+    const seg = token.split('.')[1];
+    if (!seg) return '';
+    const json = atob(seg.replace(/-/g, '+').replace(/_/g, '/'));
+    return (JSON.parse(json) as { sub?: string }).sub || '';
+  } catch {
+    return '';
+  }
+}
 
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
@@ -523,6 +539,7 @@ async function loadSecurityConfig() {
     if (walletIsMpc) {
       mpcWebAuthnCredentialId.value = wallet?.webAuthnCredentialId || preLoginWalletRecord?.webAuthnCredentialId || null;
       mpcSaltId.value = wallet?.mpcPrfSaltId || preLoginWalletRecord?.mpcPrfSaltId || null;
+      mpcExpectedSub.value = wallet?.userId || preLoginWalletRecord?.userId || null;
       // Reuse a Google session passed in (enrolled-account "Log in") so the user
       // isn't asked to sign in again; otherwise start clean and show the sign-in button.
       googleIdToken.value = props.mpcPrefillIdToken || '';
@@ -634,6 +651,13 @@ async function signInWithGoogle() {
     const profile = await profileResp.json();
     if (!profile?.email_verified || !profile?.email) {
       throw new Error(t('welcome.googleSignInFailed'));
+    }
+    // Reject the WRONG Google account up front: this MPC wallet belongs to a
+    // specific account (wallet.userId == the Google sub). Signing in with any
+    // other account can never unlock it, so fail fast with a clear message
+    // instead of a confusing 'recovery mismatch' after the passkey.
+    if (mpcExpectedSub.value && subFromToken(idToken) !== mpcExpectedSub.value) {
+      throw new Error(t('security.mpcWrongGoogleAccount'));
     }
     googleIdToken.value = idToken;
     googleEmail.value = profile.email;

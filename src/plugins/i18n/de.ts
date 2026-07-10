@@ -2407,6 +2407,7 @@ export default {
   'security.mpcOfflineUnlockToggle': 'Server nicht erreichbar? Mit deiner Wiederherstellungsdatei entsperren',
   'security.mpcOfflineUnlockHint': 'Auf diesem Gerät aus deiner Wiederherstellungsdatei rekonstruieren — ohne Server oder Google.',
   'security.mpcOfflineUnlockAction': 'Offline entsperren',
+  'security.mpcWrongGoogleAccount': 'Falsches Google-Konto — diese Wallet gehört zu einem anderen Konto.',
   'security.usePassKeyForPasswordAutofill': 'PassKey für automatisches Ausfüllen des Passworts verwenden',
   'security.usePassKeyForPasswordAutofillDescription': 'Ausgabepasswort beim Signieren von Transaktionen automatisch ausfüllen',
   'security.usePassKeyForUnlock': 'PassKey zum Entsperren verwenden',
