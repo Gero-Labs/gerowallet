@@ -436,6 +436,12 @@ const canUnlock = computed(() => {
 
 const unlockDescription = computed(() => {
   if (isMpcWallet.value) {
+    // Active session → device secret only (no Google step in the copy).
+    if (mpcSessionActive.value) {
+      return mpcUsesPasskey.value
+        ? t('welcome.unlockApprovePasskeyOnly')
+        : t('welcome.unlockPasswordOnly');
+    }
     return mpcUsesPasskey.value
       ? t('welcome.unlockApprovePasskey')
       : t('welcome.unlockGoogleWalletDescription');

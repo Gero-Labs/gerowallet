@@ -16,7 +16,9 @@
              password default and be stranded here). -->
         <template v-if="isMpcWallet">
           <p class="text-caption grey--text mb-3 text-center">
-            {{ $t(mpcUsesPasskey ? 'welcome.unlockApprovePasskey' : 'welcome.unlockGoogleWalletDescription') }}
+            {{ mpcSessionActive
+              ? $t(mpcUsesPasskey ? 'welcome.unlockApprovePasskeyOnly' : 'welcome.unlockPasswordOnly')
+              : $t(mpcUsesPasskey ? 'welcome.unlockApprovePasskey' : 'welcome.unlockGoogleWalletDescription') }}
           </p>
 
           <template v-if="!googleEmail && !mpcSessionActive">
