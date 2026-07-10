@@ -64,6 +64,9 @@
             <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
               <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
             </v-list-item-avatar>
+            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Google && item.encryptionMethod === 'mpc'">
+              <v-img :src="assets.google" contain width="18"></v-img>
+            </v-list-item-avatar>
           </v-list-item>
         </v-list-item-group>
       </v-list>
@@ -109,7 +112,7 @@ const { wallets } = toRefs(geroStore);
 const availableWallets = computed<Wallet[]>(() => {
   return (Object.values(wallets.value) as Wallet[])
     .filter((wallet: Wallet) => {
-      // Legacy zkFold "Google" wallets have their own sign-in button + dialog
+      // Legacy "Google" wallets have their own sign-in button + dialog
       // (GoogleLogIn.vue) and stay off this list. MPC "Sign in with Google"
       // wallets (Plan D, `encryptionMethod === 'mpc'`) are also `type: Google`
       // but behave like any other wallet here — login goes through the normal
