@@ -35,6 +35,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -1660,7 +1661,16 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
   try {
     // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
     const { walletId, idToken } = request.data || {};
-    if (!walletId || !idToken) throw new Error('walletId and idToken are required');
+    if (!walletId) throw new Error('walletId is required');
+    // Two ways in: a fresh Google idToken (first unlock of the session) OR a
+    // login share already cached from an earlier unlock this session (re-unlock
+    // after a lock, no repeat Google sign-in). One of them must be present.
+    const hasCachedLoginShare = mpcLoginShareCache.has(walletId);
+    if (!idToken && !hasCachedLoginShare) {
+      // No fresh Google token and no cached session (e.g. the service worker
+      // restarted). Surface guidance the UI can show and fall back to Google.
+      throw new Error('MPC session expired — sign in with Google');
+    }
     const { secret } = buildDeviceShareSecret(request.data);
 
     const { reconstructRootKeyBytes } = await import('@/shared/utils/mpc');
@@ -1668,18 +1678,42 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     const { Api } = await import('@/api/api');
     const api = new Api(undefined, undefined);
 
+    // With an idToken: fetch the login share from the backend. Without one:
+    // reuse the cached share (device + cached-login = 2 of 3, still gated by the
+    // device secret the user just supplied). Never log the share. The freshly
+    // fetched share is cached only AFTER reconstruct+validate succeeds below, so
+    // a wrong device secret / wrong account can never seed the Google-free path.
+    let fetchedLoginShare: string | null = null;
+    const getLoginShare = idToken
+      ? async (idTok: string, ch: string, net: string): Promise<string> => {
+          const share = await api.mpc.getLoginShare(idTok, ch, net);
+          fetchedLoginShare = share;
+          return share;
+        }
+      : async (): Promise<string> => {
+          const cached = mpcLoginShareCache.get(walletId);
+          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          return cached;
+        };
+
     await unlockMpcWalletFlow(
-      { walletId, idToken, secret },
+      { walletId, idToken: idToken || '', secret },
       {
         getWallet: async (id) => {
           const wallets = await getAllWallets();
           return wallets[id];
         },
-        getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
+        getLoginShare,
         reconstructRootKeyBytes,
         sessionCache: mpcSessionCache,
       },
     );
+
+    // Reconstruct+validate passed — only now is it safe to cache the freshly
+    // fetched login share so later re-unlocks this session can skip Google.
+    if (fetchedLoginShare) {
+      mpcLoginShareCache.set(walletId, fetchedLoginShare);
+    }
 
     // Flip the global lock the same way walletManager.unlock() does. Without
     // this, an already-logged-in MPC wallet that was re-locked stays stuck:
@@ -1703,6 +1737,24 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     });
   }
   return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Whether this MPC wallet has a login share cached this session — i.e. it was
+ * unlocked with Google earlier and can be re-unlocked with just the device
+ * secret (passkey/spending password), skipping a repeat Google sign-in. Returns
+ * false after the service worker restarts or the wallet logs out (cache gone),
+ * so the unlock UI falls back to Google. No secrets are returned.
+ */
+app.addToOptions(MessageTypes.HAS_MPC_SESSION, async (request, sendResponse) => {
+  const { walletId } = request.data || {};
+  sendResponse({
+    id: request.id,
+    data: { success: true, hasSession: !!walletId && mpcLoginShareCache.has(walletId) },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+  return true;
 });
 
 /**

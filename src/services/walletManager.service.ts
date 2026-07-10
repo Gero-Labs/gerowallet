@@ -44,6 +44,7 @@ import {
 } from '@/services/crossDevice/crossDeviceTrust';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -204,6 +205,9 @@ export class WalletManager {
         // to a different wallet already routes through logout() above, which also
         // clears the cache; this covers the fresh-login path too.)
         mpcSessionCache.clearAll();
+        // A wallet switch must also drop the cached login share so one wallet's
+        // session can never enable a Google-free unlock of another.
+        mpcLoginShareCache.clearAll();
         TapToolsStore.clear();
         let walletBg: WalletBg
         if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
@@ -531,8 +535,9 @@ export class WalletManager {
   async logout(): Promise<void> {
 
     try {
-      // Clear all cached MPC root-key bytes — never survive a logout.
+      // Clear all cached MPC root-key bytes and login shares — never survive a logout.
       mpcSessionCache.clearAll();
+      mpcLoginShareCache.clearAll();
 
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
@@ -648,6 +653,7 @@ export class WalletManager {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
       mpcSessionCache.clearAll();
+      mpcLoginShareCache.clearAll();
       if (this.currentWalletId !== null) {
         clearDbCache(this.currentWalletId);
       }
@@ -668,9 +674,13 @@ export class WalletManager {
   async lock(): Promise<void> {
     try {
       // Clear cached MPC root-key bytes — signing an MPC wallet after a lock
-      // requires a fresh Google unlock (UNLOCK_MPC_WALLET), same as PRF wallets
-      // require a fresh WebAuthn prompt.
+      // requires re-unlock, same as PRF wallets require a fresh WebAuthn prompt.
       mpcSessionCache.clearAll();
+      // NOTE: deliberately DO NOT clear mpcLoginShareCache here. Keeping the
+      // login share across a lock lets the still-logged-in wallet be re-unlocked
+      // with only the device secret (passkey/spending password) — no repeat
+      // Google sign-in — while re-auth (the passkey/password) is still required.
+      // It is dropped on logout / wallet switch and dies with the service worker.
       // Set locked state
       WalletStore.setLocked(true);
       // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again
