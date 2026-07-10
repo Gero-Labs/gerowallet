@@ -26,7 +26,7 @@
                 <div class="icon-container">
                   <v-icon
                     class="step-icon"
-                    :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                    :color="currentStep < index + 1 ? 'var(--g-accent)' : 'var(--g-canvas)'"
                     size="16"
                   >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
                   </v-icon>
@@ -51,7 +51,7 @@
             </div>
             <div v-if="dustBattery" class="mpv-summary-dust">
               <div class="mpv-summary-dust-head">
-                <v-icon size="12" color="#00DFF3" class="mr-1">mdi-lightning-bolt</v-icon>
+                <v-icon size="12" color="var(--g-accent)" class="mr-1">mdi-lightning-bolt</v-icon>
                 <span>{{ dustCurrency }}</span>
                 <span class="mpv-summary-dust-pct">{{ dustBattery.percent }}%</span>
               </div>
@@ -71,7 +71,7 @@
             >
               <div class="mpv-node-marker">
                 <div class="mpv-dot">
-                  <v-icon v-if="node.state === 'done'" size="13" color="#0c0e12">mdi-check</v-icon>
+                  <v-icon v-if="node.state === 'done'" size="13" color="var(--g-surface)">mdi-check</v-icon>
                   <span v-else-if="node.state === 'active'" class="mpv-pulse"></span>
                 </div>
                 <div
@@ -138,13 +138,13 @@
                         class="address-input"
                         :rules="addressRules"
                         :disabled="sending"
-                        color="#00DFF3"
+                        color="var(--g-accent)"
                       >
                         <template v-slot:append>
                           <v-icon
                             v-if="recipient"
                             style="font-size: 14px; cursor: pointer; opacity: 0.6;"
-                            color="white"
+                            color="var(--g-text-1)"
                             @click="recipient = ''"
                           >mdi-close</v-icon>
                         </template>
@@ -156,7 +156,7 @@
                         :disabled="sending"
                         @click="qrScanDialog = true"
                       >
-                        <v-icon small color="#00DFF3">mdi-qrcode</v-icon>
+                        <v-icon small color="var(--g-accent)">mdi-qrcode</v-icon>
                       </v-btn>
                       <QRAddressScannerDialog
                         :isOpen="qrScanDialog"
@@ -177,9 +177,9 @@
                           <span class="token-ticker">{{ nightCurrency }}</span>
                           <v-icon
                             x-small
-                            color="#00DFF3"
+                            color="var(--g-accent)"
                             class="ml-1"
-                            style="margin-top: -1px; font-size: 10px;"
+                            style="margin-top: -1px; font-size: 11px;"
                           >mdi-check-decagram</v-icon>
                           <span class="token-balance">
                             <template v-if="isShielded">{{ t('midnight.send.shieldedBalanceUnavailable') }}</template>
@@ -204,7 +204,7 @@
                             v-if="!isShielded"
                             text
                             x-small
-                            color="#00DFF3"
+                            color="var(--g-accent)"
                             class="max-btn"
                             :disabled="sending"
                             @click="setMax"
@@ -212,7 +212,7 @@
                         </div>
                       </div>
                       <div v-if="isShielded" class="token-info">
-                        <v-icon x-small color="#FEC84B" class="mr-1">mdi-information-outline</v-icon>
+                        <v-icon x-small color="warning" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.shieldedBalanceHint') }}
                       </div>
                     </div>
@@ -253,7 +253,7 @@
                    Suppressed when the low-DUST warning below is showing — it
                    already carries the reset message, so both at once repeats. -->
               <div v-if="!isShielded && !isDustLow" class="midnight-dust-note mt-3">
-                <v-icon size="14" color="#FEC84B" class="mr-1">mdi-information-outline</v-icon>
+                <v-icon size="14" color="warning" class="mr-1">mdi-information-outline</v-icon>
                 <span>{{ t('midnight.send.dustResetWarning') }}</span>
               </div>
               <!-- When DUST is already low, this replaces the general note: the
@@ -262,7 +262,7 @@
                 v-if="!isShielded && isDustLow"
                 class="midnight-dust-note midnight-dust-note--low mt-3"
               >
-                <v-icon size="14" color="#F97066" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+                <v-icon size="14" color="error" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
                 <span>{{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
               </div>
             </div>
@@ -292,7 +292,7 @@
           />
         </div>
 
-        <div v-if="errorMessage" class="red--text text--lighten-2 text-caption mb-2 text-center px-3">
+        <div v-if="errorMessage" class="error--text text-caption mb-2 text-center px-3">
           {{ errorMessage }}
         </div>
 
@@ -313,7 +313,7 @@
             @click="nextStep()"
             :disabled="sending"
           >{{ t('common.continue') + ' ' }}
-            <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+            <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
           <!-- Step 2: password wallets submit here (TransactionAuthSection only
                renders the field for them); PRF wallets submit via the PassKey
@@ -817,9 +817,9 @@ watch(
 .global-total {
   padding: 10px 12px;
   margin-top: 4px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
 }
 
 .global-total__row {
@@ -831,13 +831,13 @@ watch(
 .global-total__label {
   font-size: 12px;
   font-weight: 600;
-  color: #CECFD2;
+  color: var(--g-text-2);
 }
 
 .global-total__ada {
   font-size: 14px;
   font-weight: 600;
-  color: #00DFF3;
+  color: var(--g-accent);
 }
 
 .global-total__fee-row {
@@ -846,17 +846,17 @@ watch(
 
 .global-total__total-row {
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .global-total__fee-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
 }
 
 .global-total__fee {
   font-size: 11px;
-  color: #FDA29B !important;
+  color: var(--g-error) !important;
 }
 
 .send-dialog-actions {
@@ -865,12 +865,12 @@ watch(
 }
 
 .continue-button {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  color: black;
+  background: var(--g-grad);
+  color: var(--g-on-grad);
 }
 .continue-button:disabled {
   opacity: 0.5;
-  color: black !important;
+  color: var(--g-on-grad) !important;
 }
 
 .stepper-container {
@@ -891,10 +891,10 @@ watch(
   box-shadow: 0 0 0 4px #00dff327;
 }
 .stepper-container .custom-step.next .icon-container {
-  background-color: #292929;
+  background-color: var(--g-raised);
 }
 .stepper-container .custom-step .icon-container {
-  background-color: #00dff3;
+  background-color: var(--g-accent);
   border-radius: 50%;
   display: flex;
   justify-content: center;
@@ -909,7 +909,7 @@ watch(
   line-height: 16px;
   text-align: center;
   font-weight: 600;
-  color: #CECFD2;
+  color: var(--g-text-2);
 }
 .stepper-container .divider {
   flex: 1;
@@ -918,10 +918,10 @@ watch(
   margin-left: -38px;
   margin-right: -38px;
   margin-top: 11px;
-  background-color: #292929;
+  background-color: var(--g-raised);
 }
 .stepper-container .divider.active-divider {
-  background-color: #00dff3;
+  background-color: var(--g-accent);
 }
 :deep(.v-stepper__content) {
   padding: 0;
@@ -939,9 +939,9 @@ watch(
 /* ─── Recipient card + asset row — copied from SendRecipientCard /
    AssetsToSendStep so the Midnight step 1 matches the Cardano one. ─── */
 .recipient-card {
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
+  background-color: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 12px;
 }
 
@@ -963,8 +963,8 @@ watch(
   min-width: 0;
 }
 .address-input :deep(.v-input__slot) {
-  background-color: #161B26 !important;
-  border-radius: 10px;
+  background-color: var(--g-raised) !important;
+  border-radius: var(--g-r-control);
   min-height: 32px !important;
   padding: 0 8px !important;
 }
@@ -976,11 +976,11 @@ watch(
   border-color: transparent !important;
 }
 .address-input :deep(.v-input--is-focused fieldset) {
-  border-color: #00DFF3 !important;
+  border-color: var(--g-accent) !important;
   border-width: 1px !important;
 }
 .address-input.error--text :deep(fieldset) {
-  border-color: #F97066 !important;
+  border-color: var(--g-error) !important;
 }
 
 .assets-section {
@@ -990,8 +990,8 @@ watch(
 .token-row {
   display: flex;
   align-items: center;
-  background: #161B26;
-  border-radius: 8px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-control);
   padding: 6px 10px;
   gap: 6px;
 }
@@ -1004,12 +1004,12 @@ watch(
 .token-ticker {
   font-size: 12px;
   font-weight: 600;
-  color: white;
+  color: var(--g-text-1);
   white-space: nowrap;
 }
 .token-balance {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-left: 6px;
   white-space: nowrap;
 }
@@ -1035,7 +1035,7 @@ watch(
   text-align: right;
   font-size: 14px;
   font-weight: 500;
-  color: white;
+  color: var(--g-text-1);
   padding: 0;
 }
 .amount-input :deep(input::-webkit-outer-spin-button),
@@ -1059,8 +1059,8 @@ watch(
   height: 22px !important;
 }
 .token-info {
-  font-size: 10px;
-  color: #FEC84B;
+  font-size: 11px;
+  color: var(--g-warning);
   padding: 4px 2px 0;
   display: flex;
   align-items: center;
@@ -1070,7 +1070,7 @@ watch(
 /* ─── Midnight-specific bits ─── */
 .midnight-send-tabs :deep(.v-tab) {
   text-transform: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   font-size: 13px;
   min-width: 0;
   padding: 0 12px;
@@ -1084,16 +1084,16 @@ watch(
   gap: 2px;
   font-size: 11px;
   line-height: 1.4;
-  color: rgba(254, 200, 75, 0.85);
-  background: rgba(254, 200, 75, 0.06);
-  border: 1px solid rgba(254, 200, 75, 0.18);
-  border-radius: 8px;
+  color: var(--g-warning);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
   padding: 8px 10px;
 }
 .midnight-dust-note--low {
-  color: rgba(249, 112, 102, 0.9);
-  background: rgba(249, 112, 102, 0.06);
-  border-color: rgba(249, 112, 102, 0.2);
+  color: var(--g-error);
+  background: var(--g-error-fill);
+  border-color: var(--g-error-line);
 }
 
 /* ─── Send-progress timeline (right-side, appears while sending) ─── */
@@ -1113,13 +1113,13 @@ watch(
 .mpv-summary {
   width: 150px;
   flex-shrink: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--g-hairline-1);
   padding-right: 14px;
 }
 .mpv-summary-amount {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #00DFF3;
+  color: var(--g-accent);
   line-height: 1.2;
   word-break: break-word;
 }
@@ -1128,11 +1128,11 @@ watch(
   font-size: 11px;
 }
 .mpv-summary-to-label {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
   margin-right: 4px;
 }
 .mpv-summary-to-addr {
-  color: #CECFD2;
+  color: var(--g-text-2);
 }
 .mpv-summary-dust {
   margin-top: 16px;
@@ -1142,30 +1142,30 @@ watch(
   align-items: center;
   font-size: 11px;
   font-weight: 600;
-  color: #CECFD2;
+  color: var(--g-text-2);
 }
 .mpv-summary-dust-pct {
   margin-left: auto;
-  color: #00DFF3;
+  color: var(--g-accent);
 }
 .mpv-summary-dust-track {
   margin-top: 5px;
   height: 4px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: var(--g-hairline-1);
   overflow: hidden;
 }
 .mpv-summary-dust-fill {
   height: 100%;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #00c7f3, #00fad5);
+  border-radius: 4px;
+  background: var(--g-accent);
   transition: width 0.45s ease;
 }
 .mpv-summary-dust-note {
   margin-top: 6px;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.4;
-  color: rgba(254, 200, 75, 0.75);
+  color: var(--g-warning);
 }
 
 /* Right timeline column */
@@ -1196,21 +1196,21 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #292929;
+  background: var(--g-raised);
   transition: background-color 0.35s ease, box-shadow 0.35s ease;
 }
 .mpv-node.done .mpv-dot {
-  background: #00DFF3;
+  background: var(--g-accent);
 }
 .mpv-node.active .mpv-dot {
   background: transparent;
-  box-shadow: 0 0 0 2px #00DFF3;
+  box-shadow: 0 0 0 2px var(--g-accent);
 }
 .mpv-pulse {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #00DFF3;
+  background: var(--g-accent);
   animation: mpv-pulse 1.2s ease-in-out infinite;
 }
 @keyframes mpv-pulse {
@@ -1222,11 +1222,11 @@ watch(
   flex: 1;
   min-height: 20px;
   margin: 3px 0;
-  background: #292929;
+  background: var(--g-raised);
   transition: background-color 0.4s ease;
 }
 .mpv-connector.filled {
-  background: #00DFF3;
+  background: var(--g-accent);
 }
 .mpv-node-body {
   flex: 1;
@@ -1236,28 +1236,28 @@ watch(
 .mpv-node-label {
   font-size: 13px;
   font-weight: 600;
-  color: #6B6F76;
+  color: var(--g-text-3);
   transition: color 0.3s ease;
 }
 .mpv-node.active .mpv-node-label {
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 .mpv-node.done .mpv-node-label {
-  color: #CECFD2;
+  color: var(--g-text-2);
 }
 .mpv-node-bar {
   margin-top: 7px;
   height: 4px;
   max-width: 190px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: var(--g-hairline-1);
   overflow: hidden;
 }
 .mpv-node-bar-fill {
   height: 100%;
   width: 0;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #00c7f3, #00fad5);
+  border-radius: 4px;
+  background: var(--g-accent);
   transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .mpv-node-bar.indeterminate .mpv-node-bar-fill {
@@ -1270,7 +1270,7 @@ watch(
 }
 .mpv-node-detail {
   margin-top: 5px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 </style>

@@ -7,7 +7,7 @@
   >
     <v-card class="liquid-glass remote-signing-card" rounded="lg">
       <v-card-title class="d-flex align-center px-4 pt-4 pb-2">
-        <v-icon left color="#00DFF3" class="mr-2">mdi-cellphone-link</v-icon>
+        <v-icon left color="var(--g-accent)" class="mr-2">mdi-cellphone-link</v-icon>
         <span class="rs-title">{{ $t('crossDevice.settings.title') }}</span>
         <v-spacer />
         <v-btn icon small @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
@@ -25,7 +25,7 @@
           <v-switch
             :input-value="enabled"
             :loading="busy"
-            color="#00DFF3"
+            color="var(--g-accent)"
             inset
             hide-details
             class="mt-0 ml-2"
@@ -39,7 +39,7 @@
           <!-- Signing policy -->
           <div class="rs-label mb-1">{{ $t('crossDevice.settings.policy') }}</div>
           <v-radio-group :value="policy" hide-details class="mt-0 rs-policy" @change="onPolicyChange">
-            <v-radio value="ask" color="#00DFF3">
+            <v-radio value="ask" color="var(--g-accent)">
               <template #label>
                 <div>
                   <div class="rs-radio-title">{{ $t('crossDevice.settings.policyAsk') }}</div>
@@ -47,7 +47,7 @@
                 </div>
               </template>
             </v-radio>
-            <v-radio value="require_remote" color="#00DFF3" :disabled="!hasPairedDevice">
+            <v-radio value="require_remote" color="var(--g-accent)" :disabled="!hasPairedDevice">
               <template #label>
                 <div>
                   <div class="rs-radio-title">{{ $t('crossDevice.settings.policyRequire') }}</div>
@@ -64,7 +64,7 @@
           <!-- This device -->
           <div v-if="selfEntry" class="rs-label mb-2">{{ $t('crossDevice.settings.thisDevice') }}</div>
           <div v-if="selfEntry" class="rs-device rs-self d-flex align-center">
-            <v-icon class="mr-3" color="#8a94a6">{{ platformIcon(selfEntry.device.platform) }}</v-icon>
+            <v-icon class="mr-3" color="var(--g-text-3)">{{ platformIcon(selfEntry.device.platform) }}</v-icon>
             <div class="flex-grow-1">
               <div class="rs-device-label">{{ selfEntry.device.label || $t('crossDevice.settings.unnamed') }}</div>
               <div class="rs-fingerprint">{{ $t('crossDevice.settings.fingerprint') }}: {{ fingerprint(selfEntry.device.pubKey) }}</div>
@@ -75,7 +75,7 @@
           <v-btn
             v-if="!isHardwareWallet"
             block
-            color="#00DFF3"
+            color="var(--g-accent)"
             class="black--text font-weight-bold rs-pair-btn"
             @click="openPairingQr"
           >
@@ -88,7 +88,7 @@
           <p class="rs-pair-hint">{{ $t('crossDevice.settings.pairHint') }}</p>
 
           <div v-if="deviceList.length === 0" class="rs-empty">
-            <v-icon color="#5a6472" class="mb-1">mdi-cellphone-off</v-icon>
+            <v-icon color="var(--g-text-3)" class="mb-1">mdi-cellphone-off</v-icon>
             <div class="rs-hint">{{ $t('crossDevice.settings.noDevices') }}</div>
             <div class="rs-hint">{{ $t('crossDevice.settings.noDevicesHint') }}</div>
           </div>
@@ -99,7 +99,7 @@
             class="rs-device d-flex align-center"
             :class="{ 'rs-trusted': entry.trusted, 'rs-offline': !entry.online }"
           >
-            <v-icon class="mr-3" :color="entry.trusted ? '#00DFF3' : '#8a94a6'">
+            <v-icon class="mr-3" :color="entry.trusted ? 'var(--g-accent)' : 'var(--g-text-3)'">
               {{ platformIcon(entry.device.platform) }}
             </v-icon>
             <div class="flex-grow-1">
@@ -110,12 +110,12 @@
                   class="rs-badge"
                   :class="pairVerified(entry.device.deviceId) ? 'rs-verified' : 'rs-sas'"
                 >
-                  <v-icon x-small :color="pairVerified(entry.device.deviceId) ? '#37d67a' : '#8a94a6'">
+                  <v-icon x-small :color="pairVerified(entry.device.deviceId) ? 'success' : 'var(--g-text-3)'">
                     {{ pairVerified(entry.device.deviceId) ? 'mdi-shield-check' : 'mdi-shield-account-outline' }}
                   </v-icon>
                   {{ pairVerified(entry.device.deviceId) ? $t('crossDevice.settings.walletVerified') : $t('crossDevice.settings.sasOnly') }}
                 </span>
-                <span class="rs-status" :class="entry.online ? 'rs-online' : 'rs-off'">
+                <span class="rs-status t-label" :class="entry.online ? 'rs-online' : 'rs-off'">
                   {{ entry.online ? $t('crossDevice.settings.online') : $t('crossDevice.settings.offline') }}
                 </span>
               </div>
@@ -128,7 +128,7 @@
               v-if="!entry.trusted"
               small
               outlined
-              color="#00DFF3"
+              color="var(--g-accent)"
               :disabled="!entry.online"
               :loading="busy"
               @click="startPairing(entry)"
@@ -144,9 +144,9 @@
           </div>
         </template>
 
-        <v-alert dense text color="#8a94a6" class="rs-note mt-4 mb-0">
+        <v-alert dense text color="var(--g-text-3)" class="rs-note mt-4 mb-0">
           <div class="d-flex">
-            <v-icon small color="#8a94a6" class="mr-2 mt-1">mdi-information-outline</v-icon>
+            <v-icon small color="var(--g-text-3)" class="mr-2 mt-1">mdi-information-outline</v-icon>
             <span class="rs-note-text">{{ $t('crossDevice.settings.securityNote') }}</span>
           </div>
         </v-alert>
@@ -166,7 +166,7 @@
         <v-card-actions class="px-4 pb-4 pt-0">
           <v-btn text small @click="pairingCandidate = null">{{ $t('common.cancel') }}</v-btn>
           <v-spacer />
-          <v-btn small color="#00DFF3" class="black--text font-weight-bold" :loading="busy" @click="confirmPairing">
+          <v-btn small color="var(--g-accent)" class="black--text font-weight-bold" :loading="busy" @click="confirmPairing">
             {{ $t('crossDevice.settings.pairConfirmMatch') }}
           </v-btn>
         </v-card-actions>
@@ -184,12 +184,12 @@
         <v-card-text class="px-4 pb-4 text-center">
           <!-- minting the payload -->
           <div v-if="qrState === 'loading'" class="rs-qr-loading">
-            <v-progress-circular indeterminate color="#00DFF3" />
+            <v-progress-circular indeterminate color="var(--g-accent)" />
           </div>
 
           <!-- no cached proof: prompt to re-enable -->
           <div v-else-if="qrState === 'error'">
-            <v-icon color="#ff6b6b" size="40">mdi-alert-circle-outline</v-icon>
+            <v-icon color="error" size="40">mdi-alert-circle-outline</v-icon>
             <p class="rs-hint mt-3">{{ $t('crossDevice.pair.noProof') }}</p>
           </div>
 
@@ -201,14 +201,14 @@
               <span class="rs-qr-scanline"></span>
             </div>
             <div class="rs-waiting mt-3">
-              <v-progress-circular indeterminate size="16" width="2" color="#00DFF3" class="mr-2" />
+              <v-progress-circular indeterminate size="16" width="2" color="var(--g-accent)" class="mr-2" />
               {{ $t('crossDevice.pair.waiting') }}
             </div>
           </template>
 
           <!-- paired: success morph -->
           <div v-else-if="qrState === 'paired'" class="rs-qr-success">
-            <v-icon color="#37d67a" size="60">mdi-shield-check</v-icon>
+            <v-icon color="success" size="60">mdi-shield-check</v-icon>
             <p class="rs-paired-title mt-3">
               {{ $t('crossDevice.pair.pairedWith', { device: pairedResult && pairedResult.label ? pairedResult.label : $t('crossDevice.settings.unnamed') }) }}
             </p>
@@ -216,9 +216,9 @@
 
           <!-- expired: single-use nonce timed out -->
           <div v-else-if="qrState === 'expired'">
-            <v-icon color="#ffb020" size="40">mdi-clock-alert-outline</v-icon>
+            <v-icon color="warning" size="40">mdi-clock-alert-outline</v-icon>
             <p class="rs-hint mt-3 mb-3">{{ $t('crossDevice.pair.expired') }}</p>
-            <v-btn small color="#00DFF3" class="black--text font-weight-bold" @click="openPairingQr">
+            <v-btn small color="var(--g-accent)" class="black--text font-weight-bold" @click="openPairingQr">
               {{ $t('crossDevice.pair.newCode') }}
             </v-btn>
           </div>
@@ -260,7 +260,7 @@
           <v-btn
             v-if="!isPrfWallet"
             small
-            color="#00DFF3"
+            color="var(--g-accent)"
             class="black--text font-weight-bold"
             :loading="enableBusy"
             :disabled="!enablePassword"
@@ -589,50 +589,50 @@ onBeforeUnmount(() => {
 <style scoped>
 .remote-signing-card {
   background: rgba(18, 20, 26, 0.92) !important;
-  color: #fff;
+  color: var(--g-text-1);
 }
-.rs-title { font-size: 18px; font-weight: 600; color: #fff; }
-.rs-desc { font-size: 13px; color: #b3bccb; margin-bottom: 16px; }
+.rs-title { font-size: 20px; font-weight: 600; color: var(--g-text-1); }
+.rs-desc { font-size: 13px; color: var(--g-text-2); margin-bottom: 16px; }
 .rs-row { padding: 6px 0; }
-.rs-label { font-size: 14px; font-weight: 600; color: #fff; }
-.rs-hint { font-size: 12px; color: #8a94a6; line-height: 1.35; }
-.rs-radio-title { font-size: 14px; color: #e6ebf2; }
+.rs-label { font-size: 14px; font-weight: 600; color: var(--g-text-1); }
+.rs-hint { font-size: 12px; color: var(--g-text-3); line-height: 1.35; }
+.rs-radio-title { font-size: 14px; color: var(--g-text-1); }
 .rs-policy :deep(.v-radio) { align-items: flex-start; margin-bottom: 10px; }
-.rs-divider { margin: 14px 0; border-color: rgba(255,255,255,0.08); }
+.rs-divider { margin: 14px 0; border-color: var(--g-hairline-1); }
 .rs-device {
   padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   margin-bottom: 8px;
 }
-.rs-device.rs-trusted { border-color: rgba(0, 223, 243, 0.4); background: rgba(0, 223, 243, 0.05); }
+.rs-device.rs-trusted { border-color: color-mix(in srgb, var(--g-accent) 40%, transparent); background: color-mix(in srgb, var(--g-accent) 5%, transparent); }
 .rs-device.rs-offline { opacity: 0.6; }
-.rs-status { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; }
-.rs-status.rs-online { color: #37d67a; }
-.rs-status.rs-off { color: #8a94a6; }
-.rs-badge { font-size: 10px; letter-spacing: 0.3px; margin-left: 6px; white-space: nowrap; }
-.rs-badge.rs-verified { color: #37d67a; }
-.rs-badge.rs-sas { color: #8a94a6; }
+.rs-status { margin-left: 6px; }
+.rs-status.rs-online { color: var(--g-success); }
+.rs-status.rs-off { color: var(--g-text-3); }
+.rs-badge { font-size: 11px; letter-spacing: 0.3px; margin-left: 6px; white-space: nowrap; }
+.rs-badge.rs-verified { color: var(--g-success); }
+.rs-badge.rs-sas { color: var(--g-text-3); }
 .rs-self { opacity: 0.85; }
-.rs-device-label { font-size: 14px; color: #fff; }
-.rs-fingerprint { font-size: 12px; color: #9aa5b5; font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
-.rs-pair-hint { font-size: 12px; color: #8a94a6; margin-bottom: 10px; }
+.rs-device-label { font-size: 14px; color: var(--g-text-1); }
+.rs-fingerprint { font-size: 12px; color: var(--g-text-3); font-family: var(--g-font-mono); letter-spacing: 0.5px; }
+.rs-pair-hint { font-size: 12px; color: var(--g-text-3); margin-bottom: 10px; }
 .rs-empty { text-align: center; padding: 20px 8px; }
-.rs-note { border: 1px solid rgba(255,255,255,0.06) !important; }
-.rs-note-text { font-size: 11.5px; color: #9aa5b5; line-height: 1.4; }
-.rs-confirm-card { background: rgba(18, 20, 26, 0.96) !important; color: #fff; }
-.rs-error { font-size: 12px; color: #ff6b6b; line-height: 1.35; }
+.rs-note { border: 1px solid var(--g-hairline-1) !important; }
+.rs-note-text { font-size: 12px; color: var(--g-text-3); line-height: 1.4; }
+.rs-confirm-card { background: rgba(18, 20, 26, 0.96) !important; color: var(--g-text-1); }
+.rs-error { font-size: 12px; color: var(--g-error); line-height: 1.35; }
 .rs-confirm-code {
-  font-family: 'Courier New', monospace;
-  font-size: 26px;
+  font-family: var(--g-font-mono);
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 3px;
   text-align: center;
-  color: #00DFF3;
+  color: var(--g-accent);
   padding: 12px;
-  border: 1px solid rgba(0, 223, 243, 0.35);
-  border-radius: 10px;
-  background: rgba(0, 223, 243, 0.06);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 35%, transparent);
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-accent) 6%, transparent);
 }
 
 /* QR scan-to-pair */
@@ -643,7 +643,7 @@ onBeforeUnmount(() => {
   width: 260px;
   max-width: 100%;
   margin: 0 auto;
-  border-radius: 14px;
+  border-radius: var(--g-r-card);
   overflow: hidden;
   background: #fff;
 }
@@ -656,8 +656,8 @@ onBeforeUnmount(() => {
   right: 6%;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, #00DFF3, transparent);
-  box-shadow: 0 0 10px #00DFF3;
+  background: linear-gradient(90deg, transparent, var(--g-accent), transparent);
+  box-shadow: 0 0 10px var(--g-accent);
   animation: rs-scan 2.2s ease-in-out infinite;
 }
 @keyframes rs-scan {
@@ -666,9 +666,9 @@ onBeforeUnmount(() => {
   85% { opacity: 1; }
   100% { top: 94%; opacity: 0; }
 }
-.rs-waiting { font-size: 13px; color: #b3bccb; display: flex; align-items: center; justify-content: center; }
+.rs-waiting { font-size: 13px; color: var(--g-text-2); display: flex; align-items: center; justify-content: center; }
 .rs-qr-success { padding: 20px 0 8px; animation: rs-pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1); }
-.rs-paired-title { font-size: 16px; font-weight: 600; color: #fff; }
+.rs-paired-title { font-size: 16px; font-weight: 600; color: var(--g-text-1); }
 @keyframes rs-pop {
   0% { transform: scale(0.7); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }

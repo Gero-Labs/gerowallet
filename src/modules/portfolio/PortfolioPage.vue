@@ -161,7 +161,7 @@
                   : $t('market.searchPlaceholder')"
                 prepend-inner-icon="mdi-magnify"
                 dense flat solo rounded hide-details clearable
-                background-color="rgba(255,255,255,0.04)"
+                background-color="var(--g-hairline-1)"
                 class="header-search"
               />
 
@@ -256,7 +256,7 @@
                       </v-list-item>
                       <v-divider class="my-1 mx-3" style="opacity: 0.15;" />
                       <v-list-item dense @click="resetToDefaults">
-                        <v-list-item-title style="font-size: 12px; color: #7c4dff;">
+                        <v-list-item-title style="font-size: 12px; color: var(--g-info);">
                           {{ $t('market.resetColumns') }}
                         </v-list-item-title>
                       </v-list-item>
@@ -914,7 +914,7 @@ watch(
 /* ── Filter toolbar (single row: chips + search + menu) ──────────────────────── */
 
 .filter-toolbar {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .filter-chip-bar {
@@ -945,7 +945,7 @@ watch(
 }
 
 .header-search ::v-deep .v-input__slot {
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   padding: 0 12px !important;
 }
 
@@ -988,7 +988,7 @@ watch(
 
 .mode-btn.mode-active {
   opacity: 1;
-  color: #00c7f3 !important;
+  color: var(--g-accent) !important;
 }
 
 .mode-btn:hover:not(.v-btn--disabled) {
@@ -1019,14 +1019,13 @@ watch(
 }
 
 .holdings-table-card ::v-deep .v-data-table-header th {
-  background: rgba(10, 14, 20, 0.8);
-  backdrop-filter: blur(10px);
-  color: rgba(255, 255, 255, 0.5) !important;
+  background: var(--g-surface);
+  color: var(--g-text-3) !important;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
 .holdings-table-card ::v-deep tbody tr {
@@ -1034,16 +1033,16 @@ watch(
 }
 
 .holdings-table-card ::v-deep tbody tr:hover {
-  background: rgba(0, 199, 243, 0.04) !important;
+  background: var(--g-hairline-1) !important;
 }
 
 .holdings-table-card ::v-deep tbody tr td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
 /* Monospace numbers in holdings */
 .holdings-table-card ::v-deep td.text-right {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }
@@ -1057,7 +1056,7 @@ watch(
 }
 
 .filter-menu-btn:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: var(--g-hairline-1) !important;
 }
 
 /* ── Live indicator ──────────────────────────────────────────────────────────── */
@@ -1072,26 +1071,26 @@ watch(
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--g-hairline-3);
   transition: background 0.3s ease;
 }
 
 .live-dot--active {
-  background: #47CD89;
+  background: var(--g-success);
   box-shadow: 0 0 6px rgba(71, 205, 137, 0.6);
   animation: livePulse 2s ease-in-out infinite;
 }
 
 .live-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
   transition: color 0.3s ease;
 }
 
 .live-label--active {
-  color: #47CD89;
+  color: var(--g-success);
 }
 
 @keyframes livePulse {
@@ -1141,7 +1140,7 @@ watch(
 <style>
 /* Filter panel — rendered outside scoped component by v-menu */
 .filter-panel-menu {
-  border-radius: 12px !important;
+  border-radius: var(--g-r-card) !important;
 }
 
 .filter-panel {
@@ -1154,8 +1153,8 @@ watch(
   background-color: transparent !important;
   backdrop-filter: blur(24px) saturate(1.8) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
@@ -1166,22 +1165,18 @@ watch(
 .filter-panel-search .v-input__slot {
   min-height: 34px !important;
   font-size: 13px;
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-radius: 8px !important;
-  color: white !important;
+  background: var(--g-hairline-1) !important;
+  border-radius: var(--g-r-control) !important;
+  color: var(--g-text-1) !important;
 }
 
 .filter-panel-search .v-input__slot input {
-  color: white !important;
-  caret-color: white !important;
+  color: var(--g-text-1) !important;
+  caret-color: var(--g-text-1) !important;
 }
 
 .filter-panel-search .v-input__slot input::placeholder {
-  color: rgba(255, 255, 255, 0.35) !important;
-}
-
-.filter-panel-search .v-input__prepend-inner {
-  margin-top: 5px !important;
+  color: var(--g-text-3) !important;
 }
 
 .filter-panel .v-list-item {
@@ -1189,6 +1184,6 @@ watch(
 }
 
 .filter-panel .v-subheader {
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--g-text-3) !important;
 }
 </style>
