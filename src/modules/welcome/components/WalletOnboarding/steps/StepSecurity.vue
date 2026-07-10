@@ -1,5 +1,6 @@
 <template>
   <div class="step-security">
+    <div class="step-scroll">
     <v-form ref="nameForm" v-model="nameValid" style="width: 100%;">
 
       <!-- Wallet name field -->
@@ -65,6 +66,7 @@
       </div>
 
     </v-form>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">

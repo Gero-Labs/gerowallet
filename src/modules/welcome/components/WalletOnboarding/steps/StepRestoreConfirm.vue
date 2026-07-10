@@ -1,5 +1,6 @@
 <template>
   <div class="step-restore-confirm" :style="creatingWalletLoader ? { pointerEvents: 'none', opacity: '0.7' } : {}">
+    <div class="step-scroll">
 
     <!-- ===== PRF CONFIRMATION PATH ===== -->
     <template v-if="securityMethod === 'prf'">
@@ -149,6 +150,7 @@
         </v-checkbox>
       </v-form>
     </template>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">

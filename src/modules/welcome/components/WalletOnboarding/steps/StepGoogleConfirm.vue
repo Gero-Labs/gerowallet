@@ -1,5 +1,6 @@
 <template>
   <div class="step-google-confirm">
+    <div class="step-scroll">
     <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
       <v-card-text class="pa-3">
         <div class="d-flex align-center mb-2">
@@ -49,6 +50,7 @@
     >
       <span class="text-body-2">{{ errorMessage }}</span>
     </v-alert>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
