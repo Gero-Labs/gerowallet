@@ -1,6 +1,5 @@
 <template>
   <BottomSheet
-    v-if="!isApex"
     :value="isVisible"
     variant="trust"
     :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect') ? '70%' : '85%'"
@@ -779,7 +778,7 @@ function queuedItemLabel(item: DAppRequest): string {
   const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
   return `${domain} — ${methodLabel}`;
 }
-const { isApex, themeColors } = useChainContext();
+const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 // Fiat approximation for the tx total — "≈ $5,620" when you meant $56 is
