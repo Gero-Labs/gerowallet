@@ -42,7 +42,7 @@ const settings = copilotFeedSettings;
 
 .settings-content__subtitle {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   line-height: 1.5;
   margin: 0;
 }
@@ -51,24 +51,23 @@ const settings = copilotFeedSettings;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--g-hairline-1);
   padding-top: 12px;
 }
 
 .settings-content__btn {
   justify-content: flex-start !important;
   text-transform: none !important;
-  letter-spacing: 0.01em !important;
-  color: var(--chain-primary, #5b8def) !important;
+  color: var(--g-accent) !important;
 }
 
 .settings-content__btn--muted {
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: var(--g-text-3) !important;
 }
 
 .settings-content__disclaimer {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
   text-align: center;
   margin: 0;
 }
