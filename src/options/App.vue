@@ -130,7 +130,7 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
   background-color: var(--v-cardBackground-base) !important;
 }
 .v-dialog__content--active {
-  -webkit-backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
 .v-carousel__controls {
