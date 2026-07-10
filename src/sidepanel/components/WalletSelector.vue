@@ -210,6 +210,7 @@ defineEmits<{
 .hw-icon {
   flex-shrink: 0;
   opacity: 0.7;
+  margin-right: 6px;
 }
 
 .add-wallet-section {
