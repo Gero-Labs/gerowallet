@@ -3,20 +3,46 @@
 // (4.5:1) on every surface; text-3 is captions/labels only, so it must be
 // AA-normal on canvas/surface and AA-large (3:1) on raised/overlay;
 // on-grad text must be AA-normal on both gradient stops.
+//
+// The palette is PARSED from the real sources -- src/shared/styles/tokens.css
+// and src/config/themes.ts -- never copied here. A hardcoded copy would let a
+// contrast regression edited into the actual token files sail through green,
+// which would make this gate theatre. An unparseable or missing token is a
+// hard failure, not a silent skip.
+import { readFileSync } from 'node:fs';
+
+const TOKENS = readFileSync('src/shared/styles/tokens.css', 'utf8');
+const THEMES = readFileSync('src/config/themes.ts', 'utf8');
+
+function tok(name) {
+  const m = TOKENS.match(new RegExp(`^\\s*--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`, 'm'));
+  if (!m) { console.error(`FATAL: --${name} not found (or not a 6-digit hex) in tokens.css`); process.exit(2); }
+  return m[1];
+}
+function chain(key) {
+  const m = THEMES.match(
+    new RegExp(`${key}:\\s*\\{\\s*accent:\\s*'(#[0-9a-fA-F]{6})',\\s*gradient1:\\s*'(#[0-9a-fA-F]{6})',\\s*gradient2:\\s*'(#[0-9a-fA-F]{6})'`),
+  );
+  if (!m) { console.error(`FATAL: chainAccents.${key} not parseable from src/config/themes.ts`); process.exit(2); }
+  return { accent: m[1], gradient1: m[2], gradient2: m[3] };
+}
+
 const T = {
-  canvas: '#000000', surface: '#0C0E12', raised: '#12151B', overlay: '#1A1E26',
-  text1: '#F7F8F9', text2: '#B8BCC4', text3: '#7A8088',
-  accent: '#33C7DD', onGrad: '#06181B', grad1: '#00DFF3', grad2: '#00FAD5',
-  error: '#F97066', success: '#47CD89', warning: '#FDB022', info: '#7AA7FF',
+  canvas: tok('g-canvas'), surface: tok('g-surface'), raised: tok('g-raised'), overlay: tok('g-overlay'),
+  text1: tok('g-text-1'), text2: tok('g-text-2'), text3: tok('g-text-3'),
+  accent: tok('g-accent'), onGrad: tok('g-on-grad'), grad1: tok('g-grad-1'), grad2: tok('g-grad-2'),
+  error: tok('g-error'), success: tok('g-success'), warning: tok('g-warning'), info: tok('g-info'),
 };
+
 // EVERY chain's flat accent and gradient stops are used as text/focus/CTA-text
-// backing across all surfaces, so all get checked.
-// Keep in sync with chainAccents in src/config/themes.ts.
+// backing across all surfaces, so all get checked. Read from themes.ts, so a
+// new or edited chain palette is covered automatically.
+const cardano = chain('cardano'), bitcoin = chain('bitcoin'), apex = chain('apex'), midnight = chain('midnight');
 const CHAIN = {
-  cardanoAccent: '#33C7DD', bitcoinAccent: '#F7931A', apexAccent: '#E06030', midnightAccent: '#8B7CF6',
-  bitcoinGrad1: '#F7931A', bitcoinGrad2: '#FFB84D',
-  apexGrad1: '#E06030', apexGrad2: '#F08040',
-  midnightGrad1: '#8B7CF6', midnightGrad2: '#B49CFF',
+  cardanoAccent: cardano.accent, bitcoinAccent: bitcoin.accent, apexAccent: apex.accent, midnightAccent: midnight.accent,
+  bitcoinGrad1: bitcoin.gradient1, bitcoinGrad2: bitcoin.gradient2,
+  apexGrad1: apex.gradient1, apexGrad2: apex.gradient2,
+  midnightGrad1: midnight.gradient1, midnightGrad2: midnight.gradient2,
 };
 const lin = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
 const lum = (hex) => {

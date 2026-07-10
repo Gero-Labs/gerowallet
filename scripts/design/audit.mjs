@@ -13,7 +13,12 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, sep } from 'node:path';
 
 const BASE_EXT = ['.vue', '.scss', '.css'];
-const EXCLUDE_DIRS = new Set(['node_modules', 'vendor']);
+// Excluded by PATH, not by bare directory name: a `node_modules` or `vendor`
+// directory anywhere else in the tree would otherwise be a free ratchet-evasion
+// hatch (drop a file in src/modules/foo/vendor/ and it stops being counted).
+const EXCLUDE_PATHS = new Set(['src/vendor', 'src/node_modules']);
+
+const rel = (p) => p.split(sep).join(posix.sep);
 
 /** Recursively collect files under `dir` whose extension is in `exts`. */
 function walk(dir, exts, out = []) {
@@ -21,8 +26,7 @@ function walk(dir, exts, out = []) {
     const full = join(dir, name);
     const st = statSync(full);
     if (st.isDirectory()) {
-      // src/vendor is a third-party bundle, not our code.
-      if (EXCLUDE_DIRS.has(name)) continue;
+      if (EXCLUDE_PATHS.has(rel(full))) continue;
       walk(full, exts, out);
     } else if (exts.some((e) => name.endsWith(e))) {
       out.push(full);
@@ -30,8 +34,6 @@ function walk(dir, exts, out = []) {
   }
   return out;
 }
-
-const rel = (p) => p.split(sep).join(posix.sep);
 
 const cache = new Map();
 const read = (f) => {
@@ -76,18 +78,33 @@ const metrics = {
   formatFnForks: matches(/(function|const)\s+(formatPrice|formatBalance|formatUsd)\b/g, formatForkFiles).length,
 };
 
-// tokens.css <-> _tokens.scss sync check (shared hex values must match)
+// tokens.css <-> _tokens.scss sync check.
+//
+// The pairs are DERIVED from _tokens.scss, not hand-listed: every `$g-foo` it
+// declares must have a matching `--g-foo` in tokens.css with an equal value.
+// A hand-written list silently stops covering tokens as the mirror grows, and
+// a lookup that returns undefined on a miss makes `undefined === undefined`
+// pass -- so a typo in BOTH names, or a token dropped from tokens.css, would
+// have gone unnoticed. Missing on either side is now a hard failure.
+// Values (not just hexes) are compared, case-insensitively.
 const css = readFileSync('src/shared/styles/tokens.css', 'utf8');
 const scss = readFileSync('src/shared/styles/_tokens.scss', 'utf8');
-const pairs = [
-  ['--g-surface', '$g-surface'], ['--g-raised', '$g-raised'], ['--g-overlay', '$g-overlay'],
-  ['--g-text-1', '$g-text-1'], ['--g-text-2', '$g-text-2'], ['--g-text-3', '$g-text-3'],
-  ['--g-error', '$g-error'], ['--g-success', '$g-success'], ['--g-warning', '$g-warning'], ['--g-info', '$g-info'],
-];
-const val = (src, name) => (src.match(new RegExp(`${name.replace('$', '\\$')}:\\s*(#[0-9a-fA-F]{6})`)) || [])[1];
+
+const norm = (v) => (v === undefined ? undefined : v.trim().replace(/;$/, '').toLowerCase());
+const cssVal = (name) => norm((css.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm')) || [])[1]);
+const scssVars = [...scss.matchAll(/^\s*\$(g-[a-z0-9-]+):\s*([^;]+);/gim)].map((m) => [m[1], norm(m[2])]);
+
 let syncFail = 0;
-for (const [c, s] of pairs) {
-  if (val(css, c) !== val(scss, s)) { console.error(`TOKEN DESYNC: ${c}=${val(css, c)} vs ${s}=${val(scss, s)}`); syncFail++; }
+if (!scssVars.length) { console.error('TOKEN MIRROR: _tokens.scss declares no $g-* variables'); syncFail++; }
+for (const [name, sVal] of scssVars) {
+  const cVal = cssVal(`--${name}`);
+  if (cVal === undefined) {
+    console.error(`TOKEN DESYNC: $${name} exists in _tokens.scss but --${name} is missing from tokens.css`);
+    syncFail++;
+  } else if (cVal !== sVal) {
+    console.error(`TOKEN DESYNC: --${name}=${cVal} vs $${name}=${sVal}`);
+    syncFail++;
+  }
 }
 
 const budgets = JSON.parse(readFileSync('scripts/design/budgets.json', 'utf8'));
