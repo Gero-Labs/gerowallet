@@ -41,8 +41,7 @@ watch(selectedNetwork, (val) => {
     emit('update:modelValue', val);
     emit('network-changed', val);
     // Update Vuetify theme based on selected network
-    const isApex = val.blockchain?.includes('Apex');
-    updateVuetifyTheme(isApex, true);
+    updateVuetifyTheme(val.blockchain);
   }
 });
 

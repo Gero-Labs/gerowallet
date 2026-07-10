@@ -795,7 +795,7 @@ async function verifyCurrentMethod() {
           }) as BackgroundResponse<VerifyPasswordResponse>;
           isValid = passwordVerification.data.success;
           if (!isValid) {
-            tooltip.value.text = t('wallet.wrongSpendingPassword');
+            tooltip.value.text = t('errors.wrongPassword');
             enableToolTip();
           }
         } catch (error) {
@@ -822,7 +822,7 @@ async function verifyCurrentMethod() {
 
 const tooltip = ref({
   enabled: false,
-  text: t('wallet.wrongSpendingPassword'),
+  text: t('errors.wrongPassword'),
 });
 
 const enableToolTip = () => {

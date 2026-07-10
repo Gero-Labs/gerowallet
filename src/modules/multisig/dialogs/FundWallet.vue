@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.fundWallet')" :loading="txSubmitLoading" :min-height="0"
+  <BaseDialog persistent :width="850" :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.fundWallet')" :loading="txSubmitLoading" :min-height="0"
     :subtitle="$t('multisig.fundWalletSubtitle', { asset: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })">
     <v-card-title style="display: block;" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
@@ -197,7 +197,7 @@ const steps: Step[] = [
 const currentStep = ref(1);
 const tooltip = ref({
   enabled: false,
-  text: t('wallet.wrongSpendingPassword')
+  text: t('errors.wrongPassword')
 });
 const txBody = ref<Serialization.TransactionBody | undefined>();
 const txData = ref<Serialization.Transaction | undefined>();

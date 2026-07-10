@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog
+  <BaseDialog :width="850"
     :isOpen="isOpen"
     @close="emit('close')"
     :title="t('wallet.receive')"

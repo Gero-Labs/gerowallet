@@ -322,7 +322,7 @@
               color="#1a1a1a"
               @click="withdraw"
               block
-              :class="isApex ? 'apexButton' : 'geroButton'"
+              class="geroButton"
             >
               {{ $t('staking.withdraw') }}
             </v-btn>

@@ -4,49 +4,43 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gero Mini</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+  <!-- Fonts are self-hosted and bundled: see the @fontsource imports at the top of main.ts. -->
+  <!-- media="all" (Vite's documented escape hatch, vitejs/vite#6748) stops Vite's HTML transform
+       from merging this stylesheet into the app's own bundled CSS at build time. It still gets
+       emitted as its own hashless asset (extension/assets/gero-swap.css) with the href rewritten
+       accordingly; scripts/prepare.ts's Windows path-fixup normalizes that reference correctly for
+       both entry points. The vendor copy under extension/vendor/gero-swap/ remains the source of
+       truth on disk (and the loader script below is served from there), but this <link> ends up
+       pointing at the Vite-emitted copy in extension/assets/ instead of /vendor/gero-swap/. -->
+  <link rel="stylesheet" href="/vendor/gero-swap/gero-swap.css" media="all" />
+  <script src="/vendor/gero-swap/gero-swap.js"></script>
 </head>
 <body>
 <div id="app"></div>
 <script type="module" src="./main.ts"></script>
 <style>
+  /* This inline block is emitted AFTER the bundled stylesheet, so anything
+     declared here beats baseline.css on source order. Keep it to layout only:
+     the canvas color, the scrollbar recipe and .geroButton all live in
+     src/shared/styles/baseline.css. */
   html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
     height: 100%;
-    background: #0a0a0a;
+    background: var(--g-canvas);
   }
   #app {
     height: 100%;
   }
   .v-application {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
   }
-  ::-webkit-scrollbar {
-    width: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #383838;
-    border-radius: 30px;
-  }
-  .geroButton {
-    background: linear-gradient(45deg, var(--chain-gradient1, #00c7f3), var(--chain-gradient2, #00ffd1)) !important;
-    color: black !important;
-  }
-  /* Vuetify's own .v-btn--disabled already blocks pointer events (the click
-     handler genuinely can't fire), but a "blocked for your safety" state
-     must ALSO look unmistakably non-interactive — a subtle brightness dip
-     against a bright gradient isn't enough. Grey it out and desaturate. */
-  .geroButton:disabled,
-  .geroButton.v-btn--disabled {
-    background: rgba(255, 255, 255, 0.12) !important;
-    color: rgba(255, 255, 255, 0.3) !important;
-    filter: grayscale(1);
-  }
+  /* The disabled-CTA rule that used to live here (grey fill + grayscale, so a
+     "blocked for your safety" button looks unmistakably non-interactive) is now
+     baseline.css's `.geroButton.v-btn--disabled`: a solid --g-raised surface with
+     --g-text-3 text. Same intent, one definition, and specificity-correct against
+     Vuetify's own flagged disabled rules. Nothing to desaturate on a flat grey. */
 </style>
 </body>
 </html>

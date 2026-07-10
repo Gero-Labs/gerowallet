@@ -1,227 +1,107 @@
-/* Global Liquid Glass Effects */
+/* ============================================================
+   Glass canon: glass means "this floats above content".
+   Exactly 3 materials. Static cards must NOT use these classes;
+   they are solid var(--g-raised) with a hairline border.
 
-/* Apply liquid glass effect only to v-cards with liquid-glass class */
-.v-card.liquid-glass:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
-.theme--dark .v-card.liquid-glass:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
-  background:
-    linear-gradient(135deg, rgba(19, 22, 27, 0.6) 0%, rgba(19, 22, 27, 0.5) 100%),
-    radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.5) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset -1px 0 0 rgba(45, 240, 247, 0.08),
-    4px 0 24px rgba(0, 0, 0, 0.4) !important;
-  isolation: isolate !important;
-}
+   The legacy class names are kept as aliases so ~107 existing
+   template usages keep working; sweeps migrate them to the
+   glass-* names.
 
-.v-card.liquid-glass.v-card--flat:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
-.v-card.liquid-glass.v-card--outlined:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
-.theme--dark .v-card.liquid-glass.v-card--flat:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
-.theme--dark .v-card.liquid-glass.v-card--outlined:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
-  backdrop-filter: blur(20px) saturate(1.5) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset -1px 0 0 rgba(45, 240, 247, 0.08),
-    4px 0 24px rgba(0, 0, 0, 0.4) !important;
-  overflow: visible !important;
-  isolation: isolate !important;
-}
+   SPECIFICITY NOTE: src/options/App.vue declares an unscoped
+   `.v-card { background-color: ... !important }` (0,1,0). SFC styles are
+   injected AFTER these imported stylesheets, so a bare `.liquid-glass`
+   (also 0,1,0 !important) would LOSE the tie on source order and every
+   glass v-card would render solid. The `.v-card.<alias>` selectors below
+   (0,2,0) exist purely to outrank it. When that global rule is deleted,
+   the `.v-card.` variants can go too.
+   ============================================================ */
 
-/* Preserve manual liquid-glass class for backwards compatibility */
-.liquid-glass,
-.v-card.liquid-glass,
-.theme--dark .v-card.liquid-glass {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
-}
-
-/* Subtle liquid glass effect for less prominent cards */
-.liquid-glass-subtle,
-.v-card.liquid-glass-subtle,
-.theme--dark .v-card.liquid-glass-subtle {
-  background-color: rgba(0, 0, 0, 0.3) !important;
-  background-image: none !important;
-  backdrop-filter: blur(18px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(1.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 12px !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  isolation: isolate !important;
-}
-
-.v-card.liquid-glass-subtle.v-card--flat,
-.v-card.liquid-glass-subtle.v-card--outlined,
-.theme--dark .v-card.liquid-glass-subtle.v-card--flat,
-.theme--dark .v-card.liquid-glass-subtle.v-card--outlined {
-  background-color: rgba(0, 0, 0, 0.3) !important;
-  backdrop-filter: blur(18px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(1.6) !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  overflow: hidden !important;
-  isolation: isolate !important;
-}
-
-/* Liquid glass for compact cards (like market data cards) */
-.liquid-glass-compact,
-.v-card.liquid-glass-compact,
-.theme--dark .v-card.liquid-glass-compact {
-  background-color: rgba(0, 0, 0, 0.32) !important;
-  background-image: none !important;
-  backdrop-filter: blur(16px) saturate(1.5) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
-  border-radius: 8px !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  isolation: isolate !important;
-}
-
-.v-card.liquid-glass-compact.v-card--flat,
-.v-card.liquid-glass-compact.v-card--outlined,
-.theme--dark .v-card.liquid-glass-compact.v-card--flat,
-.theme--dark .v-card.liquid-glass-compact.v-card--outlined {
-  background-color: rgba(0, 0, 0, 0.32) !important;
-  backdrop-filter: blur(16px) saturate(1.5) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  overflow: hidden !important;
-  isolation: isolate !important;
-}
-
-/* Override Vuetify's default box-shadow for liquid-glass cards only */
-.v-card.liquid-glass:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Liquid glass effect for dialogs and modals */
-.liquid-glass-dialog {
-  background: rgba(0, 0, 0, 0.6) !important;
-  backdrop-filter: blur(25px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(25px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 16px !important;
-  position: relative !important;
-  overflow: visible !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-}
-
-/* Liquid glass effect for navigation drawer */
+/* Material 1: chrome (nav drawer, app bar when content scrolls under) */
+.glass-chrome,
 .liquid-glass-nav-drawer,
+.v-card.glass-chrome,
 .v-navigation-drawer.liquid-glass-nav-drawer,
-.theme--dark .v-navigation-drawer.liquid-glass-nav-drawer {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.6) !important;
-  border: none !important;
-  border-right: none !important;
-  border-left: none !important;
-  border-top: none !important;
-  border-bottom: none !important;
-  border-width: 0 !important;
-  border-color: transparent !important;
-  overflow: hidden !important;
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-  isolation: isolate !important;
+.v-navigation-drawer.glass-chrome {
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(20px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
+  border-right: 1px solid var(--g-hairline-1) !important;
 }
 
-/* Gradient overlays for enhanced visual appeal */
-.liquid-glass-gradient::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  z-index: 1;
+/* Material 2: overlay (dialogs, sheets) */
+.glass-overlay,
+.liquid-glass-dialog,
+.v-card.glass-overlay,
+.v-card.liquid-glass-dialog {
+  background: rgba(12, 14, 18, 0.80) !important;
+  backdrop-filter: blur(24px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
+  border: 1px solid var(--g-hairline-2) !important;
+  border-radius: var(--g-r-sheet) !important;
+  box-shadow: var(--g-shadow-sheet) !important;
 }
 
-.liquid-glass-gradient::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-  z-index: 1;
+/* Material 3: popover (menus, tooltips; lightest) */
+.glass-popover,
+.liquid-glass,
+.liquid-glass-subtle,
+.liquid-glass-compact,
+.v-card.glass-popover,
+.v-card.liquid-glass,
+.v-card.liquid-glass-subtle,
+.v-card.liquid-glass-compact {
+  background: rgba(18, 21, 27, 0.85) !important;
+  backdrop-filter: blur(12px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+  border: 1px solid var(--g-hairline-2) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-menu) !important;
 }
 
-/* Additional Vuetify overrides for better compatibility */
-.v-card.liquid-glass .v-card__title,
-.v-card.liquid-glass-subtle .v-card__title,
-.v-card.liquid-glass-enhanced .v-card__title,
-.v-card.liquid-glass-compact .v-card__title {
-  background-color: transparent !important;
-}
-
-.v-card.liquid-glass .v-card__text,
-.v-card.liquid-glass-subtle .v-card__text,
-.v-card.liquid-glass-enhanced .v-card__text,
-.v-card.liquid-glass-compact .v-card__text {
-  background-color: transparent !important;
-}
-
-/* Force backdrop-filter support for liquid-glass cards only */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .v-card.liquid-glass:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
-  .theme--dark .v-card.liquid-glass:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
-    backdrop-filter: blur(20px) saturate(1.8) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  }
-}
-
-/* Fallback for browsers without backdrop-filter support for liquid-glass cards only */
+/* No-blur fallback: go opaque */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .v-card.liquid-glass:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
-  .theme--dark .v-card.liquid-glass:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
-    background-color: rgba(12, 14, 18, 0.85) !important;
+  .glass-chrome, .liquid-glass-nav-drawer,
+  .v-navigation-drawer.liquid-glass-nav-drawer { background: rgba(0, 0, 0, 0.92) !important; }
+  .glass-overlay, .liquid-glass-dialog,
+  .v-card.liquid-glass-dialog { background: rgba(12, 14, 18, 0.97) !important; }
+  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
+  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact { background: rgba(18, 21, 27, 0.97) !important; }
+}
+
+/* User preference: no transparency */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chrome, .liquid-glass-nav-drawer,
+  .glass-overlay, .liquid-glass-dialog,
+  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
+  .v-navigation-drawer.liquid-glass-nav-drawer,
+  .v-card.liquid-glass-dialog,
+  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact {
+    background: var(--g-overlay) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
 
-/* Remove only the border element from navigation drawer */
+/* Increased-contrast preference: solid surfaces, strongest hairline */
+@media (prefers-contrast: more) {
+  .glass-chrome, .liquid-glass-nav-drawer,
+  .glass-overlay, .liquid-glass-dialog,
+  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
+  .v-navigation-drawer.liquid-glass-nav-drawer,
+  .v-card.liquid-glass-dialog,
+  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact {
+    background: var(--g-overlay) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: var(--g-hairline-3) !important;
+  }
+}
+
+/* Vuetify paints its own 1px drawer border in a child element. The chrome
+   material owns that edge, so hide it or the drawer renders two borders. */
 .v-navigation-drawer__border,
 .liquid-glass-nav-drawer .v-navigation-drawer__border,
 .theme--dark .v-navigation-drawer__border,
 .theme--dark .liquid-glass-nav-drawer .v-navigation-drawer__border {
   display: none !important;
-  opacity: 0 !important;
-  width: 0 !important;
-  height: 0 !important;
-  border: none !important;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .liquid-glass,
-  .liquid-glass-subtle,
-  .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card).liquid-glass,
-  .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card).liquid-glass-subtle {
-    border-radius: 8px !important;
-  }
-}
-
-/* Allow scrollable liquid-glass cards */
-.v-card.liquid-glass.detail-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
-  overflow: auto !important;
 }

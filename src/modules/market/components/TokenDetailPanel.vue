@@ -141,13 +141,12 @@
         <!-- Swap tab -->
         <transition name="tab-fade" mode="out-in">
         <div v-if="rightTab === 'swap'" key="swap">
-          <!-- QuickSwap (Cardano DEX only) -->
-          <QuickSwap
+          <!-- GeroSwapEmbed (Cardano DEX only) -->
+          <GeroSwapEmbed
             v-if="!isApex && token.unit !== 'lovelace'"
-            :token-unit="token.unit"
-            :token-ticker="token.ticker"
-            :token-decimals="token.decimals"
-            @swap-complete="onSwapComplete"
+            :token-out="token.unit"
+            context="dialog"
+            @swap-submitted="onSwapComplete"
           />
           <div v-else class="text-center py-4 text--secondary text-caption">
             {{ $t('market.na') }}
@@ -251,7 +250,7 @@ import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/mo
 import TechnicalAnalysisChart from './TechnicalAnalysisChart.vue';
 import OrderBookTable from './OrderBookTable.vue';
 import DepthChart from './DepthChart.vue';
-import QuickSwap from './QuickSwap.vue';
+import GeroSwapEmbed from '@/modules/swap/components/GeroSwapEmbed.vue';
 import RecentTrades from './RecentTrades.vue';
 import BuySellVolume from './BuySellVolume.vue';
 import CrossDexPrices from './CrossDexPrices.vue';

@@ -1,6 +1,11 @@
+import '../shared/styles/tokens.css';
+import '@fontsource-variable/inter';            // family: 'Inter Variable', wght axis 100-900
+import '@fontsource/jetbrains-mono/400.css';    // family: 'JetBrains Mono'
+import '@fontsource/jetbrains-mono/500.css';
 import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/dist/vuetify.min.css';
 import '../shared/styles/liquid-glass.css';
+import '../shared/styles/baseline.css';
 
 import Vue from 'vue';
 import VueRouter from 'vue-router';
@@ -64,6 +69,7 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
   });
 
   Vue.config.productionTip = false;
+  Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
   Vue.use(FlagIcon);
   Vue.use(VueShowdown, {
     flavor: 'github',

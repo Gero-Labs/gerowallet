@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog
+  <BaseDialog :width="850"
     icon="mdi-cog"
     :isOpen="isOpen"
     @close="$emit('close')"

@@ -137,8 +137,5 @@ const handleProgress = (progress: number) => {
 </script>
 
 <style scoped>
-.geroButton {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  color: black;
-}
+/* .geroButton lives in src/shared/styles/baseline.css (one definition, chain-aware). */
 </style>

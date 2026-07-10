@@ -162,7 +162,7 @@ import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { realFiStore } from '@/stores/realFiStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { priceStore } from '@/stores/priceStore';
@@ -193,7 +193,7 @@ const { t } = useTranslation();
 // Store references
 const { price } = toRefs(networkStore);
 const { loggedWallet, tokens } = toRefs(walletStore);
-const { dexHunterTokens } = toRefs(dexHunterStore);
+const { tokens: tokenMetadata } = toRefs(tokenMetadataStore);
 const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
 
@@ -328,11 +328,11 @@ const tokensList = computed(() => {
       token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
     } else {
       // DexHunter prices are in ADA, convert to USD first, then to user's selected currency
-      const priceInAda = dexHunterTokens.value[token.unit]?.price || 0;
+      const priceInAda = tokenMetadata.value[token.unit]?.price || 0;
       const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
       const priceInUsd = priceInAda * adaPriceUsd;
       token.price = convertFiat(priceInUsd);
-      token.mcap = convertFiat(dexHunterTokens.value[token.unit]?.mcap);
+      token.mcap = convertFiat(tokenMetadata.value[token.unit]?.mcap);
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
       );
@@ -419,7 +419,7 @@ const selectedToken = ref<MarketToken | null>(null);
 const handleTokenRowClick = (row: any) => {
   const adaPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
   const isAda = row.policy_id === '' && (row.name === 'Cardano' || row.unit === 'lovelace');
-  const dexToken = dexHunterTokens.value[row.unit];
+  const dexToken = tokenMetadata.value[row.unit];
   const priceInAda = isAda ? 1 : (dexToken?.price || 0);
 
   selectedToken.value = {

@@ -8,7 +8,7 @@
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
-                mdi-information-outlƒine
+                mdi-information-outline
               </v-icon>
             </template>
             <div>
@@ -48,7 +48,7 @@
                 @input="spendingPassword = $event"
                 outlined
                 dense
-                hide-details
+                hide-details="auto"
                 :placeholder="t('navigation.typeYourSpendingPassword')"
                 :rules="[rules.required()]"
                 required
@@ -109,7 +109,7 @@
               </v-alert>
             </v-col>
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
+              <v-btn block outlined color="error" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>

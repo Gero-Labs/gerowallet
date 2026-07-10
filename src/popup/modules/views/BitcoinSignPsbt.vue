@@ -32,7 +32,7 @@
                 ref="passwordField"
                 :value="spendingPassword"
                 @input="spendingPassword = $event"
-                dense outlined hide-details
+                dense outlined hide-details="auto"
                 :placeholder="$t('navigation.typeYourSpendingPassword')"
                 :label="$t('wallet.spendingPassword')"
                 :rules="[rules.required()]"
@@ -78,7 +78,7 @@
 
             <!-- Decline / Sign -->
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline" :disabled="loading">
+              <v-btn block outlined color="error" style="text-transform: capitalize;" @click="decline" :disabled="loading">
                 {{ $t('common.decline') }}
               </v-btn>
             </v-col>
