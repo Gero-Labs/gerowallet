@@ -76,7 +76,7 @@
               </v-alert>
             </v-col>
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline" :disabled="loading">
+              <v-btn block outlined color="error" style="text-transform: capitalize;" @click="decline" :disabled="loading">
                 Decline
               </v-btn>
             </v-col>
