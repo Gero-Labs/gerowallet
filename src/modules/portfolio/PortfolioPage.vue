@@ -144,7 +144,7 @@
                       v-bind="attrs"
                       v-on="on"
                     >
-                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }" :color="activeView === chip.value ? 'black' : 'var(--g-accent)'">{{ chip.icon }}</v-icon>
+                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }" :color="activeView === chip.value ? 'var(--g-accent)' : 'var(--g-text-2)'">{{ chip.icon }}</v-icon>
                       <template v-if="!compactChips">{{ chip.label }}</template>
                       <span v-if="chip.value === 'watchlist' && watchlistCount > 0" class="ml-1" style="font-size: 11px; opacity: 0.7;">({{ watchlistCount }})</span>
                     </v-chip>
