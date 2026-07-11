@@ -406,7 +406,7 @@ export default {
     // Midnight Preview (testnet)
     {
       icon: midnightLogo,
-      iconColor: 'purple',
+      iconColor: 'grey',
       title: 'Midnight Preview',
       blockchain: Blockchain.MIDNIGHT,
       network: Network.PREVIEW,
@@ -459,7 +459,7 @@ export default {
     // Midnight Preprod (testnet)
     {
       icon: midnightLogo,
-      iconColor: 'purple',
+      iconColor: 'grey',
       title: 'Midnight Preprod',
       blockchain: Blockchain.MIDNIGHT,
       network: Network.PREPROD,
@@ -508,7 +508,7 @@ export default {
     // Midnight Mainnet
     {
       icon: midnightLogo,
-      iconColor: 'purple',
+      iconColor: 'grey',
       title: 'Midnight Mainnet',
       blockchain: Blockchain.MIDNIGHT,
       network: Network.MAINNET,

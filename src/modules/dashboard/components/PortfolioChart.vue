@@ -128,34 +128,6 @@
           </template>
         </div>
 
-        <v-divider class="my-1" style="opacity: 0.15" />
-
-        <!-- Staking Rewards -->
-        <div class="staking-rewards-section">
-          <template v-if="account && account.pool_id">
-            <div
-              class="pnl-item staking-reward-row"
-              :class="{ clickable: hasWithdrawableRewards }"
-              @click="hasWithdrawableRewards && $emit('withdraw-rewards')"
-            >
-              <span class="pnl-label">{{ $t('dashboard.stakingRewards') }}</span>
-              <span
-                class="pnl-value"
-                :style="{ color: hasWithdrawableRewards ? '#47CD89' : 'rgba(255,255,255,0.35)' }"
-              >
-                {{ hideBalances ? '••••••' : (hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' ₳' : '—') }}
-              </span>
-            </div>
-          </template>
-          <template v-else>
-            <div class="pnl-item">
-              <span class="pnl-label">{{ $t('dashboard.stakingRewards') }}</span>
-              <a class="stake-gero-link" @click.prevent="$emit('delegate-gero')">
-                {{ $t('dashboard.stakeWithGero') }}
-              </a>
-            </div>
-          </template>
-        </div>
       </div>
     </div>
 
@@ -377,16 +349,6 @@ const emit = defineEmits<{
   (e: 'withdraw-rewards'): void;
   (e: 'delegate-gero'): void;
 }>();
-
-// Staking rewards
-const hasWithdrawableRewards = computed(() => {
-  return account.value && Number(account.value.withdrawable_amount) > 0;
-});
-
-const formatRewards = (lovelace: string | number) => {
-  const ada = Number(lovelace) / 1_000_000;
-  return ada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
 
 // Refs
 const chartContainerRef = ref<HTMLElement | null>(null);
@@ -1253,32 +1215,6 @@ onBeforeUnmount(() => {
 @keyframes pnlShimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
-}
-
-.staking-reward-row.clickable {
-  cursor: pointer;
-  border-radius: 4px;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  transition: background var(--g-dur-fast) ease;
-}
-
-.staking-reward-row.clickable:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.stake-gero-link {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--v-primary-base, #47CD89);
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.stake-gero-link:hover {
-  text-decoration: underline;
-  opacity: 0.85;
 }
 
 .mode-segmented-toggle {
