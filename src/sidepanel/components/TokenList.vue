@@ -1,7 +1,7 @@
 <template>
   <div class="token-list">
-    <!-- ADA pinned at top -->
-    <div class="token-item ada-row" @click="handleSelect(adaToken)">
+    <!-- ADA pinned at top (hidden on a truly empty wallet) -->
+    <div v-if="!isEmpty" class="token-item ada-row" @click="handleSelect(adaToken)">
       <div class="token-left">
         <v-avatar size="36" class="token-avatar ada-avatar">
           <img :src="adaLogo" alt="ADA" />
@@ -81,9 +81,12 @@
       </div>
     </template>
 
-    <!-- No empty state: ADA is always pinned above, so the token list is never
-         truly empty. Showing "No tokens yet" alongside the ADA row read as a
-         contradiction on a fresh/empty wallet. -->
+    <!-- Empty state: only a truly empty wallet (0 ADA, no tokens) reaches here,
+         so the ADA row is hidden and this stands alone — no contradiction. -->
+    <div v-if="isEmpty" class="empty-state">
+      <v-icon size="40" color="#333">mdi-wallet-outline</v-icon>
+      <div class="text-body-2 grey--text mt-2">{{ $t('miniGero.noTokens') }}</div>
+    </div>
   </div>
 </template>
 
@@ -92,7 +95,7 @@ import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { resolveIcon, applyTokenImageOverride } from '@/shared/utils/resolver';
-import { getBalance } from '@/chrome/serialization';
+import { useAdaLovelace } from '../composables/useAdaLovelace';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import assetsUtil from '@/utils/assets';
 
@@ -102,22 +105,14 @@ const emit = defineEmits<{
   (e: 'select', token: any): void;
 }>();
 
-const { tokens: rawTokens, utxos, collateral } = toRefs(walletStore);
+const { tokens: rawTokens } = toRefs(walletStore);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 const { allTokens: marketTokens, adaData } = useMarketData();
 
 const adaPrice = computed(() => adaData.value?.priceUsd || priceStore.adaUsd?.lastPrice || 0);
 
-// ADA balance from UTXOs (in lovelace)
-const adaBalanceLovelace = computed(() => {
-  if (!utxos.value || utxos.value.length === 0) return 0;
-  try {
-    const balance = getBalance(utxos.value, collateral.value);
-    return Number(balance.coin().toString());
-  } catch {
-    return 0;
-  }
-});
+// ADA balance from UTXOs (in lovelace) — shared composable
+const { adaLovelace: adaBalanceLovelace } = useAdaLovelace();
 
 const adaBalanceAda = computed(() => adaBalanceLovelace.value / 1_000_000);
 
@@ -174,6 +169,10 @@ const filteredTokens = computed(() => {
       return getTokenFiatValue(b) - getTokenFiatValue(a);
     });
 });
+
+// A truly empty wallet holds no ADA and no other tokens. In that case we hide
+// the pinned ADA-0 row and show a single empty state instead of a "0" holding.
+const isEmpty = computed(() => adaBalanceLovelace.value === 0 && filteredTokens.value.length === 0);
 
 function getTokenImg(token: any): string {
   const name = token.metadata?.ticker || token.name || token.metadata?.name;
@@ -329,5 +328,12 @@ function onImgError(event: Event) {
 
 .red-text {
   color: #F97066 !important;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 16px;
 }
 </style>
