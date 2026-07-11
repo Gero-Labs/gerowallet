@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :is-open="value"
-    :title="(isPrfWallet || isMpcWallet) ? t('security.lockSettingsOnly') : t('security.lockSettings')"
+    :title="isPrfWallet ? t('security.lockSettingsOnly') : t('security.lockSettings')"
     :subtitle="dialogSubtitle"
     :width="600"
     icon="mdi-shield-lock-outline"
@@ -9,8 +9,8 @@
     :min-height="300"
   >
     <v-card-text class="px-3 py-0 lock-settings-dialog">
-      <!-- Unlock Method Section (hidden for MPC — unlock is fixed to Google + creation secret) -->
-      <v-card v-if="!isMpcWallet" class="transparent" flat>
+      <!-- Unlock Method Section -->
+      <v-card class="transparent" flat>
         <v-card-title class="justify-center pt-0">
           <v-icon color="primary" class="mr-1" small>mdi-lock-outline</v-icon>
           <span class="subtitle-1 font-weight-bold">{{ $t('security.unlockMethod') }}</span>
@@ -19,7 +19,37 @@
           {{ $t('security.selectHowToUnlock') }}
         </v-card-subtitle>
         <v-card-text class="pa-0">
-          <v-list dense class="pa-0 transparent" nav>
+          <v-list v-if="isMpcWallet" dense class="pa-0 transparent" nav>
+            <!-- None -->
+            <v-list-item two-line @click="handleUnlockMethodSelect(null)" class="mb-0">
+              <v-list-item-avatar class="my-0"><v-icon>mdi-lock-off-outline</v-icon></v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title>{{ $t('security.none') }}</v-list-item-title>
+                <v-list-item-subtitle>{{ $t('security.mpcLockNoneDesc') }}</v-list-item-subtitle>
+              </v-list-item-content>
+              <v-list-item-icon v-if="selectedUnlockMethod === null" style="align-self: center;">
+                <v-icon color="primary">mdi-check-circle</v-icon>
+              </v-list-item-icon>
+            </v-list-item>
+
+            <v-divider class="mx-1" />
+
+            <!-- Device secret: passkey OR spending password, per how the wallet was created -->
+            <v-list-item two-line @click="handleMpcLockSelect()" class="mb-0">
+              <v-list-item-avatar class="my-0">
+                <v-icon>{{ isMpcPasskeyWallet ? 'mdi-fingerprint' : 'mdi-form-textbox-password' }}</v-icon>
+              </v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title>{{ isMpcPasskeyWallet ? $t('security.passkey') : $t('security.spendingPassword') }}</v-list-item-title>
+                <v-list-item-subtitle>{{ isMpcPasskeyWallet ? $t('security.mpcLockPasskeyDesc') : $t('security.mpcLockPasswordDesc') }}</v-list-item-subtitle>
+              </v-list-item-content>
+              <v-list-item-icon v-if="selectedUnlockMethod !== null" style="align-self: center;">
+                <v-icon color="primary">mdi-check-circle</v-icon>
+              </v-list-item-icon>
+            </v-list-item>
+          </v-list>
+
+          <v-list v-else dense class="pa-0 transparent" nav>
             <!-- None -->
             <v-list-item two-line @click="handleUnlockMethodSelect(null)" class="mb-0">
               <v-list-item-avatar class="my-0">
@@ -93,10 +123,10 @@
         </v-card-text>
       </v-card>
 
-      <v-divider class="my-5 mx-1" v-if="!isMpcWallet" />
+      <v-divider class="my-5 mx-1" />
 
-      <!-- Auto-Lock Timer Section (always enabled for MPC — it locks then requires Google re-unlock) -->
-      <v-card class="transparent" flat :disabled="selectedUnlockMethod === null && !isMpcWallet">
+      <!-- Auto-Lock Timer Section -->
+      <v-card class="transparent" flat :disabled="selectedUnlockMethod === null">
         <v-card-title class="justify-center pt-0">
           <v-icon color="primary" class="mr-1" small>mdi-timer-lock-outline</v-icon>
           <span class="subtitle-1 font-weight-bold">{{ $t('security.autoLockTimer') }}</span>
@@ -588,6 +618,15 @@ async function loadCurrentSettings() {
     passKeyAutoTrigger.value = false;
     passKeyAutoTriggerUnlock.value = false;
   }
+}
+
+// MPC wallets: the "device secret" lock method (passkey or spending password) is
+// whatever the wallet was created with — no setup dialog, just enable the lock by
+// persisting the corresponding unlockMethod flag. Unlock itself uses the MPC
+// device-secret branch in UnlockWalletDialog, not verifyUnlockCredentials.
+async function handleMpcLockSelect() {
+  errorMessage.value = '';
+  await saveUnlockMethod(isMpcPasskeyWallet.value ? 'passkey' : 'password');
 }
 
 async function handleUnlockMethodSelect(method: UnlockMethod) {
