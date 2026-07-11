@@ -2411,7 +2411,7 @@ export default {
   'security.mpcWrongGoogleAccount': 'Falsches Google-Konto - diese Wallet gehört zu einem anderen Konto.',
   'security.mpcSessionExpired': 'Sitzung abgelaufen - bitte erneut mit Google anmelden.',
   'security.passkey': 'Passkey',
-  'security.mpcLockNoneDesc': 'Keine Sperre — bleib angemeldet, bis du dich abmeldest',
+  'security.mpcLockNoneDesc': 'Keine Sperre - bleib angemeldet, bis du dich abmeldest',
   'security.mpcLockPasskeyDesc': 'Zum Entsperren deinen Passkey verlangen',
   'security.mpcLockPasswordDesc': 'Zum Entsperren dein Ausgabepasswort verlangen',
   'security.usePassKeyForPasswordAutofill': 'PassKey für automatisches Ausfüllen des Passworts verwenden',
