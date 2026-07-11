@@ -26,6 +26,7 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
@@ -78,17 +79,15 @@ loadWallets().then(async () => {
         const db = await getDb(walletStore.loggedWallet.id);
         const configTable = db.table('config');
         const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-        // MPC wallets have no unlock-method row but are NOT trapped when locked
-        // (they re-unlock with Google + passkey/password), so don't clear their lock.
-        if (!unlockMethodConfig?.value && walletStore.loggedWallet?.encryptionMethod !== 'mpc') {
+        // Clear a stray lock when no unlock method is configured (incl. MPC set to
+        // None) so the user is never trapped on a lock screen they can't dismiss.
+        if (!unlockMethodConfig?.value) {
           WalletStore.setLocked(false);
           console.log('🔓 Cleared stale lock — no unlock method configured');
         }
       } catch (e) {
         console.warn('Failed to check unlock method for stale lock:', e);
-        if (walletStore.loggedWallet?.encryptionMethod !== 'mpc') {
-          WalletStore.setLocked(false);
-        }
+        WalletStore.setLocked(false);
       }
     }
 
@@ -343,40 +342,22 @@ async function checkAutoLock(): Promise<void> {
     const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
     const autoLockMinutes = autoLockConfig?.value || 0;
 
-    // If auto-lock is disabled (0), don't lock
-    if (autoLockMinutes === 0) {
-      return;
-    }
-
-    // Get unlock method - CRITICAL: Don't lock if no unlock method is configured
+    // Lock method: a wallet auto-locks only when one is configured. MPC wallets
+    // set unlockMethod to 'passkey'/'password' when their session lock is enabled
+    // and leave it null for "None" — same rule as Normal wallets, no special case.
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-    const unlockMethod = unlockMethodConfig?.value;
+    const hasUnlockMethod = !!unlockMethodConfig?.value;
 
-    // If no unlock method is set, skip auto-lock (user won't be able to unlock!).
-    // MPC "Sign in with Google" wallets are exempt: they have no local unlock-method
-    // row but can ALWAYS be re-unlocked (Google + passkey/spending password), so
-    // they must still honor the auto-lock timer.
-    if (!unlockMethod && wallet.encryptionMethod !== 'mpc') {
-      return;
-    }
-
-    // Get last activity timestamp
+    // Last activity: absent means the wallet just logged in and the tracker hasn't
+    // run yet — skip this tick.
     const lastActivityConfig = await configTable.where({ key: 'lastActivityTimestamp' }).first();
-
-    // If lastActivityTimestamp doesn't exist, it means the wallet was just logged in
-    // and the activity tracker hasn't run yet. Skip the check.
     if (!lastActivityConfig || !lastActivityConfig.value) {
       return;
     }
 
-    const lastActivityTimestamp = lastActivityConfig.value;
+    const inactiveMinutes = (Date.now() - lastActivityConfig.value) / (1000 * 60);
 
-    // Calculate time since last activity
-    const now = Date.now();
-    const inactiveMinutes = (now - lastActivityTimestamp) / (1000 * 60);
-
-    // Lock wallet if inactive for longer than configured time
-    if (inactiveMinutes >= autoLockMinutes) {
+    if (shouldAutoLock({ autoLockMinutes, hasUnlockMethod, inactiveMinutes })) {
       await walletManager.lock();
     }
   } catch (error) {
