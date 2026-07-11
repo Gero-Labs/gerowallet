@@ -268,6 +268,15 @@ export default defineConfig(({ command }) => {
           assetFileNames: 'assets/[name][extname]',
           compact: false, // Disable for faster builds
           minifyInternalExports: false, // Disable for faster builds
+          // Pull the network layer into clearly-named chunks so DevTools XHR
+          // stacks read "vendor-axios" / "market-api" instead of attributing
+          // requests to whatever unrelated module a shared chunk was named after
+          // (e.g. activityTracker.service.js).
+          manualChunks(id: string) {
+            if (id.includes('node_modules/axios')) return 'vendor-axios';
+            if (id.includes('/api/market-api')) return 'market-api';
+            return undefined;
+          },
         },
         plugins: [
           copy({
