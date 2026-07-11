@@ -281,14 +281,11 @@
                 :key="index"
                 class="px-2 py-2"
               >
-                <v-hover v-slot="{ hover }">
-                  <v-card
-                    flat
-                    outlined
-                    :color="hover ? '#FFFFFF' : '#84CAFF'"
-                    class="pool-card fill-height"
-                    @click="delegate(pool)"
-                  >
+                <v-card
+                  flat
+                  class="pool-card fill-height"
+                  @click="delegate(pool)"
+                >
                     <v-list-item v-if="pool">
                       <v-list-item-content class="pb-0">
                         <v-list-item-title>
@@ -393,7 +390,7 @@
                           <span class="pool-card-label">{{ $t('staking.pledge') }}</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-chip x-small color="#085D3A" class="pool-pledge-chip" v-if="loggedWallet">
+                          <v-chip x-small class="pool-pledge-chip" v-if="loggedWallet">
                             {{
                               filters.toCurrency(
                                 pool.pledge,
@@ -433,7 +430,6 @@
                       </v-row>
                     </v-card-text>
                   </v-card>
-                </v-hover>
               </v-col>
             </v-row>
           </v-card-text>
@@ -768,24 +764,46 @@ onBeforeUnmount(() => {
   color: var(--g-text-1);
 }
 
-/* Pool cards styles */
+/* Pool cards: a raised card with a hairline that lifts to the chain accent on
+   hover. The label/value tone gap is the hierarchy (both were text-1 before). */
 .pool-card {
   border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-1) !important;
+  transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease,
+    box-shadow var(--g-dur-fast) ease;
+  cursor: pointer;
+}
+
+.pool-card:hover {
+  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent) !important;
+  transform: translateY(-2px);
+  box-shadow: var(--g-shadow-menu);
+}
+
+.pool-card .v-list-item__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--g-text-1);
 }
 
 .pool-card-label {
-  font-size: 14px;
-  color: var(--g-text-1);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-text-3);
 }
 
 .pool-card-value {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--g-text-1);
+  font-variant-numeric: tabular-nums;
 }
 
 .pool-pledge-chip {
-  border: 1px solid var(--g-success);
-  color: var(--g-success);
+  background: var(--g-success-fill) !important;
+  border: 1px solid var(--g-success-line);
+  color: var(--g-success) !important;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Pagination styles */
