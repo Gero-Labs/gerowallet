@@ -5,7 +5,6 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="buyButton"
               :class="['expandable-button', 'buy-button', { 'icon-only': compact }]"
               color="warning"
               height="28"
@@ -31,7 +30,6 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="sendButton"
               :class="['expandable-button', 'send-button', { 'icon-only': compact }]"
               color="primary"
               height="28"
@@ -58,7 +56,6 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="receiveButton"
               :class="['expandable-button', 'receive-button', { 'icon-only': compact }]"
               color="success"
               height="28"
@@ -84,7 +81,6 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="swapButton"
               :class="['expandable-button', 'swap-button', { 'icon-only': compact }]"
               color="error"
               height="28"
@@ -115,7 +111,6 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="perpetualsButton"
               :class="['expandable-button', 'perpetuals-button', { 'icon-only': compact }]"
               color="info"
               height="28"
@@ -161,7 +156,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { toRefs, computed, ref } from 'vue';
+import { toRefs, computed } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
@@ -176,7 +171,7 @@ import { priceStore } from '@/stores/priceStore';
 import { Blockchain } from '@/models/types';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 
-const props = defineProps<{
+defineProps<{
   compact?: boolean;
 }>();
 
@@ -191,14 +186,6 @@ const dialogs = {
   BUY: 'BUY',
   PERPETUALS: 'PERPETUALS',
 };
-
-
-// Button refs
-const buyButton = ref(null);
-const sendButton = ref(null);
-const receiveButton = ref(null);
-const swapButton = ref(null);
-const perpetualsButton = ref(null);
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 
@@ -234,9 +221,26 @@ const isPerpetualsDisabled = computed(() => {
   }
   return true;
 })
-
-
-
+</script>
+<style scoped>
+.quick-actions-container {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  height: 44px;
+  min-width: 240px;
+  width: max-content;
+  border: 1px solid var(--g-hairline-3);
+  background-color: transparent!important;
+  border-radius: var(--g-r-card);
+  padding: 8px;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
 
 .quick-actions-container.compact {
   padding: 0;
