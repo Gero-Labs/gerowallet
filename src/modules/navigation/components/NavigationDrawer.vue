@@ -11,7 +11,7 @@
     <!-- Prepend slot -->
     <template #prepend>
       <v-list-item class="text-center">
-        <v-list-item-content class="py-2">
+        <v-list-item-content class="pb-2" style="padding-top: 22px;">
           <v-list-item-title>
             <img
               :src="isApex ? assets.geroDashboardApex : assets.geroNoText"
