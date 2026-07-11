@@ -498,12 +498,19 @@ onMounted(async () => {
   border-radius: var(--g-r-control);
 }
 
+/* Field labels are the quiet tier; values are the bright answer. Everything
+   was --g-text-1 before, which is why the card read as flat. */
 .staking-label {
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--g-text-3);
 }
 
 .staking-value {
   color: var(--g-text-1);
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
 }
 
 .staking-detail-col {
@@ -513,17 +520,21 @@ onMounted(async () => {
 
 .staking-detail-value {
   color: var(--g-text-1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .staking-fees-text {
   font-size: 14px;
+  font-weight: 600;
   color: var(--g-text-1);
+  font-variant-numeric: tabular-nums;
 }
 
 .staking-saturation-details {
   font-size: 11px;
   text-align-last: justify;
-  color: var(--g-text-1);
+  color: var(--g-text-2);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -532,13 +543,15 @@ onMounted(async () => {
 .staking-stake-change-up {
   display: inline-flex;
   font-size: 11px;
-  color: var(--g-text-1);
+  font-weight: 600;
+  color: var(--g-success);
 }
 
 .staking-stake-change-down {
   display: inline-flex;
   font-size: 11px;
-  color: var(--g-text-1);
+  font-weight: 600;
+  color: var(--g-error);
 }
 
 .staking-stake-arrow {

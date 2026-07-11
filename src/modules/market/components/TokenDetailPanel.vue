@@ -58,7 +58,7 @@
         </div>
 
         <!-- Chart Section -->
-        <div class="pb-2">
+        <div class="pb-2 chart-shell">
           <!-- Timeframe + Indicators bar -->
           <div class="d-flex align-center mb-1" style="gap: 6px">
             <div class="timeframe-bar">
@@ -142,12 +142,13 @@
         <transition name="tab-fade" mode="out-in">
         <div v-if="rightTab === 'swap'" key="swap">
           <!-- GeroSwapEmbed (Cardano DEX only) -->
-          <GeroSwapEmbed
-            v-if="!isApex && token.unit !== 'lovelace'"
-            :token-out="token.unit"
-            context="dialog"
-            @swap-submitted="onSwapComplete"
-          />
+          <div v-if="!isApex && token.unit !== 'lovelace'" class="swap-shell">
+            <GeroSwapEmbed
+              :token-out="token.unit"
+              context="dialog"
+              @swap-submitted="onSwapComplete"
+            />
+          </div>
           <div v-else class="text-center py-4 text--secondary text-caption">
             {{ $t('market.na') }}
           </div>
@@ -523,12 +524,28 @@ watch(selectedCurrency, () => {
   /* 70% of content area (viewport minus 270px nav drawer) */
   width: calc(70 * (100vw - 270px) / 100);
   z-index: var(--g-z-sticky);
-  background: var(--g-overlay) !important;
+  /* Darker surface so the chart / swap / info cards read as RAISED above the
+     drawer frame (they were all the same overlay tone = flat). */
+  background: var(--g-surface) !important;
   border-left: 1px solid var(--g-hairline-2) !important;
   border-radius: 0 var(--g-r-card) var(--g-r-card) 0;
   overflow: hidden;
   box-shadow: var(--g-shadow-sheet);
   animation: panelSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Raised card wrappers give the chart and the swap widget depth against the
+   darker drawer frame. */
+.chart-shell,
+.swap-shell {
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
+  padding: 10px;
+}
+
+.chart-shell {
+  margin-top: 4px;
 }
 
 @keyframes panelSlideIn {
