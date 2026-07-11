@@ -99,6 +99,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router/composables';
 import { walletStore } from '@/stores/walletStore';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
+import { useAdaLovelace } from '../composables/useAdaLovelace';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
@@ -110,6 +111,7 @@ import SwapSheet from '../components/flows/SwapSheet.vue';
 import BuySellSheet from '../components/flows/BuySellSheet.vue';
 const router = useRouter();
 const { getTokenByUnit } = useMarketData();
+const { adaLovelace } = useAdaLovelace();
 
 const showSend = ref(false);
 const showReceive = ref(false);
@@ -118,17 +120,23 @@ const showBuySell = ref(false);
 const showTokenDetail = ref(false);
 const selectedToken = ref<any>(null);
 
-const tokenCount = computed(() => {
+// Count verified, non-scam, non-ADA tokens.
+const ftCount = computed(() => {
   const tokens = walletStore.tokens;
-  if (!tokens) return 1; // ADA only
-  // Count verified, non-scam, non-ADA tokens + 1 for ADA
-  const ftCount = Object.values(tokens).filter((t: any) => {
+  if (!tokens) return 0;
+  return Object.values(tokens).filter((t: any) => {
     if (t.policy_id === '') return false;
     if (t.isScam) return false;
     if (!t.verified) return false;
     return true;
   }).length;
-  return ftCount + 1; // +1 for ADA
+});
+
+// Matches TokenList: a truly empty wallet (0 ADA, no tokens) shows no rows, so
+// the header count is 0 (hidden). Otherwise ADA is pinned → +1.
+const tokenCount = computed(() => {
+  if (adaLovelace.value === 0 && ftCount.value === 0) return 0;
+  return ftCount.value + 1; // +1 for ADA
 });
 
 function handleBuySell() {
