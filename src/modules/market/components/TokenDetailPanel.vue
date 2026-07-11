@@ -182,28 +182,28 @@
 
           <!-- P&L Section (if user holds this token) -->
           <div v-if="tokenPnl" class="pnl-section mt-3">
-            <span class="text-caption text--secondary font-weight-medium d-block mb-1">{{ $t('market.pnl') }}</span>
+            <span class="t-label d-block mb-2">{{ $t('market.pnl') }}</span>
             <v-simple-table dense class="transparent stats-table">
               <tbody>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.avgCostBasis') }}</td>
-                  <td class="text-right" style="font-size: 12px; padding: 4px 8px">{{ formatPnlValue(tokenPnl.avgCostBasisAda) }}</td>
+                  <td class="pnl-cell-label">{{ $t('market.avgCostBasis') }}</td>
+                  <td class="text-right pnl-cell-value g-num" style="color: var(--g-text-1)">{{ formatPnlValue(tokenPnl.avgCostBasisAda) }}</td>
                 </tr>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.unrealizedPnlDetail') }}</td>
-                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.unrealizedPnlAda >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
+                  <td class="pnl-cell-label">{{ $t('market.unrealizedPnlDetail') }}</td>
+                  <td class="text-right pnl-cell-value g-num" :style="{ color: tokenPnl.unrealizedPnlAda >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
                     {{ formatPnlSigned(tokenPnl.unrealizedPnlAda) }}
                   </td>
                 </tr>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.realizedPnlDetail') }}</td>
-                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.realizedPnlAda >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
+                  <td class="pnl-cell-label">{{ $t('market.realizedPnlDetail') }}</td>
+                  <td class="text-right pnl-cell-value g-num" :style="{ color: tokenPnl.realizedPnlAda >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
                     {{ formatPnlSigned(tokenPnl.realizedPnlAda) }}
                   </td>
                 </tr>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px; font-weight: 600">{{ $t('market.totalPnlDetail') }}</td>
-                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', fontWeight: '600', color: totalPnl >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
+                  <td class="pnl-cell-label pnl-cell-total">{{ $t('market.totalPnlDetail') }}</td>
+                  <td class="text-right pnl-cell-value pnl-cell-total g-num" :style="{ color: totalPnl >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
                     {{ formatPnlSigned(totalPnl) }}
                   </td>
                 </tr>
@@ -624,24 +624,33 @@ watch(selectedCurrency, () => {
 .info-item {
   display: flex;
   flex-direction: column;
-  padding: 6px 8px;
-  background: var(--g-hairline-1);
+  gap: 2px;
+  padding: 7px 9px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
-  transition: background 0.2s ease;
+  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 }
 
 .info-item:hover {
-  background: var(--g-hairline-1);
+  border-color: var(--g-hairline-2);
+  background: var(--g-overlay);
 }
 
+/* Label is the quiet tier; the value is the bright answer. The tone gap is the
+   hierarchy - without it the tile reads as one flat block of mid-grey. */
 .info-label {
   font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--g-text-3);
 }
 
 .info-value {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-text-1);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ═══ Policy row ═══ */
@@ -668,6 +677,25 @@ watch(selectedCurrency, () => {
 .pnl-section {
   border-top: 1px solid var(--g-hairline-1);
   padding-top: 12px;
+}
+
+/* Label muted, value bright/tabular - the same tone hierarchy as the info grid.
+   Scoped under .stats-table td so they beat Vuetify's cell padding on
+   specificity alone (no override flag needed). */
+.stats-table td.pnl-cell-label {
+  width: 40%;
+  font-size: 12px;
+  padding: 5px 8px;
+  color: var(--g-text-3);
+}
+.stats-table td.pnl-cell-value {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 8px;
+}
+.stats-table td.pnl-cell-total {
+  font-weight: 700;
+  color: var(--g-text-1);
 }
 
 .stats-table >>> td {
