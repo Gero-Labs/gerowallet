@@ -509,8 +509,28 @@ onMounted(async () => {
 
 .staking-value {
   color: var(--g-text-1);
-  font-weight: 620;
+  font-size: 16px;
+  font-weight: 680;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin: 3px 0 2px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Detail labels (Pool ID / ROS / Fees / Saturation) on the type-ramp label
+   tier so the values below them read as the answer. */
+.staking-left-card h5,
+.staking-detail-col h5 {
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--g-text-3);
+  margin-bottom: 2px;
+}
+
+.staking-detail-value {
+  font-size: 13px;
 }
 
 .staking-detail-col {
