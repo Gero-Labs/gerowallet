@@ -931,6 +931,16 @@ watch(
   border-radius: var(--g-r-control) !important;
 }
 
+/* Selected chip: cyan-accented (tint + hairline) so the active tab clearly
+   reads as the chain accent. The geroButton gradient doesn't apply to a v-chip
+   (it rendered a dull grey), so we tint it here instead. The icon stays
+   var(--g-accent) via its :color prop; the label stays readable white. */
+.filter-chip-bar .v-chip.geroButton {
+  background: color-mix(in srgb, var(--g-accent) 16%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 45%, transparent) !important;
+  color: var(--g-text-1) !important;
+}
+
 /* ── Visible header search ────────────────────────────────────────────────────── */
 
 .header-search {
