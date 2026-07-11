@@ -73,6 +73,13 @@ const metrics = {
   importantCount: matches(/!important/gi).length,
   lowAlphaText: matches(/(^|[^-a-z])color:\s*rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0?\.[0-5]/gim).length,
   transitionAll: matches(/transition:\s*all/gi).length,
+  // a11y floor (Task 25). Heuristics, ratcheted down as bare interactive
+  // elements become real controls and custom focus-removal is justified.
+  // clickableDivs: a div/span/li carrying @click is a control that should be a
+  // <button>/role=button + keyboard handler. outlineNone: every outline:none
+  // must be paired with a visible custom focus style (baseline owns the ring).
+  clickableDivs: matches(/<(?:div|span|li)\b[^>]*@click/gi).length,
+  outlineNone: matches(/outline:\s*none/gi).length,
   // trust-surface tripwires
   corruptedMdiNames: matches(/mdi-[a-z-]*[^\x00-\x7F][^"' ]*/gi).length, // e.g. mdi-information-outlƒine
   formatFnForks: matches(/(function|const)\s+(formatPrice|formatBalance|formatUsd)\b/g, formatForkFiles).length,

@@ -20,8 +20,8 @@
           class="queue-strip-row"
         >
           <span class="grey--text text-caption queue-strip-label">{{ queuedItemLabel(item) }}</span>
-          <v-btn icon x-small @click="rejectQueued(item.requestId)">
-            <v-icon size="14" color="rgba(255,255,255,0.4)">mdi-close</v-icon>
+          <v-btn icon x-small :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
+            <v-icon size="14" color="var(--g-text-3)">mdi-close</v-icon>
           </v-btn>
         </div>
       </div>
