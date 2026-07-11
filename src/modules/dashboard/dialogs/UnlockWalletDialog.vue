@@ -257,7 +257,10 @@
           </div>
       </div>
     </v-card-text>
-    <v-card-actions class="px-6 pb-6 pt-0">
+    <!-- "Logout Instead" only makes sense when a wallet is actually logged in
+         (post-login re-unlock). In the pre-login flow (opened from the wallet
+         picker to sign in) there is nothing to log out of. -->
+    <v-card-actions v-if="walletStore.loggedWallet" class="px-6 pb-6 pt-0">
       <v-btn
         block
         text
