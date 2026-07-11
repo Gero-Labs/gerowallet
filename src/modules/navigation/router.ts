@@ -37,6 +37,7 @@ const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue'
 const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
 const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
 const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
+const NexusPage = () => import('@/modules/nexus/NexusPage.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -77,6 +78,15 @@ const routes = [
     path: '/staking',
     name: 'staking',
     component: Staking,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/nexus',
+    name: 'nexus',
+    component: NexusPage,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,

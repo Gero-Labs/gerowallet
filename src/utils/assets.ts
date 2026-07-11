@@ -31,6 +31,7 @@ import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
 import geroDashboardHorizontal from '@/assets/svg/gero_dashboard_horizontal.svg'
 import geroNoText from '@/assets/svg/gero-notext.svg'
+import nexusLogo from '@/assets/svg/nexus.svg'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
 import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
 import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
@@ -179,6 +180,7 @@ export default {
   geroDashboard,
   geroDashboardHorizontal,
   geroNoText,
+  nexusLogo,
   barChart,
   coinsStacked,
   blog,
