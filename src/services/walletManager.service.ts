@@ -201,14 +201,12 @@ export class WalletManager {
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
-        // Defense-in-depth: drop any cached MPC root-key bytes on a wallet switch
-        // so one wallet's session key can never carry over to another. (A switch
-        // to a different wallet already routes through logout() above, which also
-        // clears the cache; this covers the fresh-login path too.)
-        mpcSessionCache.clearAll();
-        // A wallet switch must also drop the cached login share so one wallet's
-        // session can never enable a Google-free unlock of another.
-        await mpcLoginShareCache.clearAll();
+        // NOTE: do NOT clear mpcSessionCache / mpcLoginShareCache here. Login runs
+        // right AFTER UNLOCK_MPC_WALLET has populated them for THIS wallet, so
+        // clearing here would wipe the just-established session (breaking signing
+        // and forcing a fresh Google sign-in on the next unlock). Both caches are
+        // keyed by walletId and the OUTGOING wallet is cleared by logout() above
+        // on a switch, so there is no cross-wallet leakage to defend against here.
         TapToolsStore.clear();
         let walletBg: WalletBg
         if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
