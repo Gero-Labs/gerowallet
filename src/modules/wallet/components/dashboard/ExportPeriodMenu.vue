@@ -485,7 +485,7 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
   border-color: var(--g-accent) !important;
   color: var(--g-text-1) !important;
   background: var(--g-raised) !important;
-  transition: all 0.2s ease !important;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease !important;
   border-radius: var(--g-r-control) !important;
 
   &:hover {

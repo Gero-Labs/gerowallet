@@ -659,7 +659,7 @@ function truncateAddr(addr: string): string {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   white-space: nowrap;
 }
 

@@ -170,7 +170,7 @@ async function refreshBalance(): Promise<void> {
   border: 1px solid var(--g-hairline-3);
   border-radius: var(--g-r-sheet);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  transition: box-shadow var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
   overflow: hidden;
 }
 
@@ -299,7 +299,7 @@ async function refreshBalance(): Promise<void> {
   align-items: center;
   justify-content: center;
   color: var(--g-text-3);
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease;
 }
 
 .icon-btn:hover {
@@ -480,7 +480,7 @@ async function refreshBalance(): Promise<void> {
   padding: 5px;
   display: flex;
   align-items: center;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
 }
 
 .copy-action:hover {

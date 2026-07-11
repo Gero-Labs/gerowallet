@@ -448,7 +448,7 @@ onMounted(async () => {
 .compact-card {
   height: 160px;
   border-radius: var(--g-r-control);
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease, box-shadow var(--g-dur-base) ease;
 }
 
 .refresh-badge {
@@ -462,7 +462,7 @@ onMounted(async () => {
   background-color: var(--g-raised);
   border-radius: 50%;
   padding: 4px;
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease;
 }
 
 .refresh-icon:hover {
@@ -521,7 +521,7 @@ onMounted(async () => {
 .compact-item {
   padding: 4px 6px;
   border-radius: var(--g-r-control);
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease, box-shadow var(--g-dur-base) ease;
   margin-bottom: 1px;
 }
 

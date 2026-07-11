@@ -605,7 +605,7 @@ onBeforeUnmount(() => {
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -627,7 +627,7 @@ onBeforeUnmount(() => {
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -651,7 +651,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   /* Fade to black at the bottom so the holdings table doesn't fight the bg. */
   mask-image: linear-gradient(
@@ -691,7 +691,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -842,7 +842,7 @@ div.v-toolbar__content {
   border: 1px solid rgba(130, 180, 255, 0.25);
   cursor: pointer;
   min-width: 180px;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  transition: border-color var(--g-dur-base), background var(--g-dur-base), box-shadow var(--g-dur-base);
 }
 .nav-search-field:hover {
   background: rgba(130, 180, 255, 0.14);
@@ -892,7 +892,7 @@ div.v-toolbar__content {
   -webkit-backdrop-filter: blur(10px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 12px !important;
-  transition: all 0.3s ease !important;
+  transition: border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease !important;
   cursor: pointer !important;
   overflow: hidden !important;
 }

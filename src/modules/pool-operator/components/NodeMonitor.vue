@@ -504,7 +504,7 @@ watch(() => poolOperatorStore.nodes.length, (len) => {
 
 .node-card {
   padding: 14px;
-  transition: border-color 0.2s;
+  transition: border-color var(--g-dur-base);
 }
 
 .node-card:hover { border-color: var(--g-hairline-2) !important; }
@@ -647,7 +647,7 @@ watch(() => poolOperatorStore.nodes.length, (len) => {
   height: 100%;
   background: var(--g-accent);
   border-radius: 2px;
-  transition: width 0.6s ease;
+  transition: width var(--g-dur-slow) ease;
 }
 
 /* KES Warning */
@@ -684,7 +684,7 @@ watch(() => poolOperatorStore.nodes.length, (len) => {
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: color var(--g-dur-fast), background-color var(--g-dur-fast), border-color var(--g-dur-fast);
   font-size: 12px;
   color: var(--g-text-3);
 }

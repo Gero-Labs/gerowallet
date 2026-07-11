@@ -911,7 +911,7 @@ onMounted(() => refresh());
   text-transform: none !important;
   padding: 0 20px !important;
   height: 40px !important;
-  transition: transform 0.15s ease !important;
+  transition: transform var(--g-dur-fast) ease !important;
 }
 
 .stake-cta:hover {
@@ -969,7 +969,7 @@ onMounted(() => refresh());
   font-size: 11px !important;
   cursor: help;
   opacity: 0.6;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .hstat-info:hover { opacity: 1; }
@@ -1019,7 +1019,7 @@ onMounted(() => refresh());
 .pitem-info {
   font-size: 11px !important;
   cursor: help;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .pitem-val {
@@ -1085,7 +1085,7 @@ onMounted(() => refresh());
   cursor: pointer;
   color: var(--g-text-3);
   background: transparent;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   user-select: none;
 }
 
@@ -1120,7 +1120,7 @@ onMounted(() => refresh());
   opacity: 0.3;
   cursor: help;
   border-bottom: 1px dashed var(--g-hairline-3);
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .pcol-label:hover { opacity: 0.6; }
@@ -1197,7 +1197,7 @@ onMounted(() => refresh());
   cursor: pointer;
   border-radius: var(--g-r-control) !important;
   border: 1px solid var(--bab-border) !important;
-  transition: border-color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+  transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease, box-shadow var(--g-dur-fast) ease;
   animation: fadeSlideIn 0.3s ease both;
 }
 
@@ -1275,7 +1275,7 @@ onMounted(() => refresh());
 
 .provider-chevron {
   color: rgba(247, 147, 26, 0.35) !important;
-  transition: transform 0.22s ease, opacity 0.15s ease;
+  transition: transform var(--g-dur-base) ease, opacity var(--g-dur-fast) ease;
   flex-shrink: 0;
 }
 
@@ -1334,7 +1334,7 @@ onMounted(() => refresh());
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .provider-link:hover { opacity: 1; text-decoration: underline; }

@@ -232,7 +232,7 @@ onUnmounted(() => {
 .nft-gallery-container {
   position: relative;
   z-index: 1;
-  transition: min-height 0.3s ease, height 0.3s ease;
+  transition: min-height var(--g-dur-slow) ease, height var(--g-dur-slow) ease;
 }
 
 .nft-gallery-container.adaptive-container {
@@ -244,7 +244,7 @@ onUnmounted(() => {
 }
 
 .gallery-wrapper {
-  transition: height 0.3s ease;
+  transition: height var(--g-dur-slow) ease;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -258,7 +258,7 @@ onUnmounted(() => {
   -webkit-backdrop-filter: blur(10px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 12px !important;
-  transition: all 0.3s ease !important;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease !important;
   cursor: pointer !important;
   overflow: hidden !important;
 }
@@ -284,7 +284,7 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   border-radius: var(--g-r-card) var(--g-r-card) 0 0;
-  transition: transform 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .liquid-glass-card:hover .card-content-overlay {
@@ -292,7 +292,7 @@ onUnmounted(() => {
 }
 
 .collection-image {
-  transition: transform 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .nft-collection-card:hover .collection-image {
@@ -327,7 +327,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 40px;
-  transition: height 0.3s ease;
+  transition: height var(--g-dur-slow) ease;
 }
 
 .collection-name-glass {
@@ -340,7 +340,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
-  transition: white-space 0.3s ease;
+  transition: white-space var(--g-dur-slow) ease;
 }
 
 .liquid-glass-card:hover .collection-name-glass {
@@ -353,7 +353,7 @@ onUnmounted(() => {
 .gallery-grid {
   display: grid;
   gap: 10px;
-  transition: all 0.3s ease;
+  transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
   align-content: center; /* Center cards vertically in available space */
   padding-top: 8px;
   padding-bottom: 8px;
