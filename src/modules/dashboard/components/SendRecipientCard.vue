@@ -474,7 +474,11 @@ defineExpose({ cardTotalAmounts });
 }
 
 .recipient-panel__panel {
-  background-color: rgba(255, 255, 255, 0.02) !important;
+  /* Opaque surface, NOT a low-alpha white: the dialog is translucent glass
+     (blur + saturate), so a near-transparent card bled the bright page behind
+     it through as a light-grey wash. Solid --g-surface blocks that; the inner
+     input/token rows (--g-raised) still read as raised insets. */
+  background-color: var(--g-surface) !important;
   border: 1px solid var(--g-hairline-1) !important;
   border-radius: var(--g-r-card) !important;
   transition: border-color 0.2s ease;
