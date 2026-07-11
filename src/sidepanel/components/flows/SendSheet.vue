@@ -1498,7 +1498,7 @@ function teardownNftObserver() {
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   overflow: hidden;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color var(--g-dur-base), background var(--g-dur-base);
 }
 .stepper-step.active {
   background: var(--g-hairline-1);
@@ -1532,7 +1532,7 @@ function teardownNftObserver() {
   flex-shrink: 0;
   background: var(--g-hairline-1);
   color: var(--g-text-3);
-  transition: all 0.2s;
+  transition: background-color var(--g-dur-base), color var(--g-dur-base);
 }
 .step-circle.active {
   background: var(--g-accent);
@@ -1624,7 +1624,7 @@ function teardownNftObserver() {
   align-items: center;
   padding: 8px 10px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
 }
 .contact-row:hover {
   background: var(--g-hairline-1);
@@ -1696,7 +1696,7 @@ function teardownNftObserver() {
   padding: 8px 6px;
   cursor: pointer;
   border-radius: var(--g-r-control);
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
 }
 .token-picker-item:hover {
   background: var(--g-hairline-1);
@@ -1725,7 +1725,7 @@ function teardownNftObserver() {
   border: 2px solid transparent;
   border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--g-dur-fast), border-color var(--g-dur-fast);
 }
 .nft-list-item:hover {
   background: var(--g-hairline-1);

@@ -569,7 +569,7 @@ onMounted(async () => {
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   outline: none;
 }
 
@@ -597,7 +597,7 @@ onMounted(async () => {
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
   margin-bottom: 6px;
 }
 

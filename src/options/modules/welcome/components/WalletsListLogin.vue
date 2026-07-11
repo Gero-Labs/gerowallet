@@ -457,7 +457,7 @@ const handleLoggedOut = async (): Promise<void> => {
   border: 1px solid var(--g-hairline-1) !important;
   border-radius: var(--g-r-control) !important;
   margin: 4px 0 !important;
-  transition: all 0.2s ease !important;
+  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, transform var(--g-dur-base) ease !important;
   position: relative !important;
   overflow: hidden !important;
 }

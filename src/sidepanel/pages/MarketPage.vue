@@ -424,7 +424,7 @@ function onImgError(event: Event) {
   color: var(--g-text-3);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   white-space: nowrap;
 }
 
@@ -450,7 +450,7 @@ function onImgError(event: Event) {
   align-items: center;
   padding: 10px 16px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--g-dur-fast) ease;
   border-radius: var(--g-r-control);
   margin: 1px 8px;
 }

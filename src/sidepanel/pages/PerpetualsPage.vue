@@ -624,7 +624,7 @@ watch(isConnected, (connected) => {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
   display: flex;
   align-items: center;
   justify-content: center;

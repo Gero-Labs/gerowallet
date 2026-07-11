@@ -32,7 +32,7 @@ defineProps<Props>();
   @include flex-column;
   gap: $spacing-3xl;
   text-align: center;
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
 
   &:hover {
     transform: translateY(-4px);

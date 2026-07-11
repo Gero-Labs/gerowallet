@@ -123,7 +123,7 @@ const logo = computed(() => {
 }
 
 .logo-container .logo {
-  transition: all 0.3s ease;
+  transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
 }
 
 .text-container {

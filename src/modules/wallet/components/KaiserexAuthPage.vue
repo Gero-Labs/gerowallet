@@ -515,7 +515,7 @@ const handleRegistrationComplete = () => {
   padding: 24px; // Reduced further for compactness
   display: flex;
   flex-direction: column;
-  transition: all 0.3s ease;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease;
   position: relative;
   overflow: hidden;
   min-height: 480px; // Fixed height for consistency
@@ -533,7 +533,7 @@ const handleRegistrationComplete = () => {
     height: 3px;
     background: linear-gradient(90deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--g-dur-slow) ease;
   }
 
   &:hover::before {
@@ -708,7 +708,7 @@ const handleRegistrationComplete = () => {
     .clickable-text {
       color: $primary-cyan;
       border-bottom: 1px dotted $primary-cyan;
-      transition: all 0.2s ease;
+      transition: color var(--g-dur-base) ease, border-bottom-color var(--g-dur-base) ease;
     }
 
     &:hover {
@@ -724,7 +724,7 @@ const handleRegistrationComplete = () => {
 
     .info-icon {
       color: $primary-cyan;
-      transition: all 0.2s ease;
+      transition: color var(--g-dur-base) ease;
     }
   }
 
@@ -809,7 +809,7 @@ const handleRegistrationComplete = () => {
   color: $primary-cyan;
   cursor: help;
   border-bottom: 1px dotted $primary-cyan;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, border-bottom-color var(--g-dur-base) ease;
 
   &:hover {
     color: lighten($primary-cyan, 10%);
@@ -859,7 +859,7 @@ const handleRegistrationComplete = () => {
     margin-bottom: $spacing-lg;
     padding: $spacing-xs;
     border-radius: $border-radius-sm;
-    transition: all 0.2s ease;
+    transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
 
     &:hover {
       color: $primary-cyan;
@@ -907,7 +907,7 @@ const handleRegistrationComplete = () => {
   background: $background-secondary;
   color: $text-primary;
   font-size: $font-size-base;
-  transition: border-color 0.2s ease;
+  transition: border-color var(--g-dur-base) ease;
 
   &:focus {
     outline: none;
@@ -968,7 +968,7 @@ const handleRegistrationComplete = () => {
   border-radius: $border-radius-md;
   background: $background-secondary;
   color: $text-primary;
-  transition: all 0.2s ease;
+  transition: border-color var(--g-dur-base) ease, box-shadow var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
 
   &:focus {
     outline: none;
@@ -1010,7 +1010,7 @@ const handleRegistrationComplete = () => {
     font-size: $font-size-sm;
     cursor: pointer;
     text-decoration: underline;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--g-dur-base) ease;
 
     &:hover {
       opacity: 0.8;

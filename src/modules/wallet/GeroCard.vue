@@ -220,7 +220,7 @@ onMounted(async () => {
   right: 32px;
   background: var(--g-hairline-1) !important;
   border: 1px solid var(--g-hairline-2);
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
   z-index: var(--g-z-sticky);
 
   &:hover {
@@ -319,7 +319,7 @@ onMounted(async () => {
   font-weight: 600;
   padding: 12px 24px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform var(--g-dur-base) ease;
 
   &:hover {
     transform: translateY(-2px);

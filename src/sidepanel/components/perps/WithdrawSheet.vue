@@ -599,7 +599,7 @@ watch(() => props.value, (val) => {
   font-weight: 700;
   color: var(--g-text-3);
   background: var(--g-hairline-1);
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
 }
 .step-dot.active {
   border-color: var(--g-accent);
@@ -615,7 +615,7 @@ watch(() => props.value, (val) => {
   width: 38px;
   height: 1px;
   background: var(--g-hairline-2);
-  transition: background 0.2s ease;
+  transition: background var(--g-dur-base) ease;
 }
 .step-line.filled { background: color-mix(in srgb, var(--g-accent) 50%, transparent); }
 
@@ -658,7 +658,7 @@ watch(() => props.value, (val) => {
   font-weight: 600;
   font-family: var(--g-font-mono);
   color: var(--g-text-2);
-  transition: color 0.15s ease;
+  transition: color var(--g-dur-fast) ease;
 }
 .balance-row:hover .balance-row__value { color: var(--g-accent); }
 
@@ -912,7 +912,7 @@ watch(() => props.value, (val) => {
 
 /* ── Transitions ── */
 .fade-slide-enter-active,
-.fade-slide-leave-active { transition: all 0.22s ease; }
+.fade-slide-leave-active { transition: opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease; }
 .fade-slide-enter,
 .fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

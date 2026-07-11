@@ -694,7 +694,7 @@ watch(() => props.value, (val) => {
 .copy-icon {
   cursor: pointer;
   opacity: 0.6;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  transition: opacity var(--g-dur-fast) ease, color var(--g-dur-fast) ease;
 }
 .copy-icon:hover { opacity: 1; color: var(--g-accent) !important; }
 
@@ -821,7 +821,7 @@ watch(() => props.value, (val) => {
   border-radius: var(--g-r-control);
   background: color-mix(in srgb, var(--g-accent) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--g-accent) 22%, transparent);
-  transition: background 0.15s ease;
+  transition: background var(--g-dur-fast) ease;
 }
 .tx-link:hover { background: color-mix(in srgb, var(--g-accent) 16%, transparent); }
 
@@ -891,7 +891,7 @@ watch(() => props.value, (val) => {
 /* ── Transitions ── */
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: all 0.25s ease;
+  transition: opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease;
 }
 
 .fade-slide-enter,
