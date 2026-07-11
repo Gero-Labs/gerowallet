@@ -2920,7 +2920,7 @@ export default {
   'security.mpcWrongGoogleAccount': 'Wrong Google account - this wallet belongs to a different account.',
   'security.mpcSessionExpired': 'Session expired - please sign in with Google again.',
   'security.passkey': 'Passkey',
-  'security.mpcLockNoneDesc': 'No lock — stay signed in until you log out',
+  'security.mpcLockNoneDesc': 'No lock - stay signed in until you log out',
   'security.mpcLockPasskeyDesc': 'Require your passkey to unlock',
   'security.mpcLockPasswordDesc': 'Require your spending password to unlock',
   'security.orUsePassKey': 'Or use PassKey',
