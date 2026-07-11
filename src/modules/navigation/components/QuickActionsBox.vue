@@ -269,7 +269,11 @@ const isPerpetualsDisabled = computed(() => {
   justify-content: flex-start !important;
   align-items: center !important;
   position: relative;
-  background: var(--g-hairline-1) !important;
+  /* Frost the busy header background behind the pill so the label stays
+     readable; the per-button color tint sits on top of this. */
+  background: rgba(10, 12, 16, 0.55) !important;
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
   border: 0.5px solid var(--g-hairline-3) !important;
   overflow: hidden;
 }
@@ -316,7 +320,7 @@ const isPerpetualsDisabled = computed(() => {
    which are emitted twice and otherwise win on source order (buttons rendered
    as solid Vuetify colors until a re-render). See project_vuetify_css_cascade. */
 .quick-actions-container .buy-button {
-  background: color-mix(in srgb, var(--g-warning) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--g-warning) 16%, rgba(10, 12, 16, 0.62)) !important;
 }
 
 
@@ -325,7 +329,7 @@ const isPerpetualsDisabled = computed(() => {
 }
 
 .quick-actions-container .send-button {
-  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 16%, rgba(10, 12, 16, 0.62)) !important;
 }
 
 
@@ -334,7 +338,7 @@ const isPerpetualsDisabled = computed(() => {
 }
 
 .quick-actions-container .receive-button {
-  background: color-mix(in srgb, var(--g-success) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--g-success) 16%, rgba(10, 12, 16, 0.62)) !important;
 }
 
 
@@ -343,7 +347,7 @@ const isPerpetualsDisabled = computed(() => {
 }
 
 .quick-actions-container .swap-button {
-  background: color-mix(in srgb, var(--g-error) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--g-error) 16%, rgba(10, 12, 16, 0.62)) !important;
 }
 
 
@@ -352,7 +356,7 @@ const isPerpetualsDisabled = computed(() => {
 }
 
 .quick-actions-container .perpetuals-button {
-  background: color-mix(in srgb, var(--g-info) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--g-info) 16%, rgba(10, 12, 16, 0.62)) !important;
 }
 
 
