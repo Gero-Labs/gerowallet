@@ -144,7 +144,7 @@
                       v-bind="attrs"
                       v-on="on"
                     >
-                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }" :color="activeView === chip.value ? 'black' : undefined">{{ chip.icon }}</v-icon>
+                      <v-icon v-if="chip.icon" x-small :class="{ 'mr-1': !compactChips }" :color="activeView === chip.value ? 'black' : 'var(--g-accent)'">{{ chip.icon }}</v-icon>
                       <template v-if="!compactChips">{{ chip.label }}</template>
                       <span v-if="chip.value === 'watchlist' && watchlistCount > 0" class="ml-1" style="font-size: 11px; opacity: 0.7;">({{ watchlistCount }})</span>
                     </v-chip>
@@ -926,6 +926,9 @@ watch(
   flex-shrink: 0;
   cursor: pointer;
   height: 28px !important;
+  /* Match the table/search control radius (8px) instead of Vuetify's fully
+     rounded chip pill, which clashed with the card's rounding. */
+  border-radius: var(--g-r-control) !important;
 }
 
 /* ── Visible header search ────────────────────────────────────────────────────── */
