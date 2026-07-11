@@ -1,10 +1,6 @@
 <template>
   <div>
-    <div
-      :class="['quick-actions-container', { 'compact': compact }]"
-      @mousemove="handleMouseMove"
-      @mouseleave="handleMouseLeave"
-    >
+    <div :class="['quick-actions-container', { 'compact': compact }]">
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
@@ -14,7 +10,6 @@
               color="warning"
               height="28"
               @click="openDialog(dialogs.BUY)"
-              :style="getButtonGlowStyle('buy')"
               v-bind="attrs"
               v-on="on"
             >
@@ -41,7 +36,6 @@
               color="primary"
               height="28"
               @click="openDialog(dialogs.SEND)"
-              :style="getButtonGlowStyle('send')"
               v-bind="attrs"
               v-on="on"
             >
@@ -69,7 +63,6 @@
               color="success"
               height="28"
               @click="openDialog(dialogs.RECEIVE)"
-              :style="getButtonGlowStyle('receive')"
               v-bind="attrs"
               v-on="on"
             >
@@ -96,7 +89,6 @@
               color="error"
               height="28"
               @click="openDialog(dialogs.SWAP)"
-              :style="getButtonGlowStyle('swap')"
               :disabled="!isSwapEnabledByFeatureFlag"
               :loading="loadingSwap"
               v-bind="attrs"
@@ -128,7 +120,6 @@
               color="info"
               height="28"
               @click="openDialog(dialogs.PERPETUALS)"
-              :style="getButtonGlowStyle('perpetuals')"
               :disabled="priceStore.connectionStatus !== 'connected'"
               :loading="priceStore.connectionStatus === 'connecting'"
               v-bind="attrs"
@@ -170,7 +161,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { toRefs, computed, ref, getCurrentInstance } from 'vue';
+import { toRefs, computed, ref } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
@@ -190,7 +181,6 @@ const props = defineProps<{
 }>();
 
 const { loggedWallet } = toRefs(walletStore);
-const vmProxy = getCurrentInstance()!.proxy as any
 
 const { state: quickActionState, openDialog, closeDialog } = useQuickActionDialogs();
 
@@ -202,8 +192,6 @@ const dialogs = {
   PERPETUALS: 'PERPETUALS',
 };
 
-const mousePosition = ref<{x: number, y: number} | null>(null);
-const buttonGlows = ref<Record<string, any>>({});
 
 // Button refs
 const buyButton = ref(null);
@@ -248,120 +236,7 @@ const isPerpetualsDisabled = computed(() => {
 })
 
 
-const handleMouseMove = (event: MouseEvent) => {
-  const container = event.currentTarget as HTMLElement;
-  const containerRect = container.getBoundingClientRect();
 
-  mousePosition.value = {
-    x: event.clientX - containerRect.left,
-    y: event.clientY - containerRect.top
-  };
-
-  updateButtonGlows();
-}
-
-const handleMouseLeave = () => {
-  mousePosition.value = null;
-  buttonGlows.value = {};
-}
-
-const updateButtonGlows = () => {
-  if (!mousePosition.value) return;
-
-  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals'];
-  const newGlows: Record<string, any> = {};
-
-  buttons.forEach(buttonType => {
-    const buttonRef = (vmProxy?.$refs as any)?.[`${buttonType}Button`];
-    if (buttonRef && buttonRef.$el) {
-      const buttonRect = buttonRef.$el.getBoundingClientRect();
-      const containerRect = buttonRef.$el.closest('.quick-actions-container').getBoundingClientRect();
-
-      // Check if mouse is directly over this button
-      const mouseX = mousePosition.value!.x + containerRect.left;
-      const mouseY = mousePosition.value!.y + containerRect.top;
-
-      const isMouseOverButton = (
-        mouseX >= buttonRect.left &&
-        mouseX <= buttonRect.right &&
-        mouseY >= buttonRect.top &&
-        mouseY <= buttonRect.bottom
-      );
-
-      if (isMouseOverButton) {
-        const buttonCenter = {
-          x: buttonRect.left - containerRect.left + buttonRect.width / 2,
-          y: buttonRect.top - containerRect.top + buttonRect.height / 2
-        };
-
-        const distance = Math.sqrt(
-          Math.pow(mousePosition.value!.x - buttonCenter.x, 2) +
-          Math.pow(mousePosition.value!.y - buttonCenter.y, 2)
-        );
-
-        const angleRad = Math.atan2(
-          mousePosition.value!.y - buttonCenter.y,
-          mousePosition.value!.x - buttonCenter.x
-        );
-
-        newGlows[buttonType] = {
-          intensity: 0.8,
-          angle: angleRad,
-          distance: distance
-        };
-      }
-    }
-  });
-
-  buttonGlows.value = newGlows;
-}
-
-const getButtonGlowStyle = (buttonType: string) => {
-  const glow = buttonGlows.value[buttonType];
-  if (!glow) return {};
-
-  const colors: Record<string, string> = {
-    buy: '#FFF59E',
-    send: '#00DFF3',
-    receive: '#75E0A7',
-    swap: '#FDA29B',
-    perpetuals: '#B794F4'
-  };
-
-  const color = colors[buttonType];
-  const glowIntensity = glow.intensity;
-
-  const offsetX = Math.cos(glow.angle) * 4 * glowIntensity;
-  const offsetY = Math.sin(glow.angle) * 4 * glowIntensity;
-
-  const shadowBlur = 8 + (glowIntensity * 12);
-  const shadowSpread = glowIntensity * 2;
-
-  return {
-    boxShadow: `inset ${offsetX}px ${offsetY}px ${shadowBlur}px ${shadowSpread}px ${color}${Math.round(glowIntensity * 60).toString(16).padStart(2, '0')}`,
-    transition: 'box-shadow 0.1s ease-out'
-  };
-}
-</script>
-<style scoped>
-.quick-actions-container {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  height: 44px;
-  min-width: 240px;
-  width: max-content;
-  border: 1px solid var(--g-hairline-3);
-  background-color: transparent!important;
-  border-radius: var(--g-r-card);
-  padding: 8px;
-  gap: 6px;
-  align-items: center;
-  justify-content: center;
-  z-index: 5;
-}
 
 .quick-actions-container.compact {
   padding: 0;
