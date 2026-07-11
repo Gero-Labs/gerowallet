@@ -32,7 +32,7 @@
     <!-- Navigation items -->
     <v-list nav dense>
       <template v-for="(item, index) in items" >
-        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px;" :key="index">
+        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px; margin-top: 6px; margin-bottom: 10px;" :key="index">
           {{ item.header }}
         </v-subheader>
 
