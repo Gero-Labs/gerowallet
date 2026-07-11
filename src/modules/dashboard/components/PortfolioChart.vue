@@ -1103,7 +1103,10 @@ onBeforeUnmount(() => {
 
 .portfolio-split-root {
   display: flex;
-  gap: 6px;
+  /* Match the dashboard's inter-card rhythm: the metrics panel, the chart and
+     the recent-tx card are three separate bordered cards, so the metrics<->chart
+     gap must equal the chart<->recent-tx gap (two pa-2 cols = 16px). */
+  gap: var(--g-s-4);
   height: 100%;
 }
 

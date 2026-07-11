@@ -432,7 +432,11 @@ const getButtonGlowStyle = (buttonType: string) => {
 }
 
 /* Individual button color adjustments for text and liquid glass effects */
-.buy-button {
+/* Prefixed with the container so these reach (0,4,0) in scoped CSS and beat
+   Vuetify's filled `.warning`/`.primary`/etc. override-flagged (0,2,0) rules,
+   which are emitted twice and otherwise win on source order (buttons rendered
+   as solid Vuetify colors until a re-render). See project_vuetify_css_cascade. */
+.quick-actions-container .buy-button {
   background: color-mix(in srgb, var(--g-warning) 12%, transparent) !important;
   border: 0.5px solid color-mix(in srgb, var(--g-warning) 40%, transparent) !important;
 }
@@ -442,7 +446,7 @@ const getButtonGlowStyle = (buttonType: string) => {
   color: var(--g-warning);
 }
 
-.send-button {
+.quick-actions-container .send-button {
   background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
   border: 0.5px solid color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
 }
@@ -452,7 +456,7 @@ const getButtonGlowStyle = (buttonType: string) => {
   color: var(--g-accent);
 }
 
-.receive-button {
+.quick-actions-container .receive-button {
   background: color-mix(in srgb, var(--g-success) 12%, transparent) !important;
   border: 0.5px solid color-mix(in srgb, var(--g-success) 40%, transparent) !important;
 }
@@ -462,7 +466,7 @@ const getButtonGlowStyle = (buttonType: string) => {
   color: var(--g-success);
 }
 
-.swap-button {
+.quick-actions-container .swap-button {
   background: color-mix(in srgb, var(--g-error) 12%, transparent) !important;
   border: 0.5px solid color-mix(in srgb, var(--g-error) 40%, transparent) !important;
 }
@@ -472,7 +476,7 @@ const getButtonGlowStyle = (buttonType: string) => {
   color: var(--g-error);
 }
 
-.perpetuals-button {
+.quick-actions-container .perpetuals-button {
   background: color-mix(in srgb, var(--g-info) 12%, transparent) !important;
   border: 0.5px solid color-mix(in srgb, var(--g-info) 40%, transparent) !important;
 }
