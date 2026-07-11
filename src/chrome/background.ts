@@ -78,13 +78,17 @@ loadWallets().then(async () => {
         const db = await getDb(walletStore.loggedWallet.id);
         const configTable = db.table('config');
         const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-        if (!unlockMethodConfig?.value) {
+        // MPC wallets have no unlock-method row but are NOT trapped when locked
+        // (they re-unlock with Google + passkey/password), so don't clear their lock.
+        if (!unlockMethodConfig?.value && walletStore.loggedWallet?.encryptionMethod !== 'mpc') {
           WalletStore.setLocked(false);
           console.log('🔓 Cleared stale lock — no unlock method configured');
         }
       } catch (e) {
         console.warn('Failed to check unlock method for stale lock:', e);
-        WalletStore.setLocked(false);
+        if (walletStore.loggedWallet?.encryptionMethod !== 'mpc') {
+          WalletStore.setLocked(false);
+        }
       }
     }
 
@@ -348,8 +352,11 @@ async function checkAutoLock(): Promise<void> {
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
     const unlockMethod = unlockMethodConfig?.value;
 
-    // If no unlock method is set, skip auto-lock (user won't be able to unlock!)
-    if (!unlockMethod) {
+    // If no unlock method is set, skip auto-lock (user won't be able to unlock!).
+    // MPC "Sign in with Google" wallets are exempt: they have no local unlock-method
+    // row but can ALWAYS be re-unlocked (Google + passkey/spending password), so
+    // they must still honor the auto-lock timer.
+    if (!unlockMethod && wallet.encryptionMethod !== 'mpc') {
       return;
     }
 
