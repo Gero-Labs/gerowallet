@@ -63,6 +63,8 @@ function buildCSP(dev: boolean): string {
     'https://api.coingecko.com',
     'https://analytics-snekfun.splash.trade',
     'https://www.googleapis.com',
+    // Contentful blog (Content Delivery API; images are https and covered by img-src)
+    'https://cdn.contentful.com',
     'https://api.handle.me/',
     'https://media.bringweb3.io/',
     'https://api.bringweb3.io/',
