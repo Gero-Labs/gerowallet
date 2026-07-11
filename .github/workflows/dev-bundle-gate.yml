@@ -1,0 +1,90 @@
+name: Dev Bundle Gate
+
+# Pre-merge build gate for PRs targeting `development` (and `main`).
+#
+# Why this exists: ci-cd.yml only builds on push to `main`, so Vue SFC *syntax*
+# errors and other bundle-breaking changes reached `development` uncaught and
+# only surfaced after merge to main. This bundles the main-UI vite config
+# (vite parses every single-file component) so those breaks fail pre-merge.
+#
+# Why only build:web (not the full `npm run build`): `npm run build` runs 4 vite
+# builds in parallel via run-p, each with --max-old-space-size=6144 (~24GB peak),
+# which OOM-kills the shared self-hosted `gero-plain` runner. build:web is a
+# single vite process (~6GB) and bundles the options/popup/sidepanel app — where
+# essentially all Vue SFCs live. background/content/inject are TS entrypoints
+# with ~no SFCs, so this keeps the SFC-syntax coverage while fitting the runner.
+#
+# Why build-only (no tsc/eslint step): `npm run typecheck` (plain tsc) is
+# systemically red against this repo — tsc doesn't resolve unplugin-auto-imports
+# (`computed`, `ref`, ...) or the `browser` global, so it reports hundreds of
+# pre-existing false errors and would make the gate permanently fail. The vite
+# build DOES resolve auto-imports, so it reflects real buildability. (vue-tsc is
+# also unavailable: Vue 2.7 + TS 5.8 has no compatible version — 1.x caps at
+# ~TS 5.4, 2.x+ dropped Vue 2.) Cleaning up the tsc/lint debt is a separate task.
+#
+# Secret-free by design: it materializes a placeholder .env.production from the
+# committed .env.example (VITE_* values are inlined runtime strings, not build
+# secrets), so the bundle path matches production without exposing credentials.
+
+on:
+  pull_request:
+    branches:
+      - development
+      - main
+  push:
+    branches:
+      - development
+
+permissions:
+  contents: read
+
+# One in-flight run per branch; newer pushes cancel stale runs.
+concurrency:
+  group: dev-bundle-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: Production bundle (SFC parse)
+    # This job runs a full `npm ci` + `npm run build`, which executes
+    # PR-controlled code (install scripts, build-time JS) on the self-hosted
+    # `gero-plain` runner. Restrict to same-repo PRs (Dependabot branches count)
+    # and pushes; external fork PRs are skipped so untrusted code never runs on
+    # the shared runner. No secrets are exposed here (contents: read only).
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: gero-plain
+    timeout-minutes: 25
+    env:
+      NODE_OPTIONS: "--max-old-space-size=6144 --max-semi-space-size=256"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.11.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Design ratchet. Unlike tsc/eslint (see the header note) these gates are
+      # green today and may only get greener: audit.mjs fails if any style-debt
+      # metric in scripts/design/budgets.json grows, and contrast.mjs fails if a
+      # token drops below its WCAG threshold. Pure Node, no ripgrep dependency,
+      # so it runs identically here and in the pre-commit hook. Runs before the
+      # bundle because it takes ~1s and the bundle takes minutes.
+      - name: Design ratchet (budgets + WCAG contrast)
+        run: npm run design:check
+
+      # Placeholder env: VITE_* are inlined runtime strings, so the bundle parse
+      # needs no real secrets. build:web is the single main-UI vite config; it
+      # parses every SFC in options/popup/sidepanel and fails on syntax errors.
+      - name: Bundle check (build:web, placeholder env)
+        run: |
+          cp .env.example .env.production
+          echo "Wrote placeholder .env.production ($(grep -c '^VITE_' .env.production) vars)"
+          npm run build:web -- --mode production

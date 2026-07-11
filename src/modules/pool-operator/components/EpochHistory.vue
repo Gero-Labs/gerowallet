@@ -2,7 +2,7 @@
   <div class="epoch-history">
     <div class="section-header">
       <div class="section-title">
-        <v-icon size="14" color="white" class="mr-1">mdi-chart-timeline-variant</v-icon>
+        <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-chart-timeline-variant</v-icon>
         {{ $t('poolOperator.epochHistory') }}
       </div>
       <v-btn text x-small class="refresh-btn" @click="fetchHistory" :loading="loading">
@@ -78,8 +78,8 @@
     <!-- Block Detail Dialog -->
     <v-dialog v-model="showBlockDetail" max-width="500px">
       <v-card class="block-detail-card">
-        <v-card-title class="d-flex align-center" style="border-bottom: 1px solid rgba(255,255,255,0.06)">
-          <v-icon size="18" color="#2DF0F7" class="mr-2">mdi-cube-outline</v-icon>
+        <v-card-title class="d-flex align-center" style="border-bottom: 1px solid var(--g-hairline-1)">
+          <v-icon size="18" color="var(--g-accent)" class="mr-2">mdi-cube-outline</v-icon>
           {{ $t('poolOperator.epoch') }} {{ selectedEpoch?.epoch }} — {{ $t('poolOperator.blocks') }}
           <v-spacer />
           <v-btn icon small @click="showBlockDetail = false"><v-icon small>mdi-close</v-icon></v-btn>
@@ -91,7 +91,7 @@
           <div v-else-if="epochBlocks.length">
             <div v-for="block in epochBlocks" :key="block.block_hash" class="block-item">
               <div class="block-slot">
-                <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-clock-outline</v-icon>
+                <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-clock-outline</v-icon>
                 {{ $t('poolOperator.slot') }} {{ block.epoch_slot }}
               </div>
               <div class="block-info">
@@ -100,7 +100,7 @@
               </div>
               <div class="block-hash" @click="copyHash(block.block_hash)">
                 {{ block.block_hash.substring(0, 16) }}...
-                <v-icon x-small color="rgba(255,255,255,0.4)">mdi-content-copy</v-icon>
+                <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
               </div>
             </div>
           </div>
@@ -309,7 +309,7 @@ const chartOptions = computed(() => {
         fillColor: { linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 }, stops: [[0, 'rgba(253,176,34,0.15)'], [1, 'rgba(253,176,34,0)']] },
         lineWidth: 1.5,
         marker: { enabled: false },
-        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">\u25CF</span> ${(this as any).series.name}: <b>${formatAda(String((this as any).y * 1_000_000))} ADA</b><br/>`; } },
+        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">BULLET_TMP</span> ${(this as any).series.name}: <b>${formatAda(String((this as any).y * 1_000_000))} ADA</b><br/>`; } },
       },
       {
         name: t('poolOperator.delegators'),
@@ -328,7 +328,7 @@ const chartOptions = computed(() => {
         data: spoRewardsData,
         color: 'rgba(253,176,34,0.5)',
         stack: 'rewards',
-        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">\u25CF</span> ${(this as any).series.name}: <b>${formatAda(String(Math.round((this as any).y * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">BULLET_TMP</span> ${(this as any).series.name}: <b>${formatAda(String(Math.round((this as any).y * 1_000_000)), 6)} ADA</b><br/>`; } },
       },
       {
         name: t('poolOperator.delegatorRewards'),
@@ -337,7 +337,7 @@ const chartOptions = computed(() => {
         data: delegRewardsData,
         color: 'rgba(117,224,167,0.35)',
         stack: 'rewards',
-        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">\u25CF</span> ${(this as any).series.name}: <b>${formatAda(String(Math.round((this as any).y * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">BULLET_TMP</span> ${(this as any).series.name}: <b>${formatAda(String(Math.round((this as any).y * 1_000_000)), 6)} ADA</b><br/>`; } },
       },
     ],
   };
@@ -441,7 +441,7 @@ watch(poolId, (id) => { if (id) fetchHistory(); });
 
 .epoch-chart-wrap {
   margin-bottom: 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
   padding-bottom: 12px;
 }
 
@@ -450,12 +450,12 @@ watch(poolId, (id) => { if (id) fetchHistory(); });
 }
 
 .section-title {
-  font-size: 11px; font-weight: 600; color: white;
-  display: flex; align-items: center; text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 11px; font-weight: 600; color: var(--g-text-1);
+  display: flex; align-items: center;
 }
 
 .refresh-btn {
-  text-transform: none !important; letter-spacing: normal !important; color: rgba(255,255,255,0.5) !important;
+  text-transform: none !important; letter-spacing: normal !important; color: var(--g-text-3) !important;
 }
 
 /* Data table — matches MarketTokenTable style */
@@ -468,13 +468,11 @@ watch(poolId, (id) => { if (id) fetchHistory(); });
 }
 
 .epoch-table >>> tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--g-hairline-1) !important;
 }
 
 .epoch-table >>> th {
   font-size: 11px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   white-space: nowrap;
 }
 
@@ -484,7 +482,7 @@ watch(poolId, (id) => { if (id) fetchHistory(); });
 }
 
 .epoch-table >>> td.text-end {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -494,41 +492,41 @@ watch(poolId, (id) => { if (id) fetchHistory(); });
 
 .block-count { font-weight: 700; }
 
-.text-great { color: #75E0A7; }
-.text-good { color: rgba(255,255,255,0.9); }
-.text-warn { color: #FDA29B; }
-.text-muted { color: rgba(255,255,255,0.45); }
-.text-success { color: #75E0A7; }
-.num-value { color: rgba(255,255,255,0.8); font-weight: 500; }
-.reward-spo { color: #FDB022; }
-.reward-deleg { color: #75E0A7; }
+.text-great { color: var(--g-success); }
+.text-good { color: var(--g-text-1); }
+.text-warn { color: var(--g-error); }
+.text-muted { color: var(--g-text-3); }
+.text-success { color: var(--g-success); }
+.num-value { color: var(--g-text-2); font-weight: 500; }
+.reward-spo { color: var(--g-warning); }
+.reward-deleg { color: var(--g-success); }
 
 .luck-badge {
-  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  display: inline-block; padding: 1px 6px; border-radius: var(--g-r-chip);
   font-size: 11px; font-weight: 700;
 }
-.luck--great { background: rgba(117,224,167,0.12); color: #75E0A7; }
-.luck--good { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
-.luck--low { background: rgba(253,162,155,0.12); color: #FDA29B; }
-.luck--none { background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.4); }
+.luck--great { background: var(--g-success-fill); color: var(--g-success); }
+.luck--good { background: var(--g-hairline-1); color: var(--g-text-2); }
+.luck--low { background: var(--g-error-fill); color: var(--g-error); }
+.luck--none { background: var(--g-hairline-1); color: var(--g-text-3); }
 
-.empty-text { color: rgba(255,255,255,0.45); font-size: 13px; }
+.empty-text { color: var(--g-text-3); font-size: 13px; }
 
 /* Block Detail Dialog */
-.block-detail-card { background: #13161b !important; border: 1px solid rgba(255,255,255,0.08); }
+.block-detail-card { background: var(--g-raised) !important; border: 1px solid var(--g-hairline-1); }
 
-.block-item { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.block-item { padding: 10px 0; border-bottom: 1px solid var(--g-hairline-1); }
 .block-item:last-child { border-bottom: none; }
 
-.block-slot { font-size: 11px; color: rgba(255,255,255,0.55); display: flex; align-items: center; }
+.block-slot { font-size: 11px; color: var(--g-text-3); display: flex; align-items: center; }
 .block-info { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
-.block-height { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.9); }
-.block-time { font-size: 12px; color: rgba(255,255,255,0.5); }
+.block-height { font-size: 14px; font-weight: 600; color: var(--g-text-1); }
+.block-time { font-size: 12px; color: var(--g-text-3); }
 
 .block-hash {
-  font-family: 'Roboto Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.4);
+  font-family: var(--g-font-mono); font-size: 11px; color: var(--g-text-3);
   margin-top: 2px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
   transition: color 0.15s;
 }
-.block-hash:hover { color: rgba(255,255,255,0.6); }
+.block-hash:hover { color: var(--g-text-2); }
 </style>

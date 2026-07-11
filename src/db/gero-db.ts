@@ -185,7 +185,6 @@ export async function createNewWalletDb(walletId: number|string, hasEncryptedMne
       const initialData = [
         { key: 'currency', value: Currency.USD.short },
         { key: 'txAutoSubmit', value: true },
-        { key: 'useSidePanel', value: true },
         { key: 'tokenAllocationSort', value: { by: 'allocation', desc: true } },
         { key: 'hideScamTokens', value: false },
         { key: 'hideUnverifiedTokens', value: false },

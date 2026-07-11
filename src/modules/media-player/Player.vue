@@ -49,7 +49,7 @@ const currentTrack = computed(() => {
   backdrop-filter: blur(20px) saturate(1.8) !important
   -webkit-backdrop-filter: blur(20px) saturate(1.8) !important
   border-top: 1px solid rgba(255, 255, 255, 0.15) !important
-  transition: all 0.3s
+  transition: width var(--g-dur-slow), border-color var(--g-dur-slow), border-width var(--g-dur-slow), border-radius var(--g-dur-slow)
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important
   isolation: isolate !important
 

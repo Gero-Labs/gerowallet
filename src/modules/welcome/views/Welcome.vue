@@ -149,8 +149,7 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   top: 0;
   right: 0;
   z-index: 100;
-  backdrop-filter: blur(10px);
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   padding: 4px 8px;
 }
 
@@ -206,7 +205,6 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   height: 44px !important;
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.3px;
   text-transform: none;
   z-index: 5;
 }
@@ -225,7 +223,7 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
 /* Fallback for browsers without backdrop-filter support */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .welcome-glass-panel {
-    background-color: rgba(19, 22, 27, 0.95);
+    background-color: var(--g-raised);
   }
 }
 

@@ -3,7 +3,7 @@ import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Wallet } from '@/models/types';
-import DexHunterStore from '@/stores/dexHunterStore';
+import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
@@ -583,7 +583,7 @@ export class WalletManager {
     setTimeout(async () => {
       if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
         // Load DexHunter tokens first - this provides verification status
-        await DexHunterStore.loadTokens().catch(err => console.warn('Failed to load DexHunter tokens:', err));
+        await TokenMetadataStore.loadTokens().catch(err => console.warn('Failed to load DexHunter tokens:', err));
 
         // Re-resolve assets after DexHunter tokens are loaded to update verified status
         const utxos = walletStore.utxos;
@@ -591,7 +591,7 @@ export class WalletManager {
           walletBg.setAssets(utxos as Cardano.Utxo[]);
         }
 
-        DexHunterStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
+        TokenMetadataStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
       }
       if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {
         BringStore.loadBringCache(walletBg.baseAddress).catch(err => console.warn('Failed to load Bring cache:', err));

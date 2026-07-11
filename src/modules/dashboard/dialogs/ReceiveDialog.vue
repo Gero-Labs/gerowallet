@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog
+  <BaseDialog :width="850"
     :isOpen="isOpen"
     @close="emit('close')"
     :title="t('wallet.receive')"
@@ -42,7 +42,7 @@
                 <CopyButton v-if="item.value" class="ml-1" :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
               </div>
               <p class="info-text">{{ item.info }}</p>
-              <p v-if="!item.value" class="path-text" style="color: #ff9b3b;">
+              <p v-if="!item.value" class="path-text" style="color: var(--g-warning);">
                 Pending SDK integration
               </p>
             </v-list-item-content>
@@ -115,7 +115,7 @@
       <!-- Bitcoin Controls -->
       <v-expansion-panels v-if="isBitcoinWallet" v-model="bitcoinExpandedPanels" multiple class="accordion-container">
         <!-- Address Type Selector -->
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -141,7 +141,7 @@
         </v-expansion-panel>
 
         <!-- Address Navigation -->
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -174,7 +174,7 @@
         </v-expansion-panel>
 
         <!-- Optional Amount/Label -->
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -218,7 +218,7 @@
 
       <!-- Cardano Used Addresses (Original) -->
       <v-expansion-panels v-else v-model="expandedPanels" multiple class="accordion-container">
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -243,9 +243,9 @@
                 <v-simple-table dense style="background-color: transparent">
                   <thead>
                     <tr>
-                      <th class="text-left grey--text">{{ $t('wallet.address') }}</th>
-                      <th class="text-left grey--text">{{ $t('wallet.path') }}</th>
-                      <th class="text-center grey--text">{{ $t('wallet.type') }}</th>
+                      <th class="text-left grey--text t-label">{{ $t('wallet.address') }}</th>
+                      <th class="text-left grey--text t-label">{{ $t('wallet.path') }}</th>
+                      <th class="text-center grey--text t-label">{{ $t('wallet.type') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -689,13 +689,13 @@ watch(
 
 <style scoped>
 .qr-container {
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 }
 
 .address-label {
   font-weight: bold;
-  font-size: 1.2rem;
-  color: #fff;
+  font-size: 20px;
+  color: var(--g-text-1);
 }
 
 .address-row {
@@ -709,13 +709,13 @@ watch(
 }
 
 .path-text {
-  font-size: 0.9rem;
-  color: #bbb;
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 
 .info-text {
-  font-size: 1rem;
-  color: #ddd;
+  font-size: 16px;
+  color: var(--g-text-2);
   margin-top: 0.5rem;
   word-break: break-word;
 }
@@ -726,8 +726,8 @@ watch(
 }
 
 .cred-text {
-  font-size: 0.9rem;
-  color: #ccc;
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 
 /* Collapsible panel styles */
@@ -738,18 +738,16 @@ watch(
 
 .accordion-container .v-expansion-panel {
   margin-bottom: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
+  border: 1px solid var(--g-hairline-2);
+  transition: border-color var(--g-dur-slow) ease;
 }
 
 .accordion-container .v-expansion-panel:hover {
-  border-color: rgba(0, 223, 243, 0.3);
-  box-shadow: 0 0 10px rgba(0, 223, 243, 0.1);
+  border-color: var(--g-accent);
 }
 
 .accordion-container .v-expansion-panel--active {
-  border-color: rgba(0, 223, 243, 0.5);
-  box-shadow: 0 0 15px rgba(0, 223, 243, 0.2);
+  border-color: var(--g-accent);
 }
 
 .header-container {
@@ -760,7 +758,7 @@ watch(
 }
 
 .icon-container {
-  background-color: rgba(0, 223, 243, 0.1);
+  background-color: var(--g-overlay);
   border-radius: 50%;
   padding: 8px;
   margin-right: 12px;
@@ -770,36 +768,28 @@ watch(
 }
 
 .icon-container .v-icon {
-  color: #00dff3 !important;
+  color: var(--g-accent) !important;
 }
 
 .content-container {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: var(--g-surface);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .address-cell {
-  font-family: monospace;
-  font-size: 0.875rem;
+  font-family: var(--g-font-mono);
+  font-size: 14px;
 }
 
 .path-cell {
-  font-family: monospace;
-  font-size: 0.875rem;
-  color: #bbb;
+  font-family: var(--g-font-mono);
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 
 /* Override expansion panel chevron color */
 .v-expansion-panel-header__icon .v-icon {
-  color: #00dff3 !important;
-}
-
-/* Style the table headers */
-.v-data-table thead th {
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--g-accent) !important;
 }
 
 /* Style the switch inside the header */
@@ -809,7 +799,7 @@ watch(
 }
 
 .v-expansion-panel-header .v-input--switch .v-label {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 </style>

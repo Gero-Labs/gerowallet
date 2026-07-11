@@ -1,17 +1,38 @@
 <template>
   <BottomSheet
-    v-if="!isApex"
     :value="isVisible"
     variant="trust"
-    :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect') ? '70%' : '85%'"
+    :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect' || currentRequest?.method === 'wcSessionProposal') ? '70%' : '85%'"
     @escape="onEscapeReject"
   >
     <div v-if="currentRequest" class="dapp-overlay">
       <!-- Queue indicator -->
-      <div v-if="requestQueue.length > 0" class="queue-indicator mb-2">
-        <span class="grey--text text-caption">
-          {{ $t('miniGero.requestQueueIndicator', { current: 1, total: requestQueue.length + 1 }) }}
-        </span>
+      <div v-if="requestQueue.length > 0" class="queue-strip mb-2">
+        <div class="queue-strip-header">
+          <span class="grey--text text-caption">
+            {{ $t('miniGero.requestQueueIndicator', { current: 1, total: requestQueue.length + 1 }) }}
+          </span>
+          <v-btn text x-small color="error" @click="rejectAll()">{{ $t('miniGero.rejectAll') }}</v-btn>
+        </div>
+        <div
+          v-for="item in requestQueue"
+          :key="item.requestId"
+          class="queue-strip-row"
+        >
+          <span class="grey--text text-caption queue-strip-label">{{ queuedItemLabel(item) }}</span>
+          <v-btn icon x-small :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
+            <v-icon size="14" color="var(--g-text-3)">mdi-close</v-icon>
+          </v-btn>
+        </div>
+      </div>
+
+      <!-- Wallet identity: which wallet/network this request acts on. Shown
+           once for every method (not duplicated per-branch below). Network
+           badge only appears off mainnet, so the common case stays quiet. -->
+      <div v-if="loggedWallet" class="wallet-identity-strip mb-2">
+        <v-icon size="13" color="rgba(255,255,255,0.45)" class="mr-1">mdi-wallet-outline</v-icon>
+        <span class="grey--text text-caption">{{ loggedWallet.name }}</span>
+        <span v-if="loggedWallet.network !== Network.MAINNET" class="network-badge ml-2">{{ loggedWallet.network }}</span>
       </div>
 
       <!-- DApp Connect -->
@@ -29,41 +50,34 @@
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ enableDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(enableDomain).sub }}</span><b class="dapp-root">{{ splitHost(enableDomain).root }}</b></span>
           </div>
         </div>
 
-        <!-- URL warning -->
-        <div class="url-warning mb-3">
-          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
-          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        <!-- Homograph / punycode warning: only when the hostname actually warrants it -->
+        <div v-if="splitHost(enableDomain).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
         </div>
 
-        <!-- Permissions -->
-        <div class="permissions-section mb-3">
-          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
-          <v-checkbox
-            v-model="enableConsent"
-            :color="primaryColor"
-            hide-details
-            dark
-            dense
-            class="consent-checkbox mt-0"
-            :label="$t('navigation.viewAddressAndBalance')"
-          />
-        </div>
-
-        <!-- Security note -->
-        <div class="security-note mb-4">
-          <v-icon size="14" color="rgba(255,255,255,0.4)" class="mr-1 flex-shrink-0" style="margin-top: 2px;">mdi-shield-check-outline</v-icon>
-          <span class="grey--text text-caption">
-            {{ $t('miniGero.futureTransactionsNote') }}
-          </span>
+        <!-- Permissions. A checkbox here was fake agency: it gated a button the
+             user had already decided to press, and taught them to click past
+             consent UI. The grants are stated, not negotiated. -->
+        <div class="permissions-section mb-4">
+          <p class="t-label mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('navigation.viewAddressAndBalance') }}</span>
+          </div>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('miniGero.futureTransactionsNote') }}</span>
+          </div>
         </div>
 
         <div class="action-buttons">
           <v-btn outlined rounded dark @click="reject()">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :disabled="!enableConsent" @click="approve(true)">
+          <v-btn class="geroButton" rounded depressed @click="approve(true)">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -80,11 +94,11 @@
               @error="onFaviconError"
               v-if="!faviconFailed"
             />
-            <v-icon v-else size="32" color="#FFF59E">mdi-file-document-edit-outline</v-icon>
+            <v-icon v-else size="32" color="warning">mdi-file-document-edit-outline</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.signTxRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
@@ -99,11 +113,114 @@
           :cbor-hex="txCborForSummary"
           class="mb-3"
         />
+        <div v-if="signTxSummary && formatFiatFromAda(signTxSummary.totals.youPayAda)" class="tx-fiat-approx mb-3">
+          {{ formatFiatFromAda(signTxSummary.totals.youPayAda) }}
+        </div>
+
+        <!-- Non-output intents: certificates, mint/burn, collateral, metadata.
+             Rendered only when at least one is present — an ordinary payment
+             shows nothing here. This is what stops a delegation/mint/vote
+             transaction from presenting as just an address and an amount. -->
+        <div
+          v-if="signTxSummary && (signTxSummary.certificates.length || signTxSummary.mints.length || signTxSummary.collateralCount > 0 || signTxSummary.hasMetadata)"
+          class="tx-intents mb-3"
+        >
+          <div class="tx-intents-header text-caption grey--text text-uppercase">{{ $t('signTx.thisTransactionWill') }}</div>
+          <div
+            v-for="(cert, i) in signTxSummary.certificates"
+            :key="'cert-' + i"
+            class="tx-intent-row"
+          >
+            <v-icon size="14" :color="primaryColor" class="mr-1">mdi-certificate-outline</v-icon>
+            <div class="tx-intent-text">
+              <span class="white--text text-caption">{{ cert.label }}</span>
+              <span v-if="cert.poolId" class="grey--text text-caption ml-1">{{ cert.poolId }}</span>
+              <span v-if="cert.depositAda" class="grey--text text-caption ml-1">({{ $t('signTx.depositAmount', { amount: cert.depositAda }) }})</span>
+              <span v-if="cert.drepSentinel" class="grey--text text-caption ml-1">{{ $t(`governance.${cert.drepSentinel === 'alwaysAbstain' ? 'alwaysAbstain' : 'alwaysNoConfidence'}`) }}</span>
+            </div>
+          </div>
+          <div
+            v-for="(mint, i) in signTxSummary.mints"
+            :key="'mint-' + i"
+            class="tx-intent-row"
+          >
+            <v-icon size="14" :color="mint.isBurn ? 'error' : 'success'" class="mr-1">{{ mint.isBurn ? 'mdi-fire' : 'mdi-file-plus-outline' }}</v-icon>
+            <span class="white--text text-caption">
+              {{ $t(mint.isBurn ? 'signTx.burnsAsset' : 'signTx.mintsAsset', { quantity: mint.formattedQuantity, name: mint.label }) }}
+            </span>
+          </div>
+          <div v-if="signTxSummary.collateralCount > 0" class="tx-intent-row">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-lock-outline</v-icon>
+            <span class="white--text text-caption">{{ $tc('signTx.reservesCollateral', signTxSummary.collateralCount, { count: signTxSummary.collateralCount }) }}</span>
+          </div>
+          <div v-if="signTxSummary.hasMetadata" class="tx-intent-row">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-tag-text-outline</v-icon>
+            <span class="white--text text-caption">{{ $t('signTx.includesMetadata') }}</span>
+          </div>
+        </div>
+
+        <!-- Decode-failure guard: CBOR parse failed (signTxSummary is null while
+             the payload itself decoded to a tx). Blocking — the user must
+             explicitly acknowledge before the Sign button below unlocks. -->
+        <div v-if="signTxDecodeFailed" class="tx-decode-failed-banner mb-3">
+          <v-icon color="error" size="20" class="mr-2">mdi-alert-octagon-outline</v-icon>
+          <div class="tx-expired-text">
+            <div class="tx-expired-title">{{ $t('signTx.decodeFailedTitle') }}</div>
+            <div class="tx-expired-body">{{ $t('signTx.decodeFailedBody') }}</div>
+            <v-checkbox
+              v-model="decodeFailedAck"
+              color="error"
+              hide-details
+              dark
+              dense
+              class="mt-2"
+              :label="$t('signTx.decodeFailedAck')"
+            />
+          </div>
+        </div>
+
+        <!-- Network mismatch guard: an external output address belongs to a
+             different network (mainnet/testnet) than the active wallet. -->
+        <div v-if="signTxNetworkMismatch" class="tx-decode-failed-banner mb-3">
+          <v-icon color="error" size="20" class="mr-2">mdi-swap-horizontal-circle-outline</v-icon>
+          <div class="tx-expired-text">
+            <div class="tx-expired-title">{{ $t('signTx.networkMismatchTitle') }}</div>
+            <div class="tx-expired-body">{{ $t('signTx.networkMismatchBody') }}</div>
+            <v-checkbox
+              v-model="networkMismatchAck"
+              color="error"
+              hide-details
+              dark
+              dense
+              class="mt-2"
+              :label="$t('signTx.networkMismatchAck')"
+            />
+          </div>
+        </div>
+
+        <!-- Proportional risk friction: quiet when Shield says low/medium/
+             unverified (the badge above is enough); blocking only on "high". -->
+        <div v-if="txRiskBadge && txRiskBadge.label === 'high'" class="tx-decode-failed-banner mb-3">
+          <v-icon color="error" size="20" class="mr-2">mdi-shield-alert-outline</v-icon>
+          <div class="tx-expired-text">
+            <div class="tx-expired-title">{{ $t('signTx.highRiskTitle') }}</div>
+            <div class="tx-expired-body">{{ $t('signTx.risk.highTooltip') }}</div>
+            <v-checkbox
+              v-model="highRiskAck"
+              color="error"
+              hide-details
+              dark
+              dense
+              class="mt-2"
+              :label="$t('signTx.highRiskAck')"
+            />
+          </div>
+        </div>
 
         <!-- Expired banner — shown once the live TTL countdown reaches 0. Sign buttons
              below all gate on `ttlDisplay.expired`, so the user is forced to reject. -->
         <div v-if="ttlDisplay.expired" class="tx-expired-banner">
-          <v-icon color="#ff6464" size="20" class="mr-2">mdi-clock-alert-outline</v-icon>
+          <v-icon color="error" size="20" class="mr-2">mdi-clock-alert-outline</v-icon>
           <div class="tx-expired-text">
             <div class="tx-expired-title">{{ $t('signTx.expiredTitle') }}</div>
             <div class="tx-expired-body">{{ $t('signTx.expiredBody') }}</div>
@@ -112,36 +229,22 @@
 
         <!-- Normal wallet: password input -->
         <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
-          <template v-if="!isPrfWallet">
-            <v-text-field
-              v-model="spendingPassword"
-              :type="showPassword ? 'text' : 'password'"
-              :label="$t('miniGero.spendingPassword')"
-              :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-              :error-messages="signError"
-              outlined dense dark
-              class="password-input"
-              @click:append="showPassword = !showPassword"
-              @keyup.enter="signNormal"
-            />
-            <div class="action-buttons">
-              <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || ttlDisplay.expired" @click="signNormal">
-                {{ $t('miniGero.sign') }}
-              </v-btn>
-            </div>
-          </template>
-
+          <v-text-field
+            v-if="!isPrfWallet"
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signNormal"
+          />
           <!-- PRF wallet: PassKey authentication -->
           <template v-else>
             <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
             <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-            <div class="action-buttons">
-              <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-              <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signPrf">
-                {{ $t('miniGero.sign') }}
-              </v-btn>
-            </div>
           </template>
         </template>
 
@@ -152,12 +255,6 @@
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectLedger') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signLedger">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
         </template>
 
         <!-- Trezor wallet -->
@@ -167,12 +264,6 @@
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectTrezor') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signTrezor">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
         </template>
 
         <!-- Keystone wallet -->
@@ -182,32 +273,7 @@
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.keystoneSign') }}</p>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="ttlDisplay.expired" @click="signKeystone">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
         </template>
-
-        <!-- Live TTL footer — pinned to the very bottom of the bottom sheet, beneath
-             the action buttons. Single instance for all wallet types. Centered,
-             monospaced so digits don't shift width as the countdown ticks. Hidden
-             once expired (the red banner above replaces the message). -->
-        <v-tooltip
-          v-if="ttlDisplay.relative && !ttlDisplay.expired"
-          top
-          content-class="custom-tooltip"
-          max-width="260"
-        >
-          <template v-slot:activator="{ on, attrs }">
-            <div class="tx-ttl-footer" v-bind="attrs" v-on="on">
-              <span>{{ $t('signTx.expiresIn') }}</span>
-              <span class="tx-ttl-footer-value">{{ ttlDisplay.relative }}</span>
-            </div>
-          </template>
-          <span>{{ $t('signTx.expiresTooltip', { slot: signTxSummary?.ttlSlot }) }}</span>
-        </v-tooltip>
       </div>
 
       <!-- Sign Data -->
@@ -221,18 +287,28 @@
               @error="onFaviconError"
               v-if="!faviconFailed"
             />
-            <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
+            <v-icon v-else size="32" color="error">mdi-file-sign</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.signDataRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
+        </div>
+
+        <!-- Signing address — payload.address is signed against but was
+             previously never shown, so the user couldn't see which key attests. -->
+        <div v-if="signDataAddress" class="signing-address-row mb-2">
+          <span class="grey--text text-caption">{{ $t('signTx.signingAddress') }}</span>
+          <span class="white--text text-caption signing-address-value">{{ filters.truncate(signDataAddress) }}</span>
         </div>
 
         <!-- Message content -->
         <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.signData') }}</p>
         <div class="sign-data-message">
-          <p class="white--text text-caption" style="word-break: break-all;">
+          <p v-if="signDataDecodeError" class="decode-error text-caption">
+            {{ $t('signTx.malformedSignData') }}
+          </p>
+          <p v-else class="white--text text-caption" style="word-break: break-all;">
             {{ signDataMessage }}
           </p>
         </div>
@@ -252,7 +328,7 @@
           />
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signDataNormal">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -264,7 +340,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataPrf">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataPrf">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -279,7 +355,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataHw">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -294,7 +370,7 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataHw">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataHw">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -305,9 +381,118 @@
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded depressed :loading="signing" @click="signDataNormal">
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
+          </div>
+        </template>
+      </div>
+
+      <!-- Bitcoin: Sign PSBT -->
+      <div v-else-if="currentRequest.method === 'btcSignPsbt'" class="dapp-sign-tx">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" color="warning">mdi-file-document-edit-outline</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('bitcoin.signPsbtRequest') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div v-if="btcPsbtInfo" class="tx-intents mb-3">
+          <div class="tx-intent-row">
+            <span class="grey--text text-caption">{{ $t('bitcoin.inputs') }}</span>
+            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.inputs }}</span>
+          </div>
+          <div class="tx-intent-row">
+            <span class="grey--text text-caption">{{ $t('bitcoin.outputs') }}</span>
+            <span class="white--text text-caption ml-auto">{{ btcPsbtInfo.outputs }}</span>
+          </div>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signBtcPsbtNormal"
+          />
+        </template>
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+        </template>
+        <!-- Hardware wallets: not yet supported for Bitcoin dApp signing in the
+             panel — see the script-section comment above for why this is an
+             honest deferral rather than a port of already-broken popup code. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('bitcoin.walletTypeUnsupportedInPanel') }}</p>
+        </template>
+      </div>
+
+      <!-- Bitcoin: Sign Message -->
+      <div v-else-if="currentRequest.method === 'btcSignMessage'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" color="error">mdi-file-sign</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('bitcoin.signMessageRequest') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <v-chip x-small color="orange darken-2" text-color="white" class="mb-2">
+          {{ btcMessageSigningType === 'bip322-simple' ? 'BIP-322' : 'ECDSA' }}
+        </v-chip>
+        <div class="sign-data-message">
+          <p class="white--text text-caption" style="word-break: break-all;">{{ btcMessageText }}</p>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signBtcMessageNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signBtcMessageNormal">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" @click="runBtcPrf(signBtcMessagePrf)">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+        <!-- Hardware wallets: never supported for Bitcoin message signing —
+             matches the popup's own BitcoinSignMessage.vue, which never
+             offered this either. Not a scope reduction on my part. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('bitcoin.hardwareMessageSigningNotSupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
           </div>
         </template>
       </div>
@@ -321,36 +506,30 @@
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ enableDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(enableDomain).sub }}</span><b class="dapp-root">{{ splitHost(enableDomain).root }}</b></span>
           </div>
         </div>
 
-        <div class="url-warning mb-3">
-          <v-icon size="14" color="#FFA726" class="mr-1">mdi-alert-outline</v-icon>
-          <span class="text-caption" style="color: #FFA726;">{{ $t('navigation.confirmUrlBeforeGranting') }}</span>
+        <div v-if="splitHost(enableDomain).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
         </div>
 
-        <div class="permissions-section mb-3">
-          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
-          <v-checkbox
-            v-model="enableConsent"
-            :color="primaryColor"
-            hide-details
-            dark
-            dense
-            class="consent-checkbox mt-0"
-            :label="$t('midnight.connector.viewAddressAndBalance')"
-          />
-        </div>
-
-        <div class="security-note mb-4">
-          <v-icon size="14" color="rgba(255,255,255,0.4)" class="mr-1 flex-shrink-0" style="margin-top: 2px;">mdi-shield-check-outline</v-icon>
-          <span class="grey--text text-caption">{{ $t('midnight.connector.futureRequestsNote') }}</span>
+        <div class="permissions-section mb-4">
+          <p class="t-label mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('midnight.connector.viewAddressAndBalance') }}</span>
+          </div>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('midnight.connector.futureRequestsNote') }}</span>
+          </div>
         </div>
 
         <div class="action-buttons">
           <v-btn outlined rounded dark @click="rejectMidnightConnect">{{ $t('miniGero.reject') }}</v-btn>
-          <v-btn class="geroButton" rounded depressed :disabled="!enableConsent" @click="approveMidnightConnect">
+          <v-btn class="geroButton" rounded depressed @click="approveMidnightConnect">
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
@@ -361,11 +540,11 @@
         <div class="dapp-identity mb-4">
           <div class="favicon-wrapper">
             <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
-            <v-icon v-else size="32" color="#FDA29B">mdi-file-sign</v-icon>
+            <v-icon v-else size="32" color="error">mdi-file-sign</v-icon>
           </div>
           <div class="dapp-domain-info">
             <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.signDataRequest') }}</h3>
-            <span class="dapp-url grey--text text-caption">{{ signDataDomain }}</span>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
@@ -437,25 +616,154 @@
           </div>
         </template>
       </div>
+
+      <!-- WalletConnect: session proposal (pairing) -->
+      <div v-else-if="currentRequest.method === 'wcSessionProposal'" class="dapp-connect">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-link-variant</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ wcPeerName }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(wcPeerUrl).sub }}</span><b class="dapp-root">{{ splitHost(wcPeerUrl).root }}</b></span>
+          </div>
+        </div>
+
+        <div v-if="splitHost(wcPeerUrl).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
+        </div>
+
+        <div class="permissions-section mb-3">
+          <p class="white--text text-body-2 font-weight-medium mb-2">{{ $t('walletConnect.requestedChains') }}</p>
+          <v-chip
+            v-for="chain in wcRequestedChainNames"
+            :key="chain"
+            small outlined :color="primaryColor"
+            class="mr-1 mb-1"
+          >{{ chain }}</v-chip>
+          <div v-if="wcHasUnsupportedChains" class="decode-error text-caption mt-1">
+            {{ $t('walletConnect.unsupportedChain') }}
+          </div>
+          <div class="permission-row mt-2">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('navigation.viewAddressAndBalance') }}</span>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="reject()">{{ $t('walletConnect.reject') }}</v-btn>
+          <!-- The consent gate is gone, the CAPABILITY gate stays: an unsupported
+               chain means we genuinely cannot honour the session. -->
+          <v-btn
+            class="geroButton" rounded depressed
+            :disabled="wcHasUnsupportedChains"
+            @click="approveWcSession"
+          >{{ $t('walletConnect.approve') }}</v-btn>
+        </div>
+      </div>
     </div>
 
     <!-- Keystone QR dialog -->
     <KeystoneSignDialog
       v-if="showKeystoneDialog"
-      :visible="showKeystoneDialog"
-      :type="keystoneType"
-      :cbor="keystoneCbor"
+      :isOpen="showKeystoneDialog"
+      :keystoneType="keystoneType"
+      :keystoneCbor="keystoneCbor"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @close="showKeystoneDialog = false"
     />
+
+    <!-- Sticky footer: signTx's action buttons + TTL countdown pinned below
+         the scrollable review content, so the primary action and the one
+         time-critical value are never scrolled out of view on a long
+         decoded transaction. Other methods (enable/signData/midnight_*) have
+         short enough content that this wasn't the ergonomics problem. -->
+    <template v-if="currentRequest && (currentRequest.method === 'signTx' || currentRequest.method === 'btcSignPsbt')" #footer>
+      <template v-if="currentRequest.method === 'signTx'">
+        <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              v-if="!isPrfWallet"
+              class="geroButton" rounded depressed :loading="signing"
+              :disabled="!spendingPassword || signTxBlocked" @click="signNormal"
+            >{{ $t('miniGero.sign') }}</v-btn>
+            <v-btn
+              v-else
+              class="geroButton" rounded depressed :loading="signing"
+              :disabled="signTxBlocked" @click="signPrf"
+            >{{ $t('miniGero.sign') }}</v-btn>
+          </div>
+        </template>
+        <div v-else-if="walletType === WalletType.Ledger" class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signLedger">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+        <div v-else-if="walletType === WalletType.Trezor" class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signTrezor">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+        <div v-else-if="walletType === WalletType.Keystone" class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signTxBlocked" @click="signKeystone">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+
+        <!-- Live TTL countdown — centered, monospaced so digits don't shift
+             width as it ticks. Hidden once expired (the red banner replaces it). -->
+        <v-tooltip
+          v-if="ttlDisplay.relative && !ttlDisplay.expired"
+          top
+          content-class="custom-tooltip"
+          max-width="260"
+        >
+          <template v-slot:activator="{ on, attrs }">
+            <div class="tx-ttl-footer" v-bind="attrs" v-on="on">
+              <span>{{ $t('signTx.expiresIn') }}</span>
+              <span class="tx-ttl-footer-value">{{ ttlDisplay.relative }}</span>
+            </div>
+          </template>
+          <span>{{ $t('signTx.expiresTooltip', { slot: signTxSummary?.ttlSlot }) }}</span>
+        </v-tooltip>
+      </template>
+
+      <!-- Bitcoin PSBT: Normal/PRF only, matching the pane above -->
+      <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="signBtcPsbtNormal">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+      </template>
+      <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && isPrfWallet">
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed :loading="signing" @click="runBtcPrf(signBtcPsbtPrf)">
+            {{ $t('miniGero.sign') }}
+          </v-btn>
+        </div>
+      </template>
+      <div v-else class="action-buttons">
+        <v-btn outlined rounded dark block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+      </div>
+    </template>
   </BottomSheet>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { getDomain } from 'tldts';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { useDAppOverlay } from '../composables/useDAppOverlay';
+import { useDAppOverlay, type DAppRequest } from '../composables/useDAppOverlay';
 import { useChainContext } from '../composables/useChainContext';
 import BottomSheet from './BottomSheet.vue';
 import TransactionDetailsCard, {
@@ -466,7 +774,9 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { WalletType } from '@/models/types';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { WalletType, Network } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
 import cardanoShieldApi from '@/api/cardano-shield-api';
@@ -476,21 +786,57 @@ import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature 
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
-import { decodedPayloadHexPreview, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
+import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
 
-const { isVisible, currentRequest, requestQueue, approve, reject } = useDAppOverlay();
-const { isApex, themeColors } = useChainContext();
+const { isVisible, currentRequest, requestQueue, approve, reject, rejectQueued, rejectAll } = useDAppOverlay();
+const { t } = useTranslation();
+
+// Domain + method label for a queued (not-yet-shown) request, for the queue
+// strip below. Reuses the same URL-hostname extraction as enableDomain/
+// signDataDomain (identical parsing, different source object).
+function queuedItemLabel(item: DAppRequest): string {
+  const payload = item.payload as { website?: string } | undefined;
+  const website = payload?.website || '';
+  let domain = website;
+  try { domain = new URL(website).hostname; } catch { /* leave as-is */ }
+  const methodKeys: Record<string, string> = {
+    enable: 'miniGero.connectRequest',
+    signTx: 'miniGero.signTxRequest',
+    signData: 'miniGero.signDataRequest',
+    midnight_connect: 'miniGero.connectRequest',
+    midnight_signData: 'miniGero.signDataRequest',
+    wcSessionProposal: 'miniGero.connectRequest',
+  };
+  const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
+  return `${domain} — ${methodLabel}`;
+}
+const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
+
+// Fiat approximation for the tx total — "≈ $5,620" when you meant $56 is
+// instantly visible where "12482.1 ADA" is not. Reuses the already-cached
+// price (networkStore.getAdaPrice(), populated by background sync — no new
+// API call here) and the existing display-currency conversion, so this is
+// pure presentation over data the app already has.
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+function formatFiatFromAda(adaAmountStr: string): string | null {
+  const adaPrice = networkStore.getAdaPrice();
+  if (!adaPrice) return null; // no price data yet — omit rather than show a stale/zero amount
+  const ada = parseFloat(adaAmountStr);
+  if (!Number.isFinite(ada)) return null;
+  const converted = convertFiat(ada * adaPrice);
+  return `≈ ${getCurrencySymbol()}${converted.toFixed(2)}`;
+}
 
 const spendingPassword = ref('');
 const showPassword = ref(false);
 const signing = ref(false);
 const signError = ref('');
-const enableConsent = ref(false);
 const faviconFailed = ref(false);
 
 const enableDomain = computed(() => {
@@ -501,6 +847,25 @@ const enableDomain = computed(() => {
     return website;
   }
 });
+
+/**
+ * Split a hostname into its de-emphasized subdomain and its registrable root,
+ * so the part that actually identifies the site is the part that reads loudest.
+ * `suspicious` flags punycode or non-ASCII labels, the classic homograph
+ * spoof (аpple.com with a Cyrillic а renders identically to apple.com).
+ */
+function splitHost(input: string): { sub: string; root: string; suspicious: boolean } {
+  if (!input) return { sub: '', root: '', suspicious: false };
+  // wcPeerUrl is a full URL; enableDomain/signDataDomain are already hostnames.
+  let host = input;
+  try {
+    if (/^[a-z]+:\/\//i.test(input)) host = new URL(input).hostname;
+  } catch { /* fall through with the raw string */ }
+  const root = getDomain(host) || host;
+  const sub = host.endsWith(root) ? host.slice(0, host.length - root.length) : '';
+  const suspicious = host.split('.').some((l) => l.startsWith('xn--')) || /[^\x00-\x7F]/.test(host);
+  return { sub, root, suspicious };
+}
 
 // Index of the favicon source currently being tried (advanced via @error).
 const faviconAttempt = ref(0);
@@ -538,15 +903,200 @@ const signDataDomain = computed(() => {
   }
 });
 
-const signDataMessage = computed(() => {
-  const payload = currentRequest.value?.payload?.message || currentRequest.value?.payload?.payload;
-  if (!payload) return '';
+// ── CIP-30 signData preview: strict decode, WYSIWYS ─────────────────────────
+// Mirrors the Midnight signData codec's own rationale exactly: Buffer.from(x,
+// 'hex') is lenient (silently truncates at the first invalid character
+// instead of throwing), and the ACTUAL signing path (createSignDataBuilder in
+// converter.ts) uses that same lenient decode. Gating every Sign button below
+// on !signDataDecodeError means malformed input never reaches the signer, so
+// by the time signing happens the lenient decode has no invalid input left to
+// diverge from this preview on.
+const signDataRawPayload = computed(() =>
+  currentRequest.value?.payload?.message || currentRequest.value?.payload?.payload || ''
+);
+// payload.address is signed against (see signDataNormal/signDataPrf/signDataHw
+// below) but was never shown — the user could not see which key attests.
+const signDataAddress = computed(() => currentRequest.value?.payload?.address || '');
+
+const signDataDecodeError = computed(() => {
+  if (!signDataRawPayload.value) return false;
   try {
-    return Buffer.from(payload, 'hex').toString('utf-8');
-  } catch {
-    return payload;
+    decodeSignDataPayload(signDataRawPayload.value, 'hex');
+    return false;
+  } catch (e) {
+    console.error('[DApp] Malformed signData payload:', e);
+    return true;
   }
 });
+
+const signDataMessage = computed(() => {
+  const payload = signDataRawPayload.value;
+  if (!payload || signDataDecodeError.value) return '';
+  const bytes = decodeSignDataPayload(payload, 'hex');
+  const asUtf8 = Buffer.from(bytes).toString('utf-8');
+  // Same printable-character idiom already used by decodeAssetNameHex above —
+  // show hex rather than mangled/misleading text for non-printable payloads.
+  const isPrintable = /^[\x20-\x7e\r\n\t]*$/.test(asUtf8);
+  return isPrintable ? asUtf8 : `0x${Buffer.from(bytes).toString('hex')}`;
+});
+
+// ── Bitcoin: PSBT + message signing ────────────────────────────────────────
+// Password/PRF paths mirror the popup's BitcoinSignPsbt.vue/BitcoinSignMessage.vue
+// exactly (same MessageTypes.BITCOIN_DAPP_SIGN_PSBT/MESSAGE handler, proven
+// correct). Hardware wallets (Ledger/Trezor/Keystone) are NOT ported here:
+// the popup's own Ledger/Trezor calls pass arguments and read a
+// `signedPsbtHex` field that no longer exist on the current
+// bitcoinHardwareSigner.ts API (it now returns {signedPsbt, txHex, txId} from
+// a unified signPsbtWithHardwareWallet, added in the same commit as the
+// popup view yet never wired to it) — that path silently always throws
+// "Ledger/Trezor signing failed" today regardless of whether the device
+// signed successfully. Rather than port that bug or guess at the Keystone
+// QR/UR bridging without hardware to verify against, hardware wallets get an
+// honest "not supported here yet" decline-only state — the same pattern
+// Midnight's own signData branch already uses for its unsupported wallet
+// types (see below).
+
+const btcPsbtInfo = ref<{ inputs: number; outputs: number } | null>(null);
+watch(
+  () => currentRequest.value?.method === 'btcSignPsbt' ? (currentRequest.value?.payload as { psbtHex?: string })?.psbtHex : undefined,
+  async (psbtHex) => {
+    btcPsbtInfo.value = null;
+    if (!psbtHex) return;
+    try {
+      const bitcoin = await import('bitcoinjs-lib');
+      let psbt;
+      try { psbt = bitcoin.Psbt.fromHex(psbtHex); }
+      catch { psbt = bitcoin.Psbt.fromBase64(psbtHex); }
+      btcPsbtInfo.value = { inputs: psbt.data.inputs.length, outputs: psbt.data.outputs.length };
+    } catch (e) {
+      console.error('[DApp] Failed to decode Bitcoin PSBT for preview:', e);
+    }
+  },
+  { immediate: true },
+);
+
+const btcMessageText = computed(() => {
+  if (currentRequest.value?.method !== 'btcSignMessage') return '';
+  return (currentRequest.value.payload as { message?: string })?.message || '';
+});
+const btcMessageSigningType = computed<'ecdsa' | 'bip322-simple'>(() => {
+  if (currentRequest.value?.method !== 'btcSignMessage') return 'ecdsa';
+  return ((currentRequest.value.payload as { type?: string })?.type as 'ecdsa' | 'bip322-simple') || 'ecdsa';
+});
+
+async function signBtcPsbtNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { psbtHex, options } = currentRequest.value.payload as { psbtHex: string; options?: unknown };
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
+      data: { psbtHex, options, password: spendingPassword.value },
+    }) as { data: { success: boolean; signedHex?: string; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signedHex);
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Bitcoin PSBT sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'Signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signBtcPsbtPrf(pkBytes: Uint8Array) {
+  if (!currentRequest.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { psbtHex, options } = currentRequest.value.payload as { psbtHex: string; options?: unknown };
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
+      data: { psbtHex, options, privateKeyBytes: Array.from(pkBytes) },
+    }) as { data: { success: boolean; signedHex?: string; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signedHex);
+  } catch (e) {
+    console.error('[DApp] Bitcoin PSBT PRF sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signBtcMessageNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
+      data: { message: btcMessageText.value, type: btcMessageSigningType.value, password: spendingPassword.value },
+    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signature);
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Bitcoin message sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'Signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signBtcMessagePrf(pkBytes: Uint8Array) {
+  if (!currentRequest.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
+      data: { message: btcMessageText.value, type: btcMessageSigningType.value, privateKeyBytes: Array.from(pkBytes) },
+    }) as { data: { success: boolean; signature?: unknown; error?: string } };
+    if (!response?.data?.success) throw new Error(response?.data?.error || 'Signing failed');
+    approve(response.data.signature);
+  } catch (e) {
+    console.error('[DApp] Bitcoin message PRF sign error:', e);
+    signError.value = e instanceof Error ? e.message : 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+// PRF wallets need the WebAuthn ceremony (same cross-window pattern as
+// signPrf/signDataPrf above) before either Bitcoin signer can run.
+async function runBtcPrf(onSuccess: (pkBytes: Uint8Array) => Promise<void>) {
+  if (!currentRequest.value) return;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+    const pkBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, privateKeyBytes: bytes, error } = event.data.payload;
+          if (success && bytes) resolve(new Uint8Array(bytes));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    });
+    await onSuccess(pkBytes);
+  } catch (e) {
+    console.error('[DApp] Bitcoin PRF auth error:', e);
+    signError.value = e instanceof Error ? e.message : 'PassKey authentication failed';
+    signing.value = false;
+  }
+}
 
 // ── Midnight DApp Connector: signData preview ──────────────────────────────
 // Shows the ACTUAL decoded bytes that will be signed (hex-encoded), matching
@@ -608,12 +1158,34 @@ interface SignTxOutputSummary {
   assetPillLabel: string;
 }
 
+interface SignTxCertificateRow {
+  label: string;       // human-readable certificate type (mirrors TransactionDetails.vue's getCertificateType)
+  poolId?: string;      // truncated bech32 pool id, when present (delegation/registration/retirement)
+  depositAda?: string;  // formatted ADA deposit, when present (registration certs)
+  drepSentinel?: string; // 'alwaysAbstain' | 'alwaysNoConfidence' — only for sentinel DRep targets
+}
+
+interface SignTxMintRow {
+  label: string;            // resolved asset name or 'Unknown token'
+  formattedQuantity: string; // absolute value, decimal-adjusted
+  isBurn: boolean;
+}
+
 interface SignTxSummary {
   outputs: SignTxOutputSummary[];
   /** Null when no withdrawals; the shared card uses this to render the row. */
   withdrawal: TxDetailsWithdrawal | null;
   totals: TxDetailsTotals;
   isInternal: boolean;
+  // Non-output intents — certs/mint/collateral/metadata. All empty/falsy for
+  // an ordinary payment. When any of these is present, `isInternal` is forced
+  // false even if every output happens to return to the wallet: a tx that
+  // delegates stake while returning all ADA to you is NOT "just moving money
+  // between your own addresses".
+  certificates: SignTxCertificateRow[];
+  mints: SignTxMintRow[];
+  collateralCount: number;
+  hasMetadata: boolean;
   // TTL — only the absolute slot is computed here. The live "in Xh Ym Zs" string
   // is derived in `ttlDisplay` so the expensive CBOR parse below doesn't re-run
   // every tick of the 1-second timer.
@@ -859,6 +1431,38 @@ function resolveAssetInfo(unit: string): KnownAssetInfo {
   return { name: 'Unknown token', decimals: 0 };
 }
 
+/**
+ * Human-readable certificate type label. Mirrors TransactionDetails.vue's
+ * getCertificateType exactly (same Cardano.CertificateType enum, same
+ * strings) — that mapping is already proven correct in the dashboard's own
+ * transaction detail view; duplicated here rather than imported since it's
+ * a private inline function there, not exported.
+ */
+function getCertificateLabel(certificateType: Cardano.CertificateType): string {
+  switch (certificateType) {
+    case Cardano.CertificateType.StakeRegistration: return 'Stake Registration';
+    case Cardano.CertificateType.StakeDeregistration: return 'Stake De-Registration';
+    case Cardano.CertificateType.PoolRegistration: return 'Pool Registration';
+    case Cardano.CertificateType.PoolRetirement: return 'Pool Retirement';
+    case Cardano.CertificateType.StakeDelegation: return 'Stake Delegation';
+    case Cardano.CertificateType.MIR: return 'MIR';
+    case Cardano.CertificateType.GenesisKeyDelegation: return 'Genesis Key Delegation';
+    case Cardano.CertificateType.Registration: return 'Registration';
+    case Cardano.CertificateType.Unregistration: return 'Unregistration';
+    case Cardano.CertificateType.VoteDelegation: return 'Vote Delegation';
+    case Cardano.CertificateType.StakeVoteDelegation: return 'Stake Vote Delegation';
+    case Cardano.CertificateType.StakeRegistrationDelegation: return 'Stake Registration Delegation';
+    case Cardano.CertificateType.VoteRegistrationDelegation: return 'Vote Registration Delegation';
+    case Cardano.CertificateType.StakeVoteRegistrationDelegation: return 'Stake Vote Registration Delegation';
+    case Cardano.CertificateType.AuthorizeCommitteeHot: return 'Authorize Committee Hot';
+    case Cardano.CertificateType.ResignCommitteeCold: return 'Resign Committee Cold';
+    case Cardano.CertificateType.RegisterDelegateRepresentative: return 'Register Delegate Representative';
+    case Cardano.CertificateType.UnregisterDelegateRepresentative: return 'Unregister Delegate Representative';
+    case Cardano.CertificateType.UpdateDelegateRepresentative: return 'Update Delegate Representative';
+    default: return 'Unknown certificate';
+  }
+}
+
 // Raw CBOR hex of the current sign request — used by the parser below.
 const txCborForSummary = computed<string | null>(() => {
   if (currentRequest.value?.method !== 'signTx') return null;
@@ -933,6 +1537,59 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
         }
       : null;
 
+    // ── Certificates: delegation/registration/DRep/vote actions. These carry
+    // NO output of their own — a tx that delegates stake while returning
+    // every ADA to the wallet must not read as "just an internal transfer"
+    // (see isInternal below). Mirrors TransactionDetails.vue's proven
+    // Cardano.CertificateType mapping via getCertificateLabel above.
+    const rawCertificates = (body.certificates || []) as Cardano.Certificate[];
+    const certificates: SignTxCertificateRow[] = rawCertificates.map((cert) => {
+      const row: SignTxCertificateRow = {
+        label: getCertificateLabel(cert.__typename as Cardano.CertificateType),
+      };
+      if ('poolId' in cert && cert.poolId) {
+        row.poolId = filters.truncate(String(cert.poolId));
+      }
+      if ('deposit' in cert && cert.deposit != null) {
+        row.depositAda = formatLovelace(BigInt(cert.deposit as unknown as bigint));
+      }
+      if ('dRep' in cert && cert.dRep && typeof cert.dRep === 'object' && '__typename' in cert.dRep) {
+        const drepTypename = (cert.dRep as { __typename: string }).__typename;
+        if (drepTypename === 'AlwaysAbstain') row.drepSentinel = 'alwaysAbstain';
+        else if (drepTypename === 'AlwaysNoConfidence') row.drepSentinel = 'alwaysNoConfidence';
+      }
+      return row;
+    });
+
+    // ── Mint/burn: body.mint is a Cardano.TokenMap (Map<AssetId, bigint>);
+    // negative quantity = burn, positive = mint (standard Cardano semantics).
+    // Reuses the same asset-name resolution as output token pills.
+    const mints: SignTxMintRow[] = [];
+    const rawMint = body.mint as Map<string, bigint> | Record<string, unknown> | undefined;
+    if (rawMint) {
+      const mintEntries: [string, unknown][] = rawMint instanceof Map
+        ? Array.from(rawMint.entries())
+        : Object.entries(rawMint);
+      for (const [unit, quantity] of mintEntries) {
+        const qty = BigInt(String(quantity));
+        const info = resolveAssetInfo(unit);
+        const absQty = qty < 0n ? -qty : qty;
+        mints.push({
+          label: info.name,
+          formattedQuantity: formatTokenQuantity(absQty.toString(), info.decimals),
+          isBurn: qty < 0n,
+        });
+      }
+    }
+
+    // ── Collateral: count only. Resolving the reserved ADA amount would need
+    // a wallet-UTxO lookup per txId#index; showing a wrong amount is worse
+    // than showing none, so this stays a plain count until that's verified.
+    const collateralCount = Array.isArray(body.collaterals) ? body.collaterals.length : 0;
+
+    // ── Metadata presence flag only — content is not decoded/shown here.
+    const hasMetadata = !!(body as { auxiliaryDataHash?: unknown }).auxiliaryDataHash;
+
     // Sum lovelace going to external addresses (excludes change AND self-payments)
     const totalSendingLovelace = outputs.reduce<bigint>((sum, o) => {
       if (o.isOwn) return sum;
@@ -945,8 +1602,12 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
     const youPayLovelace = feeLovelace + totalSendingLovelace - withdrawalsLovelace;
     const youPayAda = formatLovelace(youPayLovelace < 0n ? 0n : youPayLovelace);
 
-    // "Internal transfer" = every output address belongs to this wallet
-    const isInternal = outputs.length > 0 && outputs.every(o => o.isOwn);
+    // "Internal transfer" = every output address belongs to the wallet AND
+    // there is no certificate/mint/collateral action attached. A tx that
+    // delegates stake or mints an asset is never "just moving money between
+    // your own addresses", even if every output happens to return to you.
+    const isInternal = outputs.length > 0 && outputs.every(o => o.isOwn)
+      && certificates.length === 0 && mints.length === 0 && collateralCount === 0;
 
     // TTL: invalidHereafter is the absolute slot at which this tx becomes
     // invalid. We only capture the absolute slot here — the live "in Xh Ym Zs"
@@ -968,6 +1629,10 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
         isInternal,
       },
       isInternal,
+      certificates,
+      mints,
+      collateralCount,
+      hasMetadata,
       ttlSlot,
     };
   } catch (e) {
@@ -975,6 +1640,17 @@ const signTxSummary = computed<SignTxSummary | null>(() => {
     return null;
   }
 });
+
+// Phase 1b: on CBOR decode failure, signTxSummary is null and the details
+// card simply doesn't render (v-if="signTxSummary" below) while the
+// password field and Sign button rendered normally beneath it — an
+// unguarded blind-sign screen. This flag drives a blocking banner instead,
+// requiring the same explicit "I understand" acknowledgment as any other
+// undecodable/high-risk transaction.
+const signTxDecodeFailed = computed(
+  () => currentRequest.value?.method === 'signTx' && !!txCborForSummary.value && !signTxSummary.value
+);
+const decodeFailedAck = ref(false); // reset alongside the other per-request state, see the watcher below
 
 // Live TTL display — re-runs every 1s tick.
 //
@@ -1000,6 +1676,61 @@ const ttlDisplay = computed<{ relative: string | null; expired: boolean }>(() =>
   };
 });
 
+// Network mismatch: does any EXTERNAL output address belong to a different
+// network (mainnet vs testnet) than the active wallet? Cardano addresses only
+// encode mainnet-vs-testnet in their header byte, not which specific testnet
+// (preprod/preview/sanchonet all read as Testnet) — so this catches "wallet
+// is on mainnet but this address is testnet" and its inverse, not a
+// preprod-vs-preview mixup. Own/change outputs are skipped (trivially
+// correct — they came from the wallet's own key set).
+const signTxNetworkMismatch = computed(() => {
+  const summary = signTxSummary.value;
+  const wallet = loggedWallet.value;
+  if (!summary || !wallet) return false;
+  const expectedNetworkId = wallet.network === Network.MAINNET
+    ? Cardano.NetworkId.Mainnet
+    : Cardano.NetworkId.Testnet;
+  return summary.outputs.some((o) => {
+    if (o.isOwn) return false;
+    const parsed = Cardano.Address.fromString(o.address);
+    if (!parsed) return false; // unparseable — don't false-flag on a shape we don't recognize
+    return parsed.getNetworkId() !== expectedNetworkId;
+  });
+});
+const networkMismatchAck = ref(false);
+
+// Proportional risk friction: the Cardano Shield badge was purely
+// decorative (rendered in TransactionDetailsCard's header, never gated
+// anything). Quiet when safe — low/medium/unverified show only the existing
+// badge, no extra friction — blocking only when Shield says "high".
+const highRiskAck = ref(false);
+
+// Single gate for every signTx Sign button: expired TTL, an unacknowledged
+// decode failure, network mismatch, or high Cardano Shield risk. Kept as one
+// computed so all five wallet-type branches (password/PRF/Ledger/Trezor/
+// Keystone) can't drift out of sync.
+const signTxBlocked = computed(() =>
+  ttlDisplay.value.expired
+  || (signTxDecodeFailed.value && !decodeFailedAck.value)
+  || (signTxNetworkMismatch.value && !networkMismatchAck.value)
+  || (txRiskBadge.value?.label === 'high' && !highRiskAck.value)
+);
+
+// Wallet-switch mid-request: background.ts already refuses to honor a
+// response from a DIFFERENT wallet than the one the request was issued
+// against (see the wallet-switch guard in the port layer), so a signature
+// produced here can never reach the wrong dApp — but letting the user type a
+// password and sign into a response that's guaranteed to be discarded is
+// still a bad, confusing experience. Auto-reject as soon as the switch
+// happens instead.
+watch(loggedWallet, (newWallet, oldWallet) => {
+  if (!currentRequest.value || !oldWallet || !newWallet) return;
+  if (newWallet.id === oldWallet.id) return;
+  if (currentRequest.value.method === 'midnight_connect') rejectMidnightConnect();
+  else if (currentRequest.value.method === 'midnight_signData') rejectMidnightSignData();
+  else reject('wallet_changed');
+});
+
 // ── Cardano Shield risk scan (matches popup SignTx.vue behavior) ──
 
 const txRisk = ref<TxScanResponse | null>(null);
@@ -1019,11 +1750,14 @@ const txRiskBadge = computed<{ color: string; icon: string; label: string } | nu
   const isHigh = score === DappScore.high || scoreStr === 'high' || score === 2;
   const isMedium = score === DappScore.medium || scoreStr === 'medium' || score === 1;
   const isLow = score === DappScore.low || scoreStr === 'low' || score === 0;
-  if (isHigh) return { color: '#FDA29B', icon: 'mdi-shield-alert', label: 'high' };
-  if (isMedium) return { color: '#FFD54F', icon: 'mdi-shield-half-full', label: 'medium' };
-  if (isLow) return { color: '#94CFA8', icon: 'mdi-shield-check', label: 'low' };
+  // CSS var, not a Vuetify theme name: riskBadge.color feeds both a v-icon
+  // :color (which accepts var(--...)) AND an inline :style color/border-color
+  // on the badge, where a theme name like 'error' would be invalid CSS.
+  if (isHigh) return { color: 'var(--g-error)', icon: 'mdi-shield-alert', label: 'high' };
+  if (isMedium) return { color: 'var(--g-warning)', icon: 'mdi-shield-half-full', label: 'medium' };
+  if (isLow) return { color: 'var(--g-success)', icon: 'mdi-shield-check', label: 'low' };
   // Scan completed but score is 'unknown' or unrecognized → show neutral state
-  return { color: '#94969c', icon: 'mdi-shield-outline', label: 'unverified' };
+  return { color: 'var(--g-text-3)', icon: 'mdi-shield-outline', label: 'unverified' };
 });
 
 // Watch the current request: when it becomes a signTx, kick off a Cardano Shield scan
@@ -1095,9 +1829,11 @@ watch(currentRequest, () => {
   showPassword.value = false;
   signing.value = false;
   signError.value = '';
-  enableConsent.value = false;
   faviconFailed.value = false;
   faviconAttempt.value = 0;
+  decodeFailedAck.value = false;
+  networkMismatchAck.value = false;
+  highRiskAck.value = false;
 });
 
 function rejectSign() {
@@ -1555,6 +2291,47 @@ async function signMidnightDataPrf() {
     signing.value = false;
   }
 }
+
+// ── WalletConnect: session proposal (pairing) ──────────────────────────────
+// Mirrors WCSessionProposal.vue's popup fallback exactly (same fields, same
+// approve/reject payload shape) so background's onSessionProposal handler
+// doesn't need to know which surface answered it. Session *requests*
+// (signing) don't need their own pane — they reuse the signTx/signData/
+// btcSignPsbt/btcSignMessage panes above with origin metadata swapped in.
+interface WcSessionProposalPayload {
+  id: number;
+  proposer?: { metadata?: { name?: string; url?: string; icons?: string[] } };
+  requiredNamespaces?: Record<string, { chains?: string[] }>;
+  optionalNamespaces?: Record<string, { chains?: string[] }>;
+}
+const wcProposal = computed(() =>
+  currentRequest.value?.method === 'wcSessionProposal'
+    ? (currentRequest.value.payload as WcSessionProposalPayload)
+    : null
+);
+const wcPeerName = computed(() => wcProposal.value?.proposer?.metadata?.name || 'Unknown dApp');
+const wcPeerUrl = computed(() => wcProposal.value?.proposer?.metadata?.url || '');
+const wcRequestedChains = computed(() => {
+  if (!wcProposal.value) return [];
+  const chains: string[] = [];
+  const ns = { ...wcProposal.value.requiredNamespaces, ...wcProposal.value.optionalNamespaces };
+  for (const namespace of Object.values(ns)) {
+    if (namespace?.chains) chains.push(...namespace.chains);
+  }
+  return [...new Set(chains)];
+});
+const wcRequestedChainNames = computed(() =>
+  wcRequestedChains.value.map((c) => {
+    const info = resolveGeroChain(c);
+    return info ? `${info.chain} ${info.network}` : c;
+  })
+);
+const wcHasUnsupportedChains = computed(() => wcRequestedChains.value.some((c) => !resolveGeroChain(c)));
+
+function approveWcSession() {
+  if (!wcProposal.value) return;
+  approve({ approved: true, proposalId: wcProposal.value.id });
+}
 </script>
 
 <style scoped>
@@ -1564,11 +2341,52 @@ async function signMidnightDataPrf() {
   padding: 16px;
 }
 
-.queue-indicator {
-  text-align: center;
+.queue-strip {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.queue-strip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.queue-strip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.queue-strip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Enable / Connect ── */
+
+.wallet-identity-strip {
+  display: flex;
+  align-items: center;
+}
+
+.network-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 167, 38, 0.12);
+  color: var(--g-warning);
+  border: 1px solid rgba(255, 167, 38, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
 
 .dapp-identity {
   display: flex;
@@ -1601,37 +2419,46 @@ async function signMidnightDataPrf() {
   min-width: 0;
 }
 
+/* The subdomain is chrome; the registrable root is the identity. Both are always
+   rendered, so nothing about the hostname is hidden from the user. */
 .dapp-url {
   word-break: break-all;
   line-height: 1.3;
+  font-size: 14.5px;
 }
+.dapp-sub { color: var(--g-text-3); }
+.dapp-root { color: var(--g-text-1); font-weight: 600; }
 
-.url-warning {
+/* Replaces the unconditional "confirm the URL" nag: it only appears when the
+   hostname actually contains punycode or non-ASCII characters. */
+.suspicious-host {
   display: flex;
   align-items: center;
-  padding: 8px 10px;
-  background: rgba(255, 167, 38, 0.08);
-  border: 1px solid rgba(255, 167, 38, 0.15);
-  border-radius: 8px;
+  padding: var(--g-s-2) 10px;
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
+  color: var(--g-warning);
 }
 
 .permissions-section {
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  padding: var(--g-s-3);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
 }
 
-.consent-checkbox >>> .v-label {
-  font-size: 13px !important;
-  color: rgba(255, 255, 255, 0.8) !important;
-}
-
-.security-note {
+.permission-row {
   display: flex;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--g-s-2);
   line-height: 1.4;
+}
+.permission-row + .permission-row { margin-top: var(--g-s-2); }
+.permission-check {
+  color: var(--g-text-3);
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 /* ── Sign ── */
@@ -1678,11 +2505,11 @@ async function signMidnightDataPrf() {
   background: rgba(148, 207, 168, 0.06);
   border-bottom: 1px solid rgba(148, 207, 168, 0.15);
   text-align: center;
-  color: #94CFA8;
+  color: var(--g-success);
 }
 
 .tx-internal-banner .text-caption {
-  color: #94CFA8 !important;
+  color: var(--g-success) !important;
   font-weight: 500;
 }
 
@@ -1755,7 +2582,7 @@ async function signMidnightDataPrf() {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
-  color: #f5f5f6;
+  color: var(--g-text-1);
 }
 
 .tx-asset-name {
@@ -1776,7 +2603,7 @@ async function signMidnightDataPrf() {
 }
 
 .tx-ttl-expired {
-  color: #FDA29B !important;
+  color: var(--g-error) !important;
 }
 
 /* Centered countdown footer beneath the financial card. Monospaced so digit
@@ -1788,7 +2615,7 @@ async function signMidnightDataPrf() {
   gap: 6px;
   margin-top: 10px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   cursor: help;
 }
 
@@ -1805,8 +2632,51 @@ async function signMidnightDataPrf() {
   padding: 12px 14px;
   margin: 12px 0;
   border-radius: 10px;
-  background: rgba(255, 100, 100, 0.08);
-  border: 1px solid rgba(255, 100, 100, 0.32);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+}
+
+.tx-fiat-approx {
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--g-text-3);
+  font-variant-numeric: tabular-nums;
+  margin-top: -6px;
+}
+
+.tx-intents {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tx-intents-header {
+  letter-spacing: 0.5px;
+}
+
+.tx-intent-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tx-intent-text {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.tx-decode-failed-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
 }
 
 .tx-expired-text {
@@ -1815,14 +2685,14 @@ async function signMidnightDataPrf() {
 }
 
 .tx-expired-title {
-  color: #FDA29B;
+  color: var(--g-error);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.3;
 }
 
 .tx-expired-body {
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--g-text-2);
   font-size: 11px;
   line-height: 1.45;
   margin-top: 2px;
@@ -1844,8 +2714,20 @@ async function signMidnightDataPrf() {
   white-space: pre-line;
 }
 
+.signing-address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.signing-address-value {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
 .decode-error {
-  color: #F97066;
+  color: var(--g-error);
   font-weight: 600;
   margin: 0;
 }
@@ -1864,16 +2746,22 @@ async function signMidnightDataPrf() {
   width: 100%;
 }
 
+/* The specimen's action row: Decline is deliberately the narrower column. The
+   destructive-looking choice should never be the easiest one to hit by reflex,
+   but it must stay a first-class control, not a link. */
 .action-buttons {
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
   width: 100%;
-  justify-content: center;
-  margin-top: 16px;
+  margin-top: var(--g-s-4);
 }
-
+/* A pane with a single action (some hardware-wallet branches) spans the row. */
+.action-buttons > *:only-child {
+  grid-column: 1 / -1;
+}
 .action-buttons .v-btn {
-  flex: 1;
-  max-width: 160px;
+  width: 100%;
+  min-width: 0;
 }
 </style>

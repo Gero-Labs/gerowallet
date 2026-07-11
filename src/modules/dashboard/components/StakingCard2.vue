@@ -3,7 +3,7 @@
     <v-card-title>
       <router-link
         to="/staking"
-        style="text-decoration: auto; color: white;"
+        style="text-decoration: auto; color: var(--g-text-1);"
       >{{ $t('staking.staking') }}</router-link>
     </v-card-title>
     <v-card-text class="pa-0">
@@ -29,7 +29,7 @@
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn icon small v-bind="attrs" v-on="on" class="ml-1 staking2-social-btn">
-                    <v-icon small color="white">mdi-share-variant</v-icon>
+                    <v-icon small color="var(--g-text-1)">mdi-share-variant</v-icon>
                   </v-btn>
                 </template>
 
@@ -186,7 +186,7 @@
                   }}</span>
                   <v-icon
                     x-small
-                    :color="Number(currentPool.pledge) <= Number(currentPool.live_pledge) ? '#47cd89' : '#F97066'"
+                    :color="Number(currentPool.pledge) <= Number(currentPool.live_pledge) ? 'success' : 'error'"
                     class="ml-1"
                   >
                     {{ Number(currentPool.pledge) <= Number(currentPool.live_pledge) ? 'mdi-check' : 'mdi-close' }}
@@ -220,7 +220,7 @@
                   v-if="Number(currentPool.active_stake) - Number(currentPool.live_stake) > 100000000"
                   class="staking2-stake-change-up"
                 >
-                  <v-icon x-small color="#47cd89" class="staking2-arrow-icon">mdi-arrow-up-bold</v-icon>
+                  <v-icon x-small color="success" class="staking2-arrow-icon">mdi-arrow-up-bold</v-icon>
                   {{
                     filters.toCurrency(
                       Number(currentPool.active_stake) - Number(currentPool.live_stake),
@@ -236,7 +236,7 @@
                   v-else-if="Number(currentPool.live_stake) - Number(currentPool.active_stake) > 100000000"
                   class="staking2-stake-change-down"
                 >
-                  <v-icon x-small color="#F97066" class="staking2-arrow-icon-down">mdi-arrow-down-bold</v-icon>
+                  <v-icon x-small color="error" class="staking2-arrow-icon-down">mdi-arrow-down-bold</v-icon>
                   {{
                     filters.toCurrency(
                       Number(currentPool.live_stake) - Number(currentPool.active_stake),
@@ -319,10 +319,10 @@
               v-else-if="account && Number(account?.withdrawable_amount) > 0"
               elevation="2"
               small
-              color="#1a1a1a"
+              color="var(--g-raised)"
               @click="withdraw"
               block
-              :class="isApex ? 'apexButton' : 'geroButton'"
+              class="geroButton"
             >
               {{ $t('staking.withdraw') }}
             </v-btn>
@@ -330,7 +330,7 @@
               v-else
               elevation="2"
               small
-              color="#1a1a1a"
+              color="var(--g-raised)"
               disabled
               block
               class="staking2-no-rewards-btn">
@@ -443,7 +443,7 @@ onMounted(async () => {
 </script>
 <style scoped>
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  background: var(--g-accent);
 }
 
 .staking-action-buttons {
@@ -455,14 +455,10 @@ onMounted(async () => {
 
 /* Social Dropdown Liquid Glass Effect */
 .social-dropdown-card {
-  background: linear-gradient(135deg, rgba(12, 14, 18, 0.98), rgba(22, 27, 38, 0.96)) !important;
-  backdrop-filter: blur(12px) saturate(1.5) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(1.5) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6),
-              0 2px 8px rgba(0, 0, 0, 0.4),
-              inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-menu) !important;
   position: relative !important;
   z-index: 1 !important;
 }
@@ -472,30 +468,30 @@ onMounted(async () => {
 }
 
 .social-link-item {
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   margin: 2px 6px !important;
-  transition: all 0.2s ease !important;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease !important;
 }
 
 .social-link-item:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important;
+  background-color: var(--g-hairline-2) !important;
   transform: translateY(-1px);
 }
 
 .social-link-text {
-  color: #ffffff !important;
+  color: var(--g-text-1) !important;
   font-size: 14px !important;
   font-weight: 500 !important;
 }
 
 /* StakingCard2 specific styles */
 .staking2-header-row {
-  background-color: #161b26;
+  background-color: var(--g-raised);
 }
 
 .staking2-pool-title {
-  color: white;
-  font-size: 28px;
+  color: var(--g-text-1);
+  font-size: 32px;
   margin: 0;
 }
 
@@ -504,7 +500,7 @@ onMounted(async () => {
 }
 
 .staking2-amount-value {
-  color: white;
+  color: var(--g-text-1);
   font-size: 16px;
   margin: 4px 0;
 }
@@ -515,7 +511,7 @@ onMounted(async () => {
 }
 
 .staking2-stat-value {
-  color: white;
+  color: var(--g-text-1);
   font-size: 13px;
 }
 
@@ -526,13 +522,13 @@ onMounted(async () => {
 }
 
 .staking2-pledge-text {
-  color: white;
+  color: var(--g-text-1);
   font-size: 12px;
 }
 
 .staking2-fees-text {
   font-size: 12px;
-  color: white;
+  color: var(--g-text-1);
 }
 
 .staking2-saturation-container {
@@ -547,8 +543,8 @@ onMounted(async () => {
 }
 
 .staking2-stake-amount {
-  font-size: 10px;
-  color: white;
+  font-size: 11px;
+  color: var(--g-text-1);
 }
 
 .staking2-saturation-title {
@@ -557,29 +553,29 @@ onMounted(async () => {
 
 .staking2-stake-change-up {
   display: inline-flex;
-  font-size: 10px;
-  color: white;
+  font-size: 11px;
+  color: var(--g-text-1);
   align-items: center;
 }
 
 .staking2-stake-change-down {
   display: inline-flex;
-  font-size: 10px;
-  color: white;
+  font-size: 11px;
+  color: var(--g-text-1);
   align-items: center;
 }
 
 .staking2-arrow-icon {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .staking2-arrow-icon-down {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.7;
 }
 
 .staking2-placeholder {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .staking2-progress-container {
@@ -605,7 +601,7 @@ onMounted(async () => {
 }
 
 .staking2-unstake-text {
-  color: #f97066;
+  color: var(--g-error);
   font-weight: 600;
 }
 
@@ -614,7 +610,7 @@ onMounted(async () => {
 }
 
 .staking2-withdraw-text {
-  color: #47cd89;
+  color: var(--g-success);
   font-weight: 600;
 }
 
@@ -623,7 +619,7 @@ onMounted(async () => {
 }
 
 .staking2-no-rewards-text {
-  color: #666;
+  color: var(--g-text-3);
   font-weight: 600;
 }
 </style>

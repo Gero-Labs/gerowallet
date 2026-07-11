@@ -11,7 +11,7 @@
             <v-btn
               ref="buyButton"
               :class="['expandable-button', 'buy-button', { 'icon-only': compact }]"
-              color="#FFF59E1A"
+              color="warning"
               height="28"
               @click="openDialog(dialogs.BUY)"
               :style="getButtonGlowStyle('buy')"
@@ -38,7 +38,7 @@
             <v-btn
               ref="sendButton"
               :class="['expandable-button', 'send-button', { 'icon-only': compact }]"
-              color="#00DFF31A"
+              color="primary"
               height="28"
               @click="openDialog(dialogs.SEND)"
               :style="getButtonGlowStyle('send')"
@@ -66,7 +66,7 @@
             <v-btn
               ref="receiveButton"
               :class="['expandable-button', 'receive-button', { 'icon-only': compact }]"
-              color="#75E0A71A"
+              color="success"
               height="28"
               @click="openDialog(dialogs.RECEIVE)"
               :style="getButtonGlowStyle('receive')"
@@ -93,7 +93,7 @@
             <v-btn
               ref="swapButton"
               :class="['expandable-button', 'swap-button', { 'icon-only': compact }]"
-              color="#FDA29B1A"
+              color="error"
               height="28"
               @click="openDialog(dialogs.SWAP)"
               :style="getButtonGlowStyle('swap')"
@@ -125,7 +125,7 @@
             <v-btn
               ref="perpetualsButton"
               :class="['expandable-button', 'perpetuals-button', { 'icon-only': compact }]"
-              color="#B794F41A"
+              color="info"
               height="28"
               @click="openDialog(dialogs.PERPETUALS)"
               :style="getButtonGlowStyle('perpetuals')"
@@ -353,9 +353,9 @@ const getButtonGlowStyle = (buttonType: string) => {
   height: 44px;
   min-width: 240px;
   width: max-content;
-  border: 1px solid rgba(128,128,128,0.15);
+  border: 1px solid var(--g-hairline-3);
   background-color: transparent!important;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 8px;
   gap: 6px;
   align-items: center;
@@ -385,18 +385,13 @@ const getButtonGlowStyle = (buttonType: string) => {
   min-width: auto !important;
   width: auto !important;
   padding: 0 12px 0 6px !important;
-  border-radius: 6px !important;
+  border-radius: var(--g-r-control) !important;
   display: flex !important;
   justify-content: flex-start !important;
   align-items: center !important;
   position: relative;
-  background: rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(20px) brightness(1.2) contrast(1.1);
-  border: 0.5px solid rgba(255, 255, 255, 0.25) !important;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.12),
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    inset 0 0 1px rgba(255, 255, 255, 0.3);
+  background: var(--g-hairline-1) !important;
+  border: 0.5px solid var(--g-hairline-3) !important;
   overflow: hidden;
 }
 
@@ -438,53 +433,53 @@ const getButtonGlowStyle = (buttonType: string) => {
 
 /* Individual button color adjustments for text and liquid glass effects */
 .buy-button {
-  background: rgba(255, 245, 158, 0.12) !important;
-  border: 0.5px solid rgba(255, 245, 158, 0.4) !important;
+  background: color-mix(in srgb, var(--g-warning) 12%, transparent) !important;
+  border: 0.5px solid color-mix(in srgb, var(--g-warning) 40%, transparent) !important;
 }
 
 
 .buy-button .button-text {
-  color: #FFF59E;
+  color: var(--g-warning);
 }
 
 .send-button {
-  background: rgba(0, 223, 243, 0.12) !important;
-  border: 0.5px solid rgba(0, 223, 243, 0.4) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  border: 0.5px solid color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
 }
 
 
 .send-button .button-text {
-  color: #00DFF3;
+  color: var(--g-accent);
 }
 
 .receive-button {
-  background: rgba(117, 224, 167, 0.12) !important;
-  border: 0.5px solid rgba(117, 224, 167, 0.4) !important;
+  background: color-mix(in srgb, var(--g-success) 12%, transparent) !important;
+  border: 0.5px solid color-mix(in srgb, var(--g-success) 40%, transparent) !important;
 }
 
 
 .receive-button .button-text {
-  color: #75E0A7;
+  color: var(--g-success);
 }
 
 .swap-button {
-  background: rgba(253, 162, 155, 0.12) !important;
-  border: 0.5px solid rgba(253, 162, 155, 0.4) !important;
+  background: color-mix(in srgb, var(--g-error) 12%, transparent) !important;
+  border: 0.5px solid color-mix(in srgb, var(--g-error) 40%, transparent) !important;
 }
 
 
 .swap-button .button-text {
-  color: #FDA29B;
+  color: var(--g-error);
 }
 
 .perpetuals-button {
-  background: rgba(183, 148, 244, 0.12) !important;
-  border: 0.5px solid rgba(183, 148, 244, 0.4) !important;
+  background: color-mix(in srgb, var(--g-info) 12%, transparent) !important;
+  border: 0.5px solid color-mix(in srgb, var(--g-info) 40%, transparent) !important;
 }
 
 
 .perpetuals-button .button-text {
-  color: #B794F4;
+  color: var(--g-info);
 }
 
 /* Right corner ribbon "Off" badge */
@@ -504,18 +499,15 @@ const getButtonGlowStyle = (buttonType: string) => {
   display: block;
   width: 40px;
   padding: 2px 0;
-  background-color: #BD1550;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  color: #fff;
-  font-size: 7px;
+  background-color: var(--g-error);
+  color: var(--g-text-1);
+  font-size: 11px;
   font-weight: 700;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-  text-transform: uppercase;
   text-align: center;
   right: -10px;
   top: 3px;
   transform: rotate(45deg);
-  letter-spacing: 0.3px;
   line-height: 1.2;
 }
 
@@ -529,7 +521,7 @@ const getButtonGlowStyle = (buttonType: string) => {
 
   .ribbon span {
     width: 35px;
-    font-size: 6.5px;
+    font-size: 11px;
     right: -8px;
     top: 2.5px;
   }
@@ -545,7 +537,7 @@ const getButtonGlowStyle = (buttonType: string) => {
 
   .ribbon span {
     width: 32px;
-    font-size: 6px;
+    font-size: 11px;
     right: -6px;
     top: 2px;
   }
@@ -559,7 +551,7 @@ const getButtonGlowStyle = (buttonType: string) => {
   z-index: -1;
   border-left: 2px solid transparent;
   border-right: 2px solid transparent;
-  border-top: 2px solid #8B0E3C;
+  border-top: 2px solid color-mix(in srgb, var(--g-error) 65%, var(--g-canvas));
 }
 
 .ribbon span::before {

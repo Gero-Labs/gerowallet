@@ -22,9 +22,9 @@
               <v-icon
                 v-if="token.verified"
                 x-small
-                color="#00DFF3"
+                color="var(--g-accent)"
                 class="ml-1"
-                style="margin-top: -1px; font-size: 10px;"
+                style="margin-top: -1px; font-size: 11px;"
               >mdi-check-decagram</v-icon>
               <span class="token-balance">{{ formatBalance(token) }}</span>
             </template>
@@ -41,7 +41,7 @@
                       />
                     </v-avatar>
                     <span class="token-ticker">{{ token.ticker }}</span>
-                    <v-icon x-small class="ml-1" style="opacity: 0.4; font-size: 10px;">mdi-chevron-down</v-icon>
+                    <v-icon x-small class="ml-1" style="opacity: 0.4; font-size: 11px;">mdi-chevron-down</v-icon>
                   </div>
                 </template>
                 <v-list dense dark class="token-picker-list">
@@ -57,7 +57,7 @@
                       <v-list-item-title style="font-size: 12px;">{{ available.ticker }}</v-list-item-title>
                     </v-list-item-content>
                     <v-list-item-action style="margin: 0; min-width: auto;">
-                      <span style="font-size: 10px; color: rgba(255,255,255,0.4);">
+                      <span style="font-size: 11px; color: var(--g-text-3);">
                         {{ formatTokenBalance(available) }}
                       </span>
                     </v-list-item-action>
@@ -84,7 +84,7 @@
             <v-btn
               text
               x-small
-              color="#00DFF3"
+              color="var(--g-accent)"
               class="max-btn"
               @click="setMax(index)"
             >MAX</v-btn>
@@ -97,7 +97,7 @@
             class="remove-btn"
             @click="removeTokenSelector(index)"
           >
-            <v-icon x-small color="rgba(255,255,255,0.3)">mdi-close</v-icon>
+            <v-icon x-small color="var(--g-text-3)">mdi-close</v-icon>
           </v-btn>
         </div>
 
@@ -123,13 +123,13 @@
           v-if="index === 0 && lockedAdaForTokens > 0 && Number(token.quantity) > 0"
           class="token-info"
         >
-          <v-icon x-small color="#FEC84B" style="margin-top: -1px;" class="mr-1">mdi-lock-outline</v-icon>
+          <v-icon x-small color="warning" style="margin-top: -1px;" class="mr-1">mdi-lock-outline</v-icon>
           {{ lockedAdaForTokens.toFixed(2) }} {{ token.ticker }} {{ $t('wallet.lockedForTokens') }}
         </div>
 
         <!-- Info: ADA auto-set to min UTxO for tokens -->
         <div v-if="index === 0 && isAutoMinAda" class="token-info">
-          <v-icon x-small color="#FEC84B" class="mr-1" style="margin-top: -1px;">mdi-information-outline</v-icon>
+          <v-icon x-small color="warning" class="mr-1" style="margin-top: -1px;">mdi-information-outline</v-icon>
           {{ $t('wallet.adaRequiredForTokens') }}
         </div>
       </div>
@@ -141,7 +141,7 @@
         <!-- Add token picker -->
         <v-menu offset-y max-height="320" min-width="280" v-if="missingTokens.length > 0">
           <template v-slot:activator="{ on, attrs }">
-            <v-btn text x-small color="#00DFF3" v-bind="attrs" v-on="on" class="add-asset-btn">
+            <v-btn text x-small color="var(--g-accent)" v-bind="attrs" v-on="on" class="add-asset-btn">
               <v-icon x-small class="mr-1">mdi-plus</v-icon>
               {{ $t('assets.addToken') }}
             </v-btn>
@@ -162,7 +162,7 @@
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action style="margin: 0; min-width: auto;">
-                <span style="font-size: 11px; color: rgba(255,255,255,0.4);">
+                <span style="font-size: 11px; color: var(--g-text-3);">
                   {{ formatTokenBalance(token) }}
                 </span>
               </v-list-item-action>
@@ -172,7 +172,7 @@
         <!-- Add NFT button -->
         <v-btn
           v-if="collectiblesCount > 0"
-          text x-small color="#00DFF3"
+          text x-small color="var(--g-accent)"
           class="add-asset-btn"
           @click="$emit('openCollectiblesDialog')"
         >
@@ -184,7 +184,7 @@
       <div v-if="missingTokens.length > 0 || collectiblesCount > 0" class="send-all-row">
         <v-btn
           text x-small
-          color="#00DFF3"
+          color="var(--g-accent)"
           class="send-all-btn"
           @click="sendEntireWallet()"
         >
@@ -222,7 +222,7 @@ import networks from '@/utils/networks';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import filters from '@/shared/utils/filters';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
@@ -266,8 +266,8 @@ function getTokenPriceInUsd(token: any): number {
 
   // For other tokens: get price from DexHunter (in ADA), convert to USD
   const unit = token.unit || fullToken?.unit;
-  if (unit && dexHunterStore.dexHunterTokens[unit]) {
-    const priceInAda = dexHunterStore.dexHunterTokens[unit].price || 0;
+  if (unit && tokenMetadataStore.tokens[unit]) {
+    const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
     const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
     return priceInAda * adaPriceUsd;
   }
@@ -373,8 +373,8 @@ function getTokenPriceInAda(token: any): number {
 
   // For other tokens: get price from DexHunter (already in ADA)
   const unit = token.unit || fullToken?.unit;
-  if (unit && dexHunterStore.dexHunterTokens[unit]) {
-    return dexHunterStore.dexHunterTokens[unit].price || 0;
+  if (unit && tokenMetadataStore.tokens[unit]) {
+    return tokenMetadataStore.tokens[unit].price || 0;
   }
 
   // Fallback: if we have USD price, convert to ADA
@@ -447,15 +447,15 @@ const totalAmounts = computed(() => {
     totalAdaAll,
     totalUsd,
     totalEur,
-    formattedAda: totalAdaAll > 0 ? filters.toCurrency(totalAdaAll * 1e6, false, 6, '\u20B3', '', false, 6) : '\u20B30',
+    formattedAda: totalAdaAll > 0 ? filters.toCurrency(totalAdaAll * 1e6, false, 6, '₳', '', false, 6) : '₳0',
     formattedUsd:
       totalUsd > 0
-        ? `\u2248 $${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : '\u2248 $0.00',
+        ? `≈ $${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '≈ $0.00',
     formattedEur:
       totalEur > 0
-        ? `\u20AC${totalEur.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : '\u20AC0.00',
+        ? `€${totalEur.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '€0.00',
   };
 });
 
@@ -754,8 +754,8 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .token-row {
   display: flex;
   align-items: center;
-  background: #161B26;
-  border-radius: 8px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-control);
   padding: 6px 10px;
   gap: 6px;
 }
@@ -770,13 +770,13 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .token-ticker {
   font-size: 12px;
   font-weight: 600;
-  color: white;
+  color: var(--g-text-1);
   white-space: nowrap;
 }
 
 .token-balance {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-left: 6px;
   white-space: nowrap;
 }
@@ -806,7 +806,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   text-align: right;
   font-size: 14px;
   font-weight: 500;
-  color: white;
+  color: var(--g-text-1);
   padding: 0;
 }
 
@@ -842,8 +842,8 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 
 /* ─── Info: locked ADA ─── */
 .token-info {
-  font-size: 10px;
-  color: #FEC84B;
+  font-size: 11px;
+  color: var(--g-warning);
   padding: 2px 10px 0;
   display: flex;
   align-items: center;
@@ -852,7 +852,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 /* ─── Validation errors ─── */
 .token-error {
   font-size: 11px;
-  color: #F97066;
+  color: var(--g-error);
   padding: 2px 12px 0;
 }
 
@@ -863,7 +863,7 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 }
 
 .token-error--clickable:hover {
-  color: #fb8a80;
+  color: var(--g-error);
 }
 
 /* ─── Add asset row ─── */
@@ -903,18 +903,18 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   align-items: center;
   cursor: pointer;
   padding: 2px 4px;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
   transition: background-color 0.15s ease;
 }
 
 .token-selector-trigger:hover {
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--g-hairline-1);
 }
 
 .token-picker-list {
-  background: #0c0e12 !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 10px !important;
+  background: var(--g-surface) !important;
+  border: 1px solid var(--g-hairline-2) !important;
+  border-radius: var(--g-r-control) !important;
   min-width: 240px;
 }
 
@@ -927,15 +927,15 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 }
 
 .nft-chip {
-  background-color: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--g-hairline-1) !important;
+  border: 1px solid var(--g-hairline-2);
   font-size: 11px;
-  color: #CECFD2;
+  color: var(--g-text-2);
 }
 
 .nft-chip__qty {
-  color: #00DFF3;
-  font-size: 10px;
+  color: var(--g-accent);
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -945,15 +945,13 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   align-items: center;
   justify-content: space-between;
   padding: 8px 4px 2px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
   margin-top: 4px;
 }
 
 .total-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--g-text-3);
 }
 
 .total-values {
@@ -963,13 +961,13 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 .total-ada {
   font-size: 13px;
   font-weight: 600;
-  color: #00DFF3;
+  color: var(--g-accent);
   display: block;
   line-height: 1.2;
 }
 
 .total-fiat {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
 }
 </style>

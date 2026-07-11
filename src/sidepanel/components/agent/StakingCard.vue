@@ -395,9 +395,9 @@ export default defineComponent({
 
 <style scoped>
 .staking-card {
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--g-raised);
   font-size: 13px;
 }
 
@@ -412,8 +412,8 @@ export default defineComponent({
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border: 2px solid var(--g-hairline-3);
+  border-top-color: var(--g-text-1);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -423,7 +423,7 @@ export default defineComponent({
 }
 
 .staking-card__error {
-  color: #f97066;
+  color: var(--g-error);
   font-size: 12px;
 }
 
@@ -451,13 +451,13 @@ export default defineComponent({
 .staking-card__blocked {
   margin-top: 8px;
   padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(249, 112, 102, 0.12);
-  border: 1px solid rgba(249, 112, 102, 0.35);
+  border-radius: var(--g-r-control);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
 }
 
 .staking-card__blocked-title {
-  color: #f97066;
+  color: var(--g-error);
   font-weight: 600;
   font-size: 12px;
   margin-bottom: 4px;
@@ -466,19 +466,19 @@ export default defineComponent({
 .staking-card__reasons {
   margin: 0;
   padding-left: 16px;
-  color: #f97066;
+  color: var(--g-error);
   font-size: 11px;
 }
 
 .staking-card__submitted {
   margin-top: 6px;
-  color: #47cd89;
+  color: var(--g-success);
   font-size: 12px;
 }
 
 .staking-card__failed {
   margin-top: 6px;
-  color: #f97066;
+  color: var(--g-error);
   font-size: 12px;
 }
 
@@ -486,10 +486,10 @@ export default defineComponent({
   margin-top: 10px;
   width: 100%;
   padding: 8px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   border: none;
-  background: var(--v-primary-base, #5b6cff);
-  color: #fff;
+  background: var(--g-grad);
+  color: var(--g-on-grad);
   font-weight: 700;
   cursor: pointer;
   font-size: 13px;
@@ -503,7 +503,7 @@ export default defineComponent({
 
 .staking-card__advice {
   margin: 8px 0 0;
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.45;
 }
 </style>

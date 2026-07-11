@@ -104,9 +104,12 @@ function buildCSP(dev: boolean): string {
     ? ["'self'", "'wasm-unsafe-eval'", 'http://localhost:*']
     : ["'self'", "'wasm-unsafe-eval'"];
 
+  // Fonts are self-hosted (@fontsource, bundled by vite), so production needs
+  // nothing but 'self'. Dev keeps localhost because the vite dev server serves
+  // the woff2 files from its own origin.
   const fontSrc = dev
-    ? ["'self'", 'https://fonts.gstatic.com/', 'http://localhost:*']
-    : ["'self'", 'https://fonts.gstatic.com/'];
+    ? ["'self'", 'http://localhost:*']
+    : ["'self'"];
 
   const styleSrc = ['*', "'unsafe-inline'", "'self'", 'blob:'];
 

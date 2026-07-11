@@ -121,10 +121,9 @@ const delegatingTo = computed(() => {
 
 <style scoped>
 .status-card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 12px 14px;
 }
 
@@ -136,7 +135,7 @@ const delegatingTo = computed(() => {
 }
 
 .status-row + .status-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .status-label {
@@ -161,6 +160,6 @@ const delegatingTo = computed(() => {
 }
 
 .accent--text {
-  color: var(--chain-primary) !important;
+  color: var(--g-accent) !important;
 }
 </style>

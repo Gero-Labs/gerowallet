@@ -27,6 +27,9 @@
       <div class="bottom-sheet-content" ref="contentRef">
         <slot />
       </div>
+      <div v-if="$slots.footer" class="bottom-sheet-footer">
+        <slot name="footer" />
+      </div>
     </div>
   </div>
 </template>
@@ -34,6 +37,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { createSpring, projectMomentum, rubberBand } from '../composables/sheetPhysics';
+import { useSheetVisibility } from '../composables/useSheetVisibility';
 
 const props = withDefaults(defineProps<{
   value: boolean;
@@ -131,9 +135,12 @@ const sheetStyle = computed(() => ({
 
 // --- Open / Close ---
 let previouslyFocused: HTMLElement | null = null;
+const { markSheetOpened, markSheetClosed } = useSheetVisibility();
+let holdsOpenCredit = false; // guards against double-increment/decrement
 
 watch(() => props.value, async (val) => {
   if (val) {
+    if (!holdsOpenCredit) { holdsOpenCredit = true; markSheetOpened(); }
     previouslyFocused = document.activeElement as HTMLElement | null;
     visible.value = true;
     phase.value = 'entering';
@@ -174,6 +181,7 @@ function finishClose() {
   phase.value = 'closed';
   spring.setValue(0);
   translateY.value = 0;
+  if (holdsOpenCredit) { holdsOpenCredit = false; markSheetClosed(); }
   emit('input', false);
   emit('close');
   previouslyFocused?.focus?.();
@@ -226,10 +234,18 @@ function onPointerDown(e: PointerEvent) {
   if (e.button !== 0 && e.pointerType === 'mouse') return;
 
   const target = e.target as HTMLElement;
-  dragFromHandle = !!target.closest('.bottom-sheet-handle') || !!target.closest('.bottom-sheet-header');
 
-  // Never begin a drag from interactive elements (typing, tapping, selecting).
-  if (!dragFromHandle && target.closest(INTERACTIVE)) return;
+  // Never begin a drag — and critically, never call setPointerCapture — from
+  // a real control (buttons, inputs, links), regardless of whether it sits
+  // inside the handle/header zone. Capturing the pointer on the container
+  // disrupts the browser's native click synthesis on the ORIGINAL target, so
+  // gating this on "not in the handle/header" silently broke the header close
+  // button: pointerdown on it started a drag-capture sequence and its click
+  // handler never fired. Only bare handle/header background may start a drag
+  // directly; a button placed there must always be clickable.
+  if (target.closest(INTERACTIVE)) return;
+
+  dragFromHandle = !!target.closest('.bottom-sheet-handle') || !!target.closest('.bottom-sheet-header');
 
   dragPointerId = e.pointerId;
   dragCommitted = false;
@@ -346,6 +362,10 @@ onBeforeUnmount(() => {
   stopLoop();
   releasePointer();
   window.removeEventListener('click', clickBlocker, true);
+  // Safety net: if this instance is destroyed while still holding an "open"
+  // credit (torn down by a parent re-render rather than going through
+  // finishClose), don't leak the shared counter.
+  if (holdsOpenCredit) { holdsOpenCredit = false; markSheetClosed(); }
 });
 </script>
 
@@ -356,7 +376,9 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 100;
+  /* Below Vuetify's dialog stack (~202) on purpose: a v-dialog opened FROM a
+     sheet, such as KeystoneSignDialog over DAppOverlay, must render above it. */
+  z-index: var(--g-z-sheet);
   display: flex;
   align-items: flex-end;
   transition: background 0.35s ease;
@@ -364,23 +386,15 @@ onBeforeUnmount(() => {
 
 .bottom-sheet-container {
   width: 100%;
-  background:
-    linear-gradient(180deg, rgba(19, 22, 27, 0.65) 0%, rgba(10, 12, 16, 0.75) 100%),
-    radial-gradient(ellipse at 30% 0%, rgba(45, 240, 247, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse at 70% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
-  backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-  border-radius: 16px 16px 0 0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--g-overlay);
+  border-radius: var(--g-r-sheet) var(--g-r-sheet) 0 0;
+  border: 1px solid var(--g-hairline-3);
   border-bottom: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   will-change: transform;
-  box-shadow:
-    0 -12px 40px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset -1px 0 0 rgba(45, 240, 247, 0.06);
+  box-shadow: var(--g-shadow-sheet);
   outline: none;
 }
 
@@ -400,7 +414,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 4px;
   background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-radius: var(--g-r-pill);
   transition: background 0.15s ease;
 }
 
@@ -413,8 +427,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
   touch-action: none;
 }
 
@@ -424,5 +438,17 @@ onBeforeUnmount(() => {
   padding: 16px;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+}
+
+/* Optional sticky footer (Sign/Reject, a TTL countdown, ...) — stays fixed
+   at the bottom of the sheet while .bottom-sheet-content scrolls above it,
+   so the primary action and time-critical info are never scrolled out of
+   view on a long review (Apple fluid-interfaces §11: what's in the frame
+   matters more than raw scroll position). */
+.bottom-sheet-footer {
+  flex-shrink: 0;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--g-hairline-1);
+  background: var(--g-surface);
 }
 </style>

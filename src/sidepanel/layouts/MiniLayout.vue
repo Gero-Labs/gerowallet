@@ -68,7 +68,7 @@ watch(() => route.path, (to) => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #000;
+  background: var(--g-canvas);
   overflow: hidden;
   position: relative;
 }

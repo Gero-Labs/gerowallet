@@ -25,17 +25,17 @@
                   </div>
                 </div>
               </div>
-              <v-btn class="geroButton" :loading="loading" icon height="80" width="80" style="letter-spacing: normal; font-size: 20px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold > eligible.tokenAmount || loading" @click="claim">{{ $t('cashback.claim') }}</v-btn>
+              <v-btn class="geroButton" :loading="loading" icon height="80" width="80" style="letter-spacing: normal; font-size: 20px; text-transform: capitalize; color: var(--g-on-grad)!important; background: linear-gradient(134deg, var(--g-grad-1) 40%, var(--g-grad-2) 100%);" :disabled="!eligible || eligible.minimumClaimThreshold > eligible.tokenAmount || loading" @click="claim">{{ $t('cashback.claim') }}</v-btn>
             </div>
           </div>
         </v-col>
         <v-col cols="12" xl="5" lg="5" md="5" class="text-center" style="align-content: center;">
           <div>
-            <div style="color: white; font-size: 16px; font-weight: 600; line-height: 24px; word-wrap: break-word">{{ $t('cashback.pendingRewards') }}</div>
-            <div style="align-self: stretch; color: #A3A3A3; font-size: 30px; font-weight: 600; line-height: 38px; word-wrap: break-word">
+            <div style="color: var(--g-text-1); font-size: 16px; font-weight: 600; line-height: 24px; word-wrap: break-word">{{ $t('cashback.pendingRewards') }}</div>
+            <div style="align-self: stretch; color: var(--g-text-3); font-size: 32px; font-weight: 600; line-height: 38px; word-wrap: break-word">
               {{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}
             </div>
-            <div style="align-self: stretch; text-align: center; color: #737373; font-size: 16px; font-weight: 600; line-height: 38px; word-wrap: break-word">
+            <div style="align-self: stretch; text-align: center; color: var(--g-text-3); font-size: 16px; font-weight: 600; line-height: 38px; word-wrap: break-word">
               {{ filters.toCurrency(pending ? pending?.totalEstimatedUsd : 0, false, 2, '$', '', false, 0) }}
             </div>
           </div>
@@ -47,10 +47,10 @@
       <v-spacer></v-spacer>
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
         <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> {{ $t('cashback.deals') }}
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-2">{{deals?.length}}</v-chip>
+          <v-chip small outlined color="var(--g-accent)" style="background-color: var(--g-raised)!important; color: var(--g-text-2);" class="ml-1 px-2">{{deals?.length}}</v-chip>
         </v-btn>
         <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="claims?.length === 0"> {{ $t('cashback.claims') }}
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-2">{{claims.length}}</v-chip>
+          <v-chip small outlined color="var(--g-accent)" style="background-color: var(--g-raised)!important; color: var(--g-text-2);" class="ml-1 px-2">{{claims.length}}</v-chip>
         </v-btn>
       </v-btn-toggle>
     </v-card-title>
@@ -85,7 +85,7 @@
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
                 <div>{{ filters.toCurrency(item.tokenAmount, false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
-                <div style="color: #475467" v-if="item.totalEstimatedUsd">{{ filters.toCurrency(item.totalEstimatedUsd, false, 2, '$', '', true, 0) }}</div>
+                <div style="color: var(--g-text-3)" v-if="item.totalEstimatedUsd">{{ filters.toCurrency(item.totalEstimatedUsd, false, 2, '$', '', true, 0) }}</div>
               </template>
               <template v-slot:expanded-item="{ headers, item }">
                 <td :colspan="headers.length">
@@ -237,11 +237,11 @@ const handleSwitchTab = (tab: number) => {
 
 const getColor = (action: string) => {
   if (action === 'PURCHASE_POSTED') {
-    return 'red';
+    return 'error';
   } else if (action === 'PURCHASE_APPROVED') {
-    return 'green';
+    return 'success';
   } else { //PURCHASE_CORRECTED
-    return 'blue';
+    return 'info';
   }
 };
 
@@ -285,9 +285,9 @@ const claim = async () => {
 .card-text {
   width: 100%;
   padding: 10px;
-  background-color: #161B26;
-  border-radius: 12px;
-  border: 1px solid #333741;
+  background-color: var(--g-raised);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -296,11 +296,11 @@ const claim = async () => {
 }
 
 .avatar-bg {
-  background: linear-gradient(134deg, rgba(0, 199.26, 243, 0.25) 40%, rgba(0, 255, 209.10, 0.25) 100%);
+  background: var(--g-raised);
 }
 
 .header-text {
-  color: white;
+  color: var(--g-text-1);
   font-size: 14px;
   font-weight: 600;
   line-height: 24px;
@@ -326,10 +326,8 @@ const claim = async () => {
 
 .highlight-text {
   align-self: stretch;
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-size: 30px;
+  color: var(--g-accent);
+  font-size: 32px;
   line-height: 38px;
   word-wrap: break-word;
 }
@@ -339,6 +337,6 @@ const claim = async () => {
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  color: #A3A3A3;
+  color: var(--g-text-3);
 }
 </style>

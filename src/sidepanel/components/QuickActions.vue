@@ -73,9 +73,9 @@ const allActions = computed<QuickAction[]>(() => {
       id: 'receive',
       svg: assets.qrCodeSvg,
       label: t('dashboard.receive'),
-      color: '#75E0A7',
-      bgColor: 'rgba(117, 224, 167, 0.12)',
-      borderColor: 'rgba(117, 224, 167, 0.4)',
+      color: 'var(--g-success)',
+      bgColor: 'color-mix(in srgb, var(--g-success) 12%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-success) 40%, transparent)',
       filter: 'invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%)',
       enabled: !!networkInfo.value?.transactionSupport,
     },
@@ -83,9 +83,9 @@ const allActions = computed<QuickAction[]>(() => {
       id: 'swap',
       svg: assets.swapSvg,
       label: t('swap.swap'),
-      color: '#FDA29B',
-      bgColor: 'rgba(253, 162, 155, 0.12)',
-      borderColor: 'rgba(253, 162, 155, 0.4)',
+      color: 'var(--g-error)',
+      bgColor: 'color-mix(in srgb, var(--g-error) 12%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-error) 40%, transparent)',
       filter: 'invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%)',
       enabled: !!networkInfo.value?.swapSupport,
     },
@@ -93,9 +93,9 @@ const allActions = computed<QuickAction[]>(() => {
       id: 'perps',
       svg: assets.barChart,
       label: t('miniGero.perps'),
-      color: '#B794F4',
-      bgColor: 'rgba(183, 148, 244, 0.12)',
-      borderColor: 'rgba(183, 148, 244, 0.4)',
+      color: 'var(--g-info)',
+      bgColor: 'color-mix(in srgb, var(--g-info) 12%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-info) 40%, transparent)',
       filter: 'invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%)',
       enabled: !!networkInfo.value?.perpetualsSupport,
     },
@@ -143,17 +143,14 @@ function handleAction(id: string) {
   justify-content: center;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   border: 1px solid;
-  backdrop-filter: blur(12px);
 }
 
 .action-btn:hover .action-icon {
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.1);
   transform: scale(1.05);
 }
 
 .action-label {
   font-size: 11px !important;
   font-weight: 500;
-  letter-spacing: 0.3px;
 }
 </style>

@@ -415,17 +415,17 @@ export default defineComponent({
 
 <style scoped>
 .allowance-card {
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--g-surface);
   font-size: 13px;
 }
 
 .allowance-card__banner {
   padding: 7px 10px;
-  border-radius: 8px;
-  background: rgba(91, 108, 255, 0.15);
-  border: 1px solid rgba(91, 108, 255, 0.4);
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 40%, transparent);
   font-size: 11px;
   line-height: 1.4;
   margin-bottom: 10px;
@@ -452,9 +452,9 @@ export default defineComponent({
 .allowance-card__input {
   width: 100%;
   box-sizing: border-box;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-3);
+  background: var(--g-raised);
   color: inherit;
   padding: 6px 8px;
   font-size: 13px;
@@ -463,15 +463,15 @@ export default defineComponent({
 .allowance-card__errors {
   margin-bottom: 8px;
   padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(249, 112, 102, 0.12);
-  border: 1px solid rgba(249, 112, 102, 0.35);
+  border-radius: var(--g-r-control);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
 }
 
 .allowance-card__error-list {
   margin: 0;
   padding-left: 16px;
-  color: #f97066;
+  color: var(--g-error);
   font-size: 11px;
 }
 
@@ -479,10 +479,10 @@ export default defineComponent({
   margin-top: 6px;
   width: 100%;
   padding: 8px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   border: none;
-  background: var(--v-primary-base, #5b6cff);
-  color: #fff;
+  background: var(--g-accent);
+  color: var(--g-on-grad);
   font-weight: 700;
   cursor: pointer;
   font-size: 13px;
@@ -519,22 +519,22 @@ export default defineComponent({
   font-size: 11px;
   font-weight: 700;
   padding: 2px 7px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
 }
 
 .allowance-card__badge--active {
-  background: rgba(71, 205, 137, 0.18);
-  color: #47cd89;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .allowance-card__badge--paused {
-  background: rgba(255, 183, 77, 0.18);
-  color: #ffb74d;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .allowance-card__badge--revoked {
-  background: rgba(249, 112, 102, 0.18);
-  color: #f97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 .allowance-card__controls {
@@ -548,9 +548,9 @@ export default defineComponent({
   flex: 1;
   min-width: 70px;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--g-raised);
   color: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -559,31 +559,31 @@ export default defineComponent({
 }
 
 .allowance-card__ctrl-btn--warn {
-  background: rgba(255, 183, 77, 0.2);
-  color: #ffb74d;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .allowance-card__ctrl-btn--ok {
-  background: rgba(71, 205, 137, 0.2);
-  color: #47cd89;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .allowance-card__ctrl-btn--danger {
-  background: rgba(249, 112, 102, 0.2);
-  color: #f97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 .allowance-card__adjust {
   margin-top: 10px;
   padding: 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
 }
 
 .allowance-card__receipts {
   margin-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--g-hairline-1);
   padding-top: 8px;
 }
 
@@ -611,7 +611,7 @@ export default defineComponent({
 
 .allowance-card__advice {
   margin: 8px 0 0;
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.45;
 }
 </style>

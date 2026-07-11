@@ -8,7 +8,7 @@
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
-                mdi-information-outlƒine
+                mdi-information-outline
               </v-icon>
             </template>
             <div>
@@ -48,7 +48,7 @@
                 @input="spendingPassword = $event"
                 outlined
                 dense
-                hide-details
+                hide-details="auto"
                 :placeholder="t('navigation.typeYourSpendingPassword')"
                 :rules="[rules.required()]"
                 required
@@ -109,7 +109,7 @@
               </v-alert>
             </v-col>
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
+              <v-btn block outlined color="error" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>
@@ -273,7 +273,6 @@ const controller = ref<any>(null);
 const witnesses = ref<any>(undefined);
 const form = ref<any>(null);
 const popupHeader = ref<any>(null);
-const tabId = ref<number>();
 // Keystone state
 const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
@@ -287,10 +286,6 @@ const addresses = computed(() => {
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
-});
-
-const useSidePanel = computed(() => {
-  return config.value?.useSidePanel;
 });
 
 // Check if wallet uses PRF encryption (PassKey)
@@ -859,13 +854,13 @@ const init = async () => {
 };
 
 onMounted(async () => {
-  if (useSidePanel.value) {
-    const params = new URLSearchParams(window.location.href);
-    tabId.value = Number(params.get("tabId"));
-    controller.value = Messaging.createInternalSidePanelController(tabId.value);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see
+  // openPopupForSignTx in background.ts, which always targets index.html) —
+  // never inside the side panel, which renders DAppOverlay.vue instead. It
+  // must always speak the popup port protocol. It used to branch on the
+  // now-retired Prompt Display Mode setting instead, which connected the
+  // wrong port name and hung forever whenever this fallback view was reached.
+  controller.value = Messaging.createInternalController();
 
   await init();
 

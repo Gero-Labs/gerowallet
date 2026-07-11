@@ -150,7 +150,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         })) as BackgroundResponse<VerifyPasswordResponse>;
 
         if (!passwordVerification.data.success) {
-          passwordField.value?.showError(t('wallet.wrongSpendingPassword'));
+          passwordField.value?.showError(t('errors.wrongPassword'));
           loading.value = false;
           return false;
         }
