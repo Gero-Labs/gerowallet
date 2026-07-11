@@ -148,6 +148,14 @@ export class WalletManager {
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
           mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
+
+        // MPC wallets: lock when the reconstructed root key isn't cached this
+        // session (see login()), so restore/switch never exposes an MPC wallet
+        // without a fresh unlock (Google + passkey/spending password).
+        if (wallet.encryptionMethod === 'mpc') {
+          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+        }
+
         LoadingState.setText('Restoring wallet...');
         // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
         // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
@@ -255,6 +263,17 @@ export class WalletManager {
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
           mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
+
+        // MPC wallets: the reconstructed root key lives only in mpcSessionCache.
+        // If it's absent (e.g. switching to this wallet from the picker, or a fresh
+        // session), LOCK so the unlock flow (Google + passkey/spending password)
+        // runs before any access — otherwise a switch would silently expose the
+        // wallet with no re-authentication. If the key IS present (the options
+        // pre-login unlock reconstructed it before sending LOGIN), stay unlocked.
+        if (wallet.encryptionMethod === 'mpc') {
+          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+        }
+
         LoadingState.setText('Initializing wallet...');
 
         // Check if this is a first-time restore (no cached data)
