@@ -15,7 +15,9 @@ export const chainAccents: Record<ChainKey, ChainAccent> = {
   cardano: { accent: '#33C7DD', gradient1: '#00DFF3', gradient2: '#00FAD5' },
   bitcoin: { accent: '#F7931A', gradient1: '#F7931A', gradient2: '#FFB84D' },
   apex: { accent: '#E06030', gradient1: '#E06030', gradient2: '#F08040' },
-  midnight: { accent: '#8B7CF6', gradient1: '#8B7CF6', gradient2: '#B49CFF' },
+  // Moon on a black sky: monochrome silver accent, near-white -> faint-violet
+  // gradient. Purple is only a whisper (gradient2), never the dominant hue.
+  midnight: { accent: '#CBCDDC', gradient1: '#E9EAF3', gradient2: '#A69FC8' },
 };
 
 /** Blockchain display-string -> ChainKey (walletStore.loggedWallet.chain values) */

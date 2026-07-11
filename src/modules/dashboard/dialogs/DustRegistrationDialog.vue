@@ -724,7 +724,7 @@ void props;
 }
 
 .flow-stop-icon--validator {
-  background: linear-gradient(135deg, #5e35b1 0%, #7c4dff 100%);
+  background: linear-gradient(135deg, #3a3a4a 0%, #6b6b8a 100%);
 }
 
 .flow-stop-icon--midnight {

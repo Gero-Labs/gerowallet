@@ -120,14 +120,12 @@
               v-bind="attrs"
               v-on="on"
             >
-              <v-avatar tile size="14">
-                <v-img
-                  :src="assets.barChart"
-                  :alt="$t('perpetuals.perpetuals')"
-                  contain
-                  style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
-                ></v-img>
-              </v-avatar>
+              <span
+                class="qa-mask-icon"
+                :style="{ '--qa-icon': `url(${assets.barChart})` }"
+                role="img"
+                :aria-label="$t('perpetuals.perpetuals')"
+              ></span>
               <span v-if="!compact" class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
               <div v-if="priceStore.connectionStatus !== 'connected'" class="ribbon top-right" aria-hidden="true">
                 <span>{{ $t('common.down') }}</span>
@@ -233,7 +231,11 @@ const isPerpetualsDisabled = computed(() => {
   min-width: 240px;
   width: max-content;
   border: 1px solid var(--g-hairline-3);
-  background-color: transparent!important;
+  /* The whole bar is the liquid-glass surface; the buttons inside are flat
+     tints sharing this one frosted panel (was: glass per button). */
+  background-color: rgba(10, 12, 16, 0.55) !important;
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
   border-radius: var(--g-r-card);
   padding: 8px;
   gap: 6px;
@@ -269,13 +271,12 @@ const isPerpetualsDisabled = computed(() => {
   justify-content: flex-start !important;
   align-items: center !important;
   position: relative;
-  /* Frost the busy header background behind the pill so the label stays
-     readable; the per-button color tint sits on top of this. */
-  background: rgba(10, 12, 16, 0.55) !important;
-  backdrop-filter: blur(14px) saturate(1.3);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  border: 0.5px solid var(--g-hairline-3) !important;
+  /* Buttons are flat inside the glass bar: a faint color tint + colored label,
+     no per-button frost or border (the container carries the glass now). */
+  background: transparent !important;
+  border: none !important;
   overflow: hidden;
+  transition: background var(--g-dur-fast) ease;
 }
 
 
@@ -314,54 +315,74 @@ const isPerpetualsDisabled = computed(() => {
   filter: none !important;
 }
 
-/* Individual button color adjustments for text and liquid glass effects */
-/* Prefixed with the container so these reach (0,4,0) in scoped CSS and beat
-   Vuetify's filled `.warning`/`.primary`/etc. override-flagged (0,2,0) rules,
-   which are emitted twice and otherwise win on source order (buttons rendered
-   as solid Vuetify colors until a re-render). See project_vuetify_css_cascade. */
-.quick-actions-container .buy-button {
-  background: color-mix(in srgb, var(--g-warning) 16%, rgba(10, 12, 16, 0.62)) !important;
+/* Mask-painted icon: exact token color instead of an approximate CSS filter. */
+.qa-mask-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  -webkit-mask: var(--qa-icon) no-repeat center / contain;
+  mask: var(--qa-icon) no-repeat center / contain;
 }
 
-
+/* Per-button color: a faint tint over the shared glass bar (rest) that
+   intensifies on hover, plus the colored label. Prefixed with the container so
+   these reach (0,4,0) in scoped CSS and beat Vuetify's filled
+   `.warning`/`.primary`/etc. override-flagged (0,2,0) rules, which are emitted
+   twice and otherwise win on source order. See project_vuetify_css_cascade. */
+.quick-actions-container .buy-button {
+  background: color-mix(in srgb, var(--g-warning) 12%, transparent) !important;
+}
+.quick-actions-container .buy-button:hover {
+  background: color-mix(in srgb, var(--g-warning) 22%, transparent) !important;
+}
 .buy-button .button-text {
   color: var(--g-warning);
 }
 
 .quick-actions-container .send-button {
-  background: color-mix(in srgb, var(--g-accent) 16%, rgba(10, 12, 16, 0.62)) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .send-button:hover {
+  background: color-mix(in srgb, var(--g-accent) 22%, transparent) !important;
+}
 .send-button .button-text {
   color: var(--g-accent);
 }
 
 .quick-actions-container .receive-button {
-  background: color-mix(in srgb, var(--g-success) 16%, rgba(10, 12, 16, 0.62)) !important;
+  background: color-mix(in srgb, var(--g-success) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .receive-button:hover {
+  background: color-mix(in srgb, var(--g-success) 22%, transparent) !important;
+}
 .receive-button .button-text {
   color: var(--g-success);
 }
 
 .quick-actions-container .swap-button {
-  background: color-mix(in srgb, var(--g-error) 16%, rgba(10, 12, 16, 0.62)) !important;
+  background: color-mix(in srgb, var(--g-error) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .swap-button:hover {
+  background: color-mix(in srgb, var(--g-error) 22%, transparent) !important;
+}
 .swap-button .button-text {
   color: var(--g-error);
 }
 
 .quick-actions-container .perpetuals-button {
-  background: color-mix(in srgb, var(--g-info) 16%, rgba(10, 12, 16, 0.62)) !important;
+  background: color-mix(in srgb, var(--g-info) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .perpetuals-button:hover {
+  background: color-mix(in srgb, var(--g-info) 22%, transparent) !important;
+}
 .perpetuals-button .button-text {
   color: var(--g-info);
+}
+
+/* Paint the perps bar-chart glyph with the exact label token so icon and text
+   match (the other icons use approximate CSS-filter tints). */
+.perpetuals-button .qa-mask-icon {
+  background-color: var(--g-info);
 }
 
 /* Right corner ribbon "Off" badge */
