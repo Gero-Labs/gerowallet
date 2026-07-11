@@ -52,7 +52,14 @@ const version = ref<string>(APP_VERSION);
 
 .footer-btn {
   text-transform: none;
-  font-size: 10px;
   color: #ffffff;
+}
+
+/* .footer-btn is forwarded onto GButton's inner v-btn, which doesn't carry this
+   component's scope id — so a plain scoped rule never matches. Pierce with
+   ::v-deep and target the button text so the smaller size actually applies. */
+.footer-legal ::v-deep .footer-btn,
+.footer-legal ::v-deep .footer-btn .v-btn__content {
+  font-size: 11px;
 }
 </style>
