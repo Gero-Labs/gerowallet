@@ -440,7 +440,9 @@ const navigateToCashback = () => {
 
 .action-card {
   cursor: pointer;
-  transition: all 0.3s ease !important;
+  transition: transform var(--g-dur-slow) ease,
+              border-color var(--g-dur-slow) ease,
+              box-shadow var(--g-dur-slow) ease !important;
   border: 1px solid var(--g-hairline-2) !important;
   min-height: 200px;
   display: flex;
@@ -455,7 +457,7 @@ const navigateToCashback = () => {
 
 
 .copy-address-chip {
-  transition: all 0.2s ease !important;
+  transition: transform var(--g-dur-base) ease !important;
   cursor: pointer !important;
 }
 
@@ -560,7 +562,7 @@ const navigateToCashback = () => {
   border-radius: var(--g-r-card);
   overflow: hidden;
   height: 220px;
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .feature-card-container:hover {
@@ -678,7 +680,7 @@ const navigateToCashback = () => {
 /* Enhance the buy card on hover */
 .buy-card-emphasized:hover {
   transform: translateY(-6px);
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .buy-card-emphasized .feature-card-glass {

@@ -983,7 +983,7 @@ watch(
 
 .mode-btn {
   opacity: 0.4;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, opacity var(--g-dur-base) ease;
 }
 
 .mode-btn.mode-active {
@@ -1029,7 +1029,7 @@ watch(
 }
 
 .holdings-table-card ::v-deep tbody tr {
-  transition: background 0.15s ease;
+  transition: background var(--g-dur-fast) ease;
 }
 
 .holdings-table-card ::v-deep tbody tr:hover {
@@ -1052,7 +1052,7 @@ watch(
 /* ── Filter menu button ──────────────────────────────────────────────────────── */
 
 .filter-menu-btn {
-  transition: background 0.2s ease;
+  transition: background var(--g-dur-base) ease;
 }
 
 .filter-menu-btn:hover {
@@ -1072,7 +1072,7 @@ watch(
   height: 6px;
   border-radius: 50%;
   background: var(--g-hairline-3);
-  transition: background 0.3s ease;
+  transition: background var(--g-dur-slow) ease;
 }
 
 .live-dot--active {
@@ -1086,7 +1086,7 @@ watch(
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--g-text-3);
-  transition: color 0.3s ease;
+  transition: color var(--g-dur-slow) ease;
 }
 
 .live-label--active {

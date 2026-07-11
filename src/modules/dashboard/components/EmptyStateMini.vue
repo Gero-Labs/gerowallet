@@ -128,7 +128,7 @@ const primaryColor = computed(() => {
 /* Clickable card styles */
 .empty-state-mini.clickable-card {
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
 }
 
 .empty-state-mini.clickable-card:hover {
@@ -138,7 +138,7 @@ const primaryColor = computed(() => {
 
 .empty-state-icon {
   opacity: 0.8;
-  transition: all 0.3s ease;
+  transition: opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
 }
 
 .empty-state-mini:hover .empty-state-icon {

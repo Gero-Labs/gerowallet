@@ -273,7 +273,7 @@ function rttClass(rtt: number): string {
   border-radius: var(--g-r-card); cursor: pointer; white-space: nowrap;
   background: rgba(255,255,255,0.04); color: var(--g-text-3);
   border: 1px solid transparent;
-  transition: all 0.15s;
+  transition: color var(--g-dur-fast), background-color var(--g-dur-fast), border-color var(--g-dur-fast);
 }
 .chip:hover { background: rgba(255,255,255,0.08); color: var(--g-text-2); }
 .chip-active { border-color: var(--g-hairline-3); color: var(--g-text-1); background: rgba(255,255,255,0.08); }
@@ -304,7 +304,7 @@ function rttClass(rtt: number): string {
 .sort-opt {
   font-size: 11px; font-weight: 600; color: var(--g-text-3);
   cursor: pointer; display: inline-flex; align-items: center; gap: 2px;
-  transition: color 0.15s;
+  transition: color var(--g-dur-fast);
 }
 .sort-opt:hover { color: var(--g-text-2); }
 .sort-active { color: var(--g-info); }
@@ -328,7 +328,7 @@ function rttClass(rtt: number): string {
   padding: 4px 6px;
   border-radius: var(--g-r-control);
   background: rgba(255,255,255,0.02);
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
 }
 .peer-row:hover { background: rgba(255,255,255,0.05); }
 

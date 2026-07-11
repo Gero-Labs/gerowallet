@@ -167,7 +167,7 @@ const selectType = (type: 'virtual' | 'physical') => {
   border: 2px solid $border-primary;
   border-radius: $border-radius-lg;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: border-color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease;
 
   &:not(.disabled):hover {
     border-color: rgba($primary-cyan, 0.5);

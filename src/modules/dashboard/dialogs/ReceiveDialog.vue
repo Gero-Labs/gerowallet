@@ -739,7 +739,7 @@ watch(
 .accordion-container .v-expansion-panel {
   margin-bottom: 8px;
   border: 1px solid var(--g-hairline-2);
-  transition: all 0.3s ease;
+  transition: border-color var(--g-dur-slow) ease;
 }
 
 .accordion-container .v-expansion-panel:hover {

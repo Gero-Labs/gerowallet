@@ -846,7 +846,7 @@ watch(bpNode, (bp) => {
 .hero-id {
   display: inline-flex; align-items: center; margin-top: 2px; cursor: pointer;
   font-family: var(--g-font-mono); font-size: 11px; color: var(--g-text-3);
-  transition: color 0.15s;
+  transition: color var(--g-dur-fast);
 }
 .hero-id:hover { color: var(--g-text-3); }
 
@@ -859,7 +859,7 @@ watch(bpNode, (bp) => {
 .hero-icon-btn {
   width: 28px !important;
   height: 28px !important;
-  transition: all 0.15s;
+  transition: background-color var(--g-dur-fast), border-color var(--g-dur-fast);
 }
 
 .update-btn {
@@ -927,7 +927,7 @@ watch(bpNode, (bp) => {
 .hs-err { color: var(--g-error); }
 
 .sat-mini-bar { height: 2px; background: var(--g-hairline-1); border-radius: 1px; margin-top: 4px; overflow: hidden; width: 80%; margin-left: auto; margin-right: auto; }
-.sat-mini-fill { height: 100%; background: var(--g-accent); border-radius: 1px; transition: width 0.6s ease; }
+.sat-mini-fill { height: 100%; background: var(--g-accent); border-radius: 1px; transition: width var(--g-dur-slow) ease; }
 
 /* Metrics Bar — tight inline */
 .hero-metrics {
@@ -1072,7 +1072,7 @@ watch(bpNode, (bp) => {
   border-radius: var(--g-r-chip);
   padding: 3px 8px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color var(--g-dur-fast);
 }
 
 .ssc-code:hover {
@@ -1166,7 +1166,7 @@ watch(bpNode, (bp) => {
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   padding: 10px 12px;
-  transition: border-color 0.2s;
+  transition: border-color var(--g-dur-base);
 }
 
 .node-card:hover { border-color: var(--g-hairline-2); }
@@ -1214,7 +1214,7 @@ watch(bpNode, (bp) => {
 
 .nd-action {
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .node-card:hover .nd-action {
@@ -1285,7 +1285,7 @@ watch(bpNode, (bp) => {
   height: 100%;
   background: var(--g-accent);
   border-radius: 2px;
-  transition: width 0.6s ease;
+  transition: width var(--g-dur-slow) ease;
 }
 
 .nd-epoch-pct {
@@ -1391,7 +1391,7 @@ watch(bpNode, (bp) => {
   border-radius: var(--g-r-control);
   border: 1px solid var(--g-hairline-1);
   background: var(--g-hairline-1);
-  transition: all 0.2s;
+  transition: background-color var(--g-dur-base), border-color var(--g-dur-base);
 }
 
 .kes-banner.kes-critical {
@@ -1479,7 +1479,7 @@ watch(bpNode, (bp) => {
 .kes-bar-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.6s ease;
+  transition: width var(--g-dur-slow) ease;
 }
 
 .bar-critical { background: var(--g-error); }

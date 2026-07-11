@@ -487,7 +487,7 @@ defineExpose({ open });
   border-radius: var(--g-r-card);
   padding: 24px 20px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   text-align: center;
   flex: 1;
   display: flex;
@@ -522,7 +522,7 @@ defineExpose({ open });
   color: var(--g-text-3);
   display: flex;
   align-items: center;
-  transition: color 0.15s;
+  transition: color var(--g-dur-fast);
 }
 
 .drop-zone:hover .drop-zone-change-hint {
@@ -545,7 +545,7 @@ defineExpose({ open });
   align-items: center;
   justify-content: center;
   background: var(--g-hairline-1);
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color var(--g-dur-base), background var(--g-dur-base);
 }
 
 .drop-zone:hover .drop-zone-icon-ring,
@@ -618,7 +618,7 @@ defineExpose({ open });
   padding: 8px 10px;
   border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
   gap: 12px;
 
   &:hover {
@@ -664,7 +664,7 @@ defineExpose({ open });
 
 .collection-arrow {
   flex-shrink: 0;
-  transition: color 0.15s;
+  transition: color var(--g-dur-fast);
 }
 
 /* ── NFT grid (level 2) ── */
@@ -690,7 +690,7 @@ defineExpose({ open });
   border-radius: var(--g-r-control);
   overflow: hidden;
   border: 2px solid transparent;
-  transition: border-color 0.15s, transform 0.15s;
+  transition: border-color var(--g-dur-fast), transform var(--g-dur-fast);
   aspect-ratio: 1;
 }
 
@@ -739,7 +739,7 @@ defineExpose({ open });
 /* ── Transitions ── */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .fade-enter,

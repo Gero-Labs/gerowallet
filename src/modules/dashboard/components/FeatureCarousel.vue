@@ -279,7 +279,7 @@ onUnmounted(() => {
   overflow: hidden;
   background-color: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
-  transition: all 0.3s ease;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
   cursor: pointer;
   max-height: 422px;
 }

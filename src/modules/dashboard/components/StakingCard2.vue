@@ -470,7 +470,7 @@ onMounted(async () => {
 .social-link-item {
   border-radius: var(--g-r-control) !important;
   margin: 2px 6px !important;
-  transition: all 0.2s ease !important;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease !important;
 }
 
 .social-link-item:hover {

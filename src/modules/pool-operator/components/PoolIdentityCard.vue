@@ -108,7 +108,7 @@ function formatAdaShort(lovelace: any): string {
 
 .id-pool-id {
   font-family: var(--g-font-mono); font-size: 11px; color: var(--g-text-3);
-  cursor: pointer; transition: color 0.15s; margin-top: 2px;
+  cursor: pointer; transition: color var(--g-dur-fast); margin-top: 2px;
 }
 .id-pool-id:hover { color: var(--g-text-2); }
 
@@ -129,7 +129,7 @@ function formatAdaShort(lovelace: any): string {
 
 @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
 
-.id-action-btn { width: 26px !important; height: 26px !important; transition: all 0.15s; }
+.id-action-btn { width: 26px !important; height: 26px !important; transition: background-color var(--g-dur-fast); }
 .id-update { background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important; border: 1px solid color-mix(in srgb, var(--g-accent) 15%, transparent); }
 .id-update:hover { background: color-mix(in srgb, var(--g-accent) 15%, transparent) !important; }
 .id-retire { background: color-mix(in srgb, var(--g-error) 8%, transparent) !important; border: 1px solid color-mix(in srgb, var(--g-error) 15%, transparent); }

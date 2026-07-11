@@ -470,7 +470,7 @@ const currentOrderNeedsPayment = computed(() => {
       .clickable-text {
         color: $primary-cyan;
         border-bottom: 1px dotted $primary-cyan;
-        transition: all 0.2s ease;
+        transition: color var(--g-dur-base) ease, border-bottom-color var(--g-dur-base) ease;
       }
 
       &:hover {
@@ -486,7 +486,7 @@ const currentOrderNeedsPayment = computed(() => {
 
       .info-icon {
         color: $primary-cyan;
-        transition: all 0.2s ease;
+        transition: color var(--g-dur-base) ease;
       }
     }
 
@@ -527,7 +527,7 @@ const currentOrderNeedsPayment = computed(() => {
     padding: 10px 24px !important;
     height: auto !important;
     min-height: 44px;
-    transition: all 0.3s ease;
+    transition: transform var(--g-dur-slow) ease;
     position: relative;
     z-index: 1;
 
@@ -649,7 +649,7 @@ const currentOrderNeedsPayment = computed(() => {
     padding: 8px 20px !important;
     height: auto !important;
     min-height: 40px;
-    transition: all 0.3s ease;
+    transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease, filter var(--g-dur-slow) ease;
 
     &:hover:not(:disabled) {
       transform: translateY(-2px);

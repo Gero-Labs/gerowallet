@@ -79,7 +79,7 @@
                     :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    {{ hideBalances ? '••••••' : '~' + ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
+                    {{ hideBalances ? '••••••' : '~' + ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' ₳' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -89,7 +89,7 @@
                 class="pnl-value"
                 :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ hideBalances ? '••••••' : ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
+                {{ hideBalances ? '••••••' : ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' ₳' }}
               </span>
             </div>
             <div class="pnl-item">
@@ -101,7 +101,7 @@
                     :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    {{ hideBalances ? '••••••' : '~' + ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
+                    {{ hideBalances ? '••••••' : '~' + ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' ₳' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -111,7 +111,7 @@
                 class="pnl-value"
                 :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ hideBalances ? '••••••' : ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
+                {{ hideBalances ? '••••••' : ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' ₳' }}
               </span>
             </div>
           </template>
@@ -143,7 +143,7 @@
                 class="pnl-value"
                 :style="{ color: hasWithdrawableRewards ? '#47CD89' : 'rgba(255,255,255,0.35)' }"
               >
-                {{ hideBalances ? '••••••' : (hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' \u20B3' : '—') }}
+                {{ hideBalances ? '••••••' : (hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' ₳' : '—') }}
               </span>
             </div>
           </template>
@@ -1186,7 +1186,7 @@ onBeforeUnmount(() => {
 /* Balance fade transition */
 .balance-fade-enter-active,
 .balance-fade-leave-active {
-  transition: opacity 0.22s ease, filter 0.22s ease;
+  transition: opacity var(--g-dur-base) ease, filter var(--g-dur-base) ease;
 }
 
 .balance-fade-enter,
@@ -1257,7 +1257,7 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   padding: 2px 4px;
   margin: -2px -4px;
-  transition: background 0.15s ease;
+  transition: background var(--g-dur-fast) ease;
 }
 
 .staking-reward-row.clickable:hover {
@@ -1297,7 +1297,7 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   line-height: 1.2;
   outline: none;
   white-space: nowrap;
@@ -1358,7 +1358,7 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   line-height: 1.2;
   outline: none;
   white-space: nowrap;

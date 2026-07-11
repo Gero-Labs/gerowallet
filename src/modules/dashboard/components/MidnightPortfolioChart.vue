@@ -519,7 +519,7 @@ function formatNight(value: bigint): string {
   padding: 4px 10px;
   border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   outline: none;
 }
 
