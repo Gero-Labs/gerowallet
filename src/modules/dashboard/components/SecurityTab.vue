@@ -118,14 +118,11 @@
         <v-list-item-content class="py-0">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">
-              {{ (isPrfWallet || isMpcWallet) ? $t('security.lockSettingsOnly') : $t('security.lockSettings') }}
+              {{ isPrfWallet ? $t('security.lockSettingsOnly') : $t('security.lockSettings') }}
             </h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            <template v-if="isMpcWallet">
-              {{ $t('security.autoLock') }}: {{ autoLockText }}
-            </template>
-            <template v-else-if="isPrfWallet">
+            <template v-if="isMpcWallet || isPrfWallet">
               {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }}
             </template>
             <template v-else>
@@ -521,6 +518,8 @@ const unlockMethodText = computed(() => {
   }
 
   switch (unlockMethod.value) {
+    case 'passkey':
+      return t('security.passkey');
     case 'password':
       return t('security.spendingPassword');
     case 'pin':
