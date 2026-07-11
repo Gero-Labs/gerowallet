@@ -23,6 +23,7 @@ const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
 const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
+const BlogPost = () => import('@/modules/blog/BlogPost.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
@@ -121,6 +122,16 @@ const routes = [
     path: '/blog',
     name: 'blog',
     component: Blog,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/blog/:slug',
+    name: 'blog-post',
+    component: BlogPost,
+    props: true,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
