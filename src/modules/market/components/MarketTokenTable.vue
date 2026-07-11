@@ -60,7 +60,7 @@
           >mdi-snake</v-icon>
           <v-icon
             v-else-if="item.verified"
-            color="primary"
+            color="var(--g-accent)"
             class="verified-check"
             style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: var(--g-surface); border-radius: 50%;"
           >mdi-check-decagram</v-icon>
@@ -249,7 +249,7 @@
         class="allocation-bar"
         height="14"
         :value="totalAllocation > 0 ? (item.allocation / totalAllocation) * 100 : 0"
-        color="primary"
+        color="var(--g-accent)"
         background-color="var(--g-hairline-1)"
         rounded
       >
