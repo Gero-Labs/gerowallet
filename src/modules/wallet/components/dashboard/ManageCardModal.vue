@@ -156,8 +156,8 @@ const handleConfirmBlock = async () => {
 }
 
 .manage-card-dialog {
-  background: rgb(12, 14, 18) !important;
-  border-radius: 12px !important;
+  background: var(--g-surface) !important;
+  border-radius: var(--g-r-card) !important;
   overflow: hidden;
   width: 100%;
   max-width: 700px;
@@ -175,7 +175,7 @@ const handleConfirmBlock = async () => {
   font-weight: 600;
   font-size: 24px;
   line-height: 1.17;
-  color: #f7f7f7;
+  color: var(--g-text-1);
   margin: 0 0 8px 0;
 }
 
@@ -184,7 +184,7 @@ const handleConfirmBlock = async () => {
   font-weight: 400;
   font-size: 16px;
   line-height: 1.5;
-  color: #94979c;
+  color: var(--g-text-3);
   margin: 0;
   text-align: center;
 }
@@ -197,14 +197,14 @@ const handleConfirmBlock = async () => {
   height: 44px;
 
   .v-icon {
-    color: #85888e;
+    color: var(--g-text-3);
     font-size: 24px;
   }
 }
 
 .tabs-container {
   padding: 32px 32px 0;
-  border-bottom: 1px solid #22262f;
+  border-bottom: 1px solid var(--g-hairline-2);
 }
 
 .tabs-wrapper {
@@ -217,7 +217,7 @@ const handleConfirmBlock = async () => {
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #94979c !important;
+  color: var(--g-text-3) !important;
   text-transform: none;
   padding: 0 4px 12px !important;
   min-width: auto !important;
@@ -225,8 +225,8 @@ const handleConfirmBlock = async () => {
   border-radius: 0 !important;
 
   &.active {
-    color: #00dff3 !important;
-    border-bottom: 2px solid #00dff3;
+    color: var(--g-accent) !important;
+    border-bottom: 2px solid var(--g-accent);
   }
 
   &:hover {
@@ -274,10 +274,10 @@ const handleConfirmBlock = async () => {
 }
 
 .block-btn {
-  background: #d92d20 !important;
+  background: var(--g-error) !important;
   border: 1px solid $border-primary !important;
   border-radius: $border-radius-md !important;
-  color: #ffffff !important;
+  color: var(--g-text-1) !important;
   font-family: $font-family-primary;
   font-weight: $font-weight-semibold;
   font-size: $font-size-sm;
@@ -287,11 +287,11 @@ const handleConfirmBlock = async () => {
   min-width: 120px;
 
   &:hover {
-    background: #b42318 !important;
+    background: var(--g-error) !important;
   }
 
   &:disabled {
-    background: #6b7280 !important;
+    background: var(--g-raised) !important;
   }
 }
 

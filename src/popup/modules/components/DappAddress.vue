@@ -39,14 +39,14 @@
                   x-small
                   color="white"
                   style="margin-left: 1px; margin-bottom: 1px"
-                ><span style="color: #0fd25b; font-weight: 600">$</span>{{ contactInfo.label.replace(/^\$/, '') }}
+                ><span style="color: var(--g-success); font-weight: 600">$</span>{{ contactInfo.label.replace(/^\$/, '') }}
                 </v-chip>
                 <v-chip
                   v-else-if="contactInfo"
                   outlined
                   class="px-1 mr-1"
                   x-small
-                  color="#FF9800"
+                  color="warning"
                   style="margin-left: 1px; margin-bottom: 1px"
                 ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contactInfo.label }}</v-chip>
                 <v-chip outlined x-small v-if="isScriptAddress">Script</v-chip>
@@ -146,9 +146,9 @@ const riskTooltip = computed(() => {
 </script>
 <style scoped>
 #dapp-receiver-wrap {
-  background-color: #0F0F0F !important;
-  border: 1px solid #272930 !important;
-  border-radius: 10px;
+  background-color: var(--g-canvas) !important;
+  border: 1px solid var(--g-hairline-2) !important;
+  border-radius: var(--g-r-control);
   padding: 8px 10px;
 }
 #dapp-receiver-header {
@@ -159,7 +159,7 @@ const riskTooltip = computed(() => {
   justify-content: space-between;
 }
 #dapp-receiver-label {
-  color: white;
+  color: var(--g-text-1);
   font-size: 14px;
   font-weight: 500;
 }
@@ -171,8 +171,8 @@ const riskTooltip = computed(() => {
   margin: 2px 6px 2px 0;
 }
 #dapp-receiver-address {
-  color: white;
-  font-size: 10px;
+  color: var(--g-text-1);
+  font-size: 11px;
   font-weight: 400;
   line-height: 12px;
   word-wrap: break-word;
@@ -180,15 +180,15 @@ const riskTooltip = computed(() => {
   align-items: center;
 }
 #dapp-receiver-wrap.unknown {
-  background: linear-gradient(270deg, #1f1f1f -61.94%, #4b4b4b 115%);
+  background: var(--g-raised);
 }
 #dapp-receiver-wrap.suspicious {
-  background: linear-gradient(269.92deg, #552900 1.73%, #915a28 97.85%);
+  background: var(--g-warning-fill);
 }
 #dapp-receiver-wrap.blacklist {
-  background: linear-gradient(269.92deg, #250303 1.73%, #5d0101 97.85%);
+  background: var(--g-error-fill);
 }
 #dapp-receiver-wrap.whitelist {
-  background: linear-gradient(91.2deg, #00615b 40.76%, #00221c 103.06%);
+  background: var(--g-success-fill);
 }
 </style>
