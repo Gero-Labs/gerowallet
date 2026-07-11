@@ -77,6 +77,23 @@ onMounted(async () => {
         success: true,
         privateKeyBytes: Array.from(privateKeyBytes) // Convert Uint8Array to regular array for postMessage
       };
+    } else if (mode === 'mpcPrf') {
+      // MPC "Sign in with Google" wallet: evaluate the passkey PRF for the
+      // wallet's MPC salt and return the RAW PRF output. WebAuthn can't run in a
+      // Chrome side panel, so the side-panel unlock delegates the ceremony to this
+      // popup; the caller combines the output with the Google login share to
+      // reconstruct the key (never logged).
+      if (!wallet.webAuthnCredentialId || !wallet.mpcPrfSaltId) {
+        throw new Error('MPC passkey not configured');
+      }
+      const { evaluateMpcPasskey } = await import('@/shared/utils/mpc/mpcPasskey');
+      const prfOutputHex = await evaluateMpcPasskey(wallet.webAuthnCredentialId, wallet.mpcPrfSaltId);
+      resultPayload = {
+        success: true,
+        prfOutputHex,
+        webAuthnCredentialId: wallet.webAuthnCredentialId,
+        mpcPrfSaltId: wallet.mpcPrfSaltId,
+      };
     } else {
       // Default: Decrypt spending password using PRF
       // Get database config
