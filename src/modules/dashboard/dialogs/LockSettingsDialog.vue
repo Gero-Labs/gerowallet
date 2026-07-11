@@ -145,6 +145,7 @@
             dense
             attach
             hide-details
+            :menu-props="{ top: true, offsetY: true }"
             @change="handleAutoLockSelect"
           >
             <template v-slot:selection="{ item }">
