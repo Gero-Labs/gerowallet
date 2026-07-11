@@ -48,22 +48,26 @@
             <v-stepper-content step="1" class="overflow-visible pa-0" style="height: 400px">
               <v-card class="transparent fill-height" flat style="align-content: center;">
                 <v-row class="px-2" style="gap: 0;">
-                  <v-col cols="6" class="pa-2">
+                  <v-col cols="12" class="pa-2">
                     <button type="button" class="bs-choice" @click="chooseBuy">
                       <div class="bs-choice__icon">
                         <v-icon size="26" color="var(--g-success)">mdi-arrow-down-bold-circle-outline</v-icon>
                       </div>
-                      <div class="bs-choice__title">{{ buyLabel }}</div>
-                      <div class="bs-choice__desc">{{ buyDescription }}</div>
+                      <div class="bs-choice__text">
+                        <div class="bs-choice__title">{{ buyLabel }}</div>
+                        <div class="bs-choice__desc">{{ buyDescription }}</div>
+                      </div>
                     </button>
                   </v-col>
-                  <v-col cols="6" class="pa-2">
+                  <v-col cols="12" class="pa-2">
                     <button type="button" class="bs-choice" @click="chooseSell">
                       <div class="bs-choice__icon">
                         <v-icon size="26" color="var(--g-accent)">mdi-arrow-up-bold-circle-outline</v-icon>
                       </div>
-                      <div class="bs-choice__title">{{ sellLabel }}</div>
-                      <div class="bs-choice__desc">{{ sellDescription }}</div>
+                      <div class="bs-choice__text">
+                        <div class="bs-choice__title">{{ sellLabel }}</div>
+                        <div class="bs-choice__desc">{{ sellDescription }}</div>
+                      </div>
                     </button>
                   </v-col>
                 </v-row>
@@ -292,11 +296,13 @@ iframe html {
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   font: inherit;
   cursor: pointer;
-  padding: 28px 16px;
-  text-align: center;
+  padding: 16px 18px;
+  text-align: left;
   background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
@@ -311,14 +317,16 @@ iframe html {
 }
 
 .bs-choice__icon {
-  margin-bottom: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .bs-choice__title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--g-text-1);
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
 .bs-choice__desc {
