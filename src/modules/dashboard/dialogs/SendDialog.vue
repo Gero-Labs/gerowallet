@@ -18,6 +18,7 @@
     :img="assets.sendSvg"
     :width="428"
     img-color="var(--g-accent)"
+    solid
   >
     <!-- Empty wallet state -->
     <template v-if="isWalletEmpty">

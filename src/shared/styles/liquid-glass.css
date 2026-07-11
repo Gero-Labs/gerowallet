@@ -41,6 +41,19 @@
   box-shadow: var(--g-shadow-sheet) !important;
 }
 
+/* Solid variant (opt-in via BaseDialog :solid). Opaque surface, blur disabled,
+   for dialogs that reopen: the glass re-composites lighter on the 2nd open
+   (Vuetify keeps the card mounted; the blur re-evaluates over a lighter/stacked
+   backdrop). var(--g-surface) matches the near-black the glass already renders
+   on the 1st open, so it looks identical and stays put. Higher specificity
+   (0,3,0) + later source order to beat the base rule. */
+.liquid-glass-dialog--solid,
+.v-card.liquid-glass-dialog.liquid-glass-dialog--solid {
+  background: var(--g-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* Material 3: popover (menus, tooltips; lightest) */
 .glass-popover,
 .liquid-glass,

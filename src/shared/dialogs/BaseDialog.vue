@@ -8,7 +8,7 @@
     overlay-color="#000000"
     overlay-opacity="0.6"
   >
-    <v-card class="pa-5 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading">
+    <v-card class="pa-5 liquid-glass-dialog" :class="{ 'liquid-glass-dialog--solid': solid }" :min-height="minHeight" :max-height="height" :disabled="loading">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -87,6 +87,12 @@ const props = defineProps({
    *  'var(--g-accent)') instead of using the imgStyle filter. */
   imgColor: {
     type: String,
+  },
+  /** Solid opaque surface instead of translucent glass. Use for dialogs that
+   *  reopen (glass backdrop-filter re-composites lighter on the 2nd open). */
+  solid: {
+    type: Boolean,
+    default: false,
   },
   imgSize: {
     type: [Number, String],
