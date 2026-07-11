@@ -363,8 +363,11 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     return next();
   }
 
-  if (needsAuth && !isLoggedIn) {
-    // not logged in → send to /welcome (with optional redirect)
+  if (needsAuth && !isLoggedIn && to.name !== 'passkey-auth') {
+    // not logged in → send to /welcome (with optional redirect).
+    // EXCEPT the passkey-auth popup: in a pre-switch/first-login unlock it resolves
+    // its target wallet from the `walletId` query param, so it can run before any
+    // wallet is the active/logged-in one.
     let redirectTo = '/welcome';
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
