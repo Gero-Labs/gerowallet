@@ -163,7 +163,6 @@ import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
 import { useChainContext } from '../composables/useChainContext';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import { evaluateMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import assets from '@/utils/assets';
 
 /** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
@@ -335,6 +334,40 @@ async function signInWithGoogle() {
   }
 }
 
+// WebAuthn cannot run directly in a Chrome side panel, so the MPC passkey PRF
+// ceremony runs in a popup window (index.html?mode=mpcPrf#/passkey-auth) — the
+// same popup-delegation the dapp-sign flow uses. Returns the UNLOCK_MPC_WALLET
+// `extra` fields (raw prfOutputHex + credential/salt ids). Never logged.
+function evaluateMpcPasskeyViaPopup(): Promise<{ prfOutputHex: string; webAuthnCredentialId: string; mpcPrfSaltId: string }> {
+  return new Promise((resolve, reject) => {
+    const popupUrl = chrome.runtime.getURL('index.html?mode=mpcPrf#/passkey-auth');
+    const popup = window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+    if (!popup) {
+      reject(new Error(t('errors.popupBlocked')));
+      return;
+    }
+    const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== extensionOrigin) return;
+      if (event.data?.type !== 'PASSKEY_AUTH_RESULT') return;
+      window.removeEventListener('message', handler);
+      const { success, prfOutputHex, webAuthnCredentialId, mpcPrfSaltId, error: err } = event.data.payload || {};
+      if (success && prfOutputHex) {
+        resolve({ prfOutputHex, webAuthnCredentialId, mpcPrfSaltId });
+      } else {
+        reject(new Error(err || t('security.passKeyAuthFailed')));
+      }
+      try { popup.close(); } catch { /* already closed */ }
+    };
+    window.addEventListener('message', handler);
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      reject(new Error(t('errors.authenticationTimeout')));
+      try { popup.close(); } catch { /* already closed */ }
+    }, 120000);
+  });
+}
+
 async function handleMpcUnlock() {
   if (loading.value) return;
   const walletId = walletStore.loggedWallet?.id;
@@ -368,18 +401,12 @@ async function handleMpcUnlock() {
         return;
       }
     }
-    // Passkey wallets EVALUATE the existing passkey (triggers Touch ID/biometric
-    // prompt) to re-derive the PRF output; password wallets send the entered
-    // spending password. Never log request.data — contains idToken/spendingPassword/prfOutputHex.
+    // Passkey wallets re-derive the PRF output via a passkey ceremony; password
+    // wallets send the entered spending password. WebAuthn can't run in a Chrome
+    // side panel, so the passkey ceremony runs in a popup window (same mechanism
+    // as dapp signing). Never log request.data — contains idToken/spendingPassword/prfOutputHex.
     const extra = mpcUsesPasskey.value
-      ? {
-          prfOutputHex: await evaluateMpcPasskey(
-            walletStore.loggedWallet.webAuthnCredentialId,
-            walletStore.loggedWallet.mpcPrfSaltId,
-          ),
-          webAuthnCredentialId: walletStore.loggedWallet.webAuthnCredentialId,
-          mpcPrfSaltId: walletStore.loggedWallet.mpcPrfSaltId,
-        }
+      ? await evaluateMpcPasskeyViaPopup()
       : { spendingPassword: password.value };
 
     const response = await Messaging.sendToBackgroundFromOptions({
