@@ -15,7 +15,7 @@
           <v-list-item-title>
             <img
               :src="isApex ? assets.geroDashboardApex : assets.geroNoText"
-              width="80"
+              width="64"
               alt="logo"
             />
           </v-list-item-title>
