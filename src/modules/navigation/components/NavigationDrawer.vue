@@ -43,7 +43,7 @@
           :disabled="item.soon || item.loading || item.underMaintenance"
           :active-class="themeDark ? (isApex ? 'activePageDark apex' : isBitcoin ? 'activePageDark bitcoin' : 'activePageDark') : (isApex ? 'activePage apex' : isBitcoin ? 'activePage bitcoin' : 'activePage')"
           link
-          class="menuItem"
+          :class="['menuItem', { 'nexus-item': item.special }]"
           style="height: 34px"
           :key="index"
         >
@@ -57,7 +57,7 @@
                 :src="item.icon"
                 :alt="item.title"
                 contain
-                style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
+                :style="item.special ? undefined : 'filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);'"
               />
             </v-badge>
           </v-list-item-avatar>
@@ -242,6 +242,8 @@ interface NavigationItem {
   notificationDot?: boolean;
   underMaintenance?: boolean;
   loading?: boolean;
+  /** Brand spotlight item (Nexus): colored icon, animated gradient border. */
+  special?: boolean;
 }
 
 type NavigationLinkItem = NavigationItem & { link: string };
@@ -397,6 +399,9 @@ const items = computed((): NavigationItemUnion[] => {
     // Only show the player when the wallet actually holds playable media —
     // an empty player is dead weight (and the Media header auto-hides with it).
     { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR && (musicPlaylist.value?.length ?? 0) > 0 },
+    { header: t('navigation.developers'), enabled: true },
+    // Nexus infra product spotlight: colored brand logo + animated gradient border.
+    { title: t('navigation.nexus'), icon: assts.nexusLogo, link: '/nexus', enabled: true, special: true },
     // Uncomment to add more items:
     // { header: 'Tools' },
     // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
@@ -618,6 +623,15 @@ onUnmounted(() => {
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)
 })
 </script>
+<style>
+/* Typed registration so the Nexus ring's conic angle interpolates smoothly
+   (an unregistered custom property can't animate — the ring would jump). */
+@property --nx-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+</style>
 <style lang="scss" scoped>
 .menuItem {
   border: 1px solid transparent;
@@ -637,6 +651,48 @@ onUnmounted(() => {
 
 .menuItem ::v-deep .v-badge {
   overflow: visible !important;
+}
+
+/* ── Nexus spotlight item ─────────────────────────────────────────────
+   A thin conic-gradient ring in the four Nexus logo gradient families
+   (sky / violet / teal / indigo) sweeps around the row — the "AI button"
+   treatment. User-requested brand moment; the ring is masked to 1px so it
+   reads as live energy, not a glow. Reduced motion gets a static ring. */
+.nexus-item {
+  position: relative;
+}
+
+.nexus-item::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--g-r-control);
+  padding: 1px;
+  background: conic-gradient(
+    from var(--nx-angle, 0deg),
+    #4A9ADA, #7B6CDC, #44A8B4, #5F78D0, #4A9ADA
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: nexus-border-wave 4s linear infinite;
+  pointer-events: none;
+}
+
+/* The colored logo must never be recolored by the active-page icon filter. */
+.nexus-item ::v-deep .v-image {
+  filter: none !important;
+}
+
+@keyframes nexus-border-wave {
+  to { --nx-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nexus-item::before {
+    animation: none;
+  }
 }
 
 
