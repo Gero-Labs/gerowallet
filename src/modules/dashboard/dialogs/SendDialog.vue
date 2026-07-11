@@ -17,7 +17,7 @@
     :persistent="false"
     :img="assets.sendSvg"
     :width="428"
-    imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
+    img-color="var(--g-accent)"
   >
     <!-- Empty wallet state -->
     <template v-if="isWalletEmpty">
