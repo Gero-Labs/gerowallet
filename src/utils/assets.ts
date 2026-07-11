@@ -176,6 +176,7 @@ export default {
   loadingAnimation,
   errorImage,
   geroDashboard,
+  geroDashboardHorizontal,
   barChart,
   coinsStacked,
   blog,
