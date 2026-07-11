@@ -145,9 +145,9 @@
           </v-btn>
         </template>
 
-        <!-- Logout option (always available) -->
-        <v-btn text small class="mt-4 logout-btn" @click="handleLogout" :loading="loggingOut">
-          {{ $t('security.logoutInstead') }}
+        <!-- Cancel the switch (pre-switch) or logout (normal lock) -->
+        <v-btn text small class="mt-4 logout-btn" @click="onFooterAction" :loading="loggingOut">
+          {{ isPreSwitch ? $t('common.cancel') : $t('security.logoutInstead') }}
         </v-btn>
       </template>
     </div>
@@ -177,6 +177,20 @@ interface BackgroundMessageResponse {
 
 const { t } = useTranslation();
 
+// When `targetWallet` is provided, this is a PRE-SWITCH unlock: the user picked a
+// DIFFERENT (still-locked) MPC wallet to switch to, and we authenticate it WITHOUT
+// logging out the current wallet. On success we emit `switch-unlocked` (the parent
+// then does LOGIN); `cancel` aborts the switch and keeps the current wallet. With no
+// prop, this is the normal lock screen for the logged-in wallet.
+const props = defineProps<{ targetWallet?: import('@/models/types').Wallet | null }>();
+const emit = defineEmits<{
+  (e: 'switch-unlocked', wallet: import('@/models/types').Wallet): void;
+  (e: 'cancel'): void;
+}>();
+
+const lockWallet = computed(() => props.targetWallet ?? walletStore.loggedWallet);
+const isPreSwitch = computed(() => !!props.targetWallet);
+
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
@@ -187,11 +201,11 @@ const loggingOut = ref(false);
 const error = ref('');
 
 // MPC "Sign in with Google" unlock state — never logged (idToken).
-const isMpcWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'mpc');
+const isMpcWallet = computed(() => lockWallet.value?.encryptionMethod === 'mpc');
 // Passkey material lives on the wallet record (Task 5); present only when the
 // wallet was secured with a passkey at creation, undefined for password wallets.
 const mpcUsesPasskey = computed(() => (
-  !!walletStore.loggedWallet?.webAuthnCredentialId && !!walletStore.loggedWallet?.mpcPrfSaltId
+  !!lockWallet.value?.webAuthnCredentialId && !!lockWallet.value?.mpcPrfSaltId
 ));
 const googleIdToken = ref('');
 const googleEmail = ref('');
@@ -208,7 +222,7 @@ const pinInputRef = ref<{ resetValidation?: () => void } | null>(null);
 const unlockMethod = ref<string | null>(null);
 const configLoaded = ref(false);
 
-const walletName = computed(() => walletStore.loggedWallet?.name || 'Wallet');
+const walletName = computed(() => lockWallet.value?.name || 'Wallet');
 
 onMounted(async () => {
   await loadSecurityConfig();
@@ -216,7 +230,7 @@ onMounted(async () => {
 
 async function loadSecurityConfig() {
   try {
-    const walletId = walletStore.loggedWallet?.id;
+    const walletId = lockWallet.value?.id;
     if (!walletId) {
       configLoaded.value = true;
       return;
@@ -340,7 +354,9 @@ async function signInWithGoogle() {
 // `extra` fields (raw prfOutputHex + credential/salt ids). Never logged.
 function evaluateMpcPasskeyViaPopup(): Promise<{ prfOutputHex: string; webAuthnCredentialId: string; mpcPrfSaltId: string }> {
   return new Promise((resolve, reject) => {
-    const popupUrl = chrome.runtime.getURL('index.html?mode=mpcPrf#/passkey-auth');
+    // Pass the target wallet id so the popup evaluates the RIGHT wallet's passkey
+    // (during a pre-switch the logged-in wallet is still the old one).
+    const popupUrl = chrome.runtime.getURL(`index.html?mode=mpcPrf&walletId=${lockWallet.value?.id}#/passkey-auth`);
     const popup = window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
     if (!popup) {
       reject(new Error(t('errors.popupBlocked')));
@@ -370,7 +386,7 @@ function evaluateMpcPasskeyViaPopup(): Promise<{ prfOutputHex: string; webAuthnC
 
 async function handleMpcUnlock() {
   if (loading.value) return;
-  const walletId = walletStore.loggedWallet?.id;
+  const walletId = lockWallet.value?.id;
   // Either a fresh Google idToken or a cached session login share is required.
   if (!walletId || (!googleIdToken.value && !mpcSessionActive.value)) return;
   if (!mpcUsesPasskey.value && !password.value) return;
@@ -420,12 +436,27 @@ async function handleMpcUnlock() {
 
     if (!response?.data?.success) {
       error.value = response?.data?.error || t('security.unlockFailed');
+    } else if (isPreSwitch.value && props.targetWallet) {
+      // Pre-switch: the target's key is now reconstructed in the session cache.
+      // Hand off to the parent to actually switch (LOGIN) to it — login() finds
+      // the cached key and activates it unlocked, without a Welcome flash.
+      emit('switch-unlocked', props.targetWallet);
     }
   } catch (e: unknown) {
     error.value = getErrorMessage(e, t('security.unlockFailed'));
   } finally {
     password.value = '';
     loading.value = false;
+  }
+}
+
+// Footer action: on a pre-switch, "Cancel" aborts the switch (keeps the current
+// wallet); on a normal lock, "Logout Instead" logs the wallet out.
+function onFooterAction() {
+  if (isPreSwitch.value) {
+    emit('cancel');
+  } else {
+    handleLogout();
   }
 }
 

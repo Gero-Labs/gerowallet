@@ -2,8 +2,18 @@
   <v-app dark>
     <notifications></notifications>
 
+    <!-- Pre-switch unlock: authenticate the target MPC wallet before switching to
+         it, without logging out the current wallet. -->
+    <LockScreen
+      v-if="pendingSwitchWallet"
+      :key="'preswitch-' + pendingSwitchWallet.id"
+      :target-wallet="pendingSwitchWallet"
+      @switch-unlocked="onSwitchUnlocked"
+      @cancel="pendingSwitchWallet = null"
+    />
+
     <!-- No wallet exists -->
-    <NoWalletScreen v-if="!hasWallets" />
+    <NoWalletScreen v-else-if="!hasWallets" />
 
     <!-- Wallet selection needed -->
     <WalletSelector
@@ -56,6 +66,10 @@ const { t } = useTranslation();
 useChainContext();
 
 const showWalletSwitcher = ref(false);
+// When set, a full-screen pre-switch unlock overlay is shown for this target MPC
+// wallet — we authenticate it (Google + passkey/password) BEFORE switching, so the
+// current wallet stays active until the switch actually completes.
+const pendingSwitchWallet = ref<Wallet | null>(null);
 
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
@@ -78,7 +92,7 @@ watch(() => geroStore.config?.locale, async (newLocale, oldLocale) => {
   }
 }, { immediate: true, deep: true });
 
-async function onWalletSelect(wallet: Wallet) {
+async function doLogin(wallet: Wallet) {
   try {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
@@ -92,9 +106,32 @@ async function onWalletSelect(wallet: Wallet) {
   }
 }
 
+async function onWalletSelect(wallet: Wallet) {
+  // Already the active, unlocked wallet → nothing to do.
+  if (wallet.id === walletStore.loggedWallet?.id && !walletStore.isLocked) {
+    showWalletSwitcher.value = false;
+    return;
+  }
+  // MPC "Sign in with Google" wallets are authenticated BEFORE the switch: show the
+  // pre-switch unlock overlay (Google + passkey/password) which reconstructs the
+  // target's key WITHOUT logging out the current wallet. onSwitchUnlocked then does
+  // the real LOGIN; cancel keeps the current wallet. Non-MPC wallets log in directly.
+  if (wallet.encryptionMethod === 'mpc') {
+    showWalletSwitcher.value = false;
+    pendingSwitchWallet.value = wallet;
+    return;
+  }
+  await doLogin(wallet);
+}
+
 function onWalletSwitch(wallet: Wallet) {
   showWalletSwitcher.value = false;
   onWalletSelect(wallet);
+}
+
+async function onSwitchUnlocked(wallet: Wallet) {
+  pendingSwitchWallet.value = null;
+  await doLogin(wallet);
 }
 
 function openDashboardSettings() {
