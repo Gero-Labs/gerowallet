@@ -81,11 +81,9 @@
       </div>
     </template>
 
-    <!-- Empty state -->
-    <div v-else class="empty-state">
-      <v-icon size="40" color="#333">mdi-wallet-outline</v-icon>
-      <div class="text-body-2 grey--text mt-2">{{ $t('miniGero.noTokens') }}</div>
-    </div>
+    <!-- No empty state: ADA is always pinned above, so the token list is never
+         truly empty. Showing "No tokens yet" alongside the ADA row read as a
+         contradiction on a fresh/empty wallet. -->
   </div>
 </template>
 
@@ -331,12 +329,5 @@ function onImgError(event: Event) {
 
 .red-text {
   color: #F97066 !important;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px 16px;
 }
 </style>
