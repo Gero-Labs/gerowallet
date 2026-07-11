@@ -163,7 +163,7 @@ defineEmits<{
   border-radius: var(--g-r-card);
   border: 1px solid var(--g-hairline-1);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease;
 }
 
 .wallet-item:hover {
@@ -237,7 +237,7 @@ defineEmits<{
   border: 1px solid color-mix(in srgb, var(--g-accent) 15%, transparent);
   border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--g-dur-base);
   width: 100%;
   text-align: left;
 }

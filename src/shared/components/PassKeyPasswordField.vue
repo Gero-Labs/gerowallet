@@ -414,7 +414,7 @@ defineExpose({
   -webkit-tap-highlight-color: transparent;
   /* Enable hardware acceleration for smoother touch */
   will-change: transform;
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease;
   border-radius: 50%;
   /* Make it more tappable */
   touch-action: manipulation;

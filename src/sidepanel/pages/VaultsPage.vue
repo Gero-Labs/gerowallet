@@ -450,7 +450,7 @@ onMounted(() => {
   border-radius: var(--g-r-control);
   padding: 10px 12px;
   cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  transition: background var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .position-mini-card:hover {
@@ -510,7 +510,7 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   white-space: nowrap;
 }
 

@@ -191,7 +191,7 @@ function formatTvl(n: number): string {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .vpc-period-btn:hover {

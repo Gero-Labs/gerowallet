@@ -91,7 +91,7 @@ const trackBlogClick = () => {
   border-radius: var(--g-r-sheet);
   position: relative;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease;
 
   // Top gradient line effect
   &::before {
@@ -103,7 +103,7 @@ const trackBlogClick = () => {
     height: 3px;
     background: linear-gradient(90deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--g-dur-slow) ease;
   }
 
   &:hover {
@@ -143,7 +143,7 @@ const trackBlogClick = () => {
     // Make the logo white using CSS filters
     filter: brightness(0) invert(1);
     opacity: 0.9;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--g-dur-slow) ease;
   }
 
   &:hover .logo-icon {
@@ -183,7 +183,7 @@ const trackBlogClick = () => {
   background: var(--g-raised);
   border-radius: var(--g-r-card);
   border: 1px solid var(--g-hairline-2);
-  transition: all 0.3s ease;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
 
   &:hover {
     background: var(--g-overlay);
@@ -269,7 +269,7 @@ const trackBlogClick = () => {
   text-decoration: none;
   padding: $spacing-xs $spacing-md;
   border-radius: $border-radius-md;
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, gap var(--g-dur-base) ease;
 
   &:hover {
     background: rgba(0, 199, 243, 0.1);
@@ -279,7 +279,7 @@ const trackBlogClick = () => {
   .link-arrow {
     width: 14px;
     height: 14px;
-    transition: transform 0.2s ease;
+    transition: transform var(--g-dur-base) ease;
   }
 
   &:hover .link-arrow {

@@ -614,7 +614,7 @@ watch(() => account.value, (acc) => {
   text-transform: none !important;
   color: var(--g-text-3) !important;
   background: transparent !important;
-  transition: all 0.18s ease !important;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease !important;
   border: none !important;
 }
 
@@ -647,7 +647,7 @@ watch(() => account.value, (acc) => {
   background: var(--g-hairline-1);
   color: var(--g-text-3);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .ot-chip--active {
@@ -675,7 +675,7 @@ watch(() => account.value, (acc) => {
   background: color-mix(in srgb, var(--g-accent) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--g-accent) 25%, transparent);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--g-dur-fast) ease;
 }
 
 .lev-badge:hover {
@@ -750,7 +750,7 @@ watch(() => account.value, (acc) => {
   border-radius: var(--g-r-chip);
   cursor: pointer;
   margin: 0 1px;
-  transition: all 0.12s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .pct-btn--active,
@@ -787,7 +787,7 @@ watch(() => account.value, (acc) => {
 
 .tpsl-chevron {
   color: var(--g-text-3) !important;
-  transition: transform 0.2s ease;
+  transition: transform var(--g-dur-base) ease;
 }
 
 .tpsl-chevron.rotated {
@@ -827,7 +827,7 @@ watch(() => account.value, (acc) => {
   background: var(--g-hairline-1);
   flex-shrink: 0;
   position: relative;
-  transition: all 0.12s ease;
+  transition: background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .adv-checkbox:checked + .adv-checkmark {
@@ -970,7 +970,7 @@ watch(() => account.value, (acc) => {
   background: var(--g-hairline-1);
   border: 1px solid var(--g-hairline-1);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .lev-preset-btn.active,
@@ -1041,7 +1041,7 @@ watch(() => account.value, (acc) => {
 
 .estimates-fade-enter-active,
 .estimates-fade-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity var(--g-dur-fast) ease, transform var(--g-dur-fast) ease;
 }
 
 .estimates-fade-enter,

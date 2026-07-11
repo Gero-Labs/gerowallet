@@ -330,7 +330,7 @@ watch(() => props.value, (val) => {
 .action-btn.v-btn--disabled { opacity: 0.35 !important; }
 
 /* ── Transitions ── */
-.fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.25s ease; }
+.fade-slide-enter-active, .fade-slide-leave-active { transition: opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease; }
 .fade-slide-enter, .fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
 
 .mt-3 { margin-top: 12px; }
