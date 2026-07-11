@@ -47,42 +47,24 @@
           <v-stepper-items>
             <v-stepper-content step="1" class="overflow-visible pa-0" style="height: 400px">
               <v-card class="transparent fill-height" flat style="align-content: center;">
-                <v-row>
-                  <v-col cols="6">
-                    <v-card class="pa-4 transparent" flat @click="chooseBuy">
-                      <div
-                        class="card-3d-wrapper"
-                        :style="buyCardStyle"
-                        @mousemove="handleBuyCardMouseMove"
-                        @mouseleave="handleBuyCardMouseLeave"
-                      >
-                        <parallax-card
-                          style="margin-left: auto; margin-right: auto;"
-                          :data-image="isBitcoin ? assets.bitcoinBg : assets.buyAda"
-                        >
-                          <h1 slot="header" style="line-height: 1;">{{ buyLabel }}</h1>
-                          <p slot="content">{{ buyDescription }}</p>
-                        </parallax-card>
+                <v-row class="px-2" style="gap: 0;">
+                  <v-col cols="6" class="pa-2">
+                    <button type="button" class="bs-choice" @click="chooseBuy">
+                      <div class="bs-choice__icon">
+                        <v-icon size="26" color="var(--g-success)">mdi-arrow-down-bold-circle-outline</v-icon>
                       </div>
-                    </v-card>
+                      <div class="bs-choice__title">{{ buyLabel }}</div>
+                      <div class="bs-choice__desc">{{ buyDescription }}</div>
+                    </button>
                   </v-col>
-                  <v-col cols="6">
-                    <v-card class="pa-4 transparent" flat @click="chooseSell">
-                      <div
-                        class="card-3d-wrapper"
-                        :style="sellCardStyle"
-                        @mousemove="handleSellCardMouseMove"
-                        @mouseleave="handleSellCardMouseLeave"
-                      >
-                        <parallax-card
-                          style="margin-left: auto; margin-right: auto;"
-                          :data-image="isBitcoin ? assets.bitcoinBg : assets.sellAda"
-                        >
-                          <h1 slot="header" style="line-height: 1;">{{ sellLabel }}</h1>
-                          <p slot="content">{{ sellDescription }}</p>
-                        </parallax-card>
+                  <v-col cols="6" class="pa-2">
+                    <button type="button" class="bs-choice" @click="chooseSell">
+                      <div class="bs-choice__icon">
+                        <v-icon size="26" color="var(--g-accent)">mdi-arrow-up-bold-circle-outline</v-icon>
                       </div>
-                    </v-card>
+                      <div class="bs-choice__title">{{ sellLabel }}</div>
+                      <div class="bs-choice__desc">{{ sellDescription }}</div>
+                    </button>
                   </v-col>
                 </v-row>
               </v-card>
@@ -154,7 +136,6 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, toRefs, computed } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import ParallaxCard from '@/modules/welcome/components/ParallaxCard.vue';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
@@ -199,10 +180,6 @@ const provider = ref<string | undefined>(undefined);
 const loading = ref(true);
 const signingError = ref('');
 
-// 3D effect reactive refs
-const buyCardStyle = ref({});
-const sellCardStyle = ref({});
-
 const onIframeLoad = () => {
   loading.value = false;
 };
@@ -215,58 +192,6 @@ const chooseBuy = () => {
 const chooseSell = () => {
   method.value = methods.SELL;
   step.value++;
-};
-
-// 3D Card tilt effect handlers for Buy card
-const handleBuyCardMouseMove = (event: MouseEvent) => {
-  const card = event.currentTarget as HTMLElement;
-  const rect = card.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-
-  const rotateX = (y - centerY) / 10;
-  const rotateY = (centerX - x) / 10;
-
-  buyCardStyle.value = {
-    transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(10px)`,
-    transition: 'transform 0.1s ease-out'
-  };
-};
-
-const handleBuyCardMouseLeave = () => {
-  buyCardStyle.value = {
-    transform: 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)',
-    transition: 'transform 0.3s ease-out'
-  };
-};
-
-// 3D Card tilt effect handlers for Sell card
-const handleSellCardMouseMove = (event: MouseEvent) => {
-  const card = event.currentTarget as HTMLElement;
-  const rect = card.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-
-  const rotateX = (y - centerY) / 10;
-  const rotateY = (centerX - x) / 10;
-
-  sellCardStyle.value = {
-    transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(10px)`,
-    transition: 'transform 0.1s ease-out'
-  };
-};
-
-const handleSellCardMouseLeave = () => {
-  sellCardStyle.value = {
-    transform: 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)',
-    transition: 'transform 0.3s ease-out'
-  };
 };
 
 const chooseProvider = async (name: string) => {
@@ -361,14 +286,44 @@ iframe html {
   background-color: transparent;
 }
 
-/* 3D Card Effect */
-.card-3d-wrapper {
-  perspective: 1000px;
-  transform-style: preserve-3d;
-  transition: transform 0.3s ease-out;
+/* Buy / Sell choice cards: clean raised tiles, accent lift on hover.
+   Real <button> elements (keyboard-operable money path). */
+.bs-choice {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  display: block;
+  font: inherit;
+  cursor: pointer;
+  padding: 28px 16px;
+  text-align: center;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
+  transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease,
+    box-shadow var(--g-dur-fast) ease;
 }
 
-.card-3d-wrapper:hover {
-  transform-style: preserve-3d;
+.bs-choice:hover {
+  border-color: var(--g-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--g-shadow-menu);
+}
+
+.bs-choice__icon {
+  margin-bottom: 12px;
+}
+
+.bs-choice__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--g-text-1);
+  margin-bottom: 6px;
+}
+
+.bs-choice__desc {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--g-text-3);
 }
 </style>
