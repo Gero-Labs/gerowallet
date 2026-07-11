@@ -2,7 +2,7 @@
   <v-card flat class="stk-root" :loading="loadingTxs || poolLoading">
     <v-row no-gutters align="start">
       <!-- ═══ Delegation card ═══ -->
-      <v-col cols="12" md="8" class="pa-3">
+      <v-col cols="12" md="5" class="pa-3">
         <div class="stk-card">
           <!-- Header: identity -->
           <div class="stk-head">
@@ -89,7 +89,7 @@
       </v-col>
 
       <!-- ═══ Rewards history ═══ -->
-      <v-col cols="12" md="4" class="pa-3">
+      <v-col cols="12" md="7" class="pa-3">
         <div class="stk-card">
           <div class="stk-rhead">
             <div class="stk-label">{{ $t('staking.totalEarned') }}</div>
