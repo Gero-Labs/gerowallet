@@ -107,9 +107,11 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      // Clean up an existing wallet if different
+      // Clean up an existing wallet if different. On a SWITCH, only clear the
+      // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
+      // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout();
+        await this.logout(false);
       }
 
       // Create a new wallet instance if needed
@@ -200,9 +202,11 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      // Clean up an existing wallet if different
+      // Clean up an existing wallet if different. On a SWITCH, only clear the
+      // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
+      // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout();
+        await this.logout(false);
       }
 
       // Create a new wallet instance if needed
@@ -551,12 +555,24 @@ export class WalletManager {
   /**
    * Logout current wallet and cleanup all resources
    */
-  async logout(): Promise<void> {
+  // `clearAllMpcCaches` is true for an explicit logout (wipe every wallet's MPC
+  // session), but the internal logout that `login()` performs on a wallet SWITCH
+  // passes false: the auth-then-switch flow reconstructs the INCOMING wallet's key
+  // into mpcSessionCache BEFORE this runs, so a blanket clearAll would wipe the
+  // target's just-authenticated session and re-lock it. On a switch we only clear
+  // the OUTGOING wallet's caches.
+  async logout(clearAllMpcCaches = true): Promise<void> {
 
     try {
-      // Clear all cached MPC root-key bytes and login shares — never survive a logout.
-      mpcSessionCache.clearAll();
-      await mpcLoginShareCache.clearAll();
+      // Clear cached MPC root-key bytes and login shares for the logged-out wallet
+      // (or all wallets on an explicit logout) — never survive a logout.
+      if (clearAllMpcCaches) {
+        mpcSessionCache.clearAll();
+        await mpcLoginShareCache.clearAll();
+      } else if (this.currentWalletId !== null) {
+        mpcSessionCache.clear(this.currentWalletId);
+        await mpcLoginShareCache.clear(this.currentWalletId);
+      }
 
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
@@ -671,8 +687,13 @@ export class WalletManager {
     } catch (error) {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
-      mpcSessionCache.clearAll();
-      await mpcLoginShareCache.clearAll();
+      if (clearAllMpcCaches) {
+        mpcSessionCache.clearAll();
+        await mpcLoginShareCache.clearAll();
+      } else if (this.currentWalletId !== null) {
+        mpcSessionCache.clear(this.currentWalletId);
+        await mpcLoginShareCache.clear(this.currentWalletId);
+      }
       if (this.currentWalletId !== null) {
         clearDbCache(this.currentWalletId);
       }
