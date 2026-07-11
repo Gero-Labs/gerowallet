@@ -2587,6 +2587,8 @@ export default {
   'staking.delegateSubtitle': 'Verdienen Sie Belohnungen, indem Sie Ihre {currency} delegieren.',
   'staking.delegateYourStake': 'Delegieren Sie Ihren Stake',
   'staking.delegatingTo': 'Delegiert an',
+  'staking.delegating': 'Delegiert',
+  'staking.totalEarned': 'Gesamt verdient',
   'staking.delegation': 'Delegation',
   'staking.delegationAmt': 'Delegationsbetrag',
   'staking.delegationAmtTooltip': 'Gesamtbetrag an ADA aus Ihrer Wallet, der an den Stake-Pool delegiert wird. Dies umfasst das gesamte verfügbare Guthaben.',
