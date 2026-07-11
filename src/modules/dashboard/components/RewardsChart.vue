@@ -149,7 +149,7 @@ const chartOptions = computed(() => {
 <style>
 .highcharts-yaxis-grid .highcharts-grid-line {
   stroke-width: 1px;
-  stroke: #282828;
+  stroke: var(--g-hairline-3);
 }
 .highcharts-line-series .highcharts-point,
 .highcharts-line-series .highcharts-graph {

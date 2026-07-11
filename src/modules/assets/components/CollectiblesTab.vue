@@ -20,7 +20,7 @@
               class="collection-image"
               :gradient="
                 collection.isScam
-                  ? 'to bottom, transparent 60%, rgba(249, 112, 102, 0.8) 100%'
+                  ? 'to bottom, transparent 60%, var(--g-error) 100%'
                   : 'to bottom, transparent 60%, rgba(0,0,0,0.8) 100%'
               "
             >
@@ -276,14 +276,14 @@ onUnmounted(() => {
 .nft-collection-card {
   position: relative;
   height: 100%;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   overflow: hidden;
 }
 
 .card-image-container {
   position: relative;
   overflow: hidden;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--g-r-card) var(--g-r-card) 0 0;
   transition: transform 0.3s ease;
 }
 
@@ -311,10 +311,8 @@ onUnmounted(() => {
 
 .quantity-chip {
   background: rgba(0, 0, 0, 0.7) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: white !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  color: var(--g-text-1) !important;
 }
 
 .card-content-overlay {
@@ -323,10 +321,8 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   padding: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--g-hairline-2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -335,7 +331,7 @@ onUnmounted(() => {
 }
 
 .collection-name-glass {
-  color: white;
+  color: var(--g-text-1);
   font-size: 12px;
   font-weight: 600;
   margin: 0;
@@ -433,7 +429,7 @@ onUnmounted(() => {
 }
 
 .nft-collection-item {
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   margin-left: 8px;
   margin-right: 8px;
 }
@@ -442,20 +438,18 @@ onUnmounted(() => {
 .gallery-controls {
   padding: 8px 16px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
   border-radius: 0;
 }
 
 .collection-search .v-input__control,
 .sort-select .v-input__control {
   background: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .collection-search .v-input__control .v-input__slot,
 .sort-select .v-input__control .v-input__slot {
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--g-hairline-2) !important;
 }
 
 .gallery-controls .v-text-field .v-input__prepend-inner {
