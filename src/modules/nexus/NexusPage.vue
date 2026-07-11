@@ -30,16 +30,6 @@
                 <span class="nx-proof__num g-num">11</span>
                 <span class="nx-proof__label">{{ $t('nexus.proofDexes') }}</span>
               </div>
-              <span class="nx-proof__sep"></span>
-              <div class="nx-proof__item">
-                <span class="nx-proof__num g-num">1</span>
-                <span class="nx-proof__label">{{ $t('nexus.proofOneKey') }}</span>
-              </div>
-              <span class="nx-proof__sep"></span>
-              <div class="nx-proof__item">
-                <span class="nx-proof__num g-num">99.9%</span>
-                <span class="nx-proof__label">{{ $t('nexus.proofSla') }}</span>
-              </div>
             </div>
           </section>
 

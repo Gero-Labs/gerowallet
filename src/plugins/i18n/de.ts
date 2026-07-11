@@ -1776,8 +1776,6 @@ export default {
   'nexus.viewDocs': 'API-Doku ansehen',
   'nexus.proofChains': 'UTXO-Chains',
   'nexus.proofDexes': 'Cardano-DEXes',
-  'nexus.proofOneKey': 'API-Schlüssel für alles',
-  'nexus.proofSla': 'SLA bei Dedicated',
   'nexus.whatIs': 'Entwickelt vom Team hinter Gero vereint Nexus Daten mehrerer Anbieter hinter automatischem Failover mit Circuit Breakern — dieselbe Infrastruktur, die dieses Wallet antreibt. Fällt ein Anbieter aus, läuft Ihre App weiter.',
   'nexus.productsTitle': 'Was Sie bekommen',
   'nexus.product.chainData': 'Chain-Daten',
