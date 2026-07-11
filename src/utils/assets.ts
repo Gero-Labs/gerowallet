@@ -29,6 +29,7 @@ import connectKeystoneSvg from '@/assets/svg/connect_keystone.svg'
 import loadingAnimation from '@/assets/webm/loading.webm'
 import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
+import geroDashboardHorizontal from '@/assets/svg/gero_dashboard_horizontal.svg'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
 import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
 import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
@@ -383,5 +384,6 @@ export {
   geroDashboardVector,
   geroDashboardBitcoin,
   geroDashboard,
+  geroDashboardHorizontal,
   google,
 }

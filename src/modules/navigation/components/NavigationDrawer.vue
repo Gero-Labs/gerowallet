@@ -14,8 +14,8 @@
         <v-list-item-content class="py-2">
           <v-list-item-title>
             <img
-              :src="isApex ? assets.geroDashboardApex : assets.geroDashboard"
-              width="100"
+              :src="isApex ? assets.geroDashboardApex : assets.geroDashboardHorizontal"
+              width="190"
               alt="logo"
             />
           </v-list-item-title>
@@ -44,7 +44,7 @@
           :active-class="themeDark ? (isApex ? 'activePageDark apex' : isBitcoin ? 'activePageDark bitcoin' : 'activePageDark') : (isApex ? 'activePage apex' : isBitcoin ? 'activePage bitcoin' : 'activePage')"
           link
           class="menuItem"
-          style="height: 40px"
+          style="height: 34px"
           :key="index"
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
@@ -622,6 +622,9 @@ onUnmounted(() => {
 .menuItem {
   border: 1px solid transparent;
   border-radius: var(--g-r-control);
+  /* Shorter, tighter rows (Vuetify dense defaults to 40px min-height + 8px gap). */
+  min-height: 34px !important;
+  margin-bottom: 4px !important;
 }
 
 .menuItem ::v-deep .v-list-item__avatar {

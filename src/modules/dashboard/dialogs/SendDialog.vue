@@ -1328,7 +1328,7 @@ onMounted(() => {
 
 /* ─── Stepper ─── */
 .stepper-container {
-  background-color: transparent;
+  background-color: transparent !important;
 
   & .v-stepper__header {
     box-shadow: none;
