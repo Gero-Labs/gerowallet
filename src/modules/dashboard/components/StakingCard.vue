@@ -56,21 +56,21 @@
             </div>
           </div>
 
-          <!-- Details -->
-          <div class="stk-details">
-            <div class="stk-drow" v-if="loggedWallet && pool">
-              <span class="stk-k">{{ $t('staking.fees') }}</span>
-              <span class="stk-val tnum">{{ pool.margin }}% · {{ filters.toCurrency(pool.fixed_cost, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
+          <!-- Compact inline details -->
+          <div class="stk-strip" v-if="pool">
+            <div class="stk-ditem" v-if="loggedWallet">
+              <span class="stk-dk">{{ $t('staking.fees') }}</span>
+              <span class="stk-dv tnum">{{ pool.margin }}% · {{ filters.toCurrency(pool.fixed_cost, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
             </div>
-            <div class="stk-drow" v-if="loggedWallet && pool">
-              <span class="stk-k">{{ $t('staking.pledge') }}</span>
-              <span class="stk-val tnum">{{ filters.toCurrency(pool.pledge, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</span>
+            <div class="stk-ditem" v-if="loggedWallet">
+              <span class="stk-dk">{{ $t('staking.pledge') }}</span>
+              <span class="stk-dv tnum">{{ filters.toCurrency(pool.pledge, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</span>
             </div>
-            <div class="stk-drow" v-if="pool">
-              <span class="stk-k">{{ $t('staking.saturation') }}</span>
-              <span class="stk-sat-wrap">
+            <div class="stk-ditem">
+              <span class="stk-dk">{{ $t('staking.saturation') }}</span>
+              <span class="stk-dv stk-sat-wrap">
                 <span class="stk-sat"><i :class="Number(pool.live_saturation) >= 90 ? 'over' : 'ok'" :style="{ width: Math.min(Number(pool.live_saturation), 100) + '%' }"></i></span>
-                <span class="stk-val tnum" :style="{ color: Number(pool.live_saturation) >= 90 ? 'var(--g-error)' : 'var(--g-success)' }">{{ Math.ceil(Number(pool.live_saturation)) }}%</span>
+                <span class="tnum" :style="{ color: Number(pool.live_saturation) >= 90 ? 'var(--g-error)' : 'var(--g-success)' }">{{ Math.ceil(Number(pool.live_saturation)) }}%</span>
               </span>
             </div>
           </div>
@@ -92,33 +92,15 @@
       <v-col cols="12" md="4" class="pa-3">
         <div class="stk-card">
           <div class="stk-rhead">
-            <div>
-              <div class="stk-label">{{ $t('staking.totalEarned') }}</div>
-              <div class="stk-rtotal tnum">{{ filters.toCurrency(String(totalEarnedLovelace), false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</div>
-            </div>
+            <div class="stk-label">{{ $t('staking.totalEarned') }}</div>
+            <div class="stk-rtotal tnum">{{ filters.toCurrency(String(totalEarnedLovelace), false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</div>
+            <div class="stk-rsub" v-if="rewardsData && rewardsData.length">{{ $t('staking.acrossEpochs', { count: rewardsData.length }) }}</div>
           </div>
 
-          <div class="stk-chart" v-if="recentRewards.length">
-            <div class="stk-bars">
-              <span
-                v-for="r in recentRewards"
-                :key="r.epoch"
-                class="stk-bar"
-                :style="{ height: Math.max(2, (Number(r.amount) / maxReward) * 100) + '%' }"
-                :title="`${$t('staking.epoch')} ${r.epoch} · ${filters.toCurrency(r.amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true)}`"
-              ></span>
-            </div>
+          <div class="stk-chartwrap" v-if="Object.keys(rewardsChartData).length">
+            <RewardsChart :chart-data="rewardsChartData" />
           </div>
-
-          <div class="stk-rewards">
-            <div class="stk-rrow" v-for="r in recentRewardRows" :key="r.epoch">
-              <span class="stk-repoch">{{ $t('staking.epoch') }} {{ r.epoch }}</span>
-              <span class="stk-rval tnum" :class="Number(r.amount) > 0 ? 'p' : 'z'">
-                {{ Number(r.amount) > 0 ? '+' : '' }}{{ filters.toCurrency(r.amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
-              </span>
-            </div>
-            <div v-if="!recentRewardRows.length" class="stk-empty">{{ $t('staking.noRewardsYet') }}</div>
-          </div>
+          <div v-else class="stk-empty">{{ $t('staking.noRewardsYet') }}</div>
         </div>
       </v-col>
     </v-row>
@@ -135,6 +117,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useUnstake } from '@/shared/composables/useUnstake';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import { toRefs, computed, ref, watch, onMounted } from 'vue';
+import RewardsChart from './RewardsChart.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
@@ -192,11 +175,14 @@ const rewardsData = computed(() => {
   return rewards.value;
 });
 
-// Last 10 epochs for the mini bar chart.
-const recentRewards = computed(() => (rewardsData.value || []).slice(-10));
-const maxReward = computed(() => Math.max(1, ...recentRewards.value.map((r: any) => Number(r.amount) || 0)));
-// Most recent 5, newest first, for the list.
-const recentRewardRows = computed(() => [...(rewardsData.value || [])].slice(-5).reverse());
+// { epoch: adaAmount } for the RewardsChart line graph (native hover tooltip).
+const rewardsChartData = computed(() => {
+  const obj: Record<string, number> = {};
+  (rewardsData.value || []).slice(-24).forEach((v: any) => {
+    obj[v.epoch] = Number(v.amount) / 1000000;
+  });
+  return obj;
+});
 const totalEarnedLovelace = computed(() => (rewardsData.value || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0));
 
 const resolvePoolIcon = () => {
@@ -372,35 +358,46 @@ void isApex;
   color: var(--g-accent);
 }
 
-/* ── Details ── */
-.stk-drow {
+/* ── Compact inline details strip (no more spread key->value rows) ── */
+.stk-strip {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 7px 0;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 10px 2px 0;
   border-top: 1px solid var(--g-hairline-1);
-  font-size: 13px;
 }
 
-.stk-k {
+.stk-ditem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stk-dk {
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--g-text-3);
 }
 
-.stk-val {
-  color: var(--g-text-1);
+.stk-dv {
+  font-size: 13px;
   font-weight: 600;
+  color: var(--g-text-1);
 }
 
 .stk-sat-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
 }
 
 .stk-sat {
   position: relative;
-  height: 8px;
-  width: 120px;
+  height: 6px;
+  width: 70px;
   border-radius: var(--g-r-pill);
   background: var(--g-hairline-1);
   overflow: hidden;
@@ -445,88 +442,31 @@ void isApex;
   color: var(--g-text-2) !important;
 }
 
-/* ── Rewards history ── */
+/* ── Rewards history: total + area/line graph (RewardsChart) ── */
 .stk-rhead {
   margin-bottom: 4px;
 }
 
 .stk-rtotal {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 680;
   letter-spacing: -0.02em;
   color: var(--g-success);
   margin-top: 4px;
 }
 
-.stk-chart {
-  position: relative;
-  height: 66px;
-  margin: 12px 0 6px;
-  padding-top: 6px;
-  border-bottom: 1px solid var(--g-hairline-2);
-}
-
-.stk-bars {
-  position: absolute;
-  inset: 6px 0 0;
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.stk-bar {
-  flex: 1;
-  min-height: 2px;
-  background: linear-gradient(180deg, var(--g-grad-1), color-mix(in srgb, var(--g-grad-2) 30%, transparent));
-  border-radius: 2px 2px 0 0;
-  cursor: default;
-  transition: filter var(--g-dur-fast) ease, background var(--g-dur-fast) ease;
-}
-
-.stk-bar:hover {
-  background: var(--g-accent);
-  filter: brightness(1.15);
-}
-
-.stk-rewards {
-  margin-top: 4px;
-}
-
-.stk-rrow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px;
-  border-radius: var(--g-r-control);
-  border-bottom: 1px solid var(--g-hairline-1);
-}
-
-.stk-rrow:last-child {
-  border-bottom: none;
-}
-
-.stk-repoch {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--g-text-1);
-}
-
-.stk-rval {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.stk-rval.p {
-  color: var(--g-success);
-}
-
-.stk-rval.z {
+.stk-rsub {
+  font-size: 12px;
   color: var(--g-text-3);
-  font-weight: 500;
+  margin-top: 2px;
+}
+
+.stk-chartwrap {
+  margin-top: 10px;
 }
 
 .stk-empty {
-  padding: 20px 0;
+  padding: 28px 0;
   text-align: center;
   font-size: 13px;
   color: var(--g-text-3);

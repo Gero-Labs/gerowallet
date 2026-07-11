@@ -2158,6 +2158,7 @@ export default {
   'staking.delegatingTo': 'Delegating to',
   'staking.delegating': 'Delegating',
   'staking.totalEarned': 'Total earned',
+  'staking.acrossEpochs': 'across {count} epochs',
   'staking.delegation': 'Delegation',
   'staking.delegationAmt': 'Delegation Amt.',
   'staking.delegationAmtTooltip': 'Total amount of ADA from your wallet that will be delegated to the stake pool. This includes all available balance.',
