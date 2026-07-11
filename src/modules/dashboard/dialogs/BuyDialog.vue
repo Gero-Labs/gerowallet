@@ -47,7 +47,7 @@
           <v-stepper-items>
             <v-stepper-content step="1" class="overflow-visible pa-0" style="height: 400px">
               <v-card class="transparent fill-height" flat style="align-content: center;">
-                <v-row class="px-2" style="gap: 0;">
+                <v-row class="px-6" style="gap: 0;">
                   <v-col cols="12" class="pa-2">
                     <button type="button" class="bs-choice" @click="chooseBuy">
                       <div class="bs-choice__icon">
@@ -298,11 +298,12 @@ iframe html {
   width: 100%;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
   font: inherit;
   cursor: pointer;
   padding: 16px 18px;
-  text-align: left;
+  text-align: center;
   background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
