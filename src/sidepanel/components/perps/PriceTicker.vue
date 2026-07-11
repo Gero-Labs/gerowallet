@@ -159,10 +159,8 @@ const volume24h = computed(() => {
   align-items: center;
   gap: 0;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--g-surface);
+  border-bottom: 1px solid var(--g-hairline-1);
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -176,7 +174,7 @@ const volume24h = computed(() => {
 .price-ticker__divider {
   width: 1px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--g-hairline-2);
   flex-shrink: 0;
   margin: 0 10px;
 }
@@ -198,16 +196,15 @@ const volume24h = computed(() => {
 
 /* ── Mark price ───────────────────────────────────────── */
 .price-ticker__value--mark {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 0.2px;
+  color: var(--g-text-1);
   white-space: nowrap;
 }
 
 /* ── Labels ───────────────────────────────────────────── */
 .price-ticker__label {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   white-space: nowrap;
   line-height: 1.2;
 }
@@ -220,7 +217,7 @@ const volume24h = computed(() => {
 
 /* ── Change badge ─────────────────────────────────────── */
 .price-ticker__badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   padding: 2px 5px;
   border-radius: 4px;
@@ -229,31 +226,31 @@ const volume24h = computed(() => {
 
 /* ── Color utilities ──────────────────────────────────── */
 .long--text {
-  color: #26FAB0 !important;
+  color: var(--g-success) !important;
 }
 
 .short--text {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 
 .funding-positive--text {
-  color: #47CD89 !important;
+  color: var(--g-success) !important;
 }
 
 .neutral--text {
-  color: rgba(255, 255, 255, 0.45) !important;
+  color: var(--g-text-3) !important;
 }
 
 /* Badge fills */
 .long--text.price-ticker__badge {
-  background: rgba(38, 250, 176, 0.15);
+  background: var(--g-success-fill);
 }
 
 .short--text.price-ticker__badge {
-  background: rgba(249, 112, 102, 0.15);
+  background: var(--g-error-fill);
 }
 
 .neutral--text.price-ticker__badge {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
 }
 </style>

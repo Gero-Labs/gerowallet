@@ -50,7 +50,7 @@
         <div class="claim-info-card">
           <div class="d-flex justify-space-between mb-2">
             <span class="text-caption grey--text">{{ $t('miniGero.claimableRewards') }}</span>
-            <span class="text-body-2 font-weight-bold" style="color: var(--chain-primary);">{{ formattedRewards }}</span>
+            <span class="text-body-2 font-weight-bold" style="color: var(--g-accent);">{{ formattedRewards }}</span>
           </div>
           <div v-if="claimGatedByDRep" class="drep-warning">
             <v-icon small color="warning" class="mr-1">mdi-alert-outline</v-icon>
@@ -199,17 +199,16 @@ watch(
 }
 
 .segment-toggle {
-  background: rgba(255, 255, 255, 0.04) !important;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px !important;
+  background: var(--g-raised) !important;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control) !important;
   width: 100%;
 }
 
 .segment-btn {
   flex: 1 !important;
   background: transparent !important;
-  color: #888 !important;
+  color: var(--g-text-3) !important;
   border: none !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
@@ -217,15 +216,15 @@ watch(
 }
 
 .segment-active {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--chain-gradient1) 15%, transparent), color-mix(in srgb, var(--chain-gradient2) 10%, transparent)) !important;
-  color: var(--chain-primary) !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--g-grad-1) 15%, transparent), color-mix(in srgb, var(--g-grad-2) 10%, transparent)) !important;
+  color: var(--g-accent) !important;
 }
 
 /* Claim confirmation */
 .claim-info-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 14px;
 }
 
@@ -234,21 +233,21 @@ watch(
   align-items: center;
   margin-top: 8px;
   padding: 8px;
-  background: rgba(255, 152, 0, 0.1);
-  border-radius: 8px;
+  background: var(--g-warning-fill);
+  border-radius: var(--g-r-control);
 }
 
 .claim-btn {
-  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2)) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
+  color: var(--g-on-grad) !important;
   font-weight: 600;
   text-transform: none;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   height: 44px !important;
 }
 
 .claim-btn.v-btn--disabled {
-  background: #333 !important;
-  color: #666 !important;
+  background: var(--g-raised) !important;
+  color: var(--g-text-3) !important;
 }
 </style>

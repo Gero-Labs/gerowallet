@@ -3,7 +3,7 @@
     <!-- Hero intro -->
     <div class="setup-hero">
       <div class="hero-badge">
-        <v-icon size="34" color="#2DF0F7">mdi-server-network</v-icon>
+        <v-icon size="34" color="var(--g-accent)">mdi-server-network</v-icon>
       </div>
       <h2 class="setup-title">{{ $t('poolOperator.welcomeTitle') }}</h2>
       <p class="setup-subtitle">{{ $t('poolOperator.welcomeSubtitle') }}</p>
@@ -12,22 +12,22 @@
     <!-- Feature highlights -->
     <div class="features-grid">
       <div class="feature-card c-cyan">
-        <div class="feature-tile"><v-icon size="22" color="#2DF0F7">mdi-chart-bar</v-icon></div>
+        <div class="feature-tile"><v-icon size="22" color="var(--g-accent)">mdi-chart-bar</v-icon></div>
         <div class="feature-title">{{ $t('poolOperator.featureDashboard') }}</div>
         <div class="feature-desc">{{ $t('poolOperator.featureDashboardDesc') }}</div>
       </div>
       <div class="feature-card c-green">
-        <div class="feature-tile"><v-icon size="22" color="#75E0A7">mdi-server</v-icon></div>
+        <div class="feature-tile"><v-icon size="22" color="success">mdi-server</v-icon></div>
         <div class="feature-title">{{ $t('poolOperator.featureMonitor') }}</div>
         <div class="feature-desc">{{ $t('poolOperator.featureMonitorDesc') }}</div>
       </div>
       <div class="feature-card c-violet">
-        <div class="feature-tile"><v-icon size="22" color="#B692F6">mdi-calendar-clock</v-icon></div>
+        <div class="feature-tile"><v-icon size="22" color="var(--g-info)">mdi-calendar-clock</v-icon></div>
         <div class="feature-title">{{ $t('poolOperator.featureSchedule') }}</div>
         <div class="feature-desc">{{ $t('poolOperator.featureScheduleDesc') }}</div>
       </div>
       <div class="feature-card c-red">
-        <div class="feature-tile"><v-icon size="22" color="#FDA29B">mdi-key-change</v-icon></div>
+        <div class="feature-tile"><v-icon size="22" color="error">mdi-key-change</v-icon></div>
         <div class="feature-title">{{ $t('poolOperator.featureKes') }}</div>
         <div class="feature-desc">{{ $t('poolOperator.featureKesDesc') }}</div>
       </div>
@@ -35,18 +35,18 @@
 
     <!-- Get started -->
     <div class="get-started-section">
-      <span class="step-badge">{{ $t('poolOperator.getStartedStep') }}</span>
+      <span class="step-badge t-label">{{ $t('poolOperator.getStartedStep') }}</span>
       <h3 class="get-started-title">{{ $t('poolOperator.readyToStart') }}</h3>
       <p class="get-started-desc">{{ $t('poolOperator.readyToStartDesc') }}</p>
     </div>
 
     <div class="import-cta c-cyan" @click="showImportDialog = true">
-      <div class="feature-tile"><v-icon size="26" color="#2DF0F7">mdi-file-key-outline</v-icon></div>
+      <div class="feature-tile"><v-icon size="26" color="var(--g-accent)">mdi-file-key-outline</v-icon></div>
       <div class="import-cta-body">
         <h4 class="import-cta-title">{{ $t('poolOperator.importColdKey') }}</h4>
         <p class="import-cta-desc">{{ $t('poolOperator.importColdKeyDescription') }}</p>
       </div>
-      <v-icon color="#2DF0F7">mdi-chevron-right</v-icon>
+      <v-icon color="var(--g-accent)">mdi-chevron-right</v-icon>
     </div>
 
     <!-- VRF Key Import (shown after cold key is set) -->
@@ -153,10 +153,10 @@ function finishSetup() {
 }
 
 /* Per-accent CSS variables (used by tiles, hover glow, gradient border) */
-.c-cyan   { --accent: #2DF0F7; --tile-bg: rgba(45,240,247,0.16);  --tile-bd: rgba(45,240,247,0.35); }
-.c-green  { --accent: #75E0A7; --tile-bg: rgba(117,224,167,0.16); --tile-bd: rgba(117,224,167,0.32); }
-.c-violet { --accent: #B692F6; --tile-bg: rgba(182,146,246,0.16); --tile-bd: rgba(182,146,246,0.32); }
-.c-red    { --accent: #FDA29B; --tile-bg: rgba(253,162,155,0.16); --tile-bd: rgba(253,162,155,0.32); }
+.c-cyan   { --accent: var(--g-accent); --tile-bg: rgba(45,240,247,0.16);  --tile-bd: rgba(45,240,247,0.35); }
+.c-green  { --accent: var(--g-success); --tile-bg: var(--g-success-fill); --tile-bd: var(--g-success-line); }
+.c-violet { --accent: var(--g-info); --tile-bg: rgba(182,146,246,0.16); --tile-bd: rgba(182,146,246,0.32); }
+.c-red    { --accent: var(--g-error); --tile-bg: var(--g-error-fill); --tile-bd: var(--g-error-line); }
 
 /* Hero */
 .setup-hero {
@@ -168,28 +168,24 @@ function finishSetup() {
   width: 54px;
   height: 54px;
   margin: 0 auto 12px;
-  border-radius: 16px;
+  border-radius: var(--g-r-sheet);
   display: grid;
   place-items: center;
-  background: linear-gradient(160deg, rgba(45,240,247,0.18), rgba(0,199,243,0.06));
+  background: var(--g-raised);
   border: 1px solid rgba(45,240,247,0.35);
-  box-shadow: 0 0 0 5px rgba(45,240,247,0.05), 0 10px 30px rgba(45,240,247,0.2);
 }
 
 .setup-title {
-  font-size: 23px;
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.5px;
   margin-bottom: 6px;
-  background: linear-gradient(90deg, #fff 30%, #2DF0F7 130%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--g-text-1);
 }
 
 .setup-subtitle {
-  font-size: 13.5px;
-  color: rgba(255,255,255,0.5);
+  font-size: 13px;
+  color: var(--g-text-3);
   line-height: 1.5;
   max-width: 520px;
   margin: 0 auto;
@@ -210,9 +206,9 @@ function finishSetup() {
 .feature-card {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 14px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 14px;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -221,9 +217,9 @@ function finishSetup() {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 16px;
+  border-radius: var(--g-r-card);
   padding: 1px;
-  background: linear-gradient(180deg, var(--accent), transparent 60%);
+  background: var(--accent);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -235,7 +231,7 @@ function finishSetup() {
 .feature-card:hover {
   transform: translateY(-3px);
   border-color: transparent;
-  box-shadow: 0 14px 40px rgba(0,0,0,0.4), 0 0 26px -8px var(--accent);
+  box-shadow: var(--g-shadow-menu);
 }
 
 .feature-card:hover::before { opacity: 1; }
@@ -243,7 +239,7 @@ function finishSetup() {
 .feature-tile {
   width: 38px;
   height: 38px;
-  border-radius: 11px;
+  border-radius: var(--g-r-card);
   display: grid;
   place-items: center;
   background: var(--tile-bg);
@@ -252,14 +248,14 @@ function finishSetup() {
 }
 
 .feature-title {
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 700;
-  color: rgba(255,255,255,0.9);
+  color: var(--g-text-1);
 }
 
 .feature-desc {
-  font-size: 12.5px;
-  color: rgba(255,255,255,0.48);
+  font-size: 12px;
+  color: var(--g-text-3);
   line-height: 1.5;
   margin-top: 4px;
 }
@@ -273,27 +269,23 @@ function finishSetup() {
 
 .step-badge {
   display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: #2DF0F7;
+  color: var(--g-accent);
   background: rgba(45,240,247,0.1);
   border: 1px solid rgba(45,240,247,0.25);
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--g-r-pill);
   margin-bottom: 10px;
 }
 
 .get-started-title {
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 700;
-  color: rgba(255,255,255,0.92);
+  color: var(--g-text-1);
 }
 
 .get-started-desc {
   font-size: 13px;
-  color: rgba(255,255,255,0.45);
+  color: var(--g-text-3);
   margin-top: 4px;
 }
 
@@ -305,9 +297,9 @@ function finishSetup() {
   align-items: center;
   gap: 16px;
   padding: 14px 18px;
-  border-radius: 14px;
+  border-radius: var(--g-r-card);
   cursor: pointer;
-  background: linear-gradient(120deg, rgba(45,240,247,0.09), rgba(0,199,243,0.03));
+  background: var(--g-raised);
   border: 1px solid rgba(45,240,247,0.28);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -315,7 +307,7 @@ function finishSetup() {
 .import-cta:hover {
   transform: translateY(-2px);
   border-color: rgba(45,240,247,0.55);
-  box-shadow: 0 16px 44px rgba(0,0,0,0.45), 0 0 30px -6px rgba(45,240,247,0.5);
+  box-shadow: var(--g-shadow-menu);
 }
 
 .import-cta::after {
@@ -336,7 +328,7 @@ function finishSetup() {
 .import-cta .feature-tile {
   width: 46px;
   height: 46px;
-  border-radius: 13px;
+  border-radius: var(--g-r-card);
   margin: 0;
 }
 
@@ -347,13 +339,13 @@ function finishSetup() {
 .import-cta-title {
   font-size: 16px;
   font-weight: 700;
-  color: rgba(255,255,255,0.92);
+  color: var(--g-text-1);
   text-align: left;
 }
 
 .import-cta-desc {
-  font-size: 12.5px;
-  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  color: var(--g-text-3);
   line-height: 1.5;
   margin-top: 3px;
   text-align: left;

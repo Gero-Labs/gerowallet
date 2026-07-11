@@ -53,15 +53,6 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
-          <h3 style="color: white">{{ $t('settings.promptDisplayMode') }}</h3>
-          <span class="helper my-0">{{ $t('settings.promptDisplayModeHelper') }}</span>
-        </v-col>
-        <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="POPUP" text-right="SIDEPANEL" font-size="10px" v-model="useSidePanel" style="margin: auto" />
-        </v-col>
-      </v-row>
-      <v-row no-gutters class="py-2">
-        <v-col cols="9" class="text-left">
           <h3 style="color: white">{{ $t('settings.reSyncWallet') }}</h3>
           <span class="helper my-0">{{ $t('settings.reSyncWalletHelper') }}</span>
         </v-col>
@@ -174,18 +165,6 @@ const txAutoSubmit = computed({
     if (config.value) {
       config.value.txAutoSubmit = val;
       setWalletConfiguration(loggedWallet.value.id, 'txAutoSubmit', val);
-    }
-  }
-});
-
-const useSidePanel = computed({
-  get() {
-    return config.value?.useSidePanel || false;
-  },
-  set(val: boolean) {
-    if (config.value) {
-      config.value.useSidePanel = val;
-      setWalletConfiguration(loggedWallet.value.id, 'useSidePanel', val);
     }
   }
 });

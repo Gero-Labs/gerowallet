@@ -6,7 +6,7 @@
     <div class="portfolio-metrics-panel">
       <div class="metrics-inner">
         <div class="metrics-header-row">
-          <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
+          <div class="portfolio-label t-label">{{ $t('dashboard.portfolio') }}</div>
           <v-spacer />
           <v-btn icon x-small @click="$emit('refresh')">
             <v-icon small>mdi-refresh</v-icon>
@@ -36,14 +36,14 @@
           <div class="pnl-item">
             <span class="pnl-label">{{ $t('midnight.unshielded') }}</span>
             <v-skeleton-loader v-if="midnightLoading && !hideBalances" type="text" width="90" />
-            <span v-else class="pnl-value" :style="{ color: '#47CD89' }">
+            <span v-else class="pnl-value" :style="{ color: 'var(--g-success)' }">
               {{ hideBalances ? '••••' : formatNight(balances.nightUnshielded ?? 0n) + ' ' + nightCurrency }}
             </span>
           </div>
           <div class="pnl-item">
             <span class="pnl-label">{{ $t('midnight.shielded') }}</span>
             <v-skeleton-loader v-if="midnightLoading && !hideBalances" type="text" width="90" />
-            <span v-else class="pnl-value" :style="{ color: 'rgba(255,255,255,0.85)' }">
+            <span v-else class="pnl-value" :style="{ color: 'var(--g-text-1)' }">
               {{ hideBalances ? '••••' : formatNight(balances.nightShielded ?? 0n) + ' ' + nightCurrency }}
             </span>
           </div>
@@ -82,7 +82,7 @@
         <div ref="chartContainerRef" v-show="hasChartData" class="lw-chart-container"></div>
         <div v-if="!hasChartData" class="empty-state text-center">
           <v-icon size="20" color="grey">mdi-chart-line</v-icon>
-          <span class="ml-2" style="color: rgba(255,255,255,0.5); font-size: 12px;">
+          <span class="ml-2" style="color: var(--g-text-3); font-size: 12px;">
             {{ $t('midnight.chartNoData') }}
           </span>
         </div>
@@ -147,10 +147,10 @@ const shortenedAddress = computed(() => {
 
 const registrationColor = computed(() => {
   switch (dustState.value?.registrationStatus) {
-    case 'Registered': return '#47CD89';
-    case 'Pending': return '#FFD86E';
-    case 'Invalid': return '#F97066';
-    default: return 'rgba(255,255,255,0.85)';
+    case 'Registered': return 'var(--g-success)';
+    case 'Pending': return 'var(--g-warning)';
+    case 'Invalid': return 'var(--g-error)';
+    default: return 'var(--g-text-1)';
   }
 });
 
@@ -404,11 +404,9 @@ function formatNight(value: bigint): string {
 .portfolio-metrics-panel {
   flex: 0 0 30%;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
@@ -429,17 +427,13 @@ function formatNight(value: bigint): string {
 }
 
 .portfolio-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
 }
 
 .portfolio-amount {
   font-size: 1.4rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--g-text-1);
   display: inline-flex;
   align-items: baseline;
   gap: 0.1em;
@@ -455,7 +449,7 @@ function formatNight(value: bigint): string {
   font-weight: 600;
   margin-left: 0.2em;
   font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .address-section {
@@ -480,12 +474,12 @@ function formatNight(value: bigint): string {
 
 .pnl-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   white-space: nowrap;
 }
 
 .pnl-value {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   font-weight: 500;
@@ -495,11 +489,9 @@ function formatNight(value: bigint): string {
 .portfolio-chart-panel {
   flex: 1 1 70%;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
@@ -520,25 +512,25 @@ function formatNight(value: bigint): string {
 .timeframe-pill {
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 10px;
+  color: var(--g-text-3);
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   outline: none;
 }
 
 .timeframe-pill:hover {
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--g-text-1);
+  background: var(--g-hairline-1);
 }
 
 .timeframe-pill.active {
-  color: var(--v-primary-base, #00c7f3);
-  background: rgba(0, 199, 243, 0.12);
+  color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
 }
 
 .chart-area {

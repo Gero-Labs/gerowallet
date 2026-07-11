@@ -4,7 +4,7 @@
          Cardano-only). Same row styling, Midnight tx semantics. -->
     <template v-if="isMidnight">
       <div v-if="midnightTxs.length === 0" class="empty-state">
-        <v-icon size="56" color="#2a2a2a">mdi-history</v-icon>
+        <v-icon size="56" color="var(--g-text-3)">mdi-history</v-icon>
         <div class="text-body-1 white--text mt-3">{{ $t('miniGero.noTransactions') }}</div>
       </div>
       <div v-else class="tx-list">
@@ -41,7 +41,7 @@
 
     <!-- Empty state -->
     <div v-else-if="groupedTransactions.length === 0" class="empty-state">
-      <v-icon size="56" color="#2a2a2a">mdi-history</v-icon>
+      <v-icon size="56" color="var(--g-text-3)">mdi-history</v-icon>
       <div class="text-body-1 white--text mt-3">{{ $t('miniGero.noTransactions') }}</div>
       <div class="text-caption grey--text mt-1">{{ $t('miniGero.noTransactionsDesc') }}</div>
     </div>
@@ -49,7 +49,7 @@
     <!-- Transaction list grouped by date -->
     <div v-else class="tx-list">
       <div v-for="group in groupedTransactions" :key="group.label" class="tx-group">
-        <div class="group-label text-caption grey--text px-4 pt-3 pb-1">{{ group.label }}</div>
+        <div class="t-label px-4 pt-3 pb-1">{{ group.label }}</div>
         <div
           v-for="tx in group.transactions"
           :key="tx.id"
@@ -245,13 +245,6 @@ function openTxDetail(tx: any) {
   padding-bottom: 16px;
 }
 
-.group-label {
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  font-size: 11px !important;
-}
-
 .tx-item {
   display: flex;
   align-items: center;
@@ -261,17 +254,17 @@ function openTxDetail(tx: any) {
 }
 
 .tx-item:hover {
-  background: #141414;
+  background: var(--g-raised);
 }
 
 .tx-item:active {
-  background: #1a1a1a;
+  background: var(--g-overlay);
 }
 
 .tx-icon-wrapper {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -280,15 +273,15 @@ function openTxDetail(tx: any) {
 }
 
 .icon-receive {
-  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 15%, transparent);
 }
 
 .icon-send {
-  background: rgba(255, 142, 142, 0.15);
+  background: var(--g-error-fill);
 }
 
 .icon-stake {
-  background: rgba(156, 39, 176, 0.15);
+  background: color-mix(in srgb, var(--g-info) 15%, transparent);
 }
 
 .tx-info {
@@ -308,10 +301,10 @@ function openTxDetail(tx: any) {
 }
 
 .accent-text {
-  color: var(--chain-primary);
+  color: var(--g-accent);
 }
 
 .error-text {
-  color: #ff8e8e;
+  color: var(--g-error);
 }
 </style>

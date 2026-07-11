@@ -415,22 +415,20 @@ const navigateToCashback = () => {
 }
 
 .hero-avatar {
-  background: rgba(255, 255, 255, 0.1) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 2px solid rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+  background: var(--g-raised) !important;
+  border: 2px solid var(--g-hairline-3) !important;
 }
 
 .hero-title {
   font-size: 2.5rem !important;
   font-weight: 600 !important;
-  color: white !important;
+  color: var(--g-text-1) !important;
   margin-bottom: 16px !important;
 }
 
 .hero-subtitle {
   font-size: 1.125rem !important;
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: var(--g-text-1) !important;
   max-width: 600px;
   margin: 0 auto;
 }
@@ -442,8 +440,10 @@ const navigateToCashback = () => {
 
 .action-card {
   cursor: pointer;
-  transition: all 0.3s ease !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  transition: transform var(--g-dur-slow) ease,
+              border-color var(--g-dur-slow) ease,
+              box-shadow var(--g-dur-slow) ease !important;
+  border: 1px solid var(--g-hairline-2) !important;
   min-height: 200px;
   display: flex;
   align-items: center;
@@ -452,13 +452,12 @@ const navigateToCashback = () => {
 .action-card:hover {
   transform: translateY(-4px);
   border-color: v-bind(primaryColor) !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: var(--g-shadow-menu) !important;
 }
 
 
 .copy-address-chip {
-  backdrop-filter: blur(10px) !important;
-  transition: all 0.2s ease !important;
+  transition: transform var(--g-dur-base) ease !important;
   cursor: pointer !important;
 }
 
@@ -469,13 +468,13 @@ const navigateToCashback = () => {
 .action-title {
   font-size: 1.125rem !important;
   font-weight: 600 !important;
-  color: white !important;
+  color: var(--g-text-1) !important;
   margin-bottom: 8px !important;
 }
 
 .action-description {
   font-size: 0.875rem !important;
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--g-text-2) !important;
   line-height: 1.4 !important;
 }
 
@@ -491,7 +490,7 @@ const navigateToCashback = () => {
 
 /* Backup section styles - toned down */
 .backup-card {
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid var(--g-hairline-3) !important;
 }
 
 .backup-container {
@@ -502,12 +501,12 @@ const navigateToCashback = () => {
 .backup-title {
   font-size: 1.25rem !important;
   font-weight: 600 !important;
-  color: white !important;
+  color: var(--g-text-1) !important;
 }
 
 .backup-subtitle {
   font-size: 0.875rem !important;
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--g-text-2) !important;
   line-height: 1.4 !important;
 }
 
@@ -522,17 +521,17 @@ const navigateToCashback = () => {
 }
 
 .backup-help-text {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: var(--g-text-2) !important;
   font-size: 0.75rem !important;
 }
 
 .sample-data-btn {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: var(--g-text-2) !important;
   text-transform: none !important;
 }
 
 .sample-data-btn:hover {
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: var(--g-text-1) !important;
 }
 
 /* Floating animation elements */
@@ -550,24 +549,6 @@ const navigateToCashback = () => {
   position: absolute;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-  animation: float-up 20s linear infinite;
-}
-
-@keyframes float-up {
-  0% {
-    transform: translateY(100vh) scale(0);
-    opacity: 0;
-  }
-  10% {
-    opacity: 0.5;
-  }
-  90% {
-    opacity: 0.5;
-  }
-  100% {
-    transform: translateY(-100vh) scale(1.5);
-    opacity: 0;
-  }
 }
 
 /* Feature cards with spanning background */
@@ -578,10 +559,10 @@ const navigateToCashback = () => {
 
 .feature-card-container {
   position: relative;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   overflow: hidden;
   height: 220px;
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .feature-card-container:hover {
@@ -594,7 +575,7 @@ const navigateToCashback = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   z-index: 1;
 }
 
@@ -607,7 +588,7 @@ const navigateToCashback = () => {
   width: 100%;
   height: 100%;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -665,18 +646,18 @@ const navigateToCashback = () => {
 .feature-title {
   font-size: 1rem !important;
   font-weight: 600 !important;
-  color: white !important;
+  color: var(--g-text-1) !important;
   margin-bottom: 8px !important;
 }
 
 .feature-description {
   font-size: 0.875rem !important;
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--g-text-2) !important;
   line-height: 1.4 !important;
   margin-bottom: 16px !important;
 }
 
-/* Light ray animation for Buy card */
+/* Light ray for Buy card */
 .buy-card-emphasized .light-ray {
   position: absolute;
   top: -50%;
@@ -692,27 +673,14 @@ const navigateToCashback = () => {
     transparent 100%
   );
   transform: rotate(25deg);
-  animation: light-sweep 8s ease-in-out infinite;
   z-index: 3;
   pointer-events: none;
-}
-
-@keyframes light-sweep {
-  0% {
-    left: -150%;
-  }
-  15% {
-    left: 150%;
-  }
-  100% {
-    left: 150%;
-  }
 }
 
 /* Enhance the buy card on hover */
 .buy-card-emphasized:hover {
   transform: translateY(-6px);
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .buy-card-emphasized .feature-card-glass {

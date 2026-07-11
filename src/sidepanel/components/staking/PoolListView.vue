@@ -246,17 +246,17 @@ onMounted(() => {
 
 <style scoped>
 .pool-search {
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
 }
 
 .pool-search >>> .v-input__slot {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: var(--g-raised) !important;
+  border-color: var(--g-hairline-1) !important;
   min-height: 36px !important;
 }
 
 .pool-search >>> .v-input__slot fieldset {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 
 .filter-switch >>> .v-input--switch__track {
@@ -272,17 +272,16 @@ onMounted(() => {
 }
 
 .pool-item {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
 .pool-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-overlay);
 }
 
 .pool-item-header {
@@ -301,13 +300,13 @@ onMounted(() => {
 }
 
 .pool-ticker {
-  color: var(--chain-primary);
+  color: var(--g-accent);
   font-size: 13px;
   font-weight: 600;
 }
 
 .pool-name {
-  color: #ccc;
+  color: var(--g-text-2);
   font-size: 13px;
 }
 
@@ -318,14 +317,14 @@ onMounted(() => {
 }
 
 .ros-value {
-  color: #47cd89;
+  color: var(--g-success);
   font-size: 14px;
   font-weight: 600;
 }
 
 .ros-label {
-  color: #666;
-  font-size: 10px;
+  color: var(--g-text-3);
+  font-size: 11px;
   margin-left: 2px;
 }
 
@@ -361,18 +360,18 @@ onMounted(() => {
 
 /* Delegate confirmation */
 .confirm-pool-info {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 14px;
 }
 
 .delegate-btn {
-  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2)) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
+  color: var(--g-on-grad) !important;
   font-weight: 600;
   text-transform: none;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   height: 44px !important;
 }
 </style>

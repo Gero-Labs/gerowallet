@@ -48,53 +48,53 @@
                 </v-card-title>
                 <v-card-text>
                   <v-list class="transparent">
-                    <v-list-item link @mouseenter="setImprovedPerformance" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: #0F0F0F; border-radius: 12px; height: 54px;">
+                    <v-list-item link @mouseenter="setImprovedPerformance" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: var(--g-canvas); border-radius: var(--g-r-card); height: 54px;">
                       <v-img
                         :src="assets.improvedUxSS"
                         :alt="$t('navigation.improvedUx')"
                         style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;"
                       />
-                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: white; font-weight: 500; z-index: 1;">
+                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--g-text-1); font-weight: 500; z-index: 1;">
                         {{ $t('navigation.improvedPerformanceAndUX') }}
                       </v-list-item-title>
                     </v-list-item>
-                    <v-list-item link @mouseenter="setGeroCard" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: #0F0F0F; border-radius: 12px; height: 54px;">
+                    <v-list-item link @mouseenter="setGeroCard" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: var(--g-canvas); border-radius: var(--g-r-card); height: 54px;">
                       <v-img
                         :src="assets.geroCardSS"
                         :alt="$t('card.geroCard')"
                         style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;"
                       />
-                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: white; font-weight: 500; z-index: 1;">
+                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--g-text-1); font-weight: 500; z-index: 1;">
                         {{ $t('card.geroCryptoCard') }}
                       </v-list-item-title>
                     </v-list-item>
-                    <v-list-item link @mouseenter="setPerpetuals" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: #0F0F0F; border-radius: 12px; height: 54px;">
+                    <v-list-item link @mouseenter="setPerpetuals" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: var(--g-canvas); border-radius: var(--g-r-card); height: 54px;">
                       <v-img
                         :src="assets.perpetualsSS"
                         :alt="$t('perpetuals.perpetuals')"
                         style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;"
                       />
-                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: white; font-weight: 500; z-index: 1;">
+                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--g-text-1); font-weight: 500; z-index: 1;">
                         {{ $t('perpetuals.perpetuals') }}
                       </v-list-item-title>
                     </v-list-item>
-                    <v-list-item link @mouseenter="setPassKey" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: #0F0F0F; border-radius: 12px; height: 54px;">
+                    <v-list-item link @mouseenter="setPassKey" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: var(--g-canvas); border-radius: var(--g-r-card); height: 54px;">
                       <v-img
                         :src="assets.passKeySS"
                         :alt="$t('navigation.passKeySecurityFeature')"
                         style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;"
                       />
-                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: white; font-weight: 500; z-index: 1;">
+                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--g-text-1); font-weight: 500; z-index: 1;">
                         {{ $t('navigation.passKeySecurityFeature') }}
                       </v-list-item-title>
                     </v-list-item>
-                    <v-list-item link @mouseenter="setMoreCashback" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: #0F0F0F; border-radius: 12px; height: 54px;">
+                    <v-list-item link @mouseenter="setMoreCashback" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: var(--g-canvas); border-radius: var(--g-r-card); height: 54px;">
                       <v-img
                         :src="assets.cashbackNewSS"
                         :alt="$t('cashback.cashbackNew')"
                         style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;"
                       />
-                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: white; font-weight: 500; z-index: 1;">
+                      <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--g-text-1); font-weight: 500; z-index: 1;">
                         {{ $t('cashback.moreCashbackDeals') }}
                       </v-list-item-title>
                     </v-list-item>
@@ -105,7 +105,7 @@
             <v-col cols="6">
               <v-card class="fill-height transparent">
                 <v-card-title style="height: 46px"></v-card-title>
-                <v-card-text class="fill-height pb-0 mt-5" style="height:322px; color: white; font-size: 16px; text-align: center; align-content: center; background-color: #0f0f0f; border-radius: 12px; font-weight: 300" v-html="text">
+                <v-card-text class="fill-height pb-0 mt-5" style="height:322px; color: var(--g-text-1); font-size: 16px; text-align: center; align-content: center; background-color: var(--g-canvas); border-radius: var(--g-r-card); font-weight: 300" v-html="text">
                 </v-card-text>
               </v-card>
             </v-col>
@@ -114,17 +114,17 @@
       </v-carousel-item>
       <v-carousel-item style="justify-items: center;">
         <div class="pa-8" style="justify-items: center;">
-          <div style="max-width: 600px; position: relative; text-align: center; color: white; font-size: 18px; font-weight: 500; line-height: 24px; word-wrap: break-word; margin-bottom: 32px;">
+          <div style="max-width: 600px; position: relative; text-align: center; color: var(--g-text-1); font-size: 20px; font-weight: 500; line-height: 24px; word-wrap: break-word; margin-bottom: 32px;">
             {{ $t('navigation.quickActions') }}
           </div>
 
           <!-- Quick Action Button Preview -->
           <div style="display: flex; justify-content: center; margin-bottom: 40px;">
-            <div style="background-color: rgba(0, 0, 0, 0.4); padding: 8px 16px; border-radius: 20px; display: inline-flex; gap: 8px; align-items: center; backdrop-filter: blur(10px);">
+            <div style="background-color: var(--g-raised); padding: 8px 16px; border-radius: var(--g-r-sheet); display: inline-flex; gap: 8px; align-items: center;">
               <!-- Buy/Sell Button -->
               <v-btn
                 class="expandable-button"
-                color="#FFF59E1A"
+                color="warning"
                 height="28"
                 style="min-width: 100px; text-transform: none;"
                 depressed
@@ -138,7 +138,7 @@
               <!-- Send Button -->
               <v-btn
                 class="expandable-button"
-                color="#00DFF31A"
+                color="var(--g-accent)"
                 height="28"
                 style="min-width: 80px; text-transform: none;"
                 depressed
@@ -157,7 +157,7 @@
               <!-- Receive Button -->
               <v-btn
                 class="expandable-button"
-                color="#75E0A71A"
+                color="success"
                 height="28"
                 style="min-width: 80px; text-transform: none;"
                 depressed
@@ -176,7 +176,7 @@
               <!-- Swap Button -->
               <v-btn
                 class="expandable-button"
-                color="#FDA29B1A"
+                color="error"
                 height="28"
                 style="min-width: 80px; text-transform: none;"
                 depressed
@@ -195,7 +195,7 @@
               <!-- Perpetuals Button -->
               <v-btn
                 class="expandable-button"
-                color="#B794F41A"
+                color="var(--g-info)"
                 height="28"
                 style="min-width: 90px; text-transform: none;"
                 depressed
@@ -219,10 +219,10 @@
               <v-avatar tile size="32" class="mb-2">
                 <v-img :src="assets.dollarShieldSvg" :alt="$t('common.buy')" contain></v-img>
               </v-avatar>
-              <p style="color: #FFF59E; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
+              <p style="color: var(--g-warning); font-size: 13px; font-weight: 500; margin-bottom: 6px;">
                 {{ $t('navigation.buySell') }}
               </p>
-              <p style="color: rgba(255, 255, 255, 0.7); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
+              <p style="color: var(--g-text-2); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
                 {{ $t('navigation.buyOrSellDescription') }}
               </p>
             </v-col>
@@ -236,10 +236,10 @@
                   style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
                 ></v-img>
               </v-avatar>
-              <p style="color: #00DFF3; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
+              <p style="color: var(--g-accent); font-size: 13px; font-weight: 500; margin-bottom: 6px;">
                 {{ $t('common.send') }}
               </p>
-              <p style="color: rgba(255, 255, 255, 0.7); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
+              <p style="color: var(--g-text-2); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
                 {{ $t('navigation.sendDescription') }}
               </p>
             </v-col>
@@ -253,10 +253,10 @@
                   style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
                 ></v-img>
               </v-avatar>
-              <p style="color: #75E0A7; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
+              <p style="color: var(--g-success); font-size: 13px; font-weight: 500; margin-bottom: 6px;">
                 {{ $t('common.receive') }}
               </p>
-              <p style="color: rgba(255, 255, 255, 0.7); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
+              <p style="color: var(--g-text-2); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
                 {{ $t('navigation.receiveDescription') }}
               </p>
             </v-col>
@@ -270,10 +270,10 @@
                   style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
                 ></v-img>
               </v-avatar>
-              <p style="color: #FDA29B; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
+              <p style="color: var(--g-error); font-size: 13px; font-weight: 500; margin-bottom: 6px;">
                 {{ $t('swap.swap') }}
               </p>
-              <p style="color: rgba(255, 255, 255, 0.7); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
+              <p style="color: var(--g-text-2); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
                 {{ $t('navigation.swapDescription') }}
               </p>
             </v-col>
@@ -287,16 +287,16 @@
                   style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
                 ></v-img>
               </v-avatar>
-              <p style="color: #B794F4; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
+              <p style="color: var(--g-info); font-size: 13px; font-weight: 500; margin-bottom: 6px;">
                 {{ $t('perpetuals.perpetuals') }}
               </p>
-              <p style="color: rgba(255, 255, 255, 0.7); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
+              <p style="color: var(--g-text-2); font-size: 11px; line-height: 14px; max-height: 42px; overflow: hidden;">
                 {{ $t('navigation.perpetualsDescription') }}
               </p>
             </v-col>
           </v-row>
 
-          <div style="margin-top: 40px; text-align: center; color: rgba(255, 255, 255, 0.6); font-size: 14px;">
+          <div style="margin-top: 40px; text-align: center; color: var(--g-text-2); font-size: 14px;">
             {{ $t('navigation.accessQuickActions') }}
           </div>
         </div>
@@ -304,7 +304,7 @@
       <v-carousel-item>
         <div class="pa-8" :style="`height: 100%; background-image: url(${assets.cardanoBackground}); background-size: 150%; background-position: center 25%; background-repeat: no-repeat;`">
           <div class="text-center">
-            <p style="font-size: 18px;"><strong>{{ $t('navigation.ourMission') }}</strong></p>
+            <p style="font-size: 20px;"><strong>{{ $t('navigation.ourMission') }}</strong></p>
             <p>{{ $t('navigation.checkOutBlog') }}</p>
             <p>{{ $t('navigation.enjoyGeroDashboard') }}</p>
           </div>

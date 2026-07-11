@@ -113,7 +113,7 @@ const handleFileDrop = (event: DragEvent) => {
   justify-content: center;
   gap: $spacing-md;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: border-color var(--g-dur-slow) ease;
 }
 
 .upload-area:hover {
@@ -194,7 +194,7 @@ const handleFileDrop = (event: DragEvent) => {
   @include text-style($font-size-xs, $font-weight-semibold);
   color: $text-secondary;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease;
 }
 
 .change-file-btn:hover {

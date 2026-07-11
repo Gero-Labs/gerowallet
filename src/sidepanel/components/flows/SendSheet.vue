@@ -4,7 +4,7 @@
 
       <!-- ═══════ SUCCESS OVERLAY ═══════ -->
       <div v-if="txSuccess" class="success-overlay">
-        <v-icon size="56" color="#47CD89">mdi-check-circle</v-icon>
+        <v-icon size="56" color="success">mdi-check-circle</v-icon>
         <div class="text-h6 white--text mt-3">{{ $t('miniGero.txSubmitted') }}</div>
         <div class="text-caption grey--text mt-1 text-center">{{ $t('miniGero.txSubmittedDesc') }}</div>
         <div v-if="txId" class="tx-id-box mt-4" @click="copyTxId">
@@ -21,7 +21,7 @@
         <div class="stepper-step" :class="{ active: step === 1, done: step > 1 }">
           <div class="step-header" @click="editStep(1)">
             <div class="step-circle" :class="step > 1 ? 'done' : step === 1 ? 'active' : ''">
-              <v-icon v-if="step > 1" x-small color="black">mdi-check</v-icon>
+              <v-icon v-if="step > 1" x-small color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>1</span>
             </div>
             <div class="step-info">
@@ -37,15 +37,15 @@
             <div v-show="step === 1" class="step-body">
               <!-- Quick actions row -->
               <div class="quick-row">
-                <v-btn small outlined color="rgba(255,255,255,0.15)" class="quick-btn" @click="showContacts = !showContacts" :disabled="!hasContacts">
+                <v-btn small outlined color="var(--g-hairline-3)" class="quick-btn" @click="showContacts = !showContacts" :disabled="!hasContacts">
                   <v-icon x-small :color="primaryColor" class="mr-1">mdi-book-open-variant-outline</v-icon>
                   {{ $t('miniGero.contacts') }}
                 </v-btn>
-                <v-btn small outlined color="rgba(255,255,255,0.15)" class="quick-btn" @click="showQR = true">
+                <v-btn small outlined color="var(--g-hairline-3)" class="quick-btn" @click="showQR = true">
                   <v-icon x-small :color="primaryColor" class="mr-1">mdi-qrcode</v-icon>
                   {{ $t('wallet.qrScan') }}
                 </v-btn>
-                <v-btn small outlined color="rgba(255,255,255,0.15)" class="quick-btn" @click="pasteFromClipboard">
+                <v-btn small outlined color="var(--g-hairline-3)" class="quick-btn" @click="pasteFromClipboard">
                   <v-icon x-small :color="primaryColor" class="mr-1">mdi-content-paste</v-icon>
                   {{ $t('common.paste') }}
                 </v-btn>
@@ -68,8 +68,8 @@
               >
                 <template v-slot:append>
                   <v-progress-circular v-if="handleLoading" size="18" width="2" indeterminate :color="primaryColor" />
-                  <v-icon v-else-if="handleResolved === false" color="#F97066" small>mdi-alert</v-icon>
-                  <v-icon v-else-if="handleResolved === true" color="#47CD89" small>mdi-check-circle</v-icon>
+                  <v-icon v-else-if="handleResolved === false" color="error" small>mdi-alert</v-icon>
+                  <v-icon v-else-if="handleResolved === true" color="success" small>mdi-check-circle</v-icon>
                 </template>
               </v-textarea>
 
@@ -93,8 +93,8 @@
                     class="contact-row"
                     @click="selectContact(contact)"
                   >
-                    <v-avatar size="28" color="rgba(255,255,255,0.08)" class="mr-2">
-                      <v-icon size="14" color="#888">mdi-account</v-icon>
+                    <v-avatar size="28" color="var(--g-hairline-1)" class="mr-2">
+                      <v-icon size="14" color="var(--g-text-3)">mdi-account</v-icon>
                     </v-avatar>
                     <div class="contact-info">
                       <span class="white--text text-body-2">{{ contact.name }}</span>
@@ -115,7 +115,7 @@
         <div class="stepper-step" :class="{ active: step === 2, done: step > 2, locked: step < 2 }">
           <div class="step-header" @click="editStep(2)">
             <div class="step-circle" :class="step > 2 ? 'done' : step === 2 ? 'active' : ''">
-              <v-icon v-if="step > 2" x-small color="black">mdi-check</v-icon>
+              <v-icon v-if="step > 2" x-small color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>2</span>
             </div>
             <div class="step-info">
@@ -171,13 +171,13 @@
                 <div class="asset-input-header">
                   <v-avatar size="24" class="mr-2">
                     <img v-if="token.img" :src="getTokenImg(token)" :alt="token.ticker" />
-                    <v-icon v-else size="16" color="#888">mdi-circle-outline</v-icon>
+                    <v-icon v-else size="16" color="var(--g-text-3)">mdi-circle-outline</v-icon>
                   </v-avatar>
                   <span class="white--text text-body-2 font-weight-bold">{{ token.ticker || token.name }}</span>
                   <v-spacer />
                   <span class="grey--text text-caption">{{ formatTokenBalance(token) }}</span>
                   <v-btn icon x-small class="ml-1" @click="removeExtraToken(idx)">
-                    <v-icon small color="#F97066">mdi-close</v-icon>
+                    <v-icon small color="error">mdi-close</v-icon>
                   </v-btn>
                 </div>
                 <div class="amount-row">
@@ -228,7 +228,7 @@
                     >
                       <v-avatar size="24" class="mr-2">
                         <img v-if="token.img" :src="getTokenImg(token)" />
-                        <v-icon v-else size="14" color="#888">mdi-circle-outline</v-icon>
+                        <v-icon v-else size="14" color="var(--g-text-3)">mdi-circle-outline</v-icon>
                       </v-avatar>
                       <span class="white--text text-body-2">{{ token.ticker || token.name }}</span>
                       <v-spacer />
@@ -273,14 +273,14 @@
                       >
                         <div class="nft-thumb">
                           <img v-if="nft.img" :src="nft.img" loading="lazy" />
-                          <v-icon v-else size="20" color="#555">mdi-image</v-icon>
+                          <v-icon v-else size="20" color="var(--g-text-3)">mdi-image</v-icon>
                         </div>
                         <div class="nft-item-info">
                           <span class="nft-item-name">{{ nft.name || 'NFT' }}</span>
                           <span v-if="nft.collection" class="nft-item-collection">{{ nft.collection }}</span>
                         </div>
                         <v-icon v-if="isNftSelected(nft)" size="18" :color="primaryColor">mdi-check-circle</v-icon>
-                        <v-icon v-else size="18" color="#444">mdi-circle-outline</v-icon>
+                        <v-icon v-else size="18" color="var(--g-text-3)">mdi-circle-outline</v-icon>
                       </div>
                       <!-- Sentinel for infinite scroll -->
                       <div v-if="nftDisplayCount < filteredNfts.length" ref="nftSentinelEl" class="nft-sentinel">
@@ -295,7 +295,7 @@
               </div>
 
               <div class="step-actions-row mt-4">
-                <v-btn text small color="#888" @click="editStep(1)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn text small color="var(--g-text-3)" @click="editStep(1)">{{ $t('miniGero.back') }}</v-btn>
                 <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!isAssetsValid" :loading="buildingTx" @click="goToStep(3)">
                   {{ $t('miniGero.review') }}
                 </v-btn>
@@ -308,7 +308,7 @@
         <div class="stepper-step" :class="{ active: step === 3, done: step > 3, locked: step < 3 }">
           <div class="step-header" @click="editStep(3)">
             <div class="step-circle" :class="step > 3 ? 'done' : step === 3 ? 'active' : ''">
-              <v-icon v-if="step > 3" x-small color="black">mdi-check</v-icon>
+              <v-icon v-if="step > 3" x-small color="var(--g-on-grad)">mdi-check</v-icon>
               <span v-else>3</span>
             </div>
             <div class="step-info">
@@ -335,18 +335,18 @@
                   <span class="detail-label">{{ nft.name || 'NFT' }}</span>
                   <span class="detail-value white--text">×{{ nft.toSendQuantity || 1 }}</span>
                 </div>
-                <div class="review-row" style="border-top: 1px solid rgba(255,255,255,0.08); margin-top: 4px; padding-top: 12px;">
+                <div class="review-row" style="border-top: 1px solid var(--g-hairline-1); margin-top: 4px; padding-top: 12px;">
                   <span class="detail-label">{{ $t('miniGero.fee') }}</span>
                   <span class="detail-value fee-text">{{ txFeeDisplay }}</span>
                 </div>
               </div>
 
-              <div v-if="txBuildError" class="text-caption mt-2" style="color: #F97066">
+              <div v-if="txBuildError" class="text-caption mt-2" style="color: var(--g-error)">
                 {{ txBuildError }}
               </div>
 
               <div class="step-actions-row mt-4">
-                <v-btn text small color="#888" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn text small color="var(--g-text-3)" @click="editStep(2)">{{ $t('miniGero.back') }}</v-btn>
                 <v-btn :color="primaryColor" class="black--text font-weight-bold flex-grow-1 ml-2" :disabled="!txBuilt" @click="goToStep(4)">
                   {{ $t('miniGero.confirmSend') }}
                 </v-btn>
@@ -450,10 +450,10 @@
                   <v-icon size="40" :color="primaryColor" class="mb-2">mdi-usb</v-icon>
                   <div class="text-body-2 white--text text-center mb-2">{{ $t('miniGero.connectLedger') }}</div>
                   <div v-if="loggedWallet?.btSupported" class="d-flex align-center justify-center mb-2" style="gap: 8px;">
-                    <v-btn x-small :outlined="isBT" :color="!isBT ? primaryColor : '#555'" class="black--text" @click="isBT = false">
+                    <v-btn x-small :outlined="isBT" :color="!isBT ? primaryColor : 'var(--g-text-3)'" class="black--text" @click="isBT = false">
                       <v-icon x-small class="mr-1">mdi-usb</v-icon> USB
                     </v-btn>
-                    <v-btn x-small :outlined="!isBT" :color="isBT ? primaryColor : '#555'" class="black--text" @click="isBT = true">
+                    <v-btn x-small :outlined="!isBT" :color="isBT ? primaryColor : 'var(--g-text-3)'" class="black--text" @click="isBT = true">
                       <v-icon x-small class="mr-1">mdi-bluetooth</v-icon> BT
                     </v-btn>
                   </div>
@@ -510,12 +510,12 @@
               </template>
 
               <!-- Sign error display -->
-              <div v-if="passwordError" class="text-caption mt-2" style="color: #F97066">
+              <div v-if="passwordError" class="text-caption mt-2" style="color: var(--g-error)">
                 {{ passwordError }}
               </div>
 
               <div class="step-actions-row mt-3">
-                <v-btn text small color="#888" block @click="editStep(3)">{{ $t('miniGero.back') }}</v-btn>
+                <v-btn text small color="var(--g-text-3)" block @click="editStep(3)">{{ $t('miniGero.back') }}</v-btn>
               </div>
             </div>
           </v-expand-transition>
@@ -552,7 +552,6 @@ import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScanner
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -1106,7 +1105,7 @@ async function signAndSubmit() {
 
     txId.value = submitResult.data.txId || '';
     txSuccess.value = true;
-    snackbar.fireSuccess('Transaction submitted!');
+    snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
   } catch (e: any) {
     console.error('Sign/submit error:', e);
     passwordError.value = e?.message || 'Transaction failed';
@@ -1323,7 +1322,7 @@ async function submitSignedTx() {
 
   txId.value = submitResult.data.txId || '';
   txSuccess.value = true;
-  snackbar.fireSuccess('Transaction submitted!');
+  snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
 }
 
 // ── Navigation ──
@@ -1484,9 +1483,9 @@ function teardownNftObserver() {
   padding: 48px 16px;
 }
 .tx-id-box {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 8px 12px;
   cursor: pointer;
   display: flex;
@@ -1495,18 +1494,18 @@ function teardownNftObserver() {
 
 /* ── Stepper step ── */
 .stepper-step {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   overflow: hidden;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color var(--g-dur-base), background var(--g-dur-base);
 }
 .stepper-step.active {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: color-mix(in srgb, var(--chain-primary) 20%, transparent);
+  background: var(--g-hairline-1);
+  border-color: color-mix(in srgb, var(--g-accent) 20%, transparent);
 }
 .stepper-step.done {
-  border-color: rgba(71, 205, 137, 0.15);
+  border-color: var(--g-success-line);
 }
 .stepper-step.locked {
   opacity: 0.5;
@@ -1531,17 +1530,17 @@ function teardownNftObserver() {
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: #888;
-  transition: all 0.2s;
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
+  transition: background-color var(--g-dur-base), color var(--g-dur-base);
 }
 .step-circle.active {
-  background: var(--chain-primary);
-  color: black;
+  background: var(--g-accent);
+  color: var(--g-on-grad);
 }
 .step-circle.done {
-  background: #47CD89;
-  color: black;
+  background: var(--g-success);
+  color: var(--g-on-grad);
 }
 
 .step-info {
@@ -1551,12 +1550,12 @@ function teardownNftObserver() {
   flex-direction: column;
 }
 .step-label {
-  color: #e0e0e0;
+  color: var(--g-text-1);
   font-size: 13px;
   font-weight: 600;
 }
 .step-summary {
-  color: #888;
+  color: var(--g-text-3);
   font-size: 11px;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -1574,7 +1573,7 @@ function teardownNftObserver() {
 }
 .quick-btn {
   flex: 1;
-  font-size: 10px !important;
+  font-size: 11px !important;
   letter-spacing: 0;
   text-transform: none;
   padding: 0 6px !important;
@@ -1582,18 +1581,18 @@ function teardownNftObserver() {
   height: 32px !important;
 }
 .quick-btn .v-btn__content {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* ── Inputs ── */
 .mini-input >>> .v-input__slot {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: var(--g-hairline-1) !important;
+  border-color: var(--g-hairline-2) !important;
   min-height: 36px !important;
 }
 .mini-input >>> .v-text-field__slot input,
 .mini-input >>> .v-text-field__slot textarea {
-  color: #e0e0e0 !important;
+  color: var(--g-text-1) !important;
   font-size: 13px;
 }
 
@@ -1601,9 +1600,9 @@ function teardownNftObserver() {
 .handle-display {
   display: flex;
   align-items: center;
-  background: rgba(71, 205, 137, 0.08);
-  border: 1px solid rgba(71, 205, 137, 0.15);
-  border-radius: 8px;
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
+  border-radius: var(--g-r-control);
   padding: 8px 10px;
 }
 .handle-info {
@@ -1616,19 +1615,19 @@ function teardownNftObserver() {
 .contacts-list {
   max-height: 180px;
   overflow-y: auto;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
 }
 .contact-row {
   display: flex;
   align-items: center;
   padding: 8px 10px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
 }
 .contact-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--g-hairline-1);
 }
 .contact-info {
   display: flex;
@@ -1638,25 +1637,25 @@ function teardownNftObserver() {
 
 /* ── Asset inputs ── */
 .asset-input-section {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px;
 }
 .asset-input-section.ada-primary {
-  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
-  border-color: color-mix(in srgb, var(--chain-primary) 15%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 4%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 15%, transparent);
   padding: 12px;
 }
 .min-ada-hint {
-  color: #FDA29B;
+  color: var(--g-error);
   cursor: pointer;
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
 }
 .min-ada-hint:hover {
-  color: #FEC84B;
+  color: var(--g-warning);
 }
 .asset-input-header {
   display: flex;
@@ -1667,7 +1666,7 @@ function teardownNftObserver() {
   position: relative;
 }
 .amount-field >>> .v-text-field__slot input {
-  font-size: 18px !important;
+  font-size: 20px !important;
   font-weight: 600;
 }
 .max-btn {
@@ -1682,9 +1681,9 @@ function teardownNftObserver() {
 
 /* ── Token picker ── */
 .token-picker {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 8px;
 }
 .token-picker-list {
@@ -1696,11 +1695,11 @@ function teardownNftObserver() {
   align-items: center;
   padding: 8px 6px;
   cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s;
+  border-radius: var(--g-r-control);
+  transition: background var(--g-dur-fast);
 }
 .token-picker-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--g-hairline-1);
 }
 
 /* ── NFTs ── */
@@ -1715,33 +1714,33 @@ function teardownNftObserver() {
   flex-direction: column;
   gap: 4px;
   scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
+  scrollbar-color: var(--g-hairline-3) transparent;
 }
 .nft-list-item {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--g-hairline-1);
   border: 2px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--g-dur-fast), border-color var(--g-dur-fast);
 }
 .nft-list-item:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
 }
 .nft-list-item.selected {
-  border-color: var(--chain-primary);
-  background: color-mix(in srgb, var(--chain-primary) 6%, transparent);
+  border-color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 6%, transparent);
 }
 .nft-thumb {
   width: 40px;
   height: 40px;
   min-width: 40px;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--g-hairline-1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1758,7 +1757,7 @@ function teardownNftObserver() {
   min-width: 0;
 }
 .nft-item-name {
-  color: #fff;
+  color: var(--g-text-1);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
@@ -1766,16 +1765,16 @@ function teardownNftObserver() {
   text-overflow: ellipsis;
 }
 .nft-item-collection {
-  color: #888;
+  color: var(--g-text-3);
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .nft-badge {
-  background: var(--chain-primary);
-  color: #000;
-  border-radius: 10px;
+  background: var(--g-accent);
+  color: var(--g-on-grad);
+  border-radius: var(--g-r-control);
   padding: 0 6px;
   font-size: 11px;
   font-weight: 700;
@@ -1790,11 +1789,9 @@ function teardownNftObserver() {
 
 /* ── Review ── */
 .review-card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 12px 14px;
 }
 .review-row {
@@ -1802,22 +1799,22 @@ function teardownNftObserver() {
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 .review-row:last-child {
   border-bottom: none;
 }
 .detail-label {
-  color: #888;
+  color: var(--g-text-3);
   font-size: 13px;
 }
 .detail-value {
-  color: #e0e0e0;
+  color: var(--g-text-1);
   font-size: 13px;
   text-align: right;
 }
 .fee-text {
-  color: #ff8e8e;
+  color: var(--g-error);
 }
 
 /* ── Step actions ── */

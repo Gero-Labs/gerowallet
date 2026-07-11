@@ -1,13 +1,14 @@
 <template>
   <v-dialog
     v-model="isDialogOpen"
-    :persistent="persistent"
-    :width="width"
+    :persistent="persistent || loading"
+    :width="resolvedWidth"
     :scrollable="scrollable"
-    overlay-color="#1f242f"
-    overlay-opacity="0.7"
+    transition="g-dialog-transition"
+    overlay-color="#000000"
+    overlay-opacity="0.6"
   >
-    <v-card class="pa-5 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading" style="background-color: #0c0e12d1!important;">
+    <v-card class="pa-5 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -23,7 +24,7 @@
             <v-icon style="font-size: 56px">{{icon}}</v-icon>
           </v-list-item-icon>
           <v-list-item-content>
-            <v-list-item-title style="font-size: 18px; max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+            <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
               {{ title }}
               <v-tooltip v-if="titleInfo" bottom max-width="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
@@ -50,9 +51,11 @@
         </v-list-item>
       </v-card-title>
       <slot></slot>
-      <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 999;"/>
+      <!-- z-index 1, not 999: this only has to sit above the card's own content,
+           and it shares a stacking context with .close-button, which uses 1. -->
+      <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 1;"/>
       <v-btn icon @click="$emit('close')" class="close-button" :disabled="loading">
-        <v-icon color="#cecfd2">mdi-window-close</v-icon>
+        <v-icon color="var(--g-text-2)">mdi-window-close</v-icon>
       </v-btn>
     </v-card>
   </v-dialog>
@@ -100,17 +103,29 @@ const props = defineProps({
     type: Number,
     default: 800
   },
+  /** Token widths. `width` still wins when passed, for the transition. */
+  size: {
+    type: String,
+    default: 'md',
+    validator: (v: string) => ['sm', 'md', 'lg', 'xl'].includes(v),
+  },
   width: {
     type: Number,
-    default: 850
+    default: undefined,
   },
   loading: {
     type: Boolean,
     default: false
   },
+  /**
+   * Escape and scrim-click close the dialog by default. Pass `persistent` only
+   * where dismissing would lose real mid-flight state (an in-progress signing
+   * flow, a displayed seed phrase) or defeat a security gate. A dialog
+   * auto-persists while `loading` is true regardless.
+   */
   persistent: {
     type: Boolean,
-    default: true
+    default: false
   },
   scrollable: {
     type: Boolean,
@@ -121,6 +136,10 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const { truncate } = filters;
+
+const SIZE_WIDTHS: Record<string, number> = { sm: 420, md: 560, lg: 720, xl: 960 };
+/** Explicit `width` wins; otherwise the size token decides. */
+const resolvedWidth = computed(() => props.width ?? SIZE_WIDTHS[props.size] ?? SIZE_WIDTHS['md']);
 
 const isDialogOpen = computed({
   get() {
@@ -158,7 +177,7 @@ const isDialogOpen = computed({
   align-items: center;
 
   .rings {
-    border: 1px solid #1d212a;
+    border: 1px solid var(--g-hairline-1);
     border-radius: 50%;
     position: absolute;
     z-index: 0;

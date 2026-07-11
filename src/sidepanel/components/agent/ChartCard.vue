@@ -50,9 +50,9 @@ export default defineComponent({
 
 <style scoped>
 .agent-chart-card {
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--g-raised);
 }
 
 .agent-chart-card__header {

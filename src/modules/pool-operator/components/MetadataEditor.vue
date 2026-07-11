@@ -34,7 +34,7 @@
 
     <div v-if="hash" class="mt-2">
       <div class="text-caption grey--text">{{ $t('poolOperator.metadataHash') }}</div>
-      <div class="monospace-text text-body-2 mt-1 success--text">{{ hash }}</div>
+      <div class="g-mono text-body-2 mt-1 success--text">{{ hash }}</div>
     </div>
 
     <div v-if="jsonError" class="mt-1">

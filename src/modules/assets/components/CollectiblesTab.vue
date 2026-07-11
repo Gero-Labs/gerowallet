@@ -20,7 +20,7 @@
               class="collection-image"
               :gradient="
                 collection.isScam
-                  ? 'to bottom, transparent 60%, rgba(249, 112, 102, 0.8) 100%'
+                  ? 'to bottom, transparent 60%, var(--g-error) 100%'
                   : 'to bottom, transparent 60%, rgba(0,0,0,0.8) 100%'
               "
             >
@@ -232,7 +232,7 @@ onUnmounted(() => {
 .nft-gallery-container {
   position: relative;
   z-index: 1;
-  transition: min-height 0.3s ease, height 0.3s ease;
+  transition: min-height var(--g-dur-slow) ease, height var(--g-dur-slow) ease;
 }
 
 .nft-gallery-container.adaptive-container {
@@ -244,7 +244,7 @@ onUnmounted(() => {
 }
 
 .gallery-wrapper {
-  transition: height 0.3s ease;
+  transition: height var(--g-dur-slow) ease;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -258,7 +258,7 @@ onUnmounted(() => {
   -webkit-backdrop-filter: blur(10px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 12px !important;
-  transition: all 0.3s ease !important;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease !important;
   cursor: pointer !important;
   overflow: hidden !important;
 }
@@ -276,15 +276,15 @@ onUnmounted(() => {
 .nft-collection-card {
   position: relative;
   height: 100%;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   overflow: hidden;
 }
 
 .card-image-container {
   position: relative;
   overflow: hidden;
-  border-radius: 12px 12px 0 0;
-  transition: transform 0.3s ease;
+  border-radius: var(--g-r-card) var(--g-r-card) 0 0;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .liquid-glass-card:hover .card-content-overlay {
@@ -292,7 +292,7 @@ onUnmounted(() => {
 }
 
 .collection-image {
-  transition: transform 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 .nft-collection-card:hover .collection-image {
@@ -311,10 +311,8 @@ onUnmounted(() => {
 
 .quantity-chip {
   background: rgba(0, 0, 0, 0.7) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: white !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  color: var(--g-text-1) !important;
 }
 
 .card-content-overlay {
@@ -323,19 +321,17 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   padding: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--g-hairline-2);
   display: flex;
   align-items: center;
   justify-content: center;
   height: 40px;
-  transition: height 0.3s ease;
+  transition: height var(--g-dur-slow) ease;
 }
 
 .collection-name-glass {
-  color: white;
+  color: var(--g-text-1);
   font-size: 12px;
   font-weight: 600;
   margin: 0;
@@ -344,7 +340,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
-  transition: white-space 0.3s ease;
+  transition: white-space var(--g-dur-slow) ease;
 }
 
 .liquid-glass-card:hover .collection-name-glass {
@@ -357,7 +353,7 @@ onUnmounted(() => {
 .gallery-grid {
   display: grid;
   gap: 10px;
-  transition: all 0.3s ease;
+  transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
   align-content: center; /* Center cards vertically in available space */
   padding-top: 8px;
   padding-bottom: 8px;
@@ -433,7 +429,7 @@ onUnmounted(() => {
 }
 
 .nft-collection-item {
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   margin-left: 8px;
   margin-right: 8px;
 }
@@ -442,20 +438,18 @@ onUnmounted(() => {
 .gallery-controls {
   padding: 8px 16px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
   border-radius: 0;
 }
 
 .collection-search .v-input__control,
 .sort-select .v-input__control {
   background: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .collection-search .v-input__control .v-input__slot,
 .sort-select .v-input__control .v-input__slot {
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--g-hairline-2) !important;
 }
 
 .gallery-controls .v-text-field .v-input__prepend-inner {

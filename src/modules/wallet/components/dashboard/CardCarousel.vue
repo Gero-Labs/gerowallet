@@ -43,13 +43,13 @@
       </v-window-item>
     </v-window>
     <div class="card-status-chip-container">
-      <v-chip v-if="currentCardHasUUID" class="card-status-chip active-chip" small>
+      <v-chip v-if="currentCardHasUUID" class="card-status-chip active-chip t-label" small>
         <v-icon small left>mdi-check-circle</v-icon>
         {{ $t('card.active') }}
       </v-chip>
       <v-chip
         v-else-if="isCurrentCardEmpty"
-        class="card-status-chip order-chip"
+        class="card-status-chip order-chip t-label"
         small
       >
         <v-icon small left>mdi-credit-card-plus</v-icon>
@@ -57,7 +57,7 @@
       </v-chip>
       <v-chip
         v-else-if="loadingOrderDetails && cards[currentCardIndex]?.cardData.id"
-        class="card-status-chip loading-chip"
+        class="card-status-chip loading-chip t-label"
         small
         style="width: 100px"
       >
@@ -71,7 +71,7 @@
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && (normalizedCurrentCardStatus === 'rejected' || normalizedCurrentCardStatus === 'expired')"
-        class="card-status-chip rejected-chip"
+        class="card-status-chip rejected-chip t-label"
         small
         style="width: 100px"
       >
@@ -80,7 +80,7 @@
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'pending'"
-        class="card-status-chip pending-chip"
+        class="card-status-chip pending-chip t-label"
         small
         style="width: 100px"
       >
@@ -89,7 +89,7 @@
       </v-chip>
       <v-chip
         v-else-if="cards[currentCardIndex]?.cardData.id && currentCardStatus === 'new'"
-        class="card-status-chip pending-chip"
+        class="card-status-chip pending-chip t-label"
         small
       >
         <v-icon small left>mdi-clock-outline</v-icon>
@@ -281,64 +281,62 @@ const handleCardMouseLeave = () => {
   font-weight: $font-weight-semibold;
   height: 28px !important;
   padding: 0 12px !important;
-  border-radius: 14px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  border-radius: var(--g-r-pill) !important;
 
   &.active-chip {
-    background: linear-gradient(135deg, rgba(0, 199, 243, 0.2) 0%, rgba(0, 199, 243, 0.15) 100%) !important;
-    border: 1px solid rgba(0, 199, 243, 0.4) !important;
-    color: $primary-cyan !important;
+    background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
+    color: var(--g-accent) !important;
 
     .v-icon {
-      color: $primary-cyan !important;
+      color: var(--g-accent) !important;
     }
   }
 
   &.pending-chip {
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 152, 0, 0.15) 100%) !important;
-    border: 1px solid rgba(255, 152, 0, 0.4) !important;
-    color: #ff9800 !important;
+    background: var(--g-warning-fill) !important;
+    border: 1px solid var(--g-warning-line) !important;
+    color: var(--g-warning) !important;
 
     .v-icon {
-      color: #ff9800 !important;
+      color: var(--g-warning) !important;
     }
   }
 
   &.inactive-chip {
-    background: linear-gradient(135deg, rgba(158, 158, 158, 0.2) 0%, rgba(158, 158, 158, 0.15) 100%) !important;
-    border: 1px solid rgba(158, 158, 158, 0.4) !important;
-    color: #9e9e9e !important;
+    background: var(--g-raised) !important;
+    border: 1px solid var(--g-hairline-2) !important;
+    color: var(--g-text-3) !important;
 
     .v-icon {
-      color: #9e9e9e !important;
+      color: var(--g-text-3) !important;
     }
   }
 
   &.rejected-chip {
-    background: linear-gradient(135deg, rgba(244, 67, 54, 0.2) 0%, rgba(244, 67, 54, 0.15) 100%) !important;
-    border: 1px solid rgba(244, 67, 54, 0.4) !important;
-    color: #f44336 !important;
+    background: var(--g-error-fill) !important;
+    border: 1px solid var(--g-error-line) !important;
+    color: var(--g-error) !important;
 
     .v-icon {
-      color: #f44336 !important;
+      color: var(--g-error) !important;
     }
   }
 
   &.order-chip {
-    background: linear-gradient(135deg, rgba(0, 199, 243, 0.2) 0%, rgba(0, 199, 243, 0.15) 100%) !important;
-    border: 1px solid rgba(0, 199, 243, 0.4) !important;
-    color: $primary-cyan !important;
+    background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
+    color: var(--g-accent) !important;
 
     .v-icon {
-      color: $primary-cyan !important;
+      color: var(--g-accent) !important;
     }
   }
 
   &.loading-chip {
-    background: linear-gradient(135deg, rgba(158, 158, 158, 0.2) 0%, rgba(158, 158, 158, 0.15) 100%) !important;
-    border: 1px solid rgba(158, 158, 158, 0.4) !important;
-    color: #9e9e9e !important;
+    background: var(--g-raised) !important;
+    border: 1px solid var(--g-hairline-2) !important;
+    color: var(--g-text-3) !important;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -358,9 +356,9 @@ const handleCardMouseLeave = () => {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  border-radius: 1rem;
+  border-radius: var(--g-r-sheet);
   padding: 2rem;
-  color: white;
+  color: var(--g-text-1);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 120px rgba(0, 200, 200, 0.12), 0 0 60px rgba(0, 200, 200, 0.08);
   position: relative;
   display: flex;
@@ -378,7 +376,7 @@ const handleCardMouseLeave = () => {
   left: 0;
   width: 100%;
   height: 100%;
-  border-radius: 1rem;
+  border-radius: var(--g-r-sheet);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.1s ease-out;
@@ -388,16 +386,16 @@ const handleCardMouseLeave = () => {
 .card-type-badge {
   position: relative;
   z-index: 2;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.08rem;
   text-transform: uppercase;
-  color: white;
+  color: var(--g-text-1);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .card-number {
-  font-family: 'Courier New', monospace;
+  font-family: var(--g-font-mono);
   font-size: 1.5rem;
   letter-spacing: 0.25rem;
   margin-top: auto;
@@ -419,7 +417,7 @@ const handleCardMouseLeave = () => {
   .card-cvv,
   .card-expiry {
     .label {
-      font-size: 0.625rem;
+      font-size: 0.6875rem;
       letter-spacing: 0.1rem;
       opacity: 0.8;
       margin: 0 0 0.25rem 0;

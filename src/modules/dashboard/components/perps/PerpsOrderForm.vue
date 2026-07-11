@@ -28,7 +28,7 @@
               :class="{ 'perps-modal__option--active': pendingMarginMode === 'cross' }"
               @click="pendingMarginMode = 'cross'"
             >
-              <v-icon size="20" :color="pendingMarginMode === 'cross' ? '#26FAB0' : '#848e9c'" class="mr-2">
+              <v-icon size="20" :color="pendingMarginMode === 'cross' ? 'success' : 'var(--g-text-3)'" class="mr-2">
                 {{ pendingMarginMode === 'cross' ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
               </v-icon>
               <div>
@@ -41,7 +41,7 @@
               :class="{ 'perps-modal__option--active': pendingMarginMode === 'isolated' }"
               @click="pendingMarginMode = 'isolated'"
             >
-              <v-icon size="20" :color="pendingMarginMode === 'isolated' ? '#26FAB0' : '#848e9c'" class="mr-2">
+              <v-icon size="20" :color="pendingMarginMode === 'isolated' ? 'success' : 'var(--g-text-3)'" class="mr-2">
                 {{ pendingMarginMode === 'isolated' ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
               </v-icon>
               <div>
@@ -50,7 +50,7 @@
               </div>
             </div>
           </div>
-          <v-btn block color="#26FAB0" class="perps-modal__confirm" @click="applyMarginMode()">
+          <v-btn block color="success" class="perps-modal__confirm" @click="applyMarginMode()">
             {{ $t('perpetuals.confirm') }}
           </v-btn>
         </v-card>
@@ -71,8 +71,8 @@
               min="1"
               :max="maxLeverage"
               step="1"
-              color="#4efab080"
-              track-color="#ffffff1a"
+              color="success"
+              track-color="var(--g-hairline-2)"
               hide-details
               class="mt-4 custom-slider"
               ticks="always"
@@ -83,7 +83,7 @@
               <span class="slider-tick">{{ maxLeverage }}x</span>
             </div>
           </div>
-          <v-btn block color="#26FAB0" class="perps-modal__confirm" @click="leverage = pendingLeverage; applyLeverage(); showLeverageDialog = false">
+          <v-btn block color="success" class="perps-modal__confirm" @click="leverage = pendingLeverage; applyLeverage(); showLeverageDialog = false">
             {{ $t('perpetuals.confirm') }}
           </v-btn>
           <div class="leverage-warning mt-3">
@@ -104,14 +104,14 @@
           </div>
           <div class="perps-modal__body">
             <div class="perps-modal__option perps-modal__option--active">
-              <v-icon size="20" color="#26FAB0" class="mr-2">mdi-checkbox-marked</v-icon>
+              <v-icon size="20" color="success" class="mr-2">mdi-checkbox-marked</v-icon>
               <div>
                 <div class="perps-modal__option-title">{{ $t('perpetuals.oneWay') }}</div>
                 <div class="perps-modal__option-desc">{{ $t('perpetuals.oneWayDesc') }}</div>
               </div>
             </div>
           </div>
-          <v-btn block color="#26FAB0" class="perps-modal__confirm" @click="showPosModeDialog = false">
+          <v-btn block color="success" class="perps-modal__confirm" @click="showPosModeDialog = false">
             {{ $t('perpetuals.confirm') }}
           </v-btn>
         </v-card>
@@ -122,8 +122,8 @@
         :value="orderTypes.findIndex(tr => tr.value === orderType)"
         background-color="transparent"
         grow
-        color="#eaecef"
-        slider-color="#26FAB0"
+        color="var(--g-text-1)"
+        slider-color="success"
         height="32"
         class="of-type-tabs"
         @change="(i) => orderType = orderTypes[i].value"
@@ -204,8 +204,8 @@
           min="0"
           max="100"
           step="0.1"
-          color="#4efab080"
-          track-color="#ffffff1a"
+          color="success"
+          track-color="var(--g-hairline-2)"
           hide-details
           class="of-slider custom-slider"
         />
@@ -219,7 +219,7 @@
           :label="$t('perpetuals.reduceOnly')"
           hide-details
           dense
-          color="#26FAB0"
+          color="success"
           class="of-checkbox"
           :ripple="false"
         />
@@ -228,7 +228,7 @@
           :label="$t('perpetuals.tpSl')"
           hide-details
           dense
-          color="#26FAB0"
+          color="success"
           class="of-checkbox"
           :ripple="false"
         />
@@ -261,12 +261,12 @@
       <!-- Place Order button -->
       <v-btn
         block
-        :color="(insufficientBalance || belowMinOrder || aboveMaxOrder) ? '#2b2f36' : (orderSide === 'buy' ? '#26FAB0' : '#F6465D')"
+        :color="(insufficientBalance || belowMinOrder || aboveMaxOrder) ? 'var(--g-raised)' : (orderSide === 'buy' ? 'success' : 'error')"
         :loading="placingOrder"
         :disabled="!canPlaceOrder"
         @click="placeOrderAction()"
         class="of-place-btn mt-3"
-        :style="{ color: (insufficientBalance || belowMinOrder || aboveMaxOrder) ? '#F6465D' : (orderSide === 'buy' ? '#0b0e11' : '#ffffff') }"
+        :style="{ color: (insufficientBalance || belowMinOrder || aboveMaxOrder) ? 'var(--g-error)' : (orderSide === 'buy' ? 'var(--g-canvas)' : 'var(--g-text-1)') }"
       >
         {{ insufficientBalance ? $t('errors.insufficientBalance') : belowMinOrder ? $t('perpetuals.minOrderSize') : aboveMaxOrder ? $t('perpetuals.maxOrderSize') : $t('perpetuals.placeOrder') }}
       </v-btn>
@@ -303,7 +303,7 @@
             <template #activator="{ on, attrs }">
               <span class="price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.estFee') }}</span>
             </template>
-            <span style="white-space: pre-line;">{{ $t('perpetuals.estFeeTooltip') }}</span>
+            <span>{{ $t('perpetuals.estFeeTooltip') }}</span>
           </v-tooltip>
           <span class="form-value">{{ estFee }}</span>
         </div>
@@ -311,7 +311,7 @@
           v-if="slippageWarning"
           dense
           text
-          color="#F0B90B"
+          color="warning"
           class="of-slippage-alert mt-2"
           icon="mdi-alert-outline"
         >
@@ -534,7 +534,7 @@ const estEntryPrice = computed<number>(() => {
 
 const estEntryPriceDisplay = computed(() => {
   const ep = estEntryPrice.value;
-  if (!ep || ep <= 0) return '\u2014';
+  if (!ep || ep <= 0) return '—';
   const prec = props.marketConfig?.quote_prec ?? 4;
   return `$${ep.toFixed(prec)}`;
 });
@@ -542,7 +542,7 @@ const estEntryPriceDisplay = computed(() => {
 const notionalValue = computed(() => {
   const size = parseFloat(orderSize.value);
   const price = estEntryPrice.value;
-  if (!size || !price) return '\u2014';
+  if (!size || !price) return '—';
   return `$${(size * price).toFixed(2)}`;
 });
 
@@ -551,7 +551,7 @@ const notionalValue = computed(() => {
 const estMargin = computed(() => {
   const size = parseFloat(orderSize.value);
   const price = estEntryPrice.value;
-  if (!size || !price) return '\u2014';
+  if (!size || !price) return '—';
 
   let openingSize = size;
   const pos = currentSymbolPosition.value;
@@ -584,7 +584,7 @@ const estFeeRate = computed(() => {
 const estFee = computed(() => {
   const size = parseFloat(orderSize.value);
   const price = estEntryPrice.value;
-  if (!size || !price) return '\u2014';
+  if (!size || !price) return '—';
   const fee = size * price * estFeeRate.value;
   return `$${fee.toFixed(2)}`;
 });
@@ -594,11 +594,11 @@ const estFee = computed(() => {
 const estLiquidationPrice = computed(() => {
   const size = parseFloat(orderSize.value);
   const ep = estEntryPrice.value;
-  if (!size || !ep) return '\u2014';
+  if (!size || !ep) return '—';
 
   const notional = size * ep;
   const tier = getMarginTier(marketTiers.value, notional);
-  if (!tier) return '\u2014';
+  if (!tier) return '—';
 
   const isoBalance = notional / leverage.value;
   const lp = calcLiquidationPriceIsolated(
@@ -608,7 +608,7 @@ const estLiquidationPrice = computed(() => {
     size,
     tier,
   );
-  if (lp <= 0) return '\u2014';
+  if (lp <= 0) return '—';
 
   const prec = props.marketConfig?.quote_prec ?? 5;
   return lp.toFixed(prec);
@@ -804,18 +804,18 @@ async function placeOrderAction() {
   font-size: 11px !important;
   font-weight: 600 !important;
   text-transform: none !important;
-  border-color: #2b2f36 !important;
-  color: #eaecef !important;
+  border-color: var(--g-raised) !important;
+  color: var(--g-text-1) !important;
   letter-spacing: 0 !important;
 }
 
 /* ── Perps modal dialogs ─────────────────────────────────────────────── */
 
 .perps-modal {
-  background: #0b0e11 !important;
-  border-radius: 12px !important;
+  background: var(--g-surface) !important;
+  border-radius: var(--g-r-card) !important;
   padding: 24px !important;
-  border: 1px solid #2b2f36;
+  border: 1px solid var(--g-raised);
   overflow: hidden !important;
   max-width: 425px;
 }
@@ -828,13 +828,13 @@ async function placeOrderAction() {
 }
 
 .perps-modal__title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #eaecef;
+  color: var(--g-text-1);
 }
 
 .perps-modal__close {
-  color: #848e9c !important;
+  color: var(--g-text-3) !important;
   cursor: pointer;
 }
 
@@ -846,75 +846,75 @@ async function placeOrderAction() {
   display: flex;
   align-items: flex-start;
   padding: 14px;
-  border: 1px solid #2b2f36;
-  border-radius: 8px;
+  border: 1px solid var(--g-raised);
+  border-radius: var(--g-r-control);
   cursor: pointer;
   margin-bottom: 10px;
   transition: border-color 0.15s ease-out;
 }
 
 .perps-modal__option:hover {
-  border-color: #3b3f46;
+  border-color: var(--g-hairline-3);
 }
 
 .perps-modal__option--active {
-  border-color: #26FAB0;
+  border-color: var(--g-success);
 }
 
 .perps-modal__option-title {
   font-size: 14px;
   font-weight: 600;
-  color: #eaecef;
+  color: var(--g-text-1);
   margin-bottom: 4px;
 }
 
 .perps-modal__option-desc {
   font-size: 12px;
-  color: #848e9c;
+  color: var(--g-text-3);
   line-height: 1.5;
 }
 
 .perps-modal__confirm {
-  color: #0b0e11 !important;
+  color: var(--g-canvas) !important;
   font-weight: 700 !important;
   text-transform: none !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   height: 44px !important;
 }
 
 /* ── Leverage dialog ─────────────────────────────────────────────────── */
 
 .leverage-display {
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 700;
-  color: #26FAB0;
+  color: var(--g-success);
   margin-top: 8px;
 }
 
 .leverage-max {
   font-size: 12px;
-  color: #848e9c;
+  color: var(--g-text-3);
   margin-top: 4px;
 }
 
 .leverage-warning {
-  background: rgba(246, 190, 66, 0.08);
-  border: 1px solid rgba(246, 190, 66, 0.25);
-  border-radius: 8px;
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
   padding: 10px 14px;
   font-size: 12px;
-  color: #F6BE42;
+  color: var(--g-warning);
   line-height: 1.5;
 }
 
 .leverage-max-size {
   font-size: 12px;
-  color: #848e9c;
+  color: var(--g-text-3);
 }
 
 .slider-tick {
-  font-size: 9px;
-  color: #5e6673;
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 /* ── Order type tabs ─────────────────────────────────────────────────── */
@@ -953,21 +953,21 @@ async function placeOrderAction() {
 }
 
 .of-side-btn--buy {
-  background: rgba(38, 250, 176, 0.15) !important;
-  color: #26FAB0 !important;
+  background: var(--g-success-fill) !important;
+  color: var(--g-success) !important;
 }
 .of-side-btn--buy.v-btn--active {
-  background: #26FAB0 !important;
-  color: #0b0e11 !important;
+  background: var(--g-success) !important;
+  color: var(--g-canvas) !important;
 }
 
 .of-side-btn--sell {
-  background: rgba(246, 70, 93, 0.15) !important;
-  color: #F6465D !important;
+  background: var(--g-error-fill) !important;
+  color: var(--g-error) !important;
 }
 .of-side-btn--sell.v-btn--active {
-  background: #F6465D !important;
-  color: #ffffff !important;
+  background: var(--g-error) !important;
+  color: var(--g-text-1) !important;
 }
 
 /* ── Info rows ───────────────────────────────────────────────────────── */
@@ -980,14 +980,14 @@ async function placeOrderAction() {
 
 .form-label {
   font-size: 11px;
-  color: #848e9c;
+  color: var(--g-text-3);
 }
 
 .form-value {
   font-size: 11px;
   font-weight: 600;
-  color: #eaecef;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
 }
 
 /* ── Inputs ──────────────────────────────────────────────────────────── */
@@ -998,14 +998,14 @@ async function placeOrderAction() {
 
 .of-input >>> .v-input__slot {
   min-height: 32px !important;
-  background: #1b1d23 !important;
-  border-color: #2b2f36 !important;
+  background: var(--g-raised) !important;
+  border-color: var(--g-raised) !important;
 }
 
 .of-input >>> input {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  font-family: var(--g-font-mono) !important;
   font-size: 12px !important;
-  color: #eaecef !important;
+  color: var(--g-text-1) !important;
 }
 
 /* ── Custom field ────────────────────────────────────────────────────── */
@@ -1013,7 +1013,7 @@ async function placeOrderAction() {
 .of-field {
   display: flex;
   align-items: center;
-  border: 1px solid #2b2f36;
+  border: 1px solid var(--g-raised);
   border-radius: 4px;
   padding: 0 6px 0 10px;
   height: 36px;
@@ -1022,12 +1022,12 @@ async function placeOrderAction() {
 }
 
 .of-field:focus-within {
-  border-color: #26FAB0;
+  border-color: var(--g-success);
 }
 
 .of-field__label {
   font-size: 11px;
-  color: #848e9c;
+  color: var(--g-text-3);
   white-space: nowrap;
   margin-right: 8px;
 }
@@ -1037,9 +1037,9 @@ async function placeOrderAction() {
   background: none;
   border: none;
   outline: none;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-size: 12px;
-  color: #eaecef;
+  color: var(--g-text-1);
   min-width: 0;
   text-align: left;
 }
@@ -1053,7 +1053,7 @@ async function placeOrderAction() {
 
 .of-field__suffix {
   font-size: 12px;
-  color: #848e9c;
+  color: var(--g-text-3);
   margin-left: 8px;
   white-space: nowrap;
 }
@@ -1063,28 +1063,28 @@ async function placeOrderAction() {
   align-items: center;
   font-size: 12px;
   font-weight: 500;
-  color: #eaecef;
+  color: var(--g-text-1);
   cursor: pointer;
   padding: 2px 2px;
-  border-radius: 3px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
 .of-field__asset-trigger:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
 }
 
 .of-field__asset-trigger .v-icon {
-  color: #848e9c !important;
+  color: var(--g-text-3) !important;
 }
 
 .of-asset-menu {
-  border: 1px solid #2b2f36;
+  border: 1px solid var(--g-raised);
   border-radius: 4px;
 }
 
 .of-asset-list {
-  background: #1b1d23 !important;
+  background: var(--g-raised) !important;
   padding: 2px 0 !important;
 }
 
@@ -1096,12 +1096,12 @@ async function placeOrderAction() {
 .of-asset-list .v-list-item__title {
   font-size: 12px !important;
   font-weight: 500;
-  color: #848e9c;
+  color: var(--g-text-3);
   text-align: right;
 }
 
 .of-asset-list .v-list-item:hover .v-list-item__title {
-  color: #eaecef;
+  color: var(--g-text-1);
 }
 
 .of-asset-list__current-item {
@@ -1109,7 +1109,7 @@ async function placeOrderAction() {
 }
 
 .of-asset-list__current-item .v-list-item__title {
-  color: #eaecef !important;
+  color: var(--g-text-1) !important;
   font-weight: 600 !important;
 }
 
@@ -1126,13 +1126,13 @@ async function placeOrderAction() {
 
 .of-slider-pct-box {
   font-size: 11px;
-  color: #26FAB0;
+  color: var(--g-success);
   font-weight: 600;
   min-width: 46px;
   text-align: center;
   flex-shrink: 0;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  border: 1px solid #2b2f36;
+  font-family: var(--g-font-mono);
+  border: 1px solid var(--g-raised);
   border-radius: 4px;
   padding: 3px 6px;
   background: transparent;
@@ -1150,8 +1150,8 @@ async function placeOrderAction() {
   padding: 0 !important;
 }
 .of-checkbox >>> .v-label {
-  font-size: 10px !important;
-  color: #fff !important;
+  font-size: 11px !important;
+  color: var(--g-text-1) !important;
   font-weight: 700 !important;
 }
 .of-checkbox >>> .v-input--selection-controls__input {
@@ -1178,7 +1178,7 @@ async function placeOrderAction() {
 /* ── Estimates ───────────────────────────────────────────────────────── */
 
 .of-estimates {
-  background: rgba(255,255,255,0.02);
+  background: var(--g-hairline-1);
   border-radius: 4px;
   padding: 6px 8px;
 }
@@ -1187,7 +1187,7 @@ async function placeOrderAction() {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #5e6673;
+  color: var(--g-text-3);
   line-height: 20px;
 }
 
@@ -1206,30 +1206,30 @@ async function placeOrderAction() {
 /* ── Dashed label (tooltips) ─────────────────────────────────────────── */
 
 .price-info-label--dashed {
-  text-decoration: underline dotted #848e9c;
+  text-decoration: underline dotted var(--g-text-3);
   text-underline-offset: 2px;
   cursor: pointer;
 }
 
 /* ── Color utilities ─────────────────────────────────────────────────── */
 
-.clr-green { color: #26FAB0 !important; }
-.clr-red { color: #F6465D !important; }
-.clr-yellow { color: #F0B90B !important; }
+.clr-green { color: var(--g-success) !important; }
+.clr-red { color: var(--g-error) !important; }
+.clr-yellow { color: var(--g-warning) !important; }
 
 .fw-600 { font-weight: 600; }
 
-.font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+.font-mono { font-family: var(--g-font-mono); }
 
 /* ── Custom slider ───────────────────────────────────────────────────── */
 
 .custom-slider >>> .v-slider__tick {
-  background-color: rgb(255 255 255 / 20%)!important;
+  background-color: var(--g-hairline-3)!important;
   border-radius: 50%;
 }
 .custom-slider >>> .v-slider__thumb {
-  background-color: #000 !important;
-  border: 1px solid #4efab0 !important;
+  background-color: var(--g-canvas) !important;
+  border: 1px solid var(--g-success) !important;
   width: 14px!important;
   height: 14px!important;
 }

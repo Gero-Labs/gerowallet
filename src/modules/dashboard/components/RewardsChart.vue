@@ -57,7 +57,7 @@ const chartOptions = computed(() => {
       spacingTop: 15,
       spacingBottom: 5,
       style: {
-        fontFamily: 'Quicksand',
+        fontFamily: 'Inter Variable, Inter, sans-serif',
       },
     },
     rangeSelector: {
@@ -108,7 +108,7 @@ const chartOptions = computed(() => {
       },
       labels: {
         style: {
-          fontFamily: 'Inter',
+          fontFamily: 'Inter Variable, Inter, sans-serif',
           color: '#fff',
           fontSize: '10px'
         },
@@ -149,7 +149,7 @@ const chartOptions = computed(() => {
 <style>
 .highcharts-yaxis-grid .highcharts-grid-line {
   stroke-width: 1px;
-  stroke: #282828;
+  stroke: var(--g-hairline-3);
 }
 .highcharts-line-series .highcharts-point,
 .highcharts-line-series .highcharts-graph {

@@ -4,7 +4,7 @@
     <div class="cashback-header pa-4">
       <div class="d-flex align-center">
         <v-btn icon small class="mr-2" @click="$router.push('/')">
-          <v-icon color="white">mdi-arrow-left</v-icon>
+          <v-icon color="var(--g-text-1)">mdi-arrow-left</v-icon>
         </v-btn>
         <div>
           <div class="text-h6 white--text">{{ $t('miniGero.cashback') }}</div>
@@ -23,7 +23,7 @@
         </span>
       </div>
       <div v-if="pending" class="reward-item">
-        <v-icon small color="#888" class="mr-2">mdi-clock-outline</v-icon>
+        <v-icon small color="var(--g-text-3)" class="mr-2">mdi-clock-outline</v-icon>
         <span class="text-caption white--text">Pending:</span>
         <span class="text-caption grey--text ml-1">
           {{ formatReward(pending) }}
@@ -76,7 +76,7 @@
 
     <!-- Not supported -->
     <div v-else-if="!supported" class="empty-state">
-      <v-icon size="48" color="rgba(255,255,255,0.1)">mdi-earth-off</v-icon>
+      <v-icon size="48" color="var(--g-text-3)">mdi-earth-off</v-icon>
       <div class="text-body-2 grey--text mt-3 text-center">
         {{ $t('miniGero.cashbackNotAvailable') }}
       </div>
@@ -84,7 +84,7 @@
 
     <!-- Empty state -->
     <div v-else-if="deals.length === 0" class="empty-state">
-      <v-icon size="48" color="rgba(255,255,255,0.1)">mdi-tag-off-outline</v-icon>
+      <v-icon size="48" color="var(--g-text-3)">mdi-tag-off-outline</v-icon>
       <div class="text-body-1 white--text mt-3">{{ $t('miniGero.noCashbackOffers') }}</div>
       <div class="text-caption grey--text mt-1">{{ $t('miniGero.noCashbackDesc') }}</div>
     </div>
@@ -99,7 +99,7 @@
       >
         <v-avatar size="40" :color="deal.backgroundColor || '#fff'" class="deal-avatar mr-3">
           <v-img v-if="deal.img" :src="deal.img" contain />
-          <v-icon v-else color="#888">mdi-store</v-icon>
+          <v-icon v-else color="var(--g-text-3)">mdi-store</v-icon>
         </v-avatar>
         <div class="deal-info">
           <div class="white--text text-body-2 deal-name">
@@ -109,7 +109,7 @@
             Up to {{ Number(deal.maxCashback).toFixed(2) }}{{ deal.cashbackSymbol }} cashback
           </div>
         </div>
-        <v-icon small color="#444">mdi-chevron-right</v-icon>
+        <v-icon small color="var(--g-text-3)">mdi-chevron-right</v-icon>
       </div>
     </div>
 
@@ -130,7 +130,7 @@
         <div class="deal-detail-header">
           <v-avatar size="56" :color="selectedDeal.backgroundColor || '#fff'" class="deal-detail-avatar mr-3">
             <v-img v-if="selectedDeal.img" :src="selectedDeal.img" contain />
-            <v-icon v-else color="#888" size="28">mdi-store</v-icon>
+            <v-icon v-else color="var(--g-text-3)" size="28">mdi-store</v-icon>
           </v-avatar>
           <div>
             <div class="white--text text-subtitle-1 font-weight-bold" style="line-height: 1.3">
@@ -280,7 +280,7 @@ const renderedTerms = computed(() => {
   // Sanitize first, then apply markdown → HTML: bold, newlines
   const safe = escapeHtml(termsContent.value);
   return safe
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: white">$1</strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--g-text-1)">$1</strong>')
     .replace(/\n/g, '<br>');
 });
 
@@ -496,11 +496,10 @@ onMounted(async () => {
 }
 
 .rewards-summary {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  border-radius: 12px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
   padding: 12px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .reward-item {
@@ -510,7 +509,7 @@ onMounted(async () => {
 }
 
 .accent-text {
-  color: var(--chain-primary);
+  color: var(--g-accent);
 }
 
 .empty-state {
@@ -522,17 +521,17 @@ onMounted(async () => {
 }
 
 .cashback-search {
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
 }
 
 .cashback-search >>> .v-input__slot {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: var(--g-hairline-1) !important;
+  border-color: var(--g-hairline-1) !important;
   min-height: 36px !important;
 }
 
 .cashback-search >>> .v-input__slot fieldset {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 
 .category-filter {
@@ -562,27 +561,27 @@ onMounted(async () => {
 .filter-pill {
   flex-shrink: 0;
   padding: 6px 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: #999;
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   outline: none;
 }
 
 .filter-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ccc;
+  background: var(--g-hairline-2);
+  color: var(--g-text-2);
 }
 
 .filter-pill--active {
-  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2));
+  background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2));
   border-color: transparent;
-  color: #000;
+  color: var(--g-on-grad);
   font-weight: 600;
 }
 
@@ -594,25 +593,25 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
   margin-bottom: 6px;
 }
 
 .deal-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-2);
 }
 
 .deal-item:active {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--g-hairline-3);
 }
 
 .deal-avatar {
   flex-shrink: 0;
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 .deal-info {
@@ -634,7 +633,7 @@ onMounted(async () => {
 
 .deal-detail-avatar {
   flex-shrink: 0;
-  border-radius: 12px !important;
+  border-radius: var(--g-r-card) !important;
 }
 
 .deal-terms-section {
@@ -643,9 +642,9 @@ onMounted(async () => {
 }
 
 .deal-terms-content {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px;
   max-height: 200px;
   overflow-y: auto;
@@ -657,16 +656,16 @@ onMounted(async () => {
 }
 
 .start-shopping-btn {
-  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2)) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
+  color: var(--g-on-grad) !important;
   font-weight: 600;
   text-transform: none;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   height: 44px !important;
 }
 
 .start-shopping-btn.v-btn--disabled {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: #666 !important;
+  background: var(--g-raised) !important;
+  color: var(--g-text-3) !important;
 }
 </style>

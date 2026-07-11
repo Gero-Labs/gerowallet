@@ -141,7 +141,6 @@ import adLabsLogoWhite from '@/assets/svg/ad-labs_white.svg'
 import gominingIcon from '@/assets/svg/gomining.svg'
 import babylonStakingIcon from '@/assets/svg/babylon-staking.svg';
 import mempoolSvg from '@/assets/svg/mempool.svg';
-import dexHunterLogo from '@/assets/svg/dexhunter.svg'
 import miniModeSvg from '@/assets/svg/mini-mode.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
@@ -375,7 +374,6 @@ export default {
   gominingIcon,
   babylonStakingIcon,
   mempoolSvg,
-  dexHunterLogo,
   miniModeSvg,
 }
 

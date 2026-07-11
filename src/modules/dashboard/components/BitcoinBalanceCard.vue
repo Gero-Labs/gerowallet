@@ -166,28 +166,15 @@ async function refreshBalance(): Promise<void> {
   position: relative;
   height: 100%;
   min-height: 220px;
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 22px;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.2),
-    0 16px 48px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.06);
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-sheet);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  transition: box-shadow var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
   overflow: hidden;
 }
 
 .btc-glass-card:hover {
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.24),
-    0 24px 60px rgba(0, 0, 0, 0.36),
-    0 0 0 1px rgba(247, 147, 26, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
 
@@ -221,7 +208,6 @@ async function refreshBalance(): Promise<void> {
   align-items: center;
   justify-content: center;
   background: rgba(247, 147, 26, 0.12);
-  box-shadow: 0 0 16px rgba(247, 147, 26, 0.18), inset 0 1px 0 rgba(255,255,255,0.12);
   flex-shrink: 0;
 }
 
@@ -239,7 +225,7 @@ async function refreshBalance(): Promise<void> {
 .chain-name {
   font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
   line-height: 1;
 }
@@ -247,7 +233,7 @@ async function refreshBalance(): Promise<void> {
 .chain-sub {
   font-size: 11px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--g-text-2);
   line-height: 1;
 }
 
@@ -263,28 +249,27 @@ async function refreshBalance(): Promise<void> {
   align-items: center;
   gap: 5px;
   padding: 5px 11px;
-  background: rgba(48, 209, 88, 0.14);
-  border: 1px solid rgba(48, 209, 88, 0.22);
-  border-radius: 20px;
-  backdrop-filter: blur(8px);
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
+  border-radius: var(--g-r-pill);
 }
 
 .live-badge--syncing {
-  background: rgba(247, 147, 26, 0.14);
-  border-color: rgba(247, 147, 26, 0.22);
+  background: var(--g-warning-fill);
+  border-color: var(--g-warning-line);
 }
 
 .live-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #30D158;
+  background: var(--g-success);
   animation: dot-pulse 2s ease-in-out infinite;
   flex-shrink: 0;
 }
 
 .live-badge--syncing .live-dot {
-  background: #F7931A;
+  background: var(--g-warning);
 }
 
 @keyframes dot-pulse {
@@ -295,12 +280,11 @@ async function refreshBalance(): Promise<void> {
 .live-text {
   font-size: 12px;
   font-weight: 600;
-  color: #30D158;
-  letter-spacing: 0.01em;
+  color: var(--g-success);
 }
 
 .live-badge--syncing .live-text {
-  color: #F7931A;
+  color: var(--g-warning);
 }
 
 /* ─── Refresh Button ────────────────────────────────────────── */
@@ -308,20 +292,20 @@ async function refreshBalance(): Promise<void> {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.45);
-  transition: all 0.2s ease;
+  color: var(--g-text-3);
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease;
 }
 
 .icon-btn:hover {
-  background: rgba(247, 147, 26, 0.15);
-  border-color: rgba(247, 147, 26, 0.28);
-  color: #F7931A;
+  background: var(--g-hairline-2);
+  border-color: var(--g-hairline-3);
+  color: var(--g-accent);
 }
 
 .icon-btn:disabled { opacity: 0.3; cursor: default; }
@@ -343,7 +327,7 @@ async function refreshBalance(): Promise<void> {
 /* ─── Balance ───────────────────────────────────────────────── */
 .no-wallet-state {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   padding: 20px 0;
 }
 
@@ -354,8 +338,7 @@ async function refreshBalance(): Promise<void> {
 .balance-field-label {
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.62);
-  letter-spacing: 0.02em;
+  color: var(--g-text-2);
   margin-bottom: 8px;
 }
 
@@ -368,17 +351,16 @@ async function refreshBalance(): Promise<void> {
 }
 
 .balance-number {
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--g-text-1);
   letter-spacing: -0.025em;
 }
 
 .balance-unit {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #F7931A;
-  letter-spacing: 0.02em;
 }
 
 .balance-sats {
@@ -390,13 +372,13 @@ async function refreshBalance(): Promise<void> {
 
 .sats-num {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--g-text-3);
   font-variant-numeric: tabular-nums;
 }
 
 .sats-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.48);
+  color: var(--g-text-3);
 }
 
 .balance-usd {
@@ -406,7 +388,7 @@ async function refreshBalance(): Promise<void> {
 }
 
 .usd-amount {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   color: #F7931A;
   letter-spacing: -0.015em;
@@ -424,9 +406,9 @@ async function refreshBalance(): Promise<void> {
   align-items: center;
   gap: 9px;
   padding: 8px 13px;
-  background: rgba(255, 179, 0, 0.09);
-  border: 1px solid rgba(255, 179, 0, 0.18);
-  border-radius: 12px;
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-card);
   margin-bottom: 14px;
 }
 
@@ -441,7 +423,7 @@ async function refreshBalance(): Promise<void> {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: #FFB300;
+  background: var(--g-warning);
   animation: pending-ripple 1.6s ease-out infinite;
 }
 
@@ -453,7 +435,7 @@ async function refreshBalance(): Promise<void> {
 .pending-text {
   font-size: 12px;
   font-weight: 500;
-  color: #FFB300;
+  color: var(--g-warning);
 }
 
 /* ─── Address Row ───────────────────────────────────────────── */
@@ -461,27 +443,27 @@ async function refreshBalance(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 13px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-card);
   padding: 9px 12px;
   margin-top: auto;
 }
 
 .addr-tag {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(247, 147, 26, 0.75);
+  color: var(--g-text-2);
   flex-shrink: 0;
-  background: rgba(247, 147, 26, 0.12);
+  background: var(--g-hairline-1);
   padding: 3px 8px;
-  border-radius: 7px;
+  border-radius: var(--g-r-control);
 }
 
 .addr-value {
   font-size: 11px;
-  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
-  color: rgba(255, 255, 255, 0.82);
+  font-family: var(--g-font-mono);
+  color: var(--g-text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -489,27 +471,27 @@ async function refreshBalance(): Promise<void> {
 }
 
 .copy-action {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--g-text-2);
   flex-shrink: 0;
   padding: 5px;
   display: flex;
   align-items: center;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
 }
 
 .copy-action:hover {
-  background: rgba(247, 147, 26, 0.14);
-  border-color: rgba(247, 147, 26, 0.28);
-  color: #F7931A;
+  background: var(--g-hairline-2);
+  border-color: var(--g-hairline-3);
+  color: var(--g-accent);
 }
 
 .copy-action.copied {
-  color: #30D158;
-  border-color: rgba(48, 209, 88, 0.28);
-  background: rgba(48, 209, 88, 0.12);
+  color: var(--g-success);
+  border-color: var(--g-success-line);
+  background: var(--g-success-fill);
 }
 </style>

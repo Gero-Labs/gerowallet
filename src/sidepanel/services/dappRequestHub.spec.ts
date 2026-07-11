@@ -56,6 +56,26 @@ describe('dappRequestHub', () => {
     );
   });
 
+  it('accepts btcSignPsbt and btcSignMessage as valid methods', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'btcSignPsbt', requestId: 'b1', payload: {} });
+    expect(hub.currentRequest.value?.requestId).toBe('b1');
+    expect(port.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'dapp-nack', requestId: 'b1' })
+    );
+  });
+
+  it('accepts wcSessionProposal as a valid method', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'wcSessionProposal', requestId: 'w1', payload: {} });
+    expect(hub.currentRequest.value?.requestId).toBe('w1');
+    expect(port.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'dapp-nack', requestId: 'w1' })
+    );
+  });
+
   it('deduplicates re-delivered requestIds', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
@@ -73,37 +93,17 @@ describe('dappRequestHub', () => {
     });
   });
 
-  // These two import walletStore/Blockchain/nextTick DYNAMICALLY, after the
-  // same vi.resetModules() as the hub itself — a static top-level import
-  // would resolve to a DIFFERENT module instance than the one dappRequestHub
-  // reads internally once resetModules() decouples the graphs, so mutating
-  // it would silently do nothing.
-  it('never connects while the active wallet is Apex (preserves the popup fallback)', async () => {
+  // Apex shares the same Cardano signTx/signData/enable pipeline (no popup
+  // view special-cases it), so it gets no special hub treatment: it connects
+  // and renders through DAppOverlay exactly like a Cardano wallet instead of
+  // eating a 5s dead wait before falling back to a popup.
+  it('connects normally when the active wallet is Apex', async () => {
     const { walletStore } = await import('@/stores/walletStore');
     const { Blockchain } = await import('@/models/types');
     walletStore.loggedWallet = { chain: Blockchain.APEX_PRIME } as never;
-    const { initDappRequestHub } = await import('./dappRequestHub');
-    await initDappRequestHub();
-    expect(chrome.runtime.connect).not.toHaveBeenCalled();
-  });
-
-  it('disconnects immediately when switching to an Apex wallet mid-session, reconnects on switching away', async () => {
-    const { walletStore } = await import('@/stores/walletStore');
-    const { Blockchain } = await import('@/models/types');
-    const { nextTick } = await import('vue');
     const { initDappRequestHub } = await import('./dappRequestHub');
     await initDappRequestHub();
     expect(chrome.runtime.connect).toHaveBeenCalledTimes(1);
-
-    walletStore.loggedWallet = { chain: Blockchain.APEX_PRIME } as never;
-    await nextTick();
-    expect(port.disconnect).toHaveBeenCalled();
-
-    const port2 = makePort();
-    vi.mocked(chrome.runtime.connect).mockReturnValueOnce(port2 as unknown as chrome.runtime.Port);
-    walletStore.loggedWallet = { chain: Blockchain.CARDANO } as never;
-    await nextTick();
-    expect(chrome.runtime.connect).toHaveBeenCalledTimes(2);
   });
 
   it('queues a response while disconnected and flushes it after reconnect', async () => {
@@ -119,5 +119,39 @@ describe('dappRequestHub', () => {
     expect(port2.postMessage).toHaveBeenCalledWith({
       type: 'dapp-response', requestId: 'r1', data: 'signed-cbor', error: null,
     });
+  });
+
+  it('rejectQueued removes one queued item without disturbing currentRequest', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r2', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signData', requestId: 'r3', payload: {} });
+
+    hub.rejectQueued('r2');
+
+    expect(hub.currentRequest.value?.requestId).toBe('r1'); // untouched
+    expect(hub.requestQueue.value.map((r) => r.requestId)).toEqual(['r3']);
+    expect(port.postMessage).toHaveBeenCalledWith({
+      type: 'dapp-response', requestId: 'r2', data: null, error: 'user_rejected',
+    });
+  });
+
+  it('rejectAll clears the queue and the current request', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r2', payload: {} });
+
+    hub.rejectAll();
+
+    expect(hub.currentRequest.value).toBe(null);
+    expect(hub.requestQueue.value.length).toBe(0);
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'r1', error: 'user_rejected' })
+    );
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'r2', error: 'user_rejected' })
+    );
   });
 });

@@ -20,7 +20,7 @@
             />
           </v-list-item-title>
           <v-list-item-subtitle>
-            <v-btn color="orange" text plain @click="changeLogRef.setEnabled(true)">
+            <v-btn color="warning" text plain @click="changeLogRef.setEnabled(true)">
               {{ `v${version}` }}<span class="ml-1" v-if="isBeta">(Beta)</span>
               <v-icon small class="ml-1">mdi-lightning-bolt</v-icon>
             </v-btn>
@@ -49,7 +49,7 @@
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
             <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
-              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="white">{{ item.icon }}</v-icon>
+              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-text-1)">{{ item.icon }}</v-icon>
               <v-img
                 v-else
                 width="18"
@@ -93,15 +93,15 @@
               outlined
               class="px-1"
               x-small
-              color="#FFD700"
+              color="warning"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
-            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
+            ><v-icon color="warning" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
           </v-list-item-action>
           <v-list-item-action v-else-if="item.new">
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
-              color="geroButton"
+              color="primary"
               x-small
             >
               {{ $t('common.new') }}
@@ -172,10 +172,10 @@
               <v-icon style="font-size: 12px;">mdi-check</v-icon>
             </v-btn>
           </v-list-item-title>
-          <v-list-item-subtitle class="mb-0" style="font-size: 10px" v-if="account">
+          <v-list-item-subtitle class="mb-0" style="font-size: 11px" v-if="account">
             {{ account.chain }}
           </v-list-item-subtitle>
-          <v-list-item-subtitle style="font-size: 8px" v-if="account">
+          <v-list-item-subtitle style="font-size: 11px" v-if="account">
             {{ account.network }}
           </v-list-item-subtitle>
         </v-list-item-content>
@@ -534,7 +534,7 @@ async function submitLogout() {
       method: MessageTypes.LOGOUT,
       data: { },
     });
-    updateVuetifyTheme(false, true);
+    updateVuetifyTheme('Cardano'); // logout resets to the default chain accent
     // Navigate to welcome page after store is cleared
     // Use replace to avoid adding to history, and catch navigation guard redirects
     router.replace('/welcome').catch(err => {
@@ -621,7 +621,7 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 .menuItem {
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 }
 
 .menuItem ::v-deep .v-list-item__avatar {
@@ -640,17 +640,17 @@ onUnmounted(() => {
 /* Active nav item — clean tinted highlight (modern, no gradient) */
 .activePage,
 .activePageDark {
-  color: #00D1FF;
-  background: rgba(0, 209, 255, 0.12);
-  border: 1px solid rgba(0, 209, 255, 0.28);
-  border-radius: 8px;
+  color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 28%, transparent);
+  border-radius: var(--g-r-control);
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
   }
 
   .v-icon {
-    color: #00D1FF !important;
+    color: var(--g-accent) !important;
   }
 }
 
@@ -686,7 +686,7 @@ onUnmounted(() => {
 
 .theme--dark.v-list-item {
   &:not(.v-list-item--active):not(.v-list-item--disabled) {
-    color: #FFFFFF !important;
+    color: var(--g-text-1) !important;
   }
 
   &:focus::before {
@@ -705,20 +705,20 @@ onUnmounted(() => {
 .menuItem.v-list-item--link {
   &:before {
     background: transparent;
-    border-radius: 8px;
+    border-radius: var(--g-r-control);
   }
 
   &:not(.activePage):not(.activePageDark):hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--g-hairline-1);
   }
 }
 
 .v-subheader {
-  font-size: 10px;
+  font-size: 11px;
   text-align: left;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--g-text-3);
   line-height: 12px;
   width: 100%;
   padding-left: 12px;
@@ -743,7 +743,7 @@ onUnmounted(() => {
   }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--g-hairline-1);
 
     .edit-icon {
       opacity: 0.6;
@@ -756,17 +756,17 @@ onUnmounted(() => {
   line-height: 20px;
   height: 20px;
   color: inherit;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-bottom: 1px solid var(--g-hairline-3);
+  border-radius: 4px;
   outline: none;
   padding: 0 4px;
   width: 100%;
   font-family: inherit;
 
   &:focus {
-    border-bottom-color: #00c7f3;
+    border-bottom-color: var(--g-accent);
   }
 }
 </style>

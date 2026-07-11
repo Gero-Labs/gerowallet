@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-app style="background: transparent !important">
-      <v-main style="position: relative; z-index: 1; background: black !important">
+      <v-main style="position: relative; z-index: 1; background: var(--g-canvas) !important">
         <v-container class="pa-0" style="position: relative">
           <!-- Background - Confined to dashboard working area -->
           <div
@@ -58,7 +58,7 @@
                         v-bind="attrs"
                         v-on="on"
                       >
-                        <v-icon size="16" color="#82B4FF" class="nav-search-icon">mdi-magnify</v-icon>
+                        <v-icon size="16" color="info" class="nav-search-icon">mdi-magnify</v-icon>
                         <template v-if="!compactNav">
                           <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
                           <span class="nav-search-shortcut">Ctrl+K</span>
@@ -93,7 +93,7 @@
                       >
                         <v-icon
                           small
-                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? '#FFA500' : '#ff6464'"
+                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                           :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
                         >
                           {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
@@ -109,7 +109,7 @@
                           height="8"
                           :buffer-value="isMidnight ? 100 : epochSlotPercentage"
                           :value="isMidnight ? 100 : epochSlotPercentage"
-                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? '#FFA500' : '#ff6464'"
+                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                           background-color="transparent"
                           style="width: 50px"
                           striped
@@ -133,7 +133,7 @@
                         <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                         <span
                           :style="
-                            (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: '#FFA500' } : { color: '#ff6464' }
+                            (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
                           "
                           >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
                         >
@@ -157,28 +157,28 @@
                       </v-btn>
                     </template>
                     <v-card outlined class="notifications-card" style="min-width: 280px; max-width: 320px">
-                      <v-card-title class="pa-3 pb-1" style="font-size: 15px">{{ t('navigation.notifications') }}</v-card-title>
+                      <v-card-title class="pa-3 pb-1" style="font-size: 14px">{{ t('navigation.notifications') }}</v-card-title>
                       <v-card-text class="pa-0 pb-2">
                         <v-list v-if="kesWarningVisible" class="transparent" dense>
                           <v-list-item class="kes-notification-item" @click="navigateToPoolOperator">
-                            <v-list-item-avatar size="32" class="mr-2" style="background: rgba(253,176,34,0.12); border-radius: 8px; min-width: 32px">
-                              <v-icon size="16" color="#FDB022">mdi-key-chain</v-icon>
+                            <v-list-item-avatar size="32" class="mr-2" style="background: var(--g-warning-fill); border-radius: var(--g-r-control); min-width: 32px">
+                              <v-icon size="16" color="warning">mdi-key-chain</v-icon>
                             </v-list-item-avatar>
                             <v-list-item-content>
-                              <v-list-item-title style="font-size: 13px; font-weight: 600; color: #FDB022; white-space: normal">
+                              <v-list-item-title style="font-size: 13px; font-weight: 600; color: var(--g-warning); white-space: normal">
                                 {{ t('poolOperator.kesWarningTitle', { remaining: kesRemainingGlobal }) }}
                               </v-list-item-title>
-                              <v-list-item-subtitle style="font-size: 11px; white-space: normal; color: rgba(255,255,255,0.5)">
+                              <v-list-item-subtitle style="font-size: 11px; white-space: normal; color: var(--g-text-3)">
                                 {{ t('poolOperator.kesWarningSubtitle') }}
                               </v-list-item-subtitle>
                             </v-list-item-content>
                             <v-list-item-action class="my-0 ml-1">
-                              <v-icon small color="#FDB022">mdi-chevron-right</v-icon>
+                              <v-icon small color="warning">mdi-chevron-right</v-icon>
                             </v-list-item-action>
                           </v-list-item>
                         </v-list>
-                        <div v-else class="text-center pa-4" style="color: rgba(255,255,255,0.4); font-size: 13px">
-                          <v-icon small color="rgba(255,255,255,0.3)" class="mr-1">mdi-bell-check-outline</v-icon>
+                        <div v-else class="text-center pa-4" style="color: var(--g-text-3); font-size: 13px">
+                          <v-icon small color="var(--g-text-3)" class="mr-1">mdi-bell-check-outline</v-icon>
                           {{ t('navigation.nothingNew') }}
                         </div>
                       </v-card-text>
@@ -290,8 +290,7 @@ import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialo
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
-import { iconFilters, themes } from '@/config/themes';
-import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { chainAccents, chainKeyFor } from '@/config/themes';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
 import { walletStore } from '@/stores/walletStore';
@@ -350,15 +349,9 @@ watch(settingsNavRequest, (req) => {
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
-const primaryColor = computed(() => {
-  if (loggedWallet.value?.chain === Blockchain.BITCOIN) return themes.bitcoin.primary;
-  if (isApex.value) return themes.apex.primary;
-  return themes.cardano.primary;
-});
+// Chain-correct for every chain, Midnight included (the old branching had no
+// Midnight case and fell through to Cardano cyan).
+const primaryColor = computed(() => chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent);
 
 const changeLog = changeLogPlugin;
 const shouldBackup = computed(() => {
@@ -477,43 +470,9 @@ async function openMiniMode() {
   }
 }
 
-// Theme management - update colors when a chain changes
-const updateThemeColors = () => {
-  const chain = loggedWallet.value?.chain ?? '';
-  let currentTheme: typeof themes.cardano;
-  let currentFilter: string;
-
-  if (chain === Blockchain.BITCOIN) {
-    currentTheme = themes.bitcoin;
-    currentFilter = iconFilters.bitcoin;
-  } else if (isApex.value) {
-    currentTheme = themes.apex;
-    currentFilter = iconFilters.apex;
-  } else {
-    currentTheme = themes.cardano;
-    currentFilter = iconFilters.cardano;
-  }
-
-  // Update Vuetify theme
-  updateVuetifyTheme(chain, true); // Always dark theme for now
-
-  // Set CSS custom properties
-  Object.entries(currentTheme).forEach(([key, value]) => {
-    document.documentElement.style.setProperty(`--${key}-color`, value);
-  });
-  document.documentElement.style.setProperty('--icon-filter', currentFilter);
-};
-
-// Watch for wallet chain changes
-watch(
-  () => loggedWallet.value?.chain,
-  newChain => {
-    if (newChain) {
-      updateThemeColors();
-    }
-  },
-  { immediate: true }
-);
+// Theme management lives in useChainAccent (bootstrapped in options/App.vue).
+// It owns both the CSS accent slots and the Vuetify theme, so the local
+// --*-color writer and its watcher that used to sit here are gone.
 
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
@@ -575,8 +534,8 @@ onMounted(async () => {
     }
   });
 
-  // Ensure colors are set on mount
-  updateThemeColors();
+  // Chain colors are applied by useChainAccent (bootstrapped in options/App.vue
+  // with immediate: true), so there is nothing to do here on mount.
 
   // Load SPO node config and start polling for KES notifications.
   // Pool Operator is hard-gated off for 2.7 — skip polling entirely.
@@ -646,7 +605,7 @@ onBeforeUnmount(() => {
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -668,7 +627,7 @@ onBeforeUnmount(() => {
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -692,7 +651,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   /* Fade to black at the bottom so the holdings table doesn't fight the bg. */
   mask-image: linear-gradient(
@@ -732,7 +691,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -742,28 +701,28 @@ onBeforeUnmount(() => {
 /* Force progress bar colors to use CSS variables with higher specificity */
 .v-progress-linear .v-progress-linear__determinate,
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, var(--primary-color, #00c7f3), var(--secondary-color, #00ffd1)) !important;
-  border-color: var(--primary-color, #00c7f3) !important;
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2)) !important;
+  border-color: var(--g-grad-1) !important;
 }
 
 .epoch-progress-liquid-glass .v-progress-linear__determinate {
-  background: var(--primary-color, #00c7f3) !important;
+  background: var(--g-grad-1) !important;
 }
 
 /* Ensure v-app has pure black background outside working area */
 .v-application {
-  background: #000000 !important;
+  background: var(--g-canvas) !important;
   position: relative;
   z-index: 1;
 }
 
 /* Override any Vuetify theme variables */
 body {
-  background: #000000 !important;
+  background: var(--g-canvas) !important;
 }
 
 html {
-  background: #000000 !important;
+  background: var(--g-canvas) !important;
 }
 
 /* Make content areas transparent to show background */
@@ -837,29 +796,27 @@ div.v-toolbar__content {
 }
 
 .network-tooltip {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-menu) !important;
   isolation: isolate !important;
   padding: 12px 16px !important;
 
   &.connecting {
-    border: 1px solid rgba(255, 165, 0, 0.3) !important;
-    box-shadow: 0 8px 32px rgba(255, 165, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid var(--g-warning-line) !important;
+    box-shadow: var(--g-shadow-menu) !important;
   }
 
   &.offline {
-    border: 1px solid rgba(255, 100, 100, 0.3) !important;
-    box-shadow: 0 8px 32px rgba(255, 100, 100, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid var(--g-error-line) !important;
+    box-shadow: var(--g-shadow-menu) !important;
   }
 }
 
 .network-tooltip-content {
   line-height: 1.3;
-  color: #ffffff !important;
+  color: var(--g-text-1) !important;
 }
 
 .network-tooltip-content div {
@@ -871,12 +828,7 @@ div.v-toolbar__content {
 }
 
 .network-tooltip-content strong {
-  color: #00c7f3 !important;
-}
-
-.v-dialog__content--active {
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  color: var(--g-accent) !important;
 }
 
 /* Search field in top nav bar */
@@ -885,13 +837,12 @@ div.v-toolbar__content {
   align-items: center;
   gap: 8px;
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   background: rgba(130, 180, 255, 0.08);
   border: 1px solid rgba(130, 180, 255, 0.25);
   cursor: pointer;
   min-width: 180px;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-  animation: nav-search-breathe 3s ease-in-out infinite;
+  transition: border-color var(--g-dur-base), background var(--g-dur-base), box-shadow var(--g-dur-base);
 }
 .nav-search-field:hover {
   background: rgba(130, 180, 255, 0.14);
@@ -899,40 +850,36 @@ div.v-toolbar__content {
 }
 .nav-search-placeholder {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .nav-search-shortcut {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  color: var(--g-text-3);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
   border-radius: 4px;
   padding: 1px 5px;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   letter-spacing: 0.3px;
 }
 .nav-search-compact {
   min-width: unset !important;
   padding: 5px 8px !important;
-  border-radius: 6px !important;
-}
-@keyframes nav-search-breathe {
-  0%, 100% { box-shadow: 0 0 4px rgba(130, 180, 255, 0.15); }
-  50% { box-shadow: 0 0 14px rgba(130, 180, 255, 0.35); }
+  border-radius: var(--g-r-control) !important;
 }
 
 .toolbar-icon-btn {
   width: 28px !important;
   height: 28px !important;
-  border-radius: 6px !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 .toolbar-icon-btn .v-icon {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--g-text-1) !important;
 }
 
 .liquid-glass-card,
@@ -945,7 +892,7 @@ div.v-toolbar__content {
   -webkit-backdrop-filter: blur(10px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 12px !important;
-  transition: all 0.3s ease !important;
+  transition: border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease !important;
   cursor: pointer !important;
   overflow: hidden !important;
 }
@@ -960,12 +907,10 @@ div.v-toolbar__content {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
 }
 .notifications-card {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(2px) !important;
-  -webkit-backdrop-filter: blur(2px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-menu) !important;
   isolation: isolate !important;
 }
 
@@ -975,12 +920,11 @@ div.v-toolbar__content {
 <style>
 .kes-notification-item {
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   margin: 0 8px;
 }
 
 .kes-notification-item:hover {
-  background: rgba(253, 176, 34, 0.06) !important;
+  background: var(--g-warning-fill) !important;
 }
 </style>
-

@@ -11,7 +11,7 @@
                   <v-col cols="6" class="px-1 text-center">
                     <span class="staking-label">{{ $t('staking.delegatingTo') }}</span>
                     <h4 class="staking-value" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h4>
-                    <v-btn x-small text color="#F97066" @click="unstake">{{ $t('staking.unstake') }}</v-btn>
+                    <v-btn x-small text color="error" @click="unstake">{{ $t('staking.unstake') }}</v-btn>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
                     <span class="staking-label">{{ $t('common.total') }}</span>
@@ -167,7 +167,7 @@
                         v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000"
                         class="staking-stake-change-up"
                       >
-                        <v-icon x-small color="#47cd89" class="staking-stake-arrow">mdi-arrow-up-bold</v-icon>
+                        <v-icon x-small color="success" class="staking-stake-arrow">mdi-arrow-up-bold</v-icon>
                         {{
                           filters.toCurrency(
                             Number(pool.active_stake) - Number(pool.live_stake),
@@ -183,7 +183,7 @@
                         v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000"
                         class="staking-stake-change-down"
                       >
-                        <v-icon x-small color="#F97066" class="staking-stake-arrow-down">mdi-arrow-down-bold</v-icon>
+                        <v-icon x-small color="error" class="staking-stake-arrow-down">mdi-arrow-down-bold</v-icon>
                         {{
                           filters.toCurrency(
                             Number(pool.live_stake) - Number(pool.active_stake),
@@ -244,10 +244,10 @@
                         v-if="isNumeric(item.amount)"
                         :style="
                           isNaN(change(item)) || change(item) === Infinity || change(item) === 0
-                            ? { color: '#A3A3A3' }
+                            ? { color: 'var(--g-text-3)' }
                             : change(item) >= 0
-                            ? { color: '#47CD89' }
-                            : { color: '#F97066' }
+                            ? { color: 'var(--g-success)' }
+                            : { color: 'var(--g-error)' }
                         "
                       >
                         {{
@@ -279,10 +279,10 @@
                       <span
                         :style="
                           isNaN(change(item)) || change(item) === Infinity || change(item) === 0
-                            ? { color: '#A3A3A3' }
+                            ? { color: 'var(--g-text-3)' }
                             : change(item) >= 0
-                            ? { color: '#47CD89' }
-                            : { color: '#F97066' }
+                            ? { color: 'var(--g-success)' }
+                            : { color: 'var(--g-error)' }
                         "
                       >
                         {{
@@ -473,7 +473,7 @@ onMounted(async () => {
 </script>
 <style scoped>
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  background: var(--g-accent);
 }
 
 /* StakingCard specific styles */
@@ -494,8 +494,8 @@ onMounted(async () => {
 }
 
 .staking-info-row {
-  background-color: #161b26;
-  border-radius: 8px;
+  background-color: var(--g-raised);
+  border-radius: var(--g-r-control);
 }
 
 .staking-label {
@@ -503,7 +503,7 @@ onMounted(async () => {
 }
 
 .staking-value {
-  color: white;
+  color: var(--g-text-1);
 }
 
 .staking-detail-col {
@@ -512,18 +512,18 @@ onMounted(async () => {
 }
 
 .staking-detail-value {
-  color: white;
+  color: var(--g-text-1);
 }
 
 .staking-fees-text {
   font-size: 14px;
-  color: white;
+  color: var(--g-text-1);
 }
 
 .staking-saturation-details {
-  font-size: 10px;
+  font-size: 11px;
   text-align-last: justify;
-  color: white;
+  color: var(--g-text-1);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -531,22 +531,22 @@ onMounted(async () => {
 
 .staking-stake-change-up {
   display: inline-flex;
-  font-size: 10px;
-  color: white;
+  font-size: 11px;
+  color: var(--g-text-1);
 }
 
 .staking-stake-change-down {
   display: inline-flex;
-  font-size: 10px;
-  color: white;
+  font-size: 11px;
+  color: var(--g-text-1);
 }
 
 .staking-stake-arrow {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .staking-stake-arrow-down {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.7;
 }
 

@@ -72,7 +72,7 @@
 
       <!-- Go Cashback Button -->
       <div class="cashback-button-container">
-        <v-btn elevation="0" height="36" color="#0B141B" @click="navigateToCashback" :disabled="!supported" block>
+        <v-btn elevation="0" height="36" color="var(--g-surface)" @click="navigateToCashback" :disabled="!supported" block>
           <div :class="supported ? 'btn-text' : 'btn-text-disabled'">{{ $t('cashback.goCashback') }}</div>
         </v-btn>
       </div>
@@ -213,12 +213,7 @@ const navigateToCashback = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 30%),
-    radial-gradient(circle at 70% 80%, rgba(0, 199, 243, 0.03) 0%, transparent 40%),
-    radial-gradient(circle at 20% 70%, rgba(0, 250, 213, 0.03) 0%, transparent 35%),
-    linear-gradient(45deg, rgba(255, 255, 255, 0.02) 0%, transparent 50%),
-    rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.2);
   z-index: 2;
   pointer-events: none;
 }
@@ -260,14 +255,11 @@ const navigateToCashback = () => {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.4) !important;
-  border-radius: 10px;
+  background: var(--g-raised) !important;
+  border-radius: var(--g-r-control);
   padding: 12px 16px;
   min-width: 180px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--g-hairline-3);
   isolation: isolate !important;
   position: relative;
   overflow: hidden;
@@ -276,7 +268,7 @@ const navigateToCashback = () => {
 .deal-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--g-r-chip);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -288,7 +280,7 @@ const navigateToCashback = () => {
   width: 20px;
   height: 20px;
   object-fit: contain;
-  border-radius: 3px;
+  border-radius: var(--g-r-chip);
 }
 
 .deal-info {
@@ -299,7 +291,7 @@ const navigateToCashback = () => {
 .deal-name {
   font-size: 13px;
   font-weight: 600;
-  color: white;
+  color: var(--g-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -309,7 +301,7 @@ const navigateToCashback = () => {
 
 .deal-cashback {
   font-size: 11px;
-  color: #00c7f3;
+  color: var(--g-accent);
   font-weight: 500;
   line-height: 1.2;
 }
@@ -347,14 +339,11 @@ const navigateToCashback = () => {
 }
 
 .cashback-rewards-section {
-  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-color: var(--g-raised) !important;
   background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
   border-radius: 0 !important;
   position: relative !important;
   overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   isolation: isolate !important;
   padding: 8px 14px !important;
   margin: 0 0 !important;
@@ -376,7 +365,7 @@ const navigateToCashback = () => {
 
 .cashback-title {
   font-size: 14px;
-  color: white;
+  color: var(--g-text-1);
   font-weight: 500;
 }
 
@@ -387,17 +376,15 @@ const navigateToCashback = () => {
 }
 
 .highlight-text {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-size: 18px;
+  color: var(--g-accent);
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
 }
 
 .secondary-text {
-  color: #A3A3A3;
-  font-size: 18px;
+  color: var(--g-text-3);
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -406,7 +393,7 @@ const navigateToCashback = () => {
 .btn-text,
 .btn-text-disabled {
   text-transform: capitalize;
-  background: linear-gradient(to right, #00c7f3, #00fad5);
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-size: 14px;

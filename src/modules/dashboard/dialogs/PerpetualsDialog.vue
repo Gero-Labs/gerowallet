@@ -19,7 +19,7 @@
             <v-icon
               x-small
               class="mr-1 star-icon"
-              :color="isFavorite(name) ? '#F0B90B' : '#848e9c'"
+              :color="isFavorite(name) ? 'var(--g-warning)' : 'var(--g-text-3)'"
               @click.stop="toggleFavorite(name)"
             >
               {{ isFavorite(name) ? 'mdi-star' : 'mdi-star-outline' }}
@@ -506,7 +506,7 @@ function onLogoError(e: Event) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .perps-terminal {
-  background: #0b0e11 !important;
+  background: var(--g-surface) !important;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -520,9 +520,9 @@ function onLogoError(e: Event) {
   align-items: center;
   height: 36px;
   padding: 0 8px;
-  border-bottom: 1px solid #2b2f36;
+  border-bottom: 1px solid var(--g-raised);
   flex-shrink: 0;
-  background: #0b0e11;
+  background: var(--g-surface);
 }
 
 .symbol-tabs-scroll {
@@ -542,13 +542,13 @@ function onLogoError(e: Event) {
   cursor: pointer;
   white-space: nowrap;
   font-size: 12px;
-  color: #848e9c;
+  color: var(--g-text-3);
   transition: background 0.15s;
 }
-.symbol-tab:hover { background: rgba(255,255,255,0.04); }
+.symbol-tab:hover { background: var(--g-hairline-1); }
 .symbol-tab--active {
-  background: rgba(255,255,255,0.06);
-  color: #ffffff;
+  background: var(--g-hairline-1);
+  color: var(--g-text-1);
 }
 
 .symbol-tab__name { font-weight: 600; }
@@ -563,9 +563,9 @@ function onLogoError(e: Event) {
   align-items: center;
   gap: 16px;
   padding: 4px 12px;
-  border-bottom: 1px solid #2b2f36;
+  border-bottom: 1px solid var(--g-raised);
   flex-shrink: 0;
-  background: #0b0e11;
+  background: var(--g-surface);
   overflow-x: auto;
 }
 
@@ -586,8 +586,7 @@ function onLogoError(e: Event) {
 .symbol-pair__name {
   font-size: 16px;
   font-weight: 700;
-  color: #eaecef;
-  letter-spacing: 0.3px;
+  color: var(--g-text-1);
 }
 
 .price-info-item {
@@ -597,13 +596,13 @@ function onLogoError(e: Event) {
 }
 
 .price-info-label {
-  font-size: 10px;
-  color: #848e9c;
+  font-size: 11px;
+  color: var(--g-text-3);
   line-height: 1.2;
 }
 
 .price-info-label--dashed {
-  text-decoration: underline dotted #848e9c;
+  text-decoration: underline dotted var(--g-text-3);
   text-underline-offset: 2px;
   cursor: pointer;
 }
@@ -611,18 +610,18 @@ function onLogoError(e: Event) {
 .price-info-value {
   font-size: 12px;
   font-weight: 600;
-  color: #eaecef;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
   line-height: 1.3;
   transition: color 0.15s ease;
 }
 
 .price-flash-up {
-  color: #0ecb81 !important;
+  color: var(--g-success) !important;
 }
 
 .price-flash-down {
-  color: #f6465d !important;
+  color: var(--g-error) !important;
 }
 
 .funding-value-row {
@@ -633,9 +632,9 @@ function onLogoError(e: Event) {
 
 .price-info-countdown {
   font-size: 11px;
-  color: #eaecef;
+  color: var(--g-text-1);
   font-weight: 600;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   line-height: 1.3;
 }
 
@@ -654,7 +653,7 @@ function onLogoError(e: Event) {
   grid-row: 1;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #2b2f36;
+  border-right: 1px solid var(--g-raised);
   min-width: 0;
   overflow: hidden;
 }
@@ -683,20 +682,20 @@ function onLogoError(e: Event) {
   display: flex;
   gap: 2px;
   padding: 4px 8px;
-  border-bottom: 1px solid #1b1d23;
+  border-bottom: 1px solid var(--g-raised);
 }
 
 .chart-subtab {
   font-size: 11px;
-  color: #848e9c;
+  color: var(--g-text-3);
   padding: 3px 10px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: 4px;
 }
-.chart-subtab:hover { background: rgba(255,255,255,0.04); }
+.chart-subtab:hover { background: var(--g-hairline-1); }
 .chart-subtab--active {
-  color: #26FAB0;
-  background: rgba(38, 250, 176, 0.08);
+  color: var(--g-success);
+  background: var(--g-success-fill);
 }
 
 /* ── Chart toolbar ────────────────────────────────────────────────────── */
@@ -713,20 +712,20 @@ function onLogoError(e: Event) {
 .chart-toolbar__tf {
   font-size: 12px;
   font-weight: 600;
-  color: #848e9c;
+  color: var(--g-text-3);
   padding: 2px 8px;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   transition: color 0.15s;
 }
 
 .chart-toolbar__tf:hover {
-  color: #eaecef;
+  color: var(--g-text-1);
 }
 
 .chart-toolbar__tf--active {
-  color: #eaecef;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--g-text-1);
+  background: var(--g-hairline-1);
 }
 
 .chart-toolbar__price-trigger {
@@ -734,19 +733,19 @@ function onLogoError(e: Event) {
   align-items: center;
   font-size: 12px;
   font-weight: 500;
-  color: #eaecef;
+  color: var(--g-text-1);
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 4px;
   margin-left: 8px;
 }
 
 .chart-toolbar__price-trigger:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
 }
 
 .chart-toolbar__price-trigger .v-icon {
-  color: #848e9c !important;
+  color: var(--g-text-3) !important;
 }
 
 .chart-price-menu {
@@ -754,7 +753,7 @@ function onLogoError(e: Event) {
 }
 
 .chart-price-list {
-  background: #1b1d23 !important;
+  background: var(--g-raised) !important;
   padding: 4px 0 !important;
 }
 
@@ -765,11 +764,11 @@ function onLogoError(e: Event) {
 .chart-price-list .v-list-item__title {
   font-size: 12px !important;
   font-weight: 500;
-  color: #eaecef;
+  color: var(--g-text-1);
 }
 
 .chart-price-list__item--active .v-list-item__title {
-  color: #26FAB0;
+  color: var(--g-success);
   font-weight: 600;
 }
 
@@ -784,22 +783,22 @@ function onLogoError(e: Event) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Color utilities */
-.clr-green { color: #26FAB0 !important; }
-.clr-red { color: #F6465D !important; }
+.clr-green { color: var(--g-success) !important; }
+.clr-red { color: var(--g-error) !important; }
 
 /* Footer */
 .terminal-footer {
   display: flex;
   align-items: center;
   padding: 3px 12px;
-  border-top: 1px solid #2b2f36;
-  background: #0b0e11;
+  border-top: 1px solid var(--g-raised);
+  background: var(--g-surface);
   flex-shrink: 0;
 }
 
 .powered-by {
-  font-size: 10px;
-  color: #5e6673;
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-right: 6px;
 }
 
@@ -814,13 +813,13 @@ function onLogoError(e: Event) {
 
 .footer-link {
   font-size: 11px;
-  color: #848e9c;
+  color: var(--g-text-3);
   text-decoration: none;
   margin-left: 16px;
   cursor: pointer;
 }
 
 .footer-link:hover {
-  color: #eaecef;
+  color: var(--g-text-1);
 }
 </style>

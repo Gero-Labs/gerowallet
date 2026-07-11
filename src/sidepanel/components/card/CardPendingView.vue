@@ -24,11 +24,11 @@
     <!-- Status steps -->
     <div class="status-steps">
       <div class="status-step completed">
-        <v-icon small color="#4caf50">mdi-check-circle</v-icon>
+        <v-icon small color="success">mdi-check-circle</v-icon>
         <span>{{ $t('card.accountCreated') }}</span>
       </div>
       <div class="status-step completed">
-        <v-icon small color="#4caf50">mdi-check-circle</v-icon>
+        <v-icon small color="success">mdi-check-circle</v-icon>
         <span>{{ $t('card.kycDocumentsSubmitted') }}</span>
       </div>
       <div class="status-step active">
@@ -36,7 +36,7 @@
         <span>{{ $t('card.verificationInProgress') }}</span>
       </div>
       <div class="status-step pending">
-        <v-icon small color="#555">mdi-circle-outline</v-icon>
+        <v-icon small color="var(--g-text-3)">mdi-circle-outline</v-icon>
         <span>{{ $t('card.orderYourCard') }}</span>
       </div>
     </div>
@@ -133,13 +133,13 @@ async function handleLogout() {
 .status-title {
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--g-text-1);
   margin: 0 0 8px;
 }
 
 .status-message {
   font-size: 13px;
-  color: #888;
+  color: var(--g-text-3);
   margin: 0;
   line-height: 1.5;
 }
@@ -150,9 +150,9 @@ async function handleLogout() {
   gap: 12px;
   width: 100%;
   padding: 16px;
-  background: #1a1a1a;
-  border-radius: 12px;
-  border: 1px solid #2a2a2a;
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
 }
 
 .status-step {
@@ -163,16 +163,16 @@ async function handleLogout() {
 }
 
 .status-step.completed span {
-  color: #aaa;
+  color: var(--g-text-2);
 }
 
 .status-step.active span {
-  color: var(--chain-primary);
+  color: var(--g-accent);
   font-weight: 600;
 }
 
 .status-step.pending span {
-  color: #555;
+  color: var(--g-text-3);
 }
 
 .pending-actions {
@@ -186,18 +186,18 @@ async function handleLogout() {
 
 .refresh-btn {
   height: 44px !important;
-  border-radius: 10px !important;
-  border-color: #333 !important;
+  border-radius: var(--g-r-control) !important;
+  border-color: var(--g-hairline-2) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;
   letter-spacing: 0 !important;
-  color: var(--chain-primary) !important;
+  color: var(--g-accent) !important;
 }
 
 .refresh-btn:hover {
-  border-color: var(--chain-primary) !important;
-  background: color-mix(in srgb, var(--chain-primary) 8%, transparent) !important;
+  border-color: var(--g-accent) !important;
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important;
 }
 
 .logout-btn {
@@ -205,10 +205,10 @@ async function handleLogout() {
   text-transform: none !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
-  color: #888 !important;
+  color: var(--g-text-3) !important;
 }
 
 .logout-btn:hover {
-  color: #ff4d4d !important;
+  color: var(--g-error) !important;
 }
 </style>
