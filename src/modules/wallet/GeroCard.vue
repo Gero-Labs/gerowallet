@@ -47,7 +47,7 @@
         :menu-props="{ top: true, offsetY: true }"
       >
         <template #prepend-inner>
-          <v-icon small color="orange">mdi-wrench</v-icon>
+          <v-icon small color="warning">mdi-wrench</v-icon>
         </template>
       </v-select>
     </div>
@@ -218,22 +218,22 @@ onMounted(async () => {
   position: absolute;
   top: 32px;
   right: 32px;
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--g-hairline-1) !important;
+  border: 1px solid var(--g-hairline-2);
   transition: all 0.2s ease;
-  z-index: 1000;
+  z-index: var(--g-z-sticky);
 
   &:hover {
-    background: rgba(255, 77, 77, 0.15) !important;
-    border-color: rgba(255, 77, 77, 0.3);
+    background: var(--g-error-fill) !important;
+    border-color: var(--g-error-line);
   }
 
   :deep(.v-icon) {
-    color: #cecfd2;
+    color: var(--g-text-2);
   }
 
   &:hover :deep(.v-icon) {
-    color: #ff4d4d;
+    color: var(--g-error);
   }
 }
 
@@ -254,8 +254,8 @@ onMounted(async () => {
 .loading-spinner {
   width: 48px;
   height: 48px;
-  border: 4px solid rgba(255, 255, 255, 0.1);
-  border-left: 4px solid #00c7f3;
+  border: 4px solid var(--g-hairline-2);
+  border-left: 4px solid var(--g-accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 24px;
@@ -271,7 +271,7 @@ onMounted(async () => {
 }
 
 .loading-message {
-  color: #cecfd2;
+  color: var(--g-text-2);
   font-size: 16px;
   margin: 0;
 }
@@ -296,14 +296,14 @@ onMounted(async () => {
 }
 
 .error-title {
-  color: #fff;
+  color: var(--g-text-1);
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 16px 0;
 }
 
 .error-message {
-  color: #cecfd2;
+  color: var(--g-text-2);
   font-size: 16px;
   margin: 0 0 32px 0;
   max-width: 400px;
@@ -311,10 +311,10 @@ onMounted(async () => {
 }
 
 .retry-button {
-  background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+  background: var(--g-grad);
   border: none;
-  border-radius: 8px;
-  color: #0c0e12;
+  border-radius: var(--g-r-control);
+  color: var(--g-on-grad);
   font-size: 16px;
   font-weight: 600;
   padding: 12px 24px;
@@ -323,7 +323,6 @@ onMounted(async () => {
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0, 199, 243, 0.3);
   }
 
   &:active {
@@ -340,20 +339,20 @@ onMounted(async () => {
   bottom: 20px;
   right: 20px;
   width: 280px;
-  z-index: 10000;
-  background: rgba(12, 14, 18, 0.95);
-  border: 2px solid rgba(255, 165, 0, 0.5);
-  border-radius: 8px;
+  z-index: var(--g-z-toast);
+  background: var(--g-surface);
+  border: 2px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
   padding: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--g-shadow-menu);
 
   :deep(.v-input__control) {
-    background: rgba(30, 30, 30, 0.8);
+    background: var(--g-raised);
     border-radius: 4px;
   }
 
   :deep(.v-select__selection) {
-    color: #fff;
+    color: var(--g-text-1);
     font-size: 13px;
   }
 
@@ -362,7 +361,7 @@ onMounted(async () => {
   }
 
   :deep(.v-label) {
-    color: orange;
+    color: var(--g-warning);
     font-weight: 600;
     font-size: 12px;
   }

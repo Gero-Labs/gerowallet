@@ -475,19 +475,19 @@ onBeforeUnmount(() => {
 .ta-chart-container {
   width: 100%;
   position: relative;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   overflow: hidden;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .chart-area {
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   position: relative;
 }
 
 .chart-fallback {
   background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 }
 </style>

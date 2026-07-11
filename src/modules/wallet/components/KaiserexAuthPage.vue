@@ -521,7 +521,7 @@ const handleRegistrationComplete = () => {
   min-height: 480px; // Fixed height for consistency
 
   &:hover {
-    border-color: rgba(0, 199, 243, 0.3);
+    border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
   }
 
   &::before {
@@ -531,7 +531,7 @@ const handleRegistrationComplete = () => {
     left: 0;
     right: 0;
     height: 3px;
-    background: linear-gradient(90deg, $primary-cyan 0%, $primary-green 100%);
+    background: linear-gradient(90deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
     opacity: 0;
     transition: opacity 0.3s ease;
   }
@@ -581,12 +581,12 @@ const handleRegistrationComplete = () => {
   }
 
   &.new-user {
-    background: rgba(0, 199, 243, 0.1);
+    background: color-mix(in srgb, var(--g-accent) 10%, transparent);
     color: $primary-cyan;
   }
 
   &.existing-user {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--g-hairline-2);
     color: $text-secondary;
   }
 }
@@ -636,7 +636,7 @@ const handleRegistrationComplete = () => {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: rgba(0, 199, 243, 0.2);
+  background: color-mix(in srgb, var(--g-accent) 20%, transparent);
   color: $primary-cyan;
   display: flex;
   align-items: center;
@@ -666,7 +666,7 @@ const handleRegistrationComplete = () => {
 
 .feature-icon {
   font-size: 16px;
-  color: rgba(0, 199, 243, 0.7);
+  color: color-mix(in srgb, var(--g-accent) 70%, transparent);
 }
 
 .feature-text {
@@ -692,7 +692,7 @@ const handleRegistrationComplete = () => {
 .promo-section {
   margin-top: $spacing-lg;
   padding-top: $spacing-lg;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--g-hairline-2);
 
   .promo-title {
     @include text-style($font-size-base, $font-weight-semibold);
@@ -765,7 +765,7 @@ const handleRegistrationComplete = () => {
 
 .gradient-text-button {
   :deep(.button-text) {
-    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+    background: linear-gradient(135deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -863,7 +863,7 @@ const handleRegistrationComplete = () => {
 
     &:hover {
       color: $primary-cyan;
-      background: rgba(0, 199, 243, 0.1);
+      background: color-mix(in srgb, var(--g-accent) 10%, transparent);
     }
   }
 
@@ -912,7 +912,7 @@ const handleRegistrationComplete = () => {
   &:focus {
     outline: none;
     border-color: $primary-cyan;
-    box-shadow: 0 0 0 2px rgba(0, 199, 243, 0.1);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--g-accent) 10%, transparent);
   }
 
   &::placeholder {
@@ -973,8 +973,8 @@ const handleRegistrationComplete = () => {
   &:focus {
     outline: none;
     border-color: $primary-cyan;
-    box-shadow: 0 0 0 3px rgba(0, 199, 243, 0.2);
-    background: rgba(0, 199, 243, 0.05);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-accent) 20%, transparent);
+    background: color-mix(in srgb, var(--g-accent) 5%, transparent);
   }
 
   &::placeholder {
@@ -989,13 +989,13 @@ const handleRegistrationComplete = () => {
   align-items: center;
   justify-content: center;
   gap: $spacing-xs;
-  color: #ff4444;
+  color: var(--g-error);
   font-size: $font-size-sm;
   margin-top: $spacing-sm;
   text-align: center;
 
   .error-icon {
-    color: #ff4444;
+    color: var(--g-error);
   }
 }
 
