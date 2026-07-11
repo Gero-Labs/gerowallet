@@ -8,7 +8,7 @@
             <div class="custom-step" :key="item.name"
               :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }">
               <div class="icon-container">
-                <v-icon class="step-icon" :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'" size="20">{{
+                <v-icon class="step-icon" :color="currentStep < index + 1 ? 'var(--g-accent)' : 'var(--g-canvas)'" size="20">{{
                   currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
                 </v-icon>
               </div>
@@ -104,7 +104,7 @@
         <div class="text-center pt-2">
           <v-btn text @click="backScan" class="mr-2">{{ keystoneScan ? 'Back' : 'Cancel' }}
           </v-btn>
-          <v-btn v-if="!keystoneScan" class="geroButton" style="color: black!important;"
+          <v-btn v-if="!keystoneScan" class="geroButton" style="color: var(--g-on-grad)!important;"
             @click="keystoneScan = true">NEXT
           </v-btn>
         </div>
@@ -113,7 +113,7 @@
     <v-card-actions class="text-center justify-center"
       :style="loggedWallet?.type === WalletType.Ledger ? { display: 'block', height: '96px', alignContent: 'end' } : { flexFlow: 'column' }">
       <div class="" v-if="currentStep === 3">
-        <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet?.type === WalletType.Normal">
+        <v-tooltip v-model="tooltip.enabled" top color="error" v-if="loggedWallet?.type === WalletType.Normal">
           <template v-slot:activator="{ }">
             <v-text-field flat style="width: 295px" block dense v-model="spendingPassword" outlined
               :label="$t('wallet.spendingPassword')" :type="show1 ? 'text' : 'password'" :rules="[rules.required()]" hide-details
@@ -128,7 +128,7 @@
           <span>{{ tooltip.text }}</span>
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
-          <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
+          <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: var(--g-text-1)">
             <ToggleSwitch :text-left="$t('multisig.usb')" icon-left="mdi-usb" :text-right="$t('multisig.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
@@ -140,7 +140,7 @@
         <v-btn class="continue-button" @click="nextStep" :disabled="!isValid || txSubmitLoading"
           :loading="txSubmitLoading">
           {{ currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}
-          <v-icon style="color: black!important;" small v-if="currentStep !== 3" class="ml-1">mdi-arrow-right</v-icon>
+          <v-icon style="color: var(--g-on-grad)!important;" small v-if="currentStep !== 3" class="ml-1">mdi-arrow-right</v-icon>
         </v-btn>
       </div>
     </v-card-actions>
@@ -573,12 +573,12 @@ onMounted(() => {
 }
 
 .continue-button {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  color: black;
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  color: var(--g-on-grad);
 
   &:disabled {
     opacity: 0.5;
-    color: black !important;
+    color: var(--g-on-grad) !important;
   }
 }
 
@@ -602,11 +602,11 @@ onMounted(() => {
     }
 
     &.next .icon-container {
-      background-color: #292929;
+      background-color: var(--g-raised);
     }
 
     .icon-container {
-      background-color: #00dff3;
+      background-color: var(--g-accent);
       border-radius: 50%;
       display: flex;
       justify-content: center;
@@ -623,7 +623,7 @@ onMounted(() => {
     line-height: 20px;
     text-align: center;
     font-weight: 600;
-    color: #CECFD2;
+    color: var(--g-text-2);
   }
 
   .divider {
@@ -633,10 +633,10 @@ onMounted(() => {
     margin-left: -75px;
     margin-right: -75px;
     margin-top: 16px;
-    background-color: #292929;
+    background-color: var(--g-raised);
 
     &.active-divider {
-      background-color: #00dff3;
+      background-color: var(--g-accent);
     }
   }
 }

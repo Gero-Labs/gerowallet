@@ -25,7 +25,7 @@
               </v-list-item-content>
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-subtitle>
-                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
+                  <v-btn small class="geroButton" style="color: var(--g-on-grad)!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
@@ -210,7 +210,7 @@
                     v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000"
                     class="stake-change-up"
                   >
-                    <v-icon x-small color="#47cd89" class="stake-arrow-icon">mdi-arrow-up-bold</v-icon>
+                    <v-icon x-small color="success" class="stake-arrow-icon">mdi-arrow-up-bold</v-icon>
                     {{
                       filters.toCurrency(
                         Number(item.active_stake) - Number(item.live_stake),
@@ -226,7 +226,7 @@
                     v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000"
                     class="stake-change-down"
                   >
-                    <v-icon x-small color="#F97066" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
+                    <v-icon x-small color="error" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
                     {{
                       filters.toCurrency(
                         Number(item.live_stake) - Number(item.active_stake),
@@ -264,10 +264,10 @@
                     true
                   )
                 }}
-                <v-icon x-small color="#47cd89" v-if="Number(item.pledge) <= Number(item.live_pledge)"
+                <v-icon x-small color="success" v-if="Number(item.pledge) <= Number(item.live_pledge)"
                   >mdi-check</v-icon
                 >
-                <v-icon x-small color="#F97066" v-else>mdi-close</v-icon>
+                <v-icon x-small color="error" v-else>mdi-close</v-icon>
               </template>
             </v-data-table>
             <v-row no-gutters v-else>
@@ -656,11 +656,11 @@ onBeforeUnmount(() => {
 </script>
 <style scoped>
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  background: var(--g-accent);
 }
 
 .v-data-table-header {
-  background-color: rgb(22, 27, 38);
+  background-color: var(--g-raised);
 }
 
 .v-data-table > .v-data-table__wrapper > table > tbody > tr > td,
@@ -699,8 +699,8 @@ onBeforeUnmount(() => {
 }
 
 .staking-support-title {
-  color: #00dff3;
-  font-size: 18px;
+  color: var(--g-accent);
+  font-size: 16px;
 }
 
 .staking-filters-row {
@@ -737,7 +737,7 @@ onBeforeUnmount(() => {
 }
 
 .pool-saturation-details {
-  font-size: 10px;
+  font-size: 11px;
   text-align-last: justify;
   display: flex;
   justify-content: space-between;
@@ -746,46 +746,46 @@ onBeforeUnmount(() => {
 
 .stake-change-up {
   display: inline-flex;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .stake-change-down {
   display: inline-flex;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .stake-arrow-icon {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .stake-arrow-icon-down {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.7;
 }
 
 .pool-fees-text {
   font-size: 14px;
-  color: white;
+  color: var(--g-text-1);
 }
 
 /* Pool cards styles */
 .pool-card {
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
 }
 
 .pool-card-label {
   font-size: 14px;
-  color: white;
+  color: var(--g-text-1);
 }
 
 .pool-card-value {
   font-size: 14px;
-  color: white;
+  color: var(--g-text-1);
 }
 
 .pool-pledge-chip {
-  border: 1px solid #75e0a7;
-  color: #75e0a7;
+  border: 1px solid var(--g-success);
+  color: var(--g-success);
 }
 
 /* Pagination styles */

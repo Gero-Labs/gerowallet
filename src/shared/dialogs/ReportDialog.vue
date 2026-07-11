@@ -22,7 +22,7 @@
               }"
             >
               <div class="icon-container">
-                <v-icon class="step-icon" :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'" size="20"
+                <v-icon class="step-icon" :color="currentStep < index + 1 ? 'var(--g-accent)' : 'var(--g-canvas)'" size="20"
                   >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
                 </v-icon>
               </div>
@@ -53,7 +53,7 @@
             <div class="d-flex mb-3" v-if="reportTx">
               <v-label small class="white--text" style="align-content: center;">{{ $t('navigation.transactionId') }}:</v-label>
               <div>
-                <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
+                <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
                 <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               </div>
             </div>
@@ -134,7 +134,7 @@
             </p>
             <v-label small class="grey--text" style="align-content: center;" v-if="reportTx">{{ $t('navigation.transactionId') }}</v-label>
             <p class="d-flex" v-if="reportTx" style="align-items: center;">
-              <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
+              <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
               <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
             </p>
@@ -156,13 +156,13 @@
         {{ $t('navigation.back') }}
       </v-btn>
       <v-spacer></v-spacer>
-      <v-btn v-if="currentStep === 1" :disabled="!valid" @click="nextStep" class="geroButton" style="color: black!important; text-transform: uppercase">
+      <v-btn v-if="currentStep === 1" :disabled="!valid" @click="nextStep" class="geroButton" style="color: var(--g-on-grad)!important">
         {{ $t('navigation.continue') }}
-        <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+        <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-arrow-right</v-icon>
       </v-btn>
-      <v-btn v-if="currentStep === 2" @click="submitReport" :loading="loading" class="geroButton" style="color: black!important; text-transform: uppercase">
+      <v-btn v-if="currentStep === 2" @click="submitReport" :loading="loading" class="geroButton" style="color: var(--g-on-grad)!important">
         {{ $t('navigation.submitReport') }}
-        <v-icon style="color: black!important;" small class="ml-1">mdi-file-document-outline</v-icon>
+        <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-file-document-outline</v-icon>
       </v-btn>
     </v-card-actions>
   </BaseDialog>
@@ -318,7 +318,7 @@ watch(() => props.isOpen, (val) => {
 <style scoped>
 .select-item {
   max-width: 50%;
-  border-radius: 4px;
+  border-radius: var(--g-r-control);
 }
 
 .compact-list .v-list-item {
@@ -343,14 +343,14 @@ watch(() => props.isOpen, (val) => {
   width: 150px;
 }
 .custom-step.active .next .icon-container {
-  background-color: #292929;
+  background-color: var(--g-raised);
 }
 .custom-step.active .icon-container {
   box-shadow: 0 0 0 5px #00dff327;
 }
 
 .icon-container {
-  background-color: #00dff3;
+  background-color: var(--g-accent);
   border-radius: 50%;
   display: flex;
   justify-content: center;
@@ -366,7 +366,7 @@ watch(() => props.isOpen, (val) => {
   line-height: 20px;
   text-align: center;
   font-weight: 600;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .divider {
@@ -376,9 +376,9 @@ watch(() => props.isOpen, (val) => {
   margin-left: -75px;
   margin-right: -75px;
   margin-top: 16px;
-  background-color: #292929;
+  background-color: var(--g-raised);
 }
 .divider.active-divider {
-  background-color: #00dff3;
+  background-color: var(--g-accent);
 }
 </style>
