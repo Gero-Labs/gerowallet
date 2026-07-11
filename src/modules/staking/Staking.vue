@@ -622,11 +622,14 @@ const poolExtendedInfo = (pool: any) => {
     const key = pool.pool_id_bech32 || pool.pool_id;
     if (key && poolExtendedInfoCache.has(key)) return poolExtendedInfoCache.get(key);
     const parsed = JSON.parse(pool.pool_extended_info);
-    // Sanitize icon URL — some pools have placeholder text instead of a real URL
-    if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
+    // Sanitize icon URL — some pools leave the placeholder instruction text
+    // ("http(s) url to pool icon; ...") which starts with "http" but 404s, so
+    // require a real http(s):// scheme with no spaces.
+    const validUrl = (u: any) => typeof u === 'string' && /^https?:\/\/\S+$/.test(u);
+    if (parsed?.info?.url_png_icon_64x64 && !validUrl(parsed.info.url_png_icon_64x64)) {
       parsed.info.url_png_icon_64x64 = '';
     }
-    if (parsed?.info?.url_png_logo && !parsed.info.url_png_logo.startsWith('http')) {
+    if (parsed?.info?.url_png_logo && !validUrl(parsed.info.url_png_logo)) {
       parsed.info.url_png_logo = '';
     }
     if (key) poolExtendedInfoCache.set(key, parsed);

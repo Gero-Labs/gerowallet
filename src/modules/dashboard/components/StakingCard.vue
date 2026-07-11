@@ -1,6 +1,6 @@
 <template>
   <v-card flat class="stk-root" :loading="loadingTxs || poolLoading">
-    <v-row no-gutters>
+    <v-row no-gutters align="start">
       <!-- ═══ Delegation card ═══ -->
       <v-col cols="12" md="8" class="pa-3">
         <div class="stk-card">
@@ -105,6 +105,7 @@
                 :key="r.epoch"
                 class="stk-bar"
                 :style="{ height: Math.max(2, (Number(r.amount) / maxReward) * 100) + '%' }"
+                :title="`${$t('staking.epoch')} ${r.epoch} · ${filters.toCurrency(r.amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true)}`"
               ></span>
             </div>
           </div>
@@ -200,10 +201,10 @@ const totalEarnedLovelace = computed(() => (rewardsData.value || []).reduce((s: 
 
 const resolvePoolIcon = () => {
   const p = currentPool.value;
-  if (p) {
-    return JSON.parse(p.pool_extended_info)?.info?.url_png_icon_64x64;
-  }
-  return '';
+  const url = p ? JSON.parse(p.pool_extended_info)?.info?.url_png_icon_64x64 : '';
+  // Many pools leave the icon field as the placeholder instruction text
+  // ("http(s) url to pool icon; ...") which 404s. Only accept a real URL.
+  return typeof url === 'string' && /^https:\/\/\S+$/.test(url) ? url : '';
 };
 
 const loadPoolData = async (poolId: string) => {
@@ -245,11 +246,10 @@ void isApex;
 /* Card boxes: raised surface, hairline, subtle top highlight + soft lift so
    they don't read flat (design language: tiers + hairlines do the elevation). */
 .stk-card {
-  height: 100%;
   background: var(--g-surface);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
-  padding: 18px;
+  padding: 14px 16px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 2px 12px rgba(0, 0, 0, 0.4);
 }
 
@@ -258,7 +258,7 @@ void isApex;
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .stk-avatar {
@@ -340,14 +340,14 @@ void isApex;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .stk-tile {
   background: var(--g-overlay);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
-  padding: 12px 14px;
+  padding: 10px 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
@@ -360,11 +360,11 @@ void isApex;
 }
 
 .stk-tile-v {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 680;
   letter-spacing: -0.02em;
   line-height: 1;
-  margin-top: 6px;
+  margin-top: 5px;
   color: var(--g-text-1);
 }
 
@@ -377,7 +377,7 @@ void isApex;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 9px 0;
+  padding: 7px 0;
   border-top: 1px solid var(--g-hairline-1);
   font-size: 13px;
 }
@@ -424,7 +424,7 @@ void isApex;
 .stk-acts {
   display: flex;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .stk-act {
@@ -460,8 +460,8 @@ void isApex;
 
 .stk-chart {
   position: relative;
-  height: 84px;
-  margin: 14px 0 8px;
+  height: 66px;
+  margin: 12px 0 6px;
   padding-top: 6px;
   border-bottom: 1px solid var(--g-hairline-2);
 }
@@ -479,6 +479,13 @@ void isApex;
   min-height: 2px;
   background: linear-gradient(180deg, var(--g-grad-1), color-mix(in srgb, var(--g-grad-2) 30%, transparent));
   border-radius: 2px 2px 0 0;
+  cursor: default;
+  transition: filter var(--g-dur-fast) ease, background var(--g-dur-fast) ease;
+}
+
+.stk-bar:hover {
+  background: var(--g-accent);
+  filter: brightness(1.15);
 }
 
 .stk-rewards {
@@ -489,7 +496,7 @@ void isApex;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 8px;
+  padding: 8px;
   border-radius: var(--g-r-control);
   border-bottom: 1px solid var(--g-hairline-1);
 }
