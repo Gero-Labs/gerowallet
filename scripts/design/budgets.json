@@ -11,5 +11,7 @@
   "lowAlphaText": 22,
   "transitionAll": 8,
   "corruptedMdiNames": 0,
-  "formatFnForks": 16
+  "formatFnForks": 16,
+  "clickableDivs": 114,
+  "outlineNone": 27
 }
