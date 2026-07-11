@@ -18,7 +18,7 @@
           <v-list-item-content class="option-content">
             <v-list-item-title class="option-title">
               {{ $t('card.virtualCardOnly') }}
-              <span v-if="hasVirtualCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
+              <span v-if="hasVirtualCard" class="disabled-badge t-label">{{ $t('card.alreadyOrdered') }}</span>
             </v-list-item-title>
           </v-list-item-content>
         </v-list-item>
@@ -27,15 +27,15 @@
         </div>
         <div class="option-features">
           <div class="feature-item">
-            <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+            <v-icon small color="var(--g-accent)">mdi-check-circle</v-icon>
             <span>{{ $t('card.instantActivation') }}</span>
           </div>
           <div class="feature-item">
-            <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+            <v-icon small color="var(--g-accent)">mdi-check-circle</v-icon>
             <span>{{ $t('card.onlinePayments') }}</span>
           </div>
           <div class="feature-item">
-            <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+            <v-icon small color="var(--g-accent)">mdi-check-circle</v-icon>
             <span>{{ $t('card.noShippingRequired') }}</span>
           </div>
         </div>
@@ -43,8 +43,8 @@
           <span class="price-label">{{ $t('card.free') }}</span>
         </div>
         <div class="selection-indicator">
-          <v-icon v-if="selectedType === 'virtual'" color="#00c7f3">mdi-check-circle</v-icon>
-          <v-icon v-else color="#373a41">mdi-circle-outline</v-icon>
+          <v-icon v-if="selectedType === 'virtual'" color="var(--g-accent)">mdi-check-circle</v-icon>
+          <v-icon v-else color="var(--g-text-3)">mdi-circle-outline</v-icon>
         </div>
       </div>
 
@@ -68,7 +68,7 @@
           <v-list-item-content class="option-content">
             <v-list-item-title class="option-title">
               {{ $t('card.physicalPlusVirtualCard') }}
-              <span v-if="hasPhysicalCard" class="disabled-badge">{{ $t('card.alreadyOrdered') }}</span>
+              <span v-if="hasPhysicalCard" class="disabled-badge t-label">{{ $t('card.alreadyOrdered') }}</span>
             </v-list-item-title>
           </v-list-item-content>
         </v-list-item>
@@ -77,15 +77,15 @@
         </div>
         <div class="option-features">
           <div class="feature-item">
-            <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+            <v-icon small color="var(--g-accent)">mdi-check-circle</v-icon>
             <span>{{ $t('card.physicalCardDelivered') }}</span>
           </div>
           <div class="feature-item">
-            <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+            <v-icon small color="var(--g-accent)">mdi-check-circle</v-icon>
             <span>{{ $t('card.inStorePayments') }}</span>
           </div>
           <div class="feature-item">
-            <v-icon small color="#00c7f3">mdi-check-circle</v-icon>
+            <v-icon small color="var(--g-accent)">mdi-check-circle</v-icon>
             <span>{{ $t('card.atmWithdrawals') }}</span>
           </div>
         </div>
@@ -93,8 +93,8 @@
           <span class="price-label shipping">{{ $t('card.shippingFeeApplies') }}</span>
         </div>
         <div class="selection-indicator">
-          <v-icon v-if="selectedType === 'physical'" color="#00c7f3">mdi-check-circle</v-icon>
-          <v-icon v-else color="#373a41">mdi-circle-outline</v-icon>
+          <v-icon v-if="selectedType === 'physical'" color="var(--g-accent)">mdi-check-circle</v-icon>
+          <v-icon v-else color="var(--g-text-3)">mdi-circle-outline</v-icon>
         </div>
 
         <!-- Coming Soon Overlay (when feature flag is disabled) -->
@@ -232,13 +232,11 @@ const selectType = (type: 'virtual' | 'physical') => {
 .disabled-badge {
   display: inline-block;
   padding: 2px 8px;
-  background: rgba(#9e9e9e, 0.15);
-  color: #9e9e9e;
+  background: var(--g-hairline-2);
+  color: var(--g-text-3);
   font-size: $font-size-xs;
   font-weight: $font-weight-medium;
   border-radius: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .option-description {
@@ -315,15 +313,12 @@ const selectType = (type: 'virtual' | 'physical') => {
 
 .coming-soon-badge {
   position: relative;
-  background: linear-gradient(135deg, #0c0e12 0%, #1a1d24 100%);
+  background: var(--g-raised);
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: $border-radius-md;
   padding: $spacing-lg $spacing-xl;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.8),
-    0 0 40px rgba(0, 199, 243, 0.5),
-    inset 0 0 40px rgba(0, 199, 243, 0.1);
+  box-shadow: var(--g-shadow-sheet);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -332,7 +327,7 @@ const selectType = (type: 'virtual' | 'physical') => {
   opacity: 1 !important;
   overflow: hidden;
 
-  // Animated gradient border
+  // Accent border
   &::before {
     content: '';
     position: absolute;
@@ -340,23 +335,9 @@ const selectType = (type: 'virtual' | 'physical') => {
     left: -2px;
     right: -2px;
     bottom: -2px;
-    background: linear-gradient(135deg, #00c7f3, #00ffd1, #00c7f3);
-    background-size: 200% 200%;
+    background: var(--g-accent);
     border-radius: $border-radius-md;
     z-index: -1;
-    animation: gradient-rotate 3s linear infinite;
-  }
-}
-
-@keyframes gradient-rotate {
-  0% {
-    background-position: 0 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0 50%;
   }
 }
 
@@ -366,25 +347,7 @@ const selectType = (type: 'virtual' | 'physical') => {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0, 199, 243, 0.1) 45%,
-    rgba(0, 255, 209, 0.2) 50%,
-    rgba(0, 199, 243, 0.1) 55%,
-    transparent 100%
-  );
-  animation: shimmer 3s ease-in-out infinite;
   pointer-events: none;
-}
-
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%) translateY(-100%) rotate(45deg);
-  }
-  100% {
-    transform: translateX(100%) translateY(100%) rotate(45deg);
-  }
 }
 
 .coming-soon-title {
@@ -393,26 +356,19 @@ const selectType = (type: 'virtual' | 'physical') => {
   font-size: 20px;
   font-weight: $font-weight-bold;
   margin: 0 0 $spacing-xs 0;
-  background: linear-gradient(135deg, #ffffff 0%, #00ffd1 50%, #00c7f3 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-transform: uppercase;
-  letter-spacing: 2px;
+  color: var(--g-text-1);
   opacity: 1 !important;
-  filter: drop-shadow(0 0 12px rgba(0, 199, 243, 0.5));
 }
 
 .coming-soon-message {
   position: relative;
   z-index: 1;
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: var(--g-text-1) !important;
   font-size: $font-size-sm;
   margin: 0;
   line-height: $line-height-relaxed;
   opacity: 1 !important;
   font-weight: $font-weight-medium;
-  letter-spacing: 0.3px;
 }
 
 @media (max-width: $breakpoint-sm) {
@@ -431,7 +387,6 @@ const selectType = (type: 'virtual' | 'physical') => {
 
   .coming-soon-title {
     font-size: 16px;
-    letter-spacing: 1.5px;
   }
 
   .coming-soon-message {

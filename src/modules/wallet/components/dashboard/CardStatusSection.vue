@@ -2,7 +2,7 @@
   <v-col cols="12" md="6" class="py-0 card-status-column" style="align-content: center; justify-items: center; min-height: 144px">
     <div class="balance-section" v-if="currentCardHasUUID">
       <div class="balance-container">
-        <p class="balance-label">{{ $t('card.totalBalance') }}</p>
+        <p class="balance-label t-label">{{ $t('card.totalBalance') }}</p>
         <p class="balance-amount">
           {{
             currentCard?.cardBalance?.currentBalance?.amount
@@ -276,7 +276,7 @@ const currentOrderNeedsPayment = computed(() => {
   padding: 8px 16px;
   background: rgba(0, 199, 243, 0.1);
   border: 1px solid rgba(0, 199, 243, 0.3);
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 
   .timer-icon {
     color: $primary-cyan;
@@ -284,17 +284,16 @@ const currentOrderNeedsPayment = computed(() => {
   }
 
   .timer-text {
-    font-family: 'Courier New', monospace;
+    font-family: var(--g-font-mono);
     font-size: $font-size-base;
     font-weight: $font-weight-semibold;
-    letter-spacing: 0.05rem;
     color: $primary-cyan;
   }
 }
 
 .complete-payment-btn {
   :deep(.v-icon) {
-    color: #0c0e12 !important;
+    color: var(--g-on-grad) !important;
   }
 }
 
@@ -319,8 +318,6 @@ const currentOrderNeedsPayment = computed(() => {
     font-weight: $font-weight-medium;
     color: $text-secondary;
     margin: 0 0 0.5rem 0;
-    text-transform: uppercase;
-    letter-spacing: 0.05rem;
   }
 
   .balance-amount {
@@ -404,10 +401,9 @@ const currentOrderNeedsPayment = computed(() => {
   margin: 0 auto;
   text-align: center;
   padding: 24px;
-  background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
+  background: var(--g-surface);
+  border-radius: var(--g-r-sheet);
+  border: 1px solid var(--g-hairline-1);
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
@@ -419,14 +415,7 @@ const currentOrderNeedsPayment = computed(() => {
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(
-      90deg,
-      rgba(0, 199, 243, 0.8) 0%,
-      rgba(0, 255, 209, 0.8) 50%,
-      rgba(0, 199, 243, 0.8) 100%
-    );
-    background-size: 200% 100%;
-    animation: gradientShift 3s ease infinite;
+    background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
   }
 
   .order-title {
@@ -443,7 +432,7 @@ const currentOrderNeedsPayment = computed(() => {
   .order-description {
     font-family: $font-family-primary;
     font-size: $font-size-sm;
-    color: rgba($text-secondary, 0.9);
+    color: var(--g-text-2);
     line-height: 1.6;
     max-width: 500px;
     margin: 0 auto 16px;
@@ -516,7 +505,7 @@ const currentOrderNeedsPayment = computed(() => {
 
     .promo-icon {
       font-size: 16px;
-      color: rgba(0, 199, 243, 0.7);
+      color: var(--g-accent);
     }
 
     .promo-text {
@@ -527,25 +516,23 @@ const currentOrderNeedsPayment = computed(() => {
   }
 
   .order-card-btn {
-    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
-    color: #0c0e12 !important;
+    background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
+    color: var(--g-on-grad) !important;
     font-family: $font-family-primary;
     font-size: $font-size-base;
     font-weight: $font-weight-bold;
     text-transform: none;
     letter-spacing: 0.02em;
-    border-radius: 12px;
+    border-radius: var(--g-r-card);
     padding: 10px 24px !important;
     height: auto !important;
     min-height: 44px;
-    box-shadow: 0 4px 16px rgba(0, 199, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
     transition: all 0.3s ease;
     position: relative;
     z-index: 1;
 
     &:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 24px rgba(0, 199, 243, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
     }
 
     &:active {
@@ -553,7 +540,7 @@ const currentOrderNeedsPayment = computed(() => {
     }
 
     :deep(.v-icon) {
-      color: #0c0e12 !important;
+      color: var(--g-on-grad) !important;
     }
   }
 }
@@ -563,10 +550,9 @@ const currentOrderNeedsPayment = computed(() => {
   width: 100%;
   margin: 0 auto;
   position: relative;
-  background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1) !important;
+  border-radius: var(--g-r-sheet);
   overflow: hidden;
   box-sizing: border-box;
 
@@ -576,14 +562,7 @@ const currentOrderNeedsPayment = computed(() => {
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(
-      90deg,
-      rgba(0, 199, 243, 0.8) 0%,
-      rgba(0, 255, 209, 0.8) 50%,
-      rgba(0, 199, 243, 0.8) 100%
-    );
-    background-size: 200% 100%;
-    animation: gradientShift 3s ease infinite;
+    background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
   }
 
   .status-card-content {
@@ -604,9 +583,9 @@ const currentOrderNeedsPayment = computed(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, rgba(0, 199, 243, 0.15) 0%, rgba(0, 255, 209, 0.1) 100%);
-    border-radius: 12px;
-    border: 1px solid rgba(0, 199, 243, 0.2);
+    background: var(--g-raised);
+    border-radius: var(--g-r-card);
+    border: 1px solid var(--g-hairline-3);
 
     .status-icon {
       font-size: 28px !important;
@@ -646,36 +625,34 @@ const currentOrderNeedsPayment = computed(() => {
   .status-subtitle {
     font-family: $font-family-primary;
     font-size: $font-size-sm;
-    color: rgba($text-secondary, 0.9);
+    color: var(--g-text-2);
     line-height: 1.6;
     margin: 0 !important;
   }
 
   .complete-payment-btn {
-    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
-    color: #0c0e12 !important;
+    background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
+    color: var(--g-on-grad) !important;
     font-family: $font-family-primary;
     font-size: $font-size-sm;
     font-weight: $font-weight-bold;
   }
 
   .order-new-card-btn {
-    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
-    color: #0c0e12 !important;
+    background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
+    color: var(--g-on-grad) !important;
     font-family: $font-family-primary;
     font-size: $font-size-sm;
     font-weight: $font-weight-bold;
     text-transform: none;
-    border-radius: 8px;
+    border-radius: var(--g-r-control);
     padding: 8px 20px !important;
     height: auto !important;
     min-height: 40px;
-    box-shadow: 0 4px 12px rgba(0, 199, 243, 0.3);
     transition: all 0.3s ease;
 
     &:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 6px 18px rgba(0, 199, 243, 0.4);
     }
 
     &:active {
@@ -685,20 +662,20 @@ const currentOrderNeedsPayment = computed(() => {
     &.v-btn--disabled,
     &:disabled {
       opacity: 0.4 !important;
-      background: #2a2f3a none !important;
-      color: #888 !important;
+      background: var(--g-raised) none !important;
+      color: var(--g-text-3) !important;
       box-shadow: none !important;
       filter: grayscale(1) !important;
       pointer-events: none !important;
       cursor: not-allowed !important;
 
       :deep(.v-icon) {
-        color: #888 !important;
+        color: var(--g-text-3) !important;
       }
     }
 
     :deep(.v-icon) {
-      color: #0c0e12 !important;
+      color: var(--g-on-grad) !important;
     }
   }
 
@@ -724,17 +701,7 @@ const currentOrderNeedsPayment = computed(() => {
   }
 
   .rejection-icon {
-    color: #f44336 !important;
-  }
-}
-
-@keyframes gradientShift {
-  0%,
-  100% {
-    background-position: 0 50%;
-  }
-  50% {
-    background-position: 100% 50%;
+    color: var(--g-error) !important;
   }
 }
 
