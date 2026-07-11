@@ -2589,6 +2589,7 @@ export default {
   'staking.delegatingTo': 'Delegiert an',
   'staking.delegating': 'Delegiert',
   'staking.totalEarned': 'Gesamt verdient',
+  'staking.acrossEpochs': 'über {count} Epochen',
   'staking.delegation': 'Delegation',
   'staking.delegationAmt': 'Delegationsbetrag',
   'staking.delegationAmtTooltip': 'Gesamtbetrag an ADA aus Ihrer Wallet, der an den Stake-Pool delegiert wird. Dies umfasst das gesamte verfügbare Guthaben.',
