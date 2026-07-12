@@ -4024,6 +4024,9 @@ export default {
   'midnight.upgradeAddressesNoticePrf': 'Diese Wallet wurde vor der Unterstützung der DUST-Adressableitung erstellt. Autorisieren Sie mit Ihrem PassKey, um Ihre DUST-Adresse abzuleiten.',
   'midnight.deriveDustAddress': 'DUST-Adresse ableiten',
   'midnight.authorizeWithPasskey': 'Mit PassKey autorisieren',
+  // Öffentlich/Privat-Aufschlüsselung (gemeinsam für Dashboard + Mini-Gero + Empfangsdialog)
+  'midnight.common.public': 'Öffentlich',
+  'midnight.common.private': 'Privat',
   // Portfolio-Panel-Beschriftungen
   'midnight.unshielded': 'Unshielded',
   'midnight.shielded': 'Shielded',

@@ -4127,6 +4127,9 @@ export default {
   'midnight.upgradeAddressesNoticePrf': 'This wallet was created before DUST address derivation was supported. Authorize with your PassKey to derive your DUST address.',
   'midnight.deriveDustAddress': 'Derive DUST address',
   'midnight.authorizeWithPasskey': 'Authorize with PassKey',
+  // Public/Private balance breakdown (shared across dashboard + mini-Gero + receive dialog)
+  'midnight.common.public': 'Public',
+  'midnight.common.private': 'Private',
   // Portfolio panel labels
   'midnight.unshielded': 'Unshielded',
   'midnight.shielded': 'Shielded',
