@@ -21,6 +21,7 @@
 
     <!-- Flow sheets -->
     <SendSheet v-model="showSend" />
+    <MidnightSendSheet v-model="showMidnightSend" />
     <ReceiveSheet v-model="showReceive" />
     <SwapSheet v-model="showSwap" />
     <BuySellSheet v-model="showBuySell" />
@@ -109,6 +110,7 @@ import MiniDustGauge from '../components/MiniDustGauge.vue';
 import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
+import MidnightSendSheet from '../components/flows/MidnightSendSheet.vue';
 import ReceiveSheet from '../components/flows/ReceiveSheet.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';
 import BuySellSheet from '../components/flows/BuySellSheet.vue';
@@ -116,6 +118,7 @@ const router = useRouter();
 const { getTokenByUnit } = useMarketData();
 
 const showSend = ref(false);
+const showMidnightSend = ref(false);
 const showReceive = ref(false);
 const showSwap = ref(false);
 const showBuySell = ref(false);
@@ -143,16 +146,16 @@ function handleBuySell() {
 }
 
 function handleAction(id: string) {
-  // Midnight send still lives in the full dashboard (MidnightSendDialog is a
-  // Cardano-incompatible UTxO-coupled builder); receive is now native in the
-  // sidepanel (ReceiveSheet renders the Public/Private/DUST address tabs).
-  if (walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && id === 'send') {
-    window.open(chrome.runtime.getURL('index.html#/'), '_blank');
-    return;
-  }
+  // Midnight send/receive are both native in the sidepanel now: MidnightSendSheet
+  // (unshielded NIGHT only, mirrors MidnightSendDialog.vue) and ReceiveSheet
+  // (Public/Private/DUST address tabs).
   switch (id) {
     case 'send':
-      showSend.value = true;
+      if (isMidnight.value) {
+        showMidnightSend.value = true;
+      } else {
+        showSend.value = true;
+      }
       break;
     case 'receive':
       showReceive.value = true;
