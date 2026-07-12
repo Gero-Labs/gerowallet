@@ -2650,6 +2650,7 @@ export default {
   'staking.delegateYourStake': 'Delegieren Sie Ihren Stake',
   'staking.delegatingTo': 'Delegiert an',
   'staking.delegating': 'Delegiert',
+  'staking.loadingPool': 'Pool wird geladen…',
   'staking.totalEarned': 'Gesamt verdient',
   'staking.acrossEpochs': 'über {count} Epochen',
   'staking.delegation': 'Delegation',

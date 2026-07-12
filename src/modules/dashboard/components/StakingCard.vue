@@ -11,7 +11,10 @@
               <span v-else>{{ (pool?.ticker || 'G').charAt(0) }}</span>
             </div>
             <div class="stk-head-text">
-              <div class="stk-pname">{{ pool ? `[${pool.ticker}] ${pool.name}` : $t('staking.notDelegating') }}</div>
+              <!-- The card only mounts for delegating wallets (Staking.vue gates on
+                   account.pool_id), so a null pool means the lookup is in flight
+                   (or failed) — show a loading label, not "not delegating". -->
+              <div class="stk-pname">{{ pool ? `[${pool.ticker}] ${pool.name}` : $t('staking.loadingPool') }}</div>
               <div class="stk-meta">
                 <span v-if="pool" class="stk-pill"><span class="stk-dot"></span>{{ $t('staking.delegating') }}</span>
                 <span v-if="account?.pool_id" class="stk-pid">{{ filters.truncate(account.pool_id) }}</span>
