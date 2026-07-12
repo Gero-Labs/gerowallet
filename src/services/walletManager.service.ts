@@ -406,9 +406,14 @@ export class WalletManager {
         // sync once their viewing key is re-derived (recreate the wallet, or
         // the future in-place viewing-key heal).
         // Privacy: log only the boolean/validity, never the key itself.
-        // This is the ONE place the raw key is read and handed to the sync
-        // service — it never travels via midnightStore (setActive strips it).
-        const vk = addresses.zswapViewingKey;
+        // Source the raw key from RAM-only chrome.storage.session first (it is
+        // re-derived at each credentialed unlock/send, see
+        // midnightViewingKeySession), falling back to the wallet record's
+        // persisted copy for wallets not yet re-derived this browser session.
+        // It never travels via midnightStore (setActive strips it).
+        const { getSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
+        const sessionVk = await getSessionViewingKey(walletBg.id, walletBg.network);
+        const vk = sessionVk ?? addresses.zswapViewingKey;
         const vkIsValid = isValidMidnightViewingKey(vk);
         const shielded = vkIsValid
           ? { viewingKey: vk, lastIndex: null }
@@ -673,8 +678,11 @@ export class WalletManager {
       // Clear Chrome storage
       if (chrome?.storage) {
         try {
+          const { clearSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
           await Promise.all([
             chrome.storage.local.remove('loggedWallet'),
+            // Drop any RAM-only Midnight viewing keys for the signed-out user.
+            clearSessionViewingKey(),
           ]);
         } catch (storageError) {
           console.warn('Failed to clear Chrome storage during logout:', storageError);
@@ -934,7 +942,60 @@ export class WalletManager {
       }
     }
 
+    // Credentialed moment: re-derive the Midnight viewing key into RAM-only
+    // session storage so shielded sync can resume without persisting the key on
+    // disk. Only Normal password wallets qualify — their `unlockCredential` IS
+    // the mnemonic-encrypting spending password. PRF wallets arrive
+    // browser-verified (no usable secret here) and PIN/pattern don't decrypt the
+    // mnemonic, so those repopulate at the next Midnight send instead.
+    // Fire-and-forget: must never block or fail unlock.
+    if (!browserVerified && unlockMethod === 'password' && encryptionMethod !== 'prf') {
+      void this.cacheMidnightViewingKeyToSession(walletId, unlockCredential as string);
+    }
+
     return true;
+  }
+
+  /**
+   * Re-derive the Midnight zswap viewing key from the wallet's mnemonic and
+   * stash it in RAM-only chrome.storage.session for this browser session, so
+   * shielded sync survives service-worker cold starts without the key ever
+   * touching disk. Self-gates on Midnight + Normal-password wallets and fully
+   * swallows errors so it can never break the unlock path that calls it.
+   */
+  private async cacheMidnightViewingKeyToSession(walletId: number, password: string): Promise<void> {
+    try {
+      // Resolve encrypted mnemonic + network: prefer the live walletBg
+      // (post-login unlock), fall back to the DB record (pre-login).
+      let encryptedMnemonic: string | undefined;
+      let network: string | undefined;
+      let chain: string | undefined;
+      if (this.walletBg?.id === walletId) {
+        encryptedMnemonic = this.walletBg.encryptedMnemonic;
+        network = this.walletBg.network;
+        chain = this.walletBg.chain;
+      } else {
+        const { getAllWallets } = await import('@/db/gero-db');
+        const record = (await getAllWallets())[walletId];
+        encryptedMnemonic = record?.encryptedMnemonic;
+        network = record?.network;
+        chain = record?.chain;
+      }
+      if (chain !== Blockchain.MIDNIGHT || !encryptedMnemonic || !network) return;
+
+      const { decrypt } = await import('@/shared/utils/crypto');
+      const mnemonic = decrypt(encryptedMnemonic, password);
+      // skipCardano: avoid the BG-bundle pbkdf2 polyfill path that
+      // deriveCardanoMaterial hits (see walletBg.buildAndSignMidnightShieldedTransfer).
+      // Only the viewing key is consumed.
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      const { setSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
+      await setSessionViewingKey(walletId, network, derived.zswapViewingKey);
+      debugLog('🌙 Midnight viewing key cached to session at unlock');
+    } catch (e) {
+      debugLog('🌙 cacheMidnightViewingKeyToSession failed (non-fatal):', (e as Error)?.message);
+    }
   }
 
   /**
