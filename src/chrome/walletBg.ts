@@ -36,6 +36,7 @@ import {
   getStakeKey,
   hdPathToArray,
   keyHashFromAddress,
+  submitTx as submitTxFn,
   toStakeAddress,
 } from '@/chrome/serialization';
 import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
@@ -100,10 +101,13 @@ export class WalletBg {
   prfEncryptedMnemonic?: string;
   webAuthnCredentialId?: string;
   prfSpendingPassword?: string;
+  /** Wallet record creation time (ISO). Lower bound for Midnight dust-registration age. */
+  createdAt?: string;
 
   constructor(wallet: any, googleBaseAddress?: string) {
     this.id = wallet.id;
     this.name = wallet.name;
+    this.createdAt = wallet.createdAt;
     this.icon = wallet.icon;
     this.type = wallet.type;
     this.theme = wallet.theme;
@@ -139,6 +143,19 @@ export class WalletBg {
       );
       this.stakeAddress = '';  // Bitcoin has no staking address
       console.log('✅ Bitcoin address initialized:', this.baseAddress);
+    } else if (this.chain === Blockchain.MIDNIGHT) {
+      // Midnight: 3 role-specific addresses (shielded / unshielded / dust)
+      // were derived at wallet creation/restore and stored as a JSON blob in
+      // `publicKey`. The unshielded one is what gero-sync subscribes to, so
+      // we hydrate `baseAddress` from it for code paths that read baseAddress
+      // generically. The dashboard UI reads the full set from midnightStore.
+      try {
+        const addrs = this.publicKey ? JSON.parse(this.publicKey) : null;
+        this.baseAddress = addrs?.unshielded ?? '';
+      } catch {
+        this.baseAddress = '';
+      }
+      this.stakeAddress = '';
     } else if (wallet.type === WalletType.Google) {
       // Google wallet (Cardano)
       this.baseAddress = googleBaseAddress
@@ -148,7 +165,16 @@ export class WalletBg {
       this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
       this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
     }
-    this.syncService = new SyncService(this);
+    // Cardano sync service is Cardano-only — Bitcoin uses its own dedicated
+    // sync, Midnight runs through midnightSyncService.
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      this.syncService = new SyncService(this);
+    }
+    // LoaderFactory creates a per-wallet DB-backed cache for config, contacts,
+    // connected dapps, and Cardano-specific tables (account, rewards, etc.).
+    // The Cardano-specific loaders are only invoked from the Cardano init
+    // path; Midnight uses just config/contacts/dapps, all of which read the
+    // per-wallet Dexie DB and are chain-agnostic.
     this.loaderFactory = new LoaderFactory({
       id: this.id,
       chain: this.chain,
@@ -1676,6 +1702,644 @@ export class WalletBg {
     }
   }
 
+  /**
+   * Midnight: sign a list of intent-hash segments with the user's role-derived
+   * key. Used by the Midnight send pipeline — Nexus builds an
+   * `UnprovenTransaction` server-side, the wallet signs each emitted segment
+   * locally so the SDK never sees raw key material.
+   *
+   * The signing primitive is the SDK's `UnshieldedKeystore.signData(bytes)`
+   * which produces the BIP-340-compatible `Signature` (hex string) that
+   * `signUnprovenTransaction` expects in its callback.
+   *
+   * **Role mapping**:
+   *  - `NightExternal` (HD role 0) — unshielded NIGHT spends + DUST registration
+   *  - `Zswap`         (HD role 3) — shielded NIGHT spends (Phase 3)
+   *
+   * The mnemonic is decrypted on every call and the derived key is wiped on
+   * exit; nothing is cached on the WalletBg instance.
+   *
+   * @param segments  Array of `{ index, role, dataHex }` from Nexus's build response
+   * @param password  Spending password (password wallets)
+   * @param prfSecret Raw PRF output bytes (PRF/PassKey wallets)
+   * @returns         Array of `{ index, signatureHex }` matching input order
+   */
+  async signMidnightSegments(
+    segments: Array<{ index: number; role: 'NightExternal' | 'Zswap'; dataHex: string }>,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<Array<{ index: number; signatureHex: string }>> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('signMidnightSegments called on non-Midnight wallet');
+    }
+    if (segments.length === 0) return [];
+
+    // Decrypt the mnemonic once for the batch — we wipe it before returning.
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      // Phase 1 supports NightExternal only; Zswap lands in Phase 3 alongside
+      // the shielded send flow (requires `wallet-sdk-shielded` integration).
+      const usesZswap = segments.some(s => s.role === 'Zswap');
+      if (usesZswap) {
+        throw new Error('Zswap (shielded) signing is not yet supported. Phase 3 work pending.');
+      }
+
+      // skipCardano: the signing path runs inside the BG service worker where
+      // the bundled pbkdf2/sha512 polyfill chain crashes (CLAUDE.md "pbkdf2
+      // build issues"). NightExternal signing doesn't need Cardano material,
+      // so skip that derivation entirely.
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+
+      const { createKeystore } = await import('@midnightntwrk/wallet-sdk-unshielded-wallet');
+      // Map our project's `Network` constant to the SDK's NetworkId string.
+      // We avoid duplicating the mapping here — `midnightNetworkId` lives in
+      // `midnightKeyManager` and is already used during address derivation.
+      const { Network } = await import('@/models/types');
+      let networkId: string;
+      switch (this.network) {
+        case Network.MAINNET: networkId = 'mainnet'; break;
+        case Network.PREVIEW: networkId = 'preview'; break;
+        case Network.PREPROD: networkId = 'preprod'; break;
+        case Network.TESTNET: networkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+
+      const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
+
+      // Sanity: the BG-derived public key must match the one persisted at
+      // wallet creation. A mismatch means the BG bundle's HD-derivation chain
+      // is producing wrong bytes (historically: a broken sha512/HMAC polyfill
+      // — see the skipCardano workaround above) and every signature would
+      // fail Substrate-side with "Custom error: 1". Fail fast instead of
+      // signing garbage; debugLog only (never log key material in prod).
+      const bgPublicKey = keystore.getPublicKey() as unknown as string;
+      const storedPublicKey = this.publicKey
+        ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
+        : undefined;
+      if (storedPublicKey && bgPublicKey !== storedPublicKey) {
+        debugLog('[MidnightSign] BG-derived pubkey does not match stored pubkey — aborting sign');
+        throw new Error('Midnight signing key mismatch — please re-add this wallet');
+      }
+
+      const results: Array<{ index: number; signatureHex: string }> = [];
+      for (const segment of segments) {
+        // Strip an optional 0x prefix BEFORE hex-decoding. Buffer.from(hex)
+        // stops at the first non-hex char, so a 0x-prefixed payload (which
+        // Nexus's /tx/build-unshielded segments carry) would silently decode
+        // to an EMPTY buffer and we'd sign nothing. The DUST-registration
+        // caller sends bare hex, so this is a no-op there.
+        const bareHex = segment.dataHex.startsWith('0x')
+          ? segment.dataHex.slice(2)
+          : segment.dataHex;
+        if (!/^[0-9a-fA-F]+$/.test(bareHex) || bareHex.length % 2 !== 0) {
+          throw new Error(`Segment ${segment.index}: dataHex is not valid hex`);
+        }
+        const dataBytes = Buffer.from(bareHex, 'hex');
+        const signature = keystore.signData(dataBytes);
+        // The SDK's `Signature` type is `string` (hex). Pass it through as-is
+        // so Nexus can hand it back to `signUnprovenTransaction`.
+        results.push({ index: segment.index, signatureHex: signature as unknown as string });
+      }
+
+      // Best-effort wipe — Uint8Array can be zeroed; the BIP39 string lives
+      // in the GC heap and is hard to clear directly, so we drop the reference.
+      derived.unshieldedSecretKey.fill(0);
+      derived.dustSecretKey.fill(0);
+      derived.seed.fill(0);
+
+      return results;
+    } finally {
+      // Even on throw, drop the mnemonic reference so the GC can reclaim it.
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
+   * DApp Connector `signData` — signs arbitrary dapp-supplied bytes with the
+   * NightExternal (unshielded) key, per @midnight-ntwrk/dapp-connector-api
+   * v4.0.1 (`keyType: 'unshielded'` is the only value the spec currently
+   * defines). Distinct from `signMidnightSegments` (which signs Nexus-built
+   * TRANSACTION segments) — this signs arbitrary APPLICATION data, so per the
+   * spec's own security requirement it must be prefixed with
+   * `midnight_signed_message:<data_size>:` (data_size = the byte length of
+   * `dataBytes`, NOT including the prefix) before signing. Without this, a
+   * malicious dapp could ask the wallet to "sign data" that happens to be a
+   * valid raw transaction segment and get a usable signature without the
+   * transaction-signing approval flow ever firing.
+   *
+   * Returns the exact bytes that were cryptographically signed (prefix +
+   * data, hex-encoded) as `data`, so a third party can independently verify
+   * `signature` against `verifyingKey` without needing to know the prefixing
+   * rule out-of-band. The wire type (`Signature`) has no `scheme` field in
+   * the 4.0.1 package we're pinned to — see the build plan doc §3.1 — so we
+   * omit it; the spec's own default when absent is `schnorr_bip340`, which is
+   * exactly what this signs with.
+   */
+  async signMidnightConnectorData(
+    dataBytes: Uint8Array,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ dataHex: string; signatureHex: string; verifyingKeyHex: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('signMidnightConnectorData called on non-Midnight wallet');
+    }
+
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+
+      const { createKeystore } = await import('@midnightntwrk/wallet-sdk-unshielded-wallet');
+      const { Network } = await import('@/models/types');
+      let networkId: string;
+      switch (this.network) {
+        case Network.MAINNET: networkId = 'mainnet'; break;
+        case Network.PREVIEW: networkId = 'preview'; break;
+        case Network.PREPROD: networkId = 'preprod'; break;
+        case Network.TESTNET: networkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+
+      const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
+
+      const bgPublicKey = keystore.getPublicKey() as unknown as string;
+      const storedPublicKey = this.publicKey
+        ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
+        : undefined;
+      if (storedPublicKey && bgPublicKey !== storedPublicKey) {
+        debugLog('[MidnightConnector signData] BG-derived pubkey does not match stored pubkey — aborting sign');
+        throw new Error('Midnight signing key mismatch — please re-add this wallet');
+      }
+
+      const prefix = Buffer.from(`midnight_signed_message:${dataBytes.length}:`, 'utf-8');
+      const prefixedBytes = new Uint8Array(prefix.length + dataBytes.length);
+      prefixedBytes.set(prefix, 0);
+      prefixedBytes.set(dataBytes, prefix.length);
+
+      const signature = keystore.signData(prefixedBytes);
+
+      derived.unshieldedSecretKey.fill(0);
+      derived.dustSecretKey.fill(0);
+      derived.seed.fill(0);
+
+      return {
+        dataHex: Buffer.from(prefixedBytes).toString('hex'),
+        signatureHex: signature as unknown as string,
+        verifyingKeyHex: bgPublicKey,
+      };
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
+   * BG-side DUST-balance + sign of an unshielded NIGHT transfer Nexus built.
+   *
+   * Returns the SIGNED but UNPROVEN tx hex, ready for the sidecar's
+   * /tx/finalize (prove + bind + submit).
+   *
+   * Why this lives in BG: the DUST fee step (`dustWallet.balanceTransactions`)
+   * needs the user's real dust secret to derive spend nullifiers. Same
+   * constraint Lace lives with. The NIGHT input selection / change / offer
+   * construction is done by Nexus (UTxOs are public; indexer view is canonical).
+   */
+  async balanceAndSignMidnightUnshieldedTransfer(
+    unprovenTxHex: string,
+    ttlMs: number,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<string> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('balanceAndSignMidnightUnshieldedTransfer called on non-Midnight wallet');
+    }
+    if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
+      throw new Error('unprovenTxHex is required');
+    }
+
+    // Decrypt mnemonic (same pattern as signMidnightSegments above).
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { Network } = await import('@/models/types');
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { balanceAndSignUnshieldedTransfer } = await import('@/chains/midnight/midnightTxBuilder');
+      const { midnightActions } = await import('@/stores/midnightStore');
+
+      // skipCardano:true: the BG-bundle pbkdf2/sha512 shim breaks on the
+      // Cardano BIP-32 derivation path. We don't need Cardano keys for a
+      // Midnight transfer — same workaround we use in signMidnightSegments.
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      let sdkNetworkId: string;
+      switch (this.network) {
+        case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
+        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+        case Network.PREPROD: sdkNetworkId = 'preprod'; break;
+        case Network.TESTNET: sdkNetworkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) {
+        throw new Error(`No Midnight endpoints configured for network ${this.network}`);
+      }
+
+      // Sanity check: the publicKey BG re-derives from the mnemonic MUST
+      // match the publicKey stored in the wallet record (which Nexus used
+      // to build the unproven tx's inputs). If they diverge, BG signatures
+      // won't verify against Nexus's input.owner field → the SDK rejects
+      // with "Invalid signature value" inside the ledger WASM. This is a
+      // hard signal that bip39/HD derivation differs between the bundle
+      // that created the wallet and the BG bundle that's now signing.
+      let storedPublicKeyHex: string | undefined;
+      try {
+        const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+        storedPublicKeyHex = parsed?.publicKeyHex;
+      } catch { /* ignore — fall through to throw below if needed */ }
+      if (storedPublicKeyHex) {
+        const livePublicKeyHex = derived.publicKeyHex;
+        if (livePublicKeyHex !== storedPublicKeyHex) {
+          throw new Error(
+            `Midnight key derivation mismatch — BG-derived publicKey ` +
+            `(${livePublicKeyHex.slice(0, 16)}…) doesn't match the wallet record's ` +
+            `stored publicKey (${storedPublicKeyHex.slice(0, 16)}…). The wallet ` +
+            `was created with a different bundle's bip39/HD derivation than the ` +
+            `BG bundle uses now; signatures would not verify.`,
+          );
+        }
+      }
+
+      // Registration lower bound for the dust snapshot bootstrap: the wallet
+      // can't have registered for DUST before it was created. For restored
+      // wallets (creation = restore time, registration possibly earlier) a
+      // too-new snapshot degrades safely to the cold-replay fallback inside
+      // the builder. Missing createdAt → conservative 90-day lookback.
+      const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
+      const dustRegisteredAt = Number.isFinite(createdMs)
+        ? new Date(createdMs)
+        : new Date(Date.now() - 90 * 24 * 3_600_000);
+
+      try {
+        const signedTxHex = await balanceAndSignUnshieldedTransfer({
+          sdkNetworkId,
+          endpoints,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: derived.dustSecretKey,
+          unprovenTxHex,
+          ttl: new Date(ttlMs),
+          dustRegisteredAt,
+          // Forward the (long) DUST-ledger sync percentage to the store so the
+          // send dialog's stage timeline renders a real bar. Broadcast-only,
+          // cleared in the finally below.
+          onDustSyncProgress: (percent, detail) => {
+            midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
+          },
+        });
+        return signedTxHex;
+      } finally {
+        // Clear the transient progress bar (success or failure) so a stale
+        // percentage can't linger on the next send's opening frame.
+        midnightActions.setSendProgress(null);
+        // Wipe the derived secrets regardless of success/failure. The
+        // mnemonic itself is cleared in the outer finally.
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
+   * BG-side build + sign of a shielded NIGHT transfer.
+   *
+   * Unlike unshielded, the wallet owns the ENTIRE pre-prove pipeline because
+   * shielded notes are encrypted to the user's Zswap viewing key — Nexus
+   * can't see them so it can't build the inputs/change/outputs. The SDK's
+   * {@code transferTransaction} reads the wallet's note set, picks inputs,
+   * builds change, signs with the Zswap secrets, and returns an
+   * UnprovenTransaction.
+   *
+   * Returns the SIGNED but UNPROVEN tx hex (markers
+   * SignatureEnabled / PreProof / PreBinding), ready for the sidecar's
+   * /tx/prove-and-submit (prove + bind + submit).
+   *
+   * Privacy: the returned hex embeds the witness data the prover needs.
+   * Caller (UI) has surfaced consent that we're routing it through Gero
+   * Cloud — see ShieldedProvingConsentDialog. This method itself stays
+   * blind to the consent flag because by the time it's invoked, consent
+   * has already been recorded.
+   */
+  async buildAndSignMidnightShieldedTransfer(
+    outputs: ReadonlyArray<{ receiverAddress: string; amount: bigint; tokenType?: string }>,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<string> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('buildAndSignMidnightShieldedTransfer called on non-Midnight wallet');
+    }
+    if (!Array.isArray(outputs) || outputs.length === 0) {
+      throw new Error('At least one output is required');
+    }
+
+    // Decrypt mnemonic — same pattern as the unshielded path. PRF wallets
+    // need the raw PRF output; password wallets need the password.
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { Network } = await import('@/models/types');
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { buildAndSignShieldedTransfer } = await import('@/chains/midnight/midnightShieldedBuilder');
+
+      // skipCardano:true: same BG-bundle pbkdf2 polyfill workaround as
+      // balanceAndSignMidnightUnshieldedTransfer. Cardano material isn't
+      // needed for a shielded send.
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      let sdkNetworkId: string;
+      switch (this.network) {
+        case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
+        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+        case Network.PREPROD: sdkNetworkId = 'preprod'; break;
+        case Network.TESTNET: sdkNetworkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) {
+        throw new Error(`No Midnight endpoints configured for network ${this.network}`);
+      }
+
+      // Sanity check the stored viewing key matches what we just re-derived.
+      // If they diverge, sync was running against a different key than this
+      // tx — the indexer's session was scanning the wrong viewing key, the
+      // wallet sees stale notes, and the tx may try to spend phantom inputs.
+      // Fail loud rather than build a tx the chain will reject.
+      try {
+        const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+        const storedViewingKey = parsed?.zswapViewingKey;
+        if (storedViewingKey && storedViewingKey !== derived.zswapViewingKey) {
+          throw new Error(
+            `Midnight viewing-key mismatch — BG-derived viewing key ` +
+            `(${derived.zswapViewingKey.slice(0, 16)}…) doesn't match the ` +
+            `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
+            `Sync was running against the wrong key; the local note set is unsound.`,
+          );
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('Midnight viewing-key mismatch')) throw e;
+        // Parse failures fall through — the publicKey JSON may not have the
+        // field yet on legacy wallets. The build will still produce a valid
+        // tx; sync correctness is the user's responsibility on legacy wallets.
+      }
+
+      try {
+        const signedTxHex = await buildAndSignShieldedTransfer({
+          sdkNetworkId,
+          endpoints,
+          zswapSecretKeySeed: derived.zswapSecretKey,
+          outputs: outputs.map((o) => ({
+            receiverAddress: o.receiverAddress,
+            amount: o.amount,
+            tokenType: (o.tokenType ?? 'native') as 'native',
+          })),
+        });
+        return signedTxHex;
+      } finally {
+        // Wipe all derived secrets. The mnemonic itself is cleared in the
+        // outer finally.
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0);
+        derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
+   * Return the `publicKeyHex` and `addressHex` the Nexus sidecar needs to
+   * reconstruct this wallet seedlessly via `UnshieldedWallet.startWithPublicKey`.
+   *
+   * Fast path (no decryption): if the wallet record already stores these (set at
+   * creation/restore time, or persisted by a previous slow-path call), reads them
+   * directly from `this.publicKey` JSON.
+   *
+   * Slow path (one-time migration): decrypts the mnemonic, derives the keystore,
+   * writes the keys back to the DB for next time, wipes the mnemonic.
+   */
+  /**
+   * Return the cached Midnight + Cardano material persisted at wallet creation.
+   * New Midnight wallets derive both chains' keys from the same mnemonic and
+   * write the full set to the `publicKey` JSON blob in one pass — see
+   * `midnightKeyManager.deriveMidnightKeys`. No mnemonic decryption is needed
+   * at read time.
+   *
+   * `password` / `prfSecret` are accepted for forward compat with the BG
+   * message signature but unused; they can be dropped once no caller passes
+   * them.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async getMidnightWalletKeys(
+    _password?: string,
+    _prfSecret?: Uint8Array,
+  ): Promise<{
+    publicKeyHex: string;
+    addressHex: string;
+    cardanoXpub?: string;
+    cardanoBaseAddress?: string;
+    cardanoStakeAddress?: string;
+    cardanoPaymentKeyHashHex?: string;
+  }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('getMidnightWalletKeys called on non-Midnight wallet');
+    }
+    let parsed: Record<string, string> | null = null;
+    try {
+      parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+    } catch {
+      parsed = null;
+    }
+    if (!parsed?.publicKeyHex || !parsed?.addressHex) {
+      throw new Error('Midnight wallet record is missing derived keys — recreate the wallet.');
+    }
+    return {
+      publicKeyHex: parsed.publicKeyHex,
+      addressHex: parsed.addressHex,
+      cardanoXpub: parsed.cardanoXpub,
+      cardanoBaseAddress: parsed.cardanoBaseAddress,
+      cardanoStakeAddress: parsed.cardanoStakeAddress,
+      cardanoPaymentKeyHashHex: parsed.cardanoPaymentKeyHashHex,
+    };
+  }
+
+  /**
+   * Sign + submit the Cardano-side DUST registration tx for a Midnight wallet.
+   *
+   * Both the Midnight HD keys and the Cardano CIP-1852 keys are derived from
+   * the same mnemonic (Lace pattern), so a Midnight wallet can natively sign
+   * Cardano txs without requiring a separate Cardano wallet.
+   *
+   * Flow:
+   *   1. Decrypt the mnemonic (password for password wallets / PRF for PRF
+   *      wallets).
+   *   2. Derive the Cardano root key, then the account-0 external-chain
+   *      index-0 payment key (matches `cardanoBaseAddress`).
+   *   3. Sign `txCborHex.id` with that key, plus the stake key if the tx
+   *      needs it (for collateral_return on stake-bound addresses).
+   *   4. Apply the witness set to the tx and submit to the Cardano network
+   *      that mirrors this Midnight wallet's network (preview ↔ preview).
+   *
+   * Note: this is a focused signing path. It only handles the DUST
+   * registration tx shape — single payment-key signature plus optional stake
+   * key. Full address-resolution / multi-input signing is not needed here
+   * because Nexus's tx builder selects UTxOs only from `cardanoBaseAddress`.
+   */
+  async signAndSubmitDustRegistrationTx(
+    txCborHex: string,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ txHash: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('signAndSubmitDustRegistrationTx called on non-Midnight wallet');
+    }
+
+    // 1. Decrypt the mnemonic.
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret required to sign DUST registration tx');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password required to sign DUST registration tx');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      // 2. Derive Cardano keys from the same mnemonic.
+      const { resolvePrivateKey } = await import('@/shared/utils/resolver');
+      const rootKey = resolvePrivateKey(mnemonic);
+      const accountKey = rootKey.derive([
+        WalletTypePurpose.CIP1852,
+        CoinTypes.CARDANO,
+        HARDENED + 0,
+      ]);
+      const paymentKey = accountKey.derive([0, 0]).toRawKey(); // external chain, index 0
+      const stakeKey = accountKey.derive([2, 0]).toRawKey();   // staking chain
+
+      // 3. Deserialize the tx, sign the body hash with the payment + stake keys.
+      const transaction = deserializeCardanoJsSdkTx(txCborHex);
+      const signatures = new Map<string, string>();
+      const payPub = paymentKey.toPublic();
+      const paySig = paymentKey.sign(HexBlob(transaction.id));
+      signatures.set(payPub.hex(), paySig.hex());
+      // Sign with the stake key too — the validator may also require this for
+      // collateral_return witnesses, and a redundant signature is harmless.
+      const stakePub = stakeKey.toPublic();
+      const stakeSig = stakeKey.sign(HexBlob(transaction.id));
+      signatures.set(stakePub.hex(), stakeSig.hex());
+
+      const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
+
+      // 4. Attach the witness set and submit via the chain-agnostic submit
+      // endpoint, explicitly targeting the Cardano network that mirrors the
+      // Midnight wallet's network (preview ↔ preview, preprod ↔ preprod,
+      // mainnet ↔ mainnet).
+      const cardanoNetwork = this.network; // Network.PREVIEW etc — same string for both chains
+      const txDeserialized = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
+      // Splice the witness CBOR into the tx by re-serializing.
+      const txCore = txDeserialized.toCore();
+      const signedTx: Cardano.Tx = {
+        ...txCore,
+        witness: witnessSet.toCore(),
+      };
+      const signedCbor = Serialization.Transaction.fromCore(signedTx).toCbor();
+
+      const response = await submitTxFn(signedCbor, Blockchain.CARDANO, cardanoNetwork);
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Submit failed (${response.status}): ${body}`);
+      }
+      const txHashResp = (await response.text()).trim().replace(/^"|"$/g, '');
+      if (!/^[a-f0-9]{64}$/i.test(txHashResp)) {
+        throw new Error(`Unexpected submit response: ${txHashResp}`);
+      }
+      return { txHash: txHashResp };
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
   async signData(
     address: Cardano.PaymentAddress | Cardano.RewardAccount | string,
     payload: string,
@@ -1782,8 +2446,10 @@ export class WalletBg {
   }
 
   isEnterpriseAddress(): boolean {
-    // Bitcoin has no enterprise addresses
-    if (this.chain === Blockchain.BITCOIN) {
+    // Non-Cardano chains have no enterprise/script-address concept and use
+    // address formats the Cardano SDK can't parse (Bitcoin: bech32 with
+    // different HRP; Midnight: bech32m with `mn_addr_*` HRP).
+    if (this.chain === Blockchain.BITCOIN || this.chain === Blockchain.MIDNIGHT) {
       return false;
     }
 

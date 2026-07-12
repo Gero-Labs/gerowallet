@@ -1,7 +1,7 @@
 <template>
   <v-card
-    outlined
-    class="liquid-glass fill-height d-flex flex-column recent-tx-card"
+    flat
+    class="fill-height d-flex flex-column recent-tx-card"
   >
     <div class="recent-tx-header flex-grow-0">
       <span class="recent-tx-heading">{{ $t('dashboard.recentTransactions') }}</span>
@@ -109,9 +109,15 @@ function formatAmount(tx: StoredTransaction): string {
 </script>
 
 <style scoped lang="scss">
+/* Match the portfolio metrics + chart panels' glass exactly (same rgba/blur)
+   so all three hero cards read as one material. */
 .recent-tx-card {
   border-radius: 12px;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .recent-tx-header {

@@ -321,10 +321,9 @@ onMounted(async () => {
 
 <style scoped>
 .governance-info-card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px 14px;
 }
 
@@ -345,7 +344,7 @@ onMounted(async () => {
 .gov-link {
   display: flex;
   align-items: center;
-  color: var(--chain-primary);
+  color: var(--g-accent);
   text-decoration: none;
   font-size: 12px;
 }
@@ -364,34 +363,34 @@ onMounted(async () => {
 }
 
 .delegation-select >>> .v-input__slot {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
 .delegation-select >>> .v-input__slot fieldset {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 
 .delegate-action-btn {
   background: transparent !important;
-  color: #fff !important;
+  color: var(--g-text-1) !important;
   font-weight: 600;
   text-transform: none;
   height: 36px !important;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 }
 
 .delegate-action-btn.v-btn--disabled {
-  color: #fff !important;
+  color: var(--g-text-1) !important;
 }
 
 .drep-search >>> .v-input__slot {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
 .drep-search >>> .v-input__slot fieldset {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 
 .drep-list {
@@ -403,10 +402,9 @@ onMounted(async () => {
 }
 
 .drep-item {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
   cursor: pointer;
   display: flex;
@@ -416,7 +414,7 @@ onMounted(async () => {
 }
 
 .drep-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-raised);
 }
 
 .drep-item-left {
@@ -427,7 +425,7 @@ onMounted(async () => {
 }
 
 .drep-avatar-placeholder {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-raised);
 }
 
 .drep-info {
@@ -436,7 +434,7 @@ onMounted(async () => {
 }
 
 .drep-name {
-  color: #fff;
+  color: var(--g-text-1);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
@@ -451,7 +449,7 @@ onMounted(async () => {
 }
 
 .drep-voting-power {
-  color: var(--chain-primary);
+  color: var(--g-accent);
   font-size: 12px;
   font-weight: 600;
 }
@@ -466,18 +464,18 @@ onMounted(async () => {
 
 /* Delegate confirmation */
 .confirm-drep-info {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 14px;
 }
 
 .delegate-btn {
-  background: linear-gradient(135deg, var(--chain-gradient1), var(--chain-gradient2)) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
+  color: var(--g-on-grad) !important;
   font-weight: 600;
   text-transform: none;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   height: 44px !important;
 }
 </style>

@@ -93,7 +93,7 @@
       <div class="ob-spread">
         <span class="ob-spread__price" :class="lastTradeClass">
           {{ formatPrice(liveMarkPrice ?? currentTicker?.lastPrice) }}
-          <v-icon size="11" :color="lastTradeClass === 'clr-green' ? '#0ecb81' : '#f6465d'">
+          <v-icon size="11" :color="lastTradeClass === 'clr-green' ? 'success' : 'error'">
             {{ lastTradeClass === 'clr-green' ? 'mdi-arrow-up-bold' : 'mdi-arrow-down-bold' }}
           </v-icon>
         </span>
@@ -189,7 +189,7 @@ const {
   grid-row: 1;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #2b2f36;
+  border-right: 1px solid var(--g-hairline-2);
   min-width: 210px;
   overflow: hidden;
 }
@@ -199,7 +199,7 @@ const {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border-bottom: 1px solid #2b2f36;
+  border-bottom: 1px solid var(--g-hairline-2);
   flex-shrink: 0;
   height: 31.5px;
 }
@@ -222,25 +222,25 @@ const {
   flex-direction: column;
   gap: 2px;
   padding: 3px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   opacity: 0.5;
 }
 
 .ob-filter-icon--active {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
 }
 
 .ob-filter-bar {
   display: block;
   width: 14px;
   height: 3px;
-  border-radius: 1px;
+  border-radius: 4px;
 }
 
-.ob-filter-bar--green { background: #0ecb81; }
-.ob-filter-bar--red { background: #f6465d; }
+.ob-filter-bar--green { background: var(--g-success); }
+.ob-filter-bar--red { background: var(--g-error); }
 .ob-filter-bar--big { height: 8px; }
 
 .ob-tick-trigger {
@@ -248,19 +248,19 @@ const {
   align-items: center;
   font-size: 11px;
   font-weight: 500;
-  color: #eaecef;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .ob-tick-trigger:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
 }
 
 .ob-tick-trigger .v-icon {
-  color: #848e9c !important;
+  color: var(--g-text-3) !important;
 }
 
 .ob-tick-menu {
@@ -268,7 +268,7 @@ const {
 }
 
 .ob-tick-list {
-  background: #1b1d23 !important;
+  background: var(--g-overlay) !important;
   padding: 4px 0 !important;
 }
 
@@ -279,32 +279,32 @@ const {
 .ob-tick-list .v-list-item__title {
   font-size: 11px !important;
   font-weight: 500;
-  color: #eaecef;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
 }
 
 .ob-tick-list__item--active .v-list-item__title {
-  color: #26FAB0;
+  color: var(--g-success);
   font-weight: 600;
 }
 
 .ob-tab {
   font-size: 11px;
-  color: #848e9c;
+  color: var(--g-text-3);
   padding: 2px 8px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: 4px;
   font-weight: 600;
 }
-.ob-tab:hover { background: rgba(255,255,255,0.04); }
-.ob-tab--active { color: #eaecef; background: rgba(255,255,255,0.06); }
+.ob-tab:hover { background: var(--g-hairline-1); }
+.ob-tab--active { color: var(--g-text-1); background: var(--g-hairline-1); }
 
 .ob-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
 }
 
@@ -312,9 +312,9 @@ const {
   display: flex;
   justify-content: space-between;
   padding: 4px 8px;
-  font-size: 9px;
-  color: #5e6673;
-  border-bottom: 1px solid #1b1d23;
+  font-size: 11px;
+  color: var(--g-text-3);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .ob-asks, .ob-bids {
@@ -345,7 +345,7 @@ const {
 }
 
 .ob-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--g-hairline-1);
 }
 
 .ob-row-bg {
@@ -358,11 +358,11 @@ const {
 }
 
 .ob-row-bg--ask {
-  background: linear-gradient(to left, rgba(246, 70, 93, 0.20), rgba(246, 70, 93, 0.05));
+  background: linear-gradient(to left, var(--g-error-line), transparent);
 }
 
 .ob-row-bg--bid {
-  background: linear-gradient(to left, rgba(14, 203, 129, 0.20), rgba(14, 203, 129, 0.05));
+  background: linear-gradient(to left, var(--g-success-line), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -374,7 +374,7 @@ const {
 .ob-cell {
   position: relative;
   z-index: 1;
-  color: #eaecef;
+  color: var(--g-text-1);
   min-width: 0;
   flex: 1;
   text-align: right;
@@ -387,8 +387,8 @@ const {
 .ob-price { font-weight: 600; }
 
 .ob-time {
-  font-size: 10px;
-  color: #5e6673;
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .ob-spread {
@@ -396,20 +396,20 @@ const {
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px;
-  border-top: 1px solid #2b2f36;
-  border-bottom: 1px solid #2b2f36;
-  background: rgba(255,255,255,0.02);
+  border-top: 1px solid var(--g-hairline-2);
+  border-bottom: 1px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
 }
 
 .ob-spread__price {
   font-size: 13px;
   font-weight: 700;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
 }
 
 .ob-spread__info {
-  font-size: 9px;
-  color: #5e6673;
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .ob-ratio {
@@ -420,17 +420,17 @@ const {
 .ob-ratio__bar {
   display: flex;
   height: 4px;
-  border-radius: 2px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
-.ob-ratio__buy { background: #26FAB0; }
-.ob-ratio__sell { background: #F6465D; }
+.ob-ratio__buy { background: var(--g-success); }
+.ob-ratio__sell { background: var(--g-error); }
 
 .ob-ratio__labels {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   margin-top: 2px;
 }
 </style>

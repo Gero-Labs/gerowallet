@@ -192,7 +192,7 @@ const handleCardMouseLeave = () => {
   border-radius: 1rem;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.1s ease-out;
+  transition: opacity var(--g-dur-fast) ease-out;
   z-index: 1;
 }
 
@@ -245,7 +245,7 @@ const handleCardMouseLeave = () => {
 .kyc-status-hover {
   cursor: help;
   border-bottom: 1px dotted $primary-cyan;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
 
   &:hover {
     color: lighten($primary-cyan, 10%);

@@ -22,9 +22,9 @@
 .v-card.glass-chrome,
 .v-navigation-drawer.liquid-glass-nav-drawer,
 .v-navigation-drawer.glass-chrome {
-  background: rgba(0, 0, 0, 0.55) !important;
-  backdrop-filter: blur(20px) saturate(1.5) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.5) !important;
+  background: rgba(0, 0, 0, 0.66) !important;
+  backdrop-filter: blur(24px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.3) !important;
   border-right: 1px solid var(--g-hairline-1) !important;
 }
 
@@ -33,12 +33,25 @@
 .liquid-glass-dialog,
 .v-card.glass-overlay,
 .v-card.liquid-glass-dialog {
-  background: rgba(12, 14, 18, 0.80) !important;
-  backdrop-filter: blur(24px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
+  background: rgba(12, 14, 18, 0.88) !important;
+  backdrop-filter: blur(28px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.25) !important;
   border: 1px solid var(--g-hairline-2) !important;
   border-radius: var(--g-r-sheet) !important;
   box-shadow: var(--g-shadow-sheet) !important;
+}
+
+/* Solid variant (opt-in via BaseDialog :solid). Opaque surface, blur disabled,
+   for dialogs that reopen: the glass re-composites lighter on the 2nd open
+   (Vuetify keeps the card mounted; the blur re-evaluates over a lighter/stacked
+   backdrop). var(--g-surface) matches the near-black the glass already renders
+   on the 1st open, so it looks identical and stays put. Higher specificity
+   (0,3,0) + later source order to beat the base rule. */
+.liquid-glass-dialog--solid,
+.v-card.liquid-glass-dialog.liquid-glass-dialog--solid {
+  background: var(--g-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* Material 3: popover (menus, tooltips; lightest) */
@@ -50,9 +63,9 @@
 .v-card.liquid-glass,
 .v-card.liquid-glass-subtle,
 .v-card.liquid-glass-compact {
-  background: rgba(18, 21, 27, 0.85) !important;
-  backdrop-filter: blur(12px) saturate(1.4) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+  background: rgba(18, 21, 27, 0.90) !important;
+  backdrop-filter: blur(14px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.2) !important;
   border: 1px solid var(--g-hairline-2) !important;
   border-radius: var(--g-r-card) !important;
   box-shadow: var(--g-shadow-menu) !important;

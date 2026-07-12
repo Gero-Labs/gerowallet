@@ -73,6 +73,13 @@ const metrics = {
   importantCount: matches(/!important/gi).length,
   lowAlphaText: matches(/(^|[^-a-z])color:\s*rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0?\.[0-5]/gim).length,
   transitionAll: matches(/transition:\s*all/gi).length,
+  // a11y floor (Task 25). Heuristics, ratcheted down as bare interactive
+  // elements become real controls and custom focus-removal is justified.
+  // clickableDivs: a div/span/li carrying @click is a control that should be a
+  // <button>/role=button + keyboard handler. outlineNone: every outline:none
+  // must be paired with a visible custom focus style (baseline owns the ring).
+  clickableDivs: matches(/<(?:div|span|li)\b[^>]*@click/gi).length,
+  outlineNone: matches(/outline:\s*none/gi).length,
   // trust-surface tripwires
   corruptedMdiNames: matches(/mdi-[a-z-]*[^\x00-\x7F][^"' ]*/gi).length, // e.g. mdi-information-outlƒine
   formatFnForks: matches(/(function|const)\s+(formatPrice|formatBalance|formatUsd)\b/g, formatForkFiles).length,
@@ -116,10 +123,36 @@ for (const [k, v] of Object.entries(metrics)) {
   console.log(`${ok ? 'OK  ' : 'OVER'}  ${k}: ${v} (budget ${b ?? 'unset'})`);
 }
 
+// --rebaseline is the ONLY way a budget may go up, and it exists for exactly one
+// situation: a merge has brought code into the tree that the budgets were never
+// measured against (e.g. down-syncing a long-lived lineage). It demands a reason,
+// prints every raise, and is meant to appear in the history a handful of times.
+// Normal work uses --write, which can only ratchet down.
+if (process.argv.includes('--rebaseline')) {
+  const reasonArg = process.argv.find((a) => a.startsWith('--reason='));
+  const reason = reasonArg && reasonArg.slice('--reason='.length).trim();
+  if (!reason) {
+    console.error('refusing --rebaseline: pass --reason="why this tree legitimately has more debt"');
+    process.exit(1);
+  }
+  const raises = Object.entries(metrics).filter(([k, v]) => budgets[k] !== undefined && v > budgets[k]);
+  if (!raises.length) {
+    console.error('refusing --rebaseline: nothing is over budget. Use --write to ratchet down.');
+    process.exit(1);
+  }
+  console.error(`\nREBASELINE (${reason})`);
+  for (const [k, v] of raises) console.error(`  RAISED  ${k}: ${budgets[k]} -> ${v}`);
+  for (const [k, v] of Object.entries(metrics)) budgets[k] = v;
+  writeFileSync('scripts/design/budgets.json', JSON.stringify(budgets, null, 2) + '\n');
+  console.error(`\n${raises.length} budget(s) raised, ${Object.keys(metrics).length - raises.length} re-pinned at or below. Justify this in the commit message.`);
+  process.exit(0);
+}
+
 if (process.argv.includes('--write')) {
   for (const [k, v] of Object.entries(metrics)) {
     if (budgets[k] !== undefined && v > budgets[k]) {
-      console.error(`refusing --write: ${k} would RAISE the budget (${budgets[k]} -> ${v})`); process.exit(1);
+      console.error(`refusing --write: ${k} would RAISE the budget (${budgets[k]} -> ${v}). If a merge legitimately added code, use --rebaseline --reason="..."`);
+      process.exit(1);
     }
     budgets[k] = Math.min(budgets[k] ?? v, v);
   }

@@ -233,8 +233,8 @@ watch(selectedFeeOption, updateFeeOption);
   padding: $spacing-sm $spacing-md;
   align-items: center;
   justify-content: center;
-  background: #0c111d;
-  border: 1px solid #1f242f;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
   border-radius: $border-radius-md;
   width: fit-content;
 }
@@ -251,7 +251,7 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .rate-value {
@@ -276,8 +276,8 @@ watch(selectedFeeOption, updateFeeOption);
   flex-direction: column;
   gap: 12px;
   padding: $spacing-sm $spacing-md;
-  background: #0c111d;
-  border: 1px solid #1f242f;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
   border-radius: $border-radius-md;
   width: fit-content;
 }
@@ -295,7 +295,7 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .gero-info-value {
@@ -303,7 +303,7 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #75e0a7;
+  color: var(--g-success);
 }
 
 .gero-tier-badge {
@@ -312,27 +312,26 @@ watch(selectedFeeOption, updateFeeOption);
   font-size: 14px;
   line-height: 1.43;
   padding: 4px 12px;
-  border-radius: 16px;
-  text-transform: uppercase;
+  border-radius: var(--g-r-sheet);
 
   &.gold {
     background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
-    color: #000;
+    color: var(--g-canvas);
   }
 
   &.silver {
     background: linear-gradient(135deg, #c0c0c0 0%, #808080 100%);
-    color: #000;
+    color: var(--g-canvas);
   }
 
   &.bronze {
     background: linear-gradient(135deg, #cd7f32 0%, #8b4513 100%);
-    color: #fff;
+    color: var(--g-text-1);
   }
 
   &.none {
-    background: #333741;
-    color: #cecfd2;
+    background: var(--g-hairline-3);
+    color: var(--g-text-2);
   }
 }
 
@@ -350,7 +349,7 @@ watch(selectedFeeOption, updateFeeOption);
   gap: $spacing-lg;
   padding: 10px 16px;
   background: $background-secondary;
-  border: 1px solid #1f242f;
+  border: 1px solid var(--g-hairline-2);
   border-radius: $border-radius-md;
   width: 100%;
 }
@@ -368,7 +367,7 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #f5f5f6;
+  color: var(--g-text-1);
 }
 
 .fee-options {
@@ -382,13 +381,13 @@ watch(selectedFeeOption, updateFeeOption);
   align-items: center;
   gap: $spacing-sm;
   padding: $spacing-md;
-  border: 1px solid #22262f;
-  border-radius: 12px;
-  background: #0c0e12;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
+  background: var(--g-surface);
   cursor: pointer;
 
   &.selected {
-    border-color: #00dff3;
+    border-color: var(--g-accent);
     border-width: 2px;
   }
 }
@@ -397,14 +396,14 @@ watch(selectedFeeOption, updateFeeOption);
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1px solid #373a41;
+  border: 1px solid var(--g-hairline-3);
   display: flex;
   align-items: center;
   justify-content: center;
 
   &.selected {
-    background: #00dff3;
-    border-color: #00dff3;
+    background: var(--g-accent);
+    border-color: var(--g-accent);
   }
 }
 
@@ -425,7 +424,7 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .transfer-details {
@@ -484,7 +483,7 @@ watch(selectedFeeOption, updateFeeOption);
 
 .divider {
   height: 1px;
-  background: #333741;
+  background: var(--g-hairline-3);
   width: 100%;
 }
 
@@ -501,14 +500,14 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .password-input {
   width: 100%;
   padding: $spacing-sm $spacing-md;
   background: $background-dark;
-  border: 1px solid #373a41;
+  border: 1px solid var(--g-hairline-3);
   border-radius: $border-radius-md;
   font-family: var(--g-font-ui);
   font-weight: 400;
@@ -522,7 +521,7 @@ watch(selectedFeeOption, updateFeeOption);
 
   &:focus {
     outline: none;
-    border-color: #00dff3;
+    border-color: var(--g-accent);
   }
 }
 </style>

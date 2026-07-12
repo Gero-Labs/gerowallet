@@ -28,5 +28,10 @@ const activeStep = computed(() => {
 });
 </script>
 <style scoped>
-
+/* The wrapped v-stepper otherwise renders Vuetify's default grey surface
+   (a child component, so the parent dialog's transparent override can't reach
+   it). Keep it transparent so the dialog surface shows through. */
+.stepper-container {
+  background-color: transparent !important;
+}
 </style>

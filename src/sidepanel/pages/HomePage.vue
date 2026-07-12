@@ -4,7 +4,9 @@
 
     <QuickActions @action="handleAction" />
 
-    <FeaturedCarousel />
+    <!-- Midnight: compact DUST battery replaces the (Cardano-centric) carousel -->
+    <MiniDustGauge v-if="isMidnight" />
+    <FeaturedCarousel v-else />
 
     <div class="section-header">
       <span class="text-subtitle-2 white--text font-weight-bold">
@@ -37,7 +39,7 @@
               :src="selectedToken.img"
               :alt="selectedToken.ticker || selectedToken.name"
             />
-            <v-icon v-else size="28" color="#888">mdi-circle-outline</v-icon>
+            <v-icon v-else size="28" color="var(--g-text-3)">mdi-circle-outline</v-icon>
           </v-avatar>
           <div class="text-h6 white--text font-weight-bold">
             {{ selectedToken.ticker || selectedToken.name }}
@@ -98,10 +100,12 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router/composables';
 import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
+import MiniDustGauge from '../components/MiniDustGauge.vue';
 import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
@@ -119,6 +123,7 @@ const showTokenDetail = ref(false);
 const selectedToken = ref<any>(null);
 
 const tokenCount = computed(() => {
+  if (isMidnight.value) return 2; // NIGHT + DUST rows
   const tokens = walletStore.tokens;
   if (!tokens) return 1; // ADA only
   // Count verified, non-scam, non-ADA tokens + 1 for ADA
@@ -131,11 +136,20 @@ const tokenCount = computed(() => {
   return ftCount + 1; // +1 for ADA
 });
 
+const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
+
 function handleBuySell() {
   showBuySell.value = true;
 }
 
 function handleAction(id: string) {
+  // Midnight send/receive flows live in the full dashboard (MidnightSendDialog
+  // + 3-address ReceiveDialog); the sidepanel sheets are Cardano tx builders
+  // and would mis-build for Midnight. Open the dashboard instead of breaking.
+  if (walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && (id === 'send' || id === 'receive')) {
+    window.open(chrome.runtime.getURL('index.html#/'), '_blank');
+    return;
+  }
   switch (id) {
     case 'send':
       showSend.value = true;
@@ -251,7 +265,7 @@ function formatAdaPrice(price: number): string {
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--g-hairline-2);
 }
 
 .detail-row:last-child {
@@ -259,10 +273,10 @@ function formatAdaPrice(price: number): string {
 }
 
 .green-text {
-  color: #47CD89 !important;
+  color: var(--g-success) !important;
 }
 
 .red-text {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 </style>

@@ -17,22 +17,22 @@
               hide-details>
             </v-select>
           </v-col>
-          <v-col cols="12" style="color: #61646C; min-height: 52px; font-style: italic; align-content: center;"
+          <v-col cols="12" style="color: var(--g-text-3); min-height: 52px; font-style: italic; align-content: center;"
             class="py-0 px-2">
           </v-col>
           <v-col cols="4" class="px-2 pt-0">
             <v-menu v-model="saveContactMenu" :close-on-content-click="false" offset-y max-width="452">
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" :disabled="!valid"
+                <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" :disabled="!valid"
                   v-bind="attrs" v-on="on" @click="saveContact">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
-                      <v-icon small color="#00DFF3">
+                      <v-icon small color="var(--g-accent)">
                         {{ contacts && contacts[paymentAddress] != null ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline' }}
                       </v-icon>
                     </v-avatar>
                     <v-list-item-content>
-                      <v-list-item-title style="color: white; font-size: 11px">
+                      <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                         {{ contacts && contacts[paymentAddress] != null ? 'Edit Contact' : 'Save Contact' }}
                       </v-list-item-title>
                     </v-list-item-content>
@@ -87,16 +87,16 @@
             <v-menu v-model="contactsMenu" :close-on-content-click="false" offset-y nudge-left="156" min-width="452"
               max-height="400">
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs"
+                <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" v-bind="attrs"
                   v-on="on" :disabled="contacts && Object.values(contacts)?.length === 0">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
-                      <v-icon small color="#00DFF3">
+                      <v-icon small color="var(--g-accent)">
                         mdi-book-open-variant-outline
                       </v-icon>
                     </v-avatar>
                     <v-list-item-content>
-                      <v-list-item-title style="color: white; font-size: 11px">
+                      <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                         Contacts
                       </v-list-item-title>
                     </v-list-item-content>
@@ -134,15 +134,15 @@
             </v-menu>
           </v-col>
           <v-col cols="4" class="px-2 pt-0">
-            <v-btn outlined block color="#272930" style="background-color: #0F0F0F" class="pl-0" disabled>
+            <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas)" class="pl-0" disabled>
               <v-list-item dense class="px-0">
                 <v-avatar size="34" class="mx-0">
-                  <v-icon small color="#00DFF3">
+                  <v-icon small color="var(--g-accent)">
                     mdi-qrcode
                   </v-icon>
                 </v-avatar>
                 <v-list-item-content>
-                  <v-list-item-title style="color: white; font-size: 11px">
+                  <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                     QR Scan
                   </v-list-item-title>
                 </v-list-item-content>
@@ -155,14 +155,14 @@
               rows="3" outlined :rules="recipientRules" class="recipient-address" @input="resolveAddress"
               :loading="loading" hide-details dense clearable>
               <template v-slot:append>
-                <v-progress-circular color="white" v-if="loading" size="24" indeterminate></v-progress-circular>
-                <v-icon color="#F97066" v-else-if="!loading && resolved === false">
+                <v-progress-circular color="var(--g-text-1)" v-if="loading" size="24" indeterminate></v-progress-circular>
+                <v-icon color="error" v-else-if="!loading && resolved === false">
                   mdi-alert
                 </v-icon>
               </template>
             </v-textarea>
           </v-col>
-          <v-col cols="12" style="color: #61646C; min-height: 52px; font-style: italic; align-content: center;"
+          <v-col cols="12" style="color: var(--g-text-3); min-height: 52px; font-style: italic; align-content: center;"
             class="py-0">
             <span v-if="resolved">{{ paymentAddress }}</span>
           </v-col>
@@ -387,8 +387,8 @@ const truncate = filters.truncate;
   }
 
   .recipient-address>.v-input__control>.v-input__slot {
-    background-color: #292929;
-    border-radius: 6px;
+    background-color: var(--g-raised);
+    border-radius: var(--g-r-control);
     padding: 5px 10px;
 
     & textarea {

@@ -442,19 +442,17 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
   background: $background-card !important;
   border: 1px solid $border-secondary !important;
   min-width: 320px !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  border-radius: var(--g-r-control) !important;
+  box-shadow: var(--g-shadow-menu) !important;
 }
 
 :deep(.export-menu-title) {
   font-family: $font-family-primary !important;
   font-weight: $font-weight-bold !important;
   font-size: 13px !important;
-  color: #ffffff !important;
+  color: var(--g-text-1) !important;
   padding: 16px 20px !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.5px !important;
+  border-bottom: 1px solid var(--g-hairline-2) !important;
   text-align: center !important;
 }
 
@@ -476,7 +474,6 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
 }
 
 :deep(.export-period-btn) {
-  text-transform: uppercase !important;
   font-size: 12px !important;
   font-family: $font-family-primary !important;
   font-weight: $font-weight-semibold !important;
@@ -484,20 +481,18 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
   height: auto !important;
   min-height: 44px !important;
   justify-content: center !important;
-  border: 1px solid #00c7f3 !important;
-  border-color: #00c7f3 !important;
-  color: #ffffff !important;
-  background: rgba(20, 22, 28, 0.8) !important;
-  transition: all 0.2s ease !important;
-  border-radius: 6px !important;
-  letter-spacing: 0.3px !important;
+  border: 1px solid var(--g-accent) !important;
+  border-color: var(--g-accent) !important;
+  color: var(--g-text-1) !important;
+  background: var(--g-raised) !important;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease !important;
+  border-radius: var(--g-r-control) !important;
 
   &:hover {
-    background: rgba(30, 32, 38, 0.95) !important;
-    border-color: #00c7f3 !important;
-    color: #ffffff !important;
+    background: var(--g-overlay) !important;
+    border-color: var(--g-accent) !important;
+    color: var(--g-text-1) !important;
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 199, 243, 0.3);
   }
 
   &:active {
@@ -506,23 +501,22 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
 
   .v-icon {
     margin-right: 8px !important;
-    color: #ffffff !important;
+    color: var(--g-text-1) !important;
   }
 }
 
 :deep(.export-custom-btn) {
   margin-top: 0 !important;
   border-style: dashed !important;
-  border: 1px solid #00c7f3 !important;
-  border-color: #00c7f3 !important;
+  border: 1px solid var(--g-accent) !important;
+  border-color: var(--g-accent) !important;
   font-size: 11px !important;
-  letter-spacing: 0.5px !important;
   padding: 14px 20px !important;
 
   &:hover {
     border-style: dashed !important;
-    border-color: #00c7f3 !important;
-    background: rgba(30, 32, 38, 0.95) !important;
+    border-color: var(--g-accent) !important;
+    background: var(--g-overlay) !important;
   }
 }
 
@@ -553,53 +547,50 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
 }
 
 :deep(.export-dialog-close-btn) {
-  text-transform: uppercase !important;
   font-size: 12px !important;
   font-weight: $font-weight-medium !important;
   font-family: $font-family-primary !important;
   padding: 8px 20px !important;
   min-width: 80px !important;
-  background: rgba(30, 32, 36, 0.9) !important;
-  border-color: rgba(255, 255, 255, 0.15) !important;
-  color: #ffffff !important;
+  background: var(--g-raised) !important;
+  border-color: var(--g-hairline-3) !important;
+  color: var(--g-text-1) !important;
   border-radius: 4px !important;
 
   &:hover {
-    background: rgba(30, 32, 36, 1) !important;
-    border-color: rgba(255, 255, 255, 0.25) !important;
+    background: var(--g-overlay) !important;
+    border-color: var(--g-hairline-3) !important;
   }
 }
 
 :deep(.export-dialog-export-btn) {
-  text-transform: uppercase !important;
   font-size: 12px !important;
   font-weight: $font-weight-medium !important;
   font-family: $font-family-primary !important;
   padding: 8px 20px !important;
   min-width: 80px !important;
-  background: #00c7f3 !important;
-  color: #ffffff !important;
+  background: var(--g-accent) !important;
+  color: var(--g-text-1) !important;
   border-radius: 4px !important;
   box-shadow: none !important;
 
   &:hover {
-    background: #00b0d9 !important;
-    box-shadow: 0 2px 8px rgba(0, 199, 243, 0.3) !important;
+    background: var(--g-accent) !important;
   }
 
   &:active {
-    background: #0099bf !important;
+    background: var(--g-accent) !important;
   }
 }
 
 .date-range-picker {
   .error-message {
-    color: var(--v-error-base);
+    color: var(--g-error);
     font-size: 12px;
     padding: 8px;
-    background: rgba(244, 67, 54, 0.1);
+    background: var(--g-error-fill);
     border-radius: 4px;
-    border: 1px solid var(--v-error-base);
+    border: 1px solid var(--g-error-line);
   }
 }
 </style>

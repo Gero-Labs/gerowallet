@@ -57,7 +57,14 @@ jobs:
     runs-on: gero-plain
     timeout-minutes: 25
     env:
-      NODE_OPTIONS: "--max-old-space-size=6144 --max-semi-space-size=256"
+      # 4096, not 6144: with the larger cap the vite process balloons past the
+      # gero-plain host's physical memory and the OOM killer takes out the
+      # runner agent mid-build (job dies with the build step never marked
+      # completed and NO logs uploaded - observed repeatedly on PR #778, with
+      # pass/fail alternating on identical trees as GC timing decided). The
+      # build completes comfortably in a 4GB heap (~35s locally); a lower cap
+      # makes Node GC harder instead of gambling against host memory.
+      NODE_OPTIONS: "--max-old-space-size=4096 --max-semi-space-size=128"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7

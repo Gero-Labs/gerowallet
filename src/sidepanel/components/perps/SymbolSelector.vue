@@ -173,33 +173,30 @@ function select(symbol: string) {
   gap: 6px;
   padding: 5px 10px;
   max-width: 200px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-raised);
   cursor: pointer;
   outline: none;
   transition: background 0.15s ease, border-color 0.15s ease;
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 .symbol-selector-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: color-mix(in srgb, var(--chain-primary) 35%, transparent);
+  background: var(--g-overlay);
+  border-color: color-mix(in srgb, var(--g-accent) 35%, transparent);
 }
 
 .symbol-selector-btn__name {
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .symbol-selector-btn__badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   padding: 1px 5px;
   border-radius: 4px;
@@ -210,7 +207,7 @@ function select(symbol: string) {
 .symbol-selector-btn__caret {
   flex-shrink: 0;
   transition: transform 0.2s ease;
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: var(--g-text-3) !important;
 }
 
 .symbol-selector-btn__caret.rotated {
@@ -219,17 +216,15 @@ function select(symbol: string) {
 
 /* ── Dropdown panel ───────────────────────────────────── */
 .symbol-selector-menu {
-  border-radius: 12px !important;
+  border-radius: var(--g-r-card) !important;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: var(--g-shadow-menu) !important;
 }
 
 .symbol-selector-dropdown {
-  background: rgba(18, 22, 30, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
 }
 
 .symbol-selector-dropdown__header {
@@ -237,7 +232,7 @@ function select(symbol: string) {
 }
 
 .symbol-selector-search {
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 /* ── List ─────────────────────────────────────────────── */
@@ -254,40 +249,40 @@ function select(symbol: string) {
 }
 
 .symbol-selector-list__item:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: var(--g-overlay) !important;
 }
 
 .symbol-selector-list__item--active {
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent) !important;
 }
 
 .symbol-selector-list__symbol {
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 /* ── Color aliases ────────────────────────────────────── */
 .long--text {
-  color: #26FAB0 !important;
+  color: var(--g-success) !important;
 }
 
 .short--text {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 
 .neutral--text {
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: var(--g-text-3) !important;
 }
 
 /* Badge backgrounds */
 .long--text.symbol-selector-btn__badge {
-  background: rgba(38, 250, 176, 0.15);
+  background: var(--g-success-fill);
 }
 
 .short--text.symbol-selector-btn__badge {
-  background: rgba(249, 112, 102, 0.15);
+  background: var(--g-error-fill);
 }
 
 .neutral--text.symbol-selector-btn__badge {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
 }
 </style>

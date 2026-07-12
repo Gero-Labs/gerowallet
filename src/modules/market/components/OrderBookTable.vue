@@ -19,7 +19,7 @@
     <div v-if="loading" class="d-flex justify-center py-4">
       <v-progress-circular indeterminate size="24" color="primary" />
     </div>
-    <div v-else-if="errorMsg" class="text-center py-4 text-caption" style="color: #F97066">{{ errorMsg }}</div>
+    <div v-else-if="errorMsg" class="text-center py-4 text-caption" style="color: var(--g-error)">{{ errorMsg }}</div>
     <div v-else-if="!orderBook" class="text-center py-4 text--secondary text-caption">
       <v-icon small class="mb-1" style="opacity: 0.3">mdi-book-open-outline</v-icon>
       <div>{{ $t('market.noOrderBookData') }}</div>
@@ -27,7 +27,7 @@
 
     <template v-else>
       <!-- Column headers -->
-      <div class="ob-header">
+      <div class="ob-header t-label">
         <span>{{ $t('market.price') }} ({{ currencySymbol }})</span>
         <span class="text-right">{{ $t('market.size') }} ({{ currencySymbol }})</span>
         <span class="text-right">{{ $t('market.total') }} ({{ currencySymbol }})</span>
@@ -232,13 +232,13 @@ onBeforeUnmount(() => stopAutoRefresh());
 
 <style scoped>
 .order-book-container {
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px;
 }
 
-.ob-toggle { background: rgba(255,255,255,0.04) !important; }
-.ob-toggle >>> .v-btn { font-size: 10px !important; text-transform: none !important; letter-spacing: 0; }
+.ob-toggle { background: var(--g-hairline-1) !important; }
+.ob-toggle >>> .v-btn { font-size: 11px !important; text-transform: none !important; letter-spacing: 0; }
 
 .ob-pool-info {
   display: flex;
@@ -246,23 +246,19 @@ onBeforeUnmount(() => stopAutoRefresh());
   gap: 8px;
   font-size: 11px;
   padding: 4px 8px;
-  background: rgba(255,255,255,0.03);
+  background: var(--g-hairline-1);
   border-radius: 4px;
 }
-.pool-name { color: rgba(255,255,255,0.7); font-weight: 500; }
-.pool-price { color: #fff; font-weight: 600; font-family: 'Roboto Mono', monospace; }
-.pool-tvl { color: rgba(255,255,255,0.4); margin-left: auto; font-size: 10px; }
+.pool-name { color: var(--g-text-2); font-weight: 500; }
+.pool-price { color: var(--g-text-1); font-weight: 600; font-family: var(--g-font-mono); }
+.pool-tvl { color: var(--g-text-3); margin-left: auto; font-size: 11px; }
 
 /* Column headers */
 .ob-header {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   padding: 4px 8px;
-  font-size: 10px;
-  color: rgba(255,255,255,0.35);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--g-hairline-1);
   margin-bottom: 1px;
 }
 
@@ -272,14 +268,14 @@ onBeforeUnmount(() => stopAutoRefresh());
   grid-template-columns: 1fr 1fr 1fr;
   padding: 0 8px;
   font-size: 11px;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   position: relative;
   line-height: 20px;
   cursor: default;
   transition: background 0.1s;
 }
 .ob-row:hover {
-  background: rgba(255,255,255,0.04);
+  background: var(--g-hairline-1);
 }
 
 /* Depth bar — fills from right, behind size+total columns */
@@ -292,10 +288,10 @@ onBeforeUnmount(() => stopAutoRefresh());
   transition: width 0.3s ease;
 }
 .ask-depth {
-  background: linear-gradient(to left, rgba(255,82,82,0.18), rgba(255,82,82,0.04));
+  background: linear-gradient(to left, color-mix(in srgb, var(--g-error) 18%, transparent), color-mix(in srgb, var(--g-error) 4%, transparent));
 }
 .bid-depth {
-  background: linear-gradient(to left, rgba(38,250,176,0.18), rgba(38,250,176,0.04));
+  background: linear-gradient(to left, color-mix(in srgb, var(--g-success) 18%, transparent), color-mix(in srgb, var(--g-success) 4%, transparent));
 }
 
 /* Cell text */
@@ -306,22 +302,21 @@ onBeforeUnmount(() => stopAutoRefresh());
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ask-price { color: #FF5252; }
-.bid-price { color: #26FAB0; }
-.ob-size { color: rgba(255,255,255,0.75); }
-.ob-total { color: rgba(255,255,255,0.45); }
+.ask-price { color: var(--g-error); }
+.bid-price { color: var(--g-success); }
+.ob-size { color: var(--g-text-2); }
+.ob-total { color: var(--g-text-3); }
 
 /* Spread divider */
 .ob-spread {
   text-align: center;
   padding: 4px 0;
   font-size: 11px;
-  font-family: 'Roboto Mono', monospace;
-  color: rgba(255,255,255,0.5);
-  border-top: 1px solid rgba(255,255,255,0.08);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--g-font-mono);
+  color: var(--g-text-3);
+  border-top: 1px solid var(--g-hairline-1);
+  border-bottom: 1px solid var(--g-hairline-1);
   margin: 2px 0;
-  letter-spacing: 0.3px;
 }
 
 .ob-asks, .ob-bids {

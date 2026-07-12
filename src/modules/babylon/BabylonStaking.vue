@@ -25,7 +25,7 @@
       dismissible
       class="mb-3"
       @input="error = null"
-      style="border-radius: 10px !important;"
+      style="border-radius: var(--g-r-control) !important;"
     >{{ error }}</v-alert>
 
     <!-- ── BEGINNER INTRO BANNER ───────────────────────────── -->
@@ -39,7 +39,7 @@
           <div class="intro-body">{{ $t('babylon.intro.body') }}</div>
           <div class="intro-steps mt-2">
             <div v-for="step in introSteps" :key="step.icon" class="intro-step">
-              <v-icon x-small color="#F7931A" class="mr-1">{{ step.icon }}</v-icon>
+              <v-icon x-small color="primary" class="mr-1">{{ step.icon }}</v-icon>
               <span>{{ $t(step.textKey) }}</span>
             </div>
           </div>
@@ -66,7 +66,7 @@
             <span class="hero-amount-unit">BTC</span>
           </div>
           <div class="hero-meta" v-if="delegations.length > 0">
-            <v-chip x-small color="rgba(247,147,26,0.2)" text-color="#F7931A" class="mr-1" style="border: 1px solid rgba(247,147,26,0.3);">
+            <v-chip x-small color="rgba(247,147,26,0.2)" text-color="primary" class="mr-1" style="border: 1px solid rgba(247,147,26,0.3);">
               {{ delegations.length }} {{ delegations.length === 1 ? $t('babylon.delegation') || 'delegation' : $t('babylon.delegations') || 'delegations' }}
             </v-chip>
           </div>
@@ -113,8 +113,8 @@
     <!-- ── STAKING PARAMETERS (compact) ──────────────────── -->
     <div v-if="currentParams" class="params-strip liquid-glass mb-3">
       <div class="params-strip-title">
-        <v-icon x-small color="#F7931A" class="mr-1">mdi-tune-variant</v-icon>
-        <span class="text-caption font-weight-bold" style="text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.7;">
+        <v-icon x-small color="primary" class="mr-1">mdi-tune-variant</v-icon>
+        <span class="t-label" style="opacity: 0.7;">
           {{ $t('babylon.stakingParams') || 'Parameters v' }}{{ currentParams.version }}
         </span>
       </div>
@@ -155,7 +155,7 @@
               {{ $t('babylon.tooltip.duration') }}
             </v-tooltip>
           </span>
-          <span class="pitem-val">{{ (currentParams.min_staking_time ?? 0).toLocaleString() }}–{{ (currentParams.max_staking_time ?? 0).toLocaleString() }} <span style="opacity:0.5; font-size:10px;">blk</span></span>
+          <span class="pitem-val">{{ (currentParams.min_staking_time ?? 0).toLocaleString() }}–{{ (currentParams.max_staking_time ?? 0).toLocaleString() }} <span style="opacity:0.5; font-size:11px;">blk</span></span>
         </div>
         <div class="pitem-sep" />
         <div class="pitem">
@@ -176,9 +176,9 @@
     <!-- ── MY DELEGATIONS ─────────────────────────────────── -->
     <div v-if="delegations.length > 0" class="mb-4">
       <div class="section-header mb-2">
-        <v-icon small color="#F7931A" class="mr-1">mdi-safe-square-outline</v-icon>
+        <v-icon small color="primary" class="mr-1">mdi-safe-square-outline</v-icon>
         <span class="section-title">{{ $t('babylon.myDelegations') }}</span>
-        <v-chip x-small color="rgba(247,147,26,0.15)" text-color="#F7931A" class="ml-2"
+        <v-chip x-small color="rgba(247,147,26,0.15)" text-color="primary" class="ml-2"
           style="border: 1px solid rgba(247,147,26,0.25);">{{ delegations.length }}</v-chip>
       </div>
 
@@ -196,7 +196,7 @@
             <div class="d-flex align-center mb-2" style="gap: 8px;">
               <v-tooltip bottom max-width="200" content-class="babylon-tooltip">
                 <template #activator="{ on }">
-                  <v-chip x-small :color="delegationStateColor(d.state)" text-color="white" style="font-size: 9px; font-weight: 700; letter-spacing: 0.04em;" v-on="on">
+                  <v-chip x-small :color="delegationStateColor(d.state)" text-color="white" style="font-size: 11px; font-weight: 700; letter-spacing: 0.04em;" v-on="on">
                     <v-icon x-small left>{{ delegationStateIcon(d.state) }}</v-icon>
                     {{ $t(`babylon.state.${d.state}`) || d.state }}
                   </v-chip>
@@ -233,7 +233,7 @@
       <!-- Section header row -->
       <div class="section-header mb-2">
         <div class="d-flex align-center" style="gap: 6px;">
-          <v-icon small color="#F7931A">mdi-shield-half-full</v-icon>
+          <v-icon small color="primary">mdi-shield-half-full</v-icon>
           <span class="section-title">{{ $t('babylon.finalityProviders') }}</span>
           <v-tooltip bottom max-width="260" content-class="babylon-tooltip">
             <template #activator="{ on }">
@@ -269,7 +269,7 @@
             @click="setSort(s.key)"
           >
             {{ s.label }}
-            <v-icon v-if="sortKey === s.key" style="font-size: 10px; margin-left: 2px;">
+            <v-icon v-if="sortKey === s.key" style="font-size: 11px; margin-left: 2px;">
               {{ sortAsc ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
             </v-icon>
           </div>
@@ -323,7 +323,7 @@
                 <!-- Identity badge -->
                 <v-tooltip v-if="provider.description.identity" bottom max-width="200" content-class="babylon-tooltip">
                   <template #activator="{ on }">
-                    <v-icon v-on="on" style="font-size: 12px; color: #F7931A; opacity: 0.75; cursor: help;">mdi-check-decagram</v-icon>
+                    <v-icon v-on="on" style="font-size: 12px; color: var(--g-accent); opacity: 0.75; cursor: help;">mdi-check-decagram</v-icon>
                   </template>
                   {{ $t('babylon.identityVerified') }}: {{ provider.description.identity }}
                 </v-tooltip>
@@ -337,7 +337,7 @@
                   <v-icon style="font-size: 11px;">mdi-web</v-icon>
                 </v-btn>
               </div>
-              <div class="provider-pk" style="font-family: monospace; opacity: 0.35; font-size: 9px;">
+              <div class="provider-pk" style="font-family: var(--g-font-mono); opacity: 0.35; font-size: 11px;">
                 {{ provider.btc_pk.slice(0, 12) }}…{{ provider.btc_pk.slice(-8) }}
               </div>
             </div>
@@ -432,7 +432,7 @@
 
                 <!-- Stake CTA -->
                 <v-btn
-                  color="#F7931A"
+                  color="primary"
                   dark
                   small
                   block
@@ -448,7 +448,7 @@
         </v-card>
       </div>
 
-      <v-btn v-if="hasMore" text color="#F7931A" block @click="loadMore" :loading="loadingMore" small class="mt-2">
+      <v-btn v-if="hasMore" text color="primary" block @click="loadMore" :loading="loadingMore" small class="mt-2">
         <v-icon left small>mdi-chevron-down</v-icon>
         {{ $t('common.loadMore') }}
       </v-btn>
@@ -653,10 +653,10 @@ function formatBtcCompact(sats: number | undefined | null): string {
 // Commission color: green ≤5%, neutral ≤9%, orange ≤10%, red >10%
 function commissionColor(commission: string): string {
   const pct = parseFloat(commission) * 100;
-  if (pct <= 5) return '#43a047';
+  if (pct <= 5) return 'var(--g-success)';
   if (pct < 10) return 'inherit';
-  if (pct === 10) return '#FB8C00';
-  return '#e53935';
+  if (pct === 10) return 'var(--g-warning)';
+  return 'var(--g-error)';
 }
 
 function formatUnbonding(blocks: number): string {
@@ -669,12 +669,12 @@ function formatCommission(commission: string): string {
 
 function delegationStateColor(state: string): string {
   switch (state) {
-    case 'active': return '#43a047';
-    case 'pending': return '#FB8C00';
-    case 'unbonding': return '#F7931A';
-    case 'withdrawable': return '#43a047';
-    case 'withdrawn': return '#78909c';
-    default: return '#78909c';
+    case 'active': return 'success';
+    case 'pending': return 'warning';
+    case 'unbonding': return 'primary';
+    case 'withdrawable': return 'success';
+    case 'withdrawn': return 'var(--g-text-3)';
+    default: return 'var(--g-text-3)';
   }
 }
 
@@ -755,16 +755,16 @@ onMounted(() => refresh());
 <style scoped>
 /* ── Page ── */
 .babylon-page {
-  --bab-purple: #F7931A;
+  --bab-purple: var(--g-accent);
   --bab-purple-dim: rgba(247, 147, 26, 0.15);
-  --bab-orange: #F7931A;
-  --bab-glass: rgba(255, 255, 255, 0.04);
-  --bab-border: rgba(255, 255, 255, 0.08);
+  --bab-orange: var(--g-accent);
+  --bab-glass: var(--g-hairline-1);
+  --bab-border: var(--g-hairline-1);
 }
 
 .babylon-icon-wrap {
   width: 40px; height: 40px;
-  border-radius: 11px;
+  border-radius: var(--g-r-card);
   background: rgba(247, 147, 26, 0.1);
   border: 1px solid rgba(247, 147, 26, 0.2);
   display: flex; align-items: center; justify-content: center;
@@ -779,7 +779,7 @@ onMounted(() => refresh());
 
 /* ── Intro Banner ── */
 .intro-banner {
-  border-radius: 12px !important;
+  border-radius: var(--g-r-card) !important;
   border: 1px solid rgba(247, 147, 26, 0.2) !important;
   background: rgba(247, 147, 26, 0.06) !important;
   padding: 14px 14px 14px 16px;
@@ -790,7 +790,7 @@ onMounted(() => refresh());
 
 .intro-icon-wrap {
   width: 32px; height: 32px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   background: rgba(247, 147, 26, 0.12);
   border: 1px solid rgba(247, 147, 26, 0.2);
   display: flex; align-items: center; justify-content: center;
@@ -835,7 +835,7 @@ onMounted(() => refresh());
 
 /* ── Hero Card ── */
 .hero-card {
-  border-radius: 16px !important;
+  border-radius: var(--g-r-sheet) !important;
   border: 1px solid rgba(247, 147, 26, 0.18) !important;
   background: rgba(247, 147, 26, 0.05) !important;
   position: relative;
@@ -864,7 +864,7 @@ onMounted(() => refresh());
 .hero-eyebrow {
   display: flex;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   opacity: 0.55;
@@ -880,7 +880,7 @@ onMounted(() => refresh());
 }
 
 .hero-amount-number {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
@@ -903,35 +903,24 @@ onMounted(() => refresh());
 }
 
 .stake-cta {
-  background: linear-gradient(135deg, #F7931A 0%, #d4720e 100%) !important;
-  color: white !important;
-  border-radius: 10px !important;
+  background: var(--g-grad) !important;
+  color: var(--g-text-1) !important;
+  border-radius: var(--g-r-control) !important;
   font-weight: 700 !important;
   letter-spacing: 0.03em;
-  box-shadow: 0 4px 16px rgba(247, 147, 26, 0.3) !important;
   text-transform: none !important;
   padding: 0 20px !important;
   height: 40px !important;
-  transition: box-shadow 0.2s ease, transform 0.15s ease !important;
+  transition: transform var(--g-dur-fast) ease !important;
 }
 
 .stake-cta:hover {
-  box-shadow: 0 6px 24px rgba(247, 147, 26, 0.45) !important;
   transform: translateY(-1px);
-}
-
-@keyframes pulse-cta {
-  0%, 100% { box-shadow: 0 4px 16px rgba(247,147,26,0.3); }
-  50% { box-shadow: 0 4px 28px rgba(247,147,26,0.6); }
-}
-
-.stake-cta--pulse {
-  animation: pulse-cta 2.4s ease-in-out infinite;
 }
 
 .cta-hint {
   opacity: 0.4;
-  font-size: 10px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -966,7 +955,7 @@ onMounted(() => refresh());
 }
 
 .hstat-label {
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   opacity: 0.4;
@@ -977,17 +966,17 @@ onMounted(() => refresh());
 }
 
 .hstat-info {
-  font-size: 10px !important;
+  font-size: 11px !important;
   cursor: help;
   opacity: 0.6;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .hstat-info:hover { opacity: 1; }
 
 /* ── Params Strip ── */
 .params-strip {
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   border: 1px solid rgba(247, 147, 26, 0.12) !important;
   padding: 10px 16px;
   display: flex;
@@ -1017,7 +1006,7 @@ onMounted(() => refresh());
 }
 
 .pitem-label {
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   opacity: 0.4;
@@ -1028,9 +1017,9 @@ onMounted(() => refresh());
 }
 
 .pitem-info {
-  font-size: 10px !important;
+  font-size: 11px !important;
   cursor: help;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .pitem-val {
@@ -1071,7 +1060,7 @@ onMounted(() => refresh());
 }
 
 .sort-label {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   opacity: 0.4;
@@ -1088,15 +1077,15 @@ onMounted(() => refresh());
   display: inline-flex;
   align-items: center;
   padding: 2px 9px;
-  border-radius: 20px;
+  border-radius: var(--g-r-pill);
   border: 1px solid rgba(247, 147, 26, 0.25);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
   background: transparent;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   user-select: none;
 }
 
@@ -1108,7 +1097,7 @@ onMounted(() => refresh());
 
 .sort-chip--active {
   border-color: rgba(247, 147, 26, 0.5) !important;
-  color: #F7931A !important;
+  color: var(--g-accent) !important;
   background: rgba(247, 147, 26, 0.12) !important;
 }
 
@@ -1125,13 +1114,13 @@ onMounted(() => refresh());
 }
 
 .pcol-label {
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   opacity: 0.3;
   cursor: help;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
-  transition: opacity 0.15s;
+  border-bottom: 1px dashed var(--g-hairline-3);
+  transition: opacity var(--g-dur-fast);
 }
 
 .pcol-label:hover { opacity: 0.6; }
@@ -1143,14 +1132,14 @@ onMounted(() => refresh());
 .provider-search :deep(.v-input__slot) {
   background: var(--bab-glass) !important;
   border: 1px solid var(--bab-border) !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   font-size: 12px;
 }
 .provider-search :deep(input::placeholder) { opacity: 0.35; }
 
 /* ── Delegations ── */
 .delegation-card {
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   border: 1px solid rgba(247, 147, 26, 0.15) !important;
   overflow: hidden;
 }
@@ -1161,11 +1150,11 @@ onMounted(() => refresh());
   width: 3px;
   flex-shrink: 0;
 }
-.status-active { background: #43a047; }
-.status-pending { background: #FB8C00; }
-.status-unbonding { background: #F7931A; }
-.status-withdrawable { background: #43a047; }
-.status-withdrawn { background: #78909c; }
+.status-active { background: var(--g-success); }
+.status-pending { background: var(--g-warning); }
+.status-unbonding { background: var(--g-accent); }
+.status-withdrawable { background: var(--g-success); }
+.status-withdrawn { background: var(--g-text-3); }
 
 .delegation-content { padding: 12px; flex: 1; }
 
@@ -1176,7 +1165,7 @@ onMounted(() => refresh());
 }
 
 .dmetric-label {
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   opacity: 0.4;
@@ -1191,7 +1180,7 @@ onMounted(() => refresh());
 }
 
 .dmetric-unit {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 400;
   opacity: 0.45;
   letter-spacing: 0.04em;
@@ -1206,9 +1195,9 @@ onMounted(() => refresh());
 
 .provider-card {
   cursor: pointer;
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   border: 1px solid var(--bab-border) !important;
-  transition: border-color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+  transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease, box-shadow var(--g-dur-fast) ease;
   animation: fadeSlideIn 0.3s ease both;
 }
 
@@ -1232,13 +1221,13 @@ onMounted(() => refresh());
 
 .provider-avatar {
   width: 36px; height: 36px;
-  border-radius: 9px;
+  border-radius: var(--g-r-control);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 
 .provider-initial {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1;
 }
@@ -1278,7 +1267,7 @@ onMounted(() => refresh());
 }
 
 .pmetric-label {
-  font-size: 8px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   opacity: 0.35;
@@ -1286,7 +1275,7 @@ onMounted(() => refresh());
 
 .provider-chevron {
   color: rgba(247, 147, 26, 0.35) !important;
-  transition: transform 0.22s ease, opacity 0.15s ease;
+  transition: transform var(--g-dur-base) ease, opacity var(--g-dur-fast) ease;
   flex-shrink: 0;
 }
 
@@ -1306,7 +1295,7 @@ onMounted(() => refresh());
 
 /* ── Expanded content ── */
 .provider-expanded {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .provider-expanded-body {
@@ -1335,8 +1324,8 @@ onMounted(() => refresh());
 }
 
 .provider-link {
-  font-size: 10px;
-  color: #F7931A !important;
+  font-size: 11px;
+  color: var(--g-accent) !important;
   text-decoration: none;
   display: flex;
   align-items: center;
@@ -1345,13 +1334,13 @@ onMounted(() => refresh());
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .provider-link:hover { opacity: 1; text-decoration: underline; }
 
 .provider-contact {
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.4;
   display: flex;
   align-items: center;
@@ -1360,9 +1349,9 @@ onMounted(() => refresh());
 .provider-total-stats {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   overflow: hidden;
 }
 
@@ -1378,11 +1367,11 @@ onMounted(() => refresh());
   position: absolute;
   right: 0; top: 20%; height: 60%;
   width: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
 }
 
 .ptstat-label {
-  font-size: 8px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   opacity: 0.35;
@@ -1397,7 +1386,7 @@ onMounted(() => refresh());
 }
 
 .ptstat-unit {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 400;
   opacity: 0.4;
 }
@@ -1405,7 +1394,7 @@ onMounted(() => refresh());
 .ptstat-sep {
   width: 1px;
   height: 30px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
   flex-shrink: 0;
 }
 
@@ -1417,18 +1406,17 @@ onMounted(() => refresh());
 }
 
 .provider-pk-hex {
-  font-family: monospace;
-  font-size: 9px;
+  font-family: var(--g-font-mono);
+  font-size: 11px;
   opacity: 0.3;
   word-break: break-all;
 }
 
 .provider-stake-btn {
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   font-weight: 700 !important;
   text-transform: none !important;
   letter-spacing: 0.02em !important;
-  box-shadow: 0 3px 12px rgba(247, 147, 26, 0.25) !important;
 }
 
 /* ── Empty state ── */
@@ -1442,9 +1430,9 @@ onMounted(() => refresh());
 :deep(.babylon-tooltip) {
   font-size: 11px !important;
   line-height: 1.4 !important;
-  background: rgba(30, 30, 30, 0.97) !important;
+  background: var(--g-overlay) !important;
   border: 1px solid rgba(247, 147, 26, 0.2) !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   padding: 8px 10px !important;
 }
 </style>

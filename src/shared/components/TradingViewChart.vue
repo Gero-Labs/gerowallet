@@ -420,7 +420,7 @@ onBeforeUnmount(() => {
 }
 
 .chart-container {
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   position: relative;
   min-height: 160px;
   min-width: 200px;
@@ -443,13 +443,12 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  backdrop-filter: blur(2px);
+  border-radius: var(--g-r-control);
 }
 
 .loading-content {
   text-align: center;
-  color: #ffffff;
+  color: var(--g-text-1);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -459,12 +458,12 @@ onBeforeUnmount(() => {
 .loading-text {
   font-size: 14px;
   font-weight: 500;
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .loading-symbol {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
   font-weight: 600;
 }
 
@@ -479,13 +478,13 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 2px;
   pointer-events: none;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
 }
 
 .ohlc-legend__symbol {
   font-size: 13px;
   font-weight: 700;
-  color: #eaecef;
+  color: var(--g-text-1);
 }
 
 .ohlc-legend__values {
@@ -496,14 +495,14 @@ onBeforeUnmount(() => {
 }
 
 .ohlc-legend__label {
-  color: #848e9c;
+  color: var(--g-text-3);
 }
 
 .ohlc-legend--up {
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .ohlc-legend--down {
-  color: #FF5252;
+  color: var(--g-error);
 }
 </style>

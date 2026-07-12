@@ -107,7 +107,7 @@ function cycleDisplayMode() {
 </script>
 <style scoped lang="scss">
 .gero-ticker {
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease;
   border-radius: 6px;
   padding: 4px 8px;
 }
@@ -122,7 +122,7 @@ function cycleDisplayMode() {
 }
 
 .apex-ticker {
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease;
   border-radius: 6px;
   padding: 4px 8px;
 }

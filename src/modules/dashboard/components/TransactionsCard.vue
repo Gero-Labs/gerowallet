@@ -34,7 +34,7 @@
 
     <!-- Cardano/Apex header (original) -->
     <v-card-title v-else class="pb-0 flex-grow-0">
-      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white">
+      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: var(--g-text-1)">
         {{ $t('transactions.title') }}
       </router-link>
       <span v-else>{{ $t('transactions.title') }}</span>
@@ -50,7 +50,7 @@
           :placeholder="t('common.search')"
           @keydown.esc="searchField?.blur()"
         />
-        <v-icon small class="expanding-search-icon" color="white">mdi-magnify</v-icon>
+        <v-icon small class="expanding-search-icon" color="var(--g-text-1)">mdi-magnify</v-icon>
       </div>
 
       <!-- Filter menu -->
@@ -71,7 +71,7 @@
             <v-badge color="transparent" avatar :value="activeFilterCount > 0" :content="activeFilterCount" overlap>
               <template v-slot:badge>
                 <v-avatar size="14" height="14" style="height: 14px!important;" color="primary">
-                  <span style="font-size: 10px; color: black">{{ activeFilterCount }}</span>
+                  <span style="font-size: 11px; color: var(--g-on-grad)">{{ activeFilterCount }}</span>
                 </v-avatar>
               </template>
               <v-icon small>mdi-tune-variant</v-icon>
@@ -81,7 +81,7 @@
         <v-card class="liquid-glass-compact" dark>
           <v-card-text class="pa-3">
             <!-- Date range -->
-            <div class="filter-section-label">{{ $t('transactions.dateRange') }}</div>
+            <div class="filter-section-label t-label">{{ $t('transactions.dateRange') }}</div>
             <div class="d-flex align-center" style="gap: 6px">
               <v-menu
                 v-model="dateFromMenu"
@@ -115,10 +115,10 @@
                   :min="earliestTxDate"
                   :max="filterDateTo || latestTxDate"
                   :events="transactionDates"
-                  event-color="#00DFF3"
+                  event-color="var(--g-accent)"
                   no-title
                   dark
-                  color="#00DFF3"
+                  color="var(--g-accent)"
                   class="filter-date-picker"
                   @click:clear="filterDateTo = null"
                 />
@@ -154,10 +154,10 @@
                   :min="filterDateFrom || earliestTxDate"
                   :max="latestTxDate"
                   :events="transactionDates"
-                  event-color="#00DFF3"
+                  event-color="var(--g-accent)"
                   no-title
                   dark
-                  color="#00DFF3"
+                  color="var(--g-accent)"
                   class="filter-date-picker"
                 />
               </v-menu>
@@ -166,7 +166,7 @@
             <v-divider class="my-2" style="opacity: 0.1" />
 
             <!-- Transaction type -->
-            <div class="filter-section-label">{{ $t('transactions.type') }}</div>
+            <div class="filter-section-label t-label">{{ $t('transactions.type') }}</div>
             <v-chip-group v-model="filterTypes" multiple column>
               <v-chip
                 v-for="ft in typeFilterOptions"
@@ -182,7 +182,7 @@
             <v-divider class="my-2" style="opacity: 0.1" />
 
             <!-- Token filter -->
-            <div class="filter-section-label">{{ $t('transactions.tokens') }}</div>
+            <div class="filter-section-label t-label">{{ $t('transactions.tokens') }}</div>
             <v-chip-group v-model="filterTokenMode" column>
               <v-chip value="all" small outlined filter class="filter-type-chip">{{ $t('common.all') }}</v-chip>
               <v-chip value="ada_only" small outlined filter class="filter-type-chip">ADA {{ $t('common.only') }}</v-chip>
@@ -268,7 +268,7 @@
                     x-small
                     outlined
                     class="px-1"
-                    color="red"
+                    color="error"
                     style="margin-right: 4px !important"
                     >{{ $t('transactions.stakeRegistration') }}</v-chip
                   >
@@ -277,7 +277,7 @@
                     x-small
                     outlined
                     class="px-1"
-                    color="red"
+                    color="error"
                     style="margin-right: 4px !important"
                     >{{ $t('transactions.stakeDeregistration') }}</v-chip
                   >
@@ -286,7 +286,7 @@
                     x-small
                     outlined
                     class="px-1"
-                    color="blue"
+                    color="info"
                     style="margin-right: 4px !important"
                     >{{ $t('transactions.withdrawal') }}</v-chip
                   >
@@ -314,10 +314,10 @@
                       outlined
                       class="px-1"
                       x-small
-                      color="white"
+                      color="var(--g-text-1)"
                       style="margin-left: 1px; margin-bottom: 1px"
                       :key="'h-' + index"
-                    ><span style="color: #0fd25b; font-weight: 600">$</span>{{ contact.label.replace(/^\$/, '') }}</v-chip>
+                    ><span style="color: var(--g-success); font-weight: 600">$</span>{{ contact.label.replace(/^\$/, '') }}</v-chip>
                     <v-chip
                       v-else
                       outlined
@@ -420,7 +420,7 @@
                   }}
                 </template>
               </div>
-              <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
+              <div style="font-size: 12px; color: var(--g-text-2); white-space: nowrap">
                 <template v-if="hideBalances">$•••</template>
                 <template v-else>
                   {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
@@ -1559,11 +1559,11 @@ const isStakeDeRegistration = (item: StoredTransaction): boolean => {
 
 const getColor = (item: StoredTransaction): string => {
   if (item.pending) {
-    return '#FEC84B';
+    return 'var(--g-warning)';
   } else if (item.ada > 0) {
-    return '#47cd89';
+    return 'var(--g-success)';
   } else if (item.ada < 0) {
-    return '#F97066';
+    return 'var(--g-error)';
   }
   return '';
 };
@@ -1670,7 +1670,7 @@ onUnmounted(() => {
 
 /* ─── Card Title Header ─────────────────────────────────────── */
 .tx-card-title {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
 .tx-icon-box {
@@ -1678,12 +1678,11 @@ onUnmounted(() => {
   height: 30px;
   background: rgba(247, 147, 26, 0.12);
   border: 1px solid rgba(247, 147, 26, 0.2);
-  border-radius: 9px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 .tx-heading-group {
@@ -1695,10 +1694,10 @@ onUnmounted(() => {
 .tx-heading,
 .tx-heading-link {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif !important;
-  font-size: 15px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
   letter-spacing: -0.01em !important;
-  color: rgba(255, 255, 255, 0.92) !important;
+  color: var(--g-text-1) !important;
   text-decoration: none !important;
   line-height: 1 !important;
 }
@@ -1710,7 +1709,7 @@ onUnmounted(() => {
 .tx-count {
   font-size: 11px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--g-text-3);
   line-height: 1;
 }
 
@@ -1720,10 +1719,6 @@ onUnmounted(() => {
 }
 
 .filter-section-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: white;
   margin-bottom: 4px;
 }
 
@@ -1758,15 +1753,15 @@ onUnmounted(() => {
 
 /* Date picker menu styling */
 .date-picker-menu {
-  border-radius: 12px !important;
+  border-radius: var(--g-r-card) !important;
   overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(45, 240, 247, 0.1) !important;
+  box-shadow: var(--g-shadow-menu) !important;
 }
 
 .filter-date-picker {
-  background: linear-gradient(135deg, #13161b 0%, #1a1e26 100%) !important;
-  border-radius: 12px !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: var(--g-overlay) !important;
+  border-radius: var(--g-r-card) !important;
+  border: 1px solid var(--g-hairline-1) !important;
 }
 
 .filter-date-picker >>> .v-date-picker-header {
@@ -1775,7 +1770,7 @@ onUnmounted(() => {
 }
 
 .filter-date-picker >>> .v-date-picker-header .v-btn {
-  color: rgba(255, 255, 255, 0.7) !important;
+  color: var(--g-text-2) !important;
 }
 
 .filter-date-picker >>> .v-date-picker-table {
@@ -1783,17 +1778,17 @@ onUnmounted(() => {
 }
 
 .filter-date-picker >>> .v-date-picker-table .v-btn {
-  border-radius: 8px !important;
-  color: rgba(255, 255, 255, 0.7) !important;
+  border-radius: var(--g-r-control) !important;
+  color: var(--g-text-2) !important;
 }
 
 .filter-date-picker >>> .v-date-picker-table .v-btn:hover {
-  background: rgba(45, 240, 247, 0.08) !important;
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important;
 }
 
 .filter-date-picker >>> .v-btn--active {
-  background-color: #00DFF3 !important;
-  color: #0d0f12 !important;
+  background-color: var(--g-accent) !important;
+  color: var(--g-on-grad) !important;
 }
 
 .filter-date-picker >>> .v-date-picker-table--date .v-btn--disabled {
@@ -1812,7 +1807,7 @@ onUnmounted(() => {
   position: absolute;
   right: 6px;
   pointer-events: none;
-  color: white !important;
+  color: var(--g-text-1) !important;
   z-index: 1;
   transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1),
               opacity 0.2s ease;
@@ -1822,7 +1817,7 @@ onUnmounted(() => {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 28px;
+  border-radius: var(--g-r-pill);
   padding: 6px;
   background-color: transparent;
   outline: none;
@@ -1844,13 +1839,13 @@ onUnmounted(() => {
 .expanding-search-input:focus {
   width: 180px;
   padding: 6px 12px 6px 30px;
-  background-color: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
+  background-color: var(--g-hairline-1);
+  color: var(--g-text-1);
   cursor: text;
 }
 
 .expanding-search-input:focus::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
 }
 
 .expanding-search-wrap:focus-within .expanding-search-icon {
@@ -1860,41 +1855,41 @@ onUnmounted(() => {
 
 /* Filter type chips */
 .filter-type-chip {
-  border-color: rgba(255, 255, 255, 0.15) !important;
-  color: rgba(255, 255, 255, 0.7) !important;
+  border-color: var(--g-hairline-3) !important;
+  color: var(--g-text-2) !important;
 }
 
 .filter-type-chip.v-chip--active {
-  background: rgba(0, 223, 243, 0.12) !important;
-  border-color: rgba(0, 223, 243, 0.4) !important;
-  color: #00DFF3 !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
+  color: var(--g-accent) !important;
 }
 
 .filter-menu .v-chip--active {
-  background: rgba(0, 223, 243, 0.12) !important;
-  border-color: rgba(0, 223, 243, 0.4) !important;
-  color: #00DFF3 !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
+  color: var(--g-accent) !important;
 }
 
 /* ─── Data Table Glass Overrides ────────────────────────────── */
 .tx-glass-card >>> .v-data-table__wrapper thead th {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  background: var(--g-hairline-1) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
   font-size: 11px !important;
   font-weight: 500 !important;
   letter-spacing: 0.02em !important;
-  color: rgba(255, 255, 255, 0.60) !important;
+  color: var(--g-text-2) !important;
   font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
 }
 
 .tx-glass-card >>> .v-data-table__wrapper tbody td {
-  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+  border-bottom-color: var(--g-hairline-1) !important;
 }
 
 /* ─── Pagination Bar ────────────────────────────────────────── */
 .tx-pagination-bar {
-  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
-  background: rgba(255, 255, 255, 0.02) !important;
+  border-top: 1px solid var(--g-hairline-1) !important;
+  background: var(--g-hairline-1) !important;
   padding: 4px 0 !important;
 }
 
@@ -1919,7 +1914,7 @@ onUnmounted(() => {
 
 
 .transactions-table >>> tr.selected-transaction {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: var(--g-hairline-2) !important;
 }
 
 .transactions-table >>> tr {
@@ -1927,7 +1922,7 @@ onUnmounted(() => {
 }
 
 .transactions-table >>> tr:hover {
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: var(--g-hairline-1) !important;
 }
 
 .transactions-table tbody tr {
@@ -1987,7 +1982,7 @@ onUnmounted(() => {
 }
 
 .activity-date {
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.1 !important;
   min-height: 11px !important;
   max-height: 11px !important;
@@ -2013,7 +2008,7 @@ onUnmounted(() => {
 }
 
 .transactions-table .text--secondary {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: var(--g-text-2) !important;
 }
 
 /* Table container styling */
@@ -2022,7 +2017,7 @@ onUnmounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  scrollbar-color: var(--g-hairline-3) transparent;
 }
 
 /* Custom scrollbar styling for webkit browsers */
@@ -2035,7 +2030,7 @@ onUnmounted(() => {
 }
 
 .table-container::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: var(--g-hairline-3);
   border-radius: 3px;
 }
 
@@ -2179,9 +2174,9 @@ onUnmounted(() => {
   padding: 0;
   margin-left: 1px;
   margin-bottom: 1px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   background: transparent;
   cursor: default;
   vertical-align: middle;
@@ -2201,7 +2196,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 1px;
   background: linear-gradient(135deg, #935aaf 5%, #6fc7ff 95%);
   mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
@@ -2224,7 +2219,7 @@ onUnmounted(() => {
 }
 
 .vyfi-chip:hover {
-  background-color: #ffffff0d;
+  background-color: var(--g-hairline-1);
 }
 
 /* SundaeSwap gradient text and border - matches v-chip x-small */
@@ -2236,9 +2231,9 @@ onUnmounted(() => {
   padding: 0;
   margin-left: 1px;
   margin-bottom: 1px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   background: transparent;
   cursor: default;
   vertical-align: middle;
@@ -2258,7 +2253,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 1px;
   background: linear-gradient(90deg, #e85ce8, #6fb3ff);
   mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
@@ -2281,7 +2276,7 @@ onUnmounted(() => {
 }
 
 .sundaeswap-chip:hover {
-  background-color: #ffffff0d;
+  background-color: var(--g-hairline-1);
 }
 
 /* Splash gradient text and border - matches v-chip x-small */
@@ -2293,9 +2288,9 @@ onUnmounted(() => {
   padding: 0;
   margin-left: 1px;
   margin-bottom: 1px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   background: transparent;
   cursor: default;
   vertical-align: middle;
@@ -2315,7 +2310,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 1px;
   background: linear-gradient(90deg, #0059ff, #00fff6);
   mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
@@ -2338,7 +2333,7 @@ onUnmounted(() => {
 }
 
 .splash-chip:hover {
-  background-color: #ffffff0d;
+  background-color: var(--g-hairline-1);
 }
 
 @media (max-width: 600px) {
@@ -2359,7 +2354,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #FEC84B;
+  background-color: var(--g-warning);
   margin-left: 6px;
   animation: pulse-pending 2s ease-in-out infinite;
   flex-shrink: 0;
@@ -2393,6 +2388,6 @@ onUnmounted(() => {
 
 /* Failed transaction text - red/error color */
 .failed-transaction-text {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 </style>

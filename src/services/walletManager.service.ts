@@ -243,9 +243,12 @@ export class WalletManager {
         });
         LoadingState.setText('Initializing wallet...');
 
-        // Check if this is a first-time restore (no cached data)
-        const lastSyncInfo = walletBg.chain !== Blockchain.BITCOIN
-            ? await walletBg.getLastSyncInfo() : {};
+        // Check if this is a first-time restore (no cached data).
+        // Bitcoin and Midnight don't use the Cardano sync table.
+        const isCardanoChain =
+          walletBg.chain !== Blockchain.BITCOIN &&
+          walletBg.chain !== Blockchain.MIDNIGHT;
+        const lastSyncInfo = isCardanoChain ? await walletBg.getLastSyncInfo() : {};
         const isFirstRestore = !lastSyncInfo;
 
         // If first restore, prepare sync promise BEFORE connecting WebSocket (avoids race)
@@ -342,6 +345,87 @@ export class WalletManager {
         walletBg.loadContacts(),
         walletBg.loadConnectedDapps()
       );
+    } else if (walletBg.chain === Blockchain.MIDNIGHT) {
+      // Midnight wallet initialization. Cardano-specific (genesis, epoch params,
+      // assets, rewards) is skipped — Midnight runs through a separate
+      // SDK + indexer. Addresses were derived at wallet creation/restore
+      // and stored on the wallet record; here we hydrate midnightStore and
+      // open the gero-sync WebSocket against the unshielded address.
+      debugLog('🌙 Initializing Midnight wallet');
+      LoadingState.setText('Loading Midnight wallet...');
+
+      // Hydrate midnightStore with the persisted addresses so the dashboard
+      // (MidnightHoldingsTable, ReceiveDialog) can render immediately.
+      const { midnightActions } = await import('@/stores/midnightStore');
+      let addresses: {
+        unshielded: string;
+        shielded: string;
+        dust: string;
+        publicKeyHex?: string;
+        addressHex?: string;
+        zswapViewingKey?: string;
+        cardanoXpub?: string;
+        cardanoBaseAddress?: string;
+        cardanoStakeAddress?: string;
+        cardanoPaymentKeyHashHex?: string;
+      } = { unshielded: '', shielded: '', dust: '' };
+      try {
+        const parsed = walletBg.publicKey ? JSON.parse(walletBg.publicKey) : null;
+        if (parsed && typeof parsed === 'object') {
+          addresses = {
+            unshielded: parsed.unshielded ?? '',
+            shielded: parsed.shielded ?? '',
+            dust: parsed.dust ?? '',
+            publicKeyHex: parsed.publicKeyHex,
+            addressHex: parsed.addressHex,
+            zswapViewingKey: parsed.zswapViewingKey,
+            cardanoXpub: parsed.cardanoXpub,
+            cardanoBaseAddress: parsed.cardanoBaseAddress,
+            cardanoStakeAddress: parsed.cardanoStakeAddress,
+            cardanoPaymentKeyHashHex: parsed.cardanoPaymentKeyHashHex,
+          };
+        }
+      } catch (e) {
+        debugLog('🌙 Failed to parse Midnight addresses from wallet record:', e);
+      }
+      midnightActions.setActive(addresses);
+
+      // Open the gero-sync WebSocket bridge for this Midnight wallet. The
+      // service translates SYNC / CATCH_UP_COMPLETE / ROLLBACK / FORCE_RESYNC
+      // into midnightStore actions. Skip if the address derivation failed.
+      if (addresses.unshielded) {
+        const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
+        // Opt into shielded sync only if the wallet record carries a viewing
+        // key in the form the indexer's connect(viewingKey) mutation accepts:
+        // bech32m with HRP `mn_shield-esk_` (see the a3f76f1f fix). Wallets
+        // created before that fix stored the raw-hex or `mn_shield-epk_` form,
+        // which the indexer rejects with "cannot bech32m-decode viewing key" —
+        // enabling shielded sync for those just spams the indexer with failing
+        // connect() calls every reconcile. Gate on the correct prefix so legacy
+        // wallets fall back to unshielded-only cleanly. They regain shielded
+        // sync once their viewing key is re-derived (recreate the wallet, or
+        // the future in-place viewing-key heal).
+        // Privacy: log only the boolean/validity, never the key itself.
+        const vk = addresses.zswapViewingKey;
+        const vkIsValid = typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
+        const shielded = vkIsValid
+          ? { viewingKey: vk, lastIndex: null }
+          : undefined;
+        if (shielded) {
+          debugLog('🌙 Midnight sync: starting with shielded subscription enabled');
+        } else if (vk) {
+          debugLog('🌙 Midnight sync: viewing key is legacy form (not mn_shield-esk_) — shielded sync disabled until re-derivation; unshielded-only for now');
+        }
+        midnightSyncService.start(walletBg.network, addresses, 0, shielded);
+      } else {
+        debugLog('🌙 Skipping gero-sync subscribe: no unshielded address on wallet record');
+      }
+
+      promises.push(
+        walletBg.loadConfig(),
+        walletBg.loadContacts(),
+        walletBg.loadConnectedDapps()
+      );
     } else {
       // Cardano wallet initialization (existing logic)
       walletBg.loadGenesis();
@@ -382,7 +466,9 @@ export class WalletManager {
     }
 
     // --- WebSocket sync (replaces Ably) ---
-    if (walletBg.chain !== Blockchain.BITCOIN) {
+    // Midnight uses its own bridge (midnightSyncService) — wired separately
+    // once the SDK can produce the unshielded address required to subscribe.
+    if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
       const credentials = walletBg.derivePaymentCredentials();
@@ -476,7 +562,7 @@ export class WalletManager {
         },
       }, credentials);
     } else {
-      debugLog('Skipping WebSocket connection for Bitcoin wallet');
+      debugLog(`Skipping Cardano gero-sync WebSocket for ${walletBg.chain} wallet`);
     }
 
     // Wait for all initialization promises to complete
@@ -538,6 +624,17 @@ export class WalletManager {
         console.log('WebSocket service closed successfully');
       } catch (wsError) {
         console.warn('Failed to cleanup WebSocket service during logout:', wsError);
+      }
+
+      // Stop the Midnight sync bridge if it was active. This shuts down its
+      // gero-sync subscription and clears midnightStore.
+      try {
+        const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
+        if (midnightSyncService.isActive()) {
+          midnightSyncService.stop();
+        }
+      } catch (midnightError) {
+        console.warn('Failed to stop midnight sync during logout:', midnightError);
       }
 
       // Tear down the cross-device signing bridge (no-op when the flag is off).

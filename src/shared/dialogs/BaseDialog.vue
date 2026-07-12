@@ -8,7 +8,7 @@
     overlay-color="#000000"
     overlay-opacity="0.6"
   >
-    <v-card class="pa-5 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading">
+    <v-card class="pa-5 liquid-glass-dialog" :class="{ 'liquid-glass-dialog--solid': solid }" :min-height="minHeight" :max-height="height" :disabled="loading">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -18,7 +18,14 @@
       <v-card-title class="pa-0 pb-0">
         <v-list-item class="px-0" :two-line="!!subtitle" style="z-index: 1;">
           <v-list-item-avatar class="ml-5 mr-3 my-4" v-if="img" :size="imgSize" tile>
-            <v-img :src="img" contain :style="imgStyle"></v-img>
+            <!-- imgColor paints the icon in an exact token via mask (crisp,
+                 chain-aware); imgStyle is the legacy filter path. -->
+            <span
+              v-if="imgColor"
+              class="base-dialog-img-mask"
+              :style="{ '--bd-img': `url(${img})`, backgroundColor: imgColor }"
+            ></span>
+            <v-img v-else :src="img" contain :style="imgStyle"></v-img>
           </v-list-item-avatar>
           <v-list-item-icon class="ml-5 mr-3 my-4" v-if="icon">
             <v-icon style="font-size: 56px">{{icon}}</v-icon>
@@ -51,7 +58,9 @@
         </v-list-item>
       </v-card-title>
       <slot></slot>
-      <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 999;"/>
+      <!-- z-index 1, not 999: this only has to sit above the card's own content,
+           and it shares a stacking context with .close-button, which uses 1. -->
+      <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 1;"/>
       <v-btn icon @click="$emit('close')" class="close-button" :disabled="loading">
         <v-icon color="var(--g-text-2)">mdi-window-close</v-icon>
       </v-btn>
@@ -73,6 +82,17 @@ const props = defineProps({
   },
   imgStyle: {
     type: [String, Object],
+  },
+  /** When set, the header icon is mask-painted this exact color (e.g.
+   *  'var(--g-accent)') instead of using the imgStyle filter. */
+  imgColor: {
+    type: String,
+  },
+  /** Solid opaque surface instead of translucent glass. Use for dialogs that
+   *  reopen (glass backdrop-filter re-composites lighter on the 2nd open). */
+  solid: {
+    type: Boolean,
+    default: false,
   },
   imgSize: {
     type: [Number, String],
@@ -156,6 +176,14 @@ const isDialogOpen = computed({
   top: 26px;
   right: 20px;
   z-index: 1;
+}
+
+.base-dialog-img-mask {
+  display: block;
+  width: 100%;
+  height: 100%;
+  -webkit-mask: var(--bd-img) no-repeat center / contain;
+  mask: var(--bd-img) no-repeat center / contain;
 }
 
 .dialog-children-container {

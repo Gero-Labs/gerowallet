@@ -160,7 +160,7 @@ const initializeVideo = () => {
   justify-content: center;
   gap: $spacing-md;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: border-color var(--g-dur-slow) ease;
 }
 
 .camera-area:hover {
@@ -190,7 +190,7 @@ const initializeVideo = () => {
   @include text-style($font-size-sm, $font-weight-semibold);
   color: $text-secondary;
   cursor: pointer;
-  transition: color 0.3s ease;
+  transition: color var(--g-dur-slow) ease;
 }
 
 .camera-action:hover {
@@ -216,7 +216,7 @@ const initializeVideo = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
   box-shadow: 0 4px 12px rgba($primary-cyan, 0.3);
 }
 
@@ -258,7 +258,7 @@ const initializeVideo = () => {
   @include text-style($font-size-xs, $font-weight-semibold);
   color: $text-secondary;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: border-color var(--g-dur-slow) ease, color var(--g-dur-slow) ease;
 }
 
 .retake-btn:hover {

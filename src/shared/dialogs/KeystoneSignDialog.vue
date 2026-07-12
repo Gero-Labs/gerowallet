@@ -53,7 +53,7 @@
       <AnimatedQRScanner
         v-else
         purpose="sign"
-        :urTypes="['cardano-signature']"
+        :urTypes="urTypes"
         width="100%"
         height="350px"
         @scan="handleScan"
@@ -96,9 +96,15 @@ interface Props {
   isOpen: boolean;
   keystoneType: string;
   keystoneCbor: string;
+  /** UR type(s) the scanner accepts back from the device. Defaults to
+   * Cardano's signature UR so all existing (Cardano-only) consumers are
+   * unaffected; Bitcoin PSBT signing passes ['crypto-psbt']. */
+  urTypes?: string[];
 }
 
-defineProps<Props>();
+withDefaults(defineProps<Props>(), {
+  urTypes: () => ['cardano-signature'],
+});
 const emit = defineEmits(['close', 'scan', 'error', 'progress']);
 
 const { t } = useTranslation();

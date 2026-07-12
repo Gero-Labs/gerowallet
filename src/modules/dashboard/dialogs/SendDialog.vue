@@ -1,5 +1,13 @@
 <template>
+  <!-- Vue 2 requires a single root in template; the wrapping <div> is harmless
+       because both branches mount Vuetify v-dialogs that portal themselves to
+       document.body. Midnight wallets get a self-contained MidnightSendDialog
+       that reuses TransactionAuthSection (the chain-agnostic password / PRF /
+       submit UI), so no auth state machine is duplicated per chain. -->
+  <div class="send-dialog-root">
+  <MidnightSendDialog v-if="isMidnight" :is-open="isOpen" @close="emit('close')" />
   <BaseDialog
+    v-else
     :isOpen="isOpen"
     @close="emit('close')"
     :title="t('wallet.quickSend')"
@@ -9,13 +17,14 @@
     :persistent="false"
     :img="assets.sendSvg"
     :width="428"
-    imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
+    img-color="var(--g-accent)"
+    solid
   >
     <!-- Empty wallet state -->
     <template v-if="isWalletEmpty">
       <v-card-text class="px-3 pb-0 justify-center text-center send-dialog-content send-dialog-content--empty">
         <div class="empty-wallet-state">
-          <v-icon size="64" color="rgba(255, 255, 255, 0.3)" class="mb-4">mdi-wallet-outline</v-icon>
+          <v-icon size="64" color="var(--g-text-3)" class="mb-4">mdi-wallet-outline</v-icon>
           <div class="empty-wallet-title text-h6 mb-2">
             {{ $t('wallet.emptyWalletSendTitle') }}
           </div>
@@ -24,7 +33,7 @@
           </div>
           <v-btn
             outlined
-            color="#00DFF3"
+            color="var(--g-accent)"
             @click="openReceiveDialog"
           >
             <v-icon small class="mr-1">mdi-qrcode</v-icon>
@@ -49,7 +58,7 @@
                 <div class="icon-container">
                   <v-icon
                     class="step-icon"
-                    :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                    :color="currentStep < index + 1 ? 'var(--g-accent)' : 'var(--g-canvas)'"
                     size="16"
                   >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
                   </v-icon>
@@ -92,7 +101,7 @@
 
                 <!-- Add another recipient link -->
                 <div v-if="showAddLink" class="add-recipient-link">
-                  <v-btn text x-small color="#00DFF3" @click="addRecipient()">
+                  <v-btn text x-small color="var(--g-accent)" @click="addRecipient()">
                     <v-icon x-small class="mr-1">mdi-plus</v-icon>
                     {{ $t('wallet.addAnotherRecipient') }}
                   </v-btn>
@@ -112,7 +121,7 @@
                     <span class="global-total__label">{{ $t('common.total') }}</span>
                     <div>
                       <span class="global-total__ada">{{ globalTotal.formattedTotal }}</span>
-                      <span class="global-total__fiat">{{ '\u2248' }} {{ globalTotal.formattedUsd }}</span>
+                      <span class="global-total__fiat">{{ '≈' }} {{ globalTotal.formattedUsd }}</span>
                     </div>
                   </div>
                 </div>
@@ -195,7 +204,7 @@
             @click="nextStep()"
             :loading="txSignLoading"
           >{{ $t('common.continue') + ' ' }}
-            <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
+            <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
           <!-- Step 2: Sign/Confirm button for non-PRF wallets. Local signing is
                disabled while a "require remote" policy is active (unless already
@@ -224,6 +233,7 @@
       </v-card-actions>
     </template>
   </BaseDialog>
+  </div>
 </template>
 <script setup lang="ts">
 import { toRefs, ref, computed, watch, onMounted, nextTick } from 'vue';
@@ -235,8 +245,9 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import SendRecipientCard from '../components/SendRecipientCard.vue';
+import MidnightSendDialog from './MidnightSendDialog.vue';
 import rules from '@/utils/rules';
-import { WalletType } from '@/models/types';
+import { WalletType, Blockchain } from '@/models/types';
 import { Token, Collectible, SendRecipient } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
@@ -269,6 +280,12 @@ const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolved
 const { epochParams } = toRefs(networkStore)
 
 const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+// Midnight wallets render `MidnightSendDialog` instead of the Cardano stepper
+// (see template's v-if at the top of the file). That dialog owns its own
+// form + auth flow via the shared `TransactionAuthSection` component, so
+// nothing Midnight-specific lives in this file anymore.
+const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
 
 const { openReceiveDialog: switchToReceive } = useQuickActionDialogs();
 
@@ -534,7 +551,7 @@ const globalTotal = computed(() => {
   if (tx.value?.body?.fee) {
     const feeLovelace = Number(tx.value.body.fee);
     feeAda = feeLovelace / 1_000_000;
-    formattedFee = filters.toCurrency(feeLovelace, false, 6, '\u20B3', '', false, 6);
+    formattedFee = filters.toCurrency(feeLovelace, false, 6, '₳', '', false, 6);
   }
 
   // Rewards being auto-withdrawn as part of this tx (if any). They subtract
@@ -548,7 +565,7 @@ const globalTotal = computed(() => {
       BigInt(0)
     );
     withdrawalAda = Number(wLovelace) / 1_000_000;
-    formattedWithdrawal = filters.toCurrency(Number(wLovelace), false, 6, '\u20B3', '', false, 6);
+    formattedWithdrawal = filters.toCurrency(Number(wLovelace), false, 6, '₳', '', false, 6);
   }
 
   const totalWithFee = totalAda + feeAda - withdrawalAda;
@@ -562,11 +579,11 @@ const globalTotal = computed(() => {
     totalWithFee,
     usd: totalUsd,
     formattedAda: totalAda > 0
-      ? filters.toCurrency(totalAda * 1e6, false, 6, '\u20B3', '', false, 6)
-      : '\u20B30',
+      ? filters.toCurrency(totalAda * 1e6, false, 6, '₳', '', false, 6)
+      : '₳0',
     formattedTotal: totalWithFee > 0
-      ? filters.toCurrency(totalWithFee * 1e6, false, 6, '\u20B3', '', false, 6)
-      : '\u20B30',
+      ? filters.toCurrency(totalWithFee * 1e6, false, 6, '₳', '', false, 6)
+      : '₳0',
     formattedFee,
     formattedWithdrawal,
     formattedUsd: totalUsd > 0
@@ -1219,9 +1236,9 @@ onMounted(() => {
 .global-total {
   padding: 10px 12px;
   margin-top: 4px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
 }
 
 .global-total__row {
@@ -1233,18 +1250,18 @@ onMounted(() => {
 .global-total__label {
   font-size: 12px;
   font-weight: 600;
-  color: #CECFD2;
+  color: var(--g-text-2);
 }
 
 .global-total__ada {
   font-size: 14px;
   font-weight: 600;
-  color: #00DFF3;
+  color: var(--g-accent);
 }
 
 .global-total__fiat {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
   margin-left: 6px;
 }
 
@@ -1254,22 +1271,22 @@ onMounted(() => {
 
 .global-total__total-row {
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .global-total__fee-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
 }
 
 .global-total__fee {
   font-size: 11px;
-  color: #FDA29B !important;
+  color: var(--g-error) !important;
 }
 
 .global-total__withdrawal {
   font-size: 11px;
-  color: #94CFA8;
+  color: var(--g-success);
 }
 
 /* ─── Empty wallet ─── */
@@ -1283,11 +1300,11 @@ onMounted(() => {
 }
 
 .empty-wallet-title {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .empty-wallet-description {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
   max-width: 300px;
   margin: 0 auto;
 }
@@ -1300,18 +1317,18 @@ onMounted(() => {
 
 /* ─── Buttons ─── */
 .continue-button {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  color: black;
+  background: var(--g-grad);
+  color: var(--g-on-grad);
 
   &:disabled {
     opacity: 0.5;
-    color: black !important;
+    color: var(--g-on-grad) !important;
   }
 }
 
 /* ─── Stepper ─── */
 .stepper-container {
-  background-color: transparent;
+  background-color: transparent !important;
 
   & .v-stepper__header {
     box-shadow: none;
@@ -1326,15 +1343,15 @@ onMounted(() => {
     width: 68px;
 
     &.active .icon-container {
-      box-shadow: 0 0 0 4px #00dff327;
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--g-accent) 15%, transparent);
     }
 
     &.next .icon-container {
-      background-color: #292929;
+      background-color: var(--g-raised);
     }
 
     .icon-container {
-      background-color: #00dff3;
+      background-color: var(--g-accent);
       border-radius: 50%;
       display: flex;
       justify-content: center;
@@ -1351,7 +1368,7 @@ onMounted(() => {
     line-height: 16px;
     text-align: center;
     font-weight: 600;
-    color: #CECFD2;
+    color: var(--g-text-2);
   }
 
   .divider {
@@ -1361,10 +1378,10 @@ onMounted(() => {
     margin-left: -38px;
     margin-right: -38px;
     margin-top: 11px;
-    background-color: #292929;
+    background-color: var(--g-raised);
 
     &.active-divider {
-      background-color: #00dff3;
+      background-color: var(--g-accent);
     }
   }
 }

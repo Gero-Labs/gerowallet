@@ -4,7 +4,6 @@ import apexPrimeBg from '@/assets/apexPrimeBg.png'
 import apexVectorBg from '@/assets/apexVectorBg.png'
 import bitcoinBg from '@/assets/bitcoinBg.png'
 import bitcoinWavesBg from '@/assets/bitcoinWavesBg.png'
-import midnightBg from '@/assets/midnightBg.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
 import hardwareWalletBg from '@/modules/welcome/assets/hardware_wallet.png'
@@ -30,6 +29,9 @@ import connectKeystoneSvg from '@/assets/svg/connect_keystone.svg'
 import loadingAnimation from '@/assets/webm/loading.webm'
 import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
+import geroDashboardHorizontal from '@/assets/svg/gero_dashboard_horizontal.svg'
+import geroNoText from '@/assets/svg/gero-notext.svg'
+import nexusLogo from '@/assets/svg/nexus.svg'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
 import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
 import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
@@ -105,6 +107,7 @@ import google from '@/assets/svg/google.svg';
 import googleSvg from '@/assets/svg/googleWhite.svg'
 import cashbackBags from '@/assets/img/cashback.png';
 import cardanoBg from '@/assets/cardanoBg.png';
+import midnightBg from '@/assets/Midnight.webp';
 import cashbackBg from '@/assets/cashbackBg.png';
 import rectangle from '@/assets/img/rectangle.png';
 import rectangle2 from '@/assets/img/rectangle2.png';
@@ -175,6 +178,9 @@ export default {
   loadingAnimation,
   errorImage,
   geroDashboard,
+  geroDashboardHorizontal,
+  geroNoText,
+  nexusLogo,
   barChart,
   coinsStacked,
   blog,
@@ -383,5 +389,7 @@ export {
   geroDashboardVector,
   geroDashboardBitcoin,
   geroDashboard,
+  geroDashboardHorizontal,
+  geroNoText,
   google,
 }

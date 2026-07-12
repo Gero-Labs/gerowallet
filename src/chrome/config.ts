@@ -68,6 +68,43 @@ export const NETWORKD_ID_NUMBER = {
   preprod: 0,
 };
 
+// Midnight DApp Connector (@midnight-ntwrk/dapp-connector-api v4.0.1). One
+// entry per `ConnectedAPI` method, plus `connect` for the `InitialAPI`
+// handshake (the spec has no `isEnabled`-style pre-connect status check —
+// `getConnectionStatus` on the ALREADY-connected API is the analog, and it's
+// whitelist-gated normally since by then the origin is already approved).
+// `connect` is the Midnight equivalent of CIP-30's `enable` — the proxy
+// controller (messaging.ts) must bypass the isWhitelisted pre-check for it,
+// exactly like `enable`, since its OWN handler performs the approval.
+export const MIDNIGHT_METHOD = {
+  connect: 'midnight_connect',
+  getShieldedBalances: 'midnight_getShieldedBalances',
+  getUnshieldedBalances: 'midnight_getUnshieldedBalances',
+  getDustBalance: 'midnight_getDustBalance',
+  getShieldedAddresses: 'midnight_getShieldedAddresses',
+  getUnshieldedAddress: 'midnight_getUnshieldedAddress',
+  getDustAddress: 'midnight_getDustAddress',
+  getTxHistory: 'midnight_getTxHistory',
+  getConfiguration: 'midnight_getConfiguration',
+  getConnectionStatus: 'midnight_getConnectionStatus',
+  submitTransaction: 'midnight_submitTransaction',
+  signData: 'midnight_signData',
+  hintUsage: 'midnight_hintUsage',
+};
+
+// Error codes from `@midnight-ntwrk/dapp-connector-api`'s `ErrorCodes` —
+// duplicated as plain strings (not imported) so `content.ts`/`inject.ts`
+// (page-context bundle) don't need the npm package's runtime import, only
+// its types. Values are verified byte-identical against the installed
+// 4.0.1 package's `errors.d.ts`.
+export const MidnightErrorCode = {
+  InternalError: 'InternalError',
+  Rejected: 'Rejected',
+  InvalidRequest: 'InvalidRequest',
+  PermissionRejected: 'PermissionRejected',
+  Disconnected: 'Disconnected',
+} as const;
+
 export const BITCOIN_METHOD = {
   enable: 'bitcoin_enable',
   isEnabled: 'bitcoin_isEnabled',

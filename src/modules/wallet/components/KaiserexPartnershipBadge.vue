@@ -137,7 +137,7 @@ const trackBlogClick = () => {
   text-decoration: none;
   padding: $spacing-xs $spacing-md;
   border-radius: $border-radius-md;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, gap var(--g-dur-base) ease;
   white-space: nowrap;
 
   &:hover {
@@ -148,7 +148,7 @@ const trackBlogClick = () => {
   .link-arrow {
     width: 14px;
     height: 14px;
-    transition: transform 0.2s ease;
+    transition: transform var(--g-dur-base) ease;
     // Make arrows off-white
     filter: brightness(0) invert(1);
     opacity: 0.7;

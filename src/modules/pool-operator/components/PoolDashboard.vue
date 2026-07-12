@@ -3,7 +3,7 @@
     <!-- Empty State -->
     <div v-if="!poolId" class="empty-state">
       <div class="empty-icon-wrap">
-        <v-icon size="40" color="rgba(255,255,255,0.15)">mdi-server-network-off</v-icon>
+        <v-icon size="40" color="var(--g-text-3)">mdi-server-network-off</v-icon>
       </div>
       <h3 class="empty-title">{{ $t('poolOperator.noPoolConfigured') }}</h3>
       <p class="empty-subtitle">{{ $t('poolOperator.setupColdKeyFirst') }}</p>
@@ -19,7 +19,7 @@
           <div class="hero-identity">
             <v-avatar size="48" class="pool-avatar" :class="{ 'avatar-placeholder': !poolIcon }">
               <v-img v-if="poolIcon" :src="poolIcon" />
-              <v-icon v-else size="24" color="rgba(255,255,255,0.5)">mdi-shield-star-outline</v-icon>
+              <v-icon v-else size="24" color="var(--g-text-3)">mdi-shield-star-outline</v-icon>
             </v-avatar>
             <div>
               <div class="hero-ticker-row">
@@ -28,7 +28,7 @@
               </div>
               <div class="hero-id" @click="copyPoolId">
                 <span>{{ truncatePoolId }}</span>
-                <v-icon x-small color="rgba(255,255,255,0.45)" class="ml-1">mdi-content-copy</v-icon>
+                <v-icon x-small color="var(--g-text-3)" class="ml-1">mdi-content-copy</v-icon>
               </div>
             </div>
           </div>
@@ -41,7 +41,7 @@
             <v-tooltip v-if="isRegistered" bottom content-class="custom-tooltip">
               <template v-slot:activator="{ on }">
                 <v-btn icon x-small class="hero-icon-btn update-btn" v-on="on" @click="$emit('update')">
-                  <v-icon size="16" color="#2DF0F7">mdi-pencil-outline</v-icon>
+                  <v-icon size="16" color="var(--g-accent)">mdi-pencil-outline</v-icon>
                 </v-btn>
               </template>
               <span>{{ $t('poolOperator.updatePool') }}</span>
@@ -49,7 +49,7 @@
             <v-tooltip v-if="isRegistered && !isRetiring" bottom content-class="custom-tooltip">
               <template v-slot:activator="{ on }">
                 <v-btn icon x-small class="hero-icon-btn retire-btn" v-on="on" @click="$emit('retire')">
-                  <v-icon size="16" color="#FDA29B">mdi-power</v-icon>
+                  <v-icon size="16" color="error">mdi-power</v-icon>
                 </v-btn>
               </template>
               <span>{{ $t('poolOperator.retirePool') }}</span>
@@ -63,9 +63,9 @@
         <!-- Leader Schedule (Current + Next) -->
         <div v-if="bpNode" class="leader-section">
           <div class="leader-header">
-            <v-icon size="14" color="white" class="mr-1">mdi-calendar-clock</v-icon>
+            <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-calendar-clock</v-icon>
             <span>{{ $t('poolOperator.leaderSchedule') }}</span>
-            <v-progress-circular v-if="scheduleLoading" indeterminate size="12" width="1" color="#FDB022" class="ml-2" />
+            <v-progress-circular v-if="scheduleLoading" indeterminate size="12" width="1" color="warning" class="ml-2" />
           </div>
 
           <div class="leader-epochs">
@@ -154,22 +154,22 @@
         <!-- Live Metrics Bar (from API) -->
         <div v-if="isRegistered && poolInfo" class="hero-metrics">
           <div class="hm-item">
-            <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-chart-bar</v-icon>
+            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-chart-bar</v-icon>
             <span class="hm-value">{{ formatAdaShort(poolInfo.live_stake) }}</span>
             <span class="hm-label">{{ $t('poolOperator.liveStake') }}</span>
           </div>
           <div class="hm-item">
-            <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-account-group</v-icon>
+            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-account-group</v-icon>
             <span class="hm-value">{{ (poolInfo.live_delegators || 0).toLocaleString() }}</span>
             <span class="hm-label">{{ $t('poolOperator.delegators') }}</span>
           </div>
           <div class="hm-item">
-            <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-cube-outline</v-icon>
+            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-cube-outline</v-icon>
             <span class="hm-value">{{ (poolInfo.block_count || 0).toLocaleString() }}</span>
             <span class="hm-label">{{ $t('poolOperator.blocksProduced') }}</span>
           </div>
           <div class="hm-item">
-            <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-trending-up</v-icon>
+            <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-trending-up</v-icon>
             <span class="hm-value">{{ (poolInfo.ros || 0).toFixed(2) }}%</span>
             <span class="hm-label">{{ $t('poolOperator.ros') }}</span>
           </div>
@@ -180,7 +180,7 @@
           <!-- Infra Header -->
           <div class="infra-header">
             <span class="infra-title">
-              <v-icon size="14" color="white" class="mr-1">mdi-server-network</v-icon>
+              <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-server-network</v-icon>
               {{ $t('poolOperator.infrastructure') }}
             </span>
             <v-btn text x-small class="infra-add-btn" @click="$emit('add-node')">
@@ -192,7 +192,7 @@
           <!-- No nodes — setup guide -->
           <div v-if="allNodes.length === 0" class="setup-inline">
             <div class="setup-inline-header">
-              <v-icon size="20" color="#2DF0F7">mdi-rocket-launch-outline</v-icon>
+              <v-icon size="20" color="var(--g-accent)">mdi-rocket-launch-outline</v-icon>
               <div>
                 <div class="setup-inline-title">{{ $t('poolOperator.getStarted') }}</div>
                 <div class="setup-inline-desc">{{ $t('poolOperator.getStartedDescription') }}</div>
@@ -204,11 +204,11 @@
                 <span class="ssc-text">{{ step.title }}</span>
                 <div v-if="step.code" class="ssc-code" @click="copyText(step.code)">
                   <code>{{ step.code }}</code>
-                  <v-icon x-small color="rgba(255,255,255,0.4)">mdi-content-copy</v-icon>
+                  <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
                 </div>
               </div>
             </div>
-            <v-btn color="#2DF0F7" block small class="mt-3 black--text font-weight-bold" style="text-transform: none; border-radius: 8px" @click="$emit('add-node')">
+            <v-btn color="var(--g-accent)" block small class="mt-3 black--text font-weight-bold" style="text-transform: none; border-radius: var(--g-r-control)" @click="$emit('add-node')">
               <v-icon small left>mdi-plus</v-icon>
               {{ $t('poolOperator.addFirstNode') }}
             </v-btn>
@@ -227,9 +227,9 @@
             <v-btn
               v-if="bpNode.data.kesRemaining < 50"
               x-small
-              :color="bpNode.data.kesRemaining < 20 ? '#FDA29B' : '#FDB022'"
+              :color="bpNode.data.kesRemaining < 20 ? 'error' : 'warning'"
               class="black--text"
-              style="text-transform: none; font-weight: 700; border-radius: 6px; letter-spacing: normal"
+              style="text-transform: none; font-weight: 700; border-radius: var(--g-r-control); letter-spacing: normal"
               @click="openKesDialog()"
             >
               <v-icon x-small left>mdi-key-change</v-icon>
@@ -243,7 +243,7 @@
               <!-- Node identity row -->
               <div class="nd-top">
                 <div class="nd-badge" :class="node.type === 'bp' ? 'nd-bp' : 'nd-relay'">
-                  <v-icon size="12" :color="node.type === 'bp' ? '#FDB022' : '#2DF0F7'">
+                  <v-icon size="12" :color="node.type === 'bp' ? 'warning' : 'var(--g-accent)'">
                     {{ node.type === 'bp' ? 'mdi-shield-star' : 'mdi-access-point' }}
                   </v-icon>
                 </div>
@@ -251,10 +251,10 @@
                 <span v-if="node.connected" class="nd-dot" />
                 <span v-else class="nd-offline-label">{{ $t('poolOperator.offline') }}</span>
                 <v-btn icon x-small class="nd-action" @click.stop="$emit('edit-node', node)">
-                  <v-icon x-small color="rgba(255,255,255,0.3)">mdi-pencil</v-icon>
+                  <v-icon x-small color="var(--g-text-3)">mdi-pencil</v-icon>
                 </v-btn>
                 <v-btn icon x-small class="nd-action" @click.stop="$emit('remove-node', node.id)">
-                  <v-icon x-small color="rgba(255,255,255,0.3)">mdi-close</v-icon>
+                  <v-icon x-small color="var(--g-text-3)">mdi-close</v-icon>
                 </v-btn>
               </div>
 
@@ -313,7 +313,7 @@
 
               <!-- Update alerts -->
               <div v-if="nodeVersions[node.id]?.updates && Object.keys(nodeVersions[node.id].updates).length > 0" class="nd-update-alert">
-                <v-icon x-small color="#FDB022" class="mr-1">mdi-arrow-up-circle</v-icon>
+                <v-icon x-small color="warning" class="mr-1">mdi-arrow-up-circle</v-icon>
                 <span v-for="(upd, key) in nodeVersions[node.id].updates" :key="key">
                   {{ key === 'cardanoNode' ? 'Node' : key }} {{ upd.current }} → {{ upd.latest }}
                 </span>
@@ -333,7 +333,7 @@
       <v-dialog v-model="showKesRotation" max-width="550px" persistent>
         <v-card class="kes-dialog">
           <v-card-title class="kes-dialog-title">
-            <v-icon color="#FDB022" class="mr-2">mdi-key-change</v-icon>
+            <v-icon color="warning" class="mr-2">mdi-key-change</v-icon>
             {{ $t('poolOperator.kesRotation') }}
             <v-spacer />
             <v-btn icon small @click="showKesRotation = false"><v-icon small>mdi-close</v-icon></v-btn>
@@ -366,7 +366,7 @@
               <!-- Rotation steps progress -->
               <div v-if="kesRotateSteps.length" class="rotate-steps mt-3">
                 <div v-for="(step, i) in kesRotateSteps" :key="i" class="rotate-step">
-                  <v-icon x-small color="#75E0A7" class="mr-1">mdi-check</v-icon>
+                  <v-icon x-small color="success" class="mr-1">mdi-check</v-icon>
                   <span>{{ step }}</span>
                 </div>
               </div>
@@ -374,9 +374,9 @@
 
             <!-- Success -->
             <div v-else class="text-center py-4">
-              <v-icon size="48" color="#75E0A7">mdi-check-circle</v-icon>
-              <div class="mt-3" style="font-size: 15px; font-weight: 600; color: #75E0A7">{{ $t('poolOperator.kesRotated') }}</div>
-              <div class="mt-1" style="font-size: 13px; color: rgba(255,255,255,0.55)">{{ $t('poolOperator.kesRotatedDescription') }}</div>
+              <v-icon size="48" color="success">mdi-check-circle</v-icon>
+              <div class="mt-3" style="font-size: 14px; font-weight: 600; color: var(--g-success)">{{ $t('poolOperator.kesRotated') }}</div>
+              <div class="mt-1" style="font-size: 13px; color: var(--g-text-3)">{{ $t('poolOperator.kesRotatedDescription') }}</div>
             </div>
           </v-card-text>
           <v-card-actions>
@@ -385,9 +385,9 @@
             <template v-else>
               <v-btn text @click="closeKesDialog">{{ $t('common.cancel') }}</v-btn>
               <v-btn
-                color="#FDB022"
+                color="warning"
                 class="black--text"
-                style="text-transform: none; font-weight: 700; border-radius: 8px"
+                style="text-transform: none; font-weight: 700; border-radius: var(--g-r-control)"
                 :loading="kesRotating"
                 @click="rotateKesRemote"
               >
@@ -495,10 +495,10 @@ const kesBarPct = computed(() => {
 
 const kesColor = computed(() => {
   const r = kesRemaining.value;
-  if (r == null) return 'rgba(255,255,255,0.5)';
-  if (r < 20) return '#FDA29B';
-  if (r < 50) return '#FDB022';
-  return '#75E0A7';
+  if (r == null) return 'var(--g-text-3)';
+  if (r < 20) return 'error';
+  if (r < 50) return 'warning';
+  return 'success';
 });
 
 const kesTextClass = computed(() => {
@@ -803,18 +803,18 @@ watch(bpNode, (bp) => {
 .empty-state { text-align: center; padding: 56px 16px; }
 .empty-icon-wrap {
   width: 72px; height: 72px; border-radius: 50%;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+  background: var(--g-hairline-1); border: 1px solid var(--g-hairline-1);
   display: flex; align-items: center; justify-content: center; margin: 0 auto;
 }
-.empty-title { color: rgba(255,255,255,0.5); font-size: 16px; font-weight: 600; }
-.empty-subtitle { color: rgba(255,255,255,0.45); font-size: 13px; }
+.empty-title { color: var(--g-text-3); font-size: 16px; font-weight: 600; }
+.empty-subtitle { color: var(--g-text-3); font-size: 13px; }
 
 /* Hero Card */
 .pool-hero { position: relative; padding: 16px; overflow: hidden; }
 
 .hero-glow {
   position: absolute; top: -40px; right: -40px; width: 160px; height: 160px;
-  border-radius: 50%; background: radial-gradient(circle, rgba(45,240,247,0.08) 0%, transparent 70%);
+  border-radius: 50%;
   pointer-events: none;
 }
 
@@ -827,8 +827,8 @@ watch(bpNode, (bp) => {
 .hero-identity { display: flex; align-items: center; gap: 12px; }
 
 .pool-avatar {
-  border: 2px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
+  border: 2px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
 }
 .avatar-placeholder {
   border-style: dashed;
@@ -838,18 +838,17 @@ watch(bpNode, (bp) => {
 
 .hero-ticker {
   font-size: 20px; font-weight: 800;
-  background: linear-gradient(135deg, #2DF0F7, #00ffd1);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  color: var(--g-accent);
 }
 
-.hero-name { font-size: 17px; font-weight: 600; color: rgba(255,255,255,0.9); }
+.hero-name { font-size: 16px; font-weight: 600; color: var(--g-text-1); }
 
 .hero-id {
   display: inline-flex; align-items: center; margin-top: 2px; cursor: pointer;
-  font-family: 'Roboto Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.5);
-  transition: color 0.15s;
+  font-family: var(--g-font-mono); font-size: 11px; color: var(--g-text-3);
+  transition: color var(--g-dur-fast);
 }
-.hero-id:hover { color: rgba(255,255,255,0.5); }
+.hero-id:hover { color: var(--g-text-3); }
 
 .hero-actions {
   display: flex;
@@ -860,99 +859,99 @@ watch(bpNode, (bp) => {
 .hero-icon-btn {
   width: 28px !important;
   height: 28px !important;
-  transition: all 0.15s;
+  transition: background-color var(--g-dur-fast), border-color var(--g-dur-fast);
 }
 
 .update-btn {
-  background: rgba(45,240,247,0.08) !important;
-  border: 1px solid rgba(45,240,247,0.15);
+  background: var(--g-hairline-1) !important;
+  border: 1px solid var(--g-hairline-3);
 }
 
 .update-btn:hover {
-  background: rgba(45,240,247,0.15) !important;
-  border-color: rgba(45,240,247,0.3);
+  background: var(--g-hairline-3) !important;
+  border-color: var(--g-hairline-3);
 }
 
 .retire-btn {
-  background: rgba(253,162,155,0.08) !important;
-  border: 1px solid rgba(253,162,155,0.15);
+  background: var(--g-error-fill) !important;
+  border: 1px solid var(--g-error-line);
 }
 
 .retire-btn:hover {
-  background: rgba(253,162,155,0.15) !important;
-  border-color: rgba(253,162,155,0.3);
+  background: var(--g-error-fill) !important;
+  border-color: var(--g-error-line);
 }
 
 /* Status badge */
 .status-badge {
   display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
-  border-radius: 16px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap;
+  border-radius: var(--g-r-pill); font-size: 11px; font-weight: 600; white-space: nowrap;
 }
 .status-dot { width: 5px; height: 5px; border-radius: 50%; }
-.status--active { background: rgba(117,224,167,0.12); color: #75E0A7; }
-.status--active .status-dot { background: #75E0A7; box-shadow: 0 0 6px rgba(117,224,167,0.6); animation: livePulse 2s ease-in-out infinite; }
-.status--retiring { background: rgba(253,162,155,0.12); color: #FDA29B; }
-.status--retiring .status-dot { background: #FDA29B; }
-.status--inactive { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); }
-.status--inactive .status-dot { background: rgba(255,255,255,0.4); }
+.status--active { background: var(--g-success-fill); color: var(--g-success); }
+.status--active .status-dot { background: var(--g-success); animation: livePulse 2s ease-in-out infinite; }
+.status--retiring { background: var(--g-error-fill); color: var(--g-error); }
+.status--retiring .status-dot { background: var(--g-error); }
+.status--inactive { background: var(--g-hairline-1); color: var(--g-text-3); }
+.status--inactive .status-dot { background: var(--g-text-3); }
 
 @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .hero-desc {
-  font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 8px; line-height: 1.5;
+  font-size: 12px; color: var(--g-text-3); margin-top: 8px; line-height: 1.5;
   position: relative; z-index: 1;
 }
 
 /* Stats Strip — compact horizontal */
 .hero-stats {
   display: flex; align-items: flex-start; gap: 0;
-  margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--g-hairline-1);
   position: relative; z-index: 1; overflow-x: auto;
 }
 
 .hs-item { flex: 1; text-align: center; min-width: 60px; padding: 0 4px; }
-.hs-divider { width: 1px; min-height: 30px; background: rgba(255,255,255,0.06); align-self: stretch; }
+.hs-divider { width: 1px; min-height: 30px; background: var(--g-hairline-1); align-self: stretch; }
 
 .hs-value {
-  display: block; font-size: 16px; font-weight: 700; color: rgba(255,255,255,0.95);
+  display: block; font-size: 16px; font-weight: 700; color: var(--g-text-1);
   font-variant-numeric: tabular-nums; line-height: 1.2;
 }
 
 .hs-label {
-  display: block; font-size: 10px; color: rgba(255,255,255,0.5);
+  display: block; font-size: 11px; color: var(--g-text-3);
   text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px;
 }
 
-.hs-sub { display: block; font-size: 9px; margin-top: 1px; }
-.hs-ok { color: #75E0A7; }
-.hs-err { color: #FDA29B; }
+.hs-sub { display: block; font-size: 11px; margin-top: 1px; }
+.hs-ok { color: var(--g-success); }
+.hs-err { color: var(--g-error); }
 
-.sat-mini-bar { height: 2px; background: rgba(255,255,255,0.06); border-radius: 1px; margin-top: 4px; overflow: hidden; width: 80%; margin-left: auto; margin-right: auto; }
-.sat-mini-fill { height: 100%; background: linear-gradient(90deg, #00c7f3, #00ffd1); border-radius: 1px; transition: width 0.6s ease; }
+.sat-mini-bar { height: 2px; background: var(--g-hairline-1); border-radius: 1px; margin-top: 4px; overflow: hidden; width: 80%; margin-left: auto; margin-right: auto; }
+.sat-mini-fill { height: 100%; background: var(--g-accent); border-radius: 1px; transition: width var(--g-dur-slow) ease; }
 
 /* Metrics Bar — tight inline */
 .hero-metrics {
   display: flex; gap: 14px; flex-wrap: wrap;
-  margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.04);
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--g-hairline-1);
   position: relative; z-index: 1;
 }
 
 .hm-item { display: flex; align-items: center; gap: 2px; }
 
 .hm-value {
-  font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7);
+  font-size: 13px; font-weight: 600; color: var(--g-text-2);
   font-variant-numeric: tabular-nums;
 }
 
 .hm-label {
-  font-size: 11px; color: rgba(255,255,255,0.45); margin-left: 2px;
+  font-size: 11px; color: var(--g-text-3); margin-left: 2px;
 }
 
 /* ═══ Infrastructure Section ═══ */
 .infra-section {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--g-hairline-1);
   position: relative;
   z-index: 1;
 }
@@ -963,7 +962,7 @@ watch(bpNode, (bp) => {
   gap: 10px;
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .ndv-item {
@@ -973,8 +972,8 @@ watch(bpNode, (bp) => {
 }
 
 .ndv-label {
-  font-size: 10px;
-  color: rgba(255,255,255,0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -982,7 +981,7 @@ watch(bpNode, (bp) => {
 .ndv-val {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255,255,255,0.65);
+  color: var(--g-text-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -990,12 +989,12 @@ watch(bpNode, (bp) => {
 .nd-update-alert {
   margin-top: 6px;
   padding: 5px 10px;
-  background: rgba(253,176,34,0.06);
-  border: 1px solid rgba(253,176,34,0.12);
-  border-radius: 6px;
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
   font-size: 11px;
   font-weight: 600;
-  color: #FDB022;
+  color: var(--g-warning);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1005,9 +1004,9 @@ watch(bpNode, (bp) => {
 /* Setup guide inline */
 .setup-inline {
   padding: 14px;
-  background: rgba(0,0,0,0.12);
-  border: 1px solid rgba(45,240,247,0.08);
-  border-radius: 10px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   margin-bottom: 10px;
 }
 
@@ -1021,12 +1020,12 @@ watch(bpNode, (bp) => {
 .setup-inline-title {
   font-size: 14px;
   font-weight: 700;
-  color: rgba(255,255,255,0.9);
+  color: var(--g-text-1);
 }
 
 .setup-inline-desc {
   font-size: 12px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   line-height: 1.5;
   margin-top: 2px;
 }
@@ -1049,8 +1048,8 @@ watch(bpNode, (bp) => {
   height: 20px;
   min-width: 20px;
   border-radius: 50%;
-  background: rgba(45,240,247,0.1);
-  color: #2DF0F7;
+  background: var(--g-hairline-2);
+  color: var(--g-accent);
   font-size: 11px;
   font-weight: 700;
   display: flex;
@@ -1060,7 +1059,7 @@ watch(bpNode, (bp) => {
 
 .ssc-text {
   font-size: 13px;
-  color: rgba(255,255,255,0.7);
+  color: var(--g-text-2);
   font-weight: 500;
 }
 
@@ -1068,22 +1067,22 @@ watch(bpNode, (bp) => {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 4px;
+  background: var(--g-canvas);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-chip);
   padding: 3px 8px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color var(--g-dur-fast);
 }
 
 .ssc-code:hover {
-  border-color: rgba(255,255,255,0.15);
+  border-color: var(--g-hairline-3);
 }
 
 .ssc-code code {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
-  color: #75E0A7;
+  color: var(--g-success);
 }
 
 .infra-header {
@@ -1096,7 +1095,7 @@ watch(bpNode, (bp) => {
 .infra-title {
   font-size: 12px;
   font-weight: 600;
-  color: white;
+  color: var(--g-text-1);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: flex;
@@ -1107,7 +1106,7 @@ watch(bpNode, (bp) => {
   text-transform: none !important;
   letter-spacing: normal !important;
   font-size: 12px !important;
-  color: #2DF0F7 !important;
+  color: var(--g-accent) !important;
 }
 
 /* KES row */
@@ -1117,14 +1116,14 @@ watch(bpNode, (bp) => {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
   margin-bottom: 8px;
 }
 
-.kes-row.kes-critical { border-color: rgba(253,162,155,0.2); background: rgba(253,162,155,0.03); }
-.kes-row.kes-warning { border-color: rgba(253,176,34,0.15); background: rgba(253,176,34,0.02); }
+.kes-row.kes-critical { border-color: var(--g-error-line); background: var(--g-error-fill); }
+.kes-row.kes-warning { border-color: var(--g-warning-line); background: var(--g-warning-fill); }
 
 .kes-row-left {
   display: flex;
@@ -1136,23 +1135,23 @@ watch(bpNode, (bp) => {
 .kes-row-text {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255,255,255,0.7);
+  color: var(--g-text-2);
 }
 
 .kes-badge {
   font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--g-r-chip);
 }
 
-.kes-badge.text-critical { background: rgba(253,162,155,0.15); color: #FDA29B; }
-.kes-badge.text-warning { background: rgba(253,176,34,0.12); color: #FDB022; }
-.kes-badge.text-healthy { background: rgba(117,224,167,0.1); color: #75E0A7; }
+.kes-badge.text-critical { background: var(--g-error-fill); color: var(--g-error); }
+.kes-badge.text-warning { background: var(--g-warning-fill); color: var(--g-warning); }
+.kes-badge.text-healthy { background: var(--g-success-fill); color: var(--g-success); }
 
 .kes-days {
   font-size: 12px;
-  color: rgba(255,255,255,0.45);
+  color: var(--g-text-3);
 }
 
 /* Node Grid */
@@ -1163,14 +1162,14 @@ watch(bpNode, (bp) => {
 }
 
 .node-card {
-  background: rgba(0,0,0,0.15);
-  border: 1px solid rgba(255,255,255,0.04);
-  border-radius: 10px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
-  transition: border-color 0.2s;
+  transition: border-color var(--g-dur-base);
 }
 
-.node-card:hover { border-color: rgba(255,255,255,0.1); }
+.node-card:hover { border-color: var(--g-hairline-2); }
 .node-card.node-off { opacity: 0.45; }
 
 .nd-top {
@@ -1183,19 +1182,19 @@ watch(bpNode, (bp) => {
 .nd-badge {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.nd-bp { background: rgba(253,176,34,0.12); }
-.nd-relay { background: rgba(45,240,247,0.1); }
+.nd-bp { background: var(--g-warning-fill); }
+.nd-relay { background: var(--g-hairline-2); }
 
 .nd-name {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(255,255,255,0.85);
+  color: var(--g-text-1);
   flex: 1;
 }
 
@@ -1203,20 +1202,19 @@ watch(bpNode, (bp) => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #75E0A7;
-  box-shadow: 0 0 6px rgba(117,224,167,0.6);
+  background: var(--g-success);
   animation: livePulse 2s ease-in-out infinite;
 }
 
 .nd-offline-label {
   font-size: 12px;
-  color: #FDA29B;
+  color: var(--g-error);
   font-weight: 600;
 }
 
 .nd-action {
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .node-card:hover .nd-action {
@@ -1238,22 +1236,22 @@ watch(bpNode, (bp) => {
 .nd-divider {
   width: 1px;
   height: 28px;
-  background: rgba(255,255,255,0.04);
+  background: var(--g-hairline-1);
 }
 
 .nd-val {
   display: block;
   font-size: 14px;
   font-weight: 700;
-  color: rgba(255,255,255,0.9);
+  color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
 
 .nd-lbl {
   display: block;
-  font-size: 10px;
-  color: rgba(255,255,255,0.45);
+  font-size: 11px;
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.3px;
   margin-top: 1px;
@@ -1266,33 +1264,33 @@ watch(bpNode, (bp) => {
   gap: 8px;
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .nd-epoch-label {
   font-size: 11px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   white-space: nowrap;
 }
 
 .nd-epoch-track {
   flex: 1;
   height: 3px;
-  background: rgba(255,255,255,0.06);
+  background: var(--g-hairline-1);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .nd-epoch-fill {
   height: 100%;
-  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  background: var(--g-accent);
   border-radius: 2px;
-  transition: width 0.6s ease;
+  transition: width var(--g-dur-slow) ease;
 }
 
 .nd-epoch-pct {
   font-size: 11px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1300,13 +1298,13 @@ watch(bpNode, (bp) => {
 .leader-section {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .leader-header {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: flex;
@@ -1322,9 +1320,9 @@ watch(bpNode, (bp) => {
 
 .leader-epoch-card {
   flex: 1;
-  background: rgba(0,0,0,0.15);
-  border: 1px solid rgba(255,255,255,0.04);
-  border-radius: 8px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 8px 12px;
 }
 
@@ -1338,12 +1336,12 @@ watch(bpNode, (bp) => {
 .le-label {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255,255,255,0.6);
+  color: var(--g-text-2);
 }
 
 .le-epoch {
   font-size: 11px;
-  color: rgba(255,255,255,0.35);
+  color: var(--g-text-3);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1362,23 +1360,23 @@ watch(bpNode, (bp) => {
 .le-val {
   font-size: 20px;
   font-weight: 800;
-  color: rgba(255,255,255,0.95);
+  color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
-.le-val.text-ok { color: #75E0A7; }
-.le-val.text-err { color: #FDA29B; }
-.le-val.text-accent { color: #FDB022; }
+.le-val.text-ok { color: var(--g-success); }
+.le-val.text-err { color: var(--g-error); }
+.le-val.text-accent { color: var(--g-warning); }
 
 .le-lbl {
-  font-size: 10px;
-  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .le-empty {
   font-size: 16px;
-  color: rgba(255,255,255,0.15);
+  color: var(--g-text-3);
   text-align: center;
 }
 
@@ -1390,20 +1388,20 @@ watch(bpNode, (bp) => {
   gap: 12px;
   margin-top: 8px;
   padding: 12px 16px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.02);
-  transition: all 0.2s;
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-1);
+  background: var(--g-hairline-1);
+  transition: background-color var(--g-dur-base), border-color var(--g-dur-base);
 }
 
 .kes-banner.kes-critical {
-  border-color: rgba(253,162,155,0.2);
-  background: rgba(253,162,155,0.04);
+  border-color: var(--g-error-line);
+  background: var(--g-error-fill);
 }
 
 .kes-banner.kes-warning {
-  border-color: rgba(253,176,34,0.15);
-  background: rgba(253,176,34,0.03);
+  border-color: var(--g-warning-line);
+  background: var(--g-warning-fill);
 }
 
 .kes-banner-left {
@@ -1418,23 +1416,23 @@ watch(bpNode, (bp) => {
   width: 36px;
   height: 36px;
   min-width: 36px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.04);
+  background: var(--g-hairline-1);
 }
 
-.kes-icon-wrap.kes-critical { background: rgba(253,162,155,0.1); }
-.kes-icon-wrap.kes-warning { background: rgba(253,176,34,0.1); }
-.kes-icon-wrap.kes-healthy { background: rgba(117,224,167,0.1); }
+.kes-icon-wrap.kes-critical { background: var(--g-error-fill); }
+.kes-icon-wrap.kes-warning { background: var(--g-warning-fill); }
+.kes-icon-wrap.kes-healthy { background: var(--g-success-fill); }
 
 .kes-info { flex: 1; min-width: 0; }
 
 .kes-title {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(255,255,255,0.7);
+  color: var(--g-text-2);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1445,22 +1443,22 @@ watch(bpNode, (bp) => {
   font-size: 12px;
   font-weight: 700;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--g-r-chip);
 }
 
 .kes-remaining.text-critical {
-  background: rgba(253,162,155,0.15);
-  color: #FDA29B;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 .kes-remaining.text-warning {
-  background: rgba(253,176,34,0.12);
-  color: #FDB022;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .kes-remaining.text-healthy {
-  background: rgba(117,224,167,0.1);
-  color: #75E0A7;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .kes-bar-wrap {
@@ -1473,7 +1471,7 @@ watch(bpNode, (bp) => {
 .kes-bar-track {
   flex: 1;
   height: 4px;
-  background: rgba(255,255,255,0.06);
+  background: var(--g-hairline-1);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -1481,16 +1479,16 @@ watch(bpNode, (bp) => {
 .kes-bar-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.6s ease;
+  transition: width var(--g-dur-slow) ease;
 }
 
-.bar-critical { background: #FDA29B; }
-.bar-warning { background: linear-gradient(90deg, #FDA29B, #FDB022); }
-.bar-healthy { background: linear-gradient(90deg, #00c7f3, #75E0A7); }
+.bar-critical { background: var(--g-error); }
+.bar-warning { background: var(--g-warning); }
+.bar-healthy { background: var(--g-success); }
 
 .kes-bar-label {
-  font-size: 10px;
-  color: rgba(255,255,255,0.5);
+  font-size: 11px;
+  color: var(--g-text-3);
   white-space: nowrap;
 }
 
@@ -1498,24 +1496,24 @@ watch(bpNode, (bp) => {
   text-transform: none !important;
   letter-spacing: normal !important;
   font-weight: 700 !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   font-size: 12px !important;
 }
 
 /* KES Dialog */
 .kes-dialog {
-  background: #13161b !important;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-1);
 }
 
 .kes-dialog-title {
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .kes-status-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px;
 }
 
@@ -1525,34 +1523,34 @@ watch(bpNode, (bp) => {
   padding: 4px 0;
 }
 
-.ksc-row + .ksc-row { border-top: 1px solid rgba(255,255,255,0.04); }
+.ksc-row + .ksc-row { border-top: 1px solid var(--g-hairline-1); }
 
 .ksc-label {
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
 }
 
 .ksc-value {
   font-size: 12px;
   font-weight: 700;
-  color: rgba(255,255,255,0.9);
+  color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
 }
 
-.ksc-value.text-critical { color: #FDA29B; }
-.ksc-value.text-warning { color: #FDB022; }
+.ksc-value.text-critical { color: var(--g-error); }
+.ksc-value.text-warning { color: var(--g-warning); }
 
 .kes-steps { }
 
 .kes-step-title {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255,255,255,0.8);
+  color: var(--g-text-2);
 }
 
 .kes-step-desc {
   font-size: 11px;
-  color: rgba(255,255,255,0.55);
+  color: var(--g-text-3);
   line-height: 1.5;
   margin-top: 2px;
   margin-bottom: 12px;
@@ -1563,9 +1561,9 @@ watch(bpNode, (bp) => {
 }
 
 .cmd-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.3px;
   margin-bottom: 4px;
@@ -1575,29 +1573,29 @@ watch(bpNode, (bp) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 6px;
+  background: var(--g-canvas);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 8px 12px;
 }
 
 .cmd-code code {
   flex: 1;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
-  color: #75E0A7;
+  color: var(--g-success);
 }
 
 .cmd-steps-list {
-  background: rgba(0,0,0,0.2);
-  border: 1px solid rgba(255,255,255,0.04);
-  border-radius: 6px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px 14px;
 }
 
 .cmd-step {
   font-size: 11px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   line-height: 1.8;
 }
 
@@ -1606,21 +1604,21 @@ watch(bpNode, (bp) => {
   align-items: center;
   gap: 12px;
   margin: 12px 0;
-  font-size: 10px;
-  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .kes-or-divider::before, .kes-or-divider::after {
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(255,255,255,0.06);
+  background: var(--g-hairline-1);
 }
 
 /* Refresh */
 .refresh-btn {
   text-transform: none !important; letter-spacing: normal !important;
-  font-size: 11px !important; color: rgba(255,255,255,0.5) !important;
+  font-size: 11px !important; color: var(--g-text-3) !important;
 }
-.refresh-btn:hover { color: rgba(255,255,255,0.6) !important; }
+.refresh-btn:hover { color: var(--g-text-2) !important; }
 </style>

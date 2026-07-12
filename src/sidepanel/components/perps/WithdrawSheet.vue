@@ -75,14 +75,14 @@
         <!-- Margin safety -->
         <transition name="fade-slide">
           <div v-if="showMarginWarning" class="warn-banner mt-3">
-            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
             <span>{{ $t('perpetuals.marginSafetyWarning') }}</span>
           </div>
         </transition>
 
         <transition name="fade-slide">
           <div v-if="quoteError" class="error-banner mt-3">
-            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
             <span>{{ quoteError }}</span>
           </div>
         </transition>
@@ -162,7 +162,7 @@
 
         <transition name="fade-slide">
           <div v-if="withdrawError" class="error-banner mt-3">
-            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
             <span>{{ withdrawError }}</span>
           </div>
         </transition>
@@ -219,12 +219,12 @@
             indeterminate
             size="56"
             width="3"
-            color="#00c7f3"
+            color="var(--g-accent)"
           />
-          <v-icon v-else-if="withdrawStatus === 'settled'" size="56" color="#26FAB0">
+          <v-icon v-else-if="withdrawStatus === 'settled'" size="56" color="success">
             mdi-check-circle-outline
           </v-icon>
-          <v-icon v-else-if="withdrawStatus === 'error'" size="56" color="#F97066">
+          <v-icon v-else-if="withdrawStatus === 'error'" size="56" color="error">
             mdi-alert-circle-outline
           </v-icon>
         </div>
@@ -234,7 +234,7 @@
 
         <transition name="fade-slide">
           <div v-if="withdrawError && withdrawStatus === 'error'" class="error-banner mt-3" style="text-align:left;">
-            <v-icon size="14" color="#F97066" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
+            <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
             <span>{{ withdrawError }}</span>
           </div>
         </transition>
@@ -549,20 +549,20 @@ watch(() => props.value, (val) => {
 
 <style scoped>
 .perps-action-dialog {
-  background: linear-gradient(180deg, #13161B 0%, #0A0C10 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .dialog-title {
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 .dialog-body {
   padding: 16px !important;
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 .withdraw-content {
@@ -573,7 +573,7 @@ watch(() => props.value, (val) => {
 
 .connect-gate-sub {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   text-align: center;
   line-height: 1.5;
   margin-bottom: 4px;
@@ -591,33 +591,33 @@ watch(() => props.value, (val) => {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid var(--g-hairline-3);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(255,255,255,0.35);
-  background: rgba(255,255,255,0.02);
-  transition: all 0.2s ease;
+  color: var(--g-text-3);
+  background: var(--g-hairline-1);
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
 }
 .step-dot.active {
-  border-color: #00c7f3;
-  color: #00c7f3;
-  background: rgba(0,199,243,0.08);
+  border-color: var(--g-accent);
+  color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent);
 }
 .step-dot.done {
-  border-color: rgba(0,199,243,0.5);
-  background: rgba(0,199,243,0.18);
-  color: #00c7f3;
+  border-color: color-mix(in srgb, var(--g-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 18%, transparent);
+  color: var(--g-accent);
 }
 .step-line {
   width: 38px;
   height: 1px;
-  background: rgba(255,255,255,0.1);
-  transition: background 0.2s ease;
+  background: var(--g-hairline-2);
+  transition: background var(--g-dur-base) ease;
 }
-.step-line.filled { background: rgba(0,199,243,0.5); }
+.step-line.filled { background: color-mix(in srgb, var(--g-accent) 50%, transparent); }
 
 /* ── Step pane ── */
 .step-pane {
@@ -627,12 +627,12 @@ watch(() => props.value, (val) => {
 .step-title {
   font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   letter-spacing: 0.01em;
 }
 .step-sub {
   font-size: 11px;
-  color: rgba(255,255,255,0.45);
+  color: var(--g-text-3);
   margin-top: 2px;
   line-height: 1.5;
 }
@@ -651,22 +651,22 @@ watch(() => props.value, (val) => {
 }
 .balance-row__label {
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
 }
 .balance-row__value {
   font-size: 11px;
   font-weight: 600;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255,255,255,0.75);
-  transition: color 0.15s ease;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-2);
+  transition: color var(--g-dur-fast) ease;
 }
-.balance-row:hover .balance-row__value { color: #00c7f3; }
+.balance-row:hover .balance-row__value { color: var(--g-accent); }
 
 /* ── Estimate card ── */
 .estimate-card {
-  background: linear-gradient(180deg, rgba(0,199,243,0.07), rgba(0,199,243,0.02));
-  border: 1px solid rgba(0,199,243,0.18);
-  border-radius: 12px;
+  background: color-mix(in srgb, var(--g-accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 18%, transparent);
+  border-radius: var(--g-r-card);
   padding: 14px 16px;
 }
 .estimate-main {
@@ -677,19 +677,19 @@ watch(() => props.value, (val) => {
 }
 .estimate-main__label {
   font-size: 12px;
-  color: rgba(255,255,255,0.55);
+  color: var(--g-text-3);
 }
 .estimate-main__value {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 22px;
+  font-family: var(--g-font-mono);
+  font-size: 20px;
   font-weight: 700;
-  color: #00c7f3;
+  color: var(--g-accent);
   white-space: nowrap;
 }
 .estimate-main__unit {
   font-size: 11px;
   font-weight: 600;
-  color: rgba(0,199,243,0.65);
+  color: color-mix(in srgb, var(--g-accent) 65%, transparent);
   margin-left: 5px;
 }
 .estimate-sub {
@@ -697,58 +697,58 @@ watch(() => props.value, (val) => {
   justify-content: space-between;
   margin-top: 9px;
   padding-top: 9px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--g-hairline-1);
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
 }
 .estimate-sub__value {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255,255,255,0.6);
+  font-family: var(--g-font-mono);
+  color: var(--g-text-2);
   font-weight: 500;
 }
 
 /* ── Inputs ── */
 .perp-input :deep(.v-input__slot) {
-  background: rgba(255,255,255,0.04) !important;
+  background: var(--g-hairline-1) !important;
   min-height: 40px !important;
 }
 .perp-input :deep(.v-label) {
   font-size: 12px !important;
-  color: rgba(255,255,255,0.4) !important;
+  color: var(--g-text-3) !important;
 }
 .perp-input :deep(input) {
   font-size: 13px !important;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
-  color: #ffffff !important;
-  caret-color: #00c7f3 !important;
+  font-family: var(--g-font-mono) !important;
+  color: var(--g-text-1) !important;
+  caret-color: var(--g-accent) !important;
 }
 .perp-input :deep(.v-text-field__suffix) {
   font-size: 11px !important;
-  color: rgba(255,255,255,0.35) !important;
+  color: var(--g-text-3) !important;
   font-weight: 600 !important;
 }
-.perp-input :deep(fieldset) { border-color: rgba(255,255,255,0.1) !important; }
-.perp-input :deep(.v-input--is-focused fieldset) { border-color: #00c7f3 !important; }
+.perp-input :deep(fieldset) { border-color: var(--g-hairline-2) !important; }
+.perp-input :deep(.v-input--is-focused fieldset) { border-color: var(--g-accent) !important; }
 
 /* ── Hint row ── */
 .hint-row {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
 }
 .hint-value {
-  color: rgba(255,255,255,0.7);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--g-text-2);
+  font-family: var(--g-font-mono);
   font-weight: 600;
 }
 
 /* ── Preview / Review cards ── */
 .preview-card,
 .review-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px 14px;
 }
 .preview-row,
@@ -757,7 +757,7 @@ watch(() => props.value, (val) => {
   justify-content: space-between;
   align-items: center;
   padding: 5px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 .preview-row:last-child,
 .review-row:last-child { border-bottom: none; }
@@ -765,31 +765,31 @@ watch(() => props.value, (val) => {
 .preview-label,
 .review-label {
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
 }
 .preview-value,
 .review-value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255,255,255,0.85);
+  font-family: var(--g-font-mono);
+  color: var(--g-text-1);
   font-weight: 600;
 }
 .preview-value.highlight,
-.review-value.highlight { color: #00c7f3; }
-.preview-value.muted { color: rgba(255,255,255,0.45); font-weight: 400; }
+.review-value.highlight { color: var(--g-accent); }
+.preview-value.muted { color: var(--g-text-3); font-weight: 400; }
 .preview-unit {
-  font-size: 9px;
-  color: rgba(255,255,255,0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   font-weight: 400;
 }
-.review-value.warn { color: #FFA726; }
-.review-value.expired { color: #F97066; }
+.review-value.warn { color: var(--g-warning); }
+.review-value.expired { color: var(--g-error); }
 
 /* ── Message preview ── */
 .message-card {
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
 }
 .message-head {
@@ -799,16 +799,16 @@ watch(() => props.value, (val) => {
   margin-bottom: 6px;
 }
 .message-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.35);
+  color: var(--g-text-3);
 }
 .link-btn {
   background: none;
   border: none;
-  color: #00c7f3;
+  color: var(--g-accent);
   font-size: 11px;
   cursor: pointer;
   padding: 0;
@@ -817,10 +817,10 @@ watch(() => props.value, (val) => {
 .link-btn:hover { text-decoration: underline; }
 .message-body {
   margin: 0;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(255,255,255,0.7);
+  color: var(--g-text-2);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 240px;
@@ -839,19 +839,19 @@ watch(() => props.value, (val) => {
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   font-size: 11px;
   line-height: 1.5;
 }
 .warn-banner {
-  background: rgba(249,112,102,0.08);
-  border: 1px solid rgba(249,112,102,0.25);
-  color: #F97066;
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  color: var(--g-error);
 }
 .error-banner {
-  background: rgba(249,112,102,0.08);
-  border: 1px solid rgba(249,112,102,0.22);
-  color: #F97066;
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  color: var(--g-error);
 }
 
 /* ── Status pane ── */
@@ -867,13 +867,13 @@ watch(() => props.value, (val) => {
   justify-content: center;
 }
 .status-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 .status-sub {
   font-size: 11px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   margin-top: 4px;
   line-height: 1.5;
   max-width: 280px;
@@ -887,24 +887,24 @@ watch(() => props.value, (val) => {
 .action-btn {
   flex: 1;
   height: 44px !important;
-  border-radius: 10px !important;
-  background: rgba(0,199,243,0.12) !important;
-  color: #00c7f3 !important;
-  border: 1px solid rgba(0,199,243,0.3) !important;
+  border-radius: var(--g-r-control) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
   letter-spacing: 0.02em !important;
 }
-.action-btn:hover:not(.v-btn--disabled) { background: rgba(0,199,243,0.2) !important; }
+.action-btn:hover:not(.v-btn--disabled) { background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important; }
 .action-btn.v-btn--disabled { opacity: 0.35 !important; }
 .ghost-btn {
   flex: 1;
   height: 44px !important;
-  border-radius: 10px !important;
-  background: rgba(255,255,255,0.04) !important;
-  color: rgba(255,255,255,0.7) !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: var(--g-r-control) !important;
+  background: var(--g-hairline-1) !important;
+  color: var(--g-text-2) !important;
+  border: 1px solid var(--g-hairline-2) !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   text-transform: none !important;
@@ -912,7 +912,7 @@ watch(() => props.value, (val) => {
 
 /* ── Transitions ── */
 .fade-slide-enter-active,
-.fade-slide-leave-active { transition: all 0.22s ease; }
+.fade-slide-leave-active { transition: opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease; }
 .fade-slide-enter,
 .fade-slide-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

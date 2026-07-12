@@ -22,7 +22,7 @@
 
       <!-- No data -->
       <div v-else-if="!chartPoints.length" class="vpc-empty">
-        <v-icon size="28" color="rgba(255,255,255,0.15)">mdi-chart-line-variant</v-icon>
+        <v-icon size="28" color="var(--g-text-3)">mdi-chart-line-variant</v-icon>
         <span class="vpc-empty__text">{{ $t('vaults.noData') }}</span>
       </div>
 
@@ -30,8 +30,8 @@
       <svg v-else ref="svgEl" class="vpc-svg" :viewBox="`0 0 ${SVG_W} ${SVG_H}`" preserveAspectRatio="none">
         <defs>
           <linearGradient id="vpc-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" style="stop-color: var(--chain-primary)" stop-opacity="0.25" />
-            <stop offset="100%" style="stop-color: var(--chain-primary)" stop-opacity="0.01" />
+            <stop offset="0%" style="stop-color: var(--g-accent)" stop-opacity="0.25" />
+            <stop offset="100%" style="stop-color: var(--g-accent)" stop-opacity="0.01" />
           </linearGradient>
           <clipPath id="vpc-clip">
             <rect x="0" y="0" :width="SVG_W" :height="SVG_H" />
@@ -43,7 +43,7 @@
           v-for="y in gridYs"
           :key="y"
           :x1="0" :y1="y" :x2="SVG_W" :y2="y"
-          stroke="rgba(255,255,255,0.05)"
+          style="stroke: var(--g-hairline-1)"
           stroke-width="1"
         />
 
@@ -58,7 +58,7 @@
         <polyline
           :points="linePoints"
           fill="none"
-          style="stroke: var(--chain-primary)"
+          style="stroke: var(--g-accent)"
           stroke-width="1.5"
           stroke-linejoin="round"
           stroke-linecap="round"
@@ -71,7 +71,7 @@
           :cx="chartPoints[chartPoints.length - 1].x"
           :cy="chartPoints[chartPoints.length - 1].y"
           r="3"
-          style="fill: var(--chain-primary)"
+          style="fill: var(--g-accent)"
           opacity="0.9"
         />
       </svg>
@@ -184,36 +184,34 @@ function formatTvl(n: number): string {
 
 .vpc-period-btn {
   padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--g-r-chip);
+  border: 1px solid var(--g-hairline-2);
   background: transparent;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 10px;
+  color: var(--g-text-3);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
   cursor: pointer;
-  transition: all 0.15s ease;
-  text-transform: uppercase;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .vpc-period-btn:hover {
-  border-color: color-mix(in srgb, var(--chain-primary) 35%, transparent);
-  color: color-mix(in srgb, var(--chain-primary) 70%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--g-accent) 70%, transparent);
 }
 
 .vpc-period-btn--active {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
-  border-color: color-mix(in srgb, var(--chain-primary) 40%, transparent) !important;
-  color: var(--chain-primary) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
+  color: var(--g-accent) !important;
 }
 
 /* ── Chart Wrapper ── */
 .vpc-chart-wrap {
   position: relative;
   height: 100px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   overflow: hidden;
 }
 
@@ -239,9 +237,9 @@ function formatTvl(n: number): string {
 }
 
 .vpc-ylabel {
-  font-size: 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-3);
   line-height: 1;
 }
 
@@ -284,6 +282,6 @@ function formatTvl(n: number): string {
 
 .vpc-empty__text {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.2);
+  color: var(--g-text-3);
 }
 </style>
