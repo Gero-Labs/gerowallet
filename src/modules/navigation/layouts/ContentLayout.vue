@@ -87,7 +87,7 @@
                     <template v-slot:activator="{ on, attrs }">
                       <div
                         style="display: flex; align-items: center; gap: 4px"
-                        :style="{ minWidth: compactNav ? '20px' : '60px' }"
+                        :style="{ minWidth: (compactNav || isMidnight) ? '20px' : '60px' }"
                         v-bind="attrs"
                         v-on="on"
                       >

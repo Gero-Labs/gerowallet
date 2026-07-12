@@ -2,8 +2,6 @@ import { Blockchain, Network, Provider } from '@/models/types';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
-import apexPrimeSvg from '@/assets/svg/apex_prime.svg';
-import apexVectorSvg from '@/assets/svg/apex_vector.svg';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 
@@ -201,7 +199,7 @@ export default {
       }
     },
     {
-      icon: apexPrimeSvg,
+      icon: apexSvg,
       iconColor: 'orange',
       title: 'Apex Prime Mainnet',
       blockchain: Blockchain.APEX_PRIME,
@@ -249,7 +247,7 @@ export default {
       }
     },
     {
-      icon: apexVectorSvg,
+      icon: apexSvg,
       iconColor: 'orange',
       title: 'Apex Vector Mainnet',
       blockchain: Blockchain.APEX_VECTOR,

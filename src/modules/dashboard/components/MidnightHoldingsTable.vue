@@ -154,8 +154,10 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     avgCost: '—',
     pnl: '—',
     icon: 'mdi-shield-outline',
-    iconBg: 'blue darken-4',
-    iconColor: 'blue lighten-2',
+    // Neutral near-black disc (was 'blue darken-4') so the white Midnight mark
+    // reads as black-and-white, matching the chain's monochrome identity.
+    iconBg: 'grey darken-4',
+    iconColor: 'grey lighten-2',
     image: midnightLogo,
   },
 ]);

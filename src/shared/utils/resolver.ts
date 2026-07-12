@@ -353,7 +353,13 @@ export const fromPlutusData = (
 
 // Token image overrides — replace bad/missing logos for specific tokens
 // In service worker (background), SVG imports are empty — overrides only apply in browser context.
-export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker ? {} : {};
+// Keyed by resolved token name/ticker (see applyTokenImageOverride consumers).
+export const TOKEN_IMAGE_OVERRIDES: Record<string, string> = isServiceWorker
+  ? {}
+  : {
+      // The Cardano-native NIGHT ($NIGHT) token wears the black/white Midnight mark.
+      NIGHT: assetsModule.midnightTokenLogo,
+    };
 
 /**
  * Apply token image overrides for a given token name/ticker.
