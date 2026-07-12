@@ -124,7 +124,15 @@ function respond(requestId: string, data: DAppResponseData, error: string | null
   if (!delivered) {
     pendingResponses.push({ requestId, data, error });
   }
-  seenRequestIds.delete(requestId);
+  // Evict from the dedupe set ONLY when the response actually reached the
+  // background. If it was queued instead, background still has the request
+  // parked and will re-deliver it synchronously on the next port reconnect —
+  // BEFORE our flushed response is processed — so the id must stay in
+  // seenRequestIds or the user gets the approval dialog a second time for a
+  // request they already answered. (Deleting on successful flush would NOT
+  // work for the same ordering reason; ids of offline-answered requests are
+  // one UUID string each and live only for this panel document's lifetime.)
+  if (delivered) seenRequestIds.delete(requestId);
   currentRequest.value = null;
   isVisible.value = false;
   if (requestQueue.value.length > 0) {
@@ -152,9 +160,11 @@ function rejectQueued(requestId: string, reason = 'user_rejected') {
   const idx = requestQueue.value.findIndex((r) => r.requestId === requestId);
   if (idx === -1) return;
   requestQueue.value.splice(idx, 1);
-  seenRequestIds.delete(requestId);
   const delivered = safePost({ type: 'dapp-response', requestId, data: null, error: reason });
   if (!delivered) pendingResponses.push({ requestId, data: null, error: reason });
+  // Same rule as respond(): only evict from the dedupe set on real delivery,
+  // so a parked re-delivery of an already-rejected request is swallowed.
+  if (delivered) seenRequestIds.delete(requestId);
 }
 
 /** Reject everything: every queued item, then the currently displayed one. */

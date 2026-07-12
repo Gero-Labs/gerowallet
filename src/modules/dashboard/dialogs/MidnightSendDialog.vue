@@ -281,7 +281,7 @@
             :loading="sending"
             :password="password"
             @update:password="password = $event"
-            :password-label="t('common.spendingPassword')"
+            :password-label="t('send.spendingPassword')"
             :password-rules="passwordRules"
             :submit-text="t('midnight.signAndSend')"
             @passkey-prf-output="onPasskeyPrfOutput"
@@ -424,9 +424,11 @@ watch(
   (addr) => {
     if (!shieldedAvailable.value) return;
     const v = addr.trim();
-    if (v.startsWith('mn_shield-addr_')) {
+    // No trailing underscore: mainnet addresses are bare mn_addr1…/
+    // mn_shield-addr1… (shield checked first — 'mn_addr' is not its prefix).
+    if (v.startsWith('mn_shield-addr')) {
       if (activeTab.value !== 1) activeTab.value = 1;
-    } else if (v.startsWith('mn_addr_')) {
+    } else if (v.startsWith('mn_addr')) {
       if (activeTab.value !== 0) activeTab.value = 0;
     }
   },
@@ -533,20 +535,31 @@ function onQRScan(scanned: string) {
   }
 }
 
+// Midnight bech32m HRP is mn_<type>[_<network>]1<data>; MAINNET OMITS the
+// network segment (bare mn_addr1…), other networks embed it lowercased
+// (mn_addr_preview1…). Including the '1' separator makes the prefix check
+// exact per network — previously only the generic 'mn_addr_' was checked,
+// which accepted wrong-network addresses everywhere and hard-rejected every
+// legitimate mainnet address.
+function expectedAddressPrefix(kind: 'addr' | 'shield-addr'): string {
+  const isMain = loggedWallet.value?.network === Network.MAINNET;
+  return isMain
+    ? `mn_${kind}1`
+    : `mn_${kind}_${(loggedWallet.value?.network || '').toLowerCase()}1`;
+}
+
 const addressRules = computed(() => {
   if (isShielded.value) {
+    const prefix = expectedAddressPrefix('shield-addr');
     return [
       (v: string) => !!v || t('midnight.send.shieldedAddressRequired'),
-      (v: string) => v.startsWith('mn_shield-addr_') || t('midnight.send.shieldedAddressPrefix'),
+      (v: string) => v.startsWith(prefix) || t('midnight.send.shieldedAddressPrefix', { prefix }),
     ];
   }
+  const prefix = expectedAddressPrefix('addr');
   return [
-    (v: string) => !!v || 'Recipient address required',
-    (v: string) => {
-      const isMain = loggedWallet.value?.network === Network.MAINNET;
-      const prefix = isMain ? 'mn_addr_' : `mn_addr_${(loggedWallet.value?.network || '').toLowerCase()}`;
-      return v.startsWith('mn_addr_') || `Address should start with ${prefix}`;
-    },
+    (v: string) => !!v || t('midnight.send.addressRequired'),
+    (v: string) => v.startsWith(prefix) || t('midnight.send.addressPrefix', { prefix }),
   ];
 });
 

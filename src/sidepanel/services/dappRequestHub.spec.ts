@@ -121,6 +121,25 @@ describe('dappRequestHub', () => {
     });
   });
 
+  it('swallows the parked ghost re-delivery of a request answered while disconnected', async () => {
+    // Background parks a request on disconnect and re-delivers it synchronously
+    // in onConnect — BEFORE it processes the panel's flushed response. If the
+    // answered id were evicted from the dedupe set on an undelivered respond(),
+    // the user would get the approval dialog a second time.
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} });
+    port._drop();
+    hub.approve('signed-cbor'); // answered while the port was down (queued)
+    const port2 = makePort();
+    vi.mocked(chrome.runtime.connect).mockReturnValueOnce(port2 as unknown as chrome.runtime.Port);
+    await hub._reconnectNow();
+    port2._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} }); // the ghost
+    expect(hub.currentRequest.value).toBe(null);
+    expect(hub.requestQueue.value.length).toBe(0);
+    expect(hub.isVisible.value).toBe(false);
+  });
+
   it('rejectQueued removes one queued item without disturbing currentRequest', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
