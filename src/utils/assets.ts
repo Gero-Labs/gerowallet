@@ -31,6 +31,8 @@ import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
 import geroDashboardHorizontal from '@/assets/svg/gero_dashboard_horizontal.svg'
 import geroNoText from '@/assets/svg/gero-notext.svg'
+import geroNoTextApex from '@/assets/svg/gero-notext-apex.svg'
+import geroNoTextMidnight from '@/assets/svg/gero-notext-midnight.svg'
 import nexusLogo from '@/assets/svg/nexus.svg'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
 import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
@@ -108,6 +110,8 @@ import googleSvg from '@/assets/svg/googleWhite.svg'
 import cashbackBags from '@/assets/img/cashback.png';
 import cardanoBg from '@/assets/cardanoBg.png';
 import midnightBg from '@/assets/Midnight.webp';
+import midnightLoginBg from '@/assets/midnightBg.png';
+import midnightTokenLogo from '@/assets/svg/midnight.svg';
 import cashbackBg from '@/assets/cashbackBg.png';
 import rectangle from '@/assets/img/rectangle.png';
 import rectangle2 from '@/assets/img/rectangle2.png';
@@ -153,6 +157,8 @@ export default {
   apexPrimeBg,
   apexVectorBg,
   midnightBg,
+  midnightLoginBg,
+  midnightTokenLogo,
   walletCreateBg,
   walletRestoreBg,
   hardwareWalletBg,
@@ -180,6 +186,8 @@ export default {
   geroDashboard,
   geroDashboardHorizontal,
   geroNoText,
+  geroNoTextApex,
+  geroNoTextMidnight,
   nexusLogo,
   barChart,
   coinsStacked,
@@ -391,5 +399,7 @@ export {
   geroDashboard,
   geroDashboardHorizontal,
   geroNoText,
+  geroNoTextApex,
+  geroNoTextMidnight,
   google,
 }

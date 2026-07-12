@@ -14,7 +14,7 @@
         <v-list-item-content class="pb-2" style="padding-top: 22px;">
           <v-list-item-title>
             <img
-              :src="isApex ? assets.geroDashboardApex : assets.geroNoText"
+              :src="isApex ? assets.geroNoTextApex : isMidnight ? assets.geroNoTextMidnight : assets.geroNoText"
               width="64"
               alt="logo"
             />
@@ -300,6 +300,10 @@ const isApex = computed(() => {
 
 const isBitcoin = computed(() => {
   return loggedWallet.value?.chain === Blockchain.BITCOIN;
+});
+
+const isMidnight = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
 });
 
 const items = computed((): NavigationItemUnion[] => {
