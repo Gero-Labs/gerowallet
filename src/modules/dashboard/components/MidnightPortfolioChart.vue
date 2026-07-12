@@ -299,16 +299,17 @@ function initChart() {
   });
 
   areaSeries = chart.addSeries(AreaSeries, {
-    lineColor: '#00c7f3',
+    // Midnight accent (violet) — was Cardano cyan (#00c7f3) copied across.
+    lineColor: '#A78BFA',
     lineWidth: 2,
     lineType: 2,
-    topColor: 'rgba(0, 199, 243, 0.3)',
-    bottomColor: 'rgba(0, 199, 243, 0)',
+    topColor: 'rgba(167, 139, 250, 0.3)',
+    bottomColor: 'rgba(167, 139, 250, 0)',
     crosshairMarkerVisible: true,
     crosshairMarkerRadius: 4,
     crosshairMarkerBorderColor: '#ffffff',
     crosshairMarkerBorderWidth: 2,
-    crosshairMarkerBackgroundColor: '#00c7f3',
+    crosshairMarkerBackgroundColor: '#A78BFA',
     priceLineVisible: false,
     lastValueVisible: false,
     priceFormat: {
