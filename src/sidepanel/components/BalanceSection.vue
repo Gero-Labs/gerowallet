@@ -39,7 +39,6 @@
       rounded
       small
       class="buy-sell-btn mt-3 geroButton"
-      :style="{ color: 'var(--g-accent)', borderColor: 'var(--g-accent)' }"
       @click="$emit('buy-sell')"
     >
       <v-icon small left>mdi-swap-horizontal</v-icon>
