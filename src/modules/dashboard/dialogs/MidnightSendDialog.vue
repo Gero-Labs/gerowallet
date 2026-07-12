@@ -245,6 +245,12 @@
                 :unit="nightCurrency"
                 :fee-unit="dustCurrency"
               />
+              <!-- Public-chain disclosure: unshielded transfers are indexer-visible.
+                   Informational, not a warning - no error/warning coloring. -->
+              <div v-if="!isShielded" class="midnight-info-note mt-3">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+                <span>{{ t('midnight.send.publicTxNote') }}</span>
+              </div>
               <!-- Sending registered NIGHT resets its DUST accrual clock.
                    Suppressed when the low-DUST warning below is showing — it
                    already carries the reset message, so both at once repeats. -->
@@ -1096,6 +1102,18 @@ watch(
   color: var(--g-error);
   background: var(--g-error-fill);
   border-color: var(--g-error-line);
+}
+.midnight-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--g-text-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  padding: 8px 10px;
 }
 
 /* ─── Send-progress timeline (right-side, appears while sending) ─── */
