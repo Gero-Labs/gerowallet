@@ -9,15 +9,19 @@ export interface ChainAccent {
   /** Gradient stops: primary CTA, active nav indicator, chain dot, header hairline */
   gradient1: string;
   gradient2: string;
+  /** Text/icon color ON the gradient CTA. Omit to inherit the global
+   *  --g-on-grad (#06181B). Midnight overrides it to pure black. */
+  onGrad?: string;
 }
 
 export const chainAccents: Record<ChainKey, ChainAccent> = {
   cardano: { accent: '#33C7DD', gradient1: '#00DFF3', gradient2: '#00FAD5' },
   bitcoin: { accent: '#F7931A', gradient1: '#F7931A', gradient2: '#FFB84D' },
   apex: { accent: '#E06030', gradient1: '#E06030', gradient2: '#F08040' },
-  // Moon on a black sky: monochrome silver accent, near-white -> faint-violet
-  // gradient. Purple is only a whisper (gradient2), never the dominant hue.
-  midnight: { accent: '#CBCDDC', gradient1: '#E9EAF3', gradient2: '#A69FC8' },
+  // Midnight: black-and-white base with a moonlit-purple accent. Bright violet
+  // for flat use (icons/links/active), a lavender->violet gradient for CTAs,
+  // and PURE BLACK text on those purple buttons (onGrad) — never white.
+  midnight: { accent: '#A78BFA', gradient1: '#C4B5FD', gradient2: '#9D7BEA', onGrad: '#000000' },
 };
 
 /** Blockchain display-string -> ChainKey (walletStore.loggedWallet.chain values) */

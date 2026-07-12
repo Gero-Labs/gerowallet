@@ -21,10 +21,11 @@ function tok(name) {
 }
 function chain(key) {
   const m = THEMES.match(
-    new RegExp(`${key}:\\s*\\{\\s*accent:\\s*'(#[0-9a-fA-F]{6})',\\s*gradient1:\\s*'(#[0-9a-fA-F]{6})',\\s*gradient2:\\s*'(#[0-9a-fA-F]{6})'`),
+    new RegExp(`${key}:\\s*\\{\\s*accent:\\s*'(#[0-9a-fA-F]{6})',\\s*gradient1:\\s*'(#[0-9a-fA-F]{6})',\\s*gradient2:\\s*'(#[0-9a-fA-F]{6})'(?:,\\s*onGrad:\\s*'(#[0-9a-fA-F]{6})')?`),
   );
   if (!m) { console.error(`FATAL: chainAccents.${key} not parseable from src/config/themes.ts`); process.exit(2); }
-  return { accent: m[1], gradient1: m[2], gradient2: m[3] };
+  // onGrad is optional per chain; a chain without it inherits the global token.
+  return { accent: m[1], gradient1: m[2], gradient2: m[3], onGrad: m[4] || tok('g-on-grad') };
 }
 
 const T = {
@@ -40,9 +41,6 @@ const T = {
 const cardano = chain('cardano'), bitcoin = chain('bitcoin'), apex = chain('apex'), midnight = chain('midnight');
 const CHAIN = {
   cardanoAccent: cardano.accent, bitcoinAccent: bitcoin.accent, apexAccent: apex.accent, midnightAccent: midnight.accent,
-  bitcoinGrad1: bitcoin.gradient1, bitcoinGrad2: bitcoin.gradient2,
-  apexGrad1: apex.gradient1, apexGrad2: apex.gradient2,
-  midnightGrad1: midnight.gradient1, midnightGrad2: midnight.gradient2,
 };
 const lin = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
 const lum = (hex) => {
@@ -68,9 +66,11 @@ for (const s of ['canvas', 'surface', 'raised', 'overlay']) {
     if (name.endsWith('Accent')) checks.push([`${name} on ${s}`, hex, T[s], 3.0]);
   }
 }
-// CTA text must survive every chain's gradient stops
-for (const g of ['bitcoinGrad1', 'bitcoinGrad2', 'apexGrad1', 'apexGrad2', 'midnightGrad1', 'midnightGrad2']) {
-  checks.push([`onGrad on ${g}`, T.onGrad, CHAIN[g], 4.5]);
+// CTA text must survive every chain's gradient stops — using THAT chain's
+// own on-grad color (Midnight uses pure black on its purple gradient).
+for (const [ck, c] of [['bitcoin', bitcoin], ['apex', apex], ['midnight', midnight]]) {
+  checks.push([`onGrad on ${ck}Grad1`, c.onGrad, c.gradient1, 4.5]);
+  checks.push([`onGrad on ${ck}Grad2`, c.onGrad, c.gradient2, 4.5]);
 }
 
 let failed = 0;
