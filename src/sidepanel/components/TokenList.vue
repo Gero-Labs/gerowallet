@@ -19,6 +19,9 @@
       </div>
       <div class="token-right">
         <div class="token-value text-body-2 grey--text">--</div>
+        <div v-if="showNightBreakdown" class="token-change t-caption g-num">
+          {{ nightBreakdownText }}
+        </div>
       </div>
     </div>
   </div>
@@ -125,7 +128,9 @@ import midnightLogo from '@/assets/svg/midnight.svg';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { useTranslation } from '@/shared/composables/useTranslation';
 
+const { t } = useTranslation();
 const adaLogo = assetsUtil.cardanoBlueLogo;
 
 // ── Midnight branch ───────────────────────────────────────────────────────────
@@ -144,6 +149,17 @@ function formatMidnightUnits(value: bigint, divisor: bigint, digits: number): st
 const formattedNightBalance = computed(() => {
   const total = (midnightStore.balances.nightUnshielded ?? 0n) + (midnightStore.balances.nightShielded ?? 0n);
   return formatMidnightUnits(total, MN_NIGHT_DIVISOR, 2);
+});
+
+// Public/private breakdown - same visibility rule as the dashboard's
+// MidnightHoldingsTable and the sidepanel's BalanceSection (mirror rule).
+const showNightBreakdown = computed(() =>
+  midnightStore.shieldedSyncAvailable || (midnightStore.balances.nightShielded ?? 0n) > 0n);
+
+const nightBreakdownText = computed(() => {
+  const pub = formatMidnightUnits(midnightStore.balances.nightUnshielded ?? 0n, MN_NIGHT_DIVISOR, 2);
+  const priv = formatMidnightUnits(midnightStore.balances.nightShielded ?? 0n, MN_NIGHT_DIVISOR, 2);
+  return `${t('midnight.common.public')} ${pub} / ${t('midnight.common.private')} ${priv}`;
 });
 const emit = defineEmits<{
   (e: 'select', token: any): void;

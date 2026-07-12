@@ -34,6 +34,9 @@
         </span>
       </template>
     </div>
+    <div v-if="isMidnight && showNightBreakdown" class="balance-breakdown t-caption g-num">
+      {{ nightBreakdownText }}
+    </div>
     <v-btn
       v-if="showBuySell"
       rounded
@@ -55,6 +58,7 @@ import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 import { useNightFiat } from '@/shared/composables/useNightFiat';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -64,6 +68,7 @@ defineEmits<{
   (e: 'buy-sell'): void;
 }>();
 
+const { t } = useTranslation();
 const { networkInfo } = useChainContext();
 const currencyTicker = computed(() => networkInfo.value?.currencyTicker || 'ADA');
 const showBuySell = computed(() => !!networkInfo.value?.buySupport);
@@ -108,7 +113,17 @@ function formatUnits(value: bigint, divisor: bigint, digits: number): string {
 
 const formattedDustBalance = computed(() => formatUnits(midnightStore.balances.dust ?? 0n, DUST_DIVISOR, 4));
 
+// Public/private breakdown caption - mirrors the dashboard's
+// MidnightHoldingsTable visibility rule (viewing key present or already
+// holding shielded NIGHT) so mini-Gero never shows a meaningless "Private 0".
+const showNightBreakdown = computed(() =>
+  midnightStore.shieldedSyncAvailable || (midnightStore.balances.nightShielded ?? 0n) > 0n);
 
+const nightBreakdownText = computed(() => {
+  const pub = formatUnits(midnightStore.balances.nightUnshielded ?? 0n, NIGHT_DIVISOR, 2);
+  const priv = formatUnits(midnightStore.balances.nightShielded ?? 0n, NIGHT_DIVISOR, 2);
+  return `${t('midnight.common.public')} ${pub} / ${t('midnight.common.private')} ${priv}`;
+});
 
 const formattedBalance = computed(() => {
   if (isMidnight.value) {
@@ -165,6 +180,10 @@ const changeColor = computed(() => {
   align-items: center;
   margin-top: 2px;
   font-size: 12px !important;
+}
+
+.balance-breakdown {
+  margin-top: var(--g-s-1);
 }
 
 .green-change {

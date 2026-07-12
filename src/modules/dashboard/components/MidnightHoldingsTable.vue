@@ -38,9 +38,14 @@
 
     <template v-slot:[`item.balance`]="{ item }">
       <v-skeleton-loader v-if="midnightLoading" type="text" width="110" style="margin-left: auto" />
-      <span v-else style="font-family: 'Roboto Mono', monospace; font-size: 12px;">
-        {{ item.balanceFormatted }}
-      </span>
+      <div v-else style="text-align: right;">
+        <div style="font-family: 'Roboto Mono', monospace; font-size: 12px;">
+          {{ item.balanceFormatted }}
+        </div>
+        <div v-if="item.breakdownText" class="t-caption g-num" style="margin-top: 2px;">
+          {{ item.breakdownText }}
+        </div>
+      </div>
     </template>
 
     <template v-slot:[`item.price`]="{ item }">
@@ -119,6 +124,8 @@ interface MidnightHoldingRow {
   ticker: string;
   name: string;
   balanceFormatted: string;
+  /** "Public X / Private Y" caption; empty string hides the row. */
+  breakdownText: string;
   price: string;
   value: string;
   change24h: string;
@@ -140,6 +147,19 @@ const totalNight = computed<bigint>(() =>
   (balances.value.nightShielded ?? 0n),
 );
 
+// Public/private breakdown caption. Only shown once the wallet has a
+// viewing key (shieldedSyncAvailable) or already holds shielded NIGHT -
+// wallets without a viewing key would otherwise see a meaningless "Private 0".
+const showBreakdown = computed(() =>
+  midnightStore.shieldedSyncAvailable || (balances.value.nightShielded ?? 0n) > 0n);
+
+const breakdownText = computed<string>(() => {
+  if (!showBreakdown.value) return '';
+  const pub = formatBigDecimal(balances.value.nightUnshielded ?? 0n, NIGHT_DIVISOR, 2);
+  const priv = formatBigDecimal(balances.value.nightShielded ?? 0n, NIGHT_DIVISOR, 2);
+  return `${t('midnight.common.public')} ${pub} / ${t('midnight.common.private')} ${priv}`;
+});
+
 // tDUST is deliberately NOT a table row — the dedicated DUST battery panel
 // above owns the live DUST display (it's a fee resource, not a holding).
 const rows = computed<MidnightHoldingRow[]>(() => [
@@ -147,6 +167,7 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     ticker: nightCurrency.value,
     name: 'Midnight Native Token',
     balanceFormatted: `${formatBigDecimal(totalNight.value, NIGHT_DIVISOR, 2)} ${nightCurrency.value}`,
+    breakdownText: breakdownText.value,
     price: '—',
     value: '—',
     change24h: '—',
