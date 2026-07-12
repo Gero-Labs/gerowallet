@@ -4530,6 +4530,140 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
   sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
 });
 
+/** Canonical 32-byte-zero RawTokenType — how the ledger/connector names native
+ * NIGHT (see midnightShieldedBuilder.ts NIGHT_RAW_TOKEN_TYPE). */
+const MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE =
+  '0000000000000000000000000000000000000000000000000000000000000000';
+
+type MakeTransferRequestData = {
+  desiredOutputs?: Array<{ kind?: string; type?: string; value?: string; recipient?: string }>;
+  options?: { payFees?: boolean };
+};
+
+/**
+ * Validate a connector makeTransfer request BEFORE prompting the user, so an
+ * unsupported/malformed request rejects cleanly without wasting an approval
+ * dialog. Phase 2 scope: native-NIGHT UNSHIELDED outputs only, wallet pays DUST
+ * fees. Mirrors MidnightSendDialog's per-network address-prefix check
+ * (mainnet omits the network segment; others embed it lowercased).
+ */
+function validateMakeTransferInputs(
+  data: MakeTransferRequestData | undefined,
+  network: string,
+): { ok: true } | { ok: false; reason: string } {
+  const desiredOutputs = data?.desiredOutputs;
+  if (!Array.isArray(desiredOutputs) || desiredOutputs.length === 0) {
+    return { ok: false, reason: 'desiredOutputs must be a non-empty array' };
+  }
+  // Cap the output count: the array is walked synchronously in the service
+  // worker and rendered in the approval panel, so an unbounded length is a DoS
+  // vector. A real transfer never needs this many outputs (Nexus/tx-size limits
+  // bite far sooner).
+  if (desiredOutputs.length > 100) {
+    return { ok: false, reason: 'too many outputs (max 100 per transfer)' };
+  }
+  if (data?.options?.payFees === false) {
+    return { ok: false, reason: 'payFees:false is not supported in this version (GeroWallet pays DUST fees; fee delegation is planned)' };
+  }
+  const isMain = network === Network.MAINNET;
+  const prefix = isMain ? 'mn_addr1' : `mn_addr_${network.toLowerCase()}1`;
+  for (const o of desiredOutputs) {
+    if (!o || typeof o !== 'object') {
+      return { ok: false, reason: 'each desiredOutput must be an object' };
+    }
+    if (o.kind !== 'unshielded') {
+      return { ok: false, reason: `only unshielded transfers are supported in this version (got kind='${o.kind}')` };
+    }
+    // Native NIGHT only: the canonical 32-byte-zero RawTokenType, or the empty
+    // 'native' shorthand. Any other hex token type is unsupported (Nexus only
+    // builds native NIGHT today).
+    if (o.type !== undefined && o.type !== '' && o.type !== MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE) {
+      return { ok: false, reason: 'only native NIGHT transfers are supported in this version' };
+    }
+    // value arrives as a decimal string (the page bridge stringifies the bigint).
+    let value: bigint;
+    try {
+      value = BigInt(o.value as string);
+    } catch {
+      return { ok: false, reason: `invalid amount: ${o.value}` };
+    }
+    if (value <= 0n) {
+      return { ok: false, reason: 'amount must be a positive integer' };
+    }
+    if (typeof o.recipient !== 'string' || !o.recipient.startsWith(prefix)) {
+      return { ok: false, reason: `recipient must be a ${prefix}… unshielded address on the connected network` };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Opens the makeTransfer approval view in the mini-gero side panel (password/
+ * PRF wallets only — Midnight has no hardware-wallet support). Same
+ * side-panel-only routing as signData — no popup fallback.
+ *
+ * Phase 2: native-NIGHT UNSHIELDED transfers only. The panel builds +
+ * DUST-balances + signs (but does NOT submit) via buildAndSignUnshieldedTransfer
+ * and returns `{ tx }`; the dapp submits it via submitTransaction, which
+ * proves + binds server-side. Shielded/mixed outputs and payFees:false reject
+ * with InvalidRequest BEFORE the user is prompted (validateMakeTransferInputs).
+ */
+app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // Fast-pathed past the content whitelist pre-check (to keep the user gesture
+  // alive for sidePanel.open()), so enforce connect-first here — same as signData.
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  const validation = validateMakeTransferInputs(data as MakeTransferRequestData, currentWallet.network);
+  if (!validation.ok) {
+    reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+    return true;
+  }
+  const favIconUrl = send.tab?.favIconUrl;
+  const makeTransferPayload = { data, website: origin, favIconUrl };
+
+  const sendToPanel = () =>
+    sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)
+      .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
+      .catch(err => reply({
+        // Never Rejected on internal/panel failure (only a real user decline
+        // arrives as the panel's own Rejected) — same reasoning as signData.
+        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to build the transfer'),
+      }));
+
+  if (miniGeroPorts.has(tabId)) {
+    sendToPanel();
+    return true;
+  }
+
+  openSidebar(tabId, 'sidepanel/index.html')
+    .then(() => waitForMiniGeroPort(5000, tabId))
+    .then(() => sendToPanel())
+    .catch(err => reply({
+      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+    }));
+  return true;
+});
+
 /**
  * Options-context (side-panel bundle): called by DAppOverlay.vue's Midnight
  * signData branch once the user has approved + authenticated. See
