@@ -143,10 +143,10 @@ function handleBuySell() {
 }
 
 function handleAction(id: string) {
-  // Midnight send/receive flows live in the full dashboard (MidnightSendDialog
-  // + 3-address ReceiveDialog); the sidepanel sheets are Cardano tx builders
-  // and would mis-build for Midnight. Open the dashboard instead of breaking.
-  if (walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && (id === 'send' || id === 'receive')) {
+  // Midnight send still lives in the full dashboard (MidnightSendDialog is a
+  // Cardano-incompatible UTxO-coupled builder); receive is now native in the
+  // sidepanel (ReceiveSheet renders the Public/Private/DUST address tabs).
+  if (walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && id === 'send') {
     window.open(chrome.runtime.getURL('index.html#/'), '_blank');
     return;
   }
