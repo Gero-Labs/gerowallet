@@ -539,9 +539,11 @@ const adaOnlyChartData = computed(() => {
   if (!transactions.value || transactions.value.length === 0) {
     // No synced tx history yet (common right after funding a preprod wallet):
     // seed a flat line at the current balance so the ADA value + chart still
-    // render instead of collapsing to the "—" / no-data empty state.
+    // render instead of collapsing to the "no-data" empty state. Scoped to
+    // non-mainnet Cardano only: on other chains (e.g. Apex) an empty tx list
+    // must stay an honest "no data" state so a real sync stall isn't masked.
     const bal = adaBalance.value;
-    if (bal > 0) {
+    if (isCardanoNonMainnet.value && bal > 0) {
       const now = currentTimestamp.value;
       const flat: number[][] = [[now - 30 * 24 * 60 * 60 * 1000, bal], [now, bal]];
       const usd = flat.map(([t, v]) => [t, v * nativePriceUsd.value]);
