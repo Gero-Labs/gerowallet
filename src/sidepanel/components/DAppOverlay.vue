@@ -649,6 +649,14 @@
             <span class="white--text text-body-2 font-weight-bold">{{ $t('common.total') }}</span>
             <span class="white--text text-body-2 font-weight-bold">{{ makeTransferTotalDisplay }} {{ nightCurrency }}</span>
           </div>
+          <div class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
+          </div>
+          <div class="d-flex align-start mt-1">
+            <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+            <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
+          </div>
           <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
         </div>
 

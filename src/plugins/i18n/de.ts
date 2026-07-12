@@ -4049,6 +4049,7 @@ export default {
   'midnight.send.addressPrefix': 'Adresse muss mit {prefix} beginnen',
   'midnight.send.amountRequired': 'Betrag erforderlich',
   'midnight.send.shieldedBalanceNote': 'Privates Guthaben. Wird mit dem Shielded-Sync aktualisiert.',
+  'midnight.send.publicTxNote': 'Öffentliche Transaktion: Betrag und Adressen sind im Midnight-Indexer sichtbar.',
   'midnight.send.dustResetWarning': 'Beim Senden von NIGHT beginnt die DUST-Generierung der bewegten Coins von vorn. Dein DUST-Guthaben füllt sich in den nächsten Tagen wieder bis zur Obergrenze auf; die Netzwerkgebühr selbst ist vernachlässigbar.',
   'midnight.send.dustResetShort': 'Senden startet die DUST-Generierung neu; sie füllt sich über die nächsten Tage wieder auf.',
   'midnight.send.dustLowHint': 'Dein DUST ist niedrig ({percent}%). Beim Senden beginnt die Generierung der bewegten Coins von vorn, daher kann es dauern, bis vor der nächsten Transaktion wieder genug vorhanden ist.',
