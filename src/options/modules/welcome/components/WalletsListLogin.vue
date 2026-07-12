@@ -21,6 +21,7 @@
           >
             <v-list-item-icon style="height: 40px" class="mr-4">
               <v-badge
+                class="chain-badge"
                 overlap
                 avatar
                 bottom
@@ -435,6 +436,15 @@ const handleLoggedOut = async (): Promise<void> => {
 };
 </script>
 <style scoped>
+/* Chain badge disc: force a dark surface so the transparent white marks
+   (Apex ap3x.svg, Midnight midnight.svg) read on dark. Without this the
+   colorless v-badge falls back to the Vuetify theme primary and paints the
+   disc blue behind the glyph — the "Midnight shows a blue logo" symptom. */
+.chain-badge ::v-deep .v-badge__badge {
+  background: var(--g-raised) !important;
+  border-color: var(--g-hairline-2) !important;
+}
+
 /* Ensure all parent elements are transparent for backdrop-filter to work */
 .transparent-override,
 .transparent-override .v-card__title,
