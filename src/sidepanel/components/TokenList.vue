@@ -21,24 +21,6 @@
         <div class="token-value text-body-2 grey--text">--</div>
       </div>
     </div>
-    <div class="token-item">
-      <div class="token-left">
-        <v-avatar size="36" class="token-avatar">
-          <v-icon small color="amber lighten-2">mdi-star-four-points</v-icon>
-        </v-avatar>
-        <div class="token-info">
-          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
-            {{ dustTicker }}
-          </div>
-          <div class="token-amount text-caption grey--text">
-            {{ hideBalances ? '••••••' : formattedDustBalance }}
-          </div>
-        </div>
-      </div>
-      <div class="token-right">
-        <div class="token-value text-body-2 grey--text">--</div>
-      </div>
-    </div>
   </div>
 
   <div v-else class="token-list">
@@ -150,10 +132,8 @@ const adaLogo = assetsUtil.cardanoBlueLogo;
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 const isMidnightMainnet = computed(() => isMidnight.value && walletStore.loggedWallet?.network === Network.MAINNET);
 const nightTicker = computed(() => (isMidnightMainnet.value ? 'NIGHT' : 'tNIGHT'));
-const dustTicker = computed(() => (isMidnightMainnet.value ? 'DUST' : 'tDUST'));
 
 const MN_NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const MN_DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 function formatMidnightUnits(value: bigint, divisor: bigint, digits: number): string {
   const whole = value / divisor;
@@ -165,9 +145,6 @@ const formattedNightBalance = computed(() => {
   const total = (midnightStore.balances.nightUnshielded ?? 0n) + (midnightStore.balances.nightShielded ?? 0n);
   return formatMidnightUnits(total, MN_NIGHT_DIVISOR, 2);
 });
-const formattedDustBalance = computed(() =>
-  formatMidnightUnits(midnightStore.balances.dust ?? 0n, MN_DUST_DIVISOR, 4));
-
 const emit = defineEmits<{
   (e: 'select', token: any): void;
 }>();
