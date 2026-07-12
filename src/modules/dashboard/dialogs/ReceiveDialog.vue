@@ -17,9 +17,9 @@
         centered
         background-color="transparent"
       >
-        <v-tab>Unshielded</v-tab>
-        <v-tab>Shielded</v-tab>
-        <v-tab>Dust</v-tab>
+        <v-tab>{{ t('midnight.common.public') }}</v-tab>
+        <v-tab>{{ t('midnight.common.private') }}</v-tab>
+        <v-tab>{{ t('midnight.receive.tabDust') }}</v-tab>
       </v-tabs>
       <v-tabs-items v-model="midnightTab" class="transparent">
         <v-tab-item eager v-for="(item, i) in midnightTabs" :key="i">
@@ -43,7 +43,7 @@
               </div>
               <p class="info-text">{{ item.info }}</p>
               <p v-if="!item.value" class="path-text" style="color: var(--g-warning);">
-                Pending SDK integration
+                {{ t('midnight.receive.pendingSdk') }}
               </p>
             </v-list-item-content>
           </v-list-item>
@@ -339,19 +339,19 @@ const midnightTabs = computed(() => {
   const addrs = midnightStore.addresses;
   return [
     {
-      label: 'Unshielded address',
+      label: t('midnight.receive.publicLabel'),
       value: addrs.unshielded ?? '',
-      info: 'Receive public NIGHT transfers. Indexer-visible — same shape as Bitcoin/Cardano payment addresses.',
+      info: t('midnight.receive.publicInfo'),
     },
     {
-      label: 'Shielded address',
+      label: t('midnight.receive.privateLabel'),
       value: addrs.shielded ?? '',
-      info: 'Receive private (Zswap) NIGHT. Senders generate a ZK proof; the indexer cannot see amounts or recipients.',
+      info: t('midnight.receive.privateInfo'),
     },
     {
-      label: 'Dust address',
+      label: t('midnight.receive.dustLabel'),
       value: addrs.dust ?? '',
-      info: 'Receive DUST registration mappings. Used by the cnight_generates_dust validator on the Cardano side.',
+      info: t('midnight.receive.dustInfo'),
     },
   ];
 });

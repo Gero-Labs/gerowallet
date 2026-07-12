@@ -4130,6 +4130,15 @@ export default {
   // Public/Private balance breakdown (shared across dashboard + mini-Gero + receive dialog)
   'midnight.common.public': 'Public',
   'midnight.common.private': 'Private',
+  // Receive dialog Midnight branch (Public / Private / DUST tabs)
+  'midnight.receive.tabDust': 'DUST',
+  'midnight.receive.publicLabel': 'Public address',
+  'midnight.receive.publicInfo': 'For regular (unshielded) NIGHT transfers. Amounts and addresses are visible on-chain.',
+  'midnight.receive.privateLabel': 'Private address',
+  'midnight.receive.privateInfo': 'For private (shielded) transfers. Amounts and participants stay confidential.',
+  'midnight.receive.dustLabel': 'DUST address',
+  'midnight.receive.dustInfo': 'Used once when setting up DUST fee generation. You normally never share this address.',
+  'midnight.receive.pendingSdk': 'Address not available yet.',
   // Portfolio panel labels
   'midnight.unshielded': 'Unshielded',
   'midnight.shielded': 'Shielded',
@@ -4143,8 +4152,8 @@ export default {
   'midnight.signAndSend': 'Sign and send',
   'midnight.shieldedSendComingNote': 'Shielded send (with proof generation) coming in a future release.',
   // Send-dialog tab labels (unshielded ↔ shielded toggle)
-  'midnight.send.tabUnshielded': 'Unshielded',
-  'midnight.send.tabShielded': 'Shielded',
+  'midnight.send.tabUnshielded': 'Public',
+  'midnight.send.tabShielded': 'Private',
   'midnight.send.shieldedRecipientLabel': 'Shielded recipient address',
   'midnight.send.shieldedAddressRequired': 'Shielded address required',
   'midnight.send.shieldedAddressPrefix': 'Address should start with {prefix}',
