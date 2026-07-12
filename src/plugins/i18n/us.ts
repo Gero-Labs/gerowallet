@@ -4146,6 +4146,7 @@ export default {
   'midnight.send.shieldedAddressPrefix': 'Address should start with {prefix}',
   'midnight.send.addressRequired': 'Recipient address required',
   'midnight.send.addressPrefix': 'Address should start with {prefix}',
+  'midnight.send.amountRequired': 'Amount required',
   'midnight.send.shieldedBalanceUnavailable': 'Shielded balance —',
   'midnight.send.shieldedBalanceHint': 'Shielded balance display is a future release; transfers still verify on-chain.',
   'midnight.send.dustResetWarning': 'Sending NIGHT restarts DUST generation on the coins you move. Your DUST balance refills to the cap over the next few days; the network fee itself is negligible.',

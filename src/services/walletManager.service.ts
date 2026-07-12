@@ -356,7 +356,7 @@ export class WalletManager {
 
       // Hydrate midnightStore with the persisted addresses so the dashboard
       // (MidnightHoldingsTable, ReceiveDialog) can render immediately.
-      const { midnightActions } = await import('@/stores/midnightStore');
+      const { midnightActions, isValidMidnightViewingKey } = await import('@/stores/midnightStore');
       let addresses: {
         unshielded: string;
         shielded: string;
@@ -406,8 +406,10 @@ export class WalletManager {
         // sync once their viewing key is re-derived (recreate the wallet, or
         // the future in-place viewing-key heal).
         // Privacy: log only the boolean/validity, never the key itself.
+        // This is the ONE place the raw key is read and handed to the sync
+        // service — it never travels via midnightStore (setActive strips it).
         const vk = addresses.zswapViewingKey;
-        const vkIsValid = typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
+        const vkIsValid = isValidMidnightViewingKey(vk);
         const shielded = vkIsValid
           ? { viewingKey: vk, lastIndex: null }
           : undefined;

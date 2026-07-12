@@ -170,6 +170,19 @@ export interface MidnightStore {
    * `null` whenever no send is running.
    */
   sendProgress: MidnightSendProgress | null;
+
+  /**
+   * Whether shielded (Zswap) sync is available for the active wallet — i.e.
+   * the wallet record carries a valid `mn_shield-esk_` viewing key. This is
+   * the ONLY thing browser-context UI is allowed to know about the viewing
+   * key: the raw key itself is a forever-decrypt secret (see
+   * `MidnightAddresses.zswapViewingKey` blast-radius note) and is
+   * deliberately kept OUT of this store, because the store broadcasts to
+   * `chrome.storage.local` which would persist it in plaintext. The
+   * background reads the raw key straight from the wallet record and hands it
+   * to the sync service; the UI only ever needs this boolean.
+   */
+  shieldedSyncAvailable: boolean;
 }
 
 /**
@@ -218,6 +231,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   shieldedProvingConsent: null,
   activeWalletKey: null,
   sendProgress: null,
+  shieldedSyncAvailable: false,
 });
 
 // ---------------------------------------------------------------- serializer
@@ -339,14 +353,32 @@ if (context === 'browser') {
 
   // Hydrate from chrome.storage.local on cold start
   chrome.storage.local.get(STORE_NAME, (result) => {
-    const stored = result[STORE_NAME];
+    // Persisted shape mirrors MidnightStore (BigInts/Maps serialized); every
+    // field below is read defensively with a fallback, so a typed view is
+    // safe and removes the `unknown`-property-access noise this block had.
+    const stored = result[STORE_NAME] as Partial<MidnightStore> | undefined;
     if (!stored) return;
 
     midnightStore.isActive = !!stored.isActive;
     midnightStore.lastSync = stored.lastSync ?? null;
     midnightStore.networkStatus = stored.networkStatus ?? 'disconnected';
     midnightStore.tip = stored.tip ?? { ...EMPTY_TIP };
-    midnightStore.addresses = stored.addresses ?? { ...EMPTY_ADDRESSES };
+    // Defensively strip any zswapViewingKey from a STALE persisted copy: a
+    // wallet that was active before this fix landed still has the plaintext
+    // key in its chrome.storage `addresses`. Derive the boolean from it, then
+    // drop it so the in-memory store never carries the key (even transiently),
+    // and re-persist the scrubbed shape below via setActive on next login.
+    if (stored.addresses && typeof stored.addresses === 'object') {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { zswapViewingKey: _staleVk, ...safeStored } = stored.addresses;
+      midnightStore.addresses = safeStored;
+      midnightStore.shieldedSyncAvailable = typeof stored.shieldedSyncAvailable === 'boolean'
+        ? stored.shieldedSyncAvailable
+        : isValidMidnightViewingKey(stored.addresses.zswapViewingKey);
+    } else {
+      midnightStore.addresses = { ...EMPTY_ADDRESSES };
+      midnightStore.shieldedSyncAvailable = !!stored.shieldedSyncAvailable;
+    }
     midnightStore.balances = hydrateBalances(stored.balances);
     midnightStore.utxos = hydrateUtxos(stored.utxos);
     midnightStore.transactions = hydrateTransactions(stored.transactions);
@@ -400,7 +432,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
-    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress',
+    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'shieldedSyncAvailable',
   ] as const) {
     if (key in updates) {
       (midnightStore as any)[key] = updates[key];
@@ -455,6 +487,18 @@ function broadcastFromBackground(updates: Partial<MidnightStore>, immediate = fa
 // ---------------------------------------------------------------- actions
 
 /**
+ * A viewing key is usable for shielded sync only in the bech32m `mn_shield-esk_`
+ * form the indexer's `connect(viewingKey)` mutation accepts. Wallets created
+ * before that form landed stored raw-hex / `mn_shield-epk_` and fall back to
+ * unshielded-only. Shared by `setActive` (to publish the boolean) and
+ * `walletManager.initializeWallet` (to decide the sync subscription) so the
+ * two can never disagree on what "shielded available" means.
+ */
+export function isValidMidnightViewingKey(vk: string | undefined | null): boolean {
+  return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
+}
+
+/**
  * Background-context actions. Browser code should never call these directly —
  * trigger them via Chrome messaging if needed.
  */
@@ -465,10 +509,23 @@ export const midnightActions = {
    * gero-sync events arrive.
    */
   setActive(addresses: MidnightAddresses) {
+    // SECURITY: never let the zswap viewing key (a forever-decrypt secret —
+    // see MidnightAddresses.zswapViewingKey) enter this store. The store
+    // broadcasts to chrome.storage.local, so a copy here would be a plaintext
+    // at-rest copy of the key. Strip it here, at the single chokepoint every
+    // caller (walletManager.initializeWallet, midnight-sync.service.start,
+    // DustRegistrationDialog) passes through, and publish only the boolean
+    // `shieldedSyncAvailable`. The raw key never travels via the store: the
+    // background reads it straight from the wallet record and hands it to the
+    // sync service (walletManager.initializeWallet → midnightSyncService.start).
+    const shieldedSyncAvailable = isValidMidnightViewingKey(addresses.zswapViewingKey);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { zswapViewingKey: _zswapViewingKey, ...safeAddresses } = addresses;
+
     // Identity of the wallet being activated. The unshielded address is
     // unique per (wallet, network), so a change here means we're now looking
     // at a different wallet or network than whatever state was rehydrated.
-    const newKey = addresses.unshielded || null;
+    const newKey = safeAddresses.unshielded || null;
     const prevKey = midnightStore.activeWalletKey;
     const isSwitch = !!prevKey && !!newKey && prevKey !== newKey;
 
@@ -491,16 +548,18 @@ export const midnightActions = {
     }
 
     midnightStore.isActive = true;
-    midnightStore.addresses = addresses;
+    midnightStore.addresses = safeAddresses;
     midnightStore.activeWalletKey = newKey;
     midnightStore.networkStatus = 'connecting';
+    midnightStore.shieldedSyncAvailable = shieldedSyncAvailable;
     broadcastFromBackground(
       isSwitch
         ? {
           isActive: true,
-          addresses,
+          addresses: safeAddresses,
           activeWalletKey: newKey,
           networkStatus: 'connecting',
+          shieldedSyncAvailable,
           lastSync: null,
           tip: { ...EMPTY_TIP },
           balances: { ...EMPTY_BALANCES },
@@ -509,7 +568,7 @@ export const midnightActions = {
           dustState: null,
           lastMidnightTxId: null,
         }
-        : { isActive: true, addresses, activeWalletKey: newKey, networkStatus: 'connecting' },
+        : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
     );
   },

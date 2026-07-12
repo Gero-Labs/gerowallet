@@ -114,9 +114,19 @@ class WebSocketService {
      * and forwards shielded events to this WS. Null = unshielded-only sync
      * (current default until the shielded SDK derivation lands).
      *
-     * The viewing key is held in-memory only for the duration of the WS
-     * session — it's re-derived from the wallet at next login rather than
-     * persisted to disk to keep its blast radius bounded.
+     * Held in-memory here for the WS session, but sourced from the wallet
+     * record's `publicKey` JSON (walletManager.initializeWallet), which stores
+     * it in PLAINTEXT at rest — currently in several extension-local on-disk
+     * copies (the IndexedDB wallet record, plus the chrome.storage.local
+     * geroStore/walletStore snapshots). All of those share one trust domain
+     * (anyone who can read the extension's on-disk profile can read any of
+     * them), so the real hardening is getting the key OFF plaintext disk
+     * entirely — encrypted-at-rest or memory-only chrome.storage.session,
+     * populated at credentialed unlock — NOT shuffling plaintext copies
+     * around. Tracked as Phase 2 (needs a UX decision: shielded sync is
+     * unavailable after a browser restart until first unlock). Blast radius:
+     * anyone who reads this string can decrypt every incoming shielded note
+     * for this wallet, forever (cannot spend).
      */
     midnightShieldedViewingKey?: string | null,
     /**
