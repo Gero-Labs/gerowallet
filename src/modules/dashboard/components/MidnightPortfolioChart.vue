@@ -404,8 +404,12 @@ function formatNight(value: bigint): string {
 .portfolio-metrics-panel {
   flex: 0 0 30%;
   min-width: 0;
-  background: var(--g-surface);
-  border: 1px solid var(--g-hairline-2);
+  /* Match Cardano's PortfolioChart hero panels: liquid glass over the chain
+     background (was opaque var(--g-surface), which broke cross-chain parity). */
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--g-r-card);
   padding: 6px 10px;
   display: flex;
@@ -489,8 +493,12 @@ function formatNight(value: bigint): string {
 .portfolio-chart-panel {
   flex: 1 1 70%;
   min-width: 0;
-  background: var(--g-surface);
-  border: 1px solid var(--g-hairline-2);
+  /* Match Cardano's PortfolioChart hero panels: liquid glass over the chain
+     background (was opaque var(--g-surface), which broke cross-chain parity). */
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--g-r-card);
   padding: 6px 10px;
   display: flex;

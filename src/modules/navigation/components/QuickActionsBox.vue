@@ -340,13 +340,17 @@ const isPerpetualsDisabled = computed(() => {
 }
 
 .quick-actions-container .send-button {
-  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  /* Send keeps the Gero brand cyan on every chain (it matches the fixed-cyan
+     send icon filter) — deliberately NOT tied to the chain accent, so it
+     doesn't turn purple on Midnight while its icon stays cyan. */
+  --g-send: #33C7DD;
+  background: color-mix(in srgb, var(--g-send) 12%, transparent) !important;
 }
 .quick-actions-container .send-button:hover {
-  background: color-mix(in srgb, var(--g-accent) 22%, transparent) !important;
+  background: color-mix(in srgb, var(--g-send) 22%, transparent) !important;
 }
 .send-button .button-text {
-  color: var(--g-accent);
+  color: var(--g-send);
 }
 
 .quick-actions-container .receive-button {

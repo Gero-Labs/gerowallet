@@ -146,13 +146,13 @@ const timeToFullLabel = computed(() => {
   inset: 0 auto 0 0;
   height: 100%;
   border-radius: 4px 0 0 4px;
-  background: linear-gradient(90deg, #16337a 0%, #2e7cc8 45%, #9db9c9 72%, #ecc985 100%);
+  background: linear-gradient(90deg, #2E1065 0%, #7C3AED 45%, #C4A7FC 72%, #ecc985 100%);
   transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .is-full .mini-dust__fill {
   border-radius: 4px;
-  background: linear-gradient(90deg, #16337a 0%, #b98f45 55%, #ffe9b2 100%);
+  background: linear-gradient(90deg, #2E1065 0%, #9D7BEA 55%, #ffe9b2 100%);
 }
 
 .mini-dust__divider {
