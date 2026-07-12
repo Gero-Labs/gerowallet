@@ -23,6 +23,7 @@ const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
 const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
+const BlogPost = () => import('@/modules/blog/BlogPost.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
@@ -36,6 +37,7 @@ const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue'
 const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
 const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
 const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
+const NexusPage = () => import('@/modules/nexus/NexusPage.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -82,6 +84,15 @@ const routes = [
     },
   },
   {
+    path: '/nexus',
+    name: 'nexus',
+    component: NexusPage,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/cashback',
     name: 'cashback',
     component: Cashback,
@@ -121,6 +132,16 @@ const routes = [
     path: '/blog',
     name: 'blog',
     component: Blog,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/blog/:slug',
+    name: 'blog-post',
+    component: BlogPost,
+    props: true,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -371,7 +392,12 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn && !isLocked && !isSyncing) {
+  // ?addWallet=1 is the escape hatch for "Enter Setup" (WalletSelector.vue):
+  // adding a wallet from an already-logged-in session used to force a global
+  // logout first purely to get past this guard, which killed the caller's
+  // active session (and every other open tab's) as collateral damage. This
+  // lets the new tab reach /welcome without touching anyone else's state.
+  if (isWelcome && isLoggedIn && !isLocked && !isSyncing && to.query['addWallet'] !== '1') {
     // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
   }

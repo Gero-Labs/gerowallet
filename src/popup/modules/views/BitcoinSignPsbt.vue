@@ -144,7 +144,7 @@ import { UR } from '@keystonehq/keystone-sdk';
 
 const { t } = useTranslation();
 const vmProxy = getCurrentInstance()!.proxy;
-const { loggedWallet, config } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 
 const form = ref(null);
 const valid = ref(false);
@@ -385,14 +385,14 @@ const decodePsbt = async (psbtHex: string, options: any) => {
 };
 
 onMounted(async () => {
-  const useSidePanel = config.value?.useSidePanel;
-  if (useSidePanel) {
-    const params = new URLSearchParams(window.location.href);
-    const tabId = Number(params.get('tabId'));
-    controller.value = Messaging.createInternalSidePanelController(tabId);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see the
+  // BITCOIN_METHOD.signPsbt(s) popup fallback in background.ts, which always
+  // targets index.html) — never inside the side panel, which renders
+  // DAppOverlay.vue instead. It must always speak the popup port protocol.
+  // It used to branch on the now-retired Prompt Display Mode setting
+  // instead, which connected the wrong port name and hung forever whenever
+  // this fallback view was reached.
+  controller.value = Messaging.createInternalController();
 
   try {
     request.value = await controller.value.requestData();

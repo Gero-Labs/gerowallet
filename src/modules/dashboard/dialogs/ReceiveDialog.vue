@@ -10,8 +10,49 @@
     :img="assets.qrCodeSvg"
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
+    <!-- Midnight Wallet UI — three role-specific addresses -->
+    <v-card-title v-if="isMidnightWallet" class="py-0 transparent">
+      <v-tabs
+        v-model="midnightTab"
+        centered
+        background-color="transparent"
+      >
+        <v-tab>Unshielded</v-tab>
+        <v-tab>Shielded</v-tab>
+        <v-tab>Dust</v-tab>
+      </v-tabs>
+      <v-tabs-items v-model="midnightTab" class="transparent">
+        <v-tab-item eager v-for="(item, i) in midnightTabs" :key="i">
+          <v-list-item three-line class="px-0">
+            <v-list-item-avatar size="160" rounded>
+              <div
+                class="qr-container"
+                :ref="el => setMidnightQrContainerRef(el, i)"
+              ></div>
+            </v-list-item-avatar>
+            <v-list-item-content class="pl-4">
+              <h4 class="address-label">{{ item.label }}</h4>
+              <div class="address-row">
+                <span
+                  class="address-text"
+                  @click="triggerCopy(item.value)"
+                >
+                  {{ item.value ? filters.truncate(item.value) : '—' }}
+                </span>
+                <CopyButton v-if="item.value" class="ml-1" :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
+              </div>
+              <p class="info-text">{{ item.info }}</p>
+              <p v-if="!item.value" class="path-text" style="color: var(--g-warning);">
+                Pending SDK integration
+              </p>
+            </v-list-item-content>
+          </v-list-item>
+        </v-tab-item>
+      </v-tabs-items>
+    </v-card-title>
+
     <!-- Bitcoin Wallet UI -->
-    <v-card-title v-if="isBitcoinWallet" class="py-0 transparent">
+    <v-card-title v-else-if="isBitcoinWallet" class="py-0 transparent">
       <v-list-item three-line class="px-0">
         <v-list-item-avatar size="160" rounded>
           <div class="qr-container" ref="btcQrContainer"></div>
@@ -31,7 +72,7 @@
     </v-card-title>
 
     <!-- Cardano Wallet UI (Original) -->
-    <v-card-title v-else class="py-0 transparent">
+    <v-card-title v-else-if="!isMidnightWallet" class="py-0 transparent">
       <v-tabs
         v-model="tab"
         centered
@@ -74,7 +115,7 @@
       <!-- Bitcoin Controls -->
       <v-expansion-panels v-if="isBitcoinWallet" v-model="bitcoinExpandedPanels" multiple class="accordion-container">
         <!-- Address Type Selector -->
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -100,7 +141,7 @@
         </v-expansion-panel>
 
         <!-- Address Navigation -->
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -133,7 +174,7 @@
         </v-expansion-panel>
 
         <!-- Optional Amount/Label -->
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -177,7 +218,7 @@
 
       <!-- Cardano Used Addresses (Original) -->
       <v-expansion-panels v-else v-model="expandedPanels" multiple class="accordion-container">
-        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
           <v-expansion-panel-header>
             <div class="header-container">
               <div class="icon-container">
@@ -202,9 +243,9 @@
                 <v-simple-table dense style="background-color: transparent">
                   <thead>
                     <tr>
-                      <th class="text-left grey--text">{{ $t('wallet.address') }}</th>
-                      <th class="text-left grey--text">{{ $t('wallet.path') }}</th>
-                      <th class="text-center grey--text">{{ $t('wallet.type') }}</th>
+                      <th class="text-left grey--text t-label">{{ $t('wallet.address') }}</th>
+                      <th class="text-left grey--text t-label">{{ $t('wallet.path') }}</th>
+                      <th class="text-center grey--text t-label">{{ $t('wallet.type') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -255,6 +296,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
 import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
 
@@ -269,6 +311,49 @@ const { loggedWallet, keys } = toRefs(walletStore);
 // Check if Bitcoin wallet
 const isBitcoinWallet = computed(() => {
   return loggedWallet.value?.chain === Blockchain.BITCOIN;
+});
+
+// Check if Midnight wallet
+const isMidnightWallet = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
+});
+
+// Midnight state — addresses come from midnightStore (populated by the SDK
+// at login time). Until the SDK is integrated they're empty strings; the UI
+// shows a "Pending SDK integration" hint instead of a QR.
+const midnightTab = ref(0);
+const midnightQrContainers = [
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+];
+const midnightQrcodes: (QRCodeStyling | null)[] = [null, null, null];
+
+const setMidnightQrContainerRef = (el: Element | null, index: number) => {
+  if (el && midnightQrContainers[index]) {
+    midnightQrContainers[index].value = el as HTMLElement;
+  }
+};
+
+const midnightTabs = computed(() => {
+  const addrs = midnightStore.addresses;
+  return [
+    {
+      label: 'Unshielded address',
+      value: addrs.unshielded ?? '',
+      info: 'Receive public NIGHT transfers. Indexer-visible — same shape as Bitcoin/Cardano payment addresses.',
+    },
+    {
+      label: 'Shielded address',
+      value: addrs.shielded ?? '',
+      info: 'Receive private (Zswap) NIGHT. Senders generate a ZK proof; the indexer cannot see amounts or recipients.',
+    },
+    {
+      label: 'Dust address',
+      value: addrs.dust ?? '',
+      info: 'Receive DUST registration mappings. Used by the cnight_generates_dust validator on the Cardano side.',
+    },
+  ];
 });
 
 // Cardano state
@@ -538,6 +623,35 @@ watch(
       await deriveBitcoinAddress();
       await nextTick();
       updateBitcoinQrCode();
+    } else if (isMidnightWallet.value) {
+      // Midnight wallet — render a QR per address tab. Addresses may be empty
+      // strings if the SDK hasn't derived them yet; in that case skip QR setup
+      // and the template renders a "Pending SDK integration" hint.
+      midnightTabs.value.forEach((tabItem, i) => {
+        if (!tabItem.value) return;
+        if (!midnightQrcodes[i]) {
+          midnightQrcodes[i] = new QRCodeStyling({
+            width: 160,
+            height: 160,
+            type: 'svg',
+            data: tabItem.value,
+            image: assets.geroLogo,
+            margin: 2,
+            qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
+            imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
+            backgroundOptions: { color: '#ffffff' },
+            cornersSquareOptions: { type: 'extra-rounded' },
+            cornersDotOptions: { type: 'dot' },
+          });
+        } else {
+          midnightQrcodes[i]!.update({ data: tabItem.value });
+        }
+        const el = midnightQrContainers[i].value;
+        if (el) {
+          el.innerHTML = '';
+          midnightQrcodes[i]!.append(el);
+        }
+      });
     } else {
       // Cardano wallet - original logic
       tabs.value.forEach((tabItem, i) => {
@@ -575,13 +689,13 @@ watch(
 
 <style scoped>
 .qr-container {
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 }
 
 .address-label {
   font-weight: bold;
-  font-size: 1.2rem;
-  color: #fff;
+  font-size: 20px;
+  color: var(--g-text-1);
 }
 
 .address-row {
@@ -595,13 +709,13 @@ watch(
 }
 
 .path-text {
-  font-size: 0.9rem;
-  color: #bbb;
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 
 .info-text {
-  font-size: 1rem;
-  color: #ddd;
+  font-size: 16px;
+  color: var(--g-text-2);
   margin-top: 0.5rem;
   word-break: break-word;
 }
@@ -612,8 +726,8 @@ watch(
 }
 
 .cred-text {
-  font-size: 0.9rem;
-  color: #ccc;
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 
 /* Collapsible panel styles */
@@ -624,18 +738,16 @@ watch(
 
 .accordion-container .v-expansion-panel {
   margin-bottom: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
+  border: 1px solid var(--g-hairline-2);
+  transition: border-color var(--g-dur-slow) ease;
 }
 
 .accordion-container .v-expansion-panel:hover {
-  border-color: rgba(0, 223, 243, 0.3);
-  box-shadow: 0 0 10px rgba(0, 223, 243, 0.1);
+  border-color: var(--g-accent);
 }
 
 .accordion-container .v-expansion-panel--active {
-  border-color: rgba(0, 223, 243, 0.5);
-  box-shadow: 0 0 15px rgba(0, 223, 243, 0.2);
+  border-color: var(--g-accent);
 }
 
 .header-container {
@@ -646,7 +758,7 @@ watch(
 }
 
 .icon-container {
-  background-color: rgba(0, 223, 243, 0.1);
+  background-color: var(--g-overlay);
   border-radius: 50%;
   padding: 8px;
   margin-right: 12px;
@@ -656,36 +768,28 @@ watch(
 }
 
 .icon-container .v-icon {
-  color: #00dff3 !important;
+  color: var(--g-accent) !important;
 }
 
 .content-container {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: var(--g-surface);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .address-cell {
-  font-family: monospace;
-  font-size: 0.875rem;
+  font-family: var(--g-font-mono);
+  font-size: 14px;
 }
 
 .path-cell {
-  font-family: monospace;
-  font-size: 0.875rem;
-  color: #bbb;
+  font-family: var(--g-font-mono);
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 
 /* Override expansion panel chevron color */
 .v-expansion-panel-header__icon .v-icon {
-  color: #00dff3 !important;
-}
-
-/* Style the table headers */
-.v-data-table thead th {
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--g-accent) !important;
 }
 
 /* Style the switch inside the header */
@@ -695,7 +799,7 @@ watch(
 }
 
 .v-expansion-panel-header .v-input--switch .v-label {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  color: var(--g-text-2);
 }
 </style>

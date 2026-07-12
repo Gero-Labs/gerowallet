@@ -286,7 +286,7 @@ onUnmounted(() => {
   height: 100%;
   background: linear-gradient(135deg, $primary-cyan 0%, $primary-green 100%);
   border-radius: 4px;
-  transition: width 0.1s ease;
+  transition: width var(--g-dur-fast) ease;
 }
 
 .progress-icon {
@@ -294,7 +294,7 @@ onUnmounted(() => {
   top: 53%;
   transform: translateY(-50%);
   z-index: 1;
-  transition: left 0.1s ease;
+  transition: left var(--g-dur-fast) ease;
 }
 
 .progress-text {
@@ -347,7 +347,7 @@ onUnmounted(() => {
 
 // Slide transition styles
 .slide-step-enter-active {
-  transition: all 0.4s ease-out;
+  transition: opacity var(--g-dur-slow) ease-out, transform var(--g-dur-slow) ease-out;
 }
 
 .slide-step-enter-from {
@@ -372,7 +372,7 @@ onUnmounted(() => {
 
 // Move transition for when items change positions
 .slide-step-move {
-  transition: transform 0.5s ease;
+  transition: transform var(--g-dur-slow) ease;
 }
 
 // Enhanced fade-out animation for leaving text

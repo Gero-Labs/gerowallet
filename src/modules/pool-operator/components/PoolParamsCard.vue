@@ -1,7 +1,7 @@
 <template>
   <div class="pp-card liquid-glass">
     <div class="card-header">
-      <v-icon size="14" color="white" class="mr-1">mdi-tune</v-icon>
+      <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-tune</v-icon>
       <span>{{ $t('poolOperator.coreParameters') }}</span>
     </div>
 
@@ -44,7 +44,7 @@
       <!-- Relays detail -->
       <div v-if="relays.length" class="pp-section">
         <div class="pp-section-title">
-          <v-icon size="12" color="white" class="mr-1">mdi-access-point-network</v-icon>
+          <v-icon size="12" color="var(--g-text-1)" class="mr-1">mdi-access-point-network</v-icon>
           {{ $t('poolOperator.relays') }}
         </div>
         <div v-for="(relay, i) in relays" :key="i" class="relay-row">
@@ -58,21 +58,21 @@
       <!-- Metadata -->
       <div v-if="metadataUrl" class="pp-section">
         <div class="pp-section-title">
-          <v-icon size="12" color="white" class="mr-1">mdi-tag-text-outline</v-icon>
+          <v-icon size="12" color="var(--g-text-1)" class="mr-1">mdi-tag-text-outline</v-icon>
           {{ $t('poolOperator.poolMetadata') }}
         </div>
         <div class="meta-row">
           <span class="meta-label">URL</span>
           <span class="meta-value meta-link" @click="copyText(metadataUrl)">
             {{ metadataUrl }}
-            <v-icon x-small color="rgba(255,255,255,0.3)">mdi-content-copy</v-icon>
+            <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
           </span>
         </div>
         <div v-if="metadataHash" class="meta-row">
           <span class="meta-label">Hash</span>
           <span class="meta-value meta-hash" @click="copyText(metadataHash)">
             {{ truncateHash(metadataHash) }}
-            <v-icon x-small color="rgba(255,255,255,0.3)">mdi-content-copy</v-icon>
+            <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
           </span>
         </div>
       </div>
@@ -81,25 +81,25 @@
       <div v-if="owners.length || rewardAddr" class="pp-section">
         <div v-if="owners.length">
           <div class="pp-section-title">
-            <v-icon size="12" color="white" class="mr-1">mdi-account-key</v-icon>
+            <v-icon size="12" color="var(--g-text-1)" class="mr-1">mdi-account-key</v-icon>
             {{ $t('poolOperator.owners') }} ({{ owners.length }})
           </div>
           <div v-for="(owner, i) in owners" :key="i" class="meta-row">
             <span class="meta-value meta-hash" @click="copyText(owner)">
               {{ truncateHash(owner) }}
-              <v-icon x-small color="rgba(255,255,255,0.3)">mdi-content-copy</v-icon>
+              <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
             </span>
           </div>
         </div>
         <div v-if="rewardAddr" :style="owners.length ? 'margin-top: 8px' : ''">
           <div class="pp-section-title">
-            <v-icon size="12" color="white" class="mr-1">mdi-wallet-outline</v-icon>
+            <v-icon size="12" color="var(--g-text-1)" class="mr-1">mdi-wallet-outline</v-icon>
             {{ $t('poolOperator.rewardAccount') }}
           </div>
           <div class="meta-row">
             <span class="meta-value meta-hash" @click="copyText(rewardAddr)">
               {{ truncateHash(rewardAddr) }}
-              <v-icon x-small color="rgba(255,255,255,0.3)">mdi-content-copy</v-icon>
+              <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
             </span>
           </div>
         </div>
@@ -148,8 +148,8 @@ function relayIcon(r: any): string {
 }
 
 function relayColor(r: any): string {
-  if (r.ipv4 || r.ipv6 || r.__typename === 'RelayByAddress') return '#FDB022';
-  return '#2DF0F7';
+  if (r.ipv4 || r.ipv6 || r.__typename === 'RelayByAddress') return 'var(--g-warning)';
+  return 'var(--g-accent)';
 }
 
 function relayAddr(r: any): string {
@@ -175,7 +175,7 @@ function copyText(text: string) {
 .pp-card { padding: 14px; }
 
 .card-header {
-  font-size: 11px; font-weight: 600; color: white;
+  font-size: 11px; font-weight: 600; color: var(--g-text-1);
   text-transform: uppercase; letter-spacing: 0.5px;
   display: flex; align-items: center; margin-bottom: 12px;
 }
@@ -184,8 +184,8 @@ function copyText(text: string) {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: rgba(255,255,255,0.03);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   overflow: hidden;
 }
 
@@ -196,21 +196,21 @@ function copyText(text: string) {
 }
 
 .pp-val {
-  display: block; font-size: 16px; font-weight: 700; color: rgba(255,255,255,0.95);
+  display: block; font-size: 16px; font-weight: 700; color: var(--g-text-1);
   font-variant-numeric: tabular-nums; line-height: 1.2;
 }
 
 .pp-lbl {
-  display: block; font-size: 10px; color: rgba(255,255,255,0.45);
+  display: block; font-size: 11px; color: var(--g-text-3);
   text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px;
 }
 
-.pp-sub { display: block; font-size: 10px; margin-top: 2px; }
-.pp-ok { color: #75E0A7; }
-.pp-err { color: #FDA29B; }
+.pp-sub { display: block; font-size: 11px; margin-top: 2px; }
+.pp-ok { color: var(--g-success); }
+.pp-err { color: var(--g-error); }
 
-.pp-bar { height: 2px; background: rgba(255,255,255,0.06); border-radius: 1px; margin-top: 4px; }
-.pp-bar-fill { height: 100%; background: linear-gradient(90deg, #00c7f3, #00ffd1); border-radius: 1px; transition: width 0.6s; }
+.pp-bar { height: 2px; background: var(--g-hairline-1); border-radius: var(--g-r-chip); margin-top: 4px; }
+.pp-bar-fill { height: 100%; background: var(--g-accent); border-radius: var(--g-r-chip); transition: width 0.6s; }
 
 /* Detail sections - horizontal flow */
 .pp-details {
@@ -219,7 +219,7 @@ function copyText(text: string) {
   gap: 0 16px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 @media (max-width: 700px) {
@@ -231,7 +231,7 @@ function copyText(text: string) {
 }
 
 .pp-section-title {
-  font-size: 10px; font-weight: 600; color: white;
+  font-size: 11px; font-weight: 600; color: var(--g-text-1);
   text-transform: uppercase; letter-spacing: 0.4px;
   display: flex; align-items: center; margin-bottom: 6px;
 }
@@ -244,21 +244,21 @@ function copyText(text: string) {
 }
 
 .relay-type {
-  font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.5);
+  font-size: 11px; font-weight: 600; color: var(--g-text-3);
   min-width: 28px;
 }
 
 .relay-addr {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 12px;
-  color: rgba(255,255,255,0.8);
+  color: var(--g-text-2);
   word-break: break-all;
 }
 
 .relay-port {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 12px;
-  color: rgba(45,240,247,0.7);
+  color: var(--g-accent);
 }
 
 /* Metadata rows */
@@ -269,14 +269,14 @@ function copyText(text: string) {
 }
 
 .meta-label {
-  font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.4);
+  font-size: 11px; font-weight: 600; color: var(--g-text-3);
   min-width: 32px; text-transform: uppercase;
 }
 
 .meta-value {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
-  color: rgba(255,255,255,0.7);
+  color: var(--g-text-2);
   word-break: break-all;
 }
 
@@ -286,5 +286,5 @@ function copyText(text: string) {
   transition: color 0.15s;
 }
 
-.meta-link:hover, .meta-hash:hover { color: rgba(255,255,255,0.9); }
+.meta-link:hover, .meta-hash:hover { color: var(--g-text-1); }
 </style>

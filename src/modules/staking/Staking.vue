@@ -25,7 +25,7 @@
               </v-list-item-content>
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-subtitle>
-                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
+                  <v-btn small class="geroButton" style="color: var(--g-on-grad)!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
@@ -210,7 +210,7 @@
                     v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000"
                     class="stake-change-up"
                   >
-                    <v-icon x-small color="#47cd89" class="stake-arrow-icon">mdi-arrow-up-bold</v-icon>
+                    <v-icon x-small color="success" class="stake-arrow-icon">mdi-arrow-up-bold</v-icon>
                     {{
                       filters.toCurrency(
                         Number(item.active_stake) - Number(item.live_stake),
@@ -226,7 +226,7 @@
                     v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000"
                     class="stake-change-down"
                   >
-                    <v-icon x-small color="#F97066" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
+                    <v-icon x-small color="error" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
                     {{
                       filters.toCurrency(
                         Number(item.live_stake) - Number(item.active_stake),
@@ -264,10 +264,10 @@
                     true
                   )
                 }}
-                <v-icon x-small color="#47cd89" v-if="Number(item.pledge) <= Number(item.live_pledge)"
+                <v-icon x-small color="success" v-if="Number(item.pledge) <= Number(item.live_pledge)"
                   >mdi-check</v-icon
                 >
-                <v-icon x-small color="#F97066" v-else>mdi-close</v-icon>
+                <v-icon x-small color="error" v-else>mdi-close</v-icon>
               </template>
             </v-data-table>
             <v-row no-gutters v-else>
@@ -281,14 +281,11 @@
                 :key="index"
                 class="px-2 py-2"
               >
-                <v-hover v-slot="{ hover }">
-                  <v-card
-                    flat
-                    outlined
-                    :color="hover ? '#FFFFFF' : '#84CAFF'"
-                    class="pool-card fill-height"
-                    @click="delegate(pool)"
-                  >
+                <v-card
+                  flat
+                  class="pool-card fill-height"
+                  @click="delegate(pool)"
+                >
                     <v-list-item v-if="pool">
                       <v-list-item-content class="pb-0">
                         <v-list-item-title>
@@ -393,7 +390,7 @@
                           <span class="pool-card-label">{{ $t('staking.pledge') }}</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-chip x-small color="#085D3A" class="pool-pledge-chip" v-if="loggedWallet">
+                          <v-chip x-small class="pool-pledge-chip" v-if="loggedWallet">
                             {{
                               filters.toCurrency(
                                 pool.pledge,
@@ -433,7 +430,6 @@
                       </v-row>
                     </v-card-text>
                   </v-card>
-                </v-hover>
               </v-col>
             </v-row>
           </v-card-text>
@@ -626,11 +622,14 @@ const poolExtendedInfo = (pool: any) => {
     const key = pool.pool_id_bech32 || pool.pool_id;
     if (key && poolExtendedInfoCache.has(key)) return poolExtendedInfoCache.get(key);
     const parsed = JSON.parse(pool.pool_extended_info);
-    // Sanitize icon URL — some pools have placeholder text instead of a real URL
-    if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
+    // Sanitize icon URL — some pools leave the placeholder instruction text
+    // ("http(s) url to pool icon; ...") which starts with "http" but 404s, so
+    // require a real http(s):// scheme with no spaces.
+    const validUrl = (u: any) => typeof u === 'string' && /^https?:\/\/\S+$/.test(u);
+    if (parsed?.info?.url_png_icon_64x64 && !validUrl(parsed.info.url_png_icon_64x64)) {
       parsed.info.url_png_icon_64x64 = '';
     }
-    if (parsed?.info?.url_png_logo && !parsed.info.url_png_logo.startsWith('http')) {
+    if (parsed?.info?.url_png_logo && !validUrl(parsed.info.url_png_logo)) {
       parsed.info.url_png_logo = '';
     }
     if (key) poolExtendedInfoCache.set(key, parsed);
@@ -656,11 +655,11 @@ onBeforeUnmount(() => {
 </script>
 <style scoped>
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  background: var(--g-accent);
 }
 
 .v-data-table-header {
-  background-color: rgb(22, 27, 38);
+  background-color: var(--g-raised);
 }
 
 .v-data-table > .v-data-table__wrapper > table > tbody > tr > td,
@@ -699,8 +698,8 @@ onBeforeUnmount(() => {
 }
 
 .staking-support-title {
-  color: #00dff3;
-  font-size: 18px;
+  color: var(--g-accent);
+  font-size: 16px;
 }
 
 .staking-filters-row {
@@ -737,7 +736,7 @@ onBeforeUnmount(() => {
 }
 
 .pool-saturation-details {
-  font-size: 10px;
+  font-size: 11px;
   text-align-last: justify;
   display: flex;
   justify-content: space-between;
@@ -746,46 +745,68 @@ onBeforeUnmount(() => {
 
 .stake-change-up {
   display: inline-flex;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .stake-change-down {
   display: inline-flex;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .stake-arrow-icon {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .stake-arrow-icon-down {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.7;
 }
 
 .pool-fees-text {
   font-size: 14px;
-  color: white;
+  color: var(--g-text-1);
 }
 
-/* Pool cards styles */
+/* Pool cards: a raised card with a hairline that lifts to the chain accent on
+   hover. The label/value tone gap is the hierarchy (both were text-1 before). */
 .pool-card {
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-1) !important;
+  transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease,
+    box-shadow var(--g-dur-fast) ease;
+  cursor: pointer;
+}
+
+.pool-card:hover {
+  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent) !important;
+  transform: translateY(-2px);
+  box-shadow: var(--g-shadow-menu);
+}
+
+.pool-card .v-list-item__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--g-text-1);
 }
 
 .pool-card-label {
-  font-size: 14px;
-  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-text-3);
 }
 
 .pool-card-value {
-  font-size: 14px;
-  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-text-1);
+  font-variant-numeric: tabular-nums;
 }
 
 .pool-pledge-chip {
-  border: 1px solid #75e0a7;
-  color: #75e0a7;
+  background: var(--g-success-fill) !important;
+  border: 1px solid var(--g-success-line);
+  color: var(--g-success) !important;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Pagination styles */

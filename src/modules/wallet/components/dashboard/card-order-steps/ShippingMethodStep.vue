@@ -146,7 +146,7 @@ defineExpose({
   border: 2px solid $border-primary;
   border-radius: $border-radius-lg;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease;
 
   &:hover {
     border-color: rgba($primary-cyan, 0.5);

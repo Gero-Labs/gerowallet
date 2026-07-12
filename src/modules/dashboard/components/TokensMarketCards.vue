@@ -255,7 +255,7 @@ const marketData = computed(() => charli3Store.state.marketData);
 const loading = computed(() => charli3Store.state.loading);
 const error = computed(() => charli3Store.state.error);
 const lastRefreshTime = computed(() => charli3Store.state.lastRefreshTime);
-const primaryColor = computed(() => '#00c7f3');
+const primaryColor = computed(() => 'var(--g-accent)');
 
 // Methods
 const loadMarketData = async (isBackgroundRefresh = false) => {
@@ -447,8 +447,8 @@ onMounted(async () => {
 
 .compact-card {
   height: 160px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: var(--g-r-control);
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease, box-shadow var(--g-dur-base) ease;
 }
 
 .refresh-badge {
@@ -459,24 +459,22 @@ onMounted(async () => {
 }
 
 .refresh-icon {
-  background-color: rgba(20, 20, 20, 0.7);
+  background-color: var(--g-raised);
   border-radius: 50%;
   padding: 4px;
-  backdrop-filter: blur(4px);
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease;
 }
 
 .refresh-icon:hover {
-  background-color: rgba(20, 20, 20, 0.9);
+  background-color: var(--g-raised);
   transform: scale(1.1);
 }
 
 .refresh-tooltip {
   padding: 8px 12px !important;
-  border-radius: 8px !important;
-  background-color: rgba(20, 20, 20, 0.95) !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
-  backdrop-filter: blur(8px) !important;
+  border-radius: var(--g-r-control) !important;
+  background-color: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-2) !important;
 }
 
 .refresh-tooltip-content {
@@ -485,7 +483,7 @@ onMounted(async () => {
 
 .refresh-tooltip-content div {
   margin-bottom: 2px;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 
 .refresh-tooltip-content div:last-child {
@@ -493,158 +491,52 @@ onMounted(async () => {
 }
 
 .refresh-tooltip-content strong {
-  color: #00c7f3;
-}
-
-.compact-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  color: var(--g-accent);
 }
 
 .volume-card {
-  border-left: 4px solid #2196f3 !important;
-  animation: volumeColorShift 8s ease-in-out infinite;
+  border-left: 4px solid var(--g-info) !important;
 }
 
 .gainers-card {
-  border-left: 4px solid #3f51b5 !important;
-  animation: gainersColorShift 10s ease-in-out infinite;
+  border-left: 4px solid var(--g-info) !important;
 }
 
 .mcap-card {
-  border-left: 4px solid #607d8b !important;
-  animation: mcapColorShift 12s ease-in-out infinite;
-}
-
-@keyframes volumeColorShift {
-  0%,
-  100% {
-    border-left-color: #2196f3;
-  }
-  25% {
-    border-left-color: #1976d2;
-  }
-  50% {
-    border-left-color: #0d47a1;
-  }
-  75% {
-    border-left-color: #1565c0;
-  }
-}
-
-@keyframes gainersColorShift {
-  0%,
-  100% {
-    border-left-color: #3f51b5;
-  }
-  25% {
-    border-left-color: #303f9f;
-  }
-  50% {
-    border-left-color: #1a237e;
-  }
-  75% {
-    border-left-color: #283593;
-  }
-}
-
-@keyframes mcapColorShift {
-  0%,
-  100% {
-    border-left-color: #607d8b;
-  }
-  25% {
-    border-left-color: #455a64;
-  }
-  50% {
-    border-left-color: #263238;
-  }
-  75% {
-    border-left-color: #37474f;
-  }
+  border-left: 4px solid var(--g-info) !important;
 }
 
 .volume-icon {
-  color: #2196f3 !important;
-  animation: volumeIconShift 8s ease-in-out infinite;
+  color: var(--g-info) !important;
 }
 
 .gainers-icon {
-  color: #3f51b5 !important;
-  animation: gainersIconShift 10s ease-in-out infinite;
+  color: var(--g-info) !important;
 }
 
 .mcap-icon {
-  color: #607d8b !important;
-  animation: mcapIconShift 12s ease-in-out infinite;
-}
-
-@keyframes volumeIconShift {
-  0%,
-  100% {
-    color: #2196f3 !important;
-  }
-  25% {
-    color: #1976d2 !important;
-  }
-  50% {
-    color: #0d47a1 !important;
-  }
-  75% {
-    color: #1565c0 !important;
-  }
-}
-
-@keyframes gainersIconShift {
-  0%,
-  100% {
-    color: #3f51b5 !important;
-  }
-  25% {
-    color: #303f9f !important;
-  }
-  50% {
-    color: #1a237e !important;
-  }
-  75% {
-    color: #283593 !important;
-  }
-}
-
-@keyframes mcapIconShift {
-  0%,
-  100% {
-    color: #607d8b !important;
-  }
-  25% {
-    color: #455a64 !important;
-  }
-  50% {
-    color: #263238 !important;
-  }
-  75% {
-    color: #37474f !important;
-  }
+  color: var(--g-info) !important;
 }
 
 .compact-item {
   padding: 4px 6px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  border-radius: var(--g-r-control);
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease, box-shadow var(--g-dur-base) ease;
   margin-bottom: 1px;
 }
 
 .positive-change {
-  color: #4caf50;
+  color: var(--g-success);
   font-weight: 600;
 }
 
 .negative-change {
-  color: #f44336;
+  color: var(--g-error);
   font-weight: 600;
 }
 
 .neutral-change {
-  color: #757575;
+  color: var(--g-text-3);
 }
 
 .text-subtitle-1 {
@@ -666,13 +558,13 @@ onMounted(async () => {
 .token-placeholder {
   width: 20px;
   height: 20px;
-  background: linear-gradient(135deg, #00c7f3, #00ffd1);
+  background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: #000;
+  color: var(--g-on-grad);
   border-radius: 50%;
 }
 
@@ -726,7 +618,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   z-index: 10;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 }
 
 .coming-soon-content {
@@ -734,19 +626,17 @@ onMounted(async () => {
 }
 
 .market-data-label {
-  color: #ffffff;
+  color: var(--g-text-1);
   font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.05em;
   margin-bottom: 8px;
   opacity: 0.9;
 }
 
 .coming-soon-text {
-  color: #888888;
+  color: var(--g-text-3);
   font-size: 0.9rem;
   font-weight: 500;
-  letter-spacing: 0.05em;
   opacity: 0.7;
 }
 </style>

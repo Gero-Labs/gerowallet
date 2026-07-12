@@ -271,21 +271,47 @@ const openTerms = (): void => {
 const walletCreationStep = async (): Promise<void> => {
   creatingWalletLoader.value = true;
   try {
-    // Check if wallet with same mnemonic already exists
-    const { derivePublicKeyFromMnemonic, getWalletByPublicKey } = await import('@/db/gero-db');
-    const publicKey = await derivePublicKeyFromMnemonic(seedToStr.value);
-    const existingWallet = await getWalletByPublicKey(publicKey);
+    // Midnight derives its wallet identity via the wallet-sdk-facade (not the
+    // Cardano publicKey path), which isn't wired into the dedup helper yet.
+    // Skip dedup on Midnight until the SDK lands. Re-restoring the same Midnight
+    // mnemonic will create a separate wallet record for now.
+    if (props.network.blockchain !== 'Midnight') {
+      // Check if wallet with same mnemonic already exists
+      const { derivePublicKeyFromMnemonic, getWalletByPublicKey } = await import('@/db/gero-db');
+      const publicKey = await derivePublicKeyFromMnemonic(seedToStr.value);
+      const existingWallet = await getWalletByPublicKey(publicKey);
 
-    if (existingWallet) {
-      existingWalletInfo.value = existingWallet;
-      showConfirmDialog.value = true;
-      creatingWalletLoader.value = false;
-      return;
+      if (existingWallet) {
+        existingWalletInfo.value = existingWallet;
+        showConfirmDialog.value = true;
+        creatingWalletLoader.value = false;
+        return;
+      }
     }
 
     let wallet;
 
     const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
+
+    // Pre-derive Midnight bech32m addresses in this options context. See
+    // StepCreateConfirm.vue / midnightKeyManager.ts for why this can't live in
+    // the background service worker. Restore uses the user-entered mnemonic.
+    let midnightAddresses: {
+      unshielded: string;
+      shielded: string;
+      dust: string;
+      publicKeyHex?: string;
+      addressHex?: string;
+      cardanoXpub?: string;
+      cardanoBaseAddress?: string;
+      cardanoStakeAddress?: string;
+      cardanoPaymentKeyHashHex?: string;
+    } | undefined;
+    if (props.network.blockchain === 'Midnight') {
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = await deriveMidnightKeys(seedToStr.value, props.network.network);
+      midnightAddresses = derived.addresses;
+    }
 
     if (props.securityMethod === 'prf') {
       // ========================================================================
@@ -316,6 +342,7 @@ const walletCreationStep = async (): Promise<void> => {
             backupMnemonic: true,
             prfOutput,
             walletId: newWalletId, // CRITICAL: Must match ID used for PRF salt
+            ...(midnightAddresses ? { midnightAddresses } : {}),
           };
 
           wallet = await GeroStore.createNewWallet(
@@ -355,7 +382,8 @@ const walletCreationStep = async (): Promise<void> => {
         password.value,
         props.network.blockchain,
         props.network.network,
-        undefined  // addressType - use default based on chain
+        undefined,  // addressType - use default based on chain
+        midnightAddresses ? { midnightAddresses } : undefined
       );
     }
 

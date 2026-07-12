@@ -2,8 +2,8 @@
   <div class="kes-form">
     <!-- Ledger limitation -->
     <div v-if="isLedgerColdKey" class="kes-notice">
-      <div class="notice-icon-wrap" style="background: rgba(45,240,247,0.1)">
-        <v-icon size="18" color="#2DF0F7">mdi-information-outline</v-icon>
+      <div class="notice-icon-wrap" style="background: rgba(51,199,221,0.1)">
+        <v-icon size="18" color="var(--g-accent)">mdi-information-outline</v-icon>
       </div>
       <div class="notice-text">{{ $t('poolOperator.kesLedgerLimitation') }}</div>
     </div>
@@ -11,7 +11,7 @@
     <!-- KES Info Cards -->
     <div class="kes-info-grid" v-if="!isLedgerColdKey">
       <div class="kes-info-card">
-        <v-icon size="20" color="#FDB022" class="mb-2">mdi-counter</v-icon>
+        <v-icon size="20" color="warning" class="mb-2">mdi-counter</v-icon>
         <span class="kes-info-label">{{ $t('poolOperator.kesCounter') }}</span>
         <span class="kes-info-hint">{{ $t('poolOperator.kesCounterHint') }}</span>
         <v-text-field
@@ -23,7 +23,7 @@
         />
       </div>
       <div class="kes-info-card">
-        <v-icon size="20" color="#A078FF" class="mb-2">mdi-clock-outline</v-icon>
+        <v-icon size="20" color="var(--g-info)" class="mb-2">mdi-clock-outline</v-icon>
         <span class="kes-info-label">{{ $t('poolOperator.currentKesPeriod') }}</span>
         <span class="kes-info-hint">{{ $t('poolOperator.kesPeriodHint') }}</span>
         <v-text-field
@@ -48,10 +48,10 @@
 
     <v-btn
       v-if="!isLedgerColdKey"
-      color="#FDB022"
+      color="warning"
       block
       class="mt-4 black--text font-weight-bold"
-      style="border-radius: 10px; text-transform: none; letter-spacing: normal"
+      style="border-radius: var(--g-r-control); text-transform: none; letter-spacing: normal"
       :disabled="!kesPeriod || !kesCounter || !password"
       :loading="loading"
       @click="rotateKes()"
@@ -63,8 +63,8 @@
     <!-- Output Dialog -->
     <v-dialog v-model="showOutput" max-width="600px" persistent>
       <v-card class="kes-output-card">
-        <v-card-title class="d-flex align-center" style="gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06)">
-          <v-icon color="#75E0A7">mdi-check-circle</v-icon>
+        <v-card-title class="d-flex align-center" style="gap: 8px; border-bottom: 1px solid var(--g-hairline-1)">
+          <v-icon color="success">mdi-check-circle</v-icon>
           {{ $t('poolOperator.kesKeysGenerated') }}
           <v-spacer />
           <v-btn icon small @click="showOutput = false">
@@ -90,7 +90,7 @@
           </div>
 
           <div class="transfer-notice mt-4">
-            <v-icon x-small color="#FDB022" class="mr-1">mdi-alert-outline</v-icon>
+            <v-icon x-small color="warning" class="mr-1">mdi-alert-outline</v-icon>
             {{ $t('poolOperator.kesTransferInstructions') }}
           </div>
         </v-card-text>
@@ -124,9 +124,9 @@ const opCert = ref('');
 const isLedgerColdKey = computed(() => coldKeySource.value === 'ledger');
 
 const outputFiles = computed(() => [
-  { name: 'kes.skey', content: kesSkey.value, icon: 'mdi-key', color: '#FDA29B' },
-  { name: 'kes.vkey', content: kesVkey.value, icon: 'mdi-key-outline', color: '#2DF0F7' },
-  { name: 'node.cert', content: opCert.value, icon: 'mdi-certificate', color: '#75E0A7' },
+  { name: 'kes.skey', content: kesSkey.value, icon: 'mdi-key', color: 'error' },
+  { name: 'kes.vkey', content: kesVkey.value, icon: 'mdi-key-outline', color: 'var(--g-accent)' },
+  { name: 'node.cert', content: opCert.value, icon: 'mdi-certificate', color: 'success' },
 ]);
 
 async function rotateKes() {
@@ -238,16 +238,16 @@ function downloadFile(filename: string, content: string) {
   display: flex;
   gap: 12px;
   padding: 12px 14px;
-  background: rgba(45,240,247,0.04);
-  border: 1px solid rgba(45,240,247,0.1);
-  border-radius: 10px;
+  background: rgba(51,199,221,0.04);
+  border: 1px solid rgba(51,199,221,0.1);
+  border-radius: var(--g-r-control);
 }
 
 .notice-icon-wrap {
   width: 32px;
   height: 32px;
   min-width: 32px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -255,7 +255,7 @@ function downloadFile(filename: string, content: string) {
 
 .notice-text {
   font-size: 12px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   line-height: 1.5;
 }
 
@@ -272,9 +272,9 @@ function downloadFile(filename: string, content: string) {
 }
 
 .kes-info-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -283,32 +283,32 @@ function downloadFile(filename: string, content: string) {
 .kes-info-label {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255,255,255,0.8);
+  color: var(--g-text-2);
 }
 
 .kes-info-hint {
-  font-size: 10px;
-  color: rgba(255,255,255,0.5);
+  font-size: 11px;
+  color: var(--g-text-3);
   line-height: 1.4;
   margin-top: 2px;
 }
 
 /* Output dialog */
 .kes-output-card {
-  background: #13161b !important;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--g-raised) !important;
+  border: 1px solid var(--g-hairline-1);
 }
 
 .output-hint {
   font-size: 12px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   line-height: 1.5;
 }
 
 .output-file {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   margin-bottom: 8px;
   overflow: hidden;
 }
@@ -318,14 +318,14 @@ function downloadFile(filename: string, content: string) {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .output-file-icon {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.04);
+  border-radius: 4px;
+  background: var(--g-raised);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -334,8 +334,8 @@ function downloadFile(filename: string, content: string) {
 .output-file-name {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255,255,255,0.8);
-  font-family: 'Roboto Mono', monospace;
+  color: var(--g-text-2);
+  font-family: var(--g-font-mono);
 }
 
 .dl-btn {
@@ -346,9 +346,9 @@ function downloadFile(filename: string, content: string) {
 
 .output-file-preview {
   padding: 8px 12px;
-  font-family: 'Roboto Mono', monospace;
-  font-size: 10px;
-  color: rgba(255,255,255,0.45);
+  font-family: var(--g-font-mono);
+  font-size: 11px;
+  color: var(--g-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -356,22 +356,22 @@ function downloadFile(filename: string, content: string) {
 
 .transfer-notice {
   font-size: 11px;
-  color: #FDB022;
+  color: var(--g-warning);
   line-height: 1.5;
   display: flex;
   align-items: flex-start;
   padding: 10px 12px;
-  background: rgba(253,176,34,0.05);
-  border: 1px solid rgba(253,176,34,0.1);
-  border-radius: 8px;
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
 }
 
 .glass-input >>> .v-input__slot {
-  background: rgba(255,255,255,0.04) !important;
-  border-color: rgba(255,255,255,0.08) !important;
+  background: var(--g-raised) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 
 .glass-input >>> .v-input__slot:hover {
-  border-color: rgba(255,255,255,0.15) !important;
+  border-color: var(--g-hairline-3) !important;
 }
 </style>

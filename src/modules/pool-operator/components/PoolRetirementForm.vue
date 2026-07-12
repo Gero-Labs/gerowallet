@@ -3,7 +3,7 @@
     <!-- Warning Banner -->
     <div class="retire-warning">
       <div class="warning-icon-wrap">
-        <v-icon size="20" color="#FDA29B">mdi-alert-outline</v-icon>
+        <v-icon size="20" color="error">mdi-alert-outline</v-icon>
       </div>
       <div>
         <div class="warning-title">{{ $t('poolOperator.irreversibleAction') }}</div>
@@ -16,11 +16,11 @@
       <div class="epoch-picker">
         <div class="epoch-info">
           <div class="epoch-row">
-            <span class="epoch-label">{{ $t('poolOperator.currentEpoch') }}</span>
+            <span class="t-label">{{ $t('poolOperator.currentEpoch') }}</span>
             <span class="epoch-value">{{ currentEpoch }}</span>
           </div>
           <div class="epoch-row">
-            <span class="epoch-label">{{ $t('poolOperator.allowedRange') }}</span>
+            <span class="t-label">{{ $t('poolOperator.allowedRange') }}</span>
             <span class="epoch-value">{{ minEpoch }} - {{ maxEpoch }}</span>
           </div>
         </div>
@@ -37,15 +37,15 @@
 
       <!-- Deposit return info -->
       <div class="return-info mt-3">
-        <v-icon x-small color="#75E0A7" class="mr-1">mdi-arrow-down-circle</v-icon>
+        <v-icon x-small color="success" class="mr-1">mdi-arrow-down-circle</v-icon>
         <span>{{ $t('poolOperator.depositReturn') }}</span>
       </div>
 
       <v-btn
-        color="#FDA29B"
+        color="error"
         block
         class="mt-4 black--text font-weight-bold"
-        style="border-radius: 10px; text-transform: none; letter-spacing: normal"
+        style="border-radius: var(--g-r-control); text-transform: none; letter-spacing: normal"
         :disabled="!valid"
         :loading="retLoading"
         @click="buildRetirement()"
@@ -113,17 +113,17 @@ function onSigned() {
   display: flex;
   gap: 12px;
   padding: 12px 14px;
-  background: rgba(253,162,155,0.06);
-  border: 1px solid rgba(253,162,155,0.12);
-  border-radius: 10px;
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  border-radius: var(--g-r-control);
 }
 
 .warning-icon-wrap {
   width: 32px;
   height: 32px;
   min-width: 32px;
-  border-radius: 8px;
-  background: rgba(253,162,155,0.1);
+  border-radius: var(--g-r-control);
+  background: var(--g-error-fill);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -132,20 +132,20 @@ function onSigned() {
 .warning-title {
   font-size: 12px;
   font-weight: 600;
-  color: #FDA29B;
+  color: var(--g-error);
 }
 
 .warning-text {
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: var(--g-text-3);
   line-height: 1.5;
   margin-top: 2px;
 }
 
 .epoch-picker {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 14px;
 }
 
@@ -159,30 +159,23 @@ function onSigned() {
   flex-direction: column;
 }
 
-.epoch-label {
-  font-size: 10px;
-  color: rgba(255,255,255,0.55);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
 .epoch-value {
   font-size: 16px;
   font-weight: 700;
-  color: rgba(255,255,255,0.9);
+  color: var(--g-text-1);
   margin-top: 2px;
 }
 
 .return-info {
   font-size: 11px;
-  color: #75E0A7;
+  color: var(--g-success);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .glass-input >>> .v-input__slot {
-  background: rgba(255,255,255,0.04) !important;
-  border-color: rgba(255,255,255,0.08) !important;
+  background: var(--g-hairline-1) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 </style>

@@ -48,7 +48,7 @@
                   <v-chip
                     v-if="item.isScam"
                     x-small
-                    color="#F97066"
+                    color="error"
                     class="scam-badge"
                   >
                     <v-icon color="white" x-small class="mr-1">mdi-alert-decagram</v-icon>
@@ -59,7 +59,7 @@
                   <v-scroll-y-transition>
                     <v-avatar
                       v-if="isSelected(item)"
-                      color="#00c7f3"
+                      color="var(--g-accent)"
                       size="18"
                       class="check-badge"
                     >
@@ -74,7 +74,7 @@
                 <!-- Quantity controls (multi-quantity NFTs) -->
                 <div v-if="item.quantity > 1 && isSelected(item)" class="quantity-controls">
                   <v-btn icon x-small @click.stop="decreaseQty(item)">
-                    <v-icon color="#00DFF3" small>mdi-minus-box-outline</v-icon>
+                    <v-icon color="var(--g-accent)" small>mdi-minus-box-outline</v-icon>
                   </v-btn>
                   <input
                     :value="getSelectedItem(item)?.toSendQuantity || 1"
@@ -86,7 +86,7 @@
                     @click.stop
                   />
                   <v-btn icon x-small @click.stop="increaseQty(item)">
-                    <v-icon color="#00DFF3" small>mdi-plus-box-outline</v-icon>
+                    <v-icon color="var(--g-accent)" small>mdi-plus-box-outline</v-icon>
                   </v-btn>
                 </div>
               </div>
@@ -105,7 +105,7 @@
       <v-spacer />
       <v-btn
         outlined
-        color="#00DFF3"
+        color="var(--g-accent)"
         class="done-button"
         @click="onDone()"
       >
@@ -225,8 +225,8 @@ function onClose() {
 
 <style scoped>
 .collectibles-search :deep(.v-input__slot) {
-  background-color: #292929 !important;
-  border-radius: 8px;
+  background-color: var(--g-raised) !important;
+  border-radius: var(--g-r-control);
 }
 
 .collectibles-grid-wrapper {
@@ -240,8 +240,8 @@ function onClose() {
 }
 
 .collection-header {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 6px;
@@ -255,14 +255,14 @@ function onClose() {
 
 .collectible-card {
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   overflow: hidden;
   border: 2px solid transparent;
   transition: border-color 0.15s ease;
 }
 
 .collectible-card--selected {
-  border-color: #00c7f3;
+  border-color: var(--g-accent);
 }
 
 .collectible-card__image {
@@ -279,9 +279,8 @@ function onClose() {
 .collectible-card__name {
   font-size: 11px;
   font-weight: 500;
-  color: white;
+  color: var(--g-text-1);
   line-height: 1.1;
-  letter-spacing: -0.3px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -293,7 +292,7 @@ function onClose() {
   position: absolute;
   top: 4px;
   left: 4px;
-  font-size: 9px !important;
+  font-size: 11px !important;
   height: 18px !important;
 }
 
@@ -308,15 +307,15 @@ function onClose() {
   align-items: center;
   justify-content: center;
   padding: 2px 0;
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--g-hairline-1);
 }
 
 .qty-input {
   text-align: center;
   height: 16px;
-  color: white;
+  color: var(--g-text-1);
   width: 40px;
-  font-size: 10px;
+  font-size: 11px;
   background: transparent;
   border: none;
   outline: none;
@@ -335,7 +334,7 @@ function onClose() {
 
 .no-collectibles {
   text-align: center;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   font-size: 13px;
   padding: 32px 0;
 }
@@ -343,7 +342,7 @@ function onClose() {
 .done-button {
   text-transform: none !important;
   letter-spacing: 0 !important;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   min-width: 100px;
 }
 </style>

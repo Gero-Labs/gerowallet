@@ -13,7 +13,7 @@
 
     <!-- Error State -->
     <div v-else-if="showErrorState" class="card-error">
-      <v-icon large color="#ff6b6b">mdi-alert-circle-outline</v-icon>
+      <v-icon large color="error">mdi-alert-circle-outline</v-icon>
       <h3 class="error-title">{{ $t('wallet.somethingWentWrong') }}</h3>
       <p class="error-message">{{ error || $t('wallet.unexpectedError') }}</p>
       <v-btn
@@ -121,7 +121,7 @@ onMounted(async () => {
 
 .loading-text {
   font-size: 14px;
-  color: #888;
+  color: var(--g-text-3);
 }
 
 .card-error {
@@ -137,15 +137,15 @@ onMounted(async () => {
 }
 
 .error-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #fff;
+  color: var(--g-text-1);
   margin: 0;
 }
 
 .error-message {
   font-size: 13px;
-  color: #888;
+  color: var(--g-text-3);
   margin: 0;
   max-width: 280px;
   line-height: 1.5;
@@ -153,18 +153,18 @@ onMounted(async () => {
 
 .retry-btn {
   height: 40px !important;
-  border-radius: 10px !important;
-  border-color: #333 !important;
+  border-radius: var(--g-r-control) !important;
+  border-color: var(--g-hairline-2) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
-  color: var(--chain-primary) !important;
+  color: var(--g-accent) !important;
   margin-top: 8px;
 }
 
 .retry-btn:hover {
-  border-color: var(--chain-primary) !important;
-  background: color-mix(in srgb, var(--chain-primary) 8%, transparent) !important;
+  border-color: var(--g-accent) !important;
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important;
 }
 </style>

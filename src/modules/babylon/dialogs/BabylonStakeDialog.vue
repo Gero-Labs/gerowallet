@@ -91,7 +91,7 @@
           <div class="field-block mt-4">
             <label class="field-label">
               {{ $t('babylon.stakeDialog.stakingDuration') }}
-              <span class="ml-1" style="opacity: 0.4; font-size: 9px;">
+              <span class="ml-1" style="opacity: 0.4; font-size: 11px;">
                 ({{ timelockBlocks.toLocaleString() }} blocks · ≈ {{ timelockDays }} days)
               </span>
             </label>
@@ -101,7 +101,7 @@
               :max="props.params?.max_staking_time ?? 64000"
               :step="144"
               color="#F7931A"
-              track-color="rgba(255,255,255,0.1)"
+              track-color="var(--g-hairline-2)"
               hide-details
               class="babylon-slider mt-2"
             />
@@ -159,7 +159,7 @@
           </div>
 
           <div v-if="isInsufficientBalance" class="inline-error mt-3">
-            <v-icon size="14" color="#ef4444" class="mr-1">mdi-alert-circle</v-icon>
+            <v-icon size="14" color="error" class="mr-1">mdi-alert-circle</v-icon>
             {{ $t('send.insufficientBalance') }}
           </div>
 
@@ -180,7 +180,7 @@
             <div class="confirm-timelock">{{ timelockBlocks.toLocaleString() }} blocks (≈{{ timelockDays }} days)</div>
 
             <div class="confirm-flow-icon">
-              <v-icon size="16" color="rgba(255,255,255,0.3)">mdi-arrow-down-thin</v-icon>
+              <v-icon size="16" color="var(--g-text-3)">mdi-arrow-down-thin</v-icon>
             </div>
 
             <div class="confirm-to-label">{{ $t('babylon.stakeDialog.finalityProvider') }}</div>
@@ -204,7 +204,7 @@
             <transition name="fade" mode="out-in">
               <div v-if="!privateKeyBytes" key="prf-auth" class="prf-auth-block">
                 <div class="prf-hint">
-                  <v-icon size="13" color="rgba(255,255,255,0.35)" class="mr-1">mdi-shield-key-outline</v-icon>
+                  <v-icon size="13" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
                   {{ $t('security.passKeyAuthRequired') }}
                 </div>
                 <button class="prf-auth-btn" @click="authenticateWithPassKey" type="button">
@@ -213,7 +213,7 @@
                 </button>
               </div>
               <div v-else key="prf-done" class="prf-authed-strip">
-                <v-icon size="14" color="#22c55e" class="mr-2">mdi-check-circle</v-icon>
+                <v-icon size="14" color="success" class="mr-2">mdi-check-circle</v-icon>
                 <span>{{ $t('security.passKeyAuthenticated') }}</span>
                 <button class="prf-reauth-btn" @click="privateKeyBytes = null" type="button">
                   <v-icon size="12">mdi-refresh</v-icon>
@@ -234,7 +234,7 @@
                 @keyup.enter="confirmStake"
               />
               <button class="input-icon-btn" @click="showPassword = !showPassword" type="button">
-                <v-icon size="15" color="rgba(255,255,255,0.5)">
+                <v-icon size="15" color="var(--g-text-3)">
                   {{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}
                 </v-icon>
               </button>
@@ -298,7 +298,7 @@
           @click="confirmStake"
           type="button"
         >
-          <v-progress-circular v-if="loading" indeterminate :size="14" :width="2" color="white" class="mr-2" />
+          <v-progress-circular v-if="loading" indeterminate :size="14" :width="2" color="var(--g-text-1)" class="mr-2" />
           <v-icon v-else size="14" class="mr-1">mdi-lock-plus-outline</v-icon>
           {{ $t('babylon.stakeDialog.stakeNow') }}
         </button>
@@ -549,10 +549,10 @@ function formatCommission(commission: string): string {
 
 function commissionColor(commission: string): string {
   const pct = parseFloat(commission) * 100;
-  if (pct <= 5) return '#43a047';
+  if (pct <= 5) return 'var(--g-success)';
   if (pct < 10) return 'inherit';
-  if (pct === 10) return '#FB8C00';
-  return '#e53935';
+  if (pct === 10) return 'var(--g-warning)';
+  return 'var(--g-error)';
 }
 
 const PROVIDER_COLORS = ['#F7931A', '#1e88e5', '#43a047', '#e53935', '#00acc1', '#8e24aa', '#f4511e'];
@@ -581,14 +581,13 @@ watch(() => props.params, (p) => {
 .step-bar {
   flex: 1;
   height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.10);
+  border-radius: var(--g-r-chip);
+  background: var(--g-hairline-2);
   transition: background 0.3s ease;
 }
 
 .step-bar.is-active {
   background: #F7931A;
-  box-shadow: 0 0 6px rgba(247, 147, 26, 0.5);
 }
 
 .step-bar.is-done {
@@ -602,11 +601,11 @@ watch(() => props.params, (p) => {
 
 .step-label {
   flex: 1;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.30);
+  color: var(--g-text-3);
   transition: color 0.3s ease;
 }
 
@@ -628,18 +627,18 @@ watch(() => props.params, (p) => {
   padding: 12px 14px;
   background: rgba(247, 147, 26, 0.06);
   border: 1px solid rgba(247, 147, 26, 0.18);
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
 }
 
 .provider-avatar {
   width: 36px; height: 36px;
-  border-radius: 9px;
+  border-radius: var(--g-r-control);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 
 .provider-initial {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -656,8 +655,8 @@ watch(() => props.params, (p) => {
 .provider-commission { font-size: 11px; opacity: 0.55; margin-top: 2px; }
 
 .provider-pk-badge {
-  font-family: monospace;
-  font-size: 10px;
+  font-family: var(--g-font-mono);
+  font-size: 11px;
   opacity: 0.3;
   flex-shrink: 0;
 }
@@ -670,23 +669,23 @@ watch(() => props.params, (p) => {
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
 }
 
 .field-hint {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
-.field-error-msg { font-size: 11px; color: #f87171; }
+.field-error-msg { font-size: 11px; color: var(--g-error); }
 
 /* ── Amount input ── */
 .amount-wrap {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 11px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   overflow: hidden;
   transition: border-color 0.2s ease;
 }
@@ -696,14 +695,14 @@ watch(() => props.params, (p) => {
   box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.08);
 }
 
-.amount-wrap.is-error { border-color: rgba(239, 68, 68, 0.6); }
+.amount-wrap.is-error { border-color: var(--g-error); }
 
 .btc-badge {
   padding: 0 14px;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #F7931A;
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: 1px solid var(--g-hairline-1);
   height: 48px;
   display: flex;
   align-items: center;
@@ -717,14 +716,14 @@ watch(() => props.params, (p) => {
   outline: none;
   padding: 0 14px;
   height: 48px;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.02em;
   min-width: 0;
 }
 
-.amount-input::placeholder { color: rgba(255, 255, 255, 0.18); }
+.amount-input::placeholder { color: var(--g-text-3); }
 .amount-input::-webkit-outer-spin-button,
 .amount-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .amount-input[type=number] { -moz-appearance: textfield; }
@@ -739,11 +738,11 @@ watch(() => props.params, (p) => {
   padding: 7px 12px;
   background: rgba(247, 147, 26, 0.06);
   border: 1px solid rgba(247, 147, 26, 0.14);
-  border-radius: 9px;
+  border-radius: var(--g-r-control);
 }
 
-.balance-key { font-size: 11px; color: rgba(255, 255, 255, 0.45); }
-.balance-val { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.82); margin-left: 2px; }
+.balance-key { font-size: 11px; color: var(--g-text-3); }
+.balance-val { font-size: 12px; font-weight: 600; color: var(--g-text-2); margin-left: 2px; }
 
 /* ── Slider ── */
 .babylon-slider :deep(.v-slider__thumb) {
@@ -758,7 +757,7 @@ watch(() => props.params, (p) => {
 .slider-endpoints {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 11px;
   opacity: 0.3;
   margin-top: 2px;
   letter-spacing: 0.04em;
@@ -773,22 +772,21 @@ watch(() => props.params, (p) => {
 
 .fee-card {
   padding: 14px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 13px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
 }
 
 .fee-card:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-overlay);
   transform: translateY(-1px);
 }
 
 .fee-card.is-selected {
   background: rgba(247, 147, 26, 0.08);
   border-color: rgba(247, 147, 26, 0.45);
-  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.07), inset 0 1px 0 rgba(247, 147, 26, 0.15);
 }
 
 .fee-card-top {
@@ -803,37 +801,37 @@ watch(() => props.params, (p) => {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.60);
+  color: var(--g-text-2);
 }
 
 .fee-card.is-selected .fee-tier-name { color: #F7931A; }
 
 .speed-dots { display: flex; gap: 3px; }
-.speed-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); }
-.speed-dot.lit { background: rgba(255, 255, 255, 0.45); }
+.speed-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--g-hairline-3); }
+.speed-dot.lit { background: var(--g-text-3); }
 .fee-card.is-selected .speed-dot.lit { background: #F7931A; }
 
 .fee-rate-val {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
   letter-spacing: -0.02em;
   line-height: 1;
 }
 
-.fee-rate-unit { font-size: 10px; font-weight: 400; color: rgba(255, 255, 255, 0.35); }
+.fee-rate-unit { font-size: 11px; font-weight: 400; color: var(--g-text-3); }
 
 .fee-time-hint {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-top: 3px;
 }
 
 /* ── Summary ── */
 .tx-summary {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 11px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 14px 16px;
 }
 
@@ -842,33 +840,33 @@ watch(() => props.params, (p) => {
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   padding: 4px 0;
 }
 
-.summary-divider { height: 1px; background: rgba(255, 255, 255, 0.07); margin: 6px 0; }
+.summary-divider { height: 1px; background: var(--g-hairline-1); margin: 6px 0; }
 
 .summary-total {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
 }
 
 .summary-total .mono { color: #F7931A; }
-.mono { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+.mono { font-family: var(--g-font-mono); }
 
 .inline-error {
   display: flex;
   align-items: center;
   font-size: 12px;
-  color: #f87171;
+  color: var(--g-error);
 }
 
 /* ── Confirm panel ── */
 .confirm-panel {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 20px 20px 16px;
   text-align: center;
 }
@@ -886,29 +884,29 @@ watch(() => props.params, (p) => {
 .confirm-amount-val {
   font-size: 32px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
 }
 
-.confirm-label { font-size: 11px; color: rgba(255, 255, 255, 0.40); }
+.confirm-label { font-size: 11px; color: var(--g-text-3); }
 .confirm-timelock { font-size: 13px; font-weight: 600; color: #F7931A; margin-top: 2px; }
 
 .confirm-flow-icon { margin: 10px auto 6px; opacity: 0.5; }
 
 .confirm-to-label {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.30);
+  color: var(--g-text-3);
   margin-bottom: 4px;
 }
 
 .confirm-provider-name {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--g-text-2);
 }
 
 .confirm-meta-grid {
@@ -919,17 +917,17 @@ watch(() => props.params, (p) => {
 }
 
 .confirm-meta-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.confirm-meta-sep { width: 1px; height: 28px; background: rgba(255, 255, 255, 0.08); }
+.confirm-meta-sep { width: 1px; height: 28px; background: var(--g-hairline-1); }
 
 .confirm-meta-key {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.30);
+  color: var(--g-text-3);
 }
 
-.confirm-meta-val { font-size: 12px; color: rgba(255, 255, 255, 0.65); font-family: 'SF Mono', 'Fira Code', monospace; }
-.confirm-meta-val.strong { color: rgba(255, 255, 255, 0.88); font-weight: 600; }
+.confirm-meta-val { font-size: 12px; color: var(--g-text-2); font-family: var(--g-font-mono); }
+.confirm-meta-val.strong { color: var(--g-text-1); font-weight: 600; }
 
 /* ── PRF auth ── */
 .prf-auth-block { display: flex; flex-direction: column; gap: 10px; }
@@ -938,18 +936,18 @@ watch(() => props.params, (p) => {
   display: flex;
   align-items: center;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.40);
+  color: var(--g-text-3);
 }
 
 .prf-authed-strip {
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  background: rgba(34, 197, 94, 0.07);
-  border: 1px solid rgba(34, 197, 94, 0.22);
-  border-radius: 10px;
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
+  border-radius: var(--g-r-control);
   font-size: 12px;
-  color: #86efac;
+  color: var(--g-success);
   gap: 4px;
 }
 
@@ -957,10 +955,10 @@ watch(() => props.params, (p) => {
   margin-left: auto;
   padding: 2px 6px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.40);
+  color: var(--g-text-3);
   display: flex;
   align-items: center;
 }
@@ -970,7 +968,7 @@ watch(() => props.params, (p) => {
   padding: 11px 16px;
   background: rgba(247, 147, 26, 0.12);
   border: 1px solid rgba(247, 147, 26, 0.30);
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   cursor: pointer;
   color: #F7931A;
   font-size: 13px;
@@ -987,9 +985,9 @@ watch(() => props.params, (p) => {
 .glass-input-wrap {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 11px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   overflow: hidden;
   transition: border-color 0.2s ease;
 }
@@ -1006,11 +1004,11 @@ watch(() => props.params, (p) => {
   outline: none;
   padding: 11px 14px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
   min-width: 0;
 }
 
-.glass-input::placeholder { color: rgba(255, 255, 255, 0.22); }
+.glass-input::placeholder { color: var(--g-text-3); }
 
 .input-icon-btn {
   flex-shrink: 0;
@@ -1021,23 +1019,23 @@ watch(() => props.params, (p) => {
   cursor: pointer;
   display: flex;
   align-items: center;
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 1px solid var(--g-hairline-1);
 }
 
-.input-icon-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.input-icon-btn:hover { background: var(--g-overlay); }
 
 /* ── Tx status ── */
 .tx-status {
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   font-size: 12px;
 }
 
-.tx-status.success { background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); color: #86efac; }
-.tx-status.error   { background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); color: #fca5a5; }
-.tx-status.info    { background: rgba(96, 165, 250, 0.08); border: 1px solid rgba(96, 165, 250, 0.20); color: #93c5fd; }
+.tx-status.success { background: var(--g-success-fill); border: 1px solid var(--g-success-line); color: var(--g-success); }
+.tx-status.error   { background: var(--g-error-fill); border: 1px solid var(--g-error-line); color: var(--g-error); }
+.tx-status.info    { background: rgba(122, 167, 255, 0.12); border: 1px solid rgba(122, 167, 255, 0.25); color: var(--g-info); }
 
 /* ── Explorer link ── */
 .explorer-link {
@@ -1065,18 +1063,18 @@ watch(() => props.params, (p) => {
   align-items: center;
   padding: 8px 14px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-pill);
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease;
 }
 
 .back-btn:hover {
-  border-color: rgba(255, 255, 255, 0.25);
-  color: rgba(255, 255, 255, 0.80);
+  border-color: var(--g-hairline-3);
+  color: var(--g-text-2);
 }
 
 .next-btn,
@@ -1086,21 +1084,18 @@ watch(() => props.params, (p) => {
   padding: 9px 22px;
   background: linear-gradient(135deg, #F7931A, #e8820e);
   border: none;
-  border-radius: 20px;
+  border-radius: var(--g-r-pill);
   font-size: 13px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.88);
+  color: var(--g-on-grad);
   cursor: pointer;
-  transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-  box-shadow: 0 2px 12px rgba(247, 147, 26, 0.30);
-  letter-spacing: -0.01em;
+  transition: opacity 0.2s ease, transform 0.15s ease;
 }
 
 .next-btn:hover:not(:disabled),
 .stake-btn:hover:not(:disabled) {
   opacity: 0.92;
   transform: translateY(-1px);
-  box-shadow: 0 4px 18px rgba(247, 147, 26, 0.40);
 }
 
 .next-btn.is-disabled,

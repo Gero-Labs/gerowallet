@@ -40,7 +40,7 @@
 
             <!-- Register button (full width, only when not registered) -->
             <div v-if="!isRegistered" class="grid-full action-bar">
-              <v-btn small color="#2DF0F7" class="black--text action-btn-primary" @click="showUpdateDialog = true">
+              <v-btn small color="primary" class="black--text action-btn-primary" @click="showUpdateDialog = true">
                 <v-icon small left>mdi-plus-circle-outline</v-icon>
                 {{ $t('poolOperator.registerPool') }}
               </v-btn>
@@ -104,7 +104,7 @@
           <v-dialog v-model="showLiveDialog" max-width="700px">
             <v-card class="spo-dialog">
               <v-card-title class="spo-dialog-title glv-dialog-title">
-                <v-icon size="16" :color="liveNode?.type === 'bp' ? '#FDB022' : '#2DF0F7'" class="mr-2">{{ liveNode?.type === 'bp' ? 'mdi-shield-star' : 'mdi-access-point' }}</v-icon>
+                <v-icon size="16" :color="liveNode?.type === 'bp' ? 'warning' : 'primary'" class="mr-2">{{ liveNode?.type === 'bp' ? 'mdi-shield-star' : 'mdi-access-point' }}</v-icon>
                 <span class="glv-title-name">{{ liveNode?.name }}</span>
                 <span class="glv-title-tag">{{ liveNode?.type === 'bp' ? 'Core' : 'Relay' }}</span>
                 <span v-if="liveNode?.data?.nodeVersion" class="glv-title-dim">{{ liveNode.data.nodeVersion }}</span>
@@ -131,7 +131,7 @@
           <v-dialog v-model="showPeersDialog" max-width="650px">
             <v-card class="spo-dialog">
               <v-card-title class="spo-dialog-title">
-                <v-icon color="#A078FF" class="mr-2">mdi-lan</v-icon>
+                <v-icon color="info" class="mr-2">mdi-lan</v-icon>
                 {{ $t('poolOperator.networkPeers') }} — {{ peersNode?.name }}
                 <v-spacer />
                 <v-btn icon small @click="showPeersDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
@@ -150,24 +150,24 @@
           <v-dialog v-model="showKesRotation" max-width="550px" persistent>
             <v-card class="spo-dialog">
               <v-card-title class="spo-dialog-title">
-                <v-icon color="#FDB022" class="mr-2">mdi-key-change</v-icon>
+                <v-icon color="warning" class="mr-2">mdi-key-change</v-icon>
                 {{ $t('poolOperator.kesRotation') }}
                 <v-spacer />
                 <v-btn icon small @click="showKesRotation = false"><v-icon small>mdi-close</v-icon></v-btn>
               </v-card-title>
               <v-card-text class="pt-4">
                 <div v-if="!kesRotateSuccess">
-                  <p style="font-size: 13px; color: rgba(255,255,255,0.55)">{{ $t('poolOperator.remoteRotatePassKeyDescription') }}</p>
+                  <p style="font-size: 13px; color: var(--g-text-3)">{{ $t('poolOperator.remoteRotatePassKeyDescription') }}</p>
                   <v-alert v-if="kesRotateError" type="error" dense outlined class="mt-3" style="font-size: 13px">{{ kesRotateError }}</v-alert>
                   <div v-if="kesRotateSteps.length" class="mt-3">
-                    <div v-for="(step, i) in kesRotateSteps" :key="i" style="font-size: 12px; color: rgba(255,255,255,0.6); padding: 2px 0">
-                      <v-icon x-small color="#75E0A7" class="mr-1">mdi-check</v-icon> {{ step }}
+                    <div v-for="(step, i) in kesRotateSteps" :key="i" style="font-size: 12px; color: var(--g-text-2); padding: 2px 0">
+                      <v-icon x-small color="success" class="mr-1">mdi-check</v-icon> {{ step }}
                     </div>
                   </div>
                 </div>
                 <div v-else class="text-center py-4">
-                  <v-icon size="48" color="#75E0A7">mdi-check-circle</v-icon>
-                  <div class="mt-3" style="font-size: 15px; font-weight: 600; color: #75E0A7">{{ $t('poolOperator.kesRotated') }}</div>
+                  <v-icon size="48" color="success">mdi-check-circle</v-icon>
+                  <div class="mt-3" style="font-size: 14px; font-weight: 600; color: var(--g-success)">{{ $t('poolOperator.kesRotated') }}</div>
                 </div>
               </v-card-text>
               <v-card-actions>
@@ -175,7 +175,7 @@
                 <v-btn v-if="kesRotateSuccess" text @click="showKesRotation = false">{{ $t('common.close') }}</v-btn>
                 <template v-else>
                   <v-btn text @click="showKesRotation = false">{{ $t('common.cancel') }}</v-btn>
-                  <v-btn color="#FDB022" class="black--text" style="text-transform:none;font-weight:700;border-radius:8px" :loading="kesRotating" @click="rotateKesRemote">
+                  <v-btn color="warning" class="black--text" style="text-transform:none;font-weight:700;border-radius:var(--g-r-control)" :loading="kesRotating" @click="rotateKesRemote">
                     <v-icon left small>mdi-fingerprint</v-icon>
                     {{ $t('poolOperator.rotateNow') }}
                   </v-btn>
@@ -189,7 +189,7 @@
         <v-dialog v-model="showUpdateDialog" max-width="600px" scrollable>
           <v-card class="spo-dialog">
             <v-card-title class="spo-dialog-title">
-              <v-icon color="#2DF0F7" class="mr-2">{{ isRegistered ? 'mdi-pencil-outline' : 'mdi-plus-circle-outline' }}</v-icon>
+              <v-icon color="primary" class="mr-2">{{ isRegistered ? 'mdi-pencil-outline' : 'mdi-plus-circle-outline' }}</v-icon>
               {{ isRegistered ? $t('poolOperator.updatePool') : $t('poolOperator.registerPool') }}
               <v-spacer />
               <v-btn icon small @click="showUpdateDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
@@ -204,7 +204,7 @@
         <v-dialog v-model="showRetireDialog" max-width="500px">
           <v-card class="spo-dialog">
             <v-card-title class="spo-dialog-title">
-              <v-icon color="#FDA29B" class="mr-2">mdi-power</v-icon>
+              <v-icon color="error" class="mr-2">mdi-power</v-icon>
               {{ $t('poolOperator.retirePool') }}
               <v-spacer />
               <v-btn icon small @click="showRetireDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
@@ -538,21 +538,21 @@ watch(bpNode, (bp) => {
 .action-bar { display: flex; gap: 8px; }
 .action-btn-primary {
   flex: 1; text-transform: none !important; letter-spacing: normal !important;
-  font-size: 13px !important; font-weight: 700 !important; border-radius: 10px !important; height: 40px !important;
+  font-size: 13px !important; font-weight: 700 !important; border-radius: var(--g-r-control) !important; height: 40px !important;
 }
 
 /* Dialogs */
-.spo-dialog { background: #13161b !important; border: 1px solid rgba(255,255,255,0.08); }
-.spo-dialog-title { border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 16px !important; }
+.spo-dialog { background: var(--g-raised) !important; border: 1px solid var(--g-hairline-1); }
+.spo-dialog-title { border-bottom: 1px solid var(--g-hairline-1); font-size: 16px !important; }
 
 /* gLiveView dialog title */
-.glv-dialog-title { font-size: 13px !important; gap: 6px; font-family: 'Roboto Mono', monospace; }
-.glv-title-name { font-weight: 700; color: rgba(255,255,255,0.95); }
+.glv-dialog-title { font-size: 13px !important; gap: 6px; font-family: var(--g-font-mono); }
+.glv-title-name { font-weight: 700; color: var(--g-text-1); }
 .glv-title-tag {
-  font-size: 9px; font-weight: 700; padding: 1px 5px;
-  border-radius: 3px; text-transform: uppercase;
-  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.45);
+  font-size: 11px; font-weight: 700; padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--g-hairline-1); color: var(--g-text-3);
 }
-.glv-title-dim { font-size: 11px; color: rgba(255,255,255,0.4); }
-.glv-title-hash { font-size: 9px; color: rgba(255,255,255,0.25); font-family: 'Roboto Mono', monospace; }
+.glv-title-dim { font-size: 11px; color: var(--g-text-3); }
+.glv-title-hash { font-size: 11px; color: var(--g-text-3); font-family: var(--g-font-mono); }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div class="network-selector">
     <!-- Blockchain family -->
-    <div class="ns-label mb-2">{{ $t('welcome.blockchain') }}</div>
+    <div class="t-label mb-2">{{ $t('welcome.blockchain') }}</div>
     <div class="chain-row" :class="{ 'mb-3': devMode }">
       <template v-for="(fam, idx) in families">
         <!-- Force the Apex chains onto a second row → 3 (Cardano/Midnight/Bitcoin) + 2 (Apex Prime/Vector) -->
@@ -32,7 +32,7 @@
 
     <!-- Network within the chosen family — dev only -->
     <template v-if="devMode">
-      <div class="ns-label mb-2">{{ $t('common.network') }}</div>
+      <div class="t-label mb-2">{{ $t('common.network') }}</div>
       <div class="net-row">
         <button
           v-for="net in activeNets"
@@ -146,14 +146,6 @@ watch(
 </script>
 
 <style scoped lang="scss">
-.ns-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.7);
-}
-
 /* ── Chain tiles ──────────────────────────────────── */
 .chain-row {
   display: flex;
@@ -175,14 +167,14 @@ watch(
   align-items: center;
   gap: 8px;
   padding: 8px 16px 8px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-1);
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--g-dur-fast) ease, background var(--g-dur-fast) ease, box-shadow var(--g-dur-fast) ease;
 
   &:hover:not(.chain-tile--disabled) {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: var(--g-hairline-3);
     background: rgba(255, 255, 255, 0.06);
   }
 
@@ -194,12 +186,12 @@ watch(
 
   &--disabled {
     cursor: not-allowed;
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: var(--g-hairline-2);
     background: rgba(255, 255, 255, 0.02);
   }
 
   &--disabled &__label {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--g-text-3);
   }
 
   &--disabled &__icon {
@@ -209,7 +201,7 @@ watch(
   &__label {
     font-size: 14px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--g-text-1);
   }
 }
 
@@ -231,9 +223,8 @@ watch(
   width: 46px;
   padding: 2px 0;
   background-color: #bd1550;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  color: #fff;
-  font-size: 7px;
+  color: var(--g-text-1);
+  font-size: 11px;
   font-weight: 700;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
   text-transform: uppercase;
@@ -273,24 +264,24 @@ watch(
 
 .net-pill {
   padding: 7px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-2);
   background: rgba(255, 255, 255, 0.03);
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--g-text-2);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease, opacity var(--g-dur-fast) ease;
 
   &:hover:not(.net-pill--disabled) {
-    border-color: rgba(255, 255, 255, 0.28);
-    color: rgba(255, 255, 255, 0.9);
+    border-color: var(--g-hairline-3);
+    color: var(--g-text-1);
   }
 
   &--active {
     border-color: var(--v-primary-base);
     background: #{"rgb(from var(--v-primary-base) r g b / 0.12)"};
-    color: #fff;
+    color: var(--g-text-1);
   }
 
   &--disabled {

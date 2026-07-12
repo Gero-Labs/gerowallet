@@ -36,6 +36,11 @@
   .v-application {
     font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
   }
+  /* The disabled-CTA rule that used to live here (grey fill + grayscale, so a
+     "blocked for your safety" button looks unmistakably non-interactive) is now
+     baseline.css's `.geroButton.v-btn--disabled`: a solid --g-raised surface with
+     --g-text-3 text. Same intent, one definition, and specificity-correct against
+     Vuetify's own flagged disabled rules. Nothing to desaturate on a flat grey. */
 </style>
 </body>
 </html>

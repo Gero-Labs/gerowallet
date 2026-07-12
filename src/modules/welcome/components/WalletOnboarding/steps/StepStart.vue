@@ -3,7 +3,7 @@
     <!-- ── Network (two-step: blockchain → network) ────────── -->
     <NetworkSelector :network="localNetwork" :dev-mode="devMode" @change="onNetworkChange" />
 
-    <v-divider class="my-3" style="border-color: rgba(255, 255, 255, 0.08);" />
+    <v-divider class="my-3" style="border-color: var(--g-hairline-1);" />
 
     <!-- ── Method (stacked selectable cards) ───────────────── -->
     <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepMethod') }}</div>
@@ -119,15 +119,15 @@ const onContinue = (): void => {
 
 <style scoped>
 .step-section-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .onb-btn {
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   box-shadow: none !important;
 }
 
@@ -144,8 +144,8 @@ const onContinue = (): void => {
   width: 100%;
   text-align: left;
   padding: 6px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
@@ -158,7 +158,6 @@ const onContinue = (): void => {
 .method-card--active {
   border-color: var(--v-primary-base);
   background: rgb(from var(--v-primary-base) r g b / 0.1);
-  box-shadow: 0 0 16px rgb(from var(--v-primary-base) r g b / 0.08);
 }
 
 .method-card--disabled {
@@ -196,13 +195,13 @@ const onContinue = (): void => {
 .method-card__title {
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
+  color: var(--g-text-1);
   line-height: 1.25;
 }
 
 .method-card__desc {
   font-size: 13px;
-  color: #94979c;
+  color: var(--g-text-3);
   margin-top: 2px;
   line-height: 1.35;
 }

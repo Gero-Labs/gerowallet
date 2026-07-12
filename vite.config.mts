@@ -94,6 +94,24 @@ export const sharedConfig: UserConfig = {
     'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
+  css: {
+    preprocessorOptions: {
+      // Vuetify 2.7's bundled .sass/.scss use legacy Sass syntax (global
+      // map-get, @import, / division) that Dart Sass now deprecates, flooding
+      // the dev console with thousands of warnings from node_modules. quietDeps
+      // silences deprecation warnings originating in dependencies (ours still
+      // surface); silenceDeprecations covers the remaining categories + the
+      // legacy-JS-API notice on Sass versions that honor it.
+      scss: {
+        quietDeps: true,
+        silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'if-function', 'color-functions'],
+      },
+      sass: {
+        quietDeps: true,
+        silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'if-function', 'color-functions'],
+      },
+    },
+  },
   plugins: [
     Vue({
       template: {
@@ -150,6 +168,12 @@ export const sharedConfig: UserConfig = {
       'bip39',
       'blake2b',
       'crypto-ts',
+      // Pre-bundle the node-polyfill shims so the dev server doesn't discover
+      // them lazily on the first route that needs them (e.g. Gero Card) and
+      // trigger a mid-session re-optimize + full page reload.
+      'vite-plugin-node-polyfills/shims/process',
+      'vite-plugin-node-polyfills/shims/global',
+      'vite-plugin-node-polyfills/shims/buffer',
     ],
     exclude: ['vue-demi', 'cbor'],
     esbuildOptions: {

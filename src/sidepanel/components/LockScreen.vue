@@ -54,7 +54,7 @@
             :error="!!error"
           />
 
-          <p v-if="error" class="red--text text-caption mb-2">{{ error }}</p>
+          <p v-if="error" class="error--text text-caption mb-2">{{ error }}</p>
 
           <v-btn
             class="geroButton"
@@ -208,7 +208,7 @@ function openDashboard() {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: #0a0a0a;
+  background: var(--g-canvas);
 }
 
 .content {
@@ -221,19 +221,17 @@ function openDashboard() {
 }
 
 .dashboard-btn {
-  border-color: #333 !important;
-  color: var(--chain-primary) !important;
+  border-color: var(--g-hairline-3) !important;
+  color: var(--g-accent) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   height: 40px !important;
 }
 
 .logout-btn {
-  color: #F97066 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.5px !important;
+  color: var(--g-error) !important;
 }
 </style>

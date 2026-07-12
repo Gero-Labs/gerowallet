@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-app style="background: transparent !important">
-      <v-main style="position: relative; z-index: 1; background: black !important">
+      <v-main style="position: relative; z-index: 1; background: var(--g-canvas) !important">
         <v-container class="pa-0" style="position: relative">
           <!-- Background - Confined to dashboard working area -->
           <div
@@ -10,7 +10,9 @@
                 ? 'apex-background-dashboard'
                 : loggedWallet?.chain === Blockchain.BITCOIN
                   ? 'bitcoin-background-dashboard'
-                  : 'cardano-background-dashboard'
+                  : loggedWallet?.chain === Blockchain.MIDNIGHT
+                    ? 'midnight-background-dashboard'
+                    : 'cardano-background-dashboard'
             "
             :style="{
               backgroundImage: `url(${
@@ -18,7 +20,9 @@
                   ? assets.apexBg
                   : loggedWallet?.chain === Blockchain.BITCOIN
                     ? assets.bitcoinBg
-                    : assets.cardanoBg
+                    : loggedWallet?.chain === Blockchain.MIDNIGHT
+                      ? assets.midnightBg
+                      : assets.cardanoBg
               })`,
             }"
           ></div>
@@ -54,7 +58,7 @@
                         v-bind="attrs"
                         v-on="on"
                       >
-                        <v-icon size="16" color="#82B4FF" class="nav-search-icon">mdi-magnify</v-icon>
+                        <v-icon size="16" color="info" class="nav-search-icon">mdi-magnify</v-icon>
                         <template v-if="!compactNav">
                           <span class="nav-search-placeholder">{{ t('search.globalPlaceholder') }}</span>
                           <span class="nav-search-shortcut">Ctrl+K</span>
@@ -73,9 +77,9 @@
                   <v-tooltip
                     bottom
                     :content-class="
-                      connected
+                      (isMidnight ? isMidnightConnected : connected)
                         ? 'network-tooltip'
-                        : connecting
+                        : (isMidnight ? isMidnightConnecting : connecting)
                         ? 'network-tooltip connecting'
                         : 'network-tooltip offline'
                     "
@@ -89,25 +93,28 @@
                       >
                         <v-icon
                           small
-                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
-                          :class="{ 'sync-animation': isSyncing, 'connecting-animation': connecting }"
+                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
+                          :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
                         >
-                          {{ connected ? 'mdi-lan-connect' : connecting ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
+                          {{ (isMidnight ? isMidnightConnected : connected) ? 'mdi-lan-connect' : (isMidnight ? isMidnightConnecting : connecting) ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                         </v-icon>
 
-                        <!-- Small epoch progress bar (hidden in compact mode) -->
+                        <!-- Small progress bar (hidden in compact mode).
+                             Cardano: epoch-slot percentage as a definite value.
+                             Midnight: no epoch concept, so no bar at all —
+                             the connection icon already carries the status. -->
                         <v-progress-linear
-                          v-if="!compactNav"
+                          v-if="!compactNav && !isMidnight"
                           class="epoch-progress-liquid-glass"
                           height="8"
-                          :buffer-value="epochSlotPercentage"
-                          :value="epochSlotPercentage"
-                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
+                          :buffer-value="isMidnight ? 100 : epochSlotPercentage"
+                          :value="isMidnight ? 100 : epochSlotPercentage"
+                          :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                           background-color="transparent"
                           style="width: 50px"
                           striped
-                          :stream="connected"
-                          :indeterminate="connecting"
+                          :stream="isMidnight ? isMidnightConnected : connected"
+                          :indeterminate="isMidnight ? isMidnightConnecting : connecting"
                         ></v-progress-linear>
                       </div>
                     </template>
@@ -115,15 +122,20 @@
                     <div class="network-tooltip-content">
                       <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
                       <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
-                      <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
-                      <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      <template v-if="isMidnight">
+                        <div><strong>Block:</strong> {{ midnightTip?.height || 'N/A' }}</div>
+                      </template>
+                      <template v-else>
+                        <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
+                        <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      </template>
                       <div>
                         <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                         <span
                           :style="
-                            connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }
+                            (isMidnight ? isMidnightConnected : connected) ? { color: 'inherit' } : (isMidnight ? isMidnightConnecting : connecting) ? { color: 'var(--g-warning)' } : { color: 'var(--g-error)' }
                           "
-                          >{{ connected ? t('navigation.online') : connecting ? t('navigation.connecting') : t('navigation.offline') }}</span
+                          >{{ (isMidnight ? isMidnightConnected : connected) ? t('navigation.online') : (isMidnight ? isMidnightConnecting : connecting) ? t('navigation.connecting') : t('navigation.offline') }}</span
                         >
                       </div>
                     </div>
@@ -145,28 +157,28 @@
                       </v-btn>
                     </template>
                     <v-card outlined class="notifications-card" style="min-width: 280px; max-width: 320px">
-                      <v-card-title class="pa-3 pb-1" style="font-size: 15px">{{ t('navigation.notifications') }}</v-card-title>
+                      <v-card-title class="pa-3 pb-1" style="font-size: 14px">{{ t('navigation.notifications') }}</v-card-title>
                       <v-card-text class="pa-0 pb-2">
                         <v-list v-if="kesWarningVisible" class="transparent" dense>
                           <v-list-item class="kes-notification-item" @click="navigateToPoolOperator">
-                            <v-list-item-avatar size="32" class="mr-2" style="background: rgba(253,176,34,0.12); border-radius: 8px; min-width: 32px">
-                              <v-icon size="16" color="#FDB022">mdi-key-chain</v-icon>
+                            <v-list-item-avatar size="32" class="mr-2" style="background: var(--g-warning-fill); border-radius: var(--g-r-control); min-width: 32px">
+                              <v-icon size="16" color="warning">mdi-key-chain</v-icon>
                             </v-list-item-avatar>
                             <v-list-item-content>
-                              <v-list-item-title style="font-size: 13px; font-weight: 600; color: #FDB022; white-space: normal">
+                              <v-list-item-title style="font-size: 13px; font-weight: 600; color: var(--g-warning); white-space: normal">
                                 {{ t('poolOperator.kesWarningTitle', { remaining: kesRemainingGlobal }) }}
                               </v-list-item-title>
-                              <v-list-item-subtitle style="font-size: 11px; white-space: normal; color: rgba(255,255,255,0.5)">
+                              <v-list-item-subtitle style="font-size: 11px; white-space: normal; color: var(--g-text-3)">
                                 {{ t('poolOperator.kesWarningSubtitle') }}
                               </v-list-item-subtitle>
                             </v-list-item-content>
                             <v-list-item-action class="my-0 ml-1">
-                              <v-icon small color="#FDB022">mdi-chevron-right</v-icon>
+                              <v-icon small color="warning">mdi-chevron-right</v-icon>
                             </v-list-item-action>
                           </v-list-item>
                         </v-list>
-                        <div v-else class="text-center pa-4" style="color: rgba(255,255,255,0.4); font-size: 13px">
-                          <v-icon small color="rgba(255,255,255,0.3)" class="mr-1">mdi-bell-check-outline</v-icon>
+                        <div v-else class="text-center pa-4" style="color: var(--g-text-3); font-size: 13px">
+                          <v-icon small color="var(--g-text-3)" class="mr-1">mdi-bell-check-outline</v-icon>
                           {{ t('navigation.nothingNew') }}
                         </div>
                       </v-card-text>
@@ -286,6 +298,7 @@ import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { networkStore } from '@/stores/networkStore';
+import { midnightStore } from '@/stores/midnightStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -301,7 +314,12 @@ const { isSyncing, connected, connecting } = toRefs(loadingState);
 const { loggedWallet, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { tip } = toRefs(networkStore);
+// Midnight uses its own store — `networkStore.tip` is Cardano-shaped (epoch/slot)
+// and stays empty for Midnight wallets.
+const { tip: midnightTip, networkStatus: midnightNetworkStatus } = toRefs(midnightStore);
 const { musicPlaylist, context } = toRefs(musicStore);
+
+const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
 
 // Global search
 const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
@@ -370,16 +388,20 @@ const kesWarningVisible = computed(() => {
 });
 
 const epochSlotPercentage = computed(() => {
+  // Midnight has no epoch concept — show 0 (the progress bar will render flat).
+  if (isMidnight.value) return 0;
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;
 });
 
 // Format last sync as timestamp (e.g., "2:45:32 PM")
 const lastSyncTimestamp = computed(() => {
-  if (!tip.value?.time) {
+  // Midnight tip carries `timestamp` (unix seconds * 1000 from indexer); Cardano tip carries `time`.
+  const t = isMidnight.value ? midnightTip.value?.timestamp : tip.value?.time;
+  if (!t) {
     return 'N/A';
   }
 
-  const date = new Date(tip.value.time);
+  const date = new Date(t);
   return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -387,6 +409,11 @@ const lastSyncTimestamp = computed(() => {
     hour12: true
   });
 });
+
+// Midnight WS connection state mirrors midnightStore.networkStatus rather than
+// the global Cardano `loadingState.connected/connecting`.
+const isMidnightConnected = computed(() => midnightNetworkStatus.value === 'connected');
+const isMidnightConnecting = computed(() => midnightNetworkStatus.value === 'connecting');
 
 const isWelcomeDone = computed({
   get() {
@@ -458,6 +485,9 @@ const preloadBackgroundImage = () => {
       break;
     case Blockchain.BITCOIN:
       imageUrl = assets.bitcoinBg;
+      break;
+    case Blockchain.MIDNIGHT:
+      imageUrl = assets.midnightBg;
       break;
     default:
       imageUrl = assets.cardanoBg;
@@ -575,7 +605,7 @@ onBeforeUnmount(() => {
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -597,10 +627,52 @@ onBeforeUnmount(() => {
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
+  }
+}
+
+/* Midnight background — wide cinematic shot with a fade-to-black mask so the
+   portfolio surface below sits cleanly on transparent black. Mirrors the
+   prototype's treatment from `new-midnight-backup`. */
+.midnight-background-dashboard {
+  position: absolute;
+  top: -70%;
+  left: 50%;
+  width: 100vw;
+  height: 120vh;
+  z-index: -1;
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: brightness(0.7);
+  opacity: 0;
+  transition: opacity var(--g-dur-slow) ease-in-out;
+
+  /* Fade to black at the bottom so the holdings table doesn't fight the bg. */
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.4) 85%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 50%,
+    rgba(0, 0, 0, 0.8) 70%,
+    rgba(0, 0, 0, 0.4) 85%,
+    rgba(0, 0, 0, 0) 100%
+  );
+
+  &[style*='url('] {
+    opacity: 0.6;
   }
 }
 
@@ -619,7 +691,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
   filter: brightness(0.7);
   opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity var(--g-dur-slow) ease-in-out;
 
   &[style*='url('] {
     opacity: 1;
@@ -639,18 +711,18 @@ onBeforeUnmount(() => {
 
 /* Ensure v-app has pure black background outside working area */
 .v-application {
-  background: #000000 !important;
+  background: var(--g-canvas) !important;
   position: relative;
   z-index: 1;
 }
 
 /* Override any Vuetify theme variables */
 body {
-  background: #000000 !important;
+  background: var(--g-canvas) !important;
 }
 
 html {
-  background: #000000 !important;
+  background: var(--g-canvas) !important;
 }
 
 /* Make content areas transparent to show background */
@@ -724,29 +796,27 @@ div.v-toolbar__content {
 }
 
 .network-tooltip {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-menu) !important;
   isolation: isolate !important;
   padding: 12px 16px !important;
 
   &.connecting {
-    border: 1px solid rgba(255, 165, 0, 0.3) !important;
-    box-shadow: 0 8px 32px rgba(255, 165, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid var(--g-warning-line) !important;
+    box-shadow: var(--g-shadow-menu) !important;
   }
 
   &.offline {
-    border: 1px solid rgba(255, 100, 100, 0.3) !important;
-    box-shadow: 0 8px 32px rgba(255, 100, 100, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid var(--g-error-line) !important;
+    box-shadow: var(--g-shadow-menu) !important;
   }
 }
 
 .network-tooltip-content {
   line-height: 1.3;
-  color: #ffffff !important;
+  color: var(--g-text-1) !important;
 }
 
 .network-tooltip-content div {
@@ -758,12 +828,7 @@ div.v-toolbar__content {
 }
 
 .network-tooltip-content strong {
-  color: #00c7f3 !important;
-}
-
-.v-dialog__content--active {
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  color: var(--g-accent) !important;
 }
 
 /* Search field in top nav bar */
@@ -772,13 +837,12 @@ div.v-toolbar__content {
   align-items: center;
   gap: 8px;
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   background: rgba(130, 180, 255, 0.08);
   border: 1px solid rgba(130, 180, 255, 0.25);
   cursor: pointer;
   min-width: 180px;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-  animation: nav-search-breathe 3s ease-in-out infinite;
+  transition: border-color var(--g-dur-base), background var(--g-dur-base), box-shadow var(--g-dur-base);
 }
 .nav-search-field:hover {
   background: rgba(130, 180, 255, 0.14);
@@ -786,40 +850,36 @@ div.v-toolbar__content {
 }
 .nav-search-placeholder {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .nav-search-shortcut {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  color: var(--g-text-3);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
   border-radius: 4px;
   padding: 1px 5px;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   letter-spacing: 0.3px;
 }
 .nav-search-compact {
   min-width: unset !important;
   padding: 5px 8px !important;
-  border-radius: 6px !important;
-}
-@keyframes nav-search-breathe {
-  0%, 100% { box-shadow: 0 0 4px rgba(130, 180, 255, 0.15); }
-  50% { box-shadow: 0 0 14px rgba(130, 180, 255, 0.35); }
+  border-radius: var(--g-r-control) !important;
 }
 
 .toolbar-icon-btn {
   width: 28px !important;
   height: 28px !important;
-  border-radius: 6px !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 .toolbar-icon-btn .v-icon {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--g-text-1) !important;
 }
 
 .liquid-glass-card,
@@ -832,7 +892,7 @@ div.v-toolbar__content {
   -webkit-backdrop-filter: blur(10px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 12px !important;
-  transition: all 0.3s ease !important;
+  transition: border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease !important;
   cursor: pointer !important;
   overflow: hidden !important;
 }
@@ -847,12 +907,10 @@ div.v-toolbar__content {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
 }
 .notifications-card {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(2px) !important;
-  -webkit-backdrop-filter: blur(2px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-menu) !important;
   isolation: isolate !important;
 }
 
@@ -862,12 +920,11 @@ div.v-toolbar__content {
 <style>
 .kes-notification-item {
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   margin: 0 8px;
 }
 
 .kes-notification-item:hover {
-  background: rgba(253, 176, 34, 0.06) !important;
+  background: var(--g-warning-fill) !important;
 }
 </style>
-

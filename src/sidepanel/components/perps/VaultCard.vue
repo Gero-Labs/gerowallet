@@ -116,19 +116,17 @@ function formatDrawdown(raw: string): string {
 <style scoped>
 /* ── Card ── */
 .vault-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 12px 14px;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .vault-card:hover {
-  background: color-mix(in srgb, var(--chain-primary) 5%, transparent);
-  border-color: color-mix(in srgb, var(--chain-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 5%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 22%, transparent);
   transform: translateY(-1px);
 }
 
@@ -153,14 +151,14 @@ function formatDrawdown(raw: string): string {
 .vault-card__name {
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .vault-type-chip {
-  font-size: 9px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.05em !important;
   text-transform: uppercase !important;
@@ -169,15 +167,15 @@ function formatDrawdown(raw: string): string {
 }
 
 .chip--protocol {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 25%, transparent) !important;
 }
 
 .chip--user {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: rgba(255, 255, 255, 0.5) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: var(--g-raised) !important;
+  color: var(--g-text-3) !important;
+  border: 1px solid var(--g-hairline-2) !important;
 }
 
 /* ── Primary Metrics Row ── */
@@ -186,8 +184,8 @@ function formatDrawdown(raw: string): string {
   align-items: center;
   gap: 0;
   margin-bottom: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-control);
   padding: 8px 10px;
 }
 
@@ -202,27 +200,27 @@ function formatDrawdown(raw: string): string {
 .vault-metric__divider {
   width: 1px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
 }
 
 .vault-metric__label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 .vault-metric__value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
 }
 
-.vault-metric__value--cyan   { color: var(--chain-primary); }
-.vault-metric__value--green  { color: #26FAB0; }
-.vault-metric__value--red    { color: #F97066; }
+.vault-metric__value--cyan   { color: var(--g-accent); }
+.vault-metric__value--green  { color: var(--g-success); }
+.vault-metric__value--red    { color: var(--g-error); }
 
 /* ── Secondary Row ── */
 .vault-card__secondary-row {
@@ -238,18 +236,18 @@ function formatDrawdown(raw: string): string {
 }
 
 .vault-secondary__label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
 }
 
 .vault-secondary__value {
   font-size: 11px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--g-text-2);
 }
 
-.vault-secondary__value--red { color: #F97066; }
+.vault-secondary__value--red { color: var(--g-error); }
 </style>

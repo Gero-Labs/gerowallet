@@ -48,6 +48,7 @@ const purpose = {
 
 const coin_type = {
   cardano: 1815,
+  midnight: 2400,
 };
 
 const CoreAddressTypes = {
@@ -81,6 +82,7 @@ const CoinTypes = {
   CARDANO: HARDENED + coin_type.cardano, // HARD_DERIVATION_START + 1815;
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
   BITCOIN: HARDENED + 0, // HARD_DERIVATION_START + 0 (Bitcoin BIP44 coin type);
+  MIDNIGHT: HARDENED + coin_type.midnight, // HARD_DERIVATION_START + 2400 (Midnight BIP44 coin type)
 };
 
 const BIP44_SCAN_SIZE = 20;

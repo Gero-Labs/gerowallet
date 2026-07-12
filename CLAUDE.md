@@ -162,6 +162,31 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **"window/window" error**: Don't use `define: { 'global': ... }` with `nodePolyfills` plugin
 - **pbkdf2 build issues**: Virtual module plugin with `enforce: 'pre'` in background config
 
+## Design System (Gero Design Language)
+One token layer, four surfaces, scarce chain accent, motion as feedback, enforced by a ratchet.
+
+### Tokens
+- **Canonical source**: `src/shared/styles/tokens.css` (CSS custom properties) mirrored by `src/shared/styles/_tokens.scss` (SCSS vars, auto-injected into every SFC `<style lang="scss">` via `vite.config.mts` `additionalData`). The audit fails if the two drift.
+- **Surfaces** (elevation via surface + hairline, never glow): `--g-canvas` #000, `--g-surface` #0C0E12, `--g-raised` #12151B, `--g-overlay` #1A1E26. Hairlines `--g-hairline-1/2/3`. Text tones `--g-text-1/2/3` (never use white text below 0.6 alpha — use `--g-text-3`).
+- **Chain accent is the ONLY per-chain color.** `useChainAccent()` (bootstrapped once in `options/App.vue`) is the sole writer of `--g-accent` / `--g-grad-1/2` (+ legacy `--chain-*` aliases). Never hardcode chain hexes; gradients only on sanctioned slots (primary CTA, active nav indicator, chain dot, header hairline).
+- **Scale tokens**: radii `--g-r-chip/control/card/sheet/pill`, spacing `--g-s-1..6`, durations `--g-dur-fast/base/slow`, z-ladder `--g-z-sticky/dock/sheet/toast`, `--g-font-ui` / `--g-font-mono`.
+- **Baseline** (`src/shared/styles/baseline.css`, loaded after Vuetify): type ramp (`.t-display/.t-title/.t-heading/.t-body*/.t-caption/.t-label`), `.g-num` (tabular), `.g-mono`, `.delta-up`/`.delta-down`, sentence-case buttons, the focus ring, reduced-motion collapse. Vuetify CSS is emitted twice, so overrides that must win a tie are `html`-prefixed — see `project_vuetify_css_cascade` memory.
+
+### Primitives
+- `GButton` (four tiers) and the `.geroButton` gradient CTA. `BaseDialog` is THE modal primitive (`size` prop, tokenized surface, esc-to-close, house transition). Formatting: import from `src/shared/utils/format.ts` — do NOT fork `formatPrice`/`formatSignedChange`/etc. (the audit counts forks). Deltas use `formatSignedChange()` (glyph carries direction) + `delta-up`/`delta-down`, never a colored chip.
+
+### Gates (run before every commit; wired into the pre-commit hook)
+```bash
+node scripts/design/audit.mjs            # ratchet: 15 metrics vs scripts/design/budgets.json
+node scripts/design/audit.mjs --write    # ratchet the budgets DOWN to current (after a net reduction)
+node scripts/design/contrast.mjs         # 56 WCAG checks against the real token files
+```
+- The ratchet only moves down. To RAISE a budget (a token's legitimate first use, a merge): `node scripts/design/audit.mjs --rebaseline --reason="..."` and justify it in the commit message. Metrics include hex/radius/font-size/z-index distinctness, backdropFilters, uppercase, infiniteAnimations, importantCount, lowAlphaText, transitionAll, clickableDivs + outlineNone (a11y floor), and trust-surface tripwires (corruptedMdiNames, formatFnForks).
+- **Working rule**: any file you touch leaves the ratchet at or below where you found it. Tokenize the values you pass; if a change is a real token first-use, rebaseline with a reason.
+
+### Motion
+Motion is feedback, not decoration. Keep spinners, ~1.4s skeleton shimmers, typing/dot indicators, and status/sync/connection pulses. Delete decorative loops (glow/breathe/float/aurora/color-shift). Durations resolve to `--g-dur-*`; prefer explicit `transition` property lists over `transition: all` (and never comma-list properties with a single trailing duration — that only animates the last one).
+
 ## External Integrations
 Blockchain: Blockfrost, Koios, Backend API | Price: Market Data API (backend) | DeFi: DEX Hunter (swap only) | Security: Cardano Shield, Xerberus | Fiat: Moonpay, Guardarian | Other: Ably, ADA Handle, Charli3, Bring Cashback | Hardware: Ledger, Trezor, Keystone
 
