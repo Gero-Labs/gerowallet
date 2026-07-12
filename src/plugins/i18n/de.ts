@@ -4027,6 +4027,15 @@ export default {
   // Öffentlich/Privat-Aufschlüsselung (gemeinsam für Dashboard + Mini-Gero + Empfangsdialog)
   'midnight.common.public': 'Öffentlich',
   'midnight.common.private': 'Privat',
+  // Empfangsdialog Midnight-Bereich (Öffentlich / Privat / DUST Tabs)
+  'midnight.receive.tabDust': 'DUST',
+  'midnight.receive.publicLabel': 'Öffentliche Adresse',
+  'midnight.receive.publicInfo': 'Für normale (Unshielded) NIGHT-Transfers. Beträge und Adressen sind on-chain sichtbar.',
+  'midnight.receive.privateLabel': 'Private Adresse',
+  'midnight.receive.privateInfo': 'Für private (Shielded) Transfers. Beträge und Teilnehmer bleiben vertraulich.',
+  'midnight.receive.dustLabel': 'DUST-Adresse',
+  'midnight.receive.dustInfo': 'Wird einmalig bei der Einrichtung der DUST-Gebührenerzeugung verwendet. Diese Adresse teilst du normalerweise nicht.',
+  'midnight.receive.pendingSdk': 'Adresse noch nicht verfügbar.',
   // Portfolio-Panel-Beschriftungen
   'midnight.unshielded': 'Unshielded',
   'midnight.shielded': 'Shielded',
@@ -4040,8 +4049,8 @@ export default {
   'midnight.signAndSend': 'Signieren und senden',
   'midnight.shieldedSendComingNote': 'Shielded-Senden (mit Proof-Erzeugung) folgt in einer späteren Version.',
   // Send-Dialog Tab-Beschriftungen
-  'midnight.send.tabUnshielded': 'Unshielded',
-  'midnight.send.tabShielded': 'Shielded',
+  'midnight.send.tabUnshielded': 'Öffentlich',
+  'midnight.send.tabShielded': 'Privat',
   'midnight.send.shieldedRecipientLabel': 'Shielded-Empfängeradresse',
   'midnight.send.shieldedAddressRequired': 'Shielded-Adresse erforderlich',
   'midnight.send.shieldedAddressPrefix': 'Adresse muss mit {prefix} beginnen',
