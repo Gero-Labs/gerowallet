@@ -3511,6 +3511,7 @@ export default {
   'miniGero.connectRequest': 'Verbindungsanfrage',
   'dapp.suspiciousHostname': 'Die Adresse dieser Website enthält ungewöhnliche Zeichen. Bitte sorgfältig prüfen.',
   'miniGero.signDataRequest': 'Daten signieren',
+  'miniGero.transferRequest': 'Überweisungsanfrage',
   'miniGero.signTxRequest': 'Transaktion signieren',
   'signTx.transactionDetails': 'Tx-Details',
   'signTx.toRecipient': 'An',
@@ -4061,6 +4062,9 @@ export default {
   'midnight.connector.signData': 'Daten signieren',
   'midnight.connector.websiteRequestedSignature': 'Die Website hat eine Signatur angefordert',
   'midnight.connector.malformedSignData': 'Diese Website hat fehlerhafte Daten gesendet — das Signieren wurde zu deiner Sicherheit blockiert.',
+  'midnight.connector.walletTypeUnsupported': 'Dieser Wallet-Typ kann hier keine Midnight-Transaktionen signieren.',
+  'midnight.connector.transferTitle': 'Überweisung genehmigen',
+  'midnight.connector.transferFeesNote': 'Netzwerkgebühren werden von deiner Wallet in DUST bezahlt.',
   // Shielded-Proving-Consent-Dialog
   'midnight.consent.title': 'Privatsphäre beim Shielded-Senden',
   'midnight.consent.subtitle': 'Vor deiner ersten Shielded-Transaktion',

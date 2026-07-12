@@ -59,14 +59,19 @@ function buildConnectedAPI(): ConnectedAPI {
     submitTransaction: (tx) => bridge.midnightSubmitTransaction(tx),
     signData: (data, options) => bridge.midnightSignData(data, options),
     hintUsage: (methodNames) => bridge.midnightHintUsage(methodNames),
-    // Phase 2/3 — present (so the object stays structurally assignable to the
-    // real ConnectedAPI type real dapps import) but reject until implemented.
+    // Phase 2 — native-NIGHT unshielded transfers. Returns a balanced+signed
+    // (unproven) tx; the dapp submits it via submitTransaction, which
+    // proves+binds server-side. Shielded/mixed outputs and payFees:false
+    // reject with InvalidRequest (see midnightWebpage + background handler).
+    makeTransfer: (desiredOutputs, options) => bridge.midnightMakeTransfer(desiredOutputs, options),
+    // Phase 3 — contract dapps (proving-delegation + circuit-artifact gated).
+    // Present (so the object stays structurally assignable to the real
+    // ConnectedAPI type real dapps import) but reject until implemented.
     // Spec prose: "The connected API consists of a couple of parts, each
     // always present" — omitting them would both break that contract and
     // TypeScript structural compatibility for dapps typed against the SDK.
     balanceUnsealedTransaction: notYetImplemented('balanceUnsealedTransaction'),
     balanceSealedTransaction: notYetImplemented('balanceSealedTransaction'),
-    makeTransfer: notYetImplemented('makeTransfer'),
     makeIntent: notYetImplemented('makeIntent'),
     getProvingProvider: notYetImplemented('getProvingProvider'),
   };

@@ -180,6 +180,28 @@ export async function sendUnshieldedNight(
 }
 
 /**
+ * Phase-2 DApp-connector `makeTransfer`: run steps 1-3 of the unshielded NIGHT
+ * transfer (getWalletKeys → Nexus build → BG DUST-balance + sign) and STOP —
+ * do NOT submit. Returns the signed-but-unproven hex.
+ *
+ * The dapp is expected to submit the returned tx via the connector's own
+ * `submitTransaction`, which relays to Nexus `/tx/submit` → sidecar
+ * `/tx/finalize` (prove + bind + submit). This is literally
+ * `sendUnshieldedNight` minus step 4, so it reuses the exact build+sign path
+ * the dashboard send uses — no separate tx-building logic.
+ */
+export async function buildAndSignUnshieldedTransfer(
+  network: string,
+  baseRequest: Omit<BuildMidnightTxRequest, 'publicKeyHex' | 'addressHex'>,
+  credentials: MidnightSendCredentials,
+): Promise<{ tx: string }> {
+  const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
+  const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
+  const signedTxHex = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
+  return { tx: signedTxHex };
+}
+
+/**
  * Optimistically insert a just-submitted tx into the store as `pending` so it
  * shows in history immediately, before gero-sync indexes and pushes it back.
  * Best-effort: a failure here is silent (gero-sync backfills the confirmed

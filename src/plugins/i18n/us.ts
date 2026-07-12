@@ -3230,6 +3230,7 @@ export default {
   // the classic homograph spoof. Not a generic "check the URL" nag.
   'dapp.suspiciousHostname': "This site's address uses unusual characters. Verify it carefully.",
   'miniGero.signDataRequest': 'Sign Data Request',
+  'miniGero.transferRequest': 'Transfer Request',
   'miniGero.signTxRequest': 'Sign Transaction',
   'signTx.transactionDetails': 'Tx Details',
   'signTx.toRecipient': 'To',
@@ -4164,6 +4165,9 @@ export default {
   'midnight.connector.signData': 'Sign Data',
   'midnight.connector.websiteRequestedSignature': 'The website requested a signature',
   'midnight.connector.malformedSignData': 'This site sent malformed data — signing is blocked for your safety.',
+  'midnight.connector.walletTypeUnsupported': 'This wallet type cannot sign Midnight transactions here.',
+  'midnight.connector.transferTitle': 'Approve transfer',
+  'midnight.connector.transferFeesNote': 'Network fees are paid by your wallet in DUST.',
   // Shielded proving consent dialog
   'midnight.consent.title': 'Shielded send privacy',
   'midnight.consent.subtitle': 'Before your first shielded transaction',
