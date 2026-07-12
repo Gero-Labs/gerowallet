@@ -49,7 +49,7 @@
         <v-text-field
           v-if="!isPrfWallet"
           v-model="upgradePassword"
-          :label="t('common.spendingPassword')"
+          :label="t('wallet.spendingPassword')"
           type="password"
           dense
           outlined
@@ -170,7 +170,7 @@
           <v-text-field
             v-if="!isPrfWalletForSign"
             v-model="localPassword"
-            :label="t('common.spendingPassword')"
+            :label="t('wallet.spendingPassword')"
             type="password"
             outlined
             dense

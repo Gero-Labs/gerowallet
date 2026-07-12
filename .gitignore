@@ -8,6 +8,9 @@ Thumbs.db
 # credential file types explicitly.
 *.p8
 *.mobileprovision
+# Cloudflare token-policy artifacts (accidentally committed once; policy JSON,
+# not a secret, but infra config doesn't belong in the wallet repo).
+.cloudflare_api
 
 # Dependencies
 node_modules/
